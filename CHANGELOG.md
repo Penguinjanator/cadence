@@ -14,6 +14,10 @@ each with what replaces it:
 - `DreamActorCritic`, `DreamConfig`, `DiscreteCode`, `actor_critic_wiring` (`dream.py`) and
   `Seams`, `SleepConfig` (`structure.py`, fast and slow strengths, pruning and sprouting):
   removed; the consolidation of `LearnerConfig` is the slow strength that stays.
+- `ActorCriticConfig`: `critic_init` (the critic starts at zero), `lam_critic` (the critic's
+  trace decays as the actor's), `normalize_floor` (a constant) and `center_per_stream` (the
+  valence is per stream, always: one brain playing several games keeps a level for each)
+  are gone; sixteen fields become twelve.
 - `LearnerConfig.consolidate` and `restore` (a slow copy of the seams the fast ones are
   pulled back toward): removed; the NES player's E4 measured it no better than without at
   the settings tried, and the trace and the valence carry what it was for.

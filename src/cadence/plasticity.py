@@ -119,23 +119,17 @@ class Valence:
 class ActorCriticConfig:
     gamma: float = 0.99  # discount
     lam: float = 0.9  # trace decay of the actor's eligibility
-    lam_critic: float = 0.9  # trace decay of the critic's eligibility
     eta: float = 0.5  # actor step per unit dopamine per unit trace
     eta_bias: float = 0.05
     eta_critic: float = 0.05
     normalize: float = 0.0  # >0: forgetting factor of the per-seam RMS that divides its step
-    normalize_floor: float = 1e-3
     # >0: each seam steps on a running average of its own steps, so sign noise cancels before
     # the RMS divides it
     momentum: float = 0.0
-    critic_init: float = 0.0
     dopamine_cap: float = 1.0  # the broadcast saturates: |delta| is clipped here (0: no cap)
     # >0: forgetting factor of a running mean and scale of delta; the phasic signal is the
     # deviation from the tonic level
     dopamine_center: float = 0.0
-    # the tonic level per stream instead of one over the batch: streams on different tasks
-    # (one brain playing several games) each keep their own mean and scale
-    center_per_stream: bool = False
     # >0: the centred signal within this many scales of its mean is nothing; the dopamine is
     # quiet while the reward is what it usually is and speaks only for a surprise
     dopamine_floor: float = 0.0
@@ -185,7 +179,7 @@ class ActorCritic:
                 learner.output_index, learner.engine.wiring.n
             )
         self.critic_index = np.asarray(list(critic), dtype=np.int64)
-        self.w_critic = np.full(len(self.critic_index), self.config.critic_init)
+        self.w_critic = np.zeros(len(self.critic_index))
         self.b_critic = 0.0
         self.rng = np.random.default_rng(seed)
         w = learner.engine.wiring
@@ -313,7 +307,7 @@ class ActorCritic:
                 floor=cfg.dopamine_floor,
                 cap=0.0,  # the cap is applied by learn, after the centring
                 units=not cfg.center_scale,
-                per_stream=cfg.center_per_stream,
+                per_stream=True,
             )
         return v
 
@@ -398,7 +392,7 @@ class ActorCritic:
             self.trace += contrast
             self.trace_bias *= decay
             self.trace_bias += contrast_bias
-        self.trace_critic *= cfg.gamma * cfg.lam_critic
+        self.trace_critic *= cfg.gamma * cfg.lam
         self.trace_critic[:, :-1] += free.activation[:, self.critic_index]
         self.trace_critic[:, -1] += 1.0
         # the next state, warm from this one; a finished row starts its next life from rest
@@ -457,10 +451,10 @@ class ActorCritic:
             self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_bias**2
             correction = 1.0 - rho**self.updates
             step_scale = step_scale / (
-                np.sqrt(self.second_moment / correction) + cfg.normalize_floor
+                np.sqrt(self.second_moment / correction) + 1e-3
             )
             step_bias = step_bias / (
-                np.sqrt(self.second_moment_bias / correction) + cfg.normalize_floor
+                np.sqrt(self.second_moment_bias / correction) + 1e-3
             )
         step_scale = cfg.eta * step_scale
         step_bias = cfg.eta_bias * step_bias
@@ -518,7 +512,7 @@ class ActorCritic:
             self.trace_critic = np.zeros((batch, len(self.critic_index) + 1))
         free = self._free
         assert free is not None
-        self.trace_critic *= cfg.gamma * cfg.lam_critic
+        self.trace_critic *= cfg.gamma * cfg.lam
         self.trace_critic[:, :-1] += free.activation[:, self.critic_index]
         self.trace_critic[:, -1] += 1.0
         next_state = self.learner.free(next_drive, warm=free)
