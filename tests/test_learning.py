@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 import cadence as cd
+from cadence.learning import SCALE_CAP
 
 
 def two_blobs(n_per: int = 60, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
@@ -56,7 +57,7 @@ def test_learner_separates_two_classes_and_the_rule_is_local() -> None:
             - (minus.activation[:, w.pre] * minus.activation[:, w.post]).mean(axis=0)
         )
     )
-    clipped = np.abs(scale_before + expected) > learner.config.scale_cap
+    clipped = np.abs(scale_before + expected) > SCALE_CAP
     assert np.allclose(delta[~clipped], expected[~clipped])
 
 

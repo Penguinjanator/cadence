@@ -52,6 +52,9 @@ from .wiring import Wiring
 __all__ = ["Learner", "LearnerConfig", "layered", "embedded", "learning_rule", "LearnedState"]
 
 
+SCALE_CAP = 8.0  # the magnitude a seam may not exceed
+
+
 @dataclass(frozen=True, slots=True)
 class LearnerConfig:
     beta: float = 0.1  # nudge strength
@@ -61,10 +64,6 @@ class LearnerConfig:
     free_steps: int = 100  # most steps a free settlement may take
     nudged_steps: int = 50  # most steps a nudged settlement may take
     tolerance: float | None = 1e-4  # a settlement stops once no owner moves more than this
-    scale_floor: float = 0.0  # magnitude an overlap may not fall below (0: may cross zero)
-    scale_cap: float = 8.0  # magnitude an overlap may not exceed
-    target_level: float = 1.0  # activation the target owner is nudged toward
-    off_level: float = 0.0  # activation the other output owners are nudged toward
     nudge: str = "cross_entropy"  # "quadratic" or "cross_entropy"
     temperature: float = 0.2  # softmax temperature of the cross-entropy nudge
     # >0: forgetting factor of the per-overlap RMS of its raw contrast that divides its step;
@@ -221,16 +220,16 @@ class Learner:
         labels = np.asarray(labels)
         batch = len(labels)
         target = np.zeros((batch, self.engine.wiring.n))
-        target[:, self.output_index] = self.config.off_level
+        target[:, self.output_index] = 0.0
         if self.slot_count > 1:
             if labels.ndim != 2 or labels.shape[1] != self.slot_count:
                 raise ValueError("a slotted learner takes one label per slot")
             if labels.min() < 0 or (labels >= self.slot_sizes[None, :]).any():
                 raise ValueError("a slot's label lies outside its choices")
             owners = self.output_index[labels + self.slot_offsets[None, :]]
-            target[np.arange(batch)[:, None], owners] = self.config.target_level
+            target[np.arange(batch)[:, None], owners] = 1.0
         else:
-            target[np.arange(batch), self.output_index[labels]] = self.config.target_level
+            target[np.arange(batch), self.output_index[labels]] = 1.0
         return target
 
     # -- the rule
@@ -304,11 +303,7 @@ class Learner:
         if cfg.decay > 0:  # a leak on the seams: what is not relearned fades away
             scale = np.where(self.trainable_overlaps, scale * (1.0 - cfg.decay), scale)
             bias = np.where(self.trainable_owners, bias * (1.0 - cfg.decay), bias)
-        if cfg.scale_floor > 0:
-            magnitude = np.clip(np.abs(scale), cfg.scale_floor, cfg.scale_cap)
-            scale = np.sign(scale) * magnitude
-        else:  # the same bounds in one pass
-            scale = np.clip(scale, -cfg.scale_cap, cfg.scale_cap)
+        scale = np.clip(scale, -SCALE_CAP, SCALE_CAP)
         self.engine = self.engine.with_parameters(edge_scale=scale, bias=bias)
         self.updates += 1
         return {
@@ -385,11 +380,7 @@ class Learner:
             keep_bias = 1.0 - cfg.decay if ix["owners"] is None else 1.0 - cfg.decay * ix["owners"]
             scale = scale * keep_scale
             bias = bias * keep_bias
-        if cfg.scale_floor > 0:
-            magnitude = torch.clamp(scale.abs(), cfg.scale_floor, cfg.scale_cap)
-            scale = torch.sign(scale) * magnitude
-        else:
-            scale = torch.clamp(scale, -cfg.scale_cap, cfg.scale_cap)
+        scale = torch.clamp(scale, -SCALE_CAP, SCALE_CAP)
         self.engine = self.engine._with_device_parameters(scale, bias)
         self.updates += 1
         return {"scale_step": float(d.abs().mean()), "bias_step": float(db.abs().mean())}

@@ -74,7 +74,7 @@ reads itself:
 
 Two more details, both in `Learner.update`: an overlap and its reverse (`i → j` and
 `j → i`) form one *seam* and share one scale, so their two contrasts are averaged and both
-move by the same amount; and a scale's magnitude is clipped to `[scale_floor, scale_cap]`.
+move by the same amount; and a scale's magnitude is clipped to eight.
 With `centered=False` the second nudged phase is skipped and `s⁻` is replaced by `s⁰` with
 `beta` in place of `2 beta`.
 
@@ -207,7 +207,6 @@ it, export `engine.dense()` for a page, put `to_dict()` in a receipt.
 | `temperature` | `LearnerConfig` | softmax temperature of the cross-entropy nudge; also the policy temperature when sampling actions | 0.1 (labels), 0.2 (actions) |
 | `centered` | `LearnerConfig` | contrast `+beta` against `−beta` (two nudged phases) rather than against the free state | `True` |
 | `tolerance`, `free_steps`, `nudged_steps` | `LearnerConfig` | when a phase is at rest, and the step caps | 3e-3 while learning, 1e-4 to read out; 100 / 12 |
-| `scale_floor`, `scale_cap` | `LearnerConfig` | bounds on a seam's magnitude | 0, 8 |
 | `nudge` | `LearnerConfig` | `"cross_entropy"` or `"quadratic"` (`beta · (target − s)`) | cross-entropy for classes |
 | `momentum` | `LearnerConfig` | each seam steps on a running average of its own contrast (still local) | 0.9 on supervised tabular tasks, where it adds about a point; 0 elsewhere |
 | `decay` | `LearnerConfig` | every update shrinks each trainable seam and bias by this fraction: a leak on the seams | 0 for a fixed training set; 0.003 on a stream that drifts, where it keeps the net plastic (see `tasks.md`, streams) |

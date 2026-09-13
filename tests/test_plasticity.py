@@ -3,6 +3,7 @@ from __future__ import annotations
 import numpy as np
 
 import cadence as cd
+from cadence.learning import SCALE_CAP
 
 
 def _contextual_bandit(rng: np.random.Generator, batch: int) -> tuple[np.ndarray, np.ndarray]:
@@ -93,7 +94,7 @@ def test_traces_reset_on_done_and_updates_are_local() -> None:
     expected_trace = 0.9 * 0.5 * trace_before + contrast
     expected = 0.1 * (delta[:, None] * expected_trace).mean(axis=0)
     got = learner.engine.edge_scale - before
-    clipped = np.abs(before + expected) > learner.config.scale_cap
+    clipped = np.abs(before + expected) > SCALE_CAP
     assert np.allclose(got[~clipped], expected[~clipped])
 
 

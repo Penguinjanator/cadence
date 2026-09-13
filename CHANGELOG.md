@@ -18,6 +18,9 @@ each with what replaces it:
   trace decays as the actor's), `normalize_floor` (a constant) and `center_per_stream` (the
   valence is per stream, always: one brain playing several games keeps a level for each)
   are gone; sixteen fields become twelve.
+- `LearnerConfig.scale_floor`, `scale_cap`, `target_level`, `off_level`: never set by any
+  script in five repositories; the cap is the constant `cadence.learning.SCALE_CAP` (8), the
+  nudge's targets one and zero, and a seam may cross zero.
 - `LearnerConfig.consolidate` and `restore` (a slow copy of the seams the fast ones are
   pulled back toward): removed; the NES player's E4 measured it no better than without at
   the settings tried, and the trace and the valence carry what it was for.
