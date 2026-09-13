@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 
 import cadence as cd
+from cadence.receipts import canonical_sha256
 
 
 def ring(n: int = 6, count: float = 120.0) -> cd.Wiring:
@@ -131,7 +132,7 @@ def test_receipt_round_trip_and_tamper_detection(tmp_path: Path) -> None:
     assert ok, message
     raw = json.loads(path.read_text())
     raw["body"]["passed"] = 4
-    raw["digest"] = cd.canonical_sha256({k: raw[k] for k in ("kind", "body", "source")})
+    raw["digest"] = canonical_sha256({k: raw[k] for k in ("kind", "body", "source")})
     path.write_text(cd.canonical_json(raw) + "\n")
     ok, message = cd.Receipt.verify(
         path, check=lambda b: None if b["passed"] == 3 else "tally does not match rows"

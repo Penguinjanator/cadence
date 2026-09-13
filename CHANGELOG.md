@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.8.0 (unreleased): the condensation
+
+The library condensed into its elements (`docs/condense.md`): owners and seams, the
+settlement, the contrast, the trace, the valence, and one step. Dropped from the top level,
+each with what replaces it:
+
+- `Rehearsal`, `RehearsalConfig` (the clipped rehearsal learner): the trace and the valence
+  of `ActorCritic`; E4 of the NES player measured the rehearsal a failure.
+- `ValueNet`, `ValueConfig` (a separate value net as the critic): the critic is the
+  settlement's own value readout, `ActorCritic(learner, critic=<owners>)`.
+- `Population` (the continuous population code with Gaussian exploration): `Bins`.
+- `DreamActorCritic`, `DreamConfig`, `DiscreteCode`, `actor_critic_wiring` (`dream.py`) and
+  `Seams`, `SleepConfig` (`structure.py`, fast and slow strengths, pruning and sprouting):
+  removed; the consolidation of `LearnerConfig` is the slow strength that stays.
+- `Ledger`, `settle_owner_by_owner`, `canonical_sha256`, `source_manifest`, `mutate`: still in
+  `cadence.reference`, `cadence.receipts` and `cadence.constitution`, no longer top level.
+
 ## 0.7.2 (unreleased)
 
 - `Trace`: one class for the memory of the moment before, per stream, clamped into the next

@@ -10,6 +10,7 @@ import pytest
 import cadence as cd
 from cadence.custody import CustodyError, sha256_of
 from cadence.protocol import PREDICATES, Levels
+from cadence.receipts import canonical_sha256, source_manifest
 
 
 def reading(mean: float, fraction: float) -> dict[str, float]:
@@ -119,10 +120,10 @@ def test_receipt_build_write_read_verify(tmp_path: Path) -> None:
     path.write_text(tampered)
     ok, message = cd.Receipt.verify(path)
     assert not ok
-    assert cd.canonical_sha256({"b": 1, "a": 2}) == cd.canonical_sha256({"a": 2, "b": 1})
+    assert canonical_sha256({"b": 1, "a": 2}) == canonical_sha256({"a": 2, "b": 1})
     with pytest.raises(ValueError):
         cd.canonical_json({"nan": float("nan")})
-    assert cd.source_manifest([("code.py", src)])["files"][0]["path"] == "code.py"
+    assert source_manifest([("code.py", src)])["files"][0]["path"] == "code.py"
 
 
 def test_custody_fetches_verifies_and_refuses(tmp_path: Path) -> None:

@@ -183,8 +183,7 @@ receipts, which the docs still cite where they measured something.
 | [tasks](docs/tasks.md) | recipes for every kind of task the ladder and the Kaggle set have met |
 | [pages](docs/pages.md) | a trained net settling live in a browser |
 | [embodied](docs/embodied.md) | deploying in a body: the loop, several learners in one net, checkpoints |
-| [reward](docs/reward.md) | learning from reward: three factors, dreams, what the gates measured |
-| [life](docs/life.md) | fast and slow strengths, sleep, pruning and sprouting |
+| [reward](docs/reward.md) | learning from reward: three factors, what the gates measured |
 | [protocols](docs/protocols.md) | predicates, the shuffled control, gain selection |
 | [backends](docs/backends.md) | CPU and torch, precision, the block transport, timing a decision |
 | [receipts](docs/receipts.md) | what a verified result is |
@@ -222,7 +221,7 @@ with a leak, tied seams, and a centered nudge.
 ## Status
 
 0.7.0: the core (wiring, rule, engine, reference, protocol, receipts, custody), the
-free/nudged learning rule with labels, teachers, and rewards, the three-factor and dream
+free/nudged learning rule with labels, teachers, and rewards, the three-factor
 learners, seams with a life, the block transport and the fused kernel, on NumPy, torch and
 MLX. Four worked rungs with receipts live in cadence-examples. On the roadmap: closure sub-nets for in-browser settlement of large
 wirings, environment adapters for embodiment, and connectome loaders. Issues and pull

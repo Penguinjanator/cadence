@@ -20,46 +20,28 @@ produced it.
 from __future__ import annotations
 
 from .checkpoint import load, save
-from .constitution import Constitution, Projection, Region, evolve, grow, mutate
+from .constitution import Constitution, Projection, Region, evolve, grow
 from .custody import Source, fetch, manifest
-from .dream import DiscreteCode, DreamActorCritic, DreamConfig, actor_critic_wiring
 from .learning import Learner, LearnerConfig, embedded, layered, learning_rule
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
     Bins,
-    Population,
-    Rehearsal,
-    RehearsalConfig,
     Valence,
-    ValueConfig,
-    ValueNet,
 )
 from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
-from .receipts import Receipt, canonical_json, canonical_sha256, source_manifest
-from .reference import Ledger, conformance, settle_owner_by_owner
+from .receipts import Receipt, canonical_json
+from .reference import conformance
 from .rules import Adaptation, GradedRule
 from .settle import Nudge, SettledState, Settlement, available_backends
 from .stream import Afterglow, Echo, FastSeams, Trace, stateful
-from .structure import Seams, SleepConfig
 from .wiring import Wiring
 
 __all__ = [
     "ActorCritic",
-    "DiscreteCode",
-    "DreamActorCritic",
-    "DreamConfig",
-    "actor_critic_wiring",
     "ActorCriticConfig",
     "Valence",
     "Bins",
-    "ValueConfig",
-    "ValueNet",
-    "Population",
-    "Rehearsal",
-    "RehearsalConfig",
-    "Seams",
-    "SleepConfig",
     "Adaptation",
     "Region",
     "Projection",
@@ -71,7 +53,6 @@ __all__ = [
     "GradedRule",
     "Learner",
     "LearnerConfig",
-    "Ledger",
     "Nudge",
     "Protocol",
     "Receipt",
@@ -82,10 +63,8 @@ __all__ = [
     "Wiring",
     "available_backends",
     "canonical_json",
-    "canonical_sha256",
     "conformance",
     "embedded",
-    "mutate",
     "grow",
     "evolve",
     "evaluate_predicate",
@@ -96,10 +75,8 @@ __all__ = [
     "manifest",
     "save",
     "select_gain",
-    "settle_owner_by_owner",
     "shuffled",
-    "source_manifest",
     "stateful",
 ]
 
-__version__ = "0.7.1"
+__version__ = "0.8.0"

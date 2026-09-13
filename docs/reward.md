@@ -7,8 +7,8 @@ is, what it was measured to do, and what it was measured not to do.
 ## Three factors: the trace, the critic, the dopamine
 
 `ActorCritic` wraps a `Learner`. Acting is a free settlement; the action is a draw from the
-softmax over the output owners (or, with a `Population`, the bump-weighted mean of a
-population code plus Gaussian noise). Then two nudged settlements toward and away from the
+softmax over the output owners (or, with `Bins`, one softmax draw per dimension of a
+population code). Then two nudged settlements toward and away from the
 action taken give every seam its per-row contrast, the score of that action. Each seam keeps
 an eligibility trace of those contrasts:
 
@@ -38,18 +38,6 @@ action = ac.act(drive)                       # settle, draw, keep eligibility
 obs, reward, done = env.step(action)
 ac.learn(reward, done, next_drive)           # settle the next state, dopamine, every seam moves
 ```
-
-## Dreams: an actor and a critic in one net
-
-`DreamActorCritic` is one wiring (`actor_critic_wiring`) with input, actor, action, critic,
-and `q` owners, and a memory of recent transitions. Acting settles the actor's proposal, then
-imagines `candidates` actions around it, feels each in the critic with the state and the
-candidate clamped, and takes the best (or draws by value while exploring). Learning replays a
-batch: the critic's dream clamps the state and the taken action and nudges `q` toward
-`r + gamma * Q'`, with `Q'` the best imagined candidate of the next state felt with the slow
-strengths (the consolidated copy is the target network); the actor imitates the action that
-was taken by a nudge of the action owners toward its bump. Every seam moves on its own two
-endpoints; the slow strengths follow the fast ones by `consolidate` per update.
 
 ## What the gates measured
 
