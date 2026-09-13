@@ -177,7 +177,7 @@ docstrings in the source carry the details.
   in the reward's own units or over its running scale (`units`), nothing within `floor`
   scales of the level (quiet while the reward is what it usually is), capped at `cap`.
   `reset()`. `ActorCritic.valence` is the agent's, built from `dopamine_center`,
-  `dopamine_floor`, `center_scale` and `center_per_stream` of its config; the cap is
+  `dopamine_floor` and `center_scale` of its config, per stream always; the cap is
   `dopamine_cap`, applied by `learn`.
 - `ActorCritic.salience`: `(batch, owners)`, set before `learn`; each seam's eligibility is
   weighted by its pre owner's entry (a `Trace.ringing`), so that what is still ringing is
