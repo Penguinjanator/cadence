@@ -90,3 +90,23 @@ def test_refuses_foreign_files(tmp_path: Path) -> None:
     np.savez(path, meta=np.array('{"format": "something-else"}'), x=np.zeros(3))
     with pytest.raises(ValueError):
         cd.load(path)
+
+
+def test_a_checkpoint_from_an_earlier_release_loads_without_its_retired_knobs(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """A config saved with a field this version no longer has (the consolidation of 0.7)
+    loads, the field dropped."""
+    import json
+
+    wiring = cd.layered(3, 4, 2, density=1.0, seed=0)
+    learner = cd.Learner(cd.Settlement(wiring, cd.learning_rule(dt=1.0)), wiring.sets["output"], cd.LearnerConfig(eta=0.5))
+    path = tmp_path / "old.npz"
+    learner.save(path)
+    data = dict(np.load(path, allow_pickle=False))
+    meta_key = next(k for k in data if k.startswith("meta") or k == "meta_json")
+    meta = json.loads(str(data[meta_key]))
+    meta["config"]["consolidate"] = 0.2
+    meta["config"]["restore"] = 0.1
+    data[meta_key] = np.array(json.dumps(meta))
+    np.savez(path, **data)
+    loaded = cd.Learner.load(path)
+    assert loaded.config.eta == 0.5

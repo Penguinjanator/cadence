@@ -280,7 +280,8 @@ class ActorCritic:
             plus = self._nudged_groups(drive, free, target, cfg.beta)
             minus = self._nudged_groups(drive, free, target, -cfg.beta)
             self._pending = ("states", plus, minus, self.value(free))
-        return action
+        out: np.ndarray = np.asarray(action, dtype=float)
+        return out
 
     def _nudged_groups(
         self, drive: np.ndarray, free: SettledState, target: np.ndarray, beta: float

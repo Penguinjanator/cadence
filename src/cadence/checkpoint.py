@@ -9,6 +9,7 @@ so a net trained on an accelerator runs on a CPU in a body and keeps learning wh
 
 from __future__ import annotations
 
+import dataclasses
 import json
 from pathlib import Path
 from typing import Any
@@ -72,6 +73,13 @@ def save(learner: Learner, path: str | Path) -> Path:
     return path
 
 
+def _known_config(saved: dict[str, Any]) -> dict[str, Any]:
+    """The saved config's fields that this version still has: a checkpoint written by an
+    earlier release loads, its retired knobs (the consolidation of 0.7) silently dropped."""
+    fields = {f.name for f in dataclasses.fields(LearnerConfig)}
+    return {k: v for k, v in saved.items() if k in fields}
+
+
 def load(
     path: str | Path,
     *,
@@ -116,7 +124,7 @@ def load(
         learner = Learner(
             engine,
             [int(i) for i in data["outputs"]],
-            config or LearnerConfig(**meta["config"]),
+            config or LearnerConfig(**_known_config(meta["config"])),
             trainable_overlaps=data["trainable_overlaps"].astype(bool),
             trainable_owners=data["trainable_owners"].astype(bool),
             symmetric=bool(meta["symmetric"]),
