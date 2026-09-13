@@ -378,5 +378,9 @@ def test_actor_critic_centre_without_the_scale_keeps_the_rewards_size() -> None:
             ac._centre(np.array([1.0, 1.0]))
     big_scaled = scaled._centre(np.array([11.0, 11.0]))
     big_raw = raw._centre(np.array([11.0, 11.0]))
-    assert abs(big_raw[0] - 10.0) < 1.0  # ten above the usual, in the reward's units
-    assert big_scaled[0] > 10.0  # in scales of a nearly constant reward, far larger
+    # the running mean and scale take the new reward in first (half of it at this forgetting):
+    # a reward ten above the usual reads five in the reward's own units, and in scales it
+    # reads root two whatever its size, since the surprise inflates its own scale
+    assert abs(big_raw[0] - 5.0) < 0.1
+    assert abs(big_scaled[0] - np.sqrt(2.0)) < 0.05
+    assert abs(raw._centre(np.array([101.0, 101.0]))[0] - 47.5) < 0.5  # ten times the surprise, ten times the signal
