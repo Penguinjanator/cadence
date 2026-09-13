@@ -1,7 +1,22 @@
 # Cadence documentation
 
 Cadence is a library for *patch nets*: owners that each hold one patch of state, joined by
-declared overlaps, settling to rest by owner-local repair. Read in this order the first time:
+declared overlaps, settling to rest by owner-local repair. Everything in it is built from
+five elements and one step:
+
+| element | what it is | where to read |
+|---|---|---|
+| owners and seams | the state and the world model: a wiring with named ranges | [concepts](concepts.md), `Wiring` in [api](api.md) |
+| the settlement | repair to rest from a clamp, from rest or from the previous state, capped or run out; perception when run out, memory when capped | [concepts](concepts.md), [learning](learning.md), [child](child.md) |
+| the contrast | free against nudged at every seam: what a nudge would change; the local signal of every kind of learning | [learning](learning.md) |
+| the trace | a quantity decaying across moments: over the contrast the eligibility, over a range's activation the memory of the moment before (an afterimage, brightest where the moment changed) | [child](child.md), `Trace` in [api](api.md) |
+| the valence | the reward less its expectation, quiet within the usual, in proportion, capped; the expectation learned by a critic of the same kind as everything else | [reward](reward.md), [child](child.md), `Valence` in [api](api.md) |
+
+and the step: seams move by trace times valence; imitation is the same step with the nudge
+toward the target and the valence one ([learning](learning.md)). The condensation of the
+library onto these elements is in progress ([condense](condense.md)).
+
+Read in this order the first time:
 
 | read | to learn |
 |---|---|
@@ -10,8 +25,9 @@ declared overlaps, settling to rest by owner-local repair. Read in this order th
 | [learning](learning.md) | the free/nudged rule in full: every equation, a worked example with numbers, every knob |
 | [differences](differences.md) | how a patch net differs from a feed-forward network trained by backprop |
 | [games](games.md) | learning to play: imitating a search, and learning from reward |
-- [The child's brain out of simpler components](child.md): one frame and an afterimage, a trace that credits a press paid later, a dopamine quiet for the usual; the small experiments and their numbers.
-- [Condensing cadence: the plan for 0.8](condense.md): five elements and one step, what every public name becomes, the optimizations and the gates.
+| [reward](reward.md) | learning from reward: three factors, what the gates measured |
+| [child](child.md) | the child's capabilities out of simpler components: one frame and an afterimage, a trace that credits a press paid later, a dopamine quiet for the usual; the small experiments and their numbers |
+| [condense](condense.md) | the plan for 0.8: five elements and one step, what every public name becomes, the optimizations and the gates |
 | [tasks](tasks.md) | recipes: how each kind of task becomes a clamp, a target, and a readout, tabular and regression included |
 | [pages](pages.md) | putting a trained net into a browser page that settles it live |
 | [protocols](protocols.md) | held-out tests, predicates with preconditions, the shuffled control, gain selection |
