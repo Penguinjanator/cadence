@@ -109,7 +109,8 @@ class Valence:
             delta = centred
         if self.cap > 0:
             delta = np.clip(delta, -self.cap, self.cap)
-        return np.asarray(delta, dtype=float)
+        out: np.ndarray = np.asarray(delta, dtype=float)
+        return out
 
     def reset(self) -> None:
         self.mean, self.var = 0.0, 1.0
