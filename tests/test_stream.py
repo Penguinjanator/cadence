@@ -179,3 +179,25 @@ def test_afterglow_is_brightest_where_the_moment_changed() -> None:
     assert not np.allclose(glow.trace, echo.trace)
     glow.reset(1, rows=np.array([True]))
     assert glow.cold.all() and not glow.trace.any()
+
+
+def test_the_trace_reads_a_state_on_the_device_the_same_as_on_the_host() -> None:
+    """A settled state that rests on the torch device is sliced there; the trace it feeds is the
+    host trace to the last digit."""
+    pytest = __import__("pytest")
+    if "torch" not in cd.available_backends():
+        pytest.skip("no torch")
+    w, _ = cd.stateful(3, 1, 2, 3, 3, seed=1)
+    w.sets["afterglow"] = w.sets["context"]
+    drive = np.zeros((2, w.n))
+    drive[:, 0] = 1.0
+    host = cd.Settlement(w, cd.learning_rule(dt=1.0)).settle_batch(drive, steps=30)
+    dev = cd.Settlement(w, cd.learning_rule(dt=1.0), backend="torch", device="cpu").settle_batch(drive, steps=30)
+    a, b = cd.Afterglow(w, decay=0.5, source="input"), cd.Afterglow(w, decay=0.5, source="input")
+    a.update(host)
+    b.update(dev)
+    assert np.allclose(a.trace, b.trace)
+    drive[:, 1] = 1.0
+    a.update(cd.Settlement(w, cd.learning_rule(dt=1.0)).settle_batch(drive, steps=30, state=host))
+    b.update(cd.Settlement(w, cd.learning_rule(dt=1.0), backend="torch", device="cpu").settle_batch(drive, steps=30, state=dev))
+    assert np.allclose(a.trace, b.trace, atol=1e-6)

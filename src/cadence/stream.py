@@ -158,7 +158,7 @@ class Trace:
         """After a free settlement: the trace decays toward the source owners' activation, each
         weighted by its movement since the last moment when ``focus`` is above zero; a cold
         stream's first moment weighs one."""
-        h = np.ascontiguousarray(np.atleast_2d(state.activation)[:, self._hidden_columns])
+        h = self._source_activation(state)
         if len(self.trace) != len(h):
             self.reset(len(h))
         if self.focus:
@@ -170,6 +170,23 @@ class Trace:
             self.trace = self.decay * self.trace + (1.0 - self.decay) * h
         self.last = h
         self.cold[:] = False
+
+    def _source_activation(self, state: SettledState) -> np.ndarray:
+        """The source range's activation as a host array. A state that rests on a torch device
+        is sliced there and only the slice comes to the host: for an afterimage of a retina
+        of thousands of owners that is the trace's whole cost."""
+        device = getattr(state, "device", None)
+        s = device.get("s") if isinstance(device, dict) else None
+        if s is not None and hasattr(s, "device") and hasattr(s, "cpu"):
+            cols = self._hidden_columns
+            if isinstance(cols, slice):
+                part = s[:, cols]
+            else:
+                import torch
+
+                part = s[:, torch.as_tensor(np.asarray(cols), device=s.device)]
+            return np.ascontiguousarray(part.detach().to("cpu").numpy().astype(float))
+        return np.ascontiguousarray(np.atleast_2d(state.activation)[:, self._hidden_columns])
 
     def ringing(self, floor: float = 0.1) -> np.ndarray:
         """Each source owner's share of what is still ringing (its trace over the row's mean, plus
