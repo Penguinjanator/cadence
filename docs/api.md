@@ -169,8 +169,34 @@ docstrings in the source carry the details.
   `embedding`, `hidden`, `output`.
 - `LearnedState(free, nudged, opposite)`.
 
-## Valence (`cadence.plasticity`)
+## The agent and the valence (`cadence.plasticity`)
 
+- `ActorCritic(learner, critic, config=None, seed=0, population=None)`: the agent of a stream
+  of moments, the composition of the elements (`reward.md`). `learner` is a `Learner` whose
+  outputs are the action owners; `critic` the owners whose settled activation, read through a
+  learned linear readout, is the expectation of the reward to come; `population` a `Bins` for
+  a continuous action.
+  - `act(drive, greedy=False) -> action`: one free settlement, then a draw from the softmax
+    over the output owners (with `Bins`, one draw per dimension), or the most probable;
+  - `learn(reward, done, next_drive, bootstrap=None) -> report`: the prediction error
+    `reward + gamma * V(next) - V(now)` made into the dopamine by the valence and written
+    through every seam's eligibility, the trace of the last act's contrast decaying by
+    `gamma * lam` a moment; the critic's readout moves by its own trace and the same error.
+    `done` rows start their next life from rest; a truncated row passes `value_of` its last
+    observation as `bootstrap`;
+  - `reset()` (the traces cleared, at a life's end), `probabilities(state)`, `settle(drive)`,
+    `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
+    `salience`, `delta_mean`, `delta_var`.
+- `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=0.05, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True)`:
+  `gamma` the discount and `lam` the trace's decay; `eta` and `eta_bias` the actor's rates,
+  `eta_critic` the critic's; `normalize` and `momentum` the adaptive local step, as the
+  learner's; `dopamine_center` the rate at which the reward's running level and scale follow
+  it (0 for no centring), `dopamine_floor` the band around the level, in scales, within
+  which the dopamine is zero, `dopamine_cap` its cap, `center_scale` whether the surprise is
+  measured in scales of the usual (`True`) or in the reward's own units; `critic_normalize`
+  divides the critic's step by its trace's energy.
+- `Bins(dims, size=9)`: the population code for `dims` continuous dimensions, each a softmax
+  over `size` bins (`centres`, `groups`, `read`, `size`).
 - `Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True)`: the reward less its
   expectation, made into the dopamine. Called on `delta` (a prediction error, or the reward
   alone): less its running level per stream (`level` is the forgetting factor; 0 for none),
