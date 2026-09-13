@@ -27,7 +27,7 @@ from .learning import embedded
 from .settle import SettledState
 from .wiring import Wiring
 
-__all__ = ["Afterglow", "stateful", "Echo", "FastSeams", "columns"]
+__all__ = ["Trace", "Afterglow", "stateful", "Echo", "FastSeams", "columns"]
 
 
 def stateful(
@@ -98,67 +98,24 @@ def columns(index: np.ndarray) -> slice | np.ndarray:
 
 
 @dataclass
-class Echo:
-    """The leaky trace of a batch of streams' hidden equilibria, and how it enters the clamp."""
+class Trace:
+    """A quantity decaying across moments, kept per stream, entering the next settlement as a
+    clamp: the memory of the moment before.
 
-    wiring: Wiring
-    decay: float = 0.5
-    amplitude: float = 1.0  # the clamp amplitude of the rule
-    trace: np.ndarray = field(init=False)
-
-    def __post_init__(self) -> None:
-        if not 0 <= self.decay < 1:
-            raise ValueError("decay lies in [0, 1)")
-        self.context = np.asarray(self.wiring.sets["context"], dtype=np.int64)
-        self.hidden = np.asarray(self.wiring.sets["hidden"], dtype=np.int64)
-        if len(self.context) != len(self.hidden):
-            raise ValueError("one context owner per hidden owner")
-        self._context_columns = columns(self.context)
-        self._hidden_columns = columns(self.hidden)
-        self.trace = np.zeros((0, len(self.hidden)))
-
-    def reset(self, batch: int) -> None:
-        self.trace = np.zeros((batch, len(self.hidden)))
-
-    def keep(self, rows: np.ndarray) -> None:
-        """Keep the traces of ``rows`` only (streams that ended are dropped)."""
-        self.trace = self.trace[rows]
-
-    def clamp(self, drive: np.ndarray) -> np.ndarray:
-        """Write the trace into the context columns of ``drive`` (a copy is returned)."""
-        out = np.array(drive, dtype=float)
-        if len(self.trace) != len(out):
-            self.reset(len(out))
-        out[:, self._context_columns] = self.amplitude * self.trace
-        return out
-
-    def update(self, state: SettledState) -> None:
-        """After a free settlement: the trace decays toward the hidden owners' activation."""
-        h = np.ascontiguousarray(np.atleast_2d(state.activation)[:, self._hidden_columns])
-        if len(self.trace) != len(h):
-            self.reset(len(h))
-        self.trace = self.decay * self.trace + (1.0 - self.decay) * h
-
-    def to_dict(self) -> dict[str, float | int]:
-        return {"decay": self.decay, "amplitude": self.amplitude, "context": int(len(self.context))}
-
-
-@dataclass
-class Afterglow:
-    """A fading picture of the preceding moments, brightest where they changed.
-
-    The trace of a batch of streams' hidden equilibria, each owner weighted by how much it
-    moved since the last moment (its share of the batch row's mean movement, to the power
-    ``focus``), entering as a clamp on the afterglow range: what the settlement just had to
-    repair stays lit for a while, what stood still fades. With ``focus`` 0 it is the Echo.
+    Over a range's activation it is the trace of that range (the Echo of the interpretation
+    at ``focus`` 0); weighted by how much each owner moved since the last moment (its share
+    of the row's mean movement, to the power ``focus``) it is brightest where the moment
+    changed, and of the input owners it is an afterimage of the picture itself, the memory
+    that reads a cue against a static background (``tests/test_child.py``). What the
+    settlement just had to repair stays lit; what stood still fades.
     """
 
     wiring: Wiring
     decay: float = 0.5
-    amplitude: float = 1.0
-    focus: float = 1.0
-    source: str = "hidden"  # the range whose moments are traced: the interpretation, or "input" for an afterimage of the picture
-    target: str = "afterglow"  # the range the trace enters as a clamp
+    amplitude: float = 1.0  # the clamp amplitude of the rule
+    focus: float = 0.0
+    source: str = "hidden"  # the range traced
+    target: str = "context"  # the range the trace enters as a clamp, one owner per source owner
     trace: np.ndarray = field(init=False)
     last: np.ndarray = field(init=False)
     cold: np.ndarray = field(init=False)
@@ -186,10 +143,11 @@ class Afterglow:
             self.cold[rows] = True
 
     def keep(self, rows: np.ndarray) -> None:
+        """Keep the traces of ``rows`` only (streams that ended are dropped)."""
         self.trace, self.last, self.cold = self.trace[rows], self.last[rows], self.cold[rows]
 
     def clamp(self, drive: np.ndarray) -> np.ndarray:
-        """Write the trace into the afterglow columns of ``drive`` (a copy is returned)."""
+        """Write the trace into the target columns of ``drive`` (a copy is returned)."""
         out = np.array(drive, dtype=float)
         if len(self.trace) != len(out):
             self.reset(len(out))
@@ -197,15 +155,19 @@ class Afterglow:
         return out
 
     def update(self, state: SettledState) -> None:
-        """After a free settlement: the trace decays toward the hidden activation, weighted by
-        each owner's movement since the last moment; a cold stream's first moment weighs one."""
+        """After a free settlement: the trace decays toward the source owners' activation, each
+        weighted by its movement since the last moment when ``focus`` is above zero; a cold
+        stream's first moment weighs one."""
         h = np.ascontiguousarray(np.atleast_2d(state.activation)[:, self._hidden_columns])
         if len(self.trace) != len(h):
             self.reset(len(h))
-        moved = np.abs(h - self.last)
-        weight = (moved / (moved.mean(axis=1, keepdims=True) + 1e-9)) ** self.focus if self.focus else np.ones_like(h)
-        weight[self.cold] = 1.0
-        self.trace = self.decay * self.trace + (1.0 - self.decay) * weight * h
+        if self.focus:
+            moved = np.abs(h - self.last)
+            weight = (moved / (moved.mean(axis=1, keepdims=True) + 1e-9)) ** self.focus
+            weight[self.cold] = 1.0
+            self.trace = self.decay * self.trace + (1.0 - self.decay) * weight * h
+        else:
+            self.trace = self.decay * self.trace + (1.0 - self.decay) * h
         self.last = h
         self.cold[:] = False
 
@@ -216,6 +178,25 @@ class Afterglow:
         out = np.ones((len(self.trace), self.wiring.n))
         out[:, self._hidden_columns] = floor + self.trace / (self.trace.mean(axis=1, keepdims=True) + 1e-9)
         return out
+
+    def to_dict(self) -> dict[str, float | int | str]:
+        return {"decay": self.decay, "amplitude": self.amplitude, "focus": self.focus, "source": self.source, "target": self.target, "owners": int(len(self.glow))}
+
+
+@dataclass
+class Echo(Trace):
+    """The Trace of the hidden equilibria at focus 0, into the ``context`` range."""
+
+    def to_dict(self) -> dict[str, float | int]:
+        return {"decay": self.decay, "amplitude": self.amplitude, "context": int(len(self.glow))}
+
+
+@dataclass
+class Afterglow(Trace):
+    """The Trace with the afterglow's defaults: focused, into the ``afterglow`` range."""
+
+    focus: float = 1.0
+    target: str = "afterglow"
 
     def to_dict(self) -> dict[str, float | int | str]:
         return {"decay": self.decay, "amplitude": self.amplitude, "focus": self.focus, "source": self.source, "afterglow": int(len(self.glow))}
