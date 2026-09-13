@@ -27,7 +27,7 @@ from .learning import embedded
 from .settle import SettledState
 from .wiring import Wiring
 
-__all__ = ["stateful", "Echo", "FastSeams", "columns"]
+__all__ = ["Afterglow", "stateful", "Echo", "FastSeams", "columns"]
 
 
 def stateful(
@@ -141,6 +141,74 @@ class Echo:
 
     def to_dict(self) -> dict[str, float | int]:
         return {"decay": self.decay, "amplitude": self.amplitude, "context": int(len(self.context))}
+
+
+@dataclass
+class Afterglow:
+    """A fading picture of the preceding moments, brightest where they changed.
+
+    The trace of a batch of streams' hidden equilibria, each owner weighted by how much it
+    moved since the last moment (its share of the batch row's mean movement, to the power
+    ``focus``), entering as a clamp on the afterglow range: what the settlement just had to
+    repair stays lit for a while, what stood still fades. With ``focus`` 0 it is the Echo.
+    """
+
+    wiring: Wiring
+    decay: float = 0.5
+    amplitude: float = 1.0
+    focus: float = 1.0
+    trace: np.ndarray = field(init=False)
+    last: np.ndarray = field(init=False)
+    cold: np.ndarray = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.decay < 1:
+            raise ValueError("decay lies in [0, 1)")
+        self.glow = np.asarray(self.wiring.sets["afterglow"], dtype=np.int64)
+        self.hidden = np.asarray(self.wiring.sets["hidden"], dtype=np.int64)
+        if len(self.glow) != len(self.hidden):
+            raise ValueError("one afterglow owner per hidden owner")
+        self._glow_columns = columns(self.glow)
+        self._hidden_columns = columns(self.hidden)
+        self.reset(0)
+
+    def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
+        """Fresh for every stream, or for ``rows`` only (streams that begin again)."""
+        if rows is None or len(self.trace) != batch:
+            self.trace = np.zeros((batch, len(self.hidden)))
+            self.last = np.zeros((batch, len(self.hidden)))
+            self.cold = np.ones(batch, dtype=bool)
+        else:
+            self.trace[rows] = 0.0
+            self.last[rows] = 0.0
+            self.cold[rows] = True
+
+    def keep(self, rows: np.ndarray) -> None:
+        self.trace, self.last, self.cold = self.trace[rows], self.last[rows], self.cold[rows]
+
+    def clamp(self, drive: np.ndarray) -> np.ndarray:
+        """Write the trace into the afterglow columns of ``drive`` (a copy is returned)."""
+        out = np.array(drive, dtype=float)
+        if len(self.trace) != len(out):
+            self.reset(len(out))
+        out[:, self._glow_columns] = self.amplitude * self.trace
+        return out
+
+    def update(self, state: SettledState) -> None:
+        """After a free settlement: the trace decays toward the hidden activation, weighted by
+        each owner's movement since the last moment; a cold stream's first moment weighs one."""
+        h = np.ascontiguousarray(np.atleast_2d(state.activation)[:, self._hidden_columns])
+        if len(self.trace) != len(h):
+            self.reset(len(h))
+        moved = np.abs(h - self.last)
+        weight = (moved / (moved.mean(axis=1, keepdims=True) + 1e-9)) ** self.focus if self.focus else np.ones_like(h)
+        weight[self.cold] = 1.0
+        self.trace = self.decay * self.trace + (1.0 - self.decay) * weight * h
+        self.last = h
+        self.cold[:] = False
+
+    def to_dict(self) -> dict[str, float | int]:
+        return {"decay": self.decay, "amplitude": self.amplitude, "focus": self.focus, "afterglow": int(len(self.glow))}
 
 
 @dataclass

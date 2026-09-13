@@ -2,6 +2,11 @@
 
 ## 0.7.1 (unreleased)
 
+- `Afterglow`: an owned state like `Echo`, a fading picture of the preceding moments that
+  is brightest where they changed: the trace of the hidden equilibria weighted by each
+  owner's movement since the last moment (its share of the mean movement, to the power
+  `focus`), entering as a clamp on the `afterglow` range. What the settlement just had to
+  repair stays lit; what stood still fades. With `focus` 0 it is the Echo.
 - `ActorCriticConfig.center_per_stream`: the centred dopamine keeps one running mean and
   scale per stream instead of one over the batch, for streams on different tasks (one brain
   playing several games, whose rewards differ in size); the batch-wide centre is unchanged

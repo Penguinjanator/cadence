@@ -39,7 +39,7 @@ from .receipts import Receipt, canonical_json, canonical_sha256, source_manifest
 from .reference import Ledger, conformance, settle_owner_by_owner
 from .rules import Adaptation, GradedRule
 from .settle import Nudge, SettledState, Settlement, available_backends
-from .stream import Echo, FastSeams, stateful
+from .stream import Afterglow, Echo, FastSeams, stateful
 from .structure import Seams, SleepConfig
 from .wiring import Wiring
 
