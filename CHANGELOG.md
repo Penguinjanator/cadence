@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.7.1 (unreleased)
+## 0.7.1 (2026-09-14)
 
 - `Afterglow`: an owned state like `Echo`, a fading picture of the preceding moments that
   is brightest where they changed: the trace of the hidden equilibria weighted by each
