@@ -102,7 +102,7 @@ docstrings in the source carry the details.
   `Constitution(regions, projections, label)`: a wiring before it is grown.
 - `grow(constitution, seed=0) -> Wiring`: development, deterministic in the seed; sets named
   after the regions, contiguous.
-- `mutate(constitution, rng, *, size_step=0.25, fixed=())`: one offspring.
+- `cadence.constitution.mutate(constitution, rng, *, size_step=0.25, fixed=())`: one offspring (module level; `evolve` uses it).
 - `evolve(fitness, constitution, *, generations=10, population=8, keep=2, seed=0, **mutation) -> Lineage`:
   selection under `fitness(wiring, seed) -> float`; `Lineage.best`, `.best_fitness`, `.generations`.
 
@@ -116,12 +116,12 @@ docstrings in the source carry the details.
 
 ## Reference engine (`cadence.reference`)
 
-- `settle_owner_by_owner(wiring, rule, clamp, *, steps, log_gain=None, bias=None, edge_scale=None) -> (trajectory, Ledger)`:
+- `cadence.reference.settle_owner_by_owner(wiring, rule, clamp, *, steps, log_gain=None, bias=None, edge_scale=None) -> (trajectory, Ledger)` (module level; `conformance` uses it):
   one owner at a time, reading only its own row and its inbox slice, counting one delivery
   per declared overlap per step.
 - `conformance(engine, clamp, *, steps=60) -> dict`: the engine against the reference on
   the same clamp; `max_abs_deviation`, the ledger, the backend.
-- `Ledger`: `declared_overlaps`, `steps`, `deliveries`, `undeclared`; `clean` in `to_dict()`.
+- `cadence.reference.Ledger`: `declared_overlaps`, `steps`, `deliveries`, `undeclared`; `clean` in `to_dict()`.
 
 ## Protocols (`cadence.protocol`)
 
@@ -187,6 +187,6 @@ docstrings in the source carry the details.
 
 - `Receipt.build(kind, body, sources=()) -> Receipt`; `write(path)`;
   `Receipt.verify(path, *, sources=None, check=None) -> (ok, message)`; `to_dict()`.
-- `canonical_json(value)`, `canonical_sha256(value)`, `source_manifest(files)`.
+- `canonical_json(value)`; `cadence.receipts.canonical_sha256(value)` and `cadence.receipts.source_manifest(files)` at module level.
 - `Source(key, file, url, sha256, citation="")`, `fetch(sources, root, *, allow_download=False)`,
   `manifest(sources, extra=None)`, `sha256_of(path)`, `CustodyError`.

@@ -163,7 +163,7 @@ receipts, which the docs still cite where they measured something.
 | `Learner`, `LearnerConfig` | the free/nudged rule: two phases, one local contrast, tied seams, labels or advantage-weighted actions |
 | `Trace`, `Echo`, `Afterglow` | the memory of the moment before: a decaying trace of a range, clamped into the next settlement; focused on what changed it is an afterimage of the picture |
 | `ActorCritic`, `Valence` | learning from reward: an eligibility trace over the contrast, times a dopamine that is the reward less its expectation, quiet for the usual, in proportion |
-| `conformance`, `settle_owner_by_owner`, `Ledger` | the owner-by-owner reference with a message ledger, to certify any backend |
+| `conformance` | the owner-by-owner reference with a message ledger, to certify any backend |
 | `blocks` | the block transport: the overlap matrix as dense blocks between the wiring's owner ranges, a still range's product reused, so a step costs what the moving owners cost |
 | `timing` | the latency of a decision at the median and the tails, the scheduler's context switches, and the machine's state for a receipt |
 | `Protocol`, `Row`, `shuffled`, `select_gain` | declared held-out facts with preconditions, the shuffled control, gain selection under a sparsity cap |
