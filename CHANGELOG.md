@@ -14,6 +14,9 @@ each with what replaces it:
 - `DreamActorCritic`, `DreamConfig`, `DiscreteCode`, `actor_critic_wiring` (`dream.py`) and
   `Seams`, `SleepConfig` (`structure.py`, fast and slow strengths, pruning and sprouting):
   removed; the consolidation of `LearnerConfig` is the slow strength that stays.
+- `LearnerConfig.consolidate` and `restore` (a slow copy of the seams the fast ones are
+  pulled back toward): removed; the NES player's E4 measured it no better than without at
+  the settings tried, and the trace and the valence carry what it was for.
 - `Ledger`, `settle_owner_by_owner`, `canonical_sha256`, `source_manifest`, `mutate`: still in
   `cadence.reference`, `cadence.receipts` and `cadence.constitution`, no longer top level.
 
