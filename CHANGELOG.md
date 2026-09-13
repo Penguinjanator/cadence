@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.7.2 (unreleased)
+
+- `Trace`: one class for the memory of the moment before, per stream, clamped into the next
+  settlement: the trace of a range's activation, weighted by each owner's movement since the
+  last moment when `focus` is above zero (`source` and `target` name the ranges). `Echo` is
+  the `Trace` at focus 0 into the `context` range and `Afterglow` the focused one into the
+  `afterglow` range, both unchanged in use; `ringing` moved to the `Trace`.
+- `Valence`: the reward less its expectation as its own element (the running level per
+  stream, the reward's own units or its scale, the floor, the cap); `ActorCritic.valence` is
+  the agent's, built from its config, and `delta_mean`/`delta_var` read through to it.
+- The first two steps of the condensation planned in `docs/condense.md`; the API doc and the
+  README carry the new names.
+
 ## 0.7.1 (2026-09-14)
 
 - `Afterglow`: an owned state like `Echo`, a fading picture of the preceding moments that
