@@ -161,6 +161,8 @@ receipts, which the docs still cite where they measured something.
 | `GradedRule`, `Adaptation`, `learning_rule` | the owner rule: a graded potential with a rectified sigmoid that emits nothing at rest, an optional leak, and an optional slow variable that turns fixed points into rhythm |
 | `Settlement`, `Nudge` | the batched engine on NumPy or torch, with a convergence tolerance and a nudge toward a target; `dense()` for pages |
 | `Learner`, `LearnerConfig` | the free/nudged rule: two phases, one local contrast, tied seams, labels or advantage-weighted actions |
+| `Trace`, `Echo`, `Afterglow` | the memory of the moment before: a decaying trace of a range, clamped into the next settlement; focused on what changed it is an afterimage of the picture |
+| `ActorCritic`, `Valence` | learning from reward: an eligibility trace over the contrast, times a dopamine that is the reward less its expectation, quiet for the usual, in proportion |
 | `conformance`, `settle_owner_by_owner`, `Ledger` | the owner-by-owner reference with a message ledger, to certify any backend |
 | `blocks` | the block transport: the overlap matrix as dense blocks between the wiring's owner ranges, a still range's product reused, so a step costs what the moving owners cost |
 | `timing` | the latency of a decision at the median and the tails, the scheduler's context switches, and the machine's state for a receipt |
@@ -176,6 +178,8 @@ receipts, which the docs still cite where they measured something.
 | [learning](docs/learning.md) | the rule in full: every equation, a worked example, every knob |
 | [differences](docs/differences.md) | patch net versus feed-forward network with backprop |
 | [games](docs/games.md) | imitating a search; learning from reward; setting up credit |
+| [child](docs/child.md) | the child's capabilities out of simpler components: one frame and an afterimage, a trace that credits a press paid later, a dopamine quiet for the usual; the small experiments and their numbers |
+| [condense](docs/condense.md) | the plan for 0.8: five elements and one step, what every public name becomes |
 | [tasks](docs/tasks.md) | recipes for every kind of task the ladder and the Kaggle set have met |
 | [pages](docs/pages.md) | a trained net settling live in a browser |
 | [embodied](docs/embodied.md) | deploying in a body: the loop, several learners in one net, checkpoints |

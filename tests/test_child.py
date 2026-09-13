@@ -155,8 +155,10 @@ def test_a_capped_repair_carries_the_moment_before_and_a_full_one_forgets_it() -
     w, _ = cd.stateful(4, 1, 4, 24, 4, seed=0)
     engine = cd.Settlement(w, cd.learning_rule(dt=1.0))
     hidden = list(w.sets["hidden"])
-    a = np.zeros((1, w.n)); a[:, 0] = 1.0
-    b = np.zeros((1, w.n)); b[:, 1] = 1.0
+    a = np.zeros((1, w.n))
+    a[:, 0] = 1.0
+    b = np.zeros((1, w.n))
+    b[:, 1] = 1.0
     eq_a = engine.settle_batch(a, steps=300, tolerance=1e-5)
     cold_b = engine.settle_batch(b, steps=300, tolerance=1e-5)
     partial = engine.settle_batch(b, steps=3, state=eq_a)
@@ -238,3 +240,17 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
     print(f"a cue paid three moments later against twelve owners of background: hit rate {plain:.2f} with the plain trace, {weighted:.2f} weighted by the afterimage")
     assert weighted > 0.9
     assert plain > 0.9
+
+
+def test_the_valence_is_one_element() -> None:
+    """The Valence alone: level, units, floor, cap; and the agent's dopamine is the same object."""
+    v = cd.Valence(level=0.5, floor=1.0, cap=10.0, units=True)
+    for _ in range(30):
+        v(np.array([1.0, 1.0]))
+    assert np.array_equal(v(np.array([1.0, 1.0])), [0.0, 0.0])  # the usual: quiet
+    missing, bigger = v(np.array([0.0, 0.0])), v(np.array([11.0, 11.0]))
+    assert missing[0] < 0 < bigger[0] and abs(bigger[0]) > abs(missing[0])
+    assert v(np.array([1000.0, 1000.0]))[0] == 10.0  # the cap
+    wiring = cd.layered(4, 8, 2, density=1.0, seed=0)
+    ac, _ = _actor(wiring, dopamine_center=0.5, dopamine_floor=1.0, dopamine_cap=10.0, center_scale=False)
+    assert isinstance(ac.valence, cd.Valence) and ac.valence.floor == 1.0 and ac.valence.units

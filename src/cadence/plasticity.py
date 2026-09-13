@@ -227,6 +227,51 @@ class Population:
         return np.asarray(bumps.reshape(len(value), self.dims * self.size))
 
 
+@dataclass
+class Valence:
+    """The reward less its expectation, made into the signal that moves the seams: the dopamine.
+
+    ``delta`` is what came less what was expected (a critic's prediction error, or the
+    reward alone). The valence takes it less its running level per stream (``level`` is the
+    forgetting factor of that level, 0 for no centring), in the reward's own units
+    (``units``) or over its running scale; nothing within ``floor`` scales of the level
+    (quiet while the reward is what it usually is); capped at ``cap`` (0 for no cap).
+    """
+
+    level: float = 0.0
+    floor: float = 0.0
+    cap: float = 1.0
+    units: bool = True
+    per_stream: bool = True
+    mean: Any = 0.0
+    var: Any = 1.0
+
+    def __call__(self, delta: np.ndarray) -> np.ndarray:
+        delta = np.asarray(delta, dtype=float)
+        if self.level > 0:
+            rho = self.level
+            if self.per_stream:
+                if not isinstance(self.mean, np.ndarray) or len(self.mean) != len(delta):
+                    self.mean, self.var = np.zeros(len(delta)), np.zeros(len(delta))
+                self.mean = rho * self.mean + (1 - rho) * delta
+                self.var = rho * self.var + (1 - rho) * (delta - self.mean) ** 2
+            else:
+                self.mean = rho * self.mean + (1 - rho) * float(delta.mean())
+                self.var = rho * self.var + (1 - rho) * float(((delta - self.mean) ** 2).mean())
+            scale = np.sqrt(self.var) + 1e-6
+            centred = delta - self.mean if self.units else (delta - self.mean) / scale
+            if self.floor > 0:
+                within = np.abs(centred) < self.floor * (scale if self.units else 1.0)
+                centred = np.where(within, 0.0, centred)
+            delta = centred
+        if self.cap > 0:
+            delta = np.clip(delta, -self.cap, self.cap)
+        return np.asarray(delta, dtype=float)
+
+    def reset(self) -> None:
+        self.mean, self.var = 0.0, 1.0
+
+
 @dataclass(frozen=True, slots=True)
 class ActorCriticConfig:
     gamma: float = 0.99  # discount
@@ -309,19 +354,20 @@ class ActorCritic:
         self.trace: np.ndarray | None = None
         self.trace_bias: np.ndarray | None = None
         self.trace_critic: np.ndarray | None = None
-        self._trace_device: Any = None  # one stream's traces on the torch device, when it settles there
+        # one stream's traces on the torch device, when it settles there
+        self._trace_device: Any = None
         self.second_moment = np.zeros(self.edges)
         self.second_moment_bias = np.zeros(self.n)
         self.velocity = np.zeros(self.edges)
         self.velocity_bias = np.zeros(self.n)
-        self.delta_mean = 0.0
-        self.delta_var = 1.0
+        self._valence: Valence | None = None
         # (batch, owners): each seam's eligibility is weighted by its pre owner's salience, when
-        # set before ``learn`` (an ``Afterglow.ringing``: what is still ringing is what gets written)
+        # set before ``learn`` (a ``Trace.ringing``: what is still ringing is what gets written)
         self.salience: np.ndarray | None = None
         self._drive: np.ndarray | None = None
         self._free: SettledState | None = None
-        self._pending: tuple[str, np.ndarray, np.ndarray, np.ndarray] | None = None
+        # ("phases", plus, minus, value) as activations, or ("states", plus, minus, value) as states
+        self._pending: tuple[str, Any, Any, np.ndarray] | None = None
         self.updates = 0
 
     # -- readings
@@ -439,27 +485,40 @@ class ActorCritic:
 
     # -- learning
 
-    def _centre(self, delta: np.ndarray) -> np.ndarray:
-        """The phasic signal: delta less its running mean, over its running scale; one level
-        for the batch, or one per stream (``center_per_stream``)."""
-        cfg = self.config
-        rho = cfg.dopamine_center
-        if cfg.center_per_stream:
-            if not isinstance(self.delta_mean, np.ndarray) or len(self.delta_mean) != len(delta):
-                self.delta_mean = np.zeros(len(delta))
-                self.delta_var = np.zeros(len(delta))
-            self.delta_mean = rho * self.delta_mean + (1 - rho) * delta
-            self.delta_var = rho * self.delta_var + (1 - rho) * (delta - self.delta_mean) ** 2
-        else:
-            self.delta_mean = rho * self.delta_mean + (1 - rho) * float(delta.mean())
-            self.delta_var = rho * self.delta_var + (1 - rho) * float(
-                ((delta - self.delta_mean) ** 2).mean()
+    @property
+    def valence(self) -> Valence:
+        """The dopamine as a Valence built from the config; its running level is the agent's."""
+        v = self._valence
+        if v is None:
+            cfg = self.config
+            v = self._valence = Valence(
+                level=cfg.dopamine_center,
+                floor=cfg.dopamine_floor,
+                cap=0.0,  # the cap is applied by learn, after the centring
+                units=not cfg.center_scale,
+                per_stream=cfg.center_per_stream,
             )
-        scale = np.sqrt(self.delta_var) + 1e-6
-        centred = (delta - self.delta_mean) / scale if cfg.center_scale else delta - self.delta_mean
-        if cfg.dopamine_floor > 0:  # the floor is in scales either way
-            centred = np.where(np.abs(centred) < cfg.dopamine_floor * (1.0 if cfg.center_scale else scale), 0.0, centred)
-        return centred
+        return v
+
+    @property
+    def delta_mean(self) -> Any:
+        return self.valence.mean
+
+    @delta_mean.setter
+    def delta_mean(self, value: Any) -> None:
+        self.valence.mean = value
+
+    @property
+    def delta_var(self) -> Any:
+        return self.valence.var
+
+    @delta_var.setter
+    def delta_var(self, value: Any) -> None:
+        self.valence.var = value
+
+    def _centre(self, delta: np.ndarray) -> np.ndarray:
+        """The phasic signal through the Valence (the cap is learn's, applied after)."""
+        return self.valence(delta)
 
     def learn(
         self,
@@ -485,14 +544,16 @@ class ActorCritic:
         batch = len(reward)
         decay = cfg.gamma * cfg.lam
         device_kernel = None
-        if kind == "states":  # the two phases as states: on the device when the streams settled there
+        if kind == "states":  # the two phases as states: on the device when they settled there
             if cfg.momentum == 0 and cfg.normalize == 0:
                 device_kernel = self.learner._device_kernel(first, second)
             if device_kernel is None:
                 first, second = first.activation, second.activation
                 kind = "phases"
         if device_kernel is not None:
-            return self._learn_device(device_kernel, first, second, value, reward, done, next_drive, bootstrap)
+            return self._learn_device(
+                device_kernel, first, second, value, reward, done, next_drive, bootstrap
+            )
         if self.trace is None or self.trace.shape[0] != batch:
             self.trace = np.zeros((batch, self.edges))
             self.trace_bias = np.zeros((batch, self.n))
@@ -634,7 +695,9 @@ class ActorCritic:
         batch = len(reward)
         edges, owners = kernel.contrast_rows(plus.device["s"], minus.device["s"])
         if self.salience is not None:
-            salience = torch.as_tensor(np.asarray(self.salience), dtype=edges.dtype, device=edges.device)
+            salience = torch.as_tensor(
+                np.asarray(self.salience), dtype=edges.dtype, device=edges.device
+            )
             edges = edges * salience[:, kernel._row_index[0]]
         if self._trace_device is None or self._trace_device[0].shape != edges.shape:
             self._trace_device = (torch.zeros_like(edges), torch.zeros_like(owners))
@@ -671,8 +734,11 @@ class ActorCritic:
         if cfg.dopamine_cap > 0:
             delta = np.clip(delta, -cfg.dopamine_cap, cfg.dopamine_cap)
         self.updates += 1
-        d = torch.as_tensor(np.asarray(delta, dtype=float), dtype=trace.dtype, device=trace.device)[:, None]
-        report = self.learner._apply_device(kernel, cfg.eta * (d * trace).mean(dim=0), cfg.eta_bias * (d * trace_bias).mean(dim=0))
+        d = torch.as_tensor(np.asarray(delta, dtype=float), dtype=trace.dtype, device=trace.device)
+        d = d[:, None]
+        report = self.learner._apply_device(
+            kernel, cfg.eta * (d * trace).mean(dim=0), cfg.eta_bias * (d * trace_bias).mean(dim=0)
+        )
         if self.critic_net is not None:
             assert self._drive is not None
             self.critic_net.learn(self._drive, raw_target)

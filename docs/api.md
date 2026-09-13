@@ -71,10 +71,20 @@ docstrings in the source carry the details.
 - `stateful(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0, context_init=1.0) -> (Wiring, tie_groups)`:
   `embedded` plus a `context` range of `hidden` owners that hear nothing and reach every
   hidden owner. Sets `input`, `context`, `embedding`, `hidden`, `output`.
-- `Echo(wiring, decay=0.5, amplitude=1.0)`: the carried state of a batch of streams.
-  `reset(batch)`, `clamp(drive)` (writes `amplitude * trace` into the context columns),
-  `update(state)` (`trace <- decay * trace + (1 - decay) * hidden activation`), `keep(rows)`,
-  `to_dict()`.
+- `Trace(wiring, decay=0.5, amplitude=1.0, focus=0.0, source="hidden", target="context")`:
+  the memory of the moment before, per stream: the trace of the `source` range's activation,
+  entering the next settlement as a clamp on the paired `target` range (one owner per source
+  owner). `focus` above zero weights each owner by its movement since the last moment (its
+  share of the row's mean movement, to that power): brightest where the moment changed.
+  `reset(batch, rows=None)`, `clamp(drive)`, `update(state)`, `keep(rows)`, `ringing(floor=0.1)`
+  (each source owner's share of what is still ringing, one elsewhere: a salience for
+  `ActorCritic.salience`), `to_dict()`.
+- `Echo(wiring, decay, amplitude)`: the `Trace` at focus 0 into the `context` range (the
+  carried state of the earlier releases, unchanged).
+- `Afterglow(wiring, decay, amplitude, focus=1.0, source="hidden", target="afterglow")`: the
+  focused `Trace`; with `source="input"` an afterimage of the picture itself, the memory that
+  reads a cue against a static background (`tests/test_child.py`: 1.00 where the Echo reads
+  chance).
 - `FastSeams(pre, post, decay=1.0, rate=1.0, amplitude=1.0)`: fast Hebbian seams between two
   ranges, per stream, as owned state. `update(state, write)` adds the outer product of the
   pre and post activations for the rows in `write` (after fading every strength by `decay`);
@@ -158,6 +168,20 @@ docstrings in the source carry the details.
   dense hidden layer and the outputs, feedback seams tied in pairs; sets `input`,
   `embedding`, `hidden`, `output`.
 - `LearnedState(free, nudged, opposite)`.
+
+## Valence (`cadence.plasticity`)
+
+- `Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True)`: the reward less its
+  expectation, made into the dopamine. Called on `delta` (a prediction error, or the reward
+  alone): less its running level per stream (`level` is the forgetting factor; 0 for none),
+  in the reward's own units or over its running scale (`units`), nothing within `floor`
+  scales of the level (quiet while the reward is what it usually is), capped at `cap`.
+  `reset()`. `ActorCritic.valence` is the agent's, built from `dopamine_center`,
+  `dopamine_floor`, `center_scale` and `center_per_stream` of its config; the cap is
+  `dopamine_cap`, applied by `learn`.
+- `ActorCritic.salience`: `(batch, owners)`, set before `learn`; each seam's eligibility is
+  weighted by its pre owner's entry (a `Trace.ringing`), so that what is still ringing is
+  what a signal writes through. None by default.
 
 ## Receipts and custody (`cadence.receipts`, `cadence.custody`)
 

@@ -121,7 +121,8 @@ class Learner:
     updates: int = 0
 
     def __post_init__(self) -> None:
-        self._slow: Any = None  # the slow copy of the seams and biases on the host, when consolidation is on
+        # the slow copy of the seams and biases on the host, when consolidation is on
+        self._slow: Any = None
         self._slow_device: Any = None  # the same on the torch device
         self.output_index = np.asarray(list(self.outputs), dtype=np.int64)
         self.output_mask = np.zeros(self.engine.wiring.n)
@@ -315,7 +316,10 @@ class Learner:
             bias = np.where(self.trainable_owners, bias * (1.0 - cfg.decay), bias)
         if cfg.restore > 0 or cfg.consolidate > 0:  # the slow copy: pulled toward, following
             if self._slow is None:
-                self._slow = (np.array(self.engine.edge_scale, dtype=float), np.array(self.engine.bias, dtype=float))
+                self._slow = (
+                    np.array(self.engine.edge_scale, dtype=float),
+                    np.array(self.engine.bias, dtype=float),
+                )
             slow_scale, slow_bias = self._slow
             if cfg.restore > 0:
                 scale = scale + cfg.restore * (slow_scale - scale)

@@ -193,7 +193,9 @@ def evolve(
             offspring.append(mutate(parents[rng.integers(len(parents))], rng, **mutation))
         seeds = [seed + 1000 * g + k for k in range(len(offspring))]
         scores = mapper(_Life(fitness), zip(offspring, seeds, strict=True))
-        scored = [(float(f), k, child) for k, (f, child) in enumerate(zip(scores, offspring, strict=True))]
+        scored = [
+            (float(f), k, child) for k, (f, child) in enumerate(zip(scores, offspring, strict=True))
+        ]
         scored.sort(key=lambda s: -s[0])
         parents = [c for _, _, c in scored[:keep]]
         top = scored[0]

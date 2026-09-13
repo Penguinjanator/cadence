@@ -158,15 +158,19 @@ def test_afterglow_is_brightest_where_the_moment_changed() -> None:
     glow = cd.Afterglow(w, decay=0.5, focus=1.0)
     echo = cd.Afterglow(w, decay=0.5, focus=0.0)
     hidden = list(w.sets["hidden"])
-    drive_a = np.zeros((1, w.n)); drive_a[:, 0] = 1.0
-    drive_b = np.zeros((1, w.n)); drive_b[:, 1] = 1.0
+    drive_a = np.zeros((1, w.n))
+    drive_a[:, 0] = 1.0
+    drive_b = np.zeros((1, w.n))
+    drive_b[:, 1] = 1.0
     first = engine.settle_batch(glow.clamp(drive_a), steps=30)
-    glow.update(first); echo.update(first)
+    glow.update(first)
+    echo.update(first)
     h1 = first.activation[:, hidden]
     assert np.allclose(glow.trace, 0.5 * h1)  # a cold stream's first moment weighs one
     assert np.allclose(echo.trace, 0.5 * h1)
     second = engine.settle_batch(glow.clamp(drive_b), steps=30)
-    glow.update(second); echo.update(second)
+    glow.update(second)
+    echo.update(second)
     h2 = second.activation[:, hidden]
     moved = np.abs(h2 - h1)
     weight = moved / (moved.mean(axis=1, keepdims=True) + 1e-9)

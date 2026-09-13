@@ -795,7 +795,8 @@ class _TorchKernel:
                 torch.from_numpy(self._wiring.post).to(self.device),
             )
         pre, post = self._row_index
-        edges = (s_plus[:, pre] * s_plus[:, post] - s_minus[:, pre] * s_minus[:, post]).to(self.param_dtype)
+        edges = s_plus[:, pre] * s_plus[:, post] - s_minus[:, pre] * s_minus[:, post]
+        edges = edges.to(self.param_dtype)
         owners = (s_plus - s_minus).to(self.param_dtype)
         return edges, owners
 

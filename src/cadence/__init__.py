@@ -31,6 +31,7 @@ from .plasticity import (
     Population,
     Rehearsal,
     RehearsalConfig,
+    Valence,
     ValueConfig,
     ValueNet,
 )
@@ -50,6 +51,7 @@ __all__ = [
     "DreamConfig",
     "actor_critic_wiring",
     "ActorCriticConfig",
+    "Valence",
     "Bins",
     "ValueConfig",
     "ValueNet",
@@ -63,6 +65,7 @@ __all__ = [
     "Projection",
     "Constitution",
     "Echo",
+    "Afterglow",
     "Trace",
     "FastSeams",
     "GradedRule",
