@@ -1,10 +1,14 @@
 # Changelog
 
-## 0.8.0 (unreleased): the condensation
+## 0.8.0 (2026-09-14): the condensation
 
 The library condensed into its elements (`docs/condense.md`): owners and seams, the
 settlement, the contrast, the trace, the valence, and one step. Dropped from the top level,
-each with what replaces it:
+each with what replaces it. The gates it passed: the core suite with the child's
+experiments; the four example rungs' receipts verifying under it; the NES player's
+one-frame afterimage brain retrained on it reading the held-out presses at the same
+0.862 / 0.325 / 0.579 bits as on 0.7.1.
+
 
 - `Rehearsal`, `RehearsalConfig` (the clipped rehearsal learner): the trace and the valence
   of `ActorCritic`; E4 of the NES player measured the rehearsal a failure.
