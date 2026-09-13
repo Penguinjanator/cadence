@@ -325,3 +325,31 @@ def test_actor_critic_centres_the_dopamine_per_stream() -> None:
     assert isinstance(own.delta_mean, np.ndarray) and own.delta_mean.shape == (2,)
     assert own.delta_mean[0] > own.delta_mean[1] + 5.0  # each stream's level is its own reward's
     assert abs(shared.delta_mean - own.delta_mean.mean()) < 2.0  # the shared level is their mean
+
+
+def test_actor_critic_dopamine_floor_is_quiet_for_the_usual_reward() -> None:
+    """With a floor, a reward at its usual level gives no dopamine and no step; a surprise does."""
+    wiring = cd.layered(4, 8, 2, density=1.0, seed=0)
+    learner = cd.Learner(
+        cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
+        wiring.sets["output"],
+        cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
+    )
+    ac = cd.ActorCritic(
+        learner,
+        wiring.sets["hidden"],
+        cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.1, eta_critic=0.0, dopamine_center=0.5, dopamine_floor=1.0),
+        seed=0,
+    )
+    rng = np.random.default_rng(2)
+    drive = np.pad(rng.random((2, 4)), ((0, 0), (0, wiring.n - 4)))
+    ac.act(drive)
+    for _ in range(30):
+        ac.learn(np.array([1.0, 1.0]), np.zeros(2, dtype=bool), drive)
+        ac.act(drive)
+    before = learner.engine.weights.copy()
+    ac.learn(np.array([1.0, 1.0]), np.zeros(2, dtype=bool), drive)  # the usual reward: quiet
+    ac.act(drive)
+    assert np.array_equal(learner.engine.weights, before)
+    ac.learn(np.array([50.0, 50.0]), np.zeros(2, dtype=bool), drive)  # a surprise: a step
+    assert not np.array_equal(learner.engine.weights, before)

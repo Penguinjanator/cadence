@@ -248,6 +248,9 @@ class ActorCriticConfig:
     # the tonic level per stream instead of one over the batch: streams on different tasks
     # (one brain playing several games) each keep their own mean and scale
     center_per_stream: bool = False
+    # >0: the centred signal within this many scales of its mean is nothing; the dopamine is
+    # quiet while the reward is what it usually is and speaks only for a surprise
+    dopamine_floor: float = 0.0
     critic_normalize: bool = (
         True  # the critic's step is divided by its trace's energy, so its step size is scale-free
     )
@@ -446,7 +449,10 @@ class ActorCritic:
             self.delta_var = rho * self.delta_var + (1 - rho) * float(
                 ((delta - self.delta_mean) ** 2).mean()
             )
-        return (delta - self.delta_mean) / (np.sqrt(self.delta_var) + 1e-6)
+        centred = (delta - self.delta_mean) / (np.sqrt(self.delta_var) + 1e-6)
+        if cfg.dopamine_floor > 0:
+            centred = np.where(np.abs(centred) < cfg.dopamine_floor, 0.0, centred)
+        return centred
 
     def learn(
         self,

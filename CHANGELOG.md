@@ -6,6 +6,9 @@
   scale per stream instead of one over the batch, for streams on different tasks (one brain
   playing several games, whose rewards differ in size); the batch-wide centre is unchanged
   and stays the default.
+- `ActorCriticConfig.dopamine_floor`: the centred dopamine within that many scales of its
+  mean is nothing, so the broadcast is quiet while the reward is what it usually is and
+  speaks only for a surprise; with the floor at 0 (the default) nothing changes.
 - `LearnerConfig.momentum` and `normalize` are the adaptive local step proper: Adam's order
   (the running average of each seam's own contrast, divided by the RMS of its raw contrast)
   with both corrected for their short history, as `ActorCritic` already did. Before, the
