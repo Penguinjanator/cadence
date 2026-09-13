@@ -1,66 +1,45 @@
-# How a patch net differs from a feed-forward network with backprop
+# Patch nets and networks trained by backprop
 
-Both are networks of weighted connections that learn from examples. Almost everything
-else is different, and the differences are the point of the library.
+Both learn weighted responses from data. Cadence offers a different implementation of
+inference and credit, with explicit retained state. That difference is useful only when
+it fits the task and its cost is measured.
 
-## Side by side
-
-| | feed-forward network, backprop | patch net, free/nudged rule |
+| property | ordinary feed-forward model | Cadence settlement |
 |---|---|---|
-| **what a unit holds** | one number, computed once per pass | a potential and an activation that keep updating until they stop moving |
-| **how an answer is made** | one forward pass: layer by layer, input to output, no return | a settlement: every owner repairs its own patch from its inbox, tens of times, until the whole net is at rest |
-| **direction of influence** | forward only during inference | both ways: output owners feed back on hidden owners through the same seams, so an answer is a joint rest state, not a chain of function calls |
-| **where the goal enters** | at the loss, after the forward pass, as an error signal | as a *nudge*: an extra drive on the output owners during a second settlement |
-| **how credit reaches a hidden unit** | a separate backward pass sends `dL/dh` down a transposed copy of the weights; this needs a global controller that has stored every layer's activations | the nudge moves the output owners, the feedback seams move the hidden owners a little, and the hidden owners' own change *is* the credit; nothing is stored and nothing is transposed |
-| **what a weight update reads** | the gradient, a quantity computed elsewhere and delivered to the weight | two local numbers: the product of its own two endpoints' activations in the two phases |
-| **weight symmetry** | not required; forward and "backward" weights are the same matrix used twice by the controller | required, and built in: one seam carries both directions with one scale |
-| **is the update a gradient?** | exactly, by the chain rule | yes, in the limit of a small nudge and converged phases, by equilibrium propagation; the tests check it against finite differences |
-| **cost of one update** | one forward pass plus one backward pass | one free settlement plus two nudged settlements, each tens of steps |
-| **parameters** | weights and biases | seams and biases; a seam counts once |
-| **what has to be true of the net** | differentiable | symmetric seams, responsive owners, converged phases |
-| **what a trained net is** | a function | a dynamical system with a learned rest state; you can watch it settle, interrupt it, ablate an owner mid-way, or clamp any owner, and the same rule applies |
+| inference | evaluate layers | repeatedly repair state over declared seams |
+| state between inputs | supplied by a cache or separate memory when needed | retained explicitly in a state, trace, or fast-memory patch |
+| training credit | reverse-mode differentiation | free/nudged endpoint contrasts |
+| stored training data | activations or recomputation checkpoints | phase endpoints, traces and optimizer history |
+| exact gradient conditions | differentiable executed computation | stable smooth equilibrium branch, symmetric effective recurrent weights, converged phases, vanishing nudge |
+| work | forward/backward operations | all free and nudged repair steps plus the update |
+| memory capacity | model and context dependent | model and fast-store dimensions dependent |
 
-## The same thing, said with the equations
+A transformer can also use recurrent state, external memory, local updates, or a
+retrieval module. An explicit store beating one trained transformer on a structured
+memory task does not show that these resources are exclusive to patch nets.
 
-A one-hidden-layer network computes `h = f(W₁x)`, `y = g(W₂h)`, then backprop computes
-`δ₂ = dL/dy`, `δ₁ = (W₂ᵀ δ₂) ⊙ f'`, and updates `ΔW₂ ∝ δ₂ hᵀ`, `ΔW₁ ∝ δ₁ xᵀ`. The
-quantities `δ` exist only in the controller; no unit "has" them.
+## What to measure
 
-A patch net with the same shape settles `v ← v + dt (−v + W s + clamp + bias)` with `W`
-symmetric (input→hidden and hidden→output seams, each with its reverse) until `s` stops
-moving: that is `s⁰`. Then it settles again with `beta (target − softmax(s_out/T))` added
-to the output owners: `s⁺` (and `s⁻` with the opposite sign). The update of the seam
-between owners `i` and `j` is `eta · (s⁺ᵢ s⁺ⱼ − s⁻ᵢ s⁻ⱼ) / (2 beta)`. That single line does
-the work of both `δ` equations, and it does it with numbers each owner already has. The
-[learning](learning.md) page walks one update through a six-owner net with every value.
+Separate inference, learning, and record maintenance. On an addressed lookup, one read
+already computes the answer; repeated settlement can add cost without accuracy. On
+interacting constraints, feedback may change the answer, and the cost includes every
+repair. A warm start may help on slowly changing inputs, but comparing one unchanged
+cached input with another model's fresh decision does not measure a control workload.
 
-## What that buys, and what it costs
+Compare validation-selected models on the same held-out examples and include a simple
+algorithmic solver when the task has one. Count mutable records, training examples,
+architecture search, parameters, wall time, and all retained failures. A receipt hash
+verifies custody; it cannot repair mismatched budgets or an unlearned baseline.
 
-**Locality.** Every overlap's update is a function of its own two endpoints. The
-reference engine in `cadence.reference` settles a net one owner at a time with a message
-ledger and `conformance` checks any backend against it, so "no owner computed anything it
-could not see" is a verified property of every result, learning included.
+## Current evidence
 
-**One machine.** Inference and learning are the same settlement with and without a nudge.
-There is no second pathway, no stored activations, no transposed weights. That is what
-makes the rule a candidate for hardware where units are physical and a global backward
-pass is not available.
+The supervised public examples reach broadly similar accuracy to their MLP baselines
+at greater wall-clock cost; widths and selection budgets are not always matched.
+Pong's historical reward run returns about 88% of balls against 93% for REINFORCE with
+Adam using the same interaction budget, reward, and evaluation protocol.
 
-**Sample efficiency.** On every rung of the examples the rule reaches the accuracy of a
-same-sized backprop network in fewer passes over the data (digits: 20 epochs against 50;
-MNIST: within 0.4 points at 10 epochs), and on Pong it learns more from the same rollouts.
-
-**Wall-clock.** A settlement is tens of steps and an update needs three of them; a
-forward-and-backward pass is two. On a CPU that is a factor of ten to a hundred in time
-for the same accuracy, and no example hides it. On an accelerator with large batches the
-factor shrinks; on hardware that settles natively it disappears.
-
-**Parameters.** No advantage. A seam is a weight. The examples report parameter counts
-next to the baselines' and they match.
-
-## What is not different
-
-Both learn from examples by moving weights along a gradient. Both need the same
-ingredients to generalise: enough data, a validation split for selection, a held-out
-test read once. A patch net is not a shortcut around any of that, and the examples treat
-it with the same discipline as the baselines they are measured against.
+The [changing-memory example](https://github.com/muellerberndt/cadence-examples/tree/main/05_memory)
+tests a more specific benefit: residual writes revise bounded records without
+retraining a feature extractor. Exact lookup controls also solve it. The transformer
+learns the training-length task, and correlated keys expose interference in Cadence's
+store. These are task-specific results, not a general efficiency theorem.

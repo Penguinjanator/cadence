@@ -18,7 +18,7 @@ inhibition produce rhythm instead of a fixed point. It is off by default.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -84,7 +84,7 @@ class GradedRule:
         return np.where(sig > rest, d / (1.0 - rest), self.leak * d / rest)
 
     def replace(self, **changes: Any) -> GradedRule:
-        return GradedRule(**{**asdict(self), **changes})
+        return replace(self, **changes)
 
     def to_dict(self) -> dict[str, Any]:
         out = asdict(self)

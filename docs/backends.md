@@ -11,7 +11,7 @@ cd.available_backends()
 | `"cpu"` | NumPy, and the fused numba kernel | float64 | `cadence-net[fast]` | receipts, conformance, anything you will cite; every readout |
 | `"torch"` on CUDA | NVIDIA GPU | float64, or float32 with `precision="float32"` | `cadence-net[accel]` | training at scale; receipts too, in float64 |
 | `"torch"` on MPS | Apple silicon GPU through Metal | float32 | `cadence-net[accel]` | training on a Mac when torch is what you have |
-| `"mlx"` | Apple silicon GPU through MLX, unified memory | float32 | `cadence-net[apple]` | training on a Mac: the faster of the two Apple paths |
+| `"mlx"` | Apple silicon GPU through MLX, unified memory | float32 | `cadence-net[apple]` | an alternative Apple backend; benchmark the actual workload |
 | `"torch"` on CPU | torch CPU | float64 | `cadence-net[accel]` | one code path on a box without a GPU |
 
 Every backend does the same arithmetic: the block transport of the wiring (dense blocks
@@ -19,39 +19,53 @@ between the owner ranges the named sets cut; a range that did not move keeps its
 then one owner-local update, a nudge, adaptation, a mask, a tolerance, and `repair`. The
 device backends keep the settled state on the device (`state.device`) so that a phase that
 continues from it starts there, and the learning rule's contrast is read on the device
-(`Settlement.contrast_on_device`): only one number per overlap comes back to the host.
-Large wirings whose blocks do not fit `dense_limit` settle by the segmented scatter on
-`"cpu"` and `"torch"`; `"mlx"` needs the blocks.
+(`Settlement.contrast_on_device`). For blocked PyTorch learners, contrast, momentum,
+RMS normalization and parameter updates remain on the device. Scalar step reports still
+synchronize. Reading parameters or optimizer history, saving a checkpoint, or entering a
+host-only path materializes the required arrays. Public optimizer attributes remain
+mutable NumPy arrays; edits made through them are picked up by the next update. History
+uses float32 on MPS and float64 on torch CPU/CUDA. MLX contrast currently returns arrays
+to the host for the optimizer.
+Large wirings whose blocks do not fit `dense_limit` use sparse transport. The CPU backend
+uses SciPy CSR when installed, and the NumPy segmented sum otherwise. PyTorch uses its
+gather/scatter path; `"mlx"` needs the blocks.
+
+## Sparse CPU transport
+
+A CSR row holds the overlaps heard by one owner. The matrix multiplies the published
+activations directly, avoiding the NumPy fallback's temporary array with one value per
+batch row and overlap. This changes transport only: local repair, nudges, masks,
+adaptation and stopping conditions are the same. Floating-point summation order can
+change slightly, so compare complete trajectories at the precision a task requires.
+
+SciPy comes with `cadence-net[fast]`; the NumPy-only installation remains supported.
+Sparse indices are cached on the wiring, and each engine's matrix shares its current
+weights. Replacing parameters drops the old matrix wrapper; the topology can be reused.
+For a batch of size B with E overlaps and N owners, one avoided float64 message array
+occupies `8 * B * E` bytes, while the result occupies `8 * B * N` bytes. The CSR index
+cache adds approximately `4 * (E + N + 1)` bytes when 32-bit indices suffice.
+
+`engine.to_dict()["transport"]` retains `"segmented"` for sparse wiring compatibility.
+`"sparse_kernel"` is `null` before a sparse CPU multiply runs, then `"scipy_csr"` or
+`"numpy_segmented"`. Inspection does not instantiate a kernel.
 
 ## Which hardware
 
-**Apple silicon.** Two paths. `"mlx"` runs the block products and the owner updates as MLX
-graphs on the unified memory and is the faster one: on an M4, one settlement step of a
-language-model net (2,771 owners, 512 rows) takes 15 ms on MLX against 22 ms on torch/MPS,
-and a whole learning update (three settlements and the contrast) 0.7 s against 1.1 s.
-Both are float32; MPS has no float64 and MLX's GPU has none either, so a receipt readout
-runs on `"cpu"`. The fused CPU kernel on the same net does one step in about 20 ms on one
-performance core when the machine is quiet (the numbers above were taken on a machine at
-load 20, which slows the CPU path more than the GPU paths). Rule of thumb: below about a
-thousand moving owners the CPU kernel wins on latency; above it, MLX.
+Choose using the actual changing-input workload. Small nets can spend more time
+launching GPU operations than doing arithmetic; large batches and dense blocks can
+benefit from accelerator matrix products. Sparse graphs require a separate measurement.
+Warm up the backend and synchronize the GPU around wall-clock measurements.
 
-**Intel and AMD CPUs.** The `"cpu"` backend: NumPy float64 with the fused numba kernel
-(`cadence-net[fast]`, which brings numba and scipy's BLAS). The kernel's cost per step is
-one exponential per moving owner plus the block products; on x86 numba can vectorise the
-exponential through SVML when Intel's `icc_rt` is installed (`pip install icc_rt`), which
-roughly doubles the elementwise part. Set `OMP_NUM_THREADS`/`OPENBLAS_NUM_THREADS` to the
-cores you mean to use; the receipts record them (`cadence.timing.environment`).
+The CPU backend uses NumPy float64, with optional numba and SciPy acceleration through
+`cadence-net[fast]`. Cap BLAS threads when running independent experiment workers;
+`cadence.timing.environment()` records thread settings. PyTorch supports CPU, CUDA and
+Apple MPS, while MLX provides an additional Apple path. A single net currently uses one
+device. Neither backend choice nor parameter count establishes efficiency by itself.
 
-**NVIDIA.** `"torch"` with CUDA. Float64 is the default and is what a receipt wants; on a
-data-centre part (A100, H100) float64 runs at full rate. On a consumer or inference part
-(L4, L40S, A10G, RTX) float64 is a thirty-second of the float32 rate, so train with
-`Settlement(..., precision="float32")` and read out on `"cpu"`; the trainer in the author
-repository does exactly that and records the conformance between the two. One host sync
-per step (the tolerance) costs about 20 µs on CUDA and is negligible above a few hundred
-owners.
-
-**Several GPUs.** Not yet: one net settles on one device. The addition is a summed contrast
-across devices, which is small; it is on the roadmap for the level-3 author.
+CUDA defaults to float64; `precision="float32"` selects float32 settlement. Hardware
+throughput and the useful precision depend on the device and problem. Compare outputs,
+residuals and learning curves with float64, especially near multiple equilibria. MPS
+uses float32 for parameters and state because it does not support float64.
 
 ## Choosing a device
 
@@ -74,7 +88,7 @@ habits keep this honest:
 1. Make receipts on `"cpu"` or on CUDA float64.
 2. When you use MPS float32 for a page or a demo, run `cd.conformance` on the same wiring
    and clamp, and show the deviation. It is usually around 1e-5; when it is not, a readout
-   near threshold is telling you something.
+   near threshold needs closer inspection.
 
 ## Extending to another device
 
@@ -99,6 +113,11 @@ trajectory is requested; `CADENCE_FUSED=0` in the environment forces the NumPy l
 owner-by-owner reference and `conformance` are unchanged and remain what any kernel is
 measured against.
 
+The fused CPU path currently expects one shared mask with shape `(n,)`. For a
+different ablation mask per batch row, use sparse CPU settlement
+(`dense_limit=0`) or call `settle` separately for each row. The NumPy sparse path
+accepts `(batch, n)` masks; this does not imply that the fused kernel supports them.
+
 ## Timing a decision
 
 `cadence.timing.latency(decide)` calls `decide()` a thousand times and reports the median,
@@ -109,3 +128,8 @@ pinned to when the platform can say (Linux), the load average and the library ve
 wall-clock number in a receipt is a fact about a program on a machine on a day; this is the
 machine's half of it. A tail far above the median with many involuntary switches is the
 machine, not the net.
+
+For a changing-input workload, `decide()` must advance an input sequence and carry or
+reset state according to the deployment contract. Repeating an unchanged input measures
+a stable-state fast path. Report cold and warm results, output quality, and residuals
+separately; elapsed time on that fast path does not establish general inference speed.

@@ -1,6 +1,6 @@
 # API reference
 
-Everything below is importable from `cadence`. Signatures are the current ones; the
+Top-level exports and module-qualified helpers are listed below. The
 docstrings in the source carry the details.
 
 ## Wiring (`cadence.wiring`)
@@ -38,6 +38,9 @@ docstrings in the source carry the details.
   one clamp; `clamp` is a list of owners at full amplitude, a `{owner: level}` map, or a
   dense vector. `settle_batch(drive, ...)` takes `(batch, n)` drives. Both stop early at
   `tolerance` and report the steps taken.
+- `residual(drive, state, *, nudge=None, mask=None)`: per-row maximum remaining
+  fixed-point equation discrepancy, including adaptation when enabled. One CPU transport
+  evaluation, no state change; a diagnostic rather than a stability/uniqueness proof.
 - `clamp_vector(clamp)`, `clamp_levels(levels)` (levels in [0, 1] times the clamp amplitude),
   `readings(state, names)`, `with_parameters(*, edge_scale, log_gain, bias)`, `weights`
   (effective drive per overlap), `dense()` (the `W[pre, post]` matrix), `to_dict()`.
@@ -85,13 +88,17 @@ docstrings in the source carry the details.
   focused `Trace`; with `source="input"` an afterimage of the picture itself, the memory that
   reads a cue against a static background (`tests/test_child.py`: 1.00 where the Echo reads
   chance).
-- `FastSeams(pre, post, decay=1.0, rate=1.0, amplitude=1.0)`: fast Hebbian seams between two
-  ranges, per stream, as owned state. `update(state, write)` adds the outer product of the
-  pre and post activations for the rows in `write` (after fading every strength by `decay`);
-  `read(drive)` is the post owners' drive from the pre range's clamp through the strengths;
-  `clamp(drive, inplace=False)` adds it to the post columns; `reset(batch)`, `keep(rows)`,
-  `to_dict()`. The recall rung's memory, kept per stream: a digit span of twelve with no
-  trained seam (cadence-paper H1).
+- `FastSeams(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb")`:
+  one mutable `(pre, post)` matrix per stream. `rule="delta"` uses unit keys and writes
+  `rate * outer(key, value - prediction)`; it rejects `normalize`/`replace` and rates
+  outside `[0, 1]`. The default preserves additive Hebbian memory, including optional
+  count-averaged reads (`normalize`) and one-hot row replacement (`replace`).
+  `observe(key, value, write=None)` uses `(batch, width)` ports and writes all rows unless
+  given a boolean mask; `recall(key)` reads without decay. `update(state, write=None, post=None)`
+  instead reads named owner activations and defaults to decay-only; `read(drive)` reads
+  key owners' drive columns. `clamp(drive, inplace=False)` adds the read into post columns.
+  `reset(batch, rows=None)`, `keep(rows)`, `to_dict()`. See [memory](memory.md) for stream
+  identity, representation alignment, key interference, and checkpoint boundaries.
 - `columns(index)`: a slice when the owners are one contiguous range, else the index array;
   a column read or write through a slice is a strided pass, through an index array a gather
   that comes back Fortran-ordered or a scatter, tens of times slower on a wide batch.
@@ -197,7 +204,7 @@ docstrings in the source carry the details.
   divides the critic's step by its trace's energy.
 - `Bins(dims, size=9)`: the population code for `dims` continuous dimensions, each a softmax
   over `size` bins (`centres`, `groups`, `read`, `size`).
-- `Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True)`: the reward less its
+- `Valence(level=0.0, floor=0.0, cap=1.0, units=True)`: the reward less its
   expectation, made into the dopamine. Called on `delta` (a prediction error, or the reward
   alone): less its running level per stream (`level` is the forgetting factor; 0 for none),
   in the reward's own units or over its running scale (`units`), nothing within `floor`

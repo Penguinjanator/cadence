@@ -56,8 +56,9 @@ learner.step(drive(frames), actions, weight=advantages)         # free, +beta·A
 
 `Nudge.weight` scales the nudge row by row. For a transition whose action paid
 (`A > 0`) the output owner of that action is pulled up; for one that cost (`A < 0`) it is
-pushed down; the update on every seam is then `A · d log π(a|s) / dW`, summed over the
-batch, which is the REINFORCE policy gradient. The goal, a scalar reward, enters through
+pushed down; the limiting update is proportional to `A · d log π(a|s) / dW` under the
+equilibrium conditions in [learning](learning.md). Finite nudges and incomplete
+settlement introduce bias; policy temperature sets the proportionality. The goal, a scalar reward, enters through
 the nudge alone.
 
 ### Setting up the reward so credit lands on the right step
@@ -68,14 +69,13 @@ moves that mattered, and a policy-gradient learner with that reward and a modest
 learns something crude: "ball high, go up; ball low, go down", in absolute rows, ignoring
 where its own paddle is. It returns some balls and looks bad.
 
-The fix is *potential-based shaping* (Ng, Harada, and Russell 1999): add to each step's
-reward the change in a potential, here how much the paddle centre's distance to the
-ball's row shrank during the step. This changes no optimal policy, because along any
-trajectory the shaping terms telescope; it only tells the paddle at each step whether
-that step helped. With a short credit horizon (`gamma = 0.5`) the advantage of a move is
-then dominated by what that move did, and the net learns the relative rule, "move toward
-the ball's row", which is what tracks. The Pong tutorial shows the two policies side by
-side as tables of action against ball-minus-paddle offset.
+The public Pong example adds a dense tracking reward proportional to the reduction
+in paddle-to-ball distance. It changes the learning objective: with discount `gamma=0.5`,
+the un-discounted difference `distance_before - distance_after` does not have the
+policy-invariance guarantee of discounted potential shaping. That guarantee would
+require `gamma * Phi(next) - Phi(now)` with suitable terminal handling. Both compared
+policies receive the same implemented reward; evaluate the final ball-return rate
+separately from shaped training return.
 
 ### Two frames
 
@@ -89,30 +89,21 @@ page does the same: it keeps one earlier frame, nothing more.
 Greedy play (most active output) on fresh seeds until a fixed number of points have
 ended; report balls returned over balls faced, and returns per point. Cap rally length,
 or two competent paddles can keep a horizontal ball going forever. Put a same-sized
-network trained by backprop REINFORCE with Adam through the same rollouts, reward, and
+network trained by backprop REINFORCE with Adam through the same interaction budget, reward, and
 evaluation, and report both, with wall-clock.
 
 ## What the reward rungs found
 
-Across Pong and cart-pole the pattern is the same: the nudged rule learns from reward,
-and learns less than REINFORCE with Adam from the same rollouts. Pong from two frames
-plateaued near 79% of balls returned with the plain step for every variant tried (nudge
-strength, settle tolerance, batch size, a local momentum, a local per-seam normalisation,
-potential-based and immediate credit); an adaptive local step, each seam's running-average
-contrast over its running RMS with both corrected for their short history, lifts it to
-88% (three seeds 88, 88, 90) against 93% for the baseline, and the same net taught the
-tracker's own moves instead returns 96%. Cart-pole balances for 154 steps against 392.
-The gap is not representational and not in the rule as a gradient estimator on
-supervised targets, where the ladder shows parity; it is in the interaction between a
-noisy, advantage-weighted target and a small-nudge estimate: a large advantage times the
-nudge strength leaves the regime where the contrast is a gradient, a small one leaves
-the contrast in the settle tolerance's noise. Adam's per-parameter step sizes were the
-larger half of the gap, and a seam can have them from its own history alone (the step in
-rung 04's script; `LearnerConfig.normalize` and `momentum` are the same idea without the
-short-history correction, which is why they hurt early). Two consequences for practice:
-use the adaptive step from the first update, and prefer a dense, potential-based reward
-with a short credit horizon, which is the change that moved the Pong policy from an
-absolute rule to a relative one.
+The public Pong run returns about 88% of balls against 93% for backprop REINFORCE
+with Adam; imitation of a tracker reaches about 96%. Each policy generates its own
+rollouts under the same interaction budget and evaluation conditions. The adaptive
+local step uses a running mean and RMS with short-history corrections; the current
+`LearnerConfig.momentum` and `normalize` implement those corrections too.
+
+These results do not identify one universal cause of the remaining gap. Reward timing,
+exploration, credit assignment, finite-nudge bias, convergence, and representation all
+need separate controls. Check the environment's observation/action/reward order before
+interpreting a failed memory or delayed-reward experiment.
 
 ## Putting a trained net in a page
 

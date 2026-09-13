@@ -1,9 +1,11 @@
 """Cadence: machine learning by patch-net settlement.
 
 A patch net is a set of owners, each holding one patch of state, joined by
-declared overlaps. Nothing is computed globally: every owner repairs its
-own patch from what arrives over its overlaps, and the state the net comes
-to rest in is the answer. Cadence gives you the wiring, the owner rule,
+declared overlaps. During settlement every owner repairs its own patch from
+its inbox. Explicit memory patches retain observations between settlements.
+Normalization and output softmax read their declared groups; conformance
+checks the settlement transport rather than every auxiliary operation. Cadence gives
+you the wiring, the owner rule,
 the settlement engine on CPU or an accelerator, an owner-by-owner
 reference engine with a message ledger to check the accelerated one
 against, a protocol layer for declared held-out tests with a shuffled

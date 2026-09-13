@@ -17,13 +17,13 @@ Written as newline-terminated canonical JSON: sorted keys, no whitespace, no NaN
 
 ## Verification
 
-`Receipt.verify(path, sources=..., check=...)` recomputes four things and fails on the first
-that disagrees:
+`Receipt.verify(path, sources=..., check=...)` checks the following and fails on the first disagreement.
+Source and arithmetic checks are optional and must be supplied by the caller:
 
 1. the file is byte-for-byte the canonical form of its own content;
 2. the embedded digest matches;
-3. the source files named in the manifest still hash to what the receipt says;
-4. the caller's `check(body)` finds no arithmetic problem, which for a protocol receipt
+3. when `sources` is supplied, that complete source manifest matches the receipt;
+4. when supplied, the caller's `check(body)` finds no arithmetic problem, which for a protocol receipt
    means every pass flag follows from the stored readings and every tally follows from
    the rows.
 
@@ -45,3 +45,9 @@ Every file named in the source manifest is bound to the receipt. Change one line
 lane and the receipt no longer verifies until the lane is re-run. Batch edits, then re-run
 once. When several lanes share a module, an edit to that module re-runs all of them; plan
 it as a versioned break and record the library version in the body.
+
+A historical receipt remains evidence for its original source snapshot. Preserve its
+bytes and verify against that snapshot; do not re-sign an old result against new code.
+A new run should record library source hashes, data generation/seeds, every scheduled
+condition, predictions and targets, and validation choices. A verifier should reject
+missing outcomes, not merely recompute averages of whichever rows remain.

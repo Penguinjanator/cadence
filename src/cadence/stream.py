@@ -1,8 +1,8 @@
 """Owned state as a clamp: a net that carries its last equilibrium into the next one.
 
-A settlement with a given clamp goes to one fixed point from any start, so warm-starting
-the next input from the last rest state carries nothing on its own. For the last
-equilibrium to shape the next, the owners must read it. Here a range of *context* owners,
+If a settlement has a unique attracting fixed point, fully settling the next input
+erases the starting state. Multiple attractors and interrupted settlement can retain
+history, but are not a reliable addressed store. Here a range of *context* owners,
 one per hidden owner, is clamped to a leaky trace of the hidden owners' own activation at
 the previous inputs:
 
@@ -236,14 +236,19 @@ class Afterglow(Trace):
 
 @dataclass
 class FastSeams:
-    """Fast Hebbian seams between two ranges of a batch of streams, entering as a drive.
+    """A bounded associative memory between two ranges, one matrix per stream.
 
-    After a settlement the strength from every ``pre`` owner to every ``post`` owner grows
-    by the product of their activations (one local outer product, for the rows that
-    ``write``); before the next settlement the post owners receive the pre range's clamp
-    through the strengths as a drive. Strengths fade by ``decay`` per step. Nothing here is
-    trained: the seams hold what happened, and the slow seams learn what to make of it.
-    This is the recall rung's memory kept as owned state, per stream.
+    ``rule="hebb"`` adds an outer product, preserving the original behaviour.
+    ``rule="delta"`` reads before writing: for a unit key ``k``,
+    ``M += rate * outer(k, value - k @ M)``. Repeated evidence then stops changing
+    a correct prediction. A rate-one write corrects this key exactly; other
+    nonorthogonal keys can interfere. This is the established delta/LMS rule,
+    not a guarantee of unlimited capacity or learned memory addressing.
+
+    ``observe``/``recall`` operate directly on key/value ports. ``update``/``read``
+    adapt the same operations to settled states and full drives. Key normalisation
+    reads a whole key patch; a seam uses its key coordinate and the post owner's
+    prediction error. Strengths decay once per observation/update, never on reads.
     """
 
     pre: np.ndarray
@@ -253,6 +258,7 @@ class FastSeams:
     amplitude: float = 1.0
     normalize: bool = False  # unit keys and cue, the read divided by the decayed count of writes
     replace: bool = False  # a write clears what its active pre owners held (a slot; one-hot keys)
+    rule: str = "hebb"  # "delta": unit keys, residual writes, no count-averaged read
     strength: np.ndarray = field(init=False)
     mass: np.ndarray = field(init=False)  # (batch,) the decayed count of writes, for ``normalize``
     writes: int = 0
@@ -260,16 +266,37 @@ class FastSeams:
     def __post_init__(self) -> None:
         self.pre = np.asarray(self.pre, dtype=np.int64)
         self.post = np.asarray(self.post, dtype=np.int64)
+        for name, owners in (("pre", self.pre), ("post", self.post)):
+            if owners.ndim != 1 or not len(owners) or np.any(owners < 0):
+                raise ValueError(f"{name} must be a nonempty vector of owner indices")
+            if len(np.unique(owners)) != len(owners):
+                raise ValueError(f"{name} owner indices must be unique")
         if not 0 <= self.decay <= 1:
             raise ValueError("decay lies in [0, 1]")
+        if not np.isfinite(self.rate) or self.rate < 0 or not np.isfinite(self.amplitude):
+            raise ValueError("rate must be finite and nonnegative; amplitude must be finite")
+        if self.rule not in ("hebb", "delta"):
+            raise ValueError("rule must be 'hebb' or 'delta'")
+        if self.rule == "delta":
+            if self.rate > 1:
+                raise ValueError("delta rate lies in [0, 1]")
+            if self.normalize or self.replace:
+                raise ValueError(
+                    "delta already normalises keys; normalize/replace are Hebbian modes"
+                )
         self._pre_columns = columns(self.pre)
         self._post_columns = columns(self.post)
         self.strength = np.zeros((0, len(self.pre), len(self.post)))
         self.mass = np.zeros(0)
 
-    def reset(self, batch: int) -> None:
-        self.strength = np.zeros((batch, len(self.pre), len(self.post)))
-        self.mass = np.zeros(batch)
+    def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
+        """Clear all streams, or only the selected streams at episode boundaries."""
+        if rows is None or len(self.strength) != batch:
+            self.strength = np.zeros((batch, len(self.pre), len(self.post)))
+            self.mass = np.zeros(batch)
+        else:
+            self.strength[rows] = 0.0
+            self.mass[rows] = 0.0
 
     def keep(self, rows: np.ndarray) -> None:
         self.strength = self.strength[rows]
@@ -277,7 +304,83 @@ class FastSeams:
 
     @staticmethod
     def _unit(x: np.ndarray) -> np.ndarray:
+        # Preserve the original Hebbian normalisation, including its small-norm floor.
         return np.asarray(x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-12))
+
+    @staticmethod
+    def _delta_unit(x: np.ndarray) -> np.ndarray:
+        # Scale first so even very small/large finite keys have a well-defined direction.
+        scale = np.max(np.abs(x), axis=-1, keepdims=True)
+        scaled = x / np.where(scale > 0, scale, 1.0)
+        norm = np.linalg.norm(scaled, axis=-1, keepdims=True)
+        return np.asarray(scaled / np.where(norm > 0, norm, 1.0))
+
+    @staticmethod
+    def _port(values: np.ndarray, width: int, name: str) -> np.ndarray:
+        out = np.asarray(values, dtype=float)
+        if out.ndim != 2 or out.shape[1] != width or not np.isfinite(out).all():
+            raise ValueError(f"{name} must be a finite (batch, {width}) array")
+        return out
+
+    def recall(self, key: np.ndarray) -> np.ndarray:
+        """Read ``(batch, pre)`` keys as ``(batch, post)`` values without changing memory.
+
+        A different batch size starts fresh streams, as in ``read``. Delta uses
+        unit keys and does not divide by the number of writes. ``amplitude``
+        scales the returned drive, not the residual used when learning a value.
+        """
+        cue = self._port(key, len(self.pre), "key")
+        if len(self.strength) != len(cue):
+            self.reset(len(cue))
+        if self.rule == "delta":
+            cue = self._delta_unit(cue)
+        elif self.normalize:
+            cue = self._unit(cue)
+        out = (cue[:, None, :] @ self.strength)[:, 0, :]
+        if self.normalize:
+            out = out / np.maximum(self.mass, 1e-12)[:, None]
+        return np.asarray(self.amplitude * out)
+
+    def observe(
+        self, key: np.ndarray, value: np.ndarray, write: np.ndarray | None = None
+    ) -> None:
+        """Decay once, then write selected rows from the key and observed-value ports.
+
+        Inputs are ``(batch, pre)`` and ``(batch, post)``. ``write=None`` writes
+        every row; a boolean mask gates individual streams. A zero key cannot
+        write a delta association. Validation happens before any state change.
+        For prediction tasks call ``recall`` before revealing the new value.
+        """
+        key = self._port(key, len(self.pre), "key")
+        value = self._port(value, len(self.post), "value")
+        batch = len(key)
+        if len(value) != batch:
+            raise ValueError("key and value batches must match")
+        gate = np.ones(batch, dtype=bool) if write is None else np.asarray(write)
+        if gate.shape != (batch,) or gate.dtype != np.bool_:
+            raise ValueError("write must be a boolean vector with one entry per stream")
+        if len(self.strength) != batch:
+            self.reset(batch)
+        if self.decay < 1.0:
+            self.strength *= self.decay
+            self.mass *= self.decay
+        if self.rule == "delta":
+            gate = gate & np.any(key != 0.0, axis=1)
+        rows = np.flatnonzero(gate)
+        if not len(rows):
+            return
+        a, b = key[rows], value[rows]
+        if self.rule == "delta":
+            a = self._delta_unit(a)
+        elif self.normalize:
+            a = self._unit(a)
+        if self.rule == "delta":
+            b = b - (a[:, None, :] @ self.strength[rows])[:, 0, :]
+        elif self.replace:
+            self.strength[rows] *= (a <= 0.0)[:, :, None]
+        self.strength[rows] += self.rate * a[:, :, None] * b[:, None, :]
+        self.mass[rows] += self.rate
+        self.writes += len(rows)
 
     def read(self, drive: np.ndarray) -> np.ndarray:
         """The post owners' drive from the pre range's clamp in ``drive``: ``(batch, post)``.
@@ -287,15 +390,7 @@ class FastSeams:
         over the stored posts weighted by the cosine of the cue with their keys and by
         their age, and stays within the range of what was written.
         """
-        if len(self.strength) != len(drive):
-            self.reset(len(drive))
-        cue = np.ascontiguousarray(drive[:, self._pre_columns])
-        if self.normalize:
-            cue = self._unit(cue)
-        out = (cue[:, None, :] @ self.strength)[:, 0, :]
-        if self.normalize:
-            out = out / np.maximum(self.mass, 1e-12)[:, None]
-        return np.asarray(self.amplitude * out)
+        return self.recall(drive[:, self._pre_columns])
 
     def clamp(self, drive: np.ndarray, inplace: bool = False) -> np.ndarray:
         """Add the read to the post columns of ``drive`` (a copy, unless ``inplace``)."""
@@ -315,24 +410,13 @@ class FastSeams:
         actually followed (the next symbols read) rather than what the net settled on.
         """
         s = np.atleast_2d(state.activation)
-        if len(self.strength) != len(s):
-            self.reset(len(s))
-        if self.decay < 1.0:
-            self.strength *= self.decay
-            self.mass *= self.decay
-        if write is not None and np.any(write):
-            rows = np.flatnonzero(write)
-            a = np.ascontiguousarray(s[rows][:, self._pre_columns])
-            if self.normalize:
-                a = self._unit(a)
-            b = np.ascontiguousarray(s[rows][:, self._post_columns] if post is None else post[rows])
-            if self.replace:  # the active pre owners' rows are cleared before the write
-                self.strength[rows] *= (a <= 0.0)[:, :, None]
-            self.strength[rows] += self.rate * a[:, :, None] * b[:, None, :]
-            self.mass[rows] += self.rate
-            self.writes += len(rows)
+        self.observe(
+            s[:, self._pre_columns],
+            s[:, self._post_columns] if post is None else post,
+            np.zeros(len(s), dtype=bool) if write is None else write,
+        )
 
-    def to_dict(self) -> dict[str, float | int]:
+    def to_dict(self) -> dict[str, float | int | str]:
         return {
             "pre": int(len(self.pre)),
             "post": int(len(self.post)),
@@ -341,5 +425,6 @@ class FastSeams:
             "amplitude": self.amplitude,
             "normalize": self.normalize,
             "replace": self.replace,
+            "rule": self.rule,
             "writes": self.writes,
         }

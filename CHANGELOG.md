@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+- Sparse CPU settlement uses optional SciPy CSR transport, avoiding the batch-by-edge
+  message array. NumPy-only installations retain segmented sums; local dynamics and
+  parameter semantics are unchanged.
+- Blocked PyTorch learners keep adaptive optimizer history and updates on the device.
+  Host reads, edits and checkpoints remain supported. Parameter rebuilds preserve an
+  explicit torch device, and in-place trainability-mask edits invalidate cached masks.
+- `FastSeams.observe`/`recall`: direct key/value ports, with opt-in `rule="delta"`
+  residual writes and per-row resets. Existing Hebbian modes retain their semantics.
+  Independent LMS, interference, legacy, reset and validation tests cover the change.
+- `Settlement.residual`: remaining potential/adaptation equation discrepancy, so
+  saturation and tiny steps cannot masquerade as equilibrium.
+- Fixed fused source freezing on activation saturation, fractional warm-mask handling,
+  and `GradedRule.replace` losing the `Adaptation` object.
+- Receipt verification messages distinguish checks actually performed. Documentation
+  separates records, transient dynamics and equilibrium, states gradient scaling, and
+  links the controlled changing-memory example. These changes are available from the
+  source checkout; the published package version remains 0.8.1.
+
 ## 0.8.1 (2026-09-14)
 
 - A checkpoint saved by an earlier release loads. `checkpoint.load` keeps the fields of the

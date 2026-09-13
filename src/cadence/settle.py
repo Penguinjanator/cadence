@@ -147,7 +147,10 @@ def _softmax_groups(nudge: Nudge) -> list[np.ndarray]:
 
 @dataclass(frozen=True)
 class SettledState:
-    """What the net came to rest in: potentials, activations, adaptation, optional trajectory.
+    """State after a settlement run: potentials, activations, adaptation, trajectory.
+
+    A step cap or activation movement tolerance need not imply equilibrium;
+    use ``Settlement.residual`` to check the remaining owner-equation error.
 
     From ``settle`` every array is ``(n,)`` and ``trajectory`` is ``(steps, n)``;
     from ``settle_batch`` they carry a leading batch axis.
@@ -266,6 +269,7 @@ class Settlement:
         blocked = self.layout.size <= dense_limit * dense_limit
         self._blocked = blocked
         self._flat: np.ndarray | None = None  # the host blocks, made on first use (cpu paths)
+        self._csr: tuple[np.ndarray, Any] | None = None  # optional sparse matrix and its weights
         self._torch: Any = None
         self._mlx: Any = None
         if backend == "torch":  # the kernel scatters the weights into its blocks on the device
@@ -310,6 +314,7 @@ class Settlement:
         self._edge_scale = np.asarray(value, float)
         self._weights_host = None
         self._flat = None
+        self._csr = None
 
     @property
     def bias(self) -> np.ndarray:
@@ -342,6 +347,7 @@ class Settlement:
         new._bias = None
         new._weights_host = None
         new._flat = None
+        new._csr = None
         return new
 
     def with_parameters(
@@ -365,6 +371,7 @@ class Settlement:
                 new._edge_scale = scale.copy()
                 new._weights_host = None
                 new._flat = None
+                new._csr = None
             if bias is not None:
                 b = np.asarray(bias, float)
                 if b.shape != (self.wiring.n,):
@@ -378,6 +385,7 @@ class Settlement:
             edge_scale=self.edge_scale if edge_scale is None else edge_scale,
             log_gain=self.log_gain if log_gain is None else log_gain,
             bias=self.bias if bias is None else bias,
+            device=str(self._torch.device) if self._torch is not None else None,
             dense_limit=self.dense_limit,
             layout=self.layout,
             precision=self.precision,
@@ -561,10 +569,69 @@ class Settlement:
         out: tuple[np.ndarray, np.ndarray] = kernel.contrast(plus.device["s"], minus.device["s"])
         return out
 
+    def residual(
+        self,
+        drive: np.ndarray,
+        state: SettledState,
+        *,
+        nudge: Nudge | None = None,
+        mask: np.ndarray | None = None,
+    ) -> np.ndarray:
+        """Maximum absolute fixed-point equation residual per row, without settling.
+
+        For unmasked owners the potential equation is ``inbox + drive + bias
+        - adaptation_strength * a + nudge - v = 0``. When adaptation is enabled,
+        ``activation(v) - a = 0`` must hold too. Neither error is reduced by a
+        small integration step or a long adaptation time constant. A mask uses
+        the actual potential projection of ``settle_batch``; ablated owners
+        must have zero potential, and their adaptation must decay to zero.
+
+        A small residual certifies these equations at this state, not stability,
+        uniqueness, or convergence from another start. Activation-movement
+        tolerance and reaching a step cap do not provide this certificate.
+        The calculation performs one transport on the CPU; accelerator states
+        and parameters are fetched if needed. No state or parameter is changed.
+        A single state returns a length-one array; nonfinite errors return infinity.
+        """
+        d = np.asarray(drive, dtype=float)
+        if d.ndim == 1:
+            d = d[None, :]
+        if d.ndim != 2 or d.shape[1] != self.wiring.n:
+            raise ValueError("drive must have one column per owner")
+        v = np.atleast_2d(state.v)
+        a = np.atleast_2d(state.adaptation)
+        if v.shape != d.shape or a.shape != d.shape:
+            raise ValueError("state batch does not match the drive batch")
+        keep = np.ones(self.wiring.n) if mask is None else np.asarray(mask, dtype=float)
+        if keep.shape not in ((self.wiring.n,), (1, self.wiring.n), d.shape):
+            raise ValueError("mask must have one entry per owner, optionally per batch row")
+        s = self.rule.activation(v) * keep
+        blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
+        error = self._inbox(s, blocks) + d + self.bias - v
+        adapt = self.rule.adaptation
+        if adapt is not None:
+            error -= adapt.strength * a
+        if nudge is not None:
+            error += nudge.drive(s)
+        # (projected_next_v - v) / dt, written without cancellation for keep=1.
+        error = keep * error + (keep - 1.0) * v / self.rule.dt
+        result = np.max(np.abs(error), axis=1, initial=0.0)
+        if adapt is not None:
+            result = np.maximum(result, np.max(np.abs(s - a), axis=1, initial=0.0))
+        return np.where(np.isfinite(result), result, np.inf)
+
     def _inbox(self, s: np.ndarray, blocks: BlockTransport | None = None) -> np.ndarray:
-        """Transport: one segmented sum of every overlap's message into its owner's inbox."""
+        """Transport through fitting blocks, optional CSR, or the NumPy segmented sum."""
         if blocks is not None:
             return blocks.inbox(s)
+        if self.wiring.edges:
+            weights = self._weights
+            if self._csr is None or self._csr[0] is not weights:
+                from .sparse import transport
+
+                self._csr = weights, transport(self.wiring, weights)
+            if self._csr[1] is not None:
+                return np.asarray(self._csr[1].dot(s.T).T)
         inbox = np.zeros_like(s)
         if self.wiring.edges:
             messages = s[:, self.wiring.pre] * self._weights
@@ -643,6 +710,11 @@ class Settlement:
             "rule": self.rule.to_dict(),
             "backend": self.backend,
             "transport": "dense" if self._is_dense() else "segmented",
+            "sparse_kernel": (
+                None
+                if self._csr is None
+                else "scipy_csr" if self._csr[1] is not None else "numpy_segmented"
+            ),
             "layout": self.layout.to_dict(),
             "edge_scale_changed": int((self.edge_scale != self.wiring.sign).sum()),
             "log_gain_nonzero": int((self.log_gain != 0).sum()),

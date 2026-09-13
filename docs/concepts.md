@@ -2,8 +2,9 @@
 
 ## Owners, overlaps, settlement
 
-A patch net is not a function that maps inputs to outputs. It is a set of owners, each
-holding a patch of state, joined by overlaps that carry messages. There is no global step:
+A patch net is a stateful system whose input/output behaviour depends on its dynamics
+and retained records. It contains bounded observer-like patches with local state, ports,
+readback and feedback; owners exchange messages over declared overlaps. In settlement:
 every owner repairs its own patch from its own state, its inbox, its clamp, and its bias.
 Iterating that repair from rest is *settlement*, and the state the net rests in is what a
 readout sees.
@@ -27,8 +28,8 @@ is then a fixed point of the whole net, and "nothing in, nothing out" is a testa
 
 ## Why adaptation
 
-A graded rule with one time constant converges to a fixed point under a constant clamp:
-a posture, never a gait. Adaptation adds one slow variable per owner that follows its own
+Some graded wirings approach a fixed point under a constant clamp. Others can oscillate
+or have several attractors; a constant input alone does not guarantee convergence. Adaptation adds one slow variable per owner that follows its own
 activation and subtracts from its own drive. With mutual inhibition, which every real
 wiring has in abundance, that is the half-center oscillator, and the net can carry rhythm.
 It is still owner-local: an owner reads only its own adaptation. It is off by default, and
@@ -47,9 +48,9 @@ gains tried is recorded, and the same rule is applied to the control.
 A patch net learns without a backward pass. It settles free, with only its input clamped;
 then it settles again from that state with its output owners nudged toward the target; then
 every overlap moves its own scale on the difference between what its two endpoints did in
-the two phases, and every owner moves its bias on its own difference. For a symmetric
-wiring and a small nudge that local contrast is the gradient of the nudge's loss, because
-the settlement descends an energy and the nudge tilts it. The goal enters through one door,
+the two phases, and every owner moves its bias on its own difference. For symmetric effective recurrent weights and converged phases on a stable smooth
+equilibrium branch, the limiting small-nudge contrast gives the corresponding
+loss gradient, with the parameter and temperature scaling stated in [learning](learning.md). The goal enters through one door,
 the nudge, and the free phase, which is what a readout sees, never meets it. See
 [learning](learning.md).
 
@@ -79,3 +80,16 @@ purpose: a result belongs to the code that made it.
 Settling a measured wiring and passing held-out facts is evidence that the wiring carries
 those facts under this rule. It is not a claim about biology beyond the scored predicates,
 and nothing in the library ascribes experience to anything.
+
+## Fast records and simple parts
+
+A trace keeps recent activity; an associative matrix keeps key/value records; slow seam
+weights learn a reusable response. These have different update contracts even though
+they share the pattern of state, readback, discrepancy, and local correction.
+`FastSeams(rule="delta")` makes this explicit: read the value already predicted, then
+write only the error. [Memory](memory.md) derives the interference and capacity limits.
+
+Simplicity is a design constraint, not a proof of optimality. Keep a mechanism when a
+controlled experiment shows what it adds, and measure the work it saves. Current
+Cadence experiments do not establish that nature implements this particular software
+rule or that patch nets dominate every feed-forward or transformer architecture.

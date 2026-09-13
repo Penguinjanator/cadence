@@ -25,9 +25,12 @@ a wiring, with forward and feedback overlaps tied into one seam per pair,
 optional lateral inhibition among the outputs, and named sets for the
 layers.
 
-The rule is exact in a limit. When the overlaps are symmetric the
-settlement descends an energy, and for a small nudge the contrast above is
-the gradient of the nudge's loss with respect to the overlap scales. Two
+The rule is exact in a limit. With symmetric effective recurrent weights and a
+smooth stable equilibrium
+branch, converged phases give a gradient in the small-nudge limit. The
+raw contrast concerns effective weights; edge_scale derivatives also need
+the contact/gain factor. The cross-entropy nudge uses T times that loss.
+See docs/learning.md for the parameter convention and finite-step limits. Two
 things break that in practice, and ``learning_rule`` is chosen so they do
 not: an owner below rest with a hard rectifier publishes nothing and cannot
 be moved (hence a small ``leak``), and an owner on a steep sigmoid sits
@@ -53,6 +56,7 @@ __all__ = ["Learner", "LearnerConfig", "layered", "embedded", "learning_rule", "
 
 
 SCALE_CAP = 8.0  # the magnitude a seam may not exceed
+_MOMENTS = ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +115,10 @@ class Learner:
     # equal groups, or one size per group (a body's controller: a move of nine, a grip of two)
     slots: int | Sequence[int] = 1
     updates: int = 0
+    velocity: np.ndarray = field(init=False, repr=False)
+    velocity_bias: np.ndarray = field(init=False, repr=False)
+    second_moment: np.ndarray = field(init=False, repr=False)
+    second_moment_bias: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         self.output_index = np.asarray(list(self.outputs), dtype=np.int64)
@@ -170,8 +178,9 @@ class Learner:
         """Settle with the input clamped and nothing else: the net's own answer.
 
         ``warm`` starts the settlement from an earlier state instead of rest,
-        say the state the same inputs settled to on the previous pass; the
-        fixed point is the same, it is just reached in fewer steps.
+        say the state the same inputs settled to on the previous pass. Within
+        one attracting basin this can save steps; multiple attractors can
+        give different answers from different starts.
         """
         cfg = self.config
         return self.engine.settle_batch(
@@ -313,14 +322,61 @@ class Learner:
 
     def _device_kernel(self, plus: SettledState, minus: SettledState) -> Any:
         """The torch kernel both states rest on, when the update can stay on the device."""
-        cfg = self.config
         kernel = self.engine._torch
-        if kernel is None or kernel.layout is None or cfg.normalize > 0 or cfg.momentum > 0:
+        if kernel is None or kernel.layout is None:
             return None
         for state in (plus, minus):
             if state.device is None or state.device.get("owner") is not kernel:
                 return None
         return kernel
+
+    def _host_moments(self) -> None:
+        """Materialise optimizer history only when a host caller reads or edits it."""
+        held = self.__dict__.get("_device_moments")
+        if held is not None:
+            for name in _MOMENTS:
+                self.__dict__["_" + name] = held[name].detach().cpu().double().numpy().copy()
+            self.__dict__["_device_moments"] = None
+
+    def _moments_on_device(self, kernel: Any) -> dict[str, Any]:
+        held = self.__dict__.get("_device_moments")
+        if held is None or held["owner"] is not kernel:
+            self._host_moments()
+            held = {"owner": kernel}
+            for name in _MOMENTS:
+                held[name] = (
+                    kernel.torch.from_numpy(np.ascontiguousarray(self.__dict__["_" + name]))
+                    .to(kernel.device, kernel.param_dtype)
+                    .clone()
+                )
+            self.__dict__["_device_moments"] = held
+        return cast(dict[str, Any], held)
+
+    def _adaptive_device(self, kernel: Any, edges: Any, owners: Any) -> tuple[Any, Any]:
+        """The host update's bias-corrected momentum/RMS, with history on the device."""
+        cfg = self.config
+        if not (cfg.momentum or cfg.normalize):
+            return edges, owners
+        held = self._moments_on_device(kernel)
+        count = self.updates + 1
+        raw_edges, raw_owners = edges, owners
+        if cfg.momentum:
+            m = cfg.momentum
+            held["velocity"].mul_(m).add_(edges, alpha=1.0 - m)
+            held["velocity_bias"].mul_(m).add_(owners, alpha=1.0 - m)
+            correction = 1.0 - m**count
+            edges = held["velocity"] / correction
+            owners = held["velocity_bias"] / correction
+        if cfg.normalize:
+            rho = cfg.normalize
+            held["second_moment"].mul_(rho).addcmul_(raw_edges, raw_edges, value=1.0 - rho)
+            held["second_moment_bias"].mul_(rho).addcmul_(raw_owners, raw_owners, value=1.0 - rho)
+            correction = 1.0 - rho**count
+            edges = edges / ((held["second_moment"] / correction).sqrt() + cfg.normalize_floor)
+            owners = owners / (
+                (held["second_moment_bias"] / correction).sqrt() + cfg.normalize_floor
+            )
+        return edges, owners
 
     def _device_indices(self, kernel: Any) -> dict[str, Any]:
         """Index tensors of the update on the kernel's device, made once per kernel and masks."""
@@ -328,7 +384,11 @@ class Learner:
         assert self.trainable_overlaps is not None and self.trainable_owners is not None
         key = (id(kernel), id(self.trainable_overlaps), id(self.trainable_owners))
         cache = self.__dict__.setdefault("_device_cache", {})
-        if cache.get("key") != key:
+        if (
+            cache.get("key") != key
+            or not np.array_equal(cache.get("host_overlaps"), self.trainable_overlaps)
+            or not np.array_equal(cache.get("host_owners"), self.trainable_owners)
+        ):
             dev = kernel.device
 
             def to(x: np.ndarray, dtype: Any = None) -> Any:
@@ -339,6 +399,8 @@ class Learner:
             cache.clear()
             cache.update(
                 key=key,
+                host_overlaps=self.trainable_overlaps.copy(),
+                host_owners=self.trainable_owners.copy(),
                 paired=to(self._paired) if len(self._paired) else None,
                 paired_reverse=to(self._paired_reverse) if len(self._paired) else None,
                 members=to(self._members) if len(self._members) else None,
@@ -395,7 +457,8 @@ class Learner:
         if kernel is not None:  # both phases rest on the torch device: the whole update stays there
             edges, owners = kernel.contrast_tensors(nudged.device["s"], minus_state.device["s"])
             norm = float(nudged.device["s"].shape[0]) * span
-            return self._apply_device(kernel, cfg.eta * edges / norm, cfg.eta_bias * owners / norm)
+            edges, owners = self._adaptive_device(kernel, edges / norm, owners / norm)
+            return self._apply_device(kernel, cfg.eta * edges, cfg.eta_bias * owners)
         overlap_term, owner_term = self.contrast(free, nudged, opposite)
         raw_overlap, raw_owner = overlap_term, owner_term
         count = self.updates + 1  # this update's place in the history, for the corrections
@@ -477,6 +540,7 @@ class Learner:
             self.engine.wiring,
             self.engine.rule.replace(gain=gain),
             backend=self.engine.backend,
+            device=str(self.engine._torch.device) if self.engine._torch is not None else None,
             edge_scale=self.engine.edge_scale,
             log_gain=self.engine.log_gain,
             bias=self.engine.bias,
@@ -551,6 +615,24 @@ class Learner:
         from .checkpoint import load
 
         return load(path, backend=backend, device=device, config=config, precision=precision)
+
+
+def _moment_property(name: str) -> property:
+    """Keep the existing mutable NumPy attributes while avoiding per-step transfers."""
+
+    def get(learner: Learner) -> np.ndarray:
+        learner._host_moments()
+        return cast(np.ndarray, learner.__dict__["_" + name])
+
+    def put(learner: Learner, value: np.ndarray) -> None:
+        learner._host_moments()
+        learner.__dict__["_" + name] = np.asarray(value, dtype=float)
+
+    return property(get, put)
+
+
+for _moment_name in _MOMENTS:
+    setattr(Learner, _moment_name, _moment_property(_moment_name))
 
 
 def layered(

@@ -78,15 +78,17 @@ move by the same amount; and a scale's magnitude is clipped to eight.
 With `centered=False` the second nudged phase is skipped and `s⁻` is replaced by `s⁰` with
 `beta` in place of `2 beta`.
 
-That is the whole rule. Nothing else reads the target, nothing stores activations for a
-later pass, and no owner reads any number that is not its own or at one of its overlaps.
+The implementation retains the free and nudged endpoint states and optimizer history;
+it does not retain a backward computation graph. Softmax reads its declared output
+group, and weight tying aggregates the members of a declared tie group. These are
+patch-level operations in addition to the endpoint-local contrast.
 
 ## 4. A worked example, with the numbers
 
 Six owners: inputs 0 and 1, hidden 2 and 3, outputs 4 and 5. `cd.layered(2, 2, 2,
 density=1.0, seed=3)` gives dense forward overlaps, feedback overlaps tied to them, and
 two lateral overlaps between the outputs starting at 0. The rule is `learning_rule(dt=1.0)`;
-the learner uses `eta=1.0`, `beta=0.1`, `T=0.2`, tolerance `1e-9` so the phases are exact.
+the learner uses `eta=1.0`, `beta=0.1`, `T=0.2`, tolerance `1e-9` for tightly settled numerical phases.
 The input is `x = (1.0, 0.2)` with label 1.
 
 Initial seams (the reverse of each hidden↔output overlap shares its scale):
@@ -132,33 +134,51 @@ You can rerun this: it is `examples/worked_update.py`.
 
 ## 5. Why the contrast is a gradient
 
-When every seam is symmetric (`W[i→j] = W[j→i]`, which `layered` and tying guarantee),
-the settlement is a descent of an energy
+Let `F` be the recurrent owners and hold the input emissions fixed. With no adaptation,
+symmetric **effective** recurrent weights, and a monotone differentiable activation,
+the continuous-time dynamics descend
 
-    E(v) = Σ_i ∫₀^{v[i]} u · act'(u) du  −  ½ Σ_{i≠j} W[i→j] s[i] s[j]  −  Σ_i (clamp[i] + bias[i]) s[i]
+    E(v_F) = Σ_{i∈F} ∫₀^{v[i]} u · act'(u) du
+             − ½ Σ_{i,j∈F} W[i→j] s[i] s[j] − Σ_{i∈F} d[i] s[i]
+    d[i] = clamp[i] + bias[i] + Σ_{k input} W[k→i] s[k]
 
-and the rest state is a minimum of `E`. The nudge adds `beta · L(s)` to the energy, where
-`L` is the loss whose gradient the nudge drive is (for the cross-entropy nudge, the
-cross-entropy of `softmax(s/T)` against the target, up to the constant `T`). Scellier and
-Bengio (2017, *equilibrium propagation*) showed that then
+The one-way input projections belong in `d`, not in the symmetric recurrent sum.
+A finite Euler step need not lower this energy. A stationary point need not be a
+minimum or unique. Tying `edge_scale` alone does not make effective weights symmetric
+if opposite contacts or presynaptic gains differ.
 
-    dL/dW[i→j] at the free rest state = lim_{beta→0} ( s⁰[i] s⁰[j] − s^beta[i] s^beta[j] ) / beta
+On a smooth stable equilibrium branch, converged free/nudged phases obey the
+[equilibrium-propagation identity](https://arxiv.org/abs/1602.05179): the limiting
+endpoint contrast is minus the loss gradient with respect to a physical seam weight.
+The symmetric pair is one physical seam, so its two identical directed contrasts
+must not be summed twice. For a quadratic nudge the loss is half squared error.
+Cadence's cross-entropy drive omits `1/T`, so its loss is **T times cross-entropy**.
+The [centered estimator](https://arxiv.org/abs/2006.03824) cancels the leading nudge
+bias on a sufficiently smooth branch; a finite nudge crossing a kink or a different
+attractor need not have that accuracy.
 
-so the contrast is minus the gradient of the loss with respect to the seam, and the update
-is gradient descent on `L`, computed by nothing but two settlements. The centered version
-(`+beta` against `−beta`) cancels the first-order error in `beta`. The test
-`test_contrast_tracks_the_loss_gradient` checks this numerically: on a random layered net
-the contrast correlates above 0.9 with finite differences of the loss.
+`Learner.contrast` returns a statistic, and `Learner.update` keeps the library's
+existing step convention. When `c[e] = gain * count[e] * exp(log_gain[pre[e]])`
+is not one, conversion to minus the gradient with respect to a tied `edge_scale`
+requires multiplying by `c[e]` (assuming the reciprocal factors agree). For ordinary
+cross-entropy also divide by `T`. Bias gradients need the same loss scaling but no
+contact factor. Sharing a parameter across several distinct seams gives a sum of
+contributions; the implementation uses their mean as a step-size convention.
+`tests/test_equilibrium.py` checks the scale conversion against finite differences.
 
-Three things break the argument, and `learning_rule` exists to avoid them:
+A small activation change is not a fixed-point certificate: saturation or tiny `dt`
+can make it small while the potential is far from rest. Check the owner equations:
 
-1. **Phases that stop mid-transient.** The contrast reads rest states; read too early and
-   it reads the transient instead. Always settle to a tolerance.
-2. **Owners with no slope.** A hard rectifier below rest has slope zero, so nothing can
-   move such an owner and no credit passes through it. The `leak` gives it a slope.
-3. **Owners on a cliff.** A steep sigmoid puts every owner either silent or saturated,
-   where `act'` is nearly zero and the true gradient is nearly zero; a finite nudge then
-   makes moves that match no gradient. Unit slope keeps a fan-scaled layer responsive.
+```python
+free = learner.free(drive)
+remaining = learner.engine.residual(drive, free)  # one diagnostic value per batch row
+```
+
+For a nudged phase, pass its actual `nudge` too, and inspect before changing the
+engine's parameters. The diagnostic uses one transport evaluation and does not settle
+again. `learning_rule` provides responsive defaults, but cannot guarantee convergence,
+uniqueness, or accurate credit for every wiring. Leakage reduces dead regions; it
+does not remove saturation or make the piecewise activation globally smooth.
 
 ## 5b. Where the rule stops: wirings the nudge cannot travel back through
 
@@ -178,6 +198,7 @@ wirings are for the protocol layer; learnable nets are built with feedback.
 ## 6. Using it
 
 ```python
+import dataclasses
 import numpy as np
 import cadence as cd
 
@@ -208,11 +229,10 @@ it, export `engine.dense()` for a page, put `to_dict()` in a receipt.
 | `eta_bias` | `LearnerConfig` | bias step | `eta / 100` |
 | `temperature` | `LearnerConfig` | softmax temperature of the cross-entropy nudge; also the policy temperature when sampling actions | 0.1 (labels), 0.2 (actions) |
 | `centered` | `LearnerConfig` | contrast `+beta` against `−beta` (two nudged phases) rather than against the free state | `True` |
-| `tolerance`, `free_steps`, `nudged_steps` | `LearnerConfig` | when a phase is at rest, and the step caps | 3e-3 while learning, 1e-4 to read out; 100 / 12 |
 | `nudge` | `LearnerConfig` | `"cross_entropy"` or `"quadratic"` (`beta · (target − s)`) | cross-entropy for classes |
 | `momentum` | `LearnerConfig` | each seam steps on a running average of its own contrast (still local) | 0.9 on supervised tabular tasks, where it adds about a point; 0 elsewhere |
 | `decay` | `LearnerConfig` | every update shrinks each trainable seam and bias by this fraction: a leak on the seams | 0 for a fixed training set; 0.003 on a stream that drifts, where it keeps the net plastic (see `tasks.md`, streams) |
-| `normalize`, `normalize_floor` | `LearnerConfig` | each seam divides its step by the running RMS of its own contrast (still local) | 0 (off); it did not help anywhere it was tried |
+| `normalize`, `normalize_floor` | `LearnerConfig` | each seam divides its step by the running RMS of its own contrast (still local) | 0 (off); tune on validation; combined bias-corrected momentum/RMS is used by the Pong example |
 | `symmetric` | `Learner` | tie an overlap and its reverse into one seam | `True` |
 | `trainable_overlaps` | `Learner` | bool per overlap; freeze the rest | all |
 | `leak`, `slope`, `dt` | `learning_rule` | sub-rest response, activation slope, step of the owner update | 0.1, 1.0, 0.5 to 1.0 |
@@ -224,11 +244,12 @@ figure to put next to a feed-forward network's parameter count.
 ## 8. Warm starts, costs, and what to expect
 
 A free phase may start from an earlier state (`learner.free(drive, warm=state)` or
-`learner.step(..., warm=state)`); the fixed point is the same. In practice the gain is
-small, because the seams move enough between visits that the old state is not much closer
-than rest.
+`learner.step(..., warm=state)`). Within the same attracting basin this can save repairs;
+with multiple attractors it can change the answer. A capped warm phase deliberately
+retains transients and is not necessarily an equilibrium. Reset state at independent
+episode boundaries and compare warm and cold inference on changing inputs.
 
-Each update is three settlements of tens of steps each, so on a laptop core the rule costs
-ten to a hundred times the wall-clock of a forward-and-backward pass for the same accuracy,
-and reaches that accuracy in fewer passes over the data. The examples' receipts record
-both numbers on every rung; see [differences](differences.md) for why.
+Each centered update runs three phases. Measure all phase steps and wall time; fewer
+epochs do not by themselves mean greater sample efficiency or lower compute. If the
+task is simply storing and revising observations, [fast memory](memory.md) supplies a
+single read and residual write without running three settlements for every record.

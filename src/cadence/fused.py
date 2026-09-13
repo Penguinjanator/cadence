@@ -117,6 +117,7 @@ if njit is not None:
             cache_offset[k + 1] = cache_offset[k] + batch * (starts[b + 1] - starts[b])
         cache = np.zeros(cache_offset[pairs])
         moved_range = np.ones(ranges, dtype=np.bool_)  # activation changed in the last repair pass
+        moved_potential = np.ones(ranges, dtype=np.bool_)
         frozen = np.zeros(ranges, dtype=np.bool_)  # a range that can never change again
         inbox = np.zeros((batch, n))
         for t in range(steps):
@@ -141,6 +142,7 @@ if njit is not None:
                         inbox[b, b0 + j] += cache[c0 + b * nb + j]
             for r in range(ranges):
                 moved_range[r] = False
+                moved_potential[r] = False
             moved = 0.0
             for b in range(batch):
                 # the nudge on this row, from the activations before the step: one softmax per group
@@ -178,6 +180,7 @@ if njit is not None:
                         if (
                             vn != v[b, i]
                         ):  # an owner whose potential did not move publishes what it did
+                            moved_potential[r] = True
                             v[b, i] = vn
                             sn = _act_scalar(vn, slope, threshold, rest, leak)
                             if masked:
@@ -194,7 +197,7 @@ if njit is not None:
             for r in range(
                 ranges
             ):  # a still range with nothing arriving stays still: skip it from now on
-                if freezable[r] and not moved_range[r] and t > 0:
+                if freezable[r] and not moved_potential[r] and t > 0:
                     frozen[r] = True
             taken = t + 1
             if use_tolerance and moved < tolerance:
@@ -225,7 +228,7 @@ def fused_settle(
     standing = np.ascontiguousarray(drive + bias)
     masked = bool((keep != 1.0).any())
     if (
-        activation is not None
+        activation is not None and not masked
     ):  # the state's own published activation: what the kernel computed last
         s = np.array(activation, dtype=float)
     elif not v.any():  # from rest every owner publishes the same thing
