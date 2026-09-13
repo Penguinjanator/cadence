@@ -11,6 +11,7 @@ declared overlaps, settling to rest by owner-local repair. Read in this order th
 | [differences](differences.md) | how a patch net differs from a feed-forward network trained by backprop |
 | [games](games.md) | learning to play: imitating a search, and learning from reward |
 - [The child's brain out of simpler components](child.md): one frame and an afterimage, a trace that credits a press paid later, a dopamine quiet for the usual; the small experiments and their numbers.
+- [Condensing cadence: the plan for 0.8](condense.md): five elements and one step, what every public name becomes, the optimizations and the gates.
 | [tasks](tasks.md) | recipes: how each kind of task becomes a clamp, a target, and a readout, tabular and regression included |
 | [pages](pages.md) | putting a trained net into a browser page that settles it live |
 | [protocols](protocols.md) | held-out tests, predicates with preconditions, the shuffled control, gain selection |
