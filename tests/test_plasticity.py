@@ -353,3 +353,30 @@ def test_actor_critic_dopamine_floor_is_quiet_for_the_usual_reward() -> None:
     assert np.array_equal(learner.engine.weights, before)
     ac.learn(np.array([50.0, 50.0]), np.zeros(2, dtype=bool), drive)  # a surprise: a step
     assert not np.array_equal(learner.engine.weights, before)
+
+
+def test_actor_critic_centre_without_the_scale_keeps_the_rewards_size() -> None:
+    """Unscaled, the centred dopamine is in the reward's own units: a big surprise is big."""
+    wiring = cd.layered(4, 8, 2, density=1.0, seed=0)
+
+    def make(scale: bool) -> cd.ActorCritic:
+        learner = cd.Learner(
+            cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
+            wiring.sets["output"],
+            cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
+        )
+        return cd.ActorCritic(
+            learner,
+            wiring.sets["hidden"],
+            cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.0, eta_critic=0.0, dopamine_center=0.5, dopamine_cap=0.0, center_scale=scale),
+            seed=0,
+        )
+
+    scaled, raw = make(True), make(False)
+    for ac in (scaled, raw):
+        for _ in range(20):
+            ac._centre(np.array([1.0, 1.0]))
+    big_scaled = scaled._centre(np.array([11.0, 11.0]))
+    big_raw = raw._centre(np.array([11.0, 11.0]))
+    assert abs(big_raw[0] - 10.0) < 1.0  # ten above the usual, in the reward's units
+    assert big_scaled[0] > 10.0  # in scales of a nearly constant reward, far larger

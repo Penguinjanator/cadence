@@ -251,6 +251,9 @@ class ActorCriticConfig:
     # >0: the centred signal within this many scales of its mean is nothing; the dopamine is
     # quiet while the reward is what it usually is and speaks only for a surprise
     dopamine_floor: float = 0.0
+    # the centred signal divided by its running scale (a unit signal whatever the reward's
+    # size) or left in the reward's own units, so a stage cleared is ten coins, not one
+    center_scale: bool = True
     critic_normalize: bool = (
         True  # the critic's step is divided by its trace's energy, so its step size is scale-free
     )
@@ -449,9 +452,10 @@ class ActorCritic:
             self.delta_var = rho * self.delta_var + (1 - rho) * float(
                 ((delta - self.delta_mean) ** 2).mean()
             )
-        centred = (delta - self.delta_mean) / (np.sqrt(self.delta_var) + 1e-6)
-        if cfg.dopamine_floor > 0:
-            centred = np.where(np.abs(centred) < cfg.dopamine_floor, 0.0, centred)
+        scale = np.sqrt(self.delta_var) + 1e-6
+        centred = (delta - self.delta_mean) / scale if cfg.center_scale else delta - self.delta_mean
+        if cfg.dopamine_floor > 0:  # the floor is in scales either way
+            centred = np.where(np.abs(centred) < cfg.dopamine_floor * (1.0 if cfg.center_scale else scale), 0.0, centred)
         return centred
 
     def learn(

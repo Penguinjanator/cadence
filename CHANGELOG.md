@@ -9,6 +9,9 @@
 - `ActorCriticConfig.dopamine_floor`: the centred dopamine within that many scales of its
   mean is nothing, so the broadcast is quiet while the reward is what it usually is and
   speaks only for a surprise; with the floor at 0 (the default) nothing changes.
+- `ActorCriticConfig.center_scale`: whether the centred dopamine is divided by its running
+  scale (the default, a unit signal whatever the reward's size) or left in the reward's own
+  units, so a stage cleared is ten coins and not one.
 - `LearnerConfig.momentum` and `normalize` are the adaptive local step proper: Adam's order
   (the running average of each seam's own contrast, divided by the RMS of its raw contrast)
   with both corrected for their short history, as `ActorCritic` already did. Before, the
