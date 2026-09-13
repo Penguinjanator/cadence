@@ -165,3 +165,76 @@ def test_a_capped_repair_carries_the_moment_before_and_a_full_one_forgets_it() -
     print(f"distance from the moment before: partial repair {d(partial):.4f}, full repair {d(full):.4f}, cold {d(cold_b):.4f}")
     assert d(partial) < d(cold_b)
     assert abs(d(full) - d(cold_b)) < 0.05 * d(cold_b) + 1e-6
+
+
+def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_background() -> None:
+    """A context seen for one moment with the press it calls for, paid three moments later, and
+    twelve owners of background always on: the seams out of the background carry eligibility
+    at every moment, the seams out of the context only at the one that mattered. With the
+    eligibility weighted by the afterimage (what is still ringing is what gets written) the
+    signal lands on the context's seams. Both learn it here: the background's eligibility is
+    noise that averages out over rounds, and the weighting is a faster start on some seeds
+    (1.00 against 0.57 at fifty rounds on one, no difference on another), not a gain the
+    small experiment can promise."""
+    v, background, hidden, batch, rounds = 4, 12, 8, 32, 100
+    n_in = v + background
+    constitution = cd.Constitution(
+        regions=(cd.Region("input", n_in), cd.Region("afterglow", n_in), cd.Region("hidden", hidden), cd.Region("output", 2)),
+        projections=(cd.Projection("input", "hidden", density=1.0, sign=0.0, scale=1.0, symmetric=False), cd.Projection("afterglow", "hidden", density=1.0, sign=0.0, scale=1.0, symmetric=False), cd.Projection("hidden", "output", density=1.0, sign=0.0, scale=1.0)),
+        label="cue",
+    )
+
+    def hit_rate(weighted: bool) -> float:
+        rng = np.random.default_rng(0)
+        wiring = cd.grow(constitution, seed=0)
+        learner = cd.Learner(
+            cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
+            wiring.sets["output"],
+            cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
+        )
+        ac = cd.ActorCritic(learner, wiring.sets["hidden"], cd.ActorCriticConfig(gamma=1.0, lam=0.9, eta=1.0, eta_critic=0.0, dopamine_center=0.0, dopamine_cap=0.0), seed=0)
+        glow = cd.Afterglow(wiring, decay=0.7, focus=1.0, source="input")
+        glow.reset(batch)
+
+        def raw(context: np.ndarray | None) -> np.ndarray:
+            d = np.zeros((batch, wiring.n))
+            d[:, v : n_in] = 1.0  # the background, every moment
+            if context is not None:
+                d[np.arange(batch), context * 2] = 1.0
+                d[np.arange(batch), context * 2 + 1] = 1.0
+            return d
+
+        def moment(drive: np.ndarray) -> np.ndarray:
+            action = ac.act(drive)
+            glow.update(ac._free)
+            ac.salience = glow.ringing() if weighted else None
+            return action
+
+        context = rng.integers(0, 2, size=batch)
+        drive = glow.clamp(raw(context))
+        for _ in range(rounds):
+            action = moment(drive)  # the moment that matters, with the context in view
+            drive = glow.clamp(raw(None))
+            ac.learn(np.zeros(batch), np.zeros(batch, dtype=bool), drive)
+            moment(drive)  # two moments of background only, with presses of their own
+            drive = glow.clamp(raw(None))
+            ac.learn(np.zeros(batch), np.zeros(batch, dtype=bool), drive)
+            moment(drive)
+            reward = (action == context).astype(float)
+            context = rng.integers(0, 2, size=batch)
+            drive = glow.clamp(raw(context))  # the afterimage runs on: the background has long stopped ringing, the new context rings
+            ac.learn(reward, np.ones(batch, dtype=bool), drive)
+        ac.reset()
+        ac.salience = None
+        hits = []
+        for _ in range(8):
+            ctx = rng.integers(0, 2, size=batch)
+            hits.append((ac.act(glow.clamp(raw(ctx)), greedy=True) == ctx).mean())
+            glow.update(ac._free)
+            ac.reset()
+        return float(np.mean(hits))
+
+    plain, weighted = hit_rate(False), hit_rate(True)
+    print(f"a cue paid three moments later against twelve owners of background: hit rate {plain:.2f} with the plain trace, {weighted:.2f} weighted by the afterimage")
+    assert weighted > 0.9
+    assert plain > 0.9

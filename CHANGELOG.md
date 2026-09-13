@@ -12,6 +12,14 @@
   ago against twelve owners of always-on background, the echo reads chance (0.25), the
   afterglow of the interpretation 0.30, the unfocused afterimage 0.58 and the focused
   afterimage 1.00 (`tests/test_child.py`).
+- `ActorCritic.salience` and `Afterglow.ringing`: the eligibility of every seam weighted by
+  its pre owner's salience, set before `learn`; the afterglow's ringing (each source owner's
+  trace over the row's mean, plus a floor) is one such salience, so that what is still
+  ringing is what a signal writes through. Off unless set. In the small experiment (a cue
+  paid three moments later against twelve owners of always-on background) the plain trace
+  learns the cue too, since the background's eligibility is noise that averages out, and the
+  weighting is a faster start on some seeds and no difference on others: a mechanism, not
+  yet a gain.
 - `tests/test_child.py`: the child's capabilities as small experiments, each from simpler
   components already here: the eligibility trace credits a press paid three moments later
   (hit rate 1.00 with the trace, 0.47 without); the dopamine that is quiet for the usual

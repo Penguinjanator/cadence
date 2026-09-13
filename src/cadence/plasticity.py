@@ -316,6 +316,9 @@ class ActorCritic:
         self.velocity_bias = np.zeros(self.n)
         self.delta_mean = 0.0
         self.delta_var = 1.0
+        # (batch, owners): each seam's eligibility is weighted by its pre owner's salience, when
+        # set before ``learn`` (an ``Afterglow.ringing``: what is still ringing is what gets written)
+        self.salience: np.ndarray | None = None
         self._drive: np.ndarray | None = None
         self._free: SettledState | None = None
         self._pending: tuple[str, np.ndarray, np.ndarray, np.ndarray] | None = None
@@ -496,7 +499,7 @@ class ActorCritic:
             self.trace_critic = np.zeros((batch, len(self.critic_index) + 1))
         assert self.trace_bias is not None and self.trace_critic is not None
         fused = None
-        if kind == "phases" and _FUSED_TRACE:
+        if kind == "phases" and _FUSED_TRACE and self.salience is None:
             fused = (
                 first,
                 second,
@@ -511,6 +514,8 @@ class ActorCritic:
                 contrast_bias = (first - second) / span
             else:
                 contrast, contrast_bias = first, second
+            if self.salience is not None:
+                contrast = contrast * self.salience[:, self.learner.engine.wiring.pre]
             self.trace *= decay
             self.trace += contrast
             self.trace_bias *= decay
@@ -628,6 +633,9 @@ class ActorCritic:
         decay = cfg.gamma * cfg.lam
         batch = len(reward)
         edges, owners = kernel.contrast_rows(plus.device["s"], minus.device["s"])
+        if self.salience is not None:
+            salience = torch.as_tensor(np.asarray(self.salience), dtype=edges.dtype, device=edges.device)
+            edges = edges * salience[:, kernel._row_index[0]]
         if self._trace_device is None or self._trace_device[0].shape != edges.shape:
             self._trace_device = (torch.zeros_like(edges), torch.zeros_like(owners))
         trace, trace_bias = self._trace_device

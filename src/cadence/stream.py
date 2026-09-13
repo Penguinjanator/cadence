@@ -209,6 +209,14 @@ class Afterglow:
         self.last = h
         self.cold[:] = False
 
+    def ringing(self, floor: float = 0.1) -> np.ndarray:
+        """Each source owner's share of what is still ringing (its trace over the row's mean, plus
+        ``floor``), one for every other owner: a salience for the eligibility of the seams out of
+        them, so that what is still ringing is what a signal writes through (``ActorCritic.salience``)."""
+        out = np.ones((len(self.trace), self.wiring.n))
+        out[:, self._hidden_columns] = floor + self.trace / (self.trace.mean(axis=1, keepdims=True) + 1e-9)
+        return out
+
     def to_dict(self) -> dict[str, float | int | str]:
         return {"decay": self.decay, "amplitude": self.amplitude, "focus": self.focus, "source": self.source, "afterglow": int(len(self.glow))}
 
