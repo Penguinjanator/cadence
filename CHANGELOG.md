@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.1 (2026-09-14)
+
+- A checkpoint saved by an earlier release loads. `checkpoint.load` keeps the fields of the
+  saved configuration that the running `LearnerConfig` has and drops the rest; 0.8.0 raised
+  on the retired `consolidate` and `restore` of a 0.7 checkpoint. The test saves a
+  checkpoint with the retired knobs in its metadata and loads it.
+- The valence's and the population code's returns are typed as arrays, for the mypy of the
+  CI runner.
+
 ## 0.8.0 (2026-09-14): the condensation
 
 The library condensed into its elements (`docs/condense.md`): owners and seams, the
@@ -31,7 +40,7 @@ one-frame afterimage brain retrained on it reading the held-out presses at the s
 - `Ledger`, `settle_owner_by_owner`, `canonical_sha256`, `source_manifest`, `mutate`: still in
   `cadence.reference`, `cadence.receipts` and `cadence.constitution`, no longer top level.
 
-## 0.7.2 (unreleased)
+## 0.7.2 (not released; shipped in 0.8.0)
 
 - `Trace`: one class for the memory of the moment before, per stream, clamped into the next
   settlement: the trace of a range's activation, weighted by each owner's movement since the
