@@ -202,6 +202,8 @@ it, export `engine.dense()` for a page, put `to_dict()` in a receipt.
 | knob | where | what it does | where to start |
 |---|---|---|---|
 | `beta` | `LearnerConfig` | nudge strength; smaller is closer to the gradient, larger a stronger signal | 0.1 |
+| `free_steps`, `nudged_steps` | `LearnerConfig` | the most steps a free and a nudged settlement may take before the contrast is read | 100, 50 |
+| `tolerance` | `LearnerConfig` | a settlement stops once no owner moves more than this (None: the step cap alone) | 1e-4 |
 | `eta` | `LearnerConfig` | seam step; the contrast is already divided by `2 beta` | 2 to 3, decayed by 0.9 to 0.95 per epoch over 40 epochs; a decay of 0.8 over 15 epochs under-trains tabular tasks by two to five points |
 | `eta_bias` | `LearnerConfig` | bias step | `eta / 100` |
 | `temperature` | `LearnerConfig` | softmax temperature of the cross-entropy nudge; also the policy temperature when sampling actions | 0.1 (labels), 0.2 (actions) |
