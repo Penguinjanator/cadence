@@ -112,35 +112,51 @@ class Nudge:
     weight: np.ndarray | None = None  # (batch,)
     groups: np.ndarray | None = None  # (n,) group id per owner, -1 for none: one softmax per group
 
+    def __post_init__(self) -> None:
+        mask, target = np.asarray(self.mask), np.asarray(self.target)
+        if mask.ndim != 1:
+            raise ValueError("nudge mask must have one entry per owner")
+        if target.ndim not in (1, 2) or target.shape[-1] != mask.size:
+            raise ValueError("nudge target must have one entry per owner, optionally per batch row")
+        if not np.isfinite(self.beta):
+            raise ValueError("nudge beta must be finite")
+        temperature = self.softmax_temperature
+        if temperature is not None and (not np.isfinite(temperature) or temperature <= 0):
+            raise ValueError("softmax_temperature must be finite and positive")
+        if self.weight is not None and np.asarray(self.weight).ndim != 1:
+            raise ValueError("nudge weight must have one entry per batch row")
+        if self.groups is not None and np.asarray(self.groups).shape != mask.shape:
+            raise ValueError("nudge groups must have one entry per owner")
+
     def drive(self, s: np.ndarray) -> np.ndarray:
+        s = np.asarray(s, dtype=float)
+        single = s.ndim == 1
+        if s.ndim not in (1, 2) or s.shape[-1] != len(self.mask):
+            raise ValueError("activation must have one entry per owner, optionally per batch row")
+        s = np.atleast_2d(s)
+        full_target = np.broadcast_to(self.target, s.shape)
         if self.softmax_temperature is None:
-            out = np.asarray(self.beta * (self.target - s) * self.mask, dtype=float)
+            out = np.asarray(self.beta * (full_target - s) * self.mask, dtype=float)
         else:
             out = np.zeros_like(s)
-            full_target = np.broadcast_to(self.target, s.shape)
-            if self.groups is None:
-                members = [np.flatnonzero(self.mask > 0)]
-            else:
-                ids = np.asarray(self.groups)
-                members = [
-                    np.flatnonzero((ids == g) & (self.mask > 0)) for g in np.unique(ids[ids >= 0])
-                ]
-            for group in members:
+            for group in _softmax_groups(self):
                 z = s[:, group] / self.softmax_temperature
                 z = z - z.max(axis=1, keepdims=True)
                 p = np.exp(z)
                 p = p / p.sum(axis=1, keepdims=True)
                 out[:, group] = self.beta * (full_target[:, group] - p)
         if self.weight is not None:
+            if np.asarray(self.weight).shape != (len(s),):
+                raise ValueError("nudge weight must have one entry per batch row")
             out = out * np.asarray(self.weight, dtype=float)[:, None]
-        return out
+        return out[0] if single else out
 
 
 def _softmax_groups(nudge: Nudge) -> list[np.ndarray]:
     """The masked owners as one index array per softmax group (one group without ``groups``)."""
     masked = np.flatnonzero(np.asarray(nudge.mask) > 0)
     if nudge.groups is None:
-        return [masked.astype(np.int64)]
+        return [masked.astype(np.int64)] if masked.size else []
     ids = np.asarray(nudge.groups)[masked]
     return [masked[ids == g].astype(np.int64) for g in np.unique(ids[ids >= 0])]
 
@@ -494,12 +510,25 @@ class Settlement:
         drive = np.asarray(drive, float)
         if drive.ndim == 1:
             drive = drive[None, :]
+        if drive.ndim != 2 or drive.shape[0] == 0:
+            raise ValueError("drive must have shape (batch, owners) with at least one row")
+        if not isinstance(steps, (int, np.integer)) or steps < 0:
+            raise ValueError("steps must be a nonnegative integer")
+        if tolerance is not None and (not np.isfinite(tolerance) or tolerance < 0):
+            raise ValueError("tolerance must be finite and nonnegative")
         batch, n = drive.shape
         if n != self.wiring.n:
             raise ValueError("drive must have one column per owner")
         keep = np.ones(n) if mask is None else np.asarray(mask, float)
         if keep.shape not in ((n,), (1, n), (batch, n)):
             raise ValueError("mask must have one entry per owner, optionally per batch row")
+        if nudge is not None:
+            if np.asarray(nudge.mask).shape != (n,):
+                raise ValueError("nudge mask must have one entry per owner")
+            if np.asarray(nudge.target).shape not in ((n,), (1, n), (batch, n)):
+                raise ValueError("nudge target must match the drive's owners and batch size")
+            if nudge.weight is not None and np.asarray(nudge.weight).shape != (batch,):
+                raise ValueError("nudge weight must have one entry per batch row")
         on_kernel = (
             state is not None
             and state.device is not None
@@ -519,7 +548,7 @@ class Settlement:
             v, a = np.atleast_2d(state.v), np.atleast_2d(state.adaptation)
         else:
             v, a = np.atleast_2d(state.v).copy(), np.atleast_2d(state.adaptation).copy()
-        if v is not None and v.shape != (batch, n):
+        if v is not None and (v.shape != (batch, n) or a.shape != (batch, n)):
             raise ValueError("state batch does not match the drive batch")
         handle = None
         if self.backend in ("torch", "mlx"):
@@ -972,7 +1001,7 @@ class _TorchKernel:
             None,
             None,
             None,
-            np.stack(traj) if want else None,
+            (np.stack(traj) if traj else np.empty((0, batch, self.n))) if want else None,
             taken,
             repair.cpu().double().numpy(),
             held,
@@ -1135,7 +1164,7 @@ class _MlxKernel:
             np.array(v, dtype=np.float64),
             np.array(a, dtype=np.float64),
             np.array(s, dtype=np.float64),
-            np.stack(traj) if want else None,
+            (np.stack(traj) if traj else np.empty((0, batch, self.n))) if want else None,
             taken,
             np.array(repair, dtype=np.float64),
             {"kernel": "mlx", "owner": self, "v": v, "a": a, "s": s},

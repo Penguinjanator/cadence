@@ -1,42 +1,35 @@
 # Cadence documentation
 
 Cadence builds bounded observer-like software patches with local state, ports,
-readback, records, and feedback. The central loop is: read the current state, measure
-a discrepancy, correct it through declared seams, and keep the result for the next
-moment. Public examples supply executable comparisons and evidence receipts.
+readback, records, and feedback. The core loop reads a state, measures a
+discrepancy, corrects it through declared seams, and keeps what the task needs.
 
-| start here | purpose |
+## Start here
+
+1. [Install Cadence](../README.md#install), then run the short memory example.
+2. [Quickstart](quickstart.md): settle a three-owner circuit, remove a relay,
+   check the residual, fit two labels, and save a checkpoint.
+3. [Concepts](concepts.md): learn what an owner, seam, clamp, and state mean.
+4. [Task recipes](tasks.md): choose inference, memory, learning, or reward.
+
+## Choose a mechanism
+
+| Guide | What it covers |
 |---|---|
-| [concepts](concepts.md) | owners, seams, state, feedback, and the limits of the analogy |
-| [memory](memory.md) | direct key/value ports and one-line residual writes |
-| [learning](learning.md) | free/nudged settlement, exact assumptions, and numerical checks |
-| [quickstart](quickstart.md) | wiring, a held-out protocol, a control, and a receipt |
-| [API](api.md) | current public names and module helpers |
-
-## Compose only what the task needs
-
-| operation | implementation | boundary |
-|---|---|---|
-| repair interacting state | `Settlement` over a `Wiring` | a capped run need not reach equilibrium |
-| learn slow responses | `Learner` free/nudged endpoint contrast | conditional equilibrium gradient, finite-step bias |
-| retain recent activity | `Trace`; `Echo` and `Afterglow` are defaults | fading history, not a permanent record |
-| store and revise observations | `FastSeams` | fixed capacity, supplied keys, interference |
-| assign reward credit | `ActorCritic` trace and critic; `Valence` | a temporal-credit estimator, not a solved general RL system |
-
-The [small-core rationale](condense.md) explains why these operations remain distinct.
-The [small component experiments](child.md) test what composing them adds.
+| [Memory](memory.md) | Direct key/value ports, residual writes, interference, and resets |
+| [Learning](learning.md) | Free/nudged phases, gradient assumptions, and numerical checks |
+| [Reward](reward.md) | Eligibility traces, a critic, and reward prediction error |
+| [Small core](condense.md) | State lifetimes and why the operations stay separate |
+| [Small component experiments](child.md) | What a few tested compositions add |
 
 ## Build and measure
 
-[Task recipes](tasks.md) · [Games](games.md) · [Reward](reward.md) ·
-[Embodiment](embodied.md) · [Browser pages](pages.md) · [Backends and timing](backends.md) ·
-[Protocols](protocols.md) · [Receipts](receipts.md) · [Comparisons](differences.md)
+[Games](games.md) · [Embodiment](embodied.md) · [Browser pages](pages.md) ·
+[Backends and timing](backends.md) · [Protocols](protocols.md) ·
+[Receipts](receipts.md) · [Comparisons](differences.md) · [API reference](api.md)
 
-Runnable examples live in [cadence-examples](https://github.com/muellerberndt/cadence-examples):
-digits, associative recall, Connect Four, Pong, changing memory, and circuit interventions.
-The intervention example compares a supplied local model with a trained MLP, fixed-depth
-graph unrolling and an independent solver. It checks new wiring and ablations without
-retraining. The memory example
-includes a transformer that learns its training-length task and exact lookup controls;
-its length-extrapolation gains and correlated-key failures are both retained. Historical
-examples keep their original source-bound receipts, which are distinct from new results.
+The [public examples](https://github.com/muellerberndt/cadence-examples) cover digits,
+associative recall, Connect Four, Pong, changing memory, and circuit interventions.
+Their tutorials state the data, controls, selection budgets, and source version
+for each receipt. Historical receipts describe their original source snapshots;
+rerunning an example produces a separate result.

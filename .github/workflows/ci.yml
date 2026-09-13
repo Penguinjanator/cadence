@@ -4,6 +4,27 @@ on:
     branches: [main]
   pull_request:
 jobs:
+  minimal-install:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build and install the wheel with only required dependencies
+        run: |
+          python -m pip wheel --no-deps --wheel-dir dist .
+          python -m pip install dist/*.whl
+          python -m pip check
+      - name: Run the introductory examples without optional backends
+        run: |
+          python examples/two_blobs.py
+          python examples/worked_update.py
+          python examples/half_center.py
+          python examples/ring_protocol.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:

@@ -40,6 +40,24 @@ def test_echo_decays_toward_the_hidden_activation_and_enters_the_clamp() -> None
     assert clamped[:, 0].sum() == 2.0  # the input clamp is untouched
 
 
+def test_trace_remembers_previous_activation_when_state_storage_is_reused() -> None:
+    wiring = cd.Wiring.from_edges(
+        4, pre=[], post=[], sets={"hidden": [0, 1], "context": [2, 3]}
+    )
+    trace = cd.Trace(wiring, decay=0.0, focus=1.0)
+    activation = np.array([[0.1, 0.7, 0.0, 0.0]])
+    state = cd.SettledState(
+        v=activation.copy(), activation=activation, adaptation=np.zeros_like(activation), steps=1
+    )
+    trace.update(state)
+    activation[0, 0] = 0.5
+    np.testing.assert_array_equal(trace.last, [[0.1, 0.7]])
+    trace.update(state)
+    moved = np.array([[0.4, 0.0]])
+    expected = moved / (moved.mean(axis=1, keepdims=True) + 1e-9) * [[0.5, 0.7]]
+    np.testing.assert_allclose(trace.trace, expected)
+
+
 def test_carried_state_learns_what_no_window_can_see() -> None:
     """Predict the symbol seen one input ago from a window of one: impossible without state."""
     rng = np.random.default_rng(0)

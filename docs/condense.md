@@ -48,8 +48,7 @@ results: residual memory can improve revision yet damage correlated older record
 Nature motivates local state, feedback and reuse. It does not prove this implementation
 is optimal. The engineering question is which work each local correction removes and
 which capability requires interaction between patches. [Memory](memory.md) and
-[learning](learning.md) state the currently implemented answers.
+[learning](learning.md) state the implemented answers.
 
-The historical 0.8 API removals and compatibility decisions remain in the
-[changelog](../CHANGELOG.md). No new orchestrator or domain-specific brain subsystem
-is needed for the direct-memory refactor.
+API removals and compatibility decisions are recorded in the
+[changelog](../CHANGELOG.md).

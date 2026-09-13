@@ -1,5 +1,16 @@
 # Backends, devices, precision
 
+Begin with the NumPy-only [installation](../README.md#install). Optional extras
+add compiled CPU transport or accelerator libraries:
+
+```bash
+python -m pip install "cadence-net[fast] @ git+https://github.com/muellerberndt/cadence.git@main"
+```
+
+Replace `[fast]` with `[accel]` for PyTorch or `[apple]` for MLX. From a checkout,
+use `python -m pip install -e ".[fast]"`. An installed accelerator library is
+not enough to select it: pass `backend="torch"` or `backend="mlx"` to `Settlement`.
+
 ```python
 import cadence as cd
 cd.available_backends()
@@ -8,23 +19,24 @@ cd.available_backends()
 
 | backend | where it runs | precision | install | use it for |
 |---|---|---|---|---|
-| `"cpu"` | NumPy, and the fused numba kernel | float64 | `cadence-net[fast]` | receipts, conformance, anything you will cite; every readout |
+| `"cpu"` | NumPy; optional Numba and SciPy | float64 | base install; `[fast]` for acceleration | first examples, numerical checks, sparse graphs |
 | `"torch"` on CUDA | NVIDIA GPU | float64, or float32 with `precision="float32"` | `cadence-net[accel]` | training at scale; receipts too, in float64 |
 | `"torch"` on MPS | Apple silicon GPU through Metal | float32 | `cadence-net[accel]` | training on a Mac when torch is what you have |
 | `"mlx"` | Apple silicon GPU through MLX, unified memory | float32 | `cadence-net[apple]` | an alternative Apple backend; benchmark the actual workload |
 | `"torch"` on CPU | torch CPU | float64 | `cadence-net[accel]` | one code path on a box without a GPU |
 
-Every backend does the same arithmetic: the block transport of the wiring (dense blocks
-between the owner ranges the named sets cut; a range that did not move keeps its product),
-then one owner-local update, a nudge, adaptation, a mask, a tolerance, and `repair`. The
+The backends implement the same owner equations with different kernels and precision.
+For blocked wiring, transport uses dense blocks between owner ranges; unchanged
+ranges can reuse their products. Each step then applies the owner update, nudge,
+adaptation, mask, and stopping check. The
 device backends keep the settled state on the device (`state.device`) so that a phase that
 continues from it starts there, and the learning rule's contrast is read on the device
 (`Settlement.contrast_on_device`). For blocked PyTorch learners, contrast, momentum,
-RMS normalization and parameter updates remain on the device. Scalar step reports still
+RMS normalization and parameter updates remain on the device. Scalar step reports
 synchronize. Reading parameters or optimizer history, saving a checkpoint, or entering a
 host-only path materializes the required arrays. Public optimizer attributes remain
 mutable NumPy arrays; edits made through them are picked up by the next update. History
-uses float32 on MPS and float64 on torch CPU/CUDA. MLX contrast currently returns arrays
+uses float32 on MPS and float64 on torch CPU/CUDA. MLX contrast returns arrays
 to the host for the optimizer.
 Large wirings whose blocks do not fit `dense_limit` use sparse transport. The CPU backend
 uses SciPy CSR when installed, and the NumPy segmented sum otherwise. PyTorch uses its
@@ -59,7 +71,7 @@ Warm up the backend and synchronize the GPU around wall-clock measurements.
 The CPU backend uses NumPy float64, with optional numba and SciPy acceleration through
 `cadence-net[fast]`. Cap BLAS threads when running independent experiment workers;
 `cadence.timing.environment()` records thread settings. PyTorch supports CPU, CUDA and
-Apple MPS, while MLX provides an additional Apple path. A single net currently uses one
+Apple MPS, while MLX provides an additional Apple path. A single net uses one
 device. Neither backend choice nor parameter count establishes efficiency by itself.
 
 CUDA defaults to float64; `precision="float32"` selects float32 settlement. Hardware
@@ -81,14 +93,11 @@ brings a checkpoint back to the receipt backend, whatever trained it.
 
 ## Precision matters
 
-Owners can sit on knife edges, where a difference of 1e-7 in a drive flips a bistable
-readout. Float32 summation order alone did that to a motor neuron in the fly brain. Two
-habits keep this honest:
-
-1. Make receipts on `"cpu"` or on CUDA float64.
-2. When you use MPS float32 for a page or a demo, run `cd.conformance` on the same wiring
-   and clamp, and show the deviation. It is usually around 1e-5; when it is not, a readout
-   near threshold needs closer inspection.
+Near multiple attractors, a small rounding difference can change the selected
+state. Compare the deployed backend against CPU float64 with `cd.conformance`
+on representative drives, and report the measured deviation. Check residuals
+and task readouts as well as trajectories. A receipt can record any backend;
+it should declare precision and include the relevant numerical checks.
 
 ## Extending to another device
 
@@ -102,10 +111,10 @@ you check it against, and `tests/test_settle.py` has the test each kernel passes
 
 ## The fused kernel
 
-With numba installed (`pip install "cadence-net[fast]"`) the CPU backend settles blocked
+With Numba installed through `[fast]`, the CPU backend settles blocked
 wirings in one compiled loop: the block transport, then every owner's repair, activation,
-adaptation and nudge in place, the same float64 arithmetic in the same order as the NumPy
-loop (checked to 2e-16). Two more things it does are exact for the same reason: an owner
+adaptation and nudge in place. Floating-point implementations are compared against
+the reference in the tests. Two cache rules avoid repeated work: an owner
 whose potential did not move keeps the activation it published, and a range that hears
 nothing is skipped for good once it is still, because such an owner's update is a fixed
 function of its own state. It is used automatically when the wiring is blocked and no
@@ -113,8 +122,8 @@ trajectory is requested; `CADENCE_FUSED=0` in the environment forces the NumPy l
 owner-by-owner reference and `conformance` are unchanged and remain what any kernel is
 measured against.
 
-CPU settlement accepts a shared mask of shape `(n,)` or `(1, n)`, or a separate
-mask for each row with shape `(batch, n)`, in both fused and NumPy paths. The
+Settlement accepts a shared mask of shape `(n,)` or `(1, n)`, or a separate
+mask for each row with shape `(batch, n)`, across CPU and device paths. The
 fused kernel reads a broadcast view, so sharing a mask does not allocate a copy
 per row. Masks apply to potential and activation at each step; zero removes an
 owner's published activity, while any existing adaptation continues to decay.
@@ -129,8 +138,8 @@ and involuntary context switches the scheduler made during the measurement (from
 `getrusage`), and `environment()` records the thread limits, the cores the process is
 pinned to when the platform can say (Linux), the load average and the library versions. A
 wall-clock number in a receipt is a fact about a program on a machine on a day; this is the
-machine's half of it. A tail far above the median with many involuntary switches is the
-machine, not the net.
+machine's half of it. Context switches can explain some timing variation;
+profile before assigning a cause to a slow tail.
 
 For a changing-input workload, `decide()` must advance an input sequence and carry or
 reset state according to the deployment contract. Repeating an unchanged input measures

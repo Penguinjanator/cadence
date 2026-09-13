@@ -168,7 +168,7 @@ class Trace:
             self.trace = self.decay * self.trace + (1.0 - self.decay) * weight * h
         else:
             self.trace = self.decay * self.trace + (1.0 - self.decay) * h
-        self.last = h
+        self.last = h.copy()  # own the previous moment even if the caller reuses state storage
         self.cold[:] = False
 
     def _source_activation(self, state: SettledState) -> np.ndarray:

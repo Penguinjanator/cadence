@@ -80,14 +80,27 @@ class LearnerConfig:
     def __post_init__(self) -> None:
         if self.nudge not in ("quadratic", "cross_entropy"):
             raise ValueError("nudge must be 'quadratic' or 'cross_entropy'")
-        if self.beta <= 0 or self.eta < 0 or self.eta_bias < 0:
-            raise ValueError("beta must be positive and the learning rates nonnegative")
+        if (
+            not np.isfinite([self.beta, self.eta, self.eta_bias]).all()
+            or self.beta <= 0
+            or self.eta < 0
+            or self.eta_bias < 0
+        ):
+            raise ValueError(
+                "beta must be finite and positive; learning rates finite and nonnegative"
+            )
         if not 0 <= self.normalize < 1:
             raise ValueError("normalize is a forgetting factor in [0, 1)")
         if not 0 <= self.momentum < 1:
             raise ValueError("momentum lies in [0, 1)")
         if not 0 <= self.decay < 1:
             raise ValueError("decay is a fraction in [0, 1)")
+        if not np.isfinite(self.temperature) or self.temperature <= 0:
+            raise ValueError("temperature must be finite and positive")
+        for name in ("free_steps", "nudged_steps"):
+            value = getattr(self, name)
+            if not isinstance(value, (int, np.integer)) or value < 0:
+                raise ValueError(f"{name} must be a nonnegative integer")
 
     def to_dict(self) -> dict[str, Any]:
         return {k: getattr(self, k) for k in self.__slots__}
@@ -121,7 +134,16 @@ class Learner:
     second_moment_bias: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
-        self.output_index = np.asarray(list(self.outputs), dtype=np.int64)
+        outputs = np.asarray(list(self.outputs))
+        if outputs.ndim != 1 or outputs.size == 0:
+            raise ValueError("outputs must contain at least one owner index")
+        if not np.issubdtype(outputs.dtype, np.integer):
+            raise ValueError("outputs must contain integer owner indices")
+        if (outputs < 0).any() or (outputs >= self.engine.wiring.n).any():
+            raise ValueError("output owner index is outside the wiring")
+        if np.unique(outputs).size != outputs.size:
+            raise ValueError("outputs must contain distinct owner indices")
+        self.output_index = outputs.astype(np.int64)
         self.output_mask = np.zeros(self.engine.wiring.n)
         self.output_mask[self.output_index] = 1.0
         if isinstance(self.slots, int):
@@ -224,17 +246,26 @@ class Learner:
             tolerance=cfg.tolerance,
         )
 
+    def _labels(self, labels: np.ndarray) -> np.ndarray:
+        labels = np.asarray(labels)
+        if self.slot_count > 1:
+            if labels.ndim != 2 or labels.shape[1] != self.slot_count:
+                raise ValueError("a slotted learner takes labels shaped (batch, slots)")
+        elif labels.ndim != 1:
+            raise ValueError("labels must have shape (batch,) for a single output slot")
+        if not np.issubdtype(labels.dtype, np.integer):
+            raise ValueError("labels must be integer class indices")
+        if (labels < 0).any() or (labels >= self.slot_sizes).any():
+            raise ValueError("a label lies outside its output slot's choices")
+        return labels.astype(np.int64, copy=False)
+
     def targets(self, labels: np.ndarray) -> np.ndarray:
         """Per-owner target activation for class labels: ``(batch,)``, or ``(batch, slots)``."""
-        labels = np.asarray(labels)
+        labels = self._labels(labels)
         batch = len(labels)
         target = np.zeros((batch, self.engine.wiring.n))
         target[:, self.output_index] = 0.0
         if self.slot_count > 1:
-            if labels.ndim != 2 or labels.shape[1] != self.slot_count:
-                raise ValueError("a slotted learner takes one label per slot")
-            if labels.min() < 0 or (labels >= self.slot_sizes[None, :]).any():
-                raise ValueError("a slot's label lies outside its choices")
             owners = self.output_index[labels + self.slot_offsets[None, :]]
             target[np.arange(batch)[:, None], owners] = 1.0
         else:
@@ -495,6 +526,11 @@ class Learner:
         the nudge.
         """
         target = self.targets(labels)
+        drive = np.asarray(drive, dtype=float)
+        if drive.ndim == 1:
+            drive = drive[None, :]
+        if drive.ndim != 2 or drive.shape[0] != target.shape[0]:
+            raise ValueError("drive and labels must have the same batch size")
         free = self.free(drive, warm)
         nudged = self.nudged(drive, free, target, weight=weight)
         opposite = (
@@ -566,12 +602,23 @@ class Learner:
         return np.asarray(np.argmax(out, axis=-1), dtype=np.int64)
 
     def accuracy(self, drive: np.ndarray, labels: np.ndarray, batch: int = 256) -> float:
+        """Fraction of correct class choices, averaged over rows and output slots."""
+        labels = self._labels(labels)
+        if labels.size == 0:
+            raise ValueError("accuracy needs at least one labeled example")
+        if not isinstance(batch, (int, np.integer)) or batch < 1:
+            raise ValueError("batch must be a positive integer")
+        drive = np.asarray(drive, dtype=float)
+        if drive.ndim == 1:
+            drive = drive[None, :]
+        if drive.ndim != 2 or drive.shape[0] != len(labels):
+            raise ValueError("drive and labels must have the same batch size")
         hits = 0
         for start in range(0, len(labels), batch):
             hits += int(
                 (self.predict(drive[start : start + batch]) == labels[start : start + batch]).sum()
             )
-        return hits / len(labels)
+        return hits / labels.size
 
     def parameters(self) -> int:
         """Trainable numbers: one per seam (a tied pair or group counts once) plus the biases."""

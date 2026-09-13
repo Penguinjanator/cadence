@@ -3,8 +3,8 @@
 Two ways a patch net learns to act, both with the same free/nudged rule as
 classification. The full, runnable versions with receipts and playable pages are
 [04 Pong](https://github.com/muellerberndt/cadence-examples/tree/main/04_pong) in
-cadence-examples and [03 Connect Four](https://github.com/muellerberndt/cadence-examples/tree/v0.5.0/03_connect_four)
-at its tag v0.5.0; this page is the mechanism.
+cadence-examples and [03 Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/03_connect_four);
+their tutorials identify the source version of each receipt.
 
 ## Acting is a settlement
 
@@ -12,9 +12,8 @@ A game state becomes a clamp on the input owners: a board as one owner per cell 
 side (1 where a disc sits), a screen as one owner per pixel (its brightness). The net
 settles under that clamp; the output owners are the actions, and their rest activations
 are the net's preferences. To act, take the most active legal output (a game), or draw
-from `softmax(s_out / T)` (a policy that explores). There is no search inside the net
-and no memory beyond what the clamp carries: two consecutive frames if the game needs
-velocity, as Pong does.
+from `softmax(s_out / T)` (a policy that explores). These example policies do not search while acting. Their memory comes from the
+encoded observation: Pong supplies two consecutive frames to expose velocity.
 
 ## Way one: imitate a teacher (Connect Four)
 
@@ -24,7 +23,7 @@ classification, and everything in [learning](learning.md) applies unchanged:
 1. **Positions.** Play games with cheap players that make some random moves, so the
    positions are varied and plausible. Deduplicate.
 2. **Labels.** For each non-terminal position, the move a deeper search prefers for the
-   side to move. The teacher's depth is the ceiling of what the net can learn.
+   side to move. Teacher agreement measures imitation; playing strength needs separate evaluation.
 3. **Encoding from the mover's side.** One plane of the mover's discs and one of the
    opponent's, so one net plays both colours. Mirror positions left-right for free
    augmentation; mirror the labels with them.
@@ -79,8 +78,8 @@ separately from shaped training return.
 
 ### Two frames
 
-A single frame does not say which way the ball is moving, so a paddle that reads one
-frame cannot anticipate a diagonal ball and both learners return fewer than 40% of them.
+A single frame does not reveal the ball's direction, so identical images can
+require different anticipatory actions.
 Clamp the previous frame alongside the current one and the direction is visible. The
 page does the same: it keeps one earlier frame, nothing more.
 
@@ -94,10 +93,10 @@ evaluation, and report both, with wall-clock.
 
 ## What the reward rungs found
 
-The public Pong run returns about 88% of balls against 93% for backprop REINFORCE
+The source-bound historical Pong run returns about 88% of balls against 93% for backprop REINFORCE
 with Adam; imitation of a tracker reaches about 96%. Each policy generates its own
 rollouts under the same interaction budget and evaluation conditions. The adaptive
-local step uses a running mean and RMS with short-history corrections; the current
+local step uses a running mean and RMS with short-history corrections;
 `LearnerConfig.momentum` and `normalize` implement those corrections too.
 
 These results do not identify one universal cause of the remaining gap. Reward timing,

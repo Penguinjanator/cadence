@@ -1,139 +1,138 @@
-# Quickstart: a measured wiring, a held-out test, a receipt
+# Quickstart
 
-This walks the whole loop on a wiring you build yourself, then shows the same calls on a
-connectome edge list. Everything runs on the NumPy backend; add `backend="torch"` for a GPU.
+Install Cadence using the [README](../README.md#install). The examples below need
+only NumPy and Cadence. Each main example includes its imports and data, so it can
+run in a Python session or a saved `.py` file.
 
-## 1. Build a wiring
+## Settle a small circuit
+
+Owner 0 receives input, owner 1 relays it to owner 2, and owners 1 and 2 feed back
+to each other. An *owner* holds a potential and publishes an activation. An edge
+carries one owner's activation into another owner's inbox.
 
 ```python
 import numpy as np
 import cadence as cd
 
-rng = np.random.default_rng(0)
-n, e = 200, 1500
-w = cd.Wiring.from_edges(
-    n,
-    pre=rng.integers(0, n, e),
-    post=rng.integers(0, n, e),
-    count=rng.integers(5, 40, e),                 # contacts per overlap
-    sign=np.where(rng.random(e) < 0.3, -1.0, 1.0), # 30% inhibitory
-    sets={"sensors": range(0, 10), "motors": range(190, 200)},
-    min_count=5,                                   # drop weak overlaps, as connectomes do
+wiring = cd.Wiring.from_edges(
+    3,
+    pre=[0, 1, 2],
+    post=[1, 2, 1],
+    sign=[1.0, 0.4, 0.4],
+    sets={"input": [0], "output": [2]},
 )
-w.summary()
+engine = cd.Settlement(wiring, cd.learning_rule(dt=1.0))
+drive = np.array([[1.0, 0.0, 0.0]])  # one row, one drive value per owner
+state = engine.settle_batch(drive, steps=100, tolerance=1e-10)
+
+print(state.activation.round(4))
+print(engine.residual(drive, state).max() < 1e-9)
 ```
 
-`Wiring` sorts overlaps by (post, pre), merges parallel ones, drops autapses, and digests
-itself. Sets are tuples of owner rows and travel with the wiring, so protocols speak in names.
+Expected output:
 
-## 2. Settle it
-
-```python
-rule = cd.GradedRule(gain=0.02)                 # drive per contact per unit activation
-engine = cd.Settlement(w, rule)
-state = engine.settle(w.members("sensors"), steps=60, trajectory=True)
-state.mean(w.sets["motors"]), state.active(), state.trajectory.shape
+```text
+[[0.4621 0.236  0.0472]]
+True
 ```
 
-Rest is an exact fixed point: with no clamp nothing fires. The activation is a sigmoid
-re-based to emit zero at rest, so a quiet net stays quiet.
+The wiring and weights are supplied; no training occurs. `learning_rule` gives a
+responsive activation around zero and also works for inference. The engine starts
+from rest and repeatedly updates each owner from its state, inbox, and external
+drive. `steps` caps the work. `tolerance` stops on a small activation change;
+`residual` separately checks the fixed-point equations. A small residual alone
+does not prove a unique or stable equilibrium.
 
-## 3. Declare what you will test
+### Change the circuit
+
+Continue in the same session. A binary mask removes owner 1's activity:
 
 ```python
-protocol = cd.Protocol(
-    stimuli={"rest": (), "touch": ("sensors",)},
-    training=[("touch", "motors", "active")],           # the one fact the model may see
-    rows=[
-        cd.Row("R1", "rest", "motors", "inactive", "no input, no output"),
-        cd.Row("R2", "touch", "motors", "reduced", "cutting the sensors", ablate=("sensors",)),
-    ],
+mask = np.array([1.0, 0.0, 1.0])
+cut = engine.settle_batch(drive, mask=mask, steps=100, tolerance=1e-10)
+print(cut.activation.round(4))
+assert engine.residual(drive, cut, mask=mask).max() < 1e-9
+```
+
+The output is `[[0.4621 0.     0.    ]]`: owner 2 receives no signal through
+the cut relay. Always pass the same mask to settlement and its residual check.
+
+### Carry state and check the implementation
+
+```python
+changed_drive = np.array([[0.9, 0.0, 0.0]])
+continued = engine.settle_batch(changed_drive, state=state, steps=100, tolerance=1e-10)
+assert engine.residual(changed_drive, continued).max() < 1e-9
+
+check = cd.conformance(engine, drive[0], steps=30)
+print(check["ledger"]["clean"], check["max_abs_deviation"] < 1e-12)
+```
+
+The final line prints `True True`. `conformance` compares this trajectory against
+an owner-by-owner reference; it does not verify an entire learning algorithm.
+Starting from an earlier state may save steps for small changes. Multiple
+attractors can make the answer depend on that state, so compare cold and warm
+starts. Omit `state=` to start an independent episode from rest.
+
+## Learn a response
+
+This separate example fits two labelled observations. It is a check of the
+training API, not a held-out accuracy benchmark.
+
+```python
+import numpy as np
+import cadence as cd
+
+wiring = cd.layered(2, 8, 2, density=1.0, seed=0)
+learner = cd.Learner(
+    cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
+    wiring.sets["output"],
+    cd.LearnerConfig(eta=2.0, eta_bias=0.02),
 )
+drive = np.zeros((2, wiring.n))
+drive[:, list(wiring.sets["input"])] = np.eye(2)
+labels = np.array([0, 1])  # class indices within the output group
+
+for _ in range(50):
+    phases, report = learner.step(drive, labels)
+
+print(learner.predict(drive))
 ```
 
-Predicates carry preconditions: `reduced` requires the intact net to have been active, so a
-dead net cannot pass it.
+Expected output: `[0 1]`. Each `step` runs a free phase, two opposite nudged
+phases, and a parameter update. `phases.free` contains the answer before that
+update; `predict` runs a fresh free phase using the learned parameters.
+For evaluation, train on one split, choose settings on validation data, and read
+the test split after selection. [Digits](https://github.com/muellerberndt/cadence-examples/tree/main/01_digits)
+shows this workflow with an MLP control and a receipt.
 
-## 4. Select the gain on the training fact, under a sparsity cap
+Save and reload this learner:
 
 ```python
-gain, table = cd.select_gain(
-    lambda g: cd.Settlement(w, rule.replace(gain=g)), protocol, grid=(0.01, 0.02, 0.03, 0.05),
-)
-engine = cd.Settlement(w, rule.replace(gain=gain))
+learner.save("tiny_learner.npz")
+restored = cd.Learner.load("tiny_learner.npz", backend="cpu")
+assert np.array_equal(restored.predict(drive), learner.predict(drive))
 ```
 
-A gain is admissible only while at most 5% of owners are active under the training
-stimuli; pass `sparsity_cap=None` for toy nets that are meant to light entirely. Above the
-cap the net runs away and every readout lights, which says nothing about the wiring. The
-table records every gain tried.
+The checkpoint includes learned parameters and optimizer history. Separate
+`FastSeams` records and `Trace` state belong to the caller and are not included.
+Use [memory](memory.md) when the task is storing observations, rather than fitting
+a reusable input/output response. See [learning](learning.md) for the gradient
+assumptions and parameter choices.
 
-## 5. Score, and score the control
+## Shapes and common mistakes
 
-```python
-report = protocol.score(engine)
-control = protocol.score(cd.Settlement(cd.shuffled(w, seed=0), rule.replace(gain=gain)))
-report["passed"], control["passed"]
-```
+| Symptom or question | What to check |
+|---|---|
+| `ModuleNotFoundError: cadence` | Activate the environment used for installation. Run `python -m pip show cadence-net` with that same Python. |
+| Missing `observe` or `recall` | Install the GitHub source shown in the README. Inspect `cadence.__file__` for an older install or a local file named `cadence.py`. |
+| Drive shape error | Use `(batch, wiring.n)`, including zero columns for hidden and output owners. `clamp_levels` scales values; it does not pad missing columns. |
+| Invalid classification labels | Use integer class indices `0` through `len(outputs)-1`, not owner indices or one-hot rows. Use `nudged` for explicit target patterns. |
+| Confusing input amplitudes | `settle({owner: level})` scales levels by `rule.clamp_amplitude`. A dense NumPy vector and `settle_batch(drive)` carry drive values directly. |
+| Small step count, poor answer | Inspect the residual and activations. Saturation can stop movement before the potential equilibrates. More steps cannot correct a wrong supplied model. |
+| Rule rejects a resting sigmoid rounded to zero or one | Reduce the magnitude of `slope * threshold`; the rebased activation needs a representable resting value strictly between zero and one. |
+| State batch mismatch | Continuing state must have the same batch size and row identities. Start independent rows from rest. |
+| Slow first call with `[fast]` installed | Numba compiles the CPU kernel on first use. Record setup separately from warmed execution when timing. |
 
-`shuffled` permutes postsynaptic endpoints and keeps every count, sign, out-degree, and
-named set. If the wiring passes what the control does not, the prediction came from the
-wiring.
-
-## 6. Certify the engine
-
-```python
-cd.conformance(engine, w.members("sensors"), steps=60)
-# {'backend': 'cpu', 'max_abs_deviation': 1e-15, 'ledger': {'clean': True, ...}, ...}
-```
-
-The reference engine reads one owner and its inbox slice at a time and counts one delivery
-per declared overlap per step. Run this on the torch backend too, and record the number.
-
-## 7. Write the receipt
-
-```python
-from pathlib import Path
-
-receipt = cd.Receipt.build(
-    "quickstart/v1",
-    {
-        "wiring": w.summary(),
-        "rule": engine.rule.to_dict(),
-        "gain_selection": {"selected": gain, "table": table},
-        "protocol": protocol.to_dict(),
-        "score": report,
-        "control": control,
-        "conformance": cd.conformance(engine, w.members("sensors")),
-    },
-    sources=[("quickstart.py", Path(__file__))] if "__file__" in globals() else [],
-)
-receipt.write(Path("receipt.json"))
-
-def check(body):
-    for row in body["score"]["rows"]:
-        if row["passed"] != cd.evaluate_predicate(row["predicate"], row["reading"], row["reference"]):
-            return f"row {row['id']} pass flag does not follow from its readings"
-    return None
-
-cd.Receipt.verify(Path("receipt.json"), check=check)
-```
-
-## The same calls on a connectome
-
-A connectome is an edge list with a synapse count and a presynaptic sign. Pin the file,
-fetch it once, verify it always, and build the wiring the same way.
-
-```python
-src = cd.Source(
-    key="edges", file="edges.csv", url="https://example.org/edges.csv",
-    sha256="<64 hex chars>", citation="Who measured it, where it was published",
-)
-paths = cd.fetch([src], root=Path("data"), allow_download=True)
-pre, post, count, sign = load_your_csv(paths["edges"])   # your parser
-w = cd.Wiring.from_edges(n_neurons, pre=pre, post=post, count=count, sign=sign, min_count=5,
-                         sets={"sugar_grn": [...], "mn9": [...]})
-```
-
-From there the protocol, the control, the conformance check, and the receipt are the
-same six calls, with `cd.manifest([src])` embedded in the receipt body as custody.
+For held-out intervention predicates, see [protocols](protocols.md). To bind results
+to source files and verify stored arithmetic, see [receipts](receipts.md).

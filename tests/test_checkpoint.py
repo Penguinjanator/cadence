@@ -110,3 +110,32 @@ def test_a_checkpoint_from_an_earlier_release_loads_without_its_retired_knobs(tm
     np.savez(path, **data)
     loaded = cd.Learner.load(path)
     assert loaded.config.eta == 0.5
+
+
+def test_checkpoint_preserves_explicit_precision_and_allows_override(tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+    wiring = cd.layered(3, 4, 2, density=1.0, seed=0)
+    learner = cd.Learner(
+        cd.Settlement(
+            wiring, cd.learning_rule(), backend="torch", device="cpu", precision="float32"
+        ),
+        wiring.sets["output"],
+    )
+    path = learner.save(tmp_path / "single.npz")
+    restored = cd.load(path, backend="torch", device="cpu")
+    assert restored.engine.precision == "float32"
+    assert restored.engine._torch.dtype == torch.float32
+    overridden = cd.load(path, backend="torch", device="cpu", precision="float64")
+    assert overridden.engine._torch.dtype == torch.float64
+
+    # Old checkpoints did not store precision; their device default still applies.
+    import json
+
+    with np.load(path, allow_pickle=False) as data:
+        arrays = dict(data)
+    meta = json.loads(str(arrays["meta"]))
+    meta.pop("precision", None)
+    arrays["meta"] = np.array(json.dumps(meta))
+    np.savez(path, **arrays)
+    legacy = cd.load(path, backend="torch", device="cpu")
+    assert legacy.engine._torch.dtype == torch.float64

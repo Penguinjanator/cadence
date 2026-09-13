@@ -9,7 +9,7 @@ it fits the task and its cost is measured.
 | inference | evaluate layers | repeatedly repair state over declared seams |
 | state between inputs | supplied by a cache or separate memory when needed | retained explicitly in a state, trace, or fast-memory patch |
 | training credit | reverse-mode differentiation | free/nudged endpoint contrasts |
-| stored training data | activations or recomputation checkpoints | phase endpoints, traces and optimizer history |
+| differentiation storage | activations or recomputation checkpoints, plus optimizer history | phase endpoints and optimizer history; traces when used |
 | exact gradient conditions | differentiable executed computation | stable smooth equilibrium branch, symmetric effective recurrent weights, converged phases, vanishing nudge |
 | work | forward/backward operations | all free and nudged repair steps plus the update |
 | memory capacity | model and context dependent | model and fast-store dimensions dependent |
@@ -31,7 +31,7 @@ algorithmic solver when the task has one. Count mutable records, training exampl
 architecture search, parameters, wall time, and all retained failures. A receipt hash
 verifies custody; it cannot repair mismatched budgets or an unlearned baseline.
 
-## Current evidence
+## Public comparisons
 
 The supervised public examples reach broadly similar accuracy to their MLP baselines
 at greater wall-clock cost; widths and selection budgets are not always matched.

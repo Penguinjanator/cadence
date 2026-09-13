@@ -1,9 +1,9 @@
 # Learning: the free/nudged rule
 
-This page is the complete account of how a patch net learns in Cadence. It has every
-equation the code runs, a worked example with real numbers from a six-owner net, the
-reason the rule is a gradient, what breaks it, and every knob. The runnable versions are
-the tutorials in [cadence-examples](https://github.com/muellerberndt/cadence-examples).
+Start with the runnable [two-label example](quickstart.md#learn-a-response).
+This page explains supervised free/nudged learning without adaptation: the owner
+equations, a numerical update, the gradient assumptions, and configuration choices.
+Full comparisons live in [cadence-examples](https://github.com/muellerberndt/cadence-examples).
 
 ## 1. What is being learned
 
@@ -40,9 +40,10 @@ settlement runs this step from rest (or from a given state) until no owner's act
 moved more than `tolerance` in a step, or until the step cap. That state is what a
 readout sees.
 
-An input is a *clamp*: a fixed drive on the input owners, one number per owner (a pixel's
-level, a board cell's occupancy). Input owners have no inbound overlaps, so at rest each
-sits at `v = clamp` and publishes `act(clamp)`. Nothing else is clamped.
+An input is a *clamp*: a fixed drive on the input owners, one number per owner
+(a pixel's level, a board cell's occupancy). In a `layered` wiring, input owners
+have no inbound overlaps. With zero input bias, at equilibrium each sits at
+`v = clamp` and publishes `act(clamp)`. Other wirings can feed back into inputs.
 
 ## 3. The two phases and the update
 
@@ -130,7 +131,7 @@ little higher under `+beta` than `−beta`, which is the credit that flowed back
 owner 5 +0.0057, owner 4 −0.0052. After this single update a fresh free settlement gives
 outputs (0.028, 0.067) instead of (0.036, 0.052): the right answer, with more room.
 
-You can rerun this: it is `examples/worked_update.py`.
+From a checkout, rerun the calculation with `python examples/worked_update.py`.
 
 ## 5. Why the contrast is a gradient
 
@@ -180,39 +181,35 @@ again. `learning_rule` provides responsive defaults, but cannot guarantee conver
 uniqueness, or accurate credit for every wiring. Leakage reduces dead regions; it
 does not remove saturation or make the piecewise activation globally smooth.
 
-## 5b. Where the rule stops: wirings the nudge cannot travel back through
+## Feedback and the reach of a nudge
 
-The contrast teaches a seam only if the nudge changes the rest state of at least one of
-its two endpoints. In a layered net with tied feedback seams the nudge on the outputs
-moves the hidden owners, and every seam is reachable. In a measured, *directed* wiring
-the credit travels only over seams that point back toward the owners the nudge moved; a
-connectome of chemical synapses mostly does not, so only the last hop before the readout
-learns. The C. elegans rung of cadence-examples (at its tag v0.5.0) shows the consequence: the rule cannot
-fit four textbook facts that need two sensory pathways to act differently, whatever the
-gain, while a global gradient through the same settlement can. Symmetrising the wiring
-as a modelling assumption (every synapse also carries its reverse, tied) was tried and
-did not rescue it either, because the regime where a connectome's owners are both
-responsive and sparse is narrow to nonexistent under raw synapse counts. Measured
-wirings are for the protocol layer; learnable nets are built with feedback.
+An endpoint contrast is zero if neither endpoint changes under the nudge.
+Hidden owners therefore need a directed feedback path from nudged outputs.
+`layered` supplies tied feedback between hidden and output owners. A general
+directed graph may provide some such paths and omit others; asymmetry also breaks
+the energy-gradient argument above. Feedback reachability alone does not ensure
+useful credit if activations saturate or phases fail to converge.
+
+For measured wiring, distinguish supplied topology from an assumed learning
+mechanism. Adding reverse edges changes the model. Test that modelling choice
+with controls rather than treating it as a biological consequence.
 
 ## 6. Using it
 
+The [quickstart](quickstart.md#learn-a-response) creates and trains a learner from
+scratch. For a dataset, construct `(batch, wiring.n)` drives and put features in
+the input columns. `step` takes integer class indices within the output group;
+for `slots`, use one index per row and slot. `accuracy` is the fraction of correct
+choices over all rows and slots. Use [explicit target patterns](tasks.md#pattern-targets)
+for regression or reconstruction.
+
+`LearnerConfig` is frozen. To change the learning rate between epochs:
+
 ```python
-import dataclasses
-import numpy as np
-import cadence as cd
+from dataclasses import replace
 
-wiring = cd.layered(64, 32, 10, density=1.0, seed=0)         # sets: input, hidden, output
-engine = cd.Settlement(wiring, cd.learning_rule(dt=1.0))
-learner = cd.Learner(engine, wiring.sets["output"],
-                     cd.LearnerConfig(eta=3.0, beta=0.1, temperature=0.1, tolerance=3e-3))
-
-drive = engine.clamp_levels(np.pad(x, ((0, 0), (0, wiring.n - 64))))   # pixels in [0, 1]
-for epoch in range(20):
-    learner.config = dataclasses.replace(learner.config, eta=3.0 * 0.8**epoch)
-    for idx in batches:
-        learner.step(drive[idx], y[idx])                    # free, +beta, -beta, update
-learner.accuracy(drive_test, y_test)
+# Continue with the learner from the quickstart.
+learner.config = replace(learner.config, eta=0.5)
 ```
 
 `learner.engine` is a plain `Settlement` at every moment: settle it, run `conformance` on
@@ -225,21 +222,22 @@ it, export `engine.dense()` for a page, put `to_dict()` in a receipt.
 | `beta` | `LearnerConfig` | nudge strength; smaller is closer to the gradient, larger a stronger signal | 0.1 |
 | `free_steps`, `nudged_steps` | `LearnerConfig` | the most steps a free and a nudged settlement may take before the contrast is read | 100, 50 |
 | `tolerance` | `LearnerConfig` | a settlement stops once no owner moves more than this (None: the step cap alone) | 1e-4 |
-| `eta` | `LearnerConfig` | seam step; the contrast is already divided by `2 beta` | 2 to 3, decayed by 0.9 to 0.95 per epoch over 40 epochs; a decay of 0.8 over 15 epochs under-trains tabular tasks by two to five points |
+| `eta` | `LearnerConfig` | seam step; the contrast is divided by `2 beta` | default 0.2; the two-label quickstart uses 2.0; tune on validation |
 | `eta_bias` | `LearnerConfig` | bias step | `eta / 100` |
 | `temperature` | `LearnerConfig` | softmax temperature of the cross-entropy nudge; also the policy temperature when sampling actions | 0.1 (labels), 0.2 (actions) |
 | `centered` | `LearnerConfig` | contrast `+beta` against `−beta` (two nudged phases) rather than against the free state | `True` |
 | `nudge` | `LearnerConfig` | `"cross_entropy"` or `"quadratic"` (`beta · (target − s)`) | cross-entropy for classes |
-| `momentum` | `LearnerConfig` | each seam steps on a running average of its own contrast (still local) | 0.9 on supervised tabular tasks, where it adds about a point; 0 elsewhere |
-| `decay` | `LearnerConfig` | every update shrinks each trainable seam and bias by this fraction: a leak on the seams | 0 for a fixed training set; 0.003 on a stream that drifts, where it keeps the net plastic (see `tasks.md`, streams) |
-| `normalize`, `normalize_floor` | `LearnerConfig` | each seam divides its step by the running RMS of its own contrast (still local) | 0 (off); tune on validation; combined bias-corrected momentum/RMS is used by the Pong example |
+| `momentum` | `LearnerConfig` | each seam steps on a bias-corrected running average of its contrast | 0 (off); tune with the learning rate |
+| `decay` | `LearnerConfig` | every update shrinks each trainable seam and bias by this fraction | 0 by default; decay also forgets useful weights |
+| `normalize`, `normalize_floor` | `LearnerConfig` | divide each seam's step by its bias-corrected running RMS plus a floor | 0 (off); tune on validation; combining momentum and RMS gives an Adam-style update |
 | `symmetric` | `Learner` | tie an overlap and its reverse into one seam | `True` |
 | `trainable_overlaps` | `Learner` | bool per overlap; freeze the rest | all |
 | `leak`, `slope`, `dt` | `learning_rule` | sub-rest response, activation slope, step of the owner update | 0.1, 1.0, 0.5 to 1.0 |
 | `density`, `feedback`, `lateral`, `init`, `skip` | `layered` | input→hidden density, feedback scale, output↔output scale, initial magnitude, direct input→output seams | 1.0, 1.0, 0, 1.0, `False` |
 
-`Learner.parameters()` counts one number per seam plus one bias per owner, which is the
-figure to put next to a feed-forward network's parameter count.
+`Learner.parameters()` counts one number per tied seam group plus one bias per
+owner. Report optimizer arrays and episodic memory separately when comparing
+storage; parameter count alone does not measure execution cost.
 
 ## 8. Warm starts, costs, and what to expect
 

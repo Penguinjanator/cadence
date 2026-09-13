@@ -37,6 +37,8 @@ class Adaptation:
     strength: float = 1.0
 
     def __post_init__(self) -> None:
+        if not np.isfinite([self.tau_steps, self.strength]).all():
+            raise ValueError("adaptation parameters must be finite")
         if self.tau_steps <= 0 or self.strength < 0:
             raise ValueError("tau_steps must be positive and strength nonnegative")
 
@@ -52,12 +54,22 @@ class GradedRule:
     leak: float = 0.0
 
     def __post_init__(self) -> None:
+        if not np.isfinite(
+            [self.dt, self.slope, self.threshold, self.gain, self.clamp_amplitude, self.leak]
+        ).all():
+            raise ValueError("rule parameters must be finite")
         if not 0 < self.dt <= 1:
             raise ValueError("dt must lie in (0, 1]")
         if self.slope <= 0 or self.gain <= 0:
             raise ValueError("slope and gain must be positive")
         if not 0 <= self.leak <= 1:
             raise ValueError("leak must lie in [0, 1]")
+        with np.errstate(over="ignore"):
+            rest = self.rest_emission
+        if not 0 < rest < 1:
+            raise ValueError(
+                "slope and threshold saturate the resting sigmoid; reduce their product's magnitude"
+            )
 
     @property
     def rest_emission(self) -> float:

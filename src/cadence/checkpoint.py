@@ -44,6 +44,7 @@ def save(learner: Learner, path: str | Path) -> Path:
         "slots": [int(k) for k in learner.slot_sizes],
         "updates": int(learner.updates),
         "backend": engine.backend,
+        "precision": engine.precision,
         "dense_limit": int(engine.dense_limit),
     }
     assert learner.trainable_overlaps is not None and learner.trainable_owners is not None
@@ -118,7 +119,7 @@ def load(
             bias=data["bias"],
             device=device,
             dense_limit=int(meta["dense_limit"]),
-            precision=precision,
+            precision=precision if precision is not None else meta.get("precision"),
         )
         tie = data["tie_groups"]
         learner = Learner(

@@ -1,14 +1,49 @@
 # Receipts
 
-A receipt is a result that can be checked by someone who was not there.
+A receipt stores outcomes, an embedded digest, and a manifest of selected source
+files. The caller decides which outcomes to record and what the verifier checks.
+
+## Write and verify a small receipt
+
+Save this as `receipt_demo.py` and run `python receipt_demo.py`. The example binds
+a small arithmetic result to its script and the installed receipt implementation:
+
+```python
+from pathlib import Path
+import cadence as cd
+
+sources = [
+    ("receipt_demo.py", Path(__file__)),
+    ("cadence/receipts.py", Path(cd.__file__).with_name("receipts.py")),
+]
+values = [1, 2, 3]
+receipt = cd.Receipt.build(
+    "sum-demo/v1", {"values": values, "total": sum(values)}, sources=sources,
+)
+path = receipt.write(Path("sum_receipt.json"))
+
+def check(body):
+    if body["values"] != [1, 2, 3] or body["total"] != sum(body["values"]):
+        return "stored sum differs from the declared inputs"
+    return None
+
+ok, message = cd.Receipt.verify(path, sources=sources, check=check)
+assert ok, message
+print(message)
+```
+
+Expected output: `canonical form, digest, sources, arithmetic agree`.
+For an experiment, bind every consumed source and dataset, then supply checks for
+its schedule, outcomes, and metrics. This small sum example verifies only its
+declared arithmetic; it does not reproduce a model or a training run.
 
 ## Shape
 
 ```json
 {
-  "kind": "my-lane/v1",
-  "body": { "...": "whatever the lane recorded: readings, rows, gain tables, custody" },
-  "source": { "files": [{"path": "lane.py", "sha256": "..."}], "manifest_sha256": "..." },
+  "kind": "experiment/v1",
+  "body": { "...": "recorded readings, rows, gain tables, custody" },
+  "source": { "files": [{"path": "experiment.py", "sha256": "..."}], "manifest_sha256": "..." },
   "digest": "sha256 of the canonical JSON of kind, body, and source"
 }
 ```
@@ -36,15 +71,15 @@ Source and arithmetic checks are optional and must be supplied by the caller:
 - the score, with readings and reference readings on every row;
 - the control's score;
 - the conformance report for the backend used;
-- an explicit boundary block: what the lane declares rather than derives, and what it does
+- an explicit boundary block: what the experiment supplies rather than derives, and what it does
   not claim.
 
 ## Editing invalidates, on purpose
 
-Every file named in the source manifest is bound to the receipt. Change one line in the
-lane and the receipt no longer verifies until the lane is re-run. Batch edits, then re-run
-once. When several lanes share a module, an edit to that module re-runs all of them; plan
-it as a versioned break and record the library version in the body.
+Every file named in the source manifest is bound to the receipt. If such a file
+changes, a source check against those edited files fails. Record source hashes
+as well as a library version, since a version string can cover several source
+revisions. Verification does not launch an experiment automatically.
 
 A historical receipt remains evidence for its original source snapshot. Preserve its
 bytes and verify against that snapshot; do not re-sign an old result against new code.

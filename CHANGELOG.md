@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- Class-label and output-port validation prevents negative indices, duplicate outputs
+  and accidental batch broadcasting. Slotted accuracy averages over every row and slot.
+- Single-state softmax nudges and empty nudge masks work consistently. Zero-step
+  accelerator trajectories return an empty trajectory, and invalid step counts fail
+  with a clear error before execution.
+- Wiring validates endpoints before merging edges and preserves tiny signed weights.
+  Shuffled controls preserve degree counts even when endpoint swaps overlap.
+- Gain selection breaks score ties toward the smallest admissible gain and rejects a
+  grid with no admissible candidate. Checkpoints preserve explicit precision, and
+  traces retain an owned snapshot when callers reuse state storage.
+- Beginner documentation covers installation, inference, memory, supervised learning
+  and checkpoints. CI exercises all bundled examples from a built wheel using only
+  required dependencies; the small classification example scores separate test inputs.
 - Sparse CPU settlement uses optional SciPy CSR transport, avoiding the batch-by-edge
   message array. NumPy-only installations retain segmented sums; local dynamics and
   parameter semantics are unchanged.

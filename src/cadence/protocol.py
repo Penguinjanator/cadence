@@ -152,10 +152,14 @@ class Protocol:
         rows: list[dict[str, Any]] = []
         for row in self.rows:
             value = readings(row.stimulus, row.ablate)[row.readout]
-            if row.relative_to in self.stimuli:
+            if row.predicate in ("exceeds", "lateralized") and row.relative_to in wiring.sets:
+                reference = readings(row.stimulus, row.ablate)[row.relative_to]
+            elif row.relative_to in self.stimuli:
                 reference = readings(row.relative_to)[row.readout]
             elif row.relative_to in wiring.sets:
                 reference = readings(row.stimulus, row.ablate)[row.relative_to]
+            elif row.relative_to:
+                raise KeyError(f"unknown relative_to: {row.relative_to!r}")
             else:
                 reference = readings(row.stimulus)[row.readout]
             rows.append(
@@ -215,6 +219,8 @@ def shuffled(wiring: Wiring, seed: int, *, keep: np.ndarray | None = None) -> Wi
     rng = np.random.default_rng(seed)
     post = wiring.post.copy()
     movable = np.ones(wiring.edges, dtype=bool) if keep is None else ~np.asarray(keep, bool)
+    if movable.shape != (wiring.edges,):
+        raise ValueError("keep must have one entry per overlap")
     rows = np.flatnonzero(movable)
     post[rows] = post[rows][rng.permutation(len(rows))]
     # A permutation can land an overlap on its own owner; swap those endpoints with random
@@ -224,7 +230,10 @@ def shuffled(wiring: Wiring, seed: int, *, keep: np.ndarray | None = None) -> Wi
         if len(clash) == 0:
             break
         partner = rng.choice(rows, size=len(clash))
-        post[clash], post[partner] = post[partner].copy(), post[clash].copy()
+        # Index lists may overlap or repeat partners. Sequential swaps preserve the
+        # endpoint multiset in those cases; simultaneous advanced assignment does not.
+        for a, b in zip(clash, partner, strict=True):
+            post[a], post[b] = post[b], post[a]
     else:
         raise ValueError("could not shuffle without autapses")
     return Wiring(
@@ -250,7 +259,10 @@ def select_gain(
     A gain is admissible only while the net stays sparse under every
     training stimulus (at most ``sparsity_cap`` of owners active). Runaway
     activity lights every readout and is not a fact about the wiring.
+    Raises ``ValueError`` for an empty grid or when no gain is admissible.
     """
+    if len(grid) == 0:
+        raise ValueError("gain grid must not be empty")
     table = []
     best: tuple[int, float] | None = None
     for gain in grid:
@@ -278,8 +290,10 @@ def select_gain(
                 "readings": detail,
             }
         )
-        if admissible and (best is None or passed > best[0]):
+        if admissible and (
+            best is None or passed > best[0] or (passed == best[0] and gain < best[1])
+        ):
             best = (passed, gain)
     if best is None:
-        best = (0, min(grid))
+        raise ValueError("no gain satisfies the sparsity cap")
     return best[1], table

@@ -85,7 +85,10 @@ def test_protocol_scores_and_shuffled_control_and_gain_selection() -> None:
     d = protocol.to_dict()
     assert len(d["rows"]) == 3
     gain, table = cd.select_gain(
-        lambda g: cd.Settlement(wiring, cd.GradedRule(gain=g, dt=0.5)), protocol, [0.01, 0.03, 0.1]
+        lambda g: cd.Settlement(wiring, cd.GradedRule(gain=g, dt=0.5)),
+        protocol,
+        [0.01, 0.03, 0.1],
+        sparsity_cap=1.0,
     )
     assert gain in (0.01, 0.03, 0.1) and len(table) == 3
     control = cd.shuffled(wiring, seed=0)
@@ -93,6 +96,89 @@ def test_protocol_scores_and_shuffled_control_and_gain_selection() -> None:
     assert protocol.score(cd.Settlement(control, cd.GradedRule(gain=gain, dt=0.5)))[
         "passed"
     ] <= len(protocol.rows)
+
+
+def test_gain_selection_breaks_ties_by_gain_not_grid_order() -> None:
+    wiring, protocol = ring_protocol()
+    gain, table = cd.select_gain(
+        lambda g: cd.Settlement(wiring, cd.GradedRule(gain=g, dt=0.5)),
+        protocol,
+        [0.1, 0.03, 0.01],
+        sparsity_cap=None,
+    )
+    assert len({row["facts_passed"] for row in table}) == 1
+    assert gain == 0.01
+
+
+@pytest.mark.parametrize("predicate", ["exceeds", "lateralized"])
+def test_readout_comparison_uses_readout_when_stimulus_has_the_same_name(predicate: str) -> None:
+    wiring = cd.Wiring.from_edges(2, pre=[], post=[], sets={"left": [0], "right": [1]})
+    protocol = cd.Protocol(
+        stimuli={"trial": ("right",), "left": ("right",)},
+        rows=[cd.Row("compare", "trial", "right", predicate, relative_to="left")],
+        steps=10,
+    )
+    result = protocol.score(cd.Settlement(wiring, cd.GradedRule(dt=1.0)))["rows"][0]
+    assert result["reference"]["mean"] == 0.0
+    assert result["passed"]
+
+
+def test_protocol_rejects_unknown_explicit_reference() -> None:
+    wiring = cd.Wiring.from_edges(2, pre=[], post=[], sets={"right": [1]})
+    protocol = cd.Protocol(
+        stimuli={"trial": ("right",)},
+        rows=[cd.Row("retained", "trial", "right", "retained", relative_to="missing")],
+        steps=10,
+    )
+    with pytest.raises(KeyError, match="missing"):
+        protocol.score(cd.Settlement(wiring, cd.GradedRule(dt=1.0)))
+
+
+def test_gain_selection_rejects_an_empty_or_inadmissible_grid() -> None:
+    wiring, protocol = ring_protocol()
+
+    def make_engine(gain: float) -> cd.Settlement:
+        return cd.Settlement(wiring, cd.GradedRule(gain=gain, dt=0.5))
+
+    with pytest.raises(ValueError, match="empty"):
+        cd.select_gain(make_engine, protocol, [])
+    with pytest.raises(ValueError, match="sparsity cap"):
+        cd.select_gain(make_engine, protocol, [0.01, 0.03, 0.1], sparsity_cap=0.0)
+
+
+@pytest.mark.parametrize("n", [3, 4, 8])
+def test_shuffled_preserves_endpoint_multiset_and_attached_edge_data(n: int) -> None:
+    wiring = cd.Wiring.from_edges(
+        n,
+        pre=np.arange(n),
+        post=np.roll(np.arange(n), -1),
+        count=np.arange(1, n + 1),
+        sign=np.linspace(-1.0, 1.0, n),
+    )
+    for seed in range(20):
+        shuffled = cd.shuffled(wiring, seed)
+        np.testing.assert_array_equal(shuffled.in_degree(), wiring.in_degree())
+        np.testing.assert_array_equal(shuffled.out_degree(), wiring.out_degree())
+        assert np.all(shuffled.pre != shuffled.post)
+        # Counts identify edges: shuffling must keep each source, count, and sign together.
+        order = np.argsort(shuffled.count)
+        original = np.argsort(wiring.count)
+        for name in ("pre", "count", "sign"):
+            np.testing.assert_array_equal(getattr(shuffled, name)[order], getattr(wiring, name)[original])
+
+
+def test_shuffled_keeps_selected_edges_and_validates_mask_shape() -> None:
+    wiring = cd.layered(6, 4, 2, density=0.6, seed=2)
+    keep = np.zeros(wiring.edges, dtype=bool)
+    keep[::2] = True
+    shuffled = cd.shuffled(wiring, seed=0, keep=keep)
+    original = list(zip(wiring.pre[keep], wiring.post[keep], wiring.count[keep], wiring.sign[keep], strict=True))
+    result = list(zip(shuffled.pre, shuffled.post, shuffled.count, shuffled.sign, strict=True))
+    for edge in original:
+        result.remove(edge)
+    np.testing.assert_array_equal(shuffled.in_degree(), wiring.in_degree())
+    with pytest.raises(ValueError, match="keep"):
+        cd.shuffled(wiring, seed=0, keep=np.zeros(2, dtype=bool))
 
 
 def test_receipt_build_write_read_verify(tmp_path: Path) -> None:

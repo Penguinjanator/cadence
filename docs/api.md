@@ -1,7 +1,8 @@
 # API reference
 
-Top-level exports and module-qualified helpers are listed below. The
-docstrings in the source carry the details.
+Top-level exports and module-qualified helpers are listed below. Begin with the
+[quickstart](quickstart.md) for complete runnable examples; the source docstrings
+give additional details. Prefer keyword arguments for optional configuration.
 
 ## Wiring (`cadence.wiring`)
 
@@ -20,8 +21,8 @@ docstrings in the source carry the details.
   the owner rule. `activation(v)` is the rectified, re-based sigmoid with optional leak;
   `slope_at(v)` its derivative; `rest_emission` the raw sigmoid's value at rest, which is
   subtracted so rest publishes zero. `replace(**changes)`, `to_dict()`.
-- `Adaptation(tau_steps=50.0, strength=1.0)`: the slow per-owner variable that turns fixed
-  points into rhythm.
+- `Adaptation(tau_steps=50.0, strength=1.0)`: a slow per-owner variable that can
+  produce rhythm in suitable circuits.
 - `learning_rule(gain=1.0, *, slope=1.0, leak=0.1, dt=0.5, clamp_amplitude=1.0)` (in
   `cadence.learning`): the rule settings a learnable net needs.
 
@@ -33,11 +34,13 @@ docstrings in the source carry the details.
   block transport (see `cadence.blocks`); `layout` passes a precomputed cut, as
   `with_parameters` does. `engine.layout` is the cut in use. `precision` (torch only) is
   `"float32"` or `"float64"`; the default is float64 except on MPS. Float32 is the speed of a
-  consumer GPU; read out on the cpu backend for a receipt.
+  consumer GPU; compare it with float64 and record the measured precision error.
 - `settle(clamp=None, *, steps=60, state=None, mask=None, trajectory=False, nudge=None, tolerance=None) -> SettledState`:
   one clamp; `clamp` is a list of owners at full amplitude, a `{owner: level}` map, or a
-  dense vector. `settle_batch(drive, ...)` takes `(batch, n)` drives. Both stop early at
-  `tolerance` and report the steps taken.
+  dense vector. Map values are levels multiplied by `clamp_amplitude`; dense vectors
+  are drives directly. `settle_batch(drive, ...)` takes `(batch, n)` drives.
+  `mask` accepts `(n,)`, `(1, n)`, or `(batch, n)`; zero suppresses an owner.
+  Both methods stop at the activation-movement `tolerance` and report steps taken.
 - `residual(drive, state, *, nudge=None, mask=None)`: per-row maximum remaining
   fixed-point equation discrepancy, including adaptation when enabled. One CPU transport
   evaluation, no state change; a diagnostic rather than a stability/uniqueness proof.
@@ -46,13 +49,15 @@ docstrings in the source carry the details.
   (effective drive per overlap), `dense()` (the `W[pre, post]` matrix), `to_dict()`.
 - `Settlement.contrast_on_device(plus, minus)`: the learning rule's per-overlap and per-owner
   contrast computed on the device when both states carry its handle; `None` otherwise.
-- `SettledState`: `v`, `activation`, `adaptation`, `steps`, `trajectory`, `repair`, `device` (the
+- `SettledState`: `v`, `activation`, `adaptation`, `steps`, `trajectory`, `device` (the
   same state on the accelerator that produced it, or `None`), `repair` (the total
-  movement of the activations, per row); `row(i)`,
+  movement of the activations, per row). State arrays have shape `(n,)` from `settle`
+  or `(batch, n)` from `settle_batch`; trajectories add a leading step axis. `row(i)`,
   `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`.
-- `Nudge(target, mask, beta, softmax_temperature=None, weight=None)`: extra drive
+- `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None)`: extra drive
   `beta · (target − s)` on the masked owners, or `beta · (target − softmax(s/T))` over the
-  masked group with a temperature; `weight` scales rows. `drive(s)`.
+  masked group with a temperature; `weight` scales rows. `groups` assigns a separate
+  softmax group per owner (`-1` excludes an owner). `drive(s)`.
 - `available_backends()`: `{"cpu": "numpy float64", "torch": "mps float32" | "cuda float64" | "cpu float64", "mlx": "gpu float32"}`, for what is installed.
 
 ## Blocks (`cadence.blocks`)
@@ -99,9 +104,8 @@ docstrings in the source carry the details.
   key owners' drive columns. `clamp(drive, inplace=False)` adds the read into post columns.
   `reset(batch, rows=None)`, `keep(rows)`, `to_dict()`. See [memory](memory.md) for stream
   identity, representation alignment, key interference, and checkpoint boundaries.
-- `columns(index)`: a slice when the owners are one contiguous range, else the index array;
-  a column read or write through a slice is a strided pass, through an index array a gather
-  that comes back Fortran-ordered or a scatter, tens of times slower on a wide batch.
+- `cadence.stream.columns(index)`: a slice when the owners are one contiguous range,
+  else the index array. Slices can avoid the copies required by advanced indexing.
 
 ## Constitution (`cadence.constitution`)
 
@@ -135,27 +139,30 @@ docstrings in the source carry the details.
 - `Row(id, stimulus, readout, predicate, reference="", ablate=(), relative_to="", tier="experiment")`.
 - `Protocol(stimuli, rows, training=(), levels=Levels(), steps=60)`: `score(engine)`,
   `clamp_for(wiring, stimulus)`, `to_dict()`.
-- `Levels(active=0.5, inactive=0.2, margin=0.15, sparse_min=0.005, sparse_max=0.2, densify_margin=0.05)`.
+- `cadence.protocol.Levels(active=0.5, inactive=0.2, margin=0.15, sparse_min=0.005, sparse_max=0.2, densify_margin=0.05)` (module level).
 - `evaluate_predicate(predicate, value, reference, levels=None) -> bool`; `PREDICATES`
   maps each name to its definition.
 - `shuffled(wiring, seed, *, keep=None) -> Wiring`: the control.
-- `select_gain(make_engine, protocol, grid, *, sparsity_cap=0.05) -> (gain, table)`.
+- `select_gain(make_engine, protocol, grid, *, sparsity_cap=0.05) -> (gain, table)`:
+  among admissible gains, maximize training facts passed and break ties by smallest
+  gain. An empty grid or no admissible gain raises `ValueError`.
 
 ## Checkpoints (`cadence.checkpoint`)
 
-- `save(learner, path) -> Path` and `load(path, *, backend=None, device=None, config=None) -> Learner`,
+- `save(learner, path) -> Path` and `load(path, *, backend=None, device=None, config=None, precision=None) -> Learner`,
   also as `Learner.save(path)` and `Learner.load(path, ...)`: one `.npz` file holding the wiring,
   every seam's scale, every owner's gain and bias, the rule, the configuration, the masks, tie
   groups, momentum and normalisation state, and the update count. `backend` and `device` may
-  differ from the saved ones; `config` replaces the saved configuration (a frozen deployment
-  passes `LearnerConfig(eta=0.0, eta_bias=0.0)`).
+  differ from the saved ones; `precision` overrides saved precision and `config`
+  replaces the saved configuration. Inference through `predict` or `free` does
+  not update parameters. Separate `FastSeams` and `Trace` objects are not saved.
 
 ## Learning (`cadence.learning`)
 
 - `LearnerConfig(beta=0.1, eta=0.2, eta_bias=0.02, centered=True, free_steps=100, nudged_steps=50, tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0, normalize_floor=1e-3, momentum=0.0, decay=0.0)`:
   `momentum` steps each seam on a running average of its own contrast; `decay` shrinks every
   trainable seam and bias by that fraction on each update (a leak on the seams, for streams).
-- `Learner(engine, outputs, config=LearnerConfig(), trainable_overlaps=None, symmetric=True, tie_groups=None, trainable_owners=None, slots=1)`:
+- `Learner(engine, outputs, config=LearnerConfig(), trainable_overlaps=None, trainable_owners=None, symmetric=True, tie_groups=None, slots=1)`:
   `trainable_overlaps` and `trainable_owners` are bool masks over overlaps and owners; only those
   move and decay, so two learners can share one net without one's decay eroding the other's seams;
   `tie_groups` is an int per overlap (−1 for none); overlaps in a group share one scale and
@@ -165,6 +172,8 @@ docstrings in the source carry the details.
   - `contrast(free, nudged, opposite=None) -> (per_overlap, per_owner)`,
     `update(free, nudged, opposite=None) -> {"scale_step", "bias_step"}`,
     `step(drive, labels, warm=None, weight=None) -> (LearnedState, report)`;
+    labels are integer indices within each output group: `(batch,)` for one group,
+    `(batch, slots)` for several; `accuracy` averages all row/slot choices;
   - `calibrate(drive, *, level=0.5, grid=None)`, `predict(drive)`, `accuracy(drive, labels, batch=256)`,
     `parameters()`, `to_dict()`; attributes `engine`, `reverse` (index of each overlap's
     reverse, or −1), `second_moment` (when normalising).

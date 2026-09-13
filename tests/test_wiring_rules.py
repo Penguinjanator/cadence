@@ -63,8 +63,45 @@ def test_shuffled_keeps_degrees_and_changes_wiring() -> None:
     s = cd.shuffled(w, seed=1)
     assert s.edges == w.edges and s.n == w.n
     assert s.digest() != w.digest()
-    kept = cd.shuffled(w, seed=1, keep=[0, 1])
+    keep = np.zeros(w.edges, dtype=bool)
+    keep[:2] = True
+    kept = cd.shuffled(w, seed=1, keep=keep)
     assert kept.edges == w.edges
+
+
+@pytest.mark.parametrize("pre, post", [([3], [0]), ([-1], [2]), ([0.5], [1.5]), ([0], [3]), ([np.nan], [1])])
+def test_from_edges_rejects_invalid_indices_before_merging(pre, post) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(ValueError):
+        cd.Wiring.from_edges(3, pre=pre, post=post)
+
+
+@pytest.mark.parametrize("pre, post, count, sign", [([0, 1], [2], [1, 1], [1, 1]), ([[0]], [[1]], [[1]], [[1]]), ([0], [1], [np.nan], [1]), ([0], [1], [1], [np.inf])])
+def test_wiring_rejects_malformed_edge_arrays(pre, post, count, sign) -> None:  # type: ignore[no-untyped-def]
+    for construct in (
+        lambda: cd.Wiring.from_edges(3, pre=pre, post=post, count=count, sign=sign),
+        lambda: cd.Wiring(3, np.asarray(pre), np.asarray(post), np.asarray(count), np.asarray(sign)),
+    ):
+        with pytest.raises(ValueError):
+            construct()
+
+
+def test_small_contact_counts_preserve_signed_transport_when_merged() -> None:
+    wiring = cd.Wiring.from_edges(2, pre=[0, 0], post=[1, 1], count=[1e-14, 2e-14], sign=[1, -1])
+    np.testing.assert_allclose(wiring.count * wiring.sign, [-1e-14], rtol=1e-14, atol=0)
+
+
+@pytest.mark.parametrize("pre, post", [([], []), ([0], [0])])
+def test_empty_edge_construction_keeps_isolated_owners(pre, post) -> None:  # type: ignore[no-untyped-def]
+    wiring = cd.Wiring.from_edges(3, pre=pre, post=post, sets={"isolated": [1, 2]})
+    assert wiring.n == 3 and wiring.edges == 0
+    assert wiring.count.dtype == np.float64 and wiring.sign.dtype == np.float64
+    np.testing.assert_array_equal(wiring.in_degree(), [0, 0, 0])
+
+
+@pytest.mark.parametrize("members", [[-1], [3], [0.5]])
+def test_wiring_rejects_invalid_named_owners(members) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(ValueError):
+        cd.Wiring.from_edges(3, pre=[0], post=[1], sets={"readout": members})
 
 
 def test_graded_rule_validation_activation_and_dict() -> None:
@@ -89,3 +126,17 @@ def test_graded_rule_validation_activation_and_dict() -> None:
     )
     with_adapt = rule.replace(adaptation=cd.Adaptation(tau_steps=5.0))
     assert with_adapt.to_dict()["adaptation"] == {"tau_steps": 5.0, "strength": 1.0}
+
+
+@pytest.mark.parametrize("name", ["slope", "gain", "threshold", "clamp_amplitude"])
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
+def test_rule_rejects_nonfinite_parameters(name: str, value: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        cd.GradedRule(**{name: value})
+
+
+@pytest.mark.parametrize("name", ["tau_steps", "strength"])
+@pytest.mark.parametrize("value", [np.nan, np.inf, -np.inf])
+def test_adaptation_rejects_nonfinite_parameters(name: str, value: float) -> None:
+    with pytest.raises(ValueError, match="finite"):
+        cd.Adaptation(**{name: value})

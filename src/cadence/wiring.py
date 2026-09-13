@@ -18,6 +18,39 @@ import numpy as np
 __all__ = ["Wiring"]
 
 
+def _owner_indices(values: Sequence[int] | np.ndarray, n: int, name: str) -> np.ndarray:
+    array = np.asarray(values)
+    if array.ndim != 1 or array.dtype.kind not in "iuf":
+        raise ValueError(f"{name} must be a vector of integer owner indices")
+    if array.dtype.kind == "f" and (
+        not np.isfinite(array).all() or np.any(array != np.floor(array))
+    ):
+        raise ValueError(f"{name} must contain integer owner indices")
+    if np.any(array < 0) or np.any(array >= n):
+        raise ValueError(f"{name} indices must lie in [0, n)")
+    return array.astype(np.int64, copy=False)
+
+
+def _edge_arrays(
+    n: int,
+    pre: Sequence[int] | np.ndarray,
+    post: Sequence[int] | np.ndarray,
+    count: Sequence[float] | np.ndarray | None,
+    sign: Sequence[float] | np.ndarray | None,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    if not isinstance(n, (int, np.integer)) or isinstance(n, bool) or n < 0:
+        raise ValueError("n must be a nonnegative integer")
+    pre_a = _owner_indices(pre, n, "pre")
+    post_a = _owner_indices(post, n, "post")
+    count_a = np.ones(len(pre_a)) if count is None else np.asarray(count, dtype=np.float64)
+    sign_a = np.ones(len(pre_a)) if sign is None else np.asarray(sign, dtype=np.float64)
+    if any(a.shape != pre_a.shape for a in (post_a, count_a, sign_a)):
+        raise ValueError("pre, post, count, and sign must have one entry per overlap")
+    if not np.isfinite(count_a).all() or not np.isfinite(sign_a).all():
+        raise ValueError("count and sign must be finite")
+    return pre_a, post_a, count_a, sign_a
+
+
 @dataclass(frozen=True)
 class Wiring:
     """``n`` owners; overlaps ``pre[i] -> post[i]`` with ``count[i]`` contacts and ``sign[i]``."""
@@ -31,15 +64,9 @@ class Wiring:
     label: str = "wiring"
 
     def __post_init__(self) -> None:
-        for name in ("pre", "post", "count", "sign"):
-            value = np.asarray(getattr(self, name))
+        arrays = _edge_arrays(self.n, self.pre, self.post, self.count, self.sign)
+        for name, value in zip(("pre", "post", "count", "sign"), arrays, strict=True):
             object.__setattr__(self, name, value)
-        if not (len(self.pre) == len(self.post) == len(self.count) == len(self.sign)):
-            raise ValueError("pre, post, count, and sign must have one entry per overlap")
-        if len(self.pre) and (self.pre.min() < 0 or self.pre.max() >= self.n):
-            raise ValueError("pre indices must lie in [0, n)")
-        if len(self.post) and (self.post.min() < 0 or self.post.max() >= self.n):
-            raise ValueError("post indices must lie in [0, n)")
         if np.any(self.pre == self.post):
             raise ValueError("an overlap joins two distinct owners; drop autapses first")
         order = np.lexsort((self.pre, self.post))
@@ -47,7 +74,14 @@ class Wiring:
             object.__setattr__(self, name, getattr(self, name)[order].astype(np.int64))
         object.__setattr__(self, "count", self.count[order].astype(np.float64))
         object.__setattr__(self, "sign", self.sign[order].astype(np.float64))
-        object.__setattr__(self, "sets", {k: tuple(sorted(set(v))) for k, v in self.sets.items()})
+        object.__setattr__(
+            self,
+            "sets",
+            {
+                k: tuple(int(i) for i in np.unique(_owner_indices(tuple(v), self.n, k)))
+                for k, v in self.sets.items()
+            },
+        )
 
     # -- construction
 
@@ -69,18 +103,18 @@ class Wiring:
         Overlaps with fewer than ``min_count`` contacts are dropped, and
         parallel overlaps between the same pair are merged by summing counts.
         """
-        pre_a = np.asarray(pre, dtype=np.int64)
-        post_a = np.asarray(post, dtype=np.int64)
-        count_a = np.ones(len(pre_a)) if count is None else np.asarray(count, dtype=np.float64)
-        sign_a = np.ones(len(pre_a)) if sign is None else np.asarray(sign, dtype=np.float64)
+        pre_a, post_a, count_a, sign_a = _edge_arrays(n, pre, post, count, sign)
         keep = (pre_a != post_a) & (count_a >= min_count)
         pre_a, post_a, count_a, sign_a = pre_a[keep], post_a[keep], count_a[keep], sign_a[keep]
         key = post_a * n + pre_a
         uniq, inverse = np.unique(key, return_inverse=True)
         merged_count = np.bincount(inverse, weights=count_a, minlength=len(uniq))
         merged_signed = np.bincount(inverse, weights=count_a * sign_a, minlength=len(uniq))
-        merged_sign = np.where(
-            merged_count > 0, merged_signed / np.maximum(merged_count, 1e-12), 0.0
+        merged_sign = np.divide(
+            merged_signed,
+            merged_count,
+            out=np.zeros_like(merged_count, dtype=float),
+            where=merged_count > 0,
         )
         return cls(
             n=n,
