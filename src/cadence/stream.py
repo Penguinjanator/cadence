@@ -157,6 +157,8 @@ class Afterglow:
     decay: float = 0.5
     amplitude: float = 1.0
     focus: float = 1.0
+    source: str = "hidden"  # the range whose moments are traced: the interpretation, or "input" for an afterimage of the picture
+    target: str = "afterglow"  # the range the trace enters as a clamp
     trace: np.ndarray = field(init=False)
     last: np.ndarray = field(init=False)
     cold: np.ndarray = field(init=False)
@@ -164,10 +166,10 @@ class Afterglow:
     def __post_init__(self) -> None:
         if not 0 <= self.decay < 1:
             raise ValueError("decay lies in [0, 1)")
-        self.glow = np.asarray(self.wiring.sets["afterglow"], dtype=np.int64)
-        self.hidden = np.asarray(self.wiring.sets["hidden"], dtype=np.int64)
+        self.glow = np.asarray(self.wiring.sets[self.target], dtype=np.int64)
+        self.hidden = np.asarray(self.wiring.sets[self.source], dtype=np.int64)
         if len(self.glow) != len(self.hidden):
-            raise ValueError("one afterglow owner per hidden owner")
+            raise ValueError(f"one {self.target} owner per {self.source} owner")
         self._glow_columns = columns(self.glow)
         self._hidden_columns = columns(self.hidden)
         self.reset(0)
@@ -207,8 +209,8 @@ class Afterglow:
         self.last = h
         self.cold[:] = False
 
-    def to_dict(self) -> dict[str, float | int]:
-        return {"decay": self.decay, "amplitude": self.amplitude, "focus": self.focus, "afterglow": int(len(self.glow))}
+    def to_dict(self) -> dict[str, float | int | str]:
+        return {"decay": self.decay, "amplitude": self.amplitude, "focus": self.focus, "source": self.source, "afterglow": int(len(self.glow))}
 
 
 @dataclass

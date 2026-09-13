@@ -6,7 +6,18 @@
   is brightest where they changed: the trace of the hidden equilibria weighted by each
   owner's movement since the last moment (its share of the mean movement, to the power
   `focus`), entering as a clamp on the `afterglow` range. What the settlement just had to
-  repair stays lit; what stood still fades. With `focus` 0 it is the Echo.
+  repair stays lit; what stood still fades. With `focus` 0 it is the Echo. `source` names the
+  range traced: the hidden owners (the interpretation), or the input owners for an afterimage
+  of the picture itself, which is the one that works: predicting the symbol seen one moment
+  ago against twelve owners of always-on background, the echo reads chance (0.25), the
+  afterglow of the interpretation 0.30, the unfocused afterimage 0.58 and the focused
+  afterimage 1.00 (`tests/test_child.py`).
+- `tests/test_child.py`: the child's capabilities as small experiments, each from simpler
+  components already here: the eligibility trace credits a press paid three moments later
+  (hit rate 1.00 with the trace, 0.47 without); the dopamine that is quiet for the usual
+  reward and speaks for a missing or a larger one, in proportion; the afterimage above; and
+  the settlement as a memory (a capped repair from the previous equilibrium still holds the
+  moment before, a full repair forgets it).
 - `ActorCriticConfig.center_per_stream`: the centred dopamine keeps one running mean and
   scale per stream instead of one over the batch, for streams on different tasks (one brain
   playing several games, whose rewards differ in size); the batch-wide centre is unchanged
