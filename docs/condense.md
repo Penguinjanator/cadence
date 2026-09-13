@@ -90,3 +90,63 @@ The top level goes from fifty-three names to about fifteen.
    at 0.7.0).
 2. 0.8 on a branch: the five elements and their tests; the examples ported and re-run; the
    player ported and measured; the docs; the release; then the new examples.
+
+## What 0.8 did (0.8.0 and 0.8.1, 2026-09-14)
+
+The plan above stands as written; this is the work checked against it.
+
+**Done.**
+
+- The trace is one class: `Trace(wiring, decay, focus, source, target)`. `Echo` (focus 0,
+  into the context range) and `Afterglow` (focus 1, into the afterglow range) stay as its two
+  named settings, `ringing` is on the class, and the source slice of a device-resident state
+  is taken on the device.
+- The valence is one class: `Valence(level, floor, cap, units, per_stream)`;
+  `ActorCritic.valence` is built from the agent's config, per stream always.
+- Dropped: `Rehearsal`, `RehearsalConfig`, `ValueNet`, `ValueConfig`, `Population`,
+  `DreamActorCritic`, `DreamConfig`, `DiscreteCode`, `actor_critic_wiring`, `Seams`,
+  `SleepConfig`. `LearnerConfig` went from nineteen fields to thirteen (`scale_floor`,
+  `scale_cap`, `target_level`, `off_level`, `consolidate`, `restore`), `ActorCriticConfig`
+  from sixteen to twelve (`critic_init`, `lam_critic`, `normalize_floor`,
+  `center_per_stream`). `Ledger` and `settle_owner_by_owner` (`cadence.reference`),
+  `canonical_sha256` and `source_manifest` (`cadence.receipts`) and `mutate`
+  (`cadence.constitution`) left the top level. Fifty-three names became thirty-nine, not
+  the fifteen the plan named: the protocol names, the wiring builders and the two named
+  traces stay (below). The changelog lists every dropped name with its replacement.
+- The docs: the index opens with the five elements; `api.md` has the trace, the valence and
+  the salience; `child.md` the experiments the elements rest on.
+- 0.8.1: a checkpoint saved by an earlier release loads without its retired knobs.
+
+**Deferred**, each with why.
+
+- `Agent`: `ActorCritic` keeps its name. It is the composition the plan describes (the
+  settlement, the eligibility trace, the valence, the critic, the action code) and its
+  critic is a required argument; the rename alone touches every caller in four repositories
+  and waits for the new examples, so the public name changes once.
+- One trace decay for the agent: `gamma` and `lam` stay two numbers. The cart-pole and Pong
+  receipts were taken with both and were not re-run.
+- `center_scale` stays until the units form's sixteen-game self-play on 0.8 (the floor
+  recipe's continuation on the box) is measured; the receipts of the scaled form still load.
+- `FastSeams` stays its own class over pairs: the paper and the author use it as it is, and
+  no receipt asked for the change.
+- The protocol names (`Protocol`, `Row`, `select_gain`, `shuffled`, `evaluate_predicate`,
+  `conformance`) stay at the top level: the paper's fifty-seven files and the core's own
+  examples import them from `cadence`.
+- The optimizations beyond the device-side slice: the imitation learner's trace and step on
+  the device, the warm start across moments in the trainer's stream mode, the fused
+  contrast kernel on the device path, and the before-and-after measure of the player's
+  update time. None was taken; the afterimage brain still trains at about half the plain
+  brain's speed.
+
+**The gates.**
+
+1. The core suite, the child's five experiments included: 93 tests, green.
+2. The four example rungs (digits, recall, Connect Four, Pong): their receipts, taken on
+   0.7.1, verify under 0.8 and the examples' CI is green on the 0.8 pin. A re-run on 0.8
+   comes with the new set of examples.
+3. The player: the one-frame focused afterimage brain raised again on 0.8.0 reads the
+   held-out presses at the same 0.862 / 0.325 / 0.579 and plays the five screens it was
+   checked on the same to the pixel (`cadence-gamer/experiments/e3_memory`,
+   `receipt_gate_afterimage_08.json`). The sixteen-game self-play on 0.8 is the floor
+   recipe's continuation on the box, its receipt to come; the 1942 curves were not re-run
+   on 0.8 and stand as 0.7.1 receipts.

@@ -179,7 +179,7 @@ receipts, which the docs still cite where they measured something.
 | [differences](docs/differences.md) | patch net versus feed-forward network with backprop |
 | [games](docs/games.md) | imitating a search; learning from reward; setting up credit |
 | [child](docs/child.md) | the child's capabilities out of simpler components: one frame and an afterimage, a trace that credits a press paid later, a dopamine quiet for the usual; the small experiments and their numbers |
-| [condense](docs/condense.md) | the plan for 0.8: five elements and one step, what every public name becomes |
+| [condense](docs/condense.md) | the plan for 0.8, then what 0.8 did and what it deferred, each with why |
 | [tasks](docs/tasks.md) | recipes for every kind of task the ladder and the Kaggle set have met |
 | [pages](docs/pages.md) | a trained net settling live in a browser |
 | [embodied](docs/embodied.md) | deploying in a body: the loop, several learners in one net, checkpoints |

@@ -14,7 +14,8 @@ five elements and one step:
 
 and the step: seams move by trace times valence; imitation is the same step with the nudge
 toward the target and the valence one ([learning](learning.md)). The condensation of the
-library onto these elements is in progress ([condense](condense.md)).
+library onto these elements is 0.8 ([condense](condense.md): the plan, then what 0.8 did
+and deferred).
 
 Read in this order the first time:
 
@@ -27,7 +28,7 @@ Read in this order the first time:
 | [games](games.md) | learning to play: imitating a search, and learning from reward |
 | [reward](reward.md) | learning from reward: three factors, what the gates measured |
 | [child](child.md) | the child's capabilities out of simpler components: one frame and an afterimage, a trace that credits a press paid later, a dopamine quiet for the usual; the small experiments and their numbers |
-| [condense](condense.md) | the plan for 0.8: five elements and one step, what every public name becomes, the optimizations and the gates |
+| [condense](condense.md) | the plan for 0.8: five elements and one step, what every public name becomes, the optimizations and the gates; then what 0.8 did and what it deferred, each with why |
 | [tasks](tasks.md) | recipes: how each kind of task becomes a clamp, a target, and a readout, tabular and regression included |
 | [pages](pages.md) | putting a trained net into a browser page that settles it live |
 | [protocols](protocols.md) | held-out tests, predicates with preconditions, the shuffled control, gain selection |
