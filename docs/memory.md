@@ -16,7 +16,7 @@ error      = v - prediction
 M         += rate * outer(k, error)
 ```
 
-With `rate=1` and a nonzero key, reading that key immediately after the write returns
+With `rate=1`, `amplitude=1` and a nonzero key, reading that key immediately after the write returns
 `v`, to numerical precision. Repeating the same correct observation has zero residual
 and does not accumulate strength. For an earlier key `q`, the change in its read is
 `rate * dot(q, k) * error`: orthogonal records are preserved, correlated ones interfere.

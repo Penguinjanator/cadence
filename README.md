@@ -28,14 +28,13 @@ purposes, even when both are stored on seams.
 ## Install
 
 ```bash
-pip install cadence-net             # NumPy; import cadence
-pip install "cadence-net[fast]"     # optional compiled CPU settlement
-pip install "cadence-net[accel]"    # optional torch
-pip install "cadence-net[apple]"    # optional MLX
+pip install "cadence-net @ git+https://github.com/muellerberndt/cadence.git@main"
 ```
 
-Python 3.11+. The residual-memory API below is in the working source; use
-`pip install -e .` from this checkout until a package release includes it.
+Python 3.11+. This installs the current source used by the examples below. Add `[fast]`,
+`[accel]` or `[apple]` after `cadence-net` for optional compiled CPU/SciPy, PyTorch or
+MLX support. From an existing checkout, use `pip install -e ".[fast]"`.
+The published PyPI version is still 0.8.1 and does not include the new memory API.
 
 ## Remember, then correct
 

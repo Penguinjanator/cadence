@@ -113,10 +113,13 @@ trajectory is requested; `CADENCE_FUSED=0` in the environment forces the NumPy l
 owner-by-owner reference and `conformance` are unchanged and remain what any kernel is
 measured against.
 
-The fused CPU path currently expects one shared mask with shape `(n,)`. For a
-different ablation mask per batch row, use sparse CPU settlement
-(`dense_limit=0`) or call `settle` separately for each row. The NumPy sparse path
-accepts `(batch, n)` masks; this does not imply that the fused kernel supports them.
+CPU settlement accepts a shared mask of shape `(n,)` or `(1, n)`, or a separate
+mask for each row with shape `(batch, n)`, in both fused and NumPy paths. The
+fused kernel reads a broadcast view, so sharing a mask does not allocate a copy
+per row. Masks apply to potential and activation at each step; zero removes an
+owner's published activity, while any existing adaptation continues to decay.
+Warm starts recompute the publication under the current mask before transporting
+messages, including when a previous fractional mask is changed or removed.
 
 ## Timing a decision
 

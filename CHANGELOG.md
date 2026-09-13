@@ -14,7 +14,9 @@
 - `Settlement.residual`: remaining potential/adaptation equation discrepancy, so
   saturation and tiny steps cannot masquerade as equilibrium.
 - Fixed fused source freezing on activation saturation, fractional warm-mask handling,
-  and `GradedRule.replace` losing the `Adaptation` object.
+  per-row batch masks, and `GradedRule.replace` losing the `Adaptation` object.
+- Warm starts rebuild published activity under the current mask on CPU, PyTorch and
+  MLX, including after changing or removing a fractional mask.
 - Receipt verification messages distinguish checks actually performed. Documentation
   separates records, transient dynamics and equilibrium, states gradient scaling, and
   links the controlled changing-memory example. These changes are available from the

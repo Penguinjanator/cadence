@@ -241,7 +241,7 @@ class FastSeams:
     ``rule="hebb"`` adds an outer product, preserving the original behaviour.
     ``rule="delta"`` reads before writing: for a unit key ``k``,
     ``M += rate * outer(k, value - k @ M)``. Repeated evidence then stops changing
-    a correct prediction. A rate-one write corrects this key exactly; other
+    a correct prediction. A rate-one write corrects this key's unscaled prediction; other
     nonorthogonal keys can interfere. This is the established delta/LMS rule,
     not a guarantee of unlimited capacity or learned memory addressing.
 
@@ -385,10 +385,9 @@ class FastSeams:
     def read(self, drive: np.ndarray) -> np.ndarray:
         """The post owners' drive from the pre range's clamp in ``drive``: ``(batch, post)``.
 
-        With ``normalize`` the cue is a unit vector, the keys were written as unit vectors,
-        and the sum is divided by the decayed count of writes: the read is then an average
-        over the stored posts weighted by the cosine of the cue with their keys and by
-        their age, and stays within the range of what was written.
+        Normalized Hebbian mode uses unit keys and cue, then divides the read by the
+        decayed count of writes. Cosine weights can be signed, so this need not be a
+        convex average. ``rate`` and ``amplitude`` also scale the returned values.
         """
         return self.recall(drive[:, self._pre_columns])
 

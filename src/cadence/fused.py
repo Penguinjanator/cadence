@@ -176,7 +176,7 @@ if njit is not None:
                         if has_nudge and softmax_t > 0.0 and nmask[i] > 0.0:
                             vn += dt * beta * weight[b] * (target[b, i] - p[position[i]])
                         if masked:
-                            vn *= keep[i]
+                            vn *= keep[b, i]
                         if (
                             vn != v[b, i]
                         ):  # an owner whose potential did not move publishes what it did
@@ -184,7 +184,7 @@ if njit is not None:
                             v[b, i] = vn
                             sn = _act_scalar(vn, slope, threshold, rest, leak)
                             if masked:
-                                sn *= keep[i]
+                                sn *= keep[b, i]
                             d = abs(sn - s[b, i])
                             repair[b] += d
                             if d > 0.0:
@@ -221,17 +221,16 @@ def fused_settle(
 ) -> tuple[np.ndarray, int, np.ndarray]:
     """Run the fused kernel in place on ``v`` and ``a``; returns ``(s, taken, repair)``.
 
-    ``activation`` is the published activation that goes with ``v`` when the
-    settlement continues from a state; it saves recomputing it."""
+    ``activation`` is accepted for compatibility. Publication is recomputed
+    from ``v`` under the current mask, since cached readback may use an old mask.
+    """
     assert njit is not None
     batch, n = v.shape
     standing = np.ascontiguousarray(drive + bias)
     masked = bool((keep != 1.0).any())
-    if (
-        activation is not None and not masked
-    ):  # the state's own published activation: what the kernel computed last
-        s = np.array(activation, dtype=float)
-    elif not v.any():  # from rest every owner publishes the same thing
+    # A broadcast view preserves shared masks without allocating a batch-sized copy.
+    keep = np.broadcast_to(np.asarray(keep, float), (batch, n))
+    if not v.any():  # from rest every owner publishes the same thing
         row = np.empty(n)
         _activation(np.zeros(n), rule.slope, rule.threshold, rule.rest_emission, rule.leak, row)
         s = np.empty((batch, n))

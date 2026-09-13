@@ -486,7 +486,11 @@ class Settlement:
         nudge: Nudge | None = None,
         tolerance: float | None = None,
     ) -> SettledState:
-        """Settle a batch of dense drives ``(batch, n)`` at once; see ``settle``."""
+        """Settle a batch of dense drives ``(batch, n)`` at once; see ``settle``.
+
+        ``mask`` has shape ``(n,)`` or ``(1, n)`` for shared ablations, or
+        ``(batch, n)`` for a separate mask on each row.
+        """
         drive = np.asarray(drive, float)
         if drive.ndim == 1:
             drive = drive[None, :]
@@ -494,11 +498,13 @@ class Settlement:
         if n != self.wiring.n:
             raise ValueError("drive must have one column per owner")
         keep = np.ones(n) if mask is None else np.asarray(mask, float)
+        if keep.shape not in ((n,), (1, n), (batch, n)):
+            raise ValueError("mask must have one entry per owner, optionally per batch row")
         on_kernel = (
             state is not None
             and state.device is not None
-            and self.backend == "torch"
-            and state.device.get("owner") is self._torch
+            and self.backend in ("torch", "mlx")
+            and state.device.get("owner") is (self._torch if self.backend == "torch" else self._mlx)
         )
         v: Any
         a: Any
@@ -536,7 +542,6 @@ class Settlement:
                 nudge,
                 steps,
                 tolerance,
-                activation=None if state is None else np.atleast_2d(state.activation),
             )
             traj = None
         else:
@@ -921,10 +926,7 @@ class _TorchKernel:
         cache: list[Any] = [None] * (0 if self.layout is None else self.layout.pairs)
         previous = None
         with torch.no_grad():
-            if handle is not None and handle.get("owner") is self:
-                s = handle["s"] * k
-            else:
-                s = self._activation(v) * k
+            s = self._activation(v) * k
             for t in range(steps):
                 if self.layout is not None:
                     inbox = self._inbox(s, previous, cache)
@@ -1071,10 +1073,9 @@ class _MlxKernel:
 
         handle = state.device if state is not None and state.device is not None else None
         if handle is not None and handle.get("owner") is self:
-            v, a, s = handle["v"], handle["a"], handle["s"]
+            v, a = handle["v"], handle["a"]
         else:
             v, a = to(v0), to(a0)
-            s = None
         d, k = to(drive), to(keep)
         batch = v.shape[0]
         masked = bool((keep != 1.0).any())
@@ -1092,8 +1093,7 @@ class _MlxKernel:
         repair = mx.zeros((batch,), dtype=mx.float32)
         cache: list[Any] = [None] * self.layout.pairs
         previous = None
-        if s is None:
-            s = self._activation(v)
+        s = self._activation(v)
         if masked:
             s = s * k
         standing = d + self.bias
