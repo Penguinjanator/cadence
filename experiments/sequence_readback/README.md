@@ -96,7 +96,9 @@ feedback into Echo, with the same cache read as a probability mixture. Capacity
 is 128 and cache temperature is fixed at 0.1 for both arms. Amplitudes and output
 temperatures for injection, and mixture weights for probability readback, are
 chosen on validation. Even zero-current injection gets its second settling
-pass, exposing extra computation as a control. The new test excerpt starts at
+pass, exposing extra computation as a control. That phase feeds back into Echo
+and can change subsequent hidden states and keys; this compares complete reader
+patterns, not only readout functions on identical fixed trajectories. The new test excerpt starts at
 normalized character 31,000, disjoint from the first comparison's excerpt.
 These are different experiments and their test scores must not be pooled.
 
