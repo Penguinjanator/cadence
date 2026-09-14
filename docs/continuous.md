@@ -35,6 +35,14 @@ The first call has no previous action to reward. Keep stream identities until `r
 
 ## Fast activity, slow plasticity
 
+In a parallel environment pool, some slots may be empty after their last episode.
+With the lower-level `ActorCritic`, pass `learn(..., observed=active_rows)` so those
+padding rows cannot teach from invented transitions. The boolean mask refers to
+the action just taken, including a real terminal action. Inactive eligibility
+resets, reward statistics ignore padding, and the update is averaged over real
+transitions. When no slots remain active, stop the loop instead of calling `learn`.
+
+
 One ongoing system still has distinct physical quantities and numerical timescales.
 Neuron potentials change during settling. Synaptic weights change as observations,
 demonstrations or reward supply a learning signal. Cadence alternates these updates:

@@ -105,20 +105,29 @@ class Valence:
         if not np.isfinite([self.floor, self.cap]).all() or min(self.floor, self.cap) < 0:
             raise ValueError("floor and cap must be finite and nonnegative")
 
-    def __call__(self, delta: np.ndarray) -> np.ndarray:
+    def __call__(self, delta: np.ndarray, *, observed: np.ndarray | None = None) -> np.ndarray:
         delta = np.asarray(delta, dtype=float)
         if delta.ndim != 1 or not delta.size or not np.isfinite(delta).all():
             raise ValueError("delta must be a nonempty finite vector, one value per stream")
+        known = np.ones(len(delta), dtype=bool) if observed is None else np.asarray(observed)
+        if known.shape != delta.shape or known.dtype != np.bool_:
+            raise ValueError("observed must be a boolean vector matching delta")
+        if not known.any():
+            return np.zeros_like(delta)
         if self.level > 0:
             rho = self.level
             if self.per_stream:
                 if not isinstance(self.mean, np.ndarray) or len(self.mean) != len(delta):
                     self.mean, self.var = np.zeros(len(delta)), np.zeros(len(delta))
-                self.mean = rho * self.mean + (1 - rho) * delta
-                self.var = rho * self.var + (1 - rho) * (delta - self.mean) ** 2
+                self.mean = np.where(known, rho * self.mean + (1 - rho) * delta, self.mean)
+                self.var = np.where(
+                    known, rho * self.var + (1 - rho) * (delta - self.mean) ** 2, self.var
+                )
             else:
-                self.mean = rho * self.mean + (1 - rho) * float(delta.mean())
-                self.var = rho * self.var + (1 - rho) * float(((delta - self.mean) ** 2).mean())
+                self.mean = rho * self.mean + (1 - rho) * float(delta[known].mean())
+                self.var = rho * self.var + (1 - rho) * float(
+                    ((delta[known] - self.mean) ** 2).mean()
+                )
             scale = np.sqrt(self.var) + 1e-6
             centred = delta - self.mean if self.units else (delta - self.mean) / scale
             if self.floor > 0:
@@ -127,7 +136,7 @@ class Valence:
             delta = centred
         if self.cap > 0:
             delta = np.clip(delta, -self.cap, self.cap)
-        out: np.ndarray = np.asarray(delta, dtype=float)
+        out: np.ndarray = np.asarray(np.where(known, delta, 0.0), dtype=float)
         return out
 
     def reset(self) -> None:
@@ -394,9 +403,9 @@ class ActorCritic:
     def delta_var(self, value: Any) -> None:
         self.valence.var = value
 
-    def _centre(self, delta: np.ndarray) -> np.ndarray:
+    def _centre(self, delta: np.ndarray, observed: np.ndarray | None = None) -> np.ndarray:
         """The phasic signal through the Valence (the cap is learn's, applied after)."""
-        return self.valence(delta)
+        return self.valence(delta, observed=observed)
 
     def learn(
         self,
@@ -404,16 +413,25 @@ class ActorCritic:
         done: np.ndarray,
         next_drive: np.ndarray,
         bootstrap: np.ndarray | None = None,
+        *,
+        observed: np.ndarray | None = None,
     ) -> dict[str, float]:
         """Dopamine from the reward and the next state's value; every synapse moves on its trace.
 
         ``done`` rows start their next life from rest and, unless ``bootstrap`` gives them
         a value, bootstrap from zero. A time limit is not a terminal state: pass the
         value of the last observation (``value_of``) as ``bootstrap`` for a truncated row.
+        ``observed`` excludes padding rows from plasticity and reward statistics;
+        their traces reset. At least one real transition is required. Updates are
+        averaged over the observed rows, independent of padding.
         """
         reward, done, next_drive, bootstrap = self._validated_transition(
             reward, done, next_drive, bootstrap
         )
+        observed = np.ones(len(reward), dtype=bool) if observed is None else np.asarray(observed)
+        if observed.shape != reward.shape or observed.dtype != np.bool_ or not observed.any():
+            raise ValueError("observed must match the batch and include a real transition")
+        done = done | ~observed
         cfg = self.config
         assert self._pending is not None
         kind, first, second, value = self._pending
@@ -430,7 +448,7 @@ class ActorCritic:
                 kind = "phases"
         if device_kernel is not None:
             return self._learn_device(
-                device_kernel, first, second, value, reward, done, next_drive, bootstrap
+                device_kernel, first, second, value, reward, done, next_drive, bootstrap, observed
             )
         if self._trace_device is not None:
             self.trace, self.trace_bias = (
@@ -476,9 +494,10 @@ class ActorCritic:
         raw_target = reward + cfg.gamma * next_value
         delta = raw_target - value
         if cfg.dopamine_center > 0:
-            delta = self._centre(delta)
+            delta = self._centre(delta, observed)
         if cfg.dopamine_cap > 0:
             delta = np.clip(delta, -cfg.dopamine_cap, cfg.dopamine_cap)
+        delta = np.where(observed, delta / observed.mean(), 0.0)
         # three factors
         if fused is not None:
             from .fused import trace_step
@@ -534,7 +553,7 @@ class ActorCritic:
         self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
-        report["value"] = float(value.mean())
+        report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         return report
 
@@ -586,6 +605,7 @@ class ActorCritic:
         done: np.ndarray,
         next_drive: np.ndarray,
         bootstrap: np.ndarray | None,
+        observed: np.ndarray,
     ) -> dict[str, float]:
         """``learn`` for streams whose phases rest on the torch device: each stream's contrast,
         eligibility trace and the mean step never come to the host; the critic and the
@@ -630,9 +650,10 @@ class ActorCritic:
         raw_target = reward + cfg.gamma * next_value
         delta = raw_target - value
         if cfg.dopamine_center > 0:
-            delta = self._centre(delta)
+            delta = self._centre(delta, observed)
         if cfg.dopamine_cap > 0:
             delta = np.clip(delta, -cfg.dopamine_cap, cfg.dopamine_cap)
+        delta = np.where(observed, delta / observed.mean(), 0.0)
         self.updates += 1
         d = torch.as_tensor(np.asarray(delta, dtype=float), dtype=trace.dtype, device=trace.device)
         d = d[:, None]
@@ -655,7 +676,7 @@ class ActorCritic:
         self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
-        report["value"] = float(value.mean())
+        report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         return report
 

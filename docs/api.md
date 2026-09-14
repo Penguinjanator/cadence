@@ -324,12 +324,15 @@ give additional details. Prefer keyword arguments for optional configuration.
     pending eligibility and cannot be followed by `learn`. Repeated `act` replaces the
     pending decision. `Bins` requires at least two levels per dimension; a multi-slot
     learner needs a matching population code;
-  - `learn(reward, done, next_drive, bootstrap=None) -> report`: the prediction error
+  - `learn(reward, done, next_drive, bootstrap=None, *, observed=None) -> report`: the prediction error
     `reward + gamma * V(next) - V(now)` made into the dopamine by the valence and written
     through every synapse's eligibility, the trace of the last act's contrast decaying by
     `gamma * lam` a moment; the critic's readout moves by its own trace and the same error.
     `done` rows start their next life from rest; a truncated row passes `value_of` its last
     observation as `bootstrap`;
+    `observed` is a boolean batch vector for real transitions. Padding rows do not
+    teach the actor or critic or enter reward statistics; their eligibility resets.
+    Updates average over observed rows. At least one row must be observed.
   - `reset()` (cached input/state, eligibility, salience and centering cleared; learned
     parameters and optimizer history retained), `probabilities(state)` (shape `(batch, actions)`
     or `(batch, dims, size)` with `Bins`), `settle(drive)`,
@@ -354,6 +357,8 @@ give additional details. Prefer keyword arguments for optional configuration.
   is what it usually is), and capped at `cap` (0 for no cap). `reset()`. `ActorCritic.valence`
   is the agent's, built per stream from `dopamine_center`, `dopamine_floor` and `center_scale`
   of its config; the cap is `dopamine_cap`, applied by `learn`.
+  Calling `valence(delta, observed=mask)` excludes unobserved rows from the
+  running statistics and returns zero for them. An all-false mask leaves it unchanged.
 - `ActorCritic.state`: the free phase of the latest moment, the state `act` read or `learn`
   settled; `None` after `reset`.
 - `ActorCritic.salience`: `(batch, neurons)`, set before `learn`; each synapse's eligibility is

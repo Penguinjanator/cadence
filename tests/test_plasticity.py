@@ -305,3 +305,51 @@ def test_actor_critic_centre_without_the_scale_keeps_the_rewards_size() -> None:
     assert abs(big_raw[0] - 5.0) < 0.1
     assert abs(big_scaled[0] - np.sqrt(2.0)) < 0.05
     assert abs(raw._centre(np.array([101.0, 101.0]))[0] - 47.5) < 0.5  # ten times the surprise, ten times the signal
+
+
+def test_padding_cannot_teach_the_actor_critic_or_change_the_active_update() -> None:
+    import pytest
+
+    connectome = cd.layered(2, 4, 2, seed=4)
+    for backend in ("cpu", "torch"):
+        if backend == "torch" and "torch" not in cd.available_backends():
+            continue
+        results = []
+        for batch in (1, 2):
+            dynamics = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0), backend=backend,
+                                device="cpu" if backend == "torch" else None,
+                                precision="float64" if backend == "torch" else None)
+            learner = cd.Learner(dynamics, connectome.populations["output"],
+                                 cd.LearnerConfig(tolerance=1e-8, free_steps=200, nudged_steps=40))
+            actor = cd.ActorCritic(learner, connectome.populations["hidden"],
+                                  cd.ActorCriticConfig(eta=0.1, dopamine_center=0.9), seed=3)
+            drive = np.zeros((batch, connectome.n))
+            drive[:, :2] = [0.3, 0.7]
+            actor.act(drive)
+            pending = actor._pending
+            with pytest.raises(ValueError, match="observed"):
+                actor.learn(np.ones(batch), np.zeros(batch, bool), drive, observed=np.zeros(batch, bool))
+            assert actor._pending is pending
+            observed = np.arange(batch) == 0
+            actor.learn(np.array([1., 999.])[:batch], np.ones(batch, bool), drive, observed=observed)
+            assert actor._pending is None
+            if actor.trace is not None:
+                assert not actor.trace.any()
+            if actor._trace_device is not None:
+                assert not actor._trace_device[0].any().item()
+            results.append((np.asarray(learner.brain.efficacy), np.asarray(learner.brain.bias), actor.w_critic, actor.b_critic))
+        for alone, padded in zip(results[0], results[1], strict=True):
+            assert np.allclose(alone, padded, atol=1e-8), backend
+
+
+def test_unobserved_rewards_do_not_enter_shared_or_per_stream_valence() -> None:
+    for per_stream in (False, True):
+        alone = cd.Valence(level=0.9, per_stream=per_stream)
+        padded = cd.Valence(level=0.9, per_stream=per_stream)
+        for reward in (1., -0.5, 2.):
+            expected = alone(np.array([reward]))
+            actual = padded(np.array([reward, 10000.]), observed=np.array([True, False]))
+            assert actual[1] == 0 and np.allclose(actual[:1], expected)
+        before = np.array(padded.mean, copy=True)
+        assert not padded(np.array([1., 2.]), observed=np.zeros(2, bool)).any()
+        assert np.array_equal(before, padded.mean)
