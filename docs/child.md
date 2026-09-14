@@ -21,5 +21,5 @@ are part of the experiment contract.
 For explicit revisable records, [residual fast memory](memory.md) is a smaller route:
 read, compare with the observation, and write only the error. Its independent LMS,
 interference, and reset tests live in `tests/test_fast_memory.py`. The public
-[changing-memory example](https://github.com/muellerberndt/cadence-examples/tree/main/05_memory)
+[changing-memory example](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/05_memory)
 adds exact lookup controls and a trained transformer comparison.

@@ -66,6 +66,8 @@ activation stopping tolerance alone does not certify an equilibrium.
 
 Record the output owners' activations at every step and replay them as bars over a few
 animation frames: the user sees the answer form. Show the hidden owners at rest as a strip
-of squares with opacity as activation. Print the number of steps taken. Both game pages
-in cadence-examples do exactly this, and their `page_template.html` files are a starting
-point: `build_page.py` replaces one placeholder with the exported JSON.
+of squares with opacity as activation. Print the number of steps taken. The current [browser showcase](https://github.com/muellerberndt/cadence-examples/tree/main/showcase)
+separates small numerical kernels from rendering and checks them against Python.
+Use its `shell.html` and view modules as starting points. Run
+`python tools/build_showcase.py` to regenerate the two entry pages; launch each
+website with `python serve.py mouse`, `eye-arm`, `fly`, `worm`, or `memory`.

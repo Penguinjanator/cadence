@@ -2,7 +2,7 @@
 
 A controller reads sensors, puts their values on input ports, settles, and reads
 an action from output ports. Learning is a separate choice: update when a target
-or reward arrives. The [games guide](games.md) shows public imitation and reward
+or reward arrives. The [games guide](games.md) describes historical imitation and reward
 examples; [reward](reward.md) describes the eligibility-trace composition.
 
 ## Try the composite brains
@@ -93,3 +93,23 @@ not measure a changing environment.
 Keep a [receipt](receipts.md) for the trained model and its evaluation.
 Continuing to learn changes the deployed parameters; that checkpoint and
 receipt describe the model that was tested.
+
+## A food-and-wall habitat
+
+Launch `python serve.py worm` in the examples checkout. Paint food or walls,
+erase a passage, pause, change playback speed, or disable smell. The habitat
+wraps the public C. elegans chemical circuit in a supplied diffusion field, local
+gradient heading, motor-gated body steps and contact consumption. It is an
+inspectable body/environment loop, not learned locomotion or validated digestion.
+Switch to **Circuit** for neural stimulation, lesions and the trained MLP
+comparison. That comparison measures circuit responses, not foraging ability.
+
+## Inspect the circuit
+
+All five websites include the same MRI-inspired schematic viewer. It plots
+actual owners, seams and activity, with slow numerical repair replay and observed
+associative-weight changes. An input-release probe exposes transient recurrent
+decay in an isolated copy. This diagnostic does not add behavioral short-term
+memory to an application; use `Trace` or deliberately carried state where the
+task needs history. The visual layout is a metaphor, not anatomical reconstruction.
+See the [viewer guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#read-the-brain-view).

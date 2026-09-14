@@ -83,7 +83,7 @@ new association. That is useful for one-hot slots, but erases unrelated records 
 dense positive keys. Both flags are rejected in delta mode to avoid mixing incompatible
 read and write semantics.
 
-The [changing-memory example](https://github.com/muellerberndt/cadence-examples/tree/main/05_memory)
+The [changing-memory example](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/05_memory)
 compares all-key retention and newest-key accuracy with additive writes, exact lookup,
 and a trained transformer on identical streams. Its key/value parsing is supplied to
 all methods. Count mutable matrix storage as well as trained parameters. Fixed storage

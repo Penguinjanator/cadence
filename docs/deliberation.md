@@ -60,8 +60,8 @@ state, no learner updates during imagination, the delayed-consequence result,
 and failure with a wrong world model. The simple enumerator is deliberately
 bounded to 4,096 branches; larger tasks need pruning or a different search method.
 
-Public Connect Four uses this broad pattern with a supplied game simulator and
-four-ply search. Its current evaluator is a supplied threat heuristic with the
+The historical Connect Four experiment uses this broad pattern with a supplied game simulator and
+four-ply search. Its evaluator is a supplied threat heuristic with the
 learned policy breaking ties. Its reported win rate therefore includes planning;
 raw-policy and search-only controls are reported separately. The core example
 above isolates the complementary case of a learned terminal evaluator.

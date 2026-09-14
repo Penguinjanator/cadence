@@ -40,9 +40,9 @@ obs, reward, done = env.step(action)
 ac.learn(reward, done, next_drive)           # settle the next state, dopamine, every seam moves
 ```
 
-## Public reward evidence
+## Historical reward evidence
 
-The [Pong example](https://github.com/muellerberndt/cadence-examples/tree/main/04_pong)
+The archived [Pong experiment](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/04_pong)
 starts with teacher imitation, then practices with advantage-weighted local
 nudges, teacher corrections, and rehearsal. Its policy sees one current pixel
 frame plus an input `Afterglow`. The shipped run retained the imitation

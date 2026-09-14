@@ -30,8 +30,9 @@ discrepancy, corrects it through declared seams, and keeps what the task needs.
 [Backends and timing](backends.md) · [Protocols](protocols.md) ·
 [Receipts](receipts.md) · [Comparisons](differences.md) · [API reference](api.md)
 
-The [public examples](https://github.com/muellerberndt/cadence-examples) cover digits,
-associative recall, Connect Four, Pong, changing memory, and circuit interventions.
-Their tutorials state the data, controls, selection budgets, and source version
-for each receipt. Historical receipts describe their original source snapshots;
-rerunning an example produces a separate result.
+The [public examples](https://github.com/muellerberndt/cadence-examples) are five
+interactive websites: a teachable mouse, an eye and drawing arm, a fly-inspired
+forager, a C. elegans habitat/circuit and changing memory. Each launches with one
+`python serve.py <demo>` command and explains its learned records, supplied
+mechanisms and measured controls. No model training or package installation is
+needed to run the websites.

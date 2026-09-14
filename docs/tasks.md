@@ -6,10 +6,10 @@ results. Dataset encoding and the evaluation split belong to your application.
 
 | Task | Input | Operation and output | Example or guide |
 |---|---|---|---|
-| Known interacting constraints | A drive and a declared wiring | Settle; read output activations and residual | [Circuit quickstart](quickstart.md), [interventions](https://github.com/muellerberndt/cadence-examples/tree/main/06_interventions) |
+| Known interacting constraints | A drive and a declared wiring | Settle; read output activations and residual | [Circuit quickstart](quickstart.md), [C. elegans circuit](https://github.com/muellerberndt/cadence-examples/tree/main/showcase) |
 | Revise an addressed record | Key and observed value | `FastSeams.observe`, then `recall` | [Memory](memory.md) |
-| Classification | Feature values on input owners | `Learner.step(drive, labels)`; `predict` returns class indices | [Digits](https://github.com/muellerberndt/cadence-examples/tree/main/01_digits) |
-| Imitation | An observation and a teacher's action | Classification over actions, with legal-action masking at deployment | [Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/03_connect_four) |
+| Classification | Feature values on input owners | `Learner.step(drive, labels)`; `predict` returns class indices | [Label-fitting quickstart](quickstart.md#learn-a-response) |
+| Imitation | An observation and a teacher's action | Classification over actions, with legal-action masking at deployment | [Learning recipes](learning.md), [game pattern](games.md) |
 | Regression or reconstruction | Features and an output pattern | Quadratic nudge; read continuous output activations | [Pattern targets below](#pattern-targets) |
 | A continuing stream | Each observation before its label arrives | Predict, score, then update; retain history explicitly when needed | [Memory](memory.md), [embodiment](embodied.md) |
 | Reward-driven action | Observation, chosen action, reward | Weight action-target nudges by advantage, or use eligibility traces | [Games](games.md), [reward](reward.md) |

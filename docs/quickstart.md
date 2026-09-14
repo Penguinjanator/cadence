@@ -103,7 +103,7 @@ Expected output: `[0 1]`. Each `step` runs a free phase, two opposite nudged
 phases, and a parameter update. `phases.free` contains the answer before that
 update; `predict` runs a fresh free phase using the learned parameters.
 For evaluation, train on one split, choose settings on validation data, and read
-the test split after selection. [Digits](https://github.com/muellerberndt/cadence-examples/tree/main/01_digits)
+the test split after selection. [Digits](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/01_digits)
 shows this workflow with an MLP control and a receipt.
 
 Save and reload this learner:

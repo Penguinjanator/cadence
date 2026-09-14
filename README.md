@@ -73,26 +73,32 @@ equilibrium branch. [Learning](docs/learning.md) gives the equations and limits.
 
 ## Examples with controls
 
-Start with the [live composite brains](https://github.com/muellerberndt/cadence-examples#live-composite-brains):
-teach a mouse a new task, disturb a drawing arm, or watch a forager revise its
-memory. The web demos expose their supplied body rules, learned records, and
-measured controls. The original tutorials remain available below.
+Open the [live composite brains](https://github.com/muellerberndt/cadence-examples#live-composite-brains).
+All five demos run locally in your browser with bundled assets; no GPU, account,
+or training run is needed to start. Each explains what is supplied, what learns,
+and what its comparison measures. A shared MRI-inspired circuit view shows real
+activity, slowed repair iterations, recurrent decay probes and memory writes.
 
-| Example | What you can explore |
-|---|---|
-| [01 digits](https://github.com/muellerberndt/cadence-examples/tree/main/01_digits) | classification, validation selection, and an MLP comparison |
-| [02 recall](https://github.com/muellerberndt/cadence-examples/tree/main/02_recall) | one-hot associative storage and a direct-read control |
-| [03 Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/03_connect_four) | imitation of a search policy and playable inference |
-| [04 Pong](https://github.com/muellerberndt/cadence-examples/tree/main/04_pong) | reward-weighted learning and a REINFORCE comparison |
-| [05 changing memory](https://github.com/muellerberndt/cadence-examples/tree/main/05_memory) | record revision, a trained transformer, exact lookup, and key interference |
-| [06 interventions](https://github.com/muellerberndt/cadence-examples/tree/main/06_interventions) | a supplied circuit under changed wiring and ablations, compared with an MLP, fixed unrolling, and Newton's method |
+| Demo | What to try | What the control tests |
+|---|---|---|
+| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Start with three taught tasks, teach a fourth, and transfer it to a new maze | One-write task revision and retention; navigation against a frozen route and a BFS replanner |
+| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Draw an outline, upload an image, and disturb a joint | Joint visual/motor settlement with pose feedback enabled versus disabled |
+| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Watch learning on contact, then change the nectar | Residual memory versus online MLP updates; live agents collect different experiences |
+| [C. elegans circuit](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Paint food and walls, then inspect the public chemical graph | Reusing a supplied recurrent rule versus a bundled trained MLP surrogate and fixed unrolling |
+| [Changing memory](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Teach and revise records, run a stream, and increase key similarity | Identical observation streams for residual memory, MLP update budgets, and dictionary lookup |
 
-Changing memory shows where an explicit bounded store helps with long streams,
-and where overlapping keys make it worse than the tested transformer. The circuit
-example reuses a supplied rule without fitting an input/output surrogate;
-conventional graph recurrence can reuse that rule too. Each tutorial records its
-data, controls, cost, and source-bound results. These comparisons test specific
-tasks and resources; they do not establish general superiority over transformers.
+The [demo guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase)
+explains the advantages and boundaries: immediate record revision, reuse of a
+known circuit under interventions, and continuous body feedback. These are
+specific task comparisons; classical lookup, graph solvers and feedback
+controllers are relevant alternatives too. The worm uses anatomical connectivity
+with imposed dynamics, not a validated simulation of the complete animal.
+
+Launch a website from the examples checkout with `python serve.py mouse`,
+`python serve.py eye-arm`, `python serve.py fly`, `python serve.py worm`, or
+`python serve.py memory`. Each command opens the browser on an available local
+port. The worm habitat lets you place food, draw walls and inspect the circuit;
+its body, sensory adapter and contact consumption are supplied rules.
 
 ## Check your result
 

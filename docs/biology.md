@@ -53,14 +53,14 @@ light response is not the pixel-processing task used in Pong.
 
 | Biological function | Cadence counterpart | Level | What the mapping supports and where it stops |
 |---|---|---|---|
-| Visual input | Pixel encoder feeding input owners | Composition | Public Pong uses one current 12 × 16 frame. This is an observation interface, not a model of the retina or visual cortex. |
+| Visual input | Pixel encoder feeding input owners | Composition | The historical Pong experiment uses one current 12 × 16 frame. This is an observation interface, not a model of the retina or visual cortex. |
 | Motion-sensitive visual/motor coordination | Current pixels plus input `Afterglow`, connected to action owners | Composition | Pong learns paddle actions with recent sensory history. Afterglow is a decaying trace, not an explicit velocity sensor. |
 | Combining several senses | Separate named input sets projecting into shared owners | Composition | Supports a multisensory architecture; alignment, normalization, and task learning remain the application's responsibility. |
 | Selecting an action | Output readout; legal-action mask; softmax sampling or `Bins` | Composition | Turns preferences into discrete or population-coded commands. Masks and actuator constraints belong to the environment adapter. |
-| Orienting toward changing input | Change-sensitive weighting through `Trace.focus`; `Afterglow` defaults to nonzero focus | Primitive | A simple salience heuristic. It does not supply full selective attention, object tracking, or a learned allocation of computation. Pong currently sets `focus=0`. |
+| Orienting toward changing input | Change-sensitive weighting through `Trace.focus`; `Afterglow` defaults to nonzero focus | Primitive | A simple salience heuristic. It does not supply full selective attention, object tracking, or a learned allocation of computation. That Pong run sets `focus=0`. |
 | Trying different actions | Stochastic action sampling in `ActorCritic` | Primitive | Enables exploration under a reward objective. Curiosity, information-seeking goals, and exploration curricula require additional design. |
 
-See the runnable [Pong example](https://github.com/muellerberndt/cadence-examples/tree/main/04_pong)
+See the runnable [Pong example](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/04_pong)
 and the [embodiment recipe](embodied.md). The same vocabulary can describe a fly
 controller, but that does not supply fly-specific anatomy, sensory coding, or
 flight mechanics automatically.
@@ -81,11 +81,11 @@ Neither correspondence identifies Cadence's update rule with biological plastici
 | Keeping and manipulating a task-relevant item | Trace or `FastSeams` plus read/write gates and a controller | Composition | A working-memory architecture. Maintenance, selection, and manipulation must be designed and evaluated; a passive trace alone does not do all three. |
 | Rapid association between a cue and an outcome | `FastSeams(rule="delta")` | Primitive | Stores residual-corrected key/value associations. Keys, values, and write gates are explicit; correlated keys interfere and capacity is finite. See [memory](memory.md). |
 | Long-term skills and learned representations | Edge scales and biases changed by `Learner` | Primitive | Reuses learned responses across episodes. It does not automatically yield semantic understanding or immunity to forgetting. |
-| Remembering particular experiences | An external episode store plus encoding and retrieval | Composition | Public game learning saves experience for rehearsal. A log is not an automatic autobiographical memory system. |
+| Remembering particular experiences | An external episode store plus encoding and retrieval | Composition | The historical game experiments save experience for rehearsal. A log is not an automatic autobiographical memory system. |
 | Learning by imitation | `Learner.step(drive, teacher_labels)` | Primitive | Nudged phases teach a response from a demonstration. The teacher, coverage, and sufficient circuit capacity must be supplied. |
 | Assigning delayed reward to earlier actions | `ActorCritic` eligibility traces | Primitive | Retains local settlement contrasts, then applies a reward prediction error. This is a computational three-factor learning analogue. |
 | Better or worse outcomes than expected | Critic prediction error; optional `Valence` normalization and quiet band | Primitive | Signed feedback can strengthen or weaken eligible responses. It is not a simulation of dopamine chemistry, pleasure, or pain. |
-| Rehearsal and consolidation | Replay stored observations through `Learner` while retaining old examples | Composition | Can reinforce or repair learned responses. Public games implement rehearsal; no generic sleep or consolidation controller is included. |
+| Rehearsal and consolidation | Replay stored observations through `Learner` while retaining old examples | Composition | Can reinforce or repair learned responses. The historical games implement rehearsal; no generic sleep or consolidation controller is included. |
 | Forgetting and interference | Trace decay, finite fast-memory capacity, later parameter updates | Primitive | Different mechanisms lose information differently. Stable lifelong learning needs retention tests and an explicit rehearsal or protection strategy. |
 
 The reward analogy concerns **prediction error**: an expected reward can produce
@@ -130,7 +130,7 @@ of planning. [Johnson and Redish (2007)](https://pmc.ncbi.nlm.nih.gov/articles/P
 | Specialized regions and communication paths | `Region`, `Projection`, `Constitution`, `grow` | Primitive | Declares populations and their wiring. Functional specialization requires appropriate inputs, learning, and evaluation. |
 | Selecting a brain's size and layout | Explicit architecture choices, optionally external fitness search with `evolve` | Composition | Supports testing capacity and connectivity. This is not a model of biological development, synaptic pruning, or evolution within an individual. |
 
-Current Connect Four combines supplied game-rule search with a learned policy
+The historical Connect Four experiment combines supplied game-rule search with a learned policy
 for breaking ties. Measure the raw policy, search alone, and their combination:
 those controls show what each component contributes. The small deliberation
 example separately tests branch isolation, a learned evaluator, and failure

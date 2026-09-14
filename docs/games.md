@@ -5,10 +5,13 @@ Cadence supplies settlement, local learning, memory, and reward primitives; the
 application supplies observations, actions, a teacher, and an environment. The
 [biology-to-Cadence map](biology.md) explains these functional correspondences.
 
-Runnable training, receipts, and playable pages live in
-[03 Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/03_connect_four)
-and [04 Pong](https://github.com/muellerberndt/cadence-examples/tree/main/04_pong).
-Their tutorials identify the data, controls, source versions, and measured results.
+This guide describes historical game experiments. Their training, receipts and
+playable pages are retained at a fixed source revision in
+[03 Connect Four](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/03_connect_four)
+and [04 Pong](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/04_pong).
+The current [public showcase](https://github.com/muellerberndt/cadence-examples)
+focuses on embodiment and continual memory; the game launchers below apply only
+to that historical checkout.
 
 ## Observe, remember, act
 
@@ -77,7 +80,7 @@ Planning is a useful architecture built around the policy. Connect Four's browse
 uses four-ply search through supplied rules and a supplied threat heuristic;
 learned scores break ties. Evaluate the raw policy, search alone, and their
 combination with the same search budget. Search contributes most of the measured
-playing-strength gain in the current example.
+playing-strength gain in the historical example.
 
 The separate [deliberation pattern](deliberation.md) demonstrates independent
 imagined branches, a learned terminal evaluator, and learning from real outcomes.
@@ -92,15 +95,15 @@ several strengths. A high win rate against a scripted opponent does not establis
 a human win rate.
 
 For learning-rule comparisons, match observations, demonstrations, reward,
-training budget, and action-selection work. Current Pong's reward-only MLP
+training budget, and action-selection work. The historical Pong run's reward-only MLP
 control has different observations and reward/discount settings and receives no
 teacher demonstrations. It is an additional control, not a matched efficiency
 comparison. Connect Four's MLP controls do not receive the patch net's extra
 practice corrections.
 
 The static pages settle exported weights in JavaScript. Run `python serve.py pong
---learn` or `python serve.py connect-four --learn` from cadence-examples to save
+--learn` or `python serve.py connect-four --learn` from that historical checkout to save
 completed games and train locally. Retention checks on rehearsal examples limit
 some regressions but do not guarantee a monotonic win rate. See
-[Training a player](https://github.com/muellerberndt/cadence-examples/blob/main/TRAINING.md)
+[Training a player](https://github.com/muellerberndt/cadence-examples/blob/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/TRAINING.md)
 for persistence and [browser pages](pages.md) for deployment.

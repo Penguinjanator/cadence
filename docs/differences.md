@@ -33,13 +33,16 @@ verifies custody; it cannot repair mismatched budgets or an unlearned baseline.
 
 ## Public comparisons
 
-The supervised public examples reach broadly similar accuracy to their MLP baselines
-at greater wall-clock cost; widths and selection budgets are not always matched.
-Pong's historical reward run returns about 88% of balls against 93% for REINFORCE with
-Adam using the same interaction budget, reward, and evaluation protocol.
+The [current showcase](https://github.com/muellerberndt/cadence-examples/tree/main/showcase)
+measures specific benefits: residual writes replace distinct-key records in one
+observation; a supplied recurrent circuit responds accurately to interventions;
+and visual/motor feedback repairs disturbed drawing. The mouse separates taught
+tasks from a supplied spatial field. The worm habitat adds engineered diffusion,
+heading and contact consumption around the chemical circuit.
 
-The [changing-memory example](https://github.com/muellerberndt/cadence-examples/tree/main/05_memory)
-tests a more specific benefit: residual writes revise bounded records without
-retraining a feature extractor. Exact lookup controls also solve it. The transformer
-learns the training-length task, and correlated keys expose interference in Cadence's
-store. These are task-specific results, not a general efficiency theorem.
+The controls matter. Dictionary lookup also solves exact-key memory; strongly
+overlapping keys can favor the tested online MLP. The circuit MLP is faster per
+query but approximate, while conventional recurrence also reuses the mechanism.
+BFS also routes through the supplied maze. The arm compares the same controller
+with readback enabled or disabled, rather than comparing learning algorithms.
+These experiments do not establish general superiority over feedforward networks.
