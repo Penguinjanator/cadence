@@ -65,10 +65,12 @@ the equations at the state they measure, and nothing about uniqueness or converg
   gain by the fan-in, and watch `row_mass` over training. A brain that crosses the limit may
   settle in practice; the certificate then says nothing.
 - Warm-start streams. The step bound is logarithmic in the change, and an unchanged input
-  costs no step at all.
+  needs no repair step; checking that it is unchanged still has a cost.
 - Lesions keep the certificate: cutting synapses can only lower the row mass.
 
-The movement passed to `error_bound` is **potential** movement. The ordinary
+The movement passed to `error_bound` is **potential** movement. To bound the
+returned state directly, use its next-step potential residual; the resulting
+potential-error bound times `cert.lipschitz` also bounds activation error. The ordinary
 `settle_batch(tolerance=...)` option measures activation movement instead and must not be
 substituted into that bound. `equilibrate` directly checks the potential and adaptation
 equations. A zero contraction rate (`dt=1`, zero coupling) needs at most one step after a
