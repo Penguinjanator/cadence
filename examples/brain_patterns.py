@@ -24,7 +24,15 @@ def run() -> int:
     readback = monitor.read(scores, scores)
     if readback.request_more:
         result = imagine(
-            live, lambda s: (0, 1), move, value, lambda s: len(s) == 2, depth=2, adversarial=True
+            live,
+            lambda s: (0, 1),
+            move,
+            value,
+            lambda s: len(s) == 2,
+            depth=2,
+            max_nodes=32,
+            adversarial=True,
+            prune=True,
         )
     else:
         result = initial

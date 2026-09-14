@@ -7,13 +7,12 @@ model here is supplied. Each imagined branch gets its own copied state.
 from __future__ import annotations
 
 from collections.abc import Callable
-from copy import deepcopy
-from itertools import product
 from typing import Any
 
 import numpy as np
 
 import cadence as cd
+from cadence.circuits import imagine
 
 
 def compare_futures(
@@ -25,31 +24,39 @@ def compare_futures(
     horizon: int = 2,
     discount: float = 0.9,
 ) -> list[dict[str, Any]]:
-    """Enumerate a small action tree. Value reads a candidate without training on it.
+    """Use the core bounded planner, keeping each root action's best future.
 
-    ``live`` may include a Trace's arrays or other temporary state. The transition
-    must mutate only the branch state it receives, not external shared objects.
-    A transition reward is an immediate cost/benefit; value estimates the remaining
-    consequence, including the final outcome if it has not entered reward yet.
+    A copied branch carries cumulative reward and elapsed time. Its leaf value
+    adds the discounted remaining utility. A supplied terminal evaluator may
+    include outcome utility that the transition has not already returned.
     """
     if not actions or horizon < 1 or not 0 <= discount <= 1:
         raise ValueError("nonempty actions, positive horizon and discount in [0, 1] required")
     if len(actions) ** horizon > 4096:
-        raise ValueError("this small explicit planner is limited to 4096 branches")
-    futures = []
-    for sequence in product(actions, repeat=horizon):
-        state = deepcopy(live)
-        score = 0.0
-        elapsed = 0
-        for action in sequence:
-            state, reward, done = transition(state, action)
-            score += discount**elapsed * reward
-            elapsed += 1
-            if done:
-                break
-        score += discount**elapsed * value(state)
-        futures.append({"actions": sequence[:elapsed], "score": float(score), "state": state})
-    return sorted(futures, key=lambda row: -row["score"])
+        raise ValueError("this example is limited to 4096 leaf branches")
+
+    def advance(branch: dict[str, Any], action: int) -> dict[str, Any]:
+        state, reward, done = transition(branch["world"], action)
+        return {
+            "world": state,
+            "reward": branch["reward"] + discount ** branch["elapsed"] * reward,
+            "elapsed": branch["elapsed"] + 1,
+            "done": done,
+        }
+
+    result = imagine(
+        {"world": live, "reward": 0.0, "elapsed": 0, "done": False},
+        lambda branch: actions,
+        advance,
+        lambda branch: branch["reward"] + discount ** branch["elapsed"] * value(branch["world"]),
+        lambda branch: branch["done"],
+        depth=horizon,
+        max_nodes=8192,
+    )
+    return [
+        {"actions": future.sequence, "score": future.score, "state": future.state["world"]}
+        for future in result.futures
+    ]
 
 
 class Evaluator:

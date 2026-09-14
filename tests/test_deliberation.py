@@ -36,8 +36,8 @@ def test_branches_do_not_share_live_or_other_branch_memory():
     futures = m.compare_futures(live, (0, 1), step, lambda s: float(s["memory"][1]), horizon=2)
     np.testing.assert_array_equal(live["memory"], [0, 0])
     assert live["trail"] == []
-    assert len(futures) == 4
-    assert {tuple(f["state"]["trail"]) for f in futures} == {(0, 0), (0, 1), (1, 0), (1, 1)}
+    assert len(futures) == 2
+    assert {tuple(f["state"]["trail"]) for f in futures} == {(0, 1), (1, 1)}
     assert futures[0]["actions"] == (1, 1)
 
 

@@ -21,12 +21,13 @@ def run() -> float:
         cd.NeuronModel(gain=1, slope=2, threshold=0, leak=1, dt=0.25, stimulus_amplitude=1),
     )
     drive = np.array([0.6, 0.0, 0.0, 0.0])
-    state = brain.settle(drive, steps=400, tolerance=0)
-    error = float(brain.residual(drive, state)[0])
-    assert error < 1e-10
+    result = brain.equilibrate(drive, budget=400, chunk=8, tolerance=1e-10)
+    assert result.converged.all(), result.residual
+    state = result.state
+    error = float(result.residual[0])
     print("Regions:", ", ".join(name for name in connectome.populations if "/" not in name))
     print(f"Joint equation error: {error:.2e}")
-    rates = np.maximum(0, state.activation[list(connectome.populations["movement/motor"])])
+    rates = np.maximum(0, state.activation[0, list(connectome.populations["movement/motor"])])
     return float(rates[0] - rates[1])
 
 
