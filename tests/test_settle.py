@@ -222,3 +222,21 @@ def test_device_kernels_honour_softmax_groups(backend: str) -> None:
         drive, steps=25, nudge=Nudge(target, mask, 0.2, softmax_temperature=0.2)
     )
     assert np.abs(a.activation - single.activation).max() > 1e-3
+
+
+@pytest.mark.skipif("torch" not in cd.available_backends(), reason="torch not installed")
+def test_zero_tolerance_runs_fixed_budget_without_device_scalar_read(monkeypatch) -> None:
+    import torch
+
+    wiring = cd.Wiring.from_edges(2, pre=[0, 1], post=[1, 0], sign=[0.4, -0.3])
+    engine = cd.Settlement(wiring, cd.GradedRule(gain=1), backend="torch", device="cpu")
+    expected = engine.settle([1.0, 0.0], steps=20, tolerance=None)
+
+    def forbidden_scalar_read(self):
+        raise AssertionError("fixed-budget settlement must not synchronize a device scalar")
+
+    with monkeypatch.context() as scope:
+        scope.setattr(torch.Tensor, "__float__", forbidden_scalar_read)
+        actual = engine.settle([1.0, 0.0], steps=20, tolerance=0)
+    assert actual.steps == 20
+    np.testing.assert_array_equal(actual.activation, expected.activation)

@@ -470,7 +470,8 @@ class Settlement:
         the activation after every step. With ``tolerance`` set the run stops
         early once no owner's activation moved more than that in a step;
         ``steps`` is then the most it will run, and the state reports how
-        many steps it took.
+        many steps it took. ``None`` or zero disables early stopping without
+        reading a device scalar at every iteration.
         """
         drive = self.clamp_vector(clamp)[None, :]
         out = self.settle_batch(
@@ -516,6 +517,10 @@ class Settlement:
             raise ValueError("steps must be a nonnegative integer")
         if tolerance is not None and (not np.isfinite(tolerance) or tolerance < 0):
             raise ValueError("tolerance must be finite and nonnegative")
+        # Movement is nonnegative, so it can never be strictly below zero.
+        # Avoid an otherwise useless accelerator-to-host synchronization per step.
+        if tolerance == 0:
+            tolerance = None
         batch, n = drive.shape
         if n != self.wiring.n:
             raise ValueError("drive must have one column per owner")
