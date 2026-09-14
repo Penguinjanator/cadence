@@ -1,0 +1,3 @@
+{"seed": 91, "mode": "echo", "epoch": 1, "validation": {"bpc": 4.969437136281611, "accuracy": 0.1640625, "tokens": 256}, "temperature": 0.1, "mean_readback_norm": 0.3942088601205282, "mean_free_steps": 26.0, "elapsed": 2.0273236249922775}
+{"seed": 91, "mode": "bounded", "epoch": 1, "validation": {"bpc": 4.933708795675024, "accuracy": 0.1640625, "tokens": 256}, "temperature": 0.1, "mean_readback_norm": 0.33182196895835, "mean_free_steps": 26.142857142857142, "elapsed": 0.13129404198843986}
+{"seed": 91, "summary": {"echo": {"bpc": 4.980773727505542, "accuracy": 0.16796875, "tokens": 256}, "bounded": {"bpc": 4.970514333596936, "accuracy": 0.16796875, "tokens": 256}}, "mlp": {"bpc": 5.929994583129883, "accuracy": 0.03125, "tokens": 256}}

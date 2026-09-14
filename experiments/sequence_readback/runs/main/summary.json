@@ -1,0 +1,587 @@
+{
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "patch": {
+    "bounded": [
+      3.833675452642678,
+      3.7066019229217506,
+      3.6767841849413574,
+      3.7650119937882294,
+      3.861180613454785
+    ],
+    "echo": [
+      3.7835810281328284,
+      3.7002273548065245,
+      3.637314294152774,
+      3.7382402647238306,
+      3.8619272884086313
+    ],
+    "window": [
+      3.8881534776998747,
+      3.8395695451524845,
+      3.7567187178406107,
+      3.716925379574104,
+      3.771272029682983
+    ]
+  },
+  "mlp": {
+    "bounded": [
+      3.3361406326293945,
+      3.3224737644195557,
+      3.34979248046875,
+      3.3216772079467773,
+      3.3347561359405518
+    ],
+    "echo": [
+      3.3646979331970215,
+      3.3660104274749756,
+      3.376516103744507,
+      3.3372530937194824,
+      3.359712600708008
+    ],
+    "window": [
+      3.393780469894409,
+      3.233754873275757,
+      3.293710708618164,
+      3.3578267097473145,
+      3.3350133895874023
+    ]
+  },
+  "bigram": {
+    "accuracy": 0.2954638752052545,
+    "bpc": 3.626970325141114,
+    "tokens": 9744
+  },
+  "per_seed": [
+    {
+      "seed": 0,
+      "arm": "patch/bounded",
+      "bpc": 3.833675452642678,
+      "accuracy": 0.28981937602627256,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/bounded_cache_centered",
+      "bpc": 3.790691484545698,
+      "accuracy": 0.29679802955665024,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/bounded_cache_legacy_stale",
+      "bpc": 3.793330783111063,
+      "accuracy": 0.29690065681444994,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/bounded_cache_raw",
+      "bpc": 3.7899982617601204,
+      "accuracy": 0.29690065681444994,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/echo",
+      "bpc": 3.7835810281328284,
+      "accuracy": 0.30295566502463056,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/echo_cache_centered",
+      "bpc": 3.7475135257970393,
+      "accuracy": 0.3021346469622332,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/echo_cache_legacy_stale",
+      "bpc": 3.748575283465121,
+      "accuracy": 0.3045977011494253,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/echo_cache_raw",
+      "bpc": 3.7551962977829203,
+      "accuracy": 0.29895320197044334,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/window",
+      "bpc": 3.8881534776998747,
+      "accuracy": 0.2832512315270936,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/window_cache_centered",
+      "bpc": 3.827015712072457,
+      "accuracy": 0.2919745484400657,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/window_cache_legacy_stale",
+      "bpc": 3.8190589351429725,
+      "accuracy": 0.2882799671592775,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "patch/window_cache_raw",
+      "bpc": 3.822160252861879,
+      "accuracy": 0.29105090311986864,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "mlp/mlp_bounded",
+      "bpc": 3.3361406326293945,
+      "accuracy": 0.37294745484400654,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "mlp/mlp_echo",
+      "bpc": 3.3646979331970215,
+      "accuracy": 0.36720032840722494,
+      "tokens": 9744
+    },
+    {
+      "seed": 0,
+      "arm": "mlp/mlp_window",
+      "bpc": 3.393780469894409,
+      "accuracy": 0.3601190476190476,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/bounded",
+      "bpc": 3.7066019229217506,
+      "accuracy": 0.3150656814449918,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/bounded_cache_centered",
+      "bpc": 3.6748602707960685,
+      "accuracy": 0.3117816091954023,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/bounded_cache_legacy_stale",
+      "bpc": 3.67632542188422,
+      "accuracy": 0.3120894909688013,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/bounded_cache_raw",
+      "bpc": 3.672464405792201,
+      "accuracy": 0.3125,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/echo",
+      "bpc": 3.7002273548065245,
+      "accuracy": 0.3013136288998358,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/echo_cache_centered",
+      "bpc": 3.678202187092303,
+      "accuracy": 0.305316091954023,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/echo_cache_legacy_stale",
+      "bpc": 3.6800189526830827,
+      "accuracy": 0.30367405582922824,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/echo_cache_raw",
+      "bpc": 3.6747948162162616,
+      "accuracy": 0.30613711001642036,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/window",
+      "bpc": 3.8395695451524845,
+      "accuracy": 0.2811986863711002,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/window_cache_centered",
+      "bpc": 3.8043749389958044,
+      "accuracy": 0.28766420361247946,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/window_cache_legacy_stale",
+      "bpc": 3.8008814318073387,
+      "accuracy": 0.28674055829228245,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "patch/window_cache_raw",
+      "bpc": 3.8023465729272767,
+      "accuracy": 0.2872536945812808,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "mlp/mlp_bounded",
+      "bpc": 3.3224737644195557,
+      "accuracy": 0.36658456486042695,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "mlp/mlp_echo",
+      "bpc": 3.3660104274749756,
+      "accuracy": 0.3587848932676519,
+      "tokens": 9744
+    },
+    {
+      "seed": 1,
+      "arm": "mlp/mlp_window",
+      "bpc": 3.233754873275757,
+      "accuracy": 0.38351806239737274,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/bounded",
+      "bpc": 3.6767841849413574,
+      "accuracy": 0.3150656814449918,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/bounded_cache_centered",
+      "bpc": 3.651880937060199,
+      "accuracy": 0.312192118226601,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/bounded_cache_legacy_stale",
+      "bpc": 3.6522664876592583,
+      "accuracy": 0.3137315270935961,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/bounded_cache_raw",
+      "bpc": 3.649935793027664,
+      "accuracy": 0.31096059113300495,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/echo",
+      "bpc": 3.637314294152774,
+      "accuracy": 0.31547619047619047,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/echo_cache_centered",
+      "bpc": 3.6207733480870674,
+      "accuracy": 0.3156814449917898,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/echo_cache_legacy_stale",
+      "bpc": 3.6208835357064726,
+      "accuracy": 0.31629720853858784,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/echo_cache_raw",
+      "bpc": 3.6186992211278692,
+      "accuracy": 0.3148604269293924,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/window",
+      "bpc": 3.7567187178406107,
+      "accuracy": 0.3019293924466338,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/window_cache_centered",
+      "bpc": 3.735014066853559,
+      "accuracy": 0.30254515599343185,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/window_cache_legacy_stale",
+      "bpc": 3.7300376639604305,
+      "accuracy": 0.3021346469622332,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "patch/window_cache_raw",
+      "bpc": 3.7362820912731087,
+      "accuracy": 0.30295566502463056,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "mlp/mlp_bounded",
+      "bpc": 3.34979248046875,
+      "accuracy": 0.36648193760262726,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "mlp/mlp_echo",
+      "bpc": 3.376516103744507,
+      "accuracy": 0.3598111658456486,
+      "tokens": 9744
+    },
+    {
+      "seed": 2,
+      "arm": "mlp/mlp_window",
+      "bpc": 3.293710708618164,
+      "accuracy": 0.37017651888341546,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/bounded",
+      "bpc": 3.7650119937882294,
+      "accuracy": 0.2825328407224959,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/bounded_cache_centered",
+      "bpc": 3.725964395093346,
+      "accuracy": 0.2885878489326765,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/bounded_cache_legacy_stale",
+      "bpc": 3.7211116832827287,
+      "accuracy": 0.28961412151067323,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/bounded_cache_raw",
+      "bpc": 3.7235287773672097,
+      "accuracy": 0.28879310344827586,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/echo",
+      "bpc": 3.7382402647238306,
+      "accuracy": 0.29238505747126436,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/echo_cache_centered",
+      "bpc": 3.717300478637987,
+      "accuracy": 0.29536124794745483,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/echo_cache_legacy_stale",
+      "bpc": 3.7110682321209203,
+      "accuracy": 0.2951559934318555,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/echo_cache_raw",
+      "bpc": 3.7152895825851875,
+      "accuracy": 0.2951559934318555,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/window",
+      "bpc": 3.716925379574104,
+      "accuracy": 0.3044950738916256,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/window_cache_centered",
+      "bpc": 3.686142289115551,
+      "accuracy": 0.30295566502463056,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/window_cache_legacy_stale",
+      "bpc": 3.6871438180655733,
+      "accuracy": 0.3019293924466338,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "patch/window_cache_raw",
+      "bpc": 3.6837163753566236,
+      "accuracy": 0.3033661740558292,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "mlp/mlp_bounded",
+      "bpc": 3.3216772079467773,
+      "accuracy": 0.37438423645320196,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "mlp/mlp_echo",
+      "bpc": 3.3372530937194824,
+      "accuracy": 0.3658661740558292,
+      "tokens": 9744
+    },
+    {
+      "seed": 3,
+      "arm": "mlp/mlp_window",
+      "bpc": 3.3578267097473145,
+      "accuracy": 0.36073481116584566,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/bounded",
+      "bpc": 3.861180613454785,
+      "accuracy": 0.28171182266009853,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/bounded_cache_centered",
+      "bpc": 3.8030308003965927,
+      "accuracy": 0.2905377668308703,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/bounded_cache_legacy_stale",
+      "bpc": 3.806272834883498,
+      "accuracy": 0.29064039408866993,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/bounded_cache_raw",
+      "bpc": 3.809131356919559,
+      "accuracy": 0.2883825944170772,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/echo",
+      "bpc": 3.8619272884086313,
+      "accuracy": 0.27575944170771755,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/echo_cache_centered",
+      "bpc": 3.8011525976770333,
+      "accuracy": 0.28314860426929395,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/echo_cache_legacy_stale",
+      "bpc": 3.803538004733182,
+      "accuracy": 0.2814039408866995,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/echo_cache_raw",
+      "bpc": 3.8049519734444646,
+      "accuracy": 0.28427750410509034,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/window",
+      "bpc": 3.771272029682983,
+      "accuracy": 0.29936371100164205,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/window_cache_centered",
+      "bpc": 3.7449763340985207,
+      "accuracy": 0.3009031198686371,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/window_cache_legacy_stale",
+      "bpc": 3.7475713068921914,
+      "accuracy": 0.3006978653530378,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "patch/window_cache_raw",
+      "bpc": 3.7427170892825568,
+      "accuracy": 0.30038998357963875,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "mlp/mlp_bounded",
+      "bpc": 3.3347561359405518,
+      "accuracy": 0.36750821018062396,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "mlp/mlp_echo",
+      "bpc": 3.359712600708008,
+      "accuracy": 0.36761083743842365,
+      "tokens": 9744
+    },
+    {
+      "seed": 4,
+      "arm": "mlp/mlp_window",
+      "bpc": 3.3350133895874023,
+      "accuracy": 0.3725369458128079,
+      "tokens": 9744
+    }
+  ]
+}
