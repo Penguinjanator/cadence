@@ -17,12 +17,20 @@ A visual map gates the recurrent spatial field, and the body's position feeds
 the next action selection. Teaching a new association and learning to infer an
 unknown map are different tasks; this example demonstrates the former.
 
-The arm places two visual-error owners and two motor-correction owners in one
-`Wiring`. The visual owners receive negative feedback from predicted movement;
-the motor owners receive visual residuals through the supplied arm Jacobian.
-They settle together, the joints move, and actual pose readback supplies the
-next drive. Disabling readback provides an open-loop disturbance control.
-The image adapter extracts outlines; this is not learned image understanding.
+The arm reads a drawing pad through 576 retinal units. Target and proprioceptive
+ports feed three error units, two joint-coordination units and six antagonistic
+motor units. Shoulder, elbow and pencil lift move from those motor outputs; ink
+appears through paper contact. The retina receives pixels rather than stroke
+coordinates. Geometry, attention selection and weights are supplied. Disabling
+joint or pencil motor populations tests their causal roles; disabling pose
+readback supplies a disturbance control.
+
+The other moving demos also expose their sensory/motor path: the mouse uses
+position-error and directional motor owners, the forager uses bearing/approach
+and turn/propulsion owners, and the worm adds directional odor readback and motor
+owners around its public chemical graph. The memory example isolates associative
+storage and has no body. These are complete controllers for simplified tasks,
+not complete biological brains. Each example lives in its own folder and page.
 
 These examples use existing operations. The browser numerical kernels are
 checked against Python Cadence, and the showcase records navigation, task
@@ -99,7 +107,7 @@ receipt describe the model that was tested.
 Launch `python serve.py worm` in the examples checkout. Paint food or walls,
 erase a passage, pause, change playback speed, or disable smell. The habitat
 wraps the public C. elegans chemical circuit in a supplied diffusion field, local
-gradient heading, motor-gated body steps and contact consumption. It is an
+directional sensory/motor owners, body steps and contact consumption. It is an
 inspectable body/environment loop, not learned locomotion or validated digestion.
 Switch to **Circuit** for neural stimulation, lesions and the trained MLP
 comparison. That comparison measures circuit responses, not foraging ability.
@@ -109,8 +117,8 @@ comparison. That comparison measures circuit responses, not foraging ability.
 All five websites place the circuit beside the live body on desktop, with a
 stacked mobile layout. Actual owners and seams are grouped by function. Automatic
 replay reconstructs sampled settlements from captured inputs and couplings,
-slowing early repair steps and compressing later convergence. Body motion does
-not trigger a new cascade when the field stays unchanged. Observed associative
+slowing early repair steps and compressing later convergence. A changed motor input can trigger a replay even when the spatial field remains
+unchanged. Observed associative
 weight changes have a separate plasticity view. Behavior badges label seeking,
 correction and positive outcomes; they do not measure feelings or chemicals.
 Violet repair trails fade as display history, not as controller memory. An
@@ -119,3 +127,8 @@ memory to an application; use `Trace` or deliberately carried state where the
 task needs history. Supplied sensing, steering and geometry adapters are labeled
 separately from circuit owners.
 See the [viewer guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#read-the-brain-view).
+
+The graded motor potentials persist between control ticks. They provide transient
+neural state during behavior; the one-second visual repair trail is separately
+labeled display history. No new core primitive is required: ordinary `Settlement`
+state continuation and explicit input/output ports implement this pattern.

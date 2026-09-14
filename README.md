@@ -73,7 +73,7 @@ equilibrium branch. [Learning](docs/learning.md) gives the equations and limits.
 
 ## Examples
 
-**Feed a worm, teach a mouse, or watch an arm draw.** The five
+**Feed a worm, teach a mouse, draw with an arm, or challenge a reasoner.** The six
 [interactive websites](https://github.com/muellerberndt/cadence-examples#launch-any-demo)
 run locally in your browser with bundled assets. No GPU, account or training run
 is needed to start. Every demo shows its actual patch circuit beside the body on
@@ -82,18 +82,20 @@ input-release probes and memory writes. The layout stacks on mobile.
 
 | Main example | What it does | Cadence circuit size | Biological size reference |
 |---|---|---|---|
-| [C. elegans habitat](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#food-and-walls-in-the-worm-habitat) | Detects local food cues, navigates around walls and consumes food patches on contact. Draw barriers, place food, erase a passage, or inspect and perturb the chemical circuit. | **297 patches · 3,604 seams**; supplied weights, no learned entries | Drawn from C. elegans anatomy; the adult hermaphrodite has **302 neurons** in its complete nervous system |
-| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Starts with cheese, home and water tasks. Teach a new destination, revise it without erasing other distinct cues, and carry the lesson into another maze. | **126 active ports / 259 allocated slots · 274 seams** in the starting maze; **32 adaptive entries** | Hundreds of software slots; C. elegans' **302-neuron** nervous system is a count reference |
-| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Sketches built-in outlines or edges from your uploaded image. Disturb a joint and watch visual/motor feedback correct the movement. | **4 patches · 8 directed seams**; geometry-derived weights, no learned entries | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
-| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Visits flowers, learns their nectar value on contact and updates its preferences when you change the nectar. Move flowers to change its world. | **12 memory ports · 32 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
+| [C. elegans habitat](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#food-and-walls-in-the-worm-habitat) | Detects local food cues, navigates around walls and consumes food patches on contact. Draw barriers, place food, erase a passage, or inspect and perturb the chemical circuit. | **309 owners · 3,612 seams** in the habitat (297-cell chemical graph plus 12 directional sensor/motor owners); no learned entries | Drawn from C. elegans anatomy; the adult hermaphrodite has **302 neurons** in its complete nervous system |
+| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Starts with cheese, home and water tasks. Teach a new destination, revise it without erasing other distinct cues, and carry the lesson into another maze. | **132 active ports / 265 allocated slots · 278 seams** in the starting maze; **32 adaptive entries** | Hundreds of software slots; C. elegans' **302-neuron** nervous system is a count reference |
+| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Reads your drawing pad or uploaded line image through a retina, then drives shoulder, elbow and pencil-lift motors to copy it. Disturb a joint or disable a motor population. | **593 owners · 20 seams** (576 retinal + 17 controller); supplied geometry and weights | Hundreds of software coordinates; no biological brain equivalence |
+| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Visits flowers, learns their nectar value on contact and updates its preferences when you change the nectar. Move flowers to change its world. | **18 owners · 36 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
 | [Changing memory](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Learns a key/value association in one write, replaces outdated records and shows retention or interference as keys become more similar. Compare online MLP updates on the same observations. | **12 memory ports · 32 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
+
+| [Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four) | Play against bounded adversarial search; inspect hypothetical replies and a self-monitor that can request more thought. | **61 displayed ports · 11 seams**: board, value, candidate records and monitor; supplied rules/weights | Engineered task circuit; no animal-equivalence claim |
 
 **Read the counts:** patches/ports hold state; seams carry weighted messages;
 adaptive entries are the values changed by learning. Active means unmasked,
 not necessarily nonzero at that instant. These are circuit counts,
 not total simulator parameters. The mouse allocates 247 spatial slots plus 12
-memory ports; its starting maze masks 133 wall slots and has 242 spatial seams
-plus 32 memory seams. Editing or regenerating the maze changes the active counts.
+memory ports and six sensory/motor owners; its starting maze masks 133 wall
+slots and has 242 spatial seams, 32 memory seams and four motor seams. Editing or regenerating the maze changes the active counts.
 Memory seams count all matrix entries, including zeros. Body rules, environmental
 fields and comparison MLPs are outside these circuit counts.
 
@@ -101,9 +103,9 @@ The biological references count neurons, not equivalent computing power. An adul
 C. elegans hermaphrodite has 302 neurons, including 20 in its pharyngeal feeding
 network ([WormAtlas](https://www.wormatlas.org/hermaphrodite/nervous/mainframe.htm)).
 A software patch is not a biological neuron; the smaller examples have no claimed
-whole-animal brain equivalent. The worm habitat uses supplied diffusion, heading,
-body movement and contact-consumption rules, rather than validated animal
-locomotion or digestion. The arm uses supplied geometry and image edge extraction.
+whole-animal brain equivalent. The worm habitat uses supplied diffusion and a directional motor circuit with
+simplified body/contact rules. The arm uses supplied geometry, pixel sensing
+and attention. These are task controllers, not validated animal reconstructions.
 
 Launch any website from the examples checkout:
 
@@ -113,6 +115,7 @@ python serve.py mouse
 python serve.py eye-arm
 python serve.py fly
 python serve.py memory
+python serve.py connect-four
 ```
 
 Each command opens the browser on an available local port. The

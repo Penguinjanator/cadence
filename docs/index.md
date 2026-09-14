@@ -20,6 +20,7 @@ discrepancy, corrects it through declared seams, and keeps what the task needs.
 | [Memory](memory.md) | Direct key/value ports, residual writes, interference, and resets |
 | [Learning](learning.md) | Free/nudged phases, gradient assumptions, and numerical checks |
 | [Reward](reward.md) | Eligibility traces, a critic, and reward prediction error |
+| [Reusable task brains](brains.md) | Motor wiring, isolated futures and activity readback |
 | [Deliberation](deliberation.md) | Compare possible futures and learn from actual outcomes |
 | [Small core](condense.md) | State lifetimes and why the operations stay separate |
 | [Small component experiments](child.md) | What a few tested compositions add |
@@ -30,9 +31,9 @@ discrepancy, corrects it through declared seams, and keeps what the task needs.
 [Backends and timing](backends.md) · [Protocols](protocols.md) ·
 [Receipts](receipts.md) · [Comparisons](differences.md) · [API reference](api.md)
 
-The [public examples](https://github.com/muellerberndt/cadence-examples) are five
+The [public examples](https://github.com/muellerberndt/cadence-examples) are six
 interactive websites: a teachable mouse, an eye and drawing arm, a fly-inspired
-forager, a C. elegans habitat/circuit and changing memory. Each launches with one
+forager, a C. elegans habitat/circuit, changing memory and Connect Four. Each launches with one
 `python serve.py <demo>` command and explains its learned records, supplied
 mechanisms and measured controls. No model training or package installation is
 needed to run the websites.

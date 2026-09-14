@@ -158,7 +158,8 @@ showcase does not expose dopamine, serotonin, glutamate or GABA concentration fi
 The viewer groups actual owners by computational function. Behavior badges label
 observed events such as food consumption or reaching a goal, not feelings.
 Its fading repair trails are display history; input-release probes show recurrent
-decay in an isolated copy. Neither adds behavioral short-term memory to a demo.
+decay in an isolated copy. The moving demos also carry graded motor potentials between control ticks. This
+is transient neural state; it does not establish learned working-memory behavior.
 Real fMRI commonly measures blood-oxygen-related changes; PET investigates
 selected molecular targets with specific tracers. Neither is a generic live map of all neurotransmitters. See
 [the viewer's imaging explanation and sources](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#brain-colors-and-neurotransmitters).
@@ -175,3 +176,11 @@ Keep these as compositions of simple operations: biological inspiration does
 not require a new core class for every biological function. The
 [task recipes](tasks.md), [games guide](games.md), and
 [deliberation example](../examples/deliberation.py) show where to begin.
+
+## Reusable task wiring and self-reading
+
+The optional [task brains](brains.md) compose motor populations, isolated future
+branches and an activity monitor. The monitor reads the controller's own changing
+candidate values and can request deeper reasoning. This is a testable
+metacognitive feedback loop, not evidence of consciousness or a claim that humans,
+apes and insects divide according to one particular recursive module.

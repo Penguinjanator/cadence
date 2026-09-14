@@ -65,3 +65,13 @@ four-ply search. Its evaluator is a supplied threat heuristic with the
 learned policy breaking ties. Its reported win rate therefore includes planning;
 raw-policy and search-only controls are reported separately. The core example
 above isolates the complementary case of a learned terminal evaluator.
+
+## Reusable implementation and browser game
+
+The optional [`cadence.brains`](brains.md) module now provides `imagine` for bounded
+isolated branches and `ActivityMonitor` for self-reading compute control. It keeps
+the supplied transition/evaluation boundary explicit. The new separate
+[Connect Four website](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four)
+uses a specialized bounded adversarial search and shows predicted continuations,
+monitor activity, and the chosen real move. Its current evidence is separate from
+the historical game experiment described above.

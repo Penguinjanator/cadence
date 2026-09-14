@@ -232,3 +232,10 @@ give additional details. Prefer keyword arguments for optional configuration.
 - `canonical_json(value)`; `cadence.receipts.canonical_sha256(value)` and `cadence.receipts.source_manifest(files)` at module level.
 - `Source(key, file, url, sha256, citation="")`, `fetch(sources, root, *, allow_download=False)`,
   `manifest(sources, extra=None)`, `sha256_of(path)`, `CustodyError`.
+
+## Optional task compositions
+
+`from cadence.brains import sensor_motor, imagine, ActivityMonitor` imports small
+motor, counterfactual-search and self-reading compositions. See [task brains](brains.md)
+for ports, budgets, supplied-model boundaries and examples. These are optional
+architectural helpers; the owner rule and ordinary learning API are unchanged.

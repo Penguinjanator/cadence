@@ -25,6 +25,7 @@ jobs:
           python examples/worked_update.py
           python examples/half_center.py
           python examples/ring_protocol.py
+          python examples/brain_patterns.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:
