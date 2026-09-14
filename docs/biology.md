@@ -75,7 +75,10 @@ Examples refer to the [public websites](https://floatingpragma.io/cadence-exampl
 
 ## Colors in the circuit viewer
 
-The public viewer colors activity, input drive, repair and learned weight changes.
+The public viewer maps every declared owner and directed seam, with pan, zoom
+and a full-screen view. Region colors identify wiring functions; they do not prove
+exclusive biological specialization. Separate overlays show activity, input drive,
+repair and learned weight changes.
 These are dimensionless computed values. Behavior badges label observed events such
 as reaching food. Population traces plot model state over settlement iterations;
 they are not EEG, imaging or transmitter concentrations. See the
