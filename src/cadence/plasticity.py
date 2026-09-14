@@ -16,8 +16,9 @@ free/nudged difference the learner already computes, per row, with the
 nudge's target the action that was taken, so the eligibility is the score of
 that action and the goal still enters only through the nudge. The critic is a
 linear reading of the neurons named for it, trained by its own trace and the
-same dopamine, so every update reads a synapse's two endpoints and one broadcast
-number. ``normalize`` divides each synapse's step by the running RMS of its own
+prediction error selected by ``critic_signal``. Use ``"td"`` to fit return in
+reward units; ``"modulated"`` retains the bounded legacy critic update.
+``normalize`` divides each synapse's step by the running RMS of its own
 steps, the local counterpart of an adaptive optimiser.
 """
 
@@ -25,7 +26,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import numpy as np
 
@@ -154,7 +155,7 @@ class ActorCriticConfig:
     # >0: each synapse steps on a running average of its own steps, so sign noise cancels before
     # the RMS divides it
     momentum: float = 0.0
-    dopamine_cap: float = 1.0  # the broadcast saturates: |delta| is clipped here (0: no cap)
+    dopamine_cap: float = 1.0  # actor modulation saturates here (0: no cap)
     # >0: forgetting factor of a running mean and scale of delta; the phasic signal is the
     # deviation from the tonic level
     dopamine_center: float = 0.0
@@ -168,7 +169,12 @@ class ActorCriticConfig:
         True  # the critic's step is divided by its trace's energy, so its step size is scale-free
     )
 
+    # Legacy modulation can stabilize control, but does not generally fit mean return.
+    critic_signal: Literal["modulated", "td"] = "modulated"
+
     def __post_init__(self) -> None:
+        if self.critic_signal not in ("modulated", "td"):
+            raise ValueError("critic_signal must be modulated or td")
         for name in ("gamma", "lam"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
@@ -214,12 +220,12 @@ class ActorCritic:
         ):
             raise ValueError("the output set must hold dims * size neurons for a population code")
         self.bins = population
-        if population is None and learner.slot_count != 1:
-            raise ValueError("multiple action slots need a Bins population code")
         if self.bins is not None:
             self.group_id: np.ndarray | None = self.bins.groups(
                 learner.output_index, learner.brain.connectome.n
             )
+        else:
+            self.group_id = learner.output_groups
         index = np.asarray(list(critic))
         if (
             index.ndim != 1
@@ -269,10 +275,23 @@ class ActorCritic:
         return np.asarray(state.activation[:, self.critic_index] @ self.w_critic + self.b_critic)
 
     def probabilities(self, state: BrainState) -> np.ndarray:
-        """Action probabilities, or ``(batch, dims, size)`` probabilities for Bins."""
+        """Action probabilities, normalized separately for each motor slot.
+
+        Multiple categorical slots return ``(batch, slots, max_size)`` with
+        zero padding for shorter slots. Bins keeps its uniform population shape.
+        """
         s = state.activation[:, self.learner.output_index]
         if self.bins is not None:
             s = s.reshape(len(s), self.bins.dims, self.bins.size)
+        elif self.learner.slot_count > 1:
+            p = np.zeros((len(s), self.learner.slot_count, int(self.learner.slot_sizes.max())))
+            for j, (start, size) in enumerate(
+                zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
+            ):
+                z = s[:, start : start + size] / self.learner.config.temperature
+                z = np.exp(z - z.max(axis=1, keepdims=True))
+                p[:, j, :size] = z / z.sum(axis=1, keepdims=True)
+            return p
         z = s / self.learner.config.temperature
         z = z - z.max(axis=-1, keepdims=True)
         p = np.exp(z)
@@ -304,7 +323,7 @@ class ActorCritic:
     def act(self, drive: np.ndarray, greedy: bool = False) -> np.ndarray:
         """Settle (or reuse the cached free phase), sample an action per row, keep its eligibility.
 
-        Discrete: an action index per row from the softmax over the output neurons.
+        Discrete: an action index per row, or one index per categorical motor slot.
         With ``Bins``: one softmax draw per dimension of a population code.
         """
         drive = self._validated_drive(drive)
@@ -320,15 +339,20 @@ class ActorCritic:
             return self._act_bins(drive, free, greedy)
         p = self.probabilities(free)
         if greedy:
-            action = np.argmax(p, axis=1)
+            action = np.argmax(p, axis=-1)
         else:
-            u = self.rng.random(len(p))
-            action = (p.cumsum(axis=1) < u[:, None]).sum(axis=1)
-            action = np.minimum(action, p.shape[1] - 1)
+            u = self.rng.random(p.shape[:-1])
+            action = (p.cumsum(axis=-1) < u[..., None]).sum(axis=-1)
+            limit = self.learner.slot_sizes - 1 if p.ndim == 3 else p.shape[-1] - 1
+            action = np.minimum(action, limit)
         if not greedy:
             target = self.learner.targets(action)
-            plus = self.learner.nudged(drive, free, target)
-            minus = self.learner.nudged(drive, free, target, sign=-1.0)
+            # Credit must differentiate the policy that sampled this action.
+            # A learner may use quadratic imitation; its loss must not silently
+            # replace the categorical log-policy score in reward eligibility.
+            beta = self.learner.config.beta
+            plus = self._nudged_groups(drive, free, target, beta)
+            minus = self._nudged_groups(drive, free, target, -beta)
             self._pending = ("states", plus, minus, self.value(free))
         return np.asarray(action, dtype=np.int64)
 
@@ -492,7 +516,8 @@ class ActorCritic:
             done, 0.0 if bootstrap is None else np.asarray(bootstrap, dtype=float), next_value_raw
         )
         raw_target = reward + cfg.gamma * next_value
-        delta = raw_target - value
+        td_error = raw_target - value
+        delta = td_error
         if cfg.dopamine_center > 0:
             delta = self._centre(delta, observed)
         if cfg.dopamine_cap > 0:
@@ -541,7 +566,14 @@ class ActorCritic:
         critic_trace = self.trace_critic
         if cfg.critic_normalize:
             critic_trace = critic_trace / (1.0 + (critic_trace**2).sum(axis=1, keepdims=True))
-        critic_step = cfg.eta_critic * (delta[:, None] * critic_trace).mean(axis=0)
+        # Calibrated TD retains reward units; legacy mode uses the same bounded
+        # signal as the actor. Modulation can change the critic's fixed point.
+        critic_delta = (
+            np.where(observed, td_error / observed.mean(), 0.0)
+            if cfg.critic_signal == "td"
+            else delta
+        )
+        critic_step = cfg.eta_critic * (critic_delta[:, None] * critic_trace).mean(axis=0)
         self.w_critic += critic_step[:-1]
         self.b_critic += float(critic_step[-1])
         # a finished row forgets its traces
@@ -554,6 +586,7 @@ class ActorCritic:
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
         report["dopamine"] = float(delta.mean())
+        report["td_error"] = float(np.abs(td_error[observed]).mean())
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         return report
@@ -649,7 +682,8 @@ class ActorCritic:
             done, 0.0 if bootstrap is None else np.asarray(bootstrap, dtype=float), next_value_raw
         )
         raw_target = reward + cfg.gamma * next_value
-        delta = raw_target - value
+        td_error = raw_target - value
+        delta = td_error
         if cfg.dopamine_center > 0:
             delta = self._centre(delta, observed)
         if cfg.dopamine_cap > 0:
@@ -664,7 +698,14 @@ class ActorCritic:
         critic_trace = self.trace_critic
         if cfg.critic_normalize:
             critic_trace = critic_trace / (1.0 + (critic_trace**2).sum(axis=1, keepdims=True))
-        critic_step = cfg.eta_critic * (delta[:, None] * critic_trace).mean(axis=0)
+        # Calibrated TD retains reward units; legacy mode uses the same bounded
+        # signal as the actor. Modulation can change the critic's fixed point.
+        critic_delta = (
+            np.where(observed, td_error / observed.mean(), 0.0)
+            if cfg.critic_signal == "td"
+            else delta
+        )
+        critic_step = cfg.eta_critic * (critic_delta[:, None] * critic_trace).mean(axis=0)
         self.w_critic += critic_step[:-1]
         self.b_critic += float(critic_step[-1])
         if done.any():  # a finished stream forgets its traces
@@ -678,6 +719,7 @@ class ActorCritic:
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
         report["dopamine"] = float(delta.mean())
+        report["td_error"] = float(np.abs(td_error[observed]).mean())
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         return report

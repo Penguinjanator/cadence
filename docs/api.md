@@ -322,12 +322,17 @@ give additional details. Prefer keyword arguments for optional configuration.
     over the output neurons (with `Bins`, one draw per dimension), or the most probable.
     Cache reuse requires the same drive; caller buffers are copied. A greedy action clears
     pending eligibility and cannot be followed by `learn`. Repeated `act` replaces the
-    pending decision. `Bins` requires at least two levels per dimension; a multi-slot
-    learner needs a matching population code;
+    pending decision. `Bins` requires at least two levels per dimension. Without
+    `Bins`, `Learner(slots=[2, 3])` returns two categorical action indices per row;
+    padding is never sampled. Actor nudges differentiate the softmax policy,
+    independently of the learner's imitation loss;
   - `learn(reward, done, next_drive, bootstrap=None, *, observed=None) -> report`: the prediction error
     `reward + gamma * V(next) - V(now)` made into the dopamine by the valence and written
     through every synapse's eligibility, the trace of the last act's contrast decaying by
-    `gamma * lam` a moment; the critic's readout moves by its own trace and the same error.
+    `gamma * lam` a moment. The critic uses its own trace and `critic_signal`: raw
+    prediction error (`"td"`) or modulated error (`"modulated"`, the default).
+    Reports include absolute raw `td_error`, absolute modulated `delta`, and signed
+    `dopamine`.
     `done` rows start their next life from rest; a truncated row passes `value_of` its last
     observation as `bootstrap`;
     `observed` is a boolean batch vector for real transitions. Padding rows do not
@@ -335,17 +340,20 @@ give additional details. Prefer keyword arguments for optional configuration.
     Updates average over observed rows. At least one row must be observed.
   - `reset()` (cached input/state, eligibility, salience and centering cleared; learned
     parameters and optimizer history retained), `probabilities(state)` (shape `(batch, actions)`
-    or `(batch, dims, size)` with `Bins`), `settle(drive)`,
+    or `(batch, slots, max_size)` for categorical slots, with exact zero padding;
+    `(batch, dims, size)` with `Bins`), `settle(drive)`,
     `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
     `salience`, `delta_mean`, `delta_var`.
-- `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=0.05, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True)`:
+- `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=0.05, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="modulated")`:
   `gamma` the discount and `lam` the trace's decay; `eta` and `eta_bias` the actor's rates,
   `eta_critic` the critic's; `normalize` and `momentum` the adaptive local step, as the
   learner's; `dopamine_center` the rate at which the reward's running level and scale follow
   it (0 for no centring), `dopamine_floor` the band around the level, in scales, within
   which the dopamine is zero, `dopamine_cap` its cap, `center_scale` whether the surprise is
   measured in scales of the usual (`True`) or in the reward's own units; `critic_normalize`
-  divides the critic's step by its trace's energy.
+  divides the critic's step by its trace's energy. `critic_signal="td"` keeps the
+  critic target in reward units; `"modulated"` may change its fixed point through
+  clipping or centring. See [the choice and its measured tradeoff](reward.md).
 - `Bins(dims, size=9)`: the population code for `dims` continuous dimensions, each a softmax
   over `size` bins (`centres`, `groups`, `read`, `size`).
 - `Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True, mean=0.0, var=1.0)`: the

@@ -4,6 +4,15 @@
 
 Biological names throughout, brain regions, and a generic brain.
 
+- Discrete reward eligibility now differentiates the sampled softmax policy even
+  when imitation uses quadratic nudges. Native categorical motor slots can have
+  unequal sizes and never sample padding. Numerical derivative and CPU/Torch
+  regression tests cover both contracts.
+- `ActorCriticConfig(critic_signal="td")` lets the critic fit return in reward
+  units independently of actor clipping/centring. The default `"modulated"`
+  preserves the original bounded critic update. Reports distinguish raw TD error
+  from the actor's modulation; the reward guide explains calibration and tuning.
+
 - `cadence.certificate(brain)`: the settling certificate. From the largest absolute incoming
   effective weight sum (`row_mass`) and the neuron model's slope bound (`lipschitz_constant`)
   it reports the contraction rate `1 - dt (1 - L rho)`, whether the free phase is certified,

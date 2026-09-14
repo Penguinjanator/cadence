@@ -13,10 +13,14 @@ mechanism for custom architectures and measurement.
 ## Eligibility traces and dopamine
 
 `ActorCritic` wraps a `Learner`. Acting runs the free phase; the action is a draw from the
-softmax over the output neurons (or, with `Bins`, one softmax draw per dimension of a
-population code). Two nudged phases, toward and away from the
+softmax over each categorical motor slot (or, with `Bins`, one softmax draw per
+continuous dimension). Unequal categorical slots use the existing `Learner(slots=[...])`
+layout; every slot participates in the same settlement. Two nudged phases, toward and away from the
 action taken, give every synapse its per-row contrast, an estimate of that action's score
-under the [equilibrium assumptions](learning.md). Each synapse keeps an eligibility trace
+under the [equilibrium assumptions](learning.md). The actor always uses a softmax
+nudge, even when the learner uses quadratic imitation. For a fixed temperature `T`,
+the contrast estimates `T * grad(log policy)`. Its common scale is absorbed in the
+actor learning rate; several slots estimate the sum of their log probabilities. Each synapse keeps an eligibility trace
 of those contrasts:
 
 ```
@@ -29,10 +33,22 @@ This is a three-factor rule. Presynaptic and postsynaptic activity enter through
 contrast and accumulate in the synapse's eligibility trace; the prediction error `delta`,
 the dopamine signal, is the same for every synapse and sets the sign and size of the
 weight change. `V` is a linear readout of the neurons named as the critic (usually the
-hidden population), trained by its own trace and the same `delta`. The dopamine signal is
-clipped (`dopamine_cap`), can be centred and scaled by its own running statistics
-(`dopamine_center`), and the critic's step is divided by its trace's energy
-(`critic_normalize`). A time limit is not a terminal state: pass `bootstrap=` the value of
+hidden population). The actor signal is clipped (`dopamine_cap`) and can be centred
+and scaled by its own running statistics (`dopamine_center`). The critic has two
+explicit choices:
+
+- `critic_signal="modulated"` preserves the original rule: the critic shares the
+  actor signal. This can stabilize an update, but clipping or centring means it need
+  not predict mean discounted return in reward units.
+- `critic_signal="td"` uses the raw prediction error for the critic, independently
+  of actor modulation. Use this when a calibrated return prediction is required.
+  It can require retuning the critic rate and reward scale. Switching this globally
+  reduced performance in a finite-budget continuous-action bandit, so the existing
+  default is preserved.
+
+The critic's step can be divided by its trace's energy (`critic_normalize`). Reports
+include the absolute raw `td_error`, the absolute modulated `delta`, and signed
+`dopamine`. A time limit is not a terminal state: pass `bootstrap=` the value of
 the last observation for a truncated row.
 
 The adaptive local step uses `momentum` and `normalize` to keep a running mean and RMS
@@ -96,3 +112,22 @@ Choose the settling budget using changing observations and the deployed policy's
 evaluation metric. Compare cold and warm starts, reset independent episodes, and
 measure all decision work. A small step count or a cached response to one unchanged
 input does not establish reliable control or lower inference cost.
+
+## What delayed credit requires
+
+An eligibility trace remembers which action could have caused a later reward; it
+does not remember an arbitrary observation or learn a memory address. At a delay of
+`d` transitions its contribution is multiplied by `(gamma * lam) ** d`. A trace
+that fades too soon cannot assign useful credit, while a long trace includes more
+unrelated actions. State representation, exploration and the critic matter too.
+
+The [delayed-credit experiment](../experiments/policy_credit/README.md) tests a first
+choice followed by blank observations and irrelevant actions. It includes a trace
+ablation, the previous quadratic-nudge actor and a conventional categorical score
+rule, with five seeds and all outcomes. Passing this small test does not establish
+Hopper, Pong, POPGym or console performance.
+
+For a real task, record raw held-out return, forgetting and every interaction used
+by rehearsal or planning. Choose the eligibility horizon from actual action-to-reward
+delays, and test imitation, reward practice and rehearsal separately. A biological
+analogy supplies a hypothesis; the behavioral test determines whether it works.
