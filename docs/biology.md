@@ -147,6 +147,19 @@ advantage over other architectures.
 | Sleep stages and autonomous dream generation | Rehearsal and deliberation are application patterns; there is no current generic sleep/dream controller. |
 | Language, social cognition, self-modeling, consciousness | No established full counterpart. A mapping of local operations does not demonstrate these capabilities. |
 
+## Brain colors and chemical signals
+
+The public circuit viewer can color actual activity, input drive and repair, or
+highlight learned weight changes. These are dimensionless computational values,
+not neurotransmitter concentrations. A signed reward prediction error can serve
+as a modulatory learning signal without simulating dopamine chemistry. The current
+showcase does not expose dopamine, serotonin, glutamate or GABA concentration fields.
+
+The MRI-inspired silhouette is a layout metaphor. Real fMRI commonly measures
+blood-oxygen-related changes; PET investigates selected molecular targets with
+specific tracers. Neither is a generic live map of all neurotransmitters. See
+[the viewer's imaging explanation and sources](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#brain-colors-and-neurotransmitters).
+
 ## Build a task from the map
 
 Choose the observation and action ports, body loop, memory timescale, and enough
