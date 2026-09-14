@@ -91,3 +91,32 @@ def test_patch_evaluation_never_receives_the_current_or_future_target() -> None:
     np.testing.assert_array_equal(features, mutated_features)
     np.testing.assert_array_equal(patch.learner.brain.efficacy, before_weights)
     np.testing.assert_array_equal(patch.learner.brain.bias, before_bias)
+
+
+def test_runner_refuses_to_overwrite_existing_evidence(tmp_path) -> None:
+    from argparse import Namespace
+
+    pytest.importorskip("torch")
+    spec = importlib.util.spec_from_file_location(
+        "sequence_runner_guard", HERE / "experiments/sequence_readback/run.py"
+    )
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    existing = tmp_path / "receipt.json"
+    existing.write_text("immutable")
+    with pytest.raises(FileExistsError, match="fresh"):
+        runner.run(Namespace(output=tmp_path))
+    assert existing.read_text() == "immutable"
+
+
+def test_source_snapshot_recurses_into_the_circuits_package() -> None:
+    pytest.importorskip("torch")
+    spec = importlib.util.spec_from_file_location(
+        "sequence_runner_sources", HERE / "experiments/sequence_readback/run.py"
+    )
+    runner = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(runner)
+    paths = {relative for relative, _ in runner.sources()}
+    assert "src/cadence/__init__.py" in paths
+    assert "src/cadence/circuits/assembly.py" in paths
+    assert "src/cadence/circuits/deliberation.py" in paths

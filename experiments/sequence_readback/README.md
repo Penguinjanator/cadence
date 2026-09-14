@@ -46,9 +46,12 @@ PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
   python experiments/sequence_readback/run.py --output /tmp/cadence-sequence-reproduction
 PYTHONPATH=src python experiments/sequence_readback/verify.py \
   experiments/sequence_readback/runs/main/receipt.json
+PYTHONPATH=src python experiments/sequence_readback/archive.py \
+  experiments/sequence_readback/runs/main/receipt.json --verify
 ```
 
-Use a fresh output directory for a reproduction so the committed receipts remain intact.
+Use a fresh output directory for a reproduction. The current runner refuses to
+overwrite a nonempty directory, preserving existing receipts and source copies.
 The committed text files are the experiment inputs. `data/manifest.json` records
 the Gutenberg IDs, original file hashes, normalization source hash and excerpt
 hashes. `prepare.py` optionally regenerates those files from the sibling
@@ -67,10 +70,13 @@ retained. They used the previous runner revision and are historical diagnostics,
 not confirmation receipts.
 
 `runs/main/receipt.json` binds the experiment inputs, critical numerical sources,
-configuration, every seed and every architecture to their hashes. Those source
-bytes are copied under `runs/main/source/` before training. Other library files
-come from the worktree base `9f859bf`; the source copies are a custody bundle,
-not a standalone package. `seedN.npz` retains every test token's loss and correct
+configuration, every seed and every architecture to their hashes. Those critical source
+bytes are copied under `runs/main/source/` before training. The full recursive
+package, including `circuits/`, is supplied from immutable base `9f859bf` without
+replacing any frozen file. `archive_manifest.json` binds that complete source
+archive to the final receipt. New runs copy the full recursive package from the
+start. The archived package can be imported by setting
+`PYTHONPATH=experiments/sequence_readback/runs/main/source/src`. `seedN.npz` retains every test token's loss and correct
 or incorrect decision for every neural/cache comparison. `verify.py` recomputes
 all test aggregates and checks completeness, validation-only selection, artifact
 hashes and independent cosine equality. It does not rerun training or claim

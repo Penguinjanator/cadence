@@ -83,7 +83,7 @@ class SequenceCache:
 
     @staticmethod
     def _unit(x: np.ndarray) -> np.ndarray:
-        return x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-12)
+        return np.asarray(x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-12))
 
     def read(self, features: np.ndarray) -> SequenceRead:
         """Query only; this never updates the centre, keys, values, or head."""

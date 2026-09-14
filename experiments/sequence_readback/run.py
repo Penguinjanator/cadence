@@ -262,11 +262,9 @@ def cache_comparison(val_features, test_features, val_y, test_y, val_p, test_p, 
 
 
 def sources():
-    files = [HERE / "run.py", HERE / "data/manifest.json", ROOT / "src/cadence/sequence.py"]
-    files += [
-        ROOT / "src/cadence" / f
-        for f in ("brain.py", "learning.py", "stream.py", "neuron.py", "fused.py", "blocks.py")
-    ]
+    # Copy the complete package recursively, including circuits and future subpackages.
+    files = [HERE / "run.py", HERE / "data/manifest.json"]
+    files += sorted((ROOT / "src/cadence").rglob("*.py"))
     files += [
         HERE / "data" / name for name in ("train.txt", "validation.txt", "test_confirmation.txt")
     ]
@@ -274,6 +272,10 @@ def sources():
 
 
 def run(args):
+    if args.output.exists() and any(args.output.iterdir()):
+        raise FileExistsError("Output directory is not empty; choose a fresh --output directory")
+    if len(set(args.seeds)) != len(args.seeds):
+        raise ValueError("seeds must be distinct")
     torch.set_num_threads(1)
     args.output.mkdir(parents=True, exist_ok=True)
     data, metadata = load_data(args.train_chars, args.eval_chars)
@@ -446,7 +448,12 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--output", type=Path, default=HERE / "runs/main")
     p.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
-    p.add_argument("--modes", nargs="+", default=["window", "echo", "bounded"])
+    p.add_argument(
+        "--modes",
+        nargs="+",
+        choices=["window", "echo", "bounded"],
+        default=["window", "echo", "bounded"],
+    )
     p.add_argument("--epochs", type=int, default=4)
     p.add_argument("--train-chars", type=int, default=60000)
     p.add_argument("--eval-chars", type=int, default=10000)
