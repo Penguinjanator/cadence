@@ -790,6 +790,7 @@ def layered(
     count: float = 1.0,
     init: float = 1.0,
     skip: bool = False,
+    skip_init: float | None = None,
     excitatory_forward: bool = False,
 ) -> Connectome:
     """Input, hidden, and output neurons with forward, feedback, and lateral synapses.
@@ -798,7 +799,10 @@ def layered(
     output (dense); feedback synapses run output to hidden with scale
     ``feedback`` so the nudge can reach the hidden neurons; lateral synapses
     among the outputs carry ``lateral`` (negative: winner takes most); with
-    ``skip`` every input also reaches every output directly.
+    ``skip`` every input also reaches every output directly. ``skip_init`` overrides
+    the initialization scale of only those direct projections; ``None`` uses ``init``.
+    Zero keeps the new projections trainable while preserving the original effective
+    weights and initial predictions.
     Forward synapses start with random signs and fan-scaled magnitudes times
     ``init`` (positive only when ``excitatory_forward``); each feedback
     synapse starts equal to its forward partner scaled by ``feedback``, so a
@@ -812,6 +816,8 @@ def layered(
         raise ValueError("density must lie in [0, 1]")
     if not np.isfinite([feedback, lateral, count, init]).all() or min(count, init) < 0:
         raise ValueError("connection settings must be finite; count and init nonnegative")
+    if skip_init is not None and (not np.isfinite(skip_init) or skip_init < 0):
+        raise ValueError("skip_init must be finite and nonnegative, or None")
     rng = np.random.default_rng(seed)
     n = inputs + hidden + outputs
     i0, h0, o0 = 0, inputs, inputs + hidden
@@ -819,11 +825,11 @@ def layered(
     post: list[np.ndarray] = []
     sign: list[np.ndarray] = []
 
-    def forward_signs(size: int, fan_in: float, fan_out: float) -> np.ndarray:
+    def forward_signs(size: int, fan_in: float, fan_out: float, scale: float = init) -> np.ndarray:
         # Fan-scaled magnitudes (Glorot), so a fresh layer's drive is of order one.
         if size == 0:
             return np.zeros(0)
-        magnitude = rng.uniform(0.0, 1.0, size=size) * np.sqrt(6.0 / (fan_in + fan_out)) * init
+        magnitude = rng.uniform(0.0, 1.0, size=size) * np.sqrt(6.0 / (fan_in + fan_out)) * scale
         if excitatory_forward:
             return np.asarray(magnitude, dtype=float)
         return np.asarray(rng.choice([-1.0, 1.0], size=size) * magnitude, dtype=float)
@@ -847,7 +853,11 @@ def layered(
         grid_i, grid_o2 = np.meshgrid(np.arange(inputs), np.arange(outputs), indexing="ij")
         pre.append(i0 + grid_i.ravel())
         post.append(o0 + grid_o2.ravel())
-        sign.append(forward_signs(inputs * outputs, inputs, outputs))
+        sign.append(
+            forward_signs(
+                inputs * outputs, inputs, outputs, init if skip_init is None else skip_init
+            )
+        )
     # output <-> output lateral
     a, b = np.meshgrid(np.arange(outputs), np.arange(outputs), indexing="ij")
     keep = a.ravel() != b.ravel()
