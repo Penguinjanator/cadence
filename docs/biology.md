@@ -189,3 +189,9 @@ branches and an activity monitor. The monitor reads the controller's own changin
 candidate values and can request deeper reasoning. This is a testable
 metacognitive feedback loop, not evidence of consciousness or a claim that humans,
 apes and insects divide according to one particular recursive module.
+
+The public viewer now exposes signed population activity and equation-mismatch
+traces. They are observations of the software model across settlement iterations;
+they are not EEG, inferred transmitter concentrations or evidence of consciousness.
+A measured oscillation and a declining residual are different possible dynamics.
+The viewer shows either honestly, and labels time expansion.

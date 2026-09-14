@@ -125,7 +125,7 @@ comparison. That comparison measures circuit responses, not foraging ability.
 
 ## Inspect the circuit
 
-All five websites place the circuit beside the live body on desktop, with a
+All six websites place the circuit beside the live body on desktop, with a
 stacked mobile layout. Actual owners and seams are grouped by function. Automatic
 replay reconstructs sampled settlements from captured inputs and couplings,
 slowing early repair steps and compressing later convergence. A changed motor input can trigger a replay even when the spatial field remains
@@ -137,6 +137,18 @@ input-release probe exposes transient recurrent decay in an isolated copy. This 
 memory to an application; use `Trace` or deliberately carried state where the
 task needs history. Supplied sensing, steering and geometry adapters are labeled
 separately from circuit owners.
+The integrated display also plots each population's signed mean activation and
+RMS owner-equation mismatch through the captured settlement. Changed messages
+appear on their actual seams. Oscillations are displayed when measured; the
+viewer never invents ongoing activity at equilibrium. These model traces use
+simulation iterations, not biological EEG frequencies.
+
+**Slow thought** holds a prepared motor command until its captured iterations
+finish playing. This is a presentation gate around the existing controller,
+without another neural rule. Edits invalidate the pending command. Search in
+Connect Four has its own explicit thinking/preview phase. A settlement's step
+count measures numerical work, not semantic difficulty.
+
 See the [viewer guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#read-the-brain-view).
 
 The graded motor potentials persist between control ticks. They provide transient
