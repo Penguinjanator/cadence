@@ -4,6 +4,7 @@ from pathlib import Path
 from zipfile import ZipFile
 
 import cadence as cd
+from cadence.receipts import canonical_sha256
 from run import check
 
 
@@ -17,7 +18,7 @@ def verify():
     with ZipFile(root / "sources.zip") as archive:
         entries = [{"path": p, "sha256": sha256(archive.read(p)).hexdigest()}
                    for p in sorted(archive.namelist())]
-    source = {"files": entries, "manifest_sha256": cd.canonical_sha256(entries)}
+    source = {"files": entries, "manifest_sha256": canonical_sha256(entries)}
     if source != receipt.source:
         return False, "frozen source archive differs from receipt"
     return True, message + "; frozen source archive agrees"
