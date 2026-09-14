@@ -40,6 +40,15 @@ therefore affect association and perception through feedback, and their next act
 can affect the motor intention in turn. This repeated local correction seeks a common
 self-consistent state. It does not guarantee a global optimum.
 
+A direct sensory-to-motor route can shorten credit assignment for a simple reflex
+while the association population learns a richer response. For a layered design,
+`layered(..., skip=True, skip_init=0.0)` adds trainable direct synapses without
+changing its initial predictions or existing effective weights. This improved
+delayed binary choices across five seeds in the
+[wiring experiment](../benchmarks/sensorimotor_skip/README.md). The conventional
+score-rule control remained stronger on long-delay stochastic accuracy; test the
+route on your own task instead of adding it to every design automatically.
+
 A visual pathway with feedback to its feature population:
 
 ```python

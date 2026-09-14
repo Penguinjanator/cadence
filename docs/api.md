@@ -311,8 +311,11 @@ give additional details. Prefer keyword arguments for optional configuration.
   - `calibrate(drive, *, level=0.5, grid=None)`, `predict(drive)`, `accuracy(drive, labels, batch=256)`,
     `parameters()`, `to_dict()`; attributes `brain`, `reverse` (index of each synapse's
     reverse, or −1), `second_moment` (when normalising).
-- `layered(inputs, hidden, outputs, *, density=0.3, feedback=1.0, lateral=0.0, seed=0, count=1.0, init=1.0, skip=False, excitatory_forward=False) -> Connectome`
-  with populations `input`, `hidden`, `output`.
+- `layered(inputs, hidden, outputs, *, density=0.3, feedback=1.0, lateral=0.0, seed=0, count=1.0, init=1.0, skip=False, skip_init=None, excitatory_forward=False) -> Connectome`
+  with populations `input`, `hidden`, `output`. `skip_init=None` uses `init` for
+  direct input-to-output projections. A finite nonnegative value overrides that
+  scale; `skip=True, skip_init=0.0` adds trainable zero-efficacy projections while
+  preserving the other effective parameters and initial predictions.
 - `embedded(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0) -> (Connectome, tie_groups)`:
   a window of one-hot tokens through one embedding table shared across positions, then a
   dense hidden layer and the outputs, feedback synapses tied in pairs; populations `input`,

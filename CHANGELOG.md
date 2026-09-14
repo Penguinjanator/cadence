@@ -4,6 +4,18 @@
 
 Biological names throughout, brain regions, and a generic brain.
 
+- `ContentMemory` provides competitive prototype recall; `ReservoirReplay`
+  retains a bounded uniform sample of real observations for rehearsal. Both
+  expose their memory budgets and keep observation separate from pure reads.
+- `cadence.sequence` adds causal content readback and bounded activity traces,
+  with fixed coordinate frames per read and stable extreme-value arithmetic.
+- Persistent memory now honors expanded separator keys, and `GenericBrain`
+  checkpoints preserve the actual separator projection and running mean.
+- Float64 Torch residual checks can stay on device; float32 keeps the independent
+  host reference. Transport avoids unnecessary accelerator synchronizations.
+  `ep_structure` checks effective free/free symmetry under declared fixed inputs.
+- `layered(skip=True, skip_init=0.0)` adds a learnable direct sensory-to-motor
+  route with unchanged initial predictions; the existing initializer is the default.
 - Discrete reward eligibility now differentiates the sampled softmax policy even
   when imitation uses quadratic nudges. Native categorical motor slots can have
   unequal sizes and never sample padding. Numerical derivative and CPU/Torch
