@@ -38,7 +38,7 @@ owner also receives feedback or bias.
 Named functional regions can inhabit one wiring. Local repairs cross their seams
 and seek a common fixed point of the combined system under the current boundary.
 Use one settlement for that joint state; independent solves followed by a merged
-visualization do not couple the regions. See [task brains](brains.md).
+visualization do not couple the regions. See [patterns](patterns.md#several-regions-one-equilibrium).
 
 Settlement means running the update, from rest or a supplied state. A returned
 `SettledState` can be a transient, a fixed point, or part of an oscillation.
@@ -93,6 +93,22 @@ It checks the tested transport and update. A [receipt](receipts.md) binds stored
 results to sources when those files are included and checked; its caller supplies
 the arithmetic verifier. Neither check establishes benchmark fairness.
 
-The [small-core rationale](condense.md) explains why inference, memory, and
-learning remain separate operations. Simplicity is a design constraint, not a
-proof that one architecture is optimal.
+## Compared with backprop networks
+
+| | Feed-forward model trained by backprop | Cadence settlement |
+|---|---|---|
+| Inference | Evaluate layers | Repair state over declared seams until it settles |
+| State between inputs | A cache or a separate memory | A settled state, trace or record, each explicit |
+| Credit | Reverse-mode differentiation | Free and nudged endpoint contrasts |
+| Exact gradient conditions | Differentiable computation | Stable smooth equilibrium, symmetric effective weights, converged phases, vanishing nudge |
+| Work | Forward and backward passes | Every free and nudged repair step plus the update |
+
+Measure inference, learning and record maintenance separately on the same held-out
+data, and include the simple algorithmic solver when a task has one.
+
+## When to add machinery
+
+Inference, memory and learning are separate operations because their state
+lifetimes differ. A new mechanism needs a failure it fixes and an ablation on the
+same inputs, budget and seeds, with its state and cost counted. Brain functions
+are compositions of the existing operations; [patterns](patterns.md) lists them.

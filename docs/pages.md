@@ -66,8 +66,9 @@ activation stopping tolerance alone does not certify an equilibrium.
 
 Record the output owners' activations at every step and replay them as bars over a few
 animation frames: the user sees the answer form. Show the hidden owners at rest as a strip
-of squares with opacity as activation. Print the number of steps taken. The current [browser showcase](https://github.com/muellerberndt/cadence-examples/blob/main/METHODS.md)
-separates small numerical kernels from rendering and checks them against Python.
-Use its `shell.html` and view modules as starting points. Run
-`python tools/build_showcase.py` to regenerate the two entry pages; launch each
-website with `python serve.py mouse`, `eye-arm`, `fly`, `worm`, or `memory`.
+of squares with opacity as activation. Print the number of steps taken. The
+[cadence-examples](https://github.com/muellerberndt/cadence-examples) websites
+separate small numerical kernels from rendering and check them against Python.
+Their `shared/shell.html` and view modules are starting points, and
+`python tools/build_showcase.py` regenerates the six websites and the gallery.
+The [hosted versions](https://floatingpragma.io/cadence-examples/) serve the same files.

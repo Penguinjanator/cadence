@@ -9,10 +9,10 @@ results. Dataset encoding and the evaluation split belong to your application.
 | Known interacting constraints | A drive and a declared wiring | Settle; read output activations and residual | [Circuit quickstart](quickstart.md), [C. elegans circuit](https://github.com/muellerberndt/cadence-examples/tree/main/worm) |
 | Revise an addressed record | Key and observed value | `FastSeams.observe`, then `recall` | [Memory](memory.md) |
 | Classification | Feature values on input owners | `Learner.step(drive, labels)`; `predict` returns class indices | [Label-fitting quickstart](quickstart.md#learn-a-response) |
-| Imitation | An observation and a teacher's action | Classification over actions, with legal-action masking at deployment | [Learning recipes](learning.md), [game pattern](games.md) |
+| Imitation | An observation and a teacher's action | Classification over actions, with legal-action masking at deployment | [Learning recipes](learning.md), [learning life](patterns.md#a-learning-life) |
 | Regression or reconstruction | Features and an output pattern | Quadratic nudge; read continuous output activations | [Pattern targets below](#pattern-targets) |
-| A continuing stream | Each observation before its label arrives | Predict, score, then update; retain history explicitly when needed | [Memory](memory.md), [embodiment](embodied.md) |
-| Reward-driven action | Observation, chosen action, reward | Weight action-target nudges by advantage, or use eligibility traces | [Games](games.md), [reward](reward.md) |
+| A continuing stream | Each observation before its label arrives | Predict, score, then update; retain history explicitly when needed | [Memory](memory.md), [body loop](patterns.md#sensor-opposing-motors-body) |
+| Reward-driven action | Observation, chosen action, reward | Weight action-target nudges by advantage, or use eligibility traces | [Signed feedback](patterns.md#signed-feedback), [reward](reward.md) |
 | A measured edge list | Supplied topology and declared stimuli | Settle and score held-out predicates with controls | [Protocols](protocols.md) |
 
 ## Put features on input owners
@@ -80,35 +80,6 @@ episodic state. For `FastSeams` and `Trace`, `reset(batch, rows=...)` resets
 selected rows and `keep(rows)` retains a subset without changing identities.
 Changing the batch size through an ordinary read or update can initialize fresh
 fast state; use the explicit stream operations when records must survive.
-
-## A game player's learning life
-
-Start by designing the state ranges and connections for the task, with enough
-capacity to fit a held-out portion of the teacher's demonstrations. A temporal
-task should receive the current observation and carry its own `Trace` state;
-a fully visible board need not carry an extra temporal copy.
-
-Use this sequence for the game examples:
-
-1. Fit teacher demonstrations with `Learner.step(drive, target)`.
-2. Play and experiment. An action and its reward-derived advantage can use
-   `Learner.step(drive, action, weight=advantage)`; `ActorCritic` supplies a
-   continuing reward learner with eligibility and a critic.
-3. Inspect recurring failures and obtain additional teacher demonstrations on
-   those states. Mix them with earlier examples to retain prior skills.
-4. Keep collecting experience in later games and save the learned parameters
-   with `Learner.save`. Retain a reusable episode record and rehearsal examples.
-
-Evaluate candidate updates on separate validation episodes, then measure the
-selected checkpoint on untouched test episodes. Every game supplies experience;
-not every update improves performance. Report rejected updates as well as gains.
-During reward replay, use the observation and trace available when the action
-was taken. Do not advance the live trace with shuffled training rows or targets.
-Reset transient state between episodes while preserving learned parameters.
-`Learner.save` does not save separately owned traces or experience buffers.
-
-For comparing candidate actions before acting, see the tested
-[deliberation pattern](deliberation.md).
 
 ## Several learners in one net
 

@@ -46,7 +46,7 @@
 
 ## 0.8.0 (2026-09-14): the condensation
 
-The library condensed into its elements (`docs/condense.md`): owners and seams, the
+The library condensed into its elements (`docs/concepts.md`): owners and seams, the
 settlement, the contrast, the trace, the valence, and one step. Dropped from the top level,
 each with what replaces it. The gates it passed: the core suite with the child's
 experiments; the four example rungs' receipts verifying under it; the NES player's
@@ -85,7 +85,7 @@ one-frame afterimage brain retrained on it reading the held-out presses at the s
 - `Valence`: the reward less its expectation as its own element (the running level per
   stream, the reward's own units or its scale, the floor, the cap); `ActorCritic.valence` is
   the agent's, built from its config, and `delta_mean`/`delta_var` read through to it.
-- The first two steps of the condensation planned in `docs/condense.md`; the API doc and the
+- The first two steps of the condensation planned in `docs/concepts.md`; the API doc and the
   README carry the new names.
 
 ## 0.7.1 (2026-09-14)

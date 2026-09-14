@@ -236,7 +236,7 @@ give additional details. Prefer keyword arguments for optional configuration.
 ## Optional task compositions
 
 `from cadence.brains import couple, sensor_motor, imagine, ActivityMonitor` imports small
-motor, counterfactual-search and self-reading compositions. See [task brains](brains.md)
+motor, counterfactual-search and self-reading compositions. See [patterns](patterns.md)
 for ports, budgets, supplied-model boundaries and examples. These are optional
 architectural helpers; the owner rule and ordinary learning API are unchanged.
 

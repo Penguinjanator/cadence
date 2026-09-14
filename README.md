@@ -63,6 +63,7 @@ explicit ports and stream resets. It needs no recurrent solve or offline trainin
 | Store observations and revise them as values change | `FastSeams(rule="delta")` | [Memory](docs/memory.md) |
 | Learn reusable responses from labelled observations | `Learner` | [Quickstart: fit two labels](docs/quickstart.md#learn-a-response) |
 | Carry recent activity or learn from delayed reward | `Trace`, `ActorCritic` | [Task recipes](docs/tasks.md), [reward](docs/reward.md) |
+| Assemble vision, memory and motor regions into one brain | `couple`, `sensor_motor`, `FastSeams` | [Patterns](docs/patterns.md) |
 
 Settlement repeatedly repairs interacting state. A learner settles freely, then
 nudges its output ports toward and away from a target and updates each seam from
@@ -74,7 +75,7 @@ equilibrium branch. [Learning](docs/learning.md) gives the equations and limits.
 Different functions can share one equilibrium: vision, memory and motor regions
 exchange local repairs through their seams until the combined circuit is
 self-consistent under its current input. The body acts, changes that input, and
-repair continues. [`couple`](docs/brains.md#different-regions-one-equilibrium)
+repair continues. [`couple`](docs/patterns.md#several-regions-one-equilibrium)
 assembles labeled regions for one settlement. A fixed point is not a guarantee
 of the globally best action.
 
@@ -143,7 +144,7 @@ answer different questions; [the quickstart](docs/quickstart.md) shows the first
 two, and [receipts](docs/receipts.md) explains reproducible comparisons.
 
 [Quickstart](docs/quickstart.md) · [Concepts](docs/concepts.md) ·
-[Biology-to-Cadence map](docs/biology.md) ·
+[Patterns](docs/patterns.md) · [Function map](docs/biology.md) ·
 [Learning](docs/learning.md) · [Memory](docs/memory.md) ·
 [API](docs/api.md) · [All docs](docs/index.md)
 
@@ -154,5 +155,5 @@ Cadence grew from connectome and observer-patch experiments. Related methods inc
 MIT licensed.
 
 Compare predicted outcomes before acting with the tested
-[deliberation pattern](docs/deliberation.md): independent imagined branches,
+[imagined-futures pattern](docs/patterns.md#imagined-futures): independent imagined branches,
 a learned evaluator, and feedback from real outcomes.

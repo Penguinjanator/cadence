@@ -1,39 +1,36 @@
 # Cadence documentation
 
-Cadence builds bounded observer-like software patches with local state, ports,
-readback, records, and feedback. The core loop reads a state, measures a
-discrepancy, corrects it through declared seams, and keeps what the task needs.
+Cadence builds patch nets: owners with local state exchange messages over declared
+seams and repair their state until the net settles. Records, traces and local
+learning keep what a task needs.
 
 ## Start here
 
-1. [Install Cadence](../README.md#install), then run the short memory example.
-2. [Quickstart](quickstart.md): settle a three-owner circuit, remove a relay,
-   check the residual, fit two labels, and save a checkpoint.
-3. [Concepts](concepts.md): learn what an owner, seam, clamp, and state mean.
-4. [Task recipes](tasks.md): choose inference, memory, learning, or reward.
+1. [Install Cadence](../README.md#install) and run the short memory example.
+2. [Quickstart](quickstart.md): settle a circuit, cut a relay, check the residual,
+   fit two labels and save a checkpoint.
+3. [Concepts](concepts.md): owners, seams, settlement and the three state lifetimes.
+4. [Patterns](patterns.md): assemble regions, bodies, records, futures and monitors
+   into a brain.
+5. [Function map](biology.md): from a nervous-system function to its wiring and pattern.
 
-## Choose a mechanism
+## Mechanisms
 
 | Guide | What it covers |
 |---|---|
-| [Biology-to-Cadence map](biology.md) | Nervous-system functions, concrete mechanisms, architectural patterns, and biological limits |
-| [Memory](memory.md) | Direct key/value ports, residual writes, interference, and resets |
-| [Learning](learning.md) | Free/nudged phases, gradient assumptions, and numerical checks |
-| [Reward](reward.md) | Eligibility traces, a critic, and reward prediction error |
-| [Reusable task brains](brains.md) | Motor wiring, isolated futures and activity readback |
-| [Deliberation](deliberation.md) | Compare possible futures and learn from actual outcomes |
-| [Small core](condense.md) | State lifetimes and why the operations stay separate |
-| [Small component experiments](child.md) | What a few tested compositions add |
+| [Memory](memory.md) | Key/value records, residual writes, interference and resets |
+| [Learning](learning.md) | Free and nudged phases, gradient conditions, every knob |
+| [Reward](reward.md) | Eligibility traces, a critic and the prediction error |
+| [Task recipes](tasks.md) | Input encoding, pattern targets, streams, several learners |
 
 ## Build and measure
 
-[Games](games.md) · [Embodiment](embodied.md) · [Browser pages](pages.md) ·
-[Backends and timing](backends.md) · [Protocols](protocols.md) ·
-[Receipts](receipts.md) · [Comparisons](differences.md) · [API reference](api.md)
+[Browser pages](pages.md) · [Backends and timing](backends.md) ·
+[Protocols](protocols.md) · [Receipts](receipts.md) · [API reference](api.md)
 
-The [public examples](https://github.com/muellerberndt/cadence-examples) are six
-interactive websites: a teachable mouse, an eye and drawing arm, a fly-inspired
-forager, a C. elegans habitat/circuit, changing memory and Connect Four. Each launches with one
-`python serve.py <demo>` command and explains its learned records, supplied
-mechanisms and measured controls. No model training or package installation is
-needed to run the websites.
+## Examples
+
+Six [interactive websites](https://floatingpragma.io/cadence-examples/) apply these
+patterns: an eye and drawing arm, a teachable mouse, a C. elegans habitat, a
+fly-inspired forager, changing memory and Connect Four. Their code, evidence and
+local launcher are in [cadence-examples](https://github.com/muellerberndt/cadence-examples).

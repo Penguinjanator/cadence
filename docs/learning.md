@@ -59,7 +59,7 @@ owners' activations are the net's answer; no target has entered.
 
 `p` is a softmax over the output owners, so pushing the target's owner up pushes the
 others down by their share (a cross-entropy nudge). `weight` is 1 for a label; for a
-reward it is the advantage of the action (see [games](games.md)). With `centered=True`
+reward it is the advantage of the action (see [reward](reward.md)). With `centered=True`
 (the default) two such settlements run from the same `s⁰`: one with `+beta`, rest state
 `s⁺`, and one with `-beta`, rest state `s⁻`. The nudge travels back over the feedback
 overlaps, so hidden owners rest at slightly different activations in the two phases.

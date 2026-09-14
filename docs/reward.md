@@ -60,9 +60,8 @@ undiscounted potential difference does not generally preserve the original
 objective under discounting; that guarantee requires the discounted form
 `gamma * Phi(next) - Phi(now)` with appropriate terminal handling.
 
-The [biology-to-Cadence map](biology.md#memory-and-learning) distinguishes
-eligibility, prediction error, and memory, and explains the scope of the dopamine
-analogy.
+The [function map](biology.md#learning) places eligibility, prediction error
+and valence among the other mechanisms.
 
 ## Deployment
 
