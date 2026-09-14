@@ -24,7 +24,7 @@ designed region can replace any of them.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -37,7 +37,7 @@ from .learning import Learner, LearnerConfig, learning_neuron_model
 from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
 from .regions import Region, motor_cortex, prefrontal_cortex, visual_cortex
-from .stream import FastSynapses, Trace
+from .stream import FastSynapses, PatternSeparator, Trace
 
 __all__ = ["GenericBrain"]
 
@@ -64,6 +64,97 @@ def _learning() -> LearnerConfig:
 
 def _reward() -> ActorCriticConfig:
     return ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_critic=0.3)
+
+
+def _load_memory(metadata: Any, data: Mapping[str, Any], neurons: int) -> FastSynapses | None:
+    """Validate and restore a detached memory before constructing the resumed composition."""
+    prefix = "episodic/"
+
+    def array(name: str, shape: tuple[int, ...] | None = None) -> np.ndarray:
+        key = prefix + name
+        if key not in data:
+            raise ValueError(f"missing saved memory state: {name}")
+        value: np.ndarray = data[key]
+        if (
+            value.dtype.kind not in "iuf"
+            or not np.isfinite(value).all()
+            or (shape is not None and value.shape != shape)
+        ):
+            raise ValueError(f"invalid saved memory state: {name}")
+        return value.copy()
+
+    if metadata is None:
+        if any(key.startswith(prefix) for key in data):
+            raise ValueError("saved memory arrays require hippocampus metadata")
+        return None
+    if not isinstance(metadata, dict):
+        raise ValueError("invalid hippocampus metadata")
+    try:
+        kind = metadata.get("kind")
+        if kind not in (None, "consolidating"):
+            raise ValueError("unsupported saved memory kind")
+        for name in ("normalize", "replace"):
+            if not isinstance(metadata[name], bool):
+                raise ValueError(f"saved memory {name} must be boolean")
+        for name in ("pre", "post", "writes"):
+            value = metadata[name]
+            if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                raise ValueError(f"saved memory {name} must be a nonnegative integer")
+        pre, post = array("pre", (metadata["pre"],)), array("post", (metadata["post"],))
+        if np.any(pre >= neurons) or np.any(post >= neurons):
+            raise ValueError("saved memory indices exceed the connectome")
+        separator = None
+        spec = metadata.get("separator")  # Older unseparated checkpoints omitted this field.
+        if spec is None:
+            if any(key.startswith(prefix + "separator/") for key in data):
+                raise ValueError("saved separator arrays require separator metadata")
+        else:
+            if not isinstance(spec, dict):
+                raise ValueError("invalid separator metadata")
+            if set(spec) != {"inputs", "expansion", "winners", "seed", "center"}:
+                raise ValueError("incomplete or unsupported separator metadata")
+            for name in ("inputs", "expansion", "winners", "seed"):
+                value = spec[name]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError(f"saved separator {name} must be a nonnegative integer")
+            if spec["inputs"] != len(pre):
+                raise ValueError("saved separator inputs must match memory pre neurons")
+            # Do not regenerate these arrays from the seed: projections can be customized,
+            # and the running center of FastSynapses can have changed after observations.
+            projection = array("separator/projection", (spec["inputs"], spec["expansion"]))
+            mean = array("separator/mean", (spec["inputs"],))
+            separator = PatternSeparator(**spec)
+            separator.projection, separator.mean = projection, mean
+        options = {
+            name: metadata[name]
+            for name in ("decay", "rate", "amplitude", "normalize", "replace", "rule", "writes")
+        }
+        memory: FastSynapses
+        if kind == "consolidating":
+            memory = SynapticMemory(
+                pre, post, separator=separator, consolidation=metadata["consolidation"], **options
+            )
+        else:
+            if prefix + "consolidated" in data:
+                raise ValueError("consolidated weights require consolidating memory metadata")
+            memory = FastSynapses(pre, post, separator=separator, **options)
+        strength = array("strength")
+        if strength.ndim != 3 or strength.shape[1:] != (memory.key_width, len(post)):
+            raise ValueError("invalid saved memory strength dimensions")
+        mass = array("mass", (len(strength),))
+        if np.any(mass < 0):
+            raise ValueError("saved memory mass must be nonnegative")
+        if isinstance(memory, SynapticMemory):
+            memory.consolidated = array("consolidated", (memory.key_width, len(post)))
+            if (
+                metadata.get("persistent_parameters", memory.consolidated.size)
+                != memory.consolidated.size
+            ):
+                raise ValueError("inconsistent saved persistent parameter count")
+        memory.strength, memory.mass = strength, mass
+        return memory
+    except (KeyError, TypeError, OverflowError) as exc:
+        raise ValueError("invalid or incomplete saved memory metadata") from exc
 
 
 class GenericBrain:
@@ -464,6 +555,9 @@ class GenericBrain:
         if self.hippocampus is not None:
             for name in ("pre", "post", "strength", "mass"):
                 data["episodic/" + name] = getattr(self.hippocampus, name)
+            if self.hippocampus.separator is not None:
+                for name in ("projection", "mean"):
+                    data["episodic/separator/" + name] = getattr(self.hippocampus.separator, name)
             if isinstance(self.hippocampus, SynapticMemory):
                 data["episodic/consolidated"] = self.hippocampus.consolidated
         data["generic"] = np.array(canonical_json(metadata))
@@ -491,7 +585,10 @@ class GenericBrain:
             meta = json.loads(str(data["generic"]))
             if meta.get("format") not in ("cadence-generic/1", "cadence-generic/2"):
                 raise ValueError("unsupported GenericBrain checkpoint format")
+            if "hippocampus" not in meta:
+                raise ValueError("missing hippocampus metadata")
             learner = Learner.load(path, backend=backend, device=device, precision=precision)
+            memory = _load_memory(meta["hippocampus"], data, learner.brain.connectome.n)
             result = cls(
                 learner.brain.connectome, episodic=False, reward=ActorCriticConfig(**meta["reward"])
             )
@@ -547,41 +644,5 @@ class GenericBrain:
                 )
                 for name in ("trace", "last", "cold"):
                     setattr(result.working_memory, name, data["working/" + name].copy())
-            episodic = meta["hippocampus"]
-            if episodic is not None:
-                memory_class = (
-                    SynapticMemory if episodic.get("kind") == "consolidating" else FastSynapses
-                )
-                memory_options = (
-                    {"consolidation": episodic["consolidation"]}
-                    if memory_class is SynapticMemory
-                    else {}
-                )
-                result.hippocampus = memory_class(
-                    data["episodic/pre"],
-                    data["episodic/post"],
-                    **{
-                        name: episodic[name]
-                        for name in (
-                            "decay",
-                            "rate",
-                            "amplitude",
-                            "normalize",
-                            "replace",
-                            "rule",
-                            "writes",
-                        )
-                    },
-                    **memory_options,
-                )
-                result.hippocampus.strength = data["episodic/strength"].copy()
-                result.hippocampus.mass = data["episodic/mass"].copy()
-                if isinstance(result.hippocampus, SynapticMemory):
-                    weights = data["episodic/consolidated"].copy()
-                    if (
-                        weights.shape != result.hippocampus.consolidated.shape
-                        or not np.isfinite(weights).all()
-                    ):
-                        raise ValueError("invalid consolidated synaptic weights")
-                    result.hippocampus.consolidated = weights
+            result.hippocampus = memory
         return result

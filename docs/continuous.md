@@ -133,6 +133,12 @@ Unlike independent `FastSynapses` streams, these streams share long-term knowled
 working activity, random generators, and pending-action states. Resume the same row
 identities and supply the pending action's actual outcome once. The environment/body
 must be saved separately. Old generic checkpoints retain their original fast-memory rule.
+When memory uses a `PatternSeparator`, the checkpoint includes its actual projection,
+running mean and expanded memory matrices. Restoring does not regenerate the projection
+from its seed. Ordinary older checkpoints without a separator remain supported; older
+separated checkpoints that omitted the projection or mean are rejected because their
+original coordinate system cannot be recovered reliably. Memory metadata, array shapes
+and finite values are checked before constructing the resumed brain.
 `parameters()` includes the consolidated matrix; per-stream residuals and eligibility
 are additional storage. Persistent memory costs `key_width × value_width` numbers,
 plus the same amount per stream for effective fast weights. Reads do not consolidate
