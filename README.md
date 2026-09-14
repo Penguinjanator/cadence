@@ -48,18 +48,19 @@ write stores only the prediction error, so a correct prediction changes nothing.
 | Feature | How it works | Docs |
 |---|---|---|
 | **Owners and seams** | An owner holds a potential and publishes an activation. Seams carry weighted activity between owners. | [Concepts](docs/concepts.md) |
-| **Settlement** | Every owner repairs itself from its inbox until the network reaches a fixed point. `residual` checks the equations. | [Quickstart](docs/quickstart.md) |
+| **Settlement** | Every owner repairs itself from its inbox until the network reaches a fixed point. Settlement continues until `residual` confirms the equations hold. | [Quickstart](docs/quickstart.md), [checked settlement](docs/patterns.md#settle-until-the-equations-hold) |
 | **One brain from many regions** | `couple` joins vision, memory, planning and motor regions into one settlement. | [Regions](docs/patterns.md#several-regions-one-equilibrium) |
 | **Senses and movement** | Encoders drive sensory owners. Opposing motor pairs move a body, and the body's new state is the next input. | [Body loop](docs/patterns.md#sensor-opposing-motors-body) |
 | **Short-term memory** | The percept reverberates. `Echo` and `Afterglow` feed a fading trace of the last moments into the next settlement, brightest where something changed. A self-exciting owner pair holds an item after its input is gone. | [Fading context](docs/patterns.md#fading-context), [holding an item](docs/patterns.md#holding-an-item) |
 | **Episodic memory** | Fast seams store what followed a cue after one observation and correct the record when the world changes. Clock owners address records by time or position. | [Memory](docs/memory.md), [time](docs/patterns.md#records-addressed-by-time) |
 | **Long-term memory** | Plasticity. A seam strengthens or weakens from the difference between a free and a nudged settlement at its two ends. There is no backward pass. | [Learning](docs/learning.md) |
+| **Expectation and surprise** | Statistics learned over many experiences become seams that bias what the brain expects next. Surprise measures how unexpected an outcome was. | [Expectations](docs/patterns.md#expectations-as-seams) |
 | **Imitation** | A teacher's action nudges the output owners, and the seams learn the response. | [Learning life](docs/patterns.md#a-learning-life) |
-| **Reward and valence** | Eligibility traces keep which seams were active. The prediction error, better or worse than expected, writes through them. | [Reward](docs/reward.md) |
-| **Imagination** | `imagine` plays candidate futures in isolated copies. Only real outcomes teach. | [Imagined futures](docs/patterns.md#imagined-futures) |
+| **Reward and valence** | Eligibility traces keep which seams were active. The prediction error, better or worse than expected, writes through them. A winning future's advantage narrows exploration, and a signed preference teaches learned relationships with a retention guard. | [Reward](docs/reward.md), [signed feedback](docs/patterns.md#signed-feedback) |
+| **Future simulation** | Before acting, the brain rolls candidate futures forward through its own predictions or a world model, and a critic compares their consequences. Imagined outcomes never write memory; only real outcomes teach. | [Future simulation](docs/patterns.md#future-simulation) |
 | **Self-reading** | Monitor regions read the brain's own activity, request more thought when options are close, and learn when the brain tends to be wrong. | [Self-reading](docs/patterns.md#reading-its-own-activity) |
 | **Rhythm and restlessness** | Adaptation turns mutual inhibition into a rhythm. Fatigue on repeated choices moves a stuck controller out of a loop. | [Rhythm](docs/patterns.md#rhythm), [restlessness](docs/patterns.md#restlessness) |
-| **Creative variation** | Several detuned settlements compete, and a critic keeps the best. | [Rehearse and select](docs/patterns.md#rehearse-select-revise) |
+| **Review and revision** | Detuned futures vary the output. A finished draft is rendered and measured, and its weakest part is re-simulated and kept only when the whole improves. | [Review and revise](docs/patterns.md#review-and-revise) |
 | **Growth and evolution** | `grow` develops a wiring from regions and projections; `evolve` selects wirings by fitness. | [API](docs/api.md#constitution-cadenceconstitution) |
 | **Evidence** | `conformance` checks an engine owner by owner. `Receipt` binds results to their sources. | [Receipts](docs/receipts.md) |
 

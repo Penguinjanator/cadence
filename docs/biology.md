@@ -30,12 +30,15 @@ Examples refer to the [public websites](https://floatingpragma.io/cadence-exampl
 |---|---|---|---|
 | Specialized regions exchanging signals | Named wirings merged by `couple`, or `Region`, `Projection` and `grow` | [Several regions, one equilibrium](patterns.md#several-regions-one-equilibrium) | All six |
 | Spatial map and route finding | A spatial field region gated by a visual map, position error to directional motors | [Several regions, one equilibrium](patterns.md#several-regions-one-equilibrium) | Mouse |
-| Choosing among options | Candidate owners settling with a value owner and a monitor | [Imagined futures](patterns.md#imagined-futures) | Connect Four |
-| Imagining consequences | `imagine` over isolated copies with a supplied transition model | [Imagined futures](patterns.md#imagined-futures) | Connect Four |
+| Choosing among options | Candidate owners settling with a value owner and a monitor | [Future simulation](patterns.md#future-simulation) | Connect Four |
+| Simulating consequences before acting | Futures rolled forward through the brain's own predictions in isolated batch rows, scored by a critic | [Future simulation](patterns.md#future-simulation) | |
+| Planning with a world model | `imagine` over isolated copies with a supplied transition model | [Future simulation](patterns.md#with-a-supplied-world-model) | Connect Four |
+| Expectation and surprise | Transition statistics as seams from context cues to expectation owners | [Expectations as seams](patterns.md#expectations-as-seams) | |
+| Self-review | Render the draft, re-simulate its weakest part, keep only whole-draft improvements | [Review and revise](patterns.md#review-and-revise) | |
 | Confidence, knowing when to think longer | `ActivityMonitor`, or a learned confidence owner | [Reading its own activity](patterns.md#reading-its-own-activity) | Connect Four |
 | Attention and salience | Supplied gaze or attention selection; `Trace(focus=...)` weights owners that changed | [Fading context](patterns.md#fading-context) | Eye & arm |
 | Leaving a rut | Fatigue on looping choices, growing with idleness | [Restlessness](patterns.md#restlessness) | |
-| Exploration and creative variation | Softmax sampling; detuned candidate settlements ranked by a critic | [Rehearse, select, revise](patterns.md#rehearse-select-revise) | |
+| Exploration and creative variation | Softmax sampling; detuned candidate settlements ranked by a critic | [Future simulation](patterns.md#with-the-brains-own-predictions) | |
 
 ## Memory
 
@@ -57,7 +60,7 @@ Examples refer to the [public websites](https://floatingpragma.io/cadence-exampl
 | Imitation | `Learner.step(drive, teacher_labels)` | [A learning life](patterns.md#a-learning-life) | |
 | Delayed credit | `ActorCritic` eligibility traces of settlement contrasts | [Reward](reward.md) | |
 | Reward prediction error | Critic error shaped by `Valence` | [Signed feedback](patterns.md#signed-feedback) | |
-| Preference | Signed nudge weight with replay and rollback | [Signed feedback](patterns.md#signed-feedback) | |
+| Preference | Signed nudge weight with replay and rollback, or a signed update of expectation tables with a retention guard | [Signed feedback](patterns.md#signed-feedback) | |
 | Learning about its own errors | A second learner on a monitor range | [Reading its own activity](patterns.md#reading-its-own-activity) | |
 
 ## Without a counterpart

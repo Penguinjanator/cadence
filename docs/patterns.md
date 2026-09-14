@@ -10,6 +10,7 @@ patterns.
 | Pattern | Use it when | Public example |
 |---|---|---|
 | [Several regions, one equilibrium](#several-regions-one-equilibrium) | Functions must influence each other within one decision | All six websites |
+| [Settle until the equations hold](#settle-until-the-equations-hold) | A result must be a checked equilibrium | |
 | [Sensor, opposing motors, body](#sensor-opposing-motors-body) | A body moves toward a target or away from an error | Eye & arm, mouse, forager, worm |
 | [Records in the loop](#records-in-the-loop) | One observation must set or revise an association | Mouse, forager, changing memory |
 | [Records addressed by time](#records-addressed-by-time) | The answer is what happened n steps ago or at a position | |
@@ -17,9 +18,9 @@ patterns.
 | [Holding an item](#holding-an-item) | A report must ignite all-or-none and persist | |
 | [Rhythm](#rhythm) | Output must alternate without a clock | [`half_center.py`](../examples/half_center.py) |
 | [Restlessness](#restlessness) | A controller repeats choices without progress | |
-| [Imagined futures](#imagined-futures) | Consequences can be simulated before acting | Connect Four |
+| [Future simulation](#future-simulation) | The consequences of an action should be assessed before acting | Connect Four |
 | [Reading its own activity](#reading-its-own-activity) | Compute or abstention should depend on confidence | Connect Four |
-| [Rehearse, select, revise](#rehearse-select-revise) | Several outputs are plausible and a critic can rank them | |
+| [Expectations as seams](#expectations-as-seams) | Statistics learned over many experiences should shape what comes next | |
 | [Signed feedback](#signed-feedback) | Reward or preference should change learned seams | |
 | [A learning life](#a-learning-life) | A skill is taught, practiced and kept | |
 
@@ -67,9 +68,41 @@ at this boundary; it says nothing about uniqueness or the best action.
 To add one-trial content to a trained graph, couple a cue region and a
 recall region to it. Bridge each recall owner both ways with the intention owners
 it concerns, leave the trained seams unchanged, and write the recall seams only
-after an output is committed. The trained graph and the new record then settle
-together. [`COUPLED_BRAINS.md`](https://github.com/muellerberndt/cadence-examples/blob/main/COUPLED_BRAINS.md)
+after an output is committed. Drive the cue of each position while that position
+is produced and release it afterwards so the output can develop. The trained graph
+and the new record then settle together. [`COUPLED_BRAINS.md`](https://github.com/muellerberndt/cadence-examples/blob/main/COUPLED_BRAINS.md)
 lists the regions and bridges of all six websites.
+
+## Settle until the equations hold
+
+A step cap stops work without certifying an equilibrium. Continue the same rule in
+chunks until the residual of every row is below a tolerance, and record whether the
+budget ran out.
+
+```python
+import numpy as np
+import cadence as cd
+
+def settle_checked(engine, drive, tolerance=1e-5, budget=512, chunk=32):
+    state, steps = None, 0
+    while steps < budget:
+        state = engine.settle_batch(drive, steps=chunk, state=state, tolerance=0)
+        steps += chunk
+        error = engine.residual(drive, state)
+        if np.all(error <= tolerance):
+            break
+    return state, {"steps": steps, "residual": float(error.max()), "converged": bool(np.all(error <= tolerance))}
+
+wiring = cd.layered(3, 12, 2, density=1.0, seed=0)
+engine = cd.Settlement(wiring, cd.learning_rule())
+drive = np.zeros((2, wiring.n))
+drive[:, list(wiring.sets["input"])] = [[1, 0, 1], [0, 1, 0]]
+state, report = settle_checked(engine, drive)
+print(report)
+```
+
+Report the budget-limited rows as unsettled. Large networks settle in fewer chunks
+when a warm state from the previous step is passed in.
 
 ## Sensor, opposing motors, body
 
@@ -314,7 +347,56 @@ print(restless.apply(np.zeros(8), mismatch=10.0)[4:6].round(3))
 controller's own states. Tune `tau`, `strength` and `growth` at deployment; the
 learned seams are unchanged.
 
-## Imagined futures
+## Future simulation
+
+Before acting, the brain simulates where its candidate actions lead and compares
+the outcomes. Every future runs in its own state: its own batch row, trace and
+records. Imagined outcomes never write memory or change seams; the real outcome
+after acting is what teaches.
+
+### With the brain's own predictions
+
+When the brain predicts its next observation, it rolls futures forward itself.
+Each batch row hears its own previous event, settles, samples the next event and
+continues. Bounded random drive on latent owners (detuning) makes the futures
+differ. A critic scores each finished future and the controller commits the best.
+
+```python
+import numpy as np
+import cadence as cd
+
+tokens, steps, futures = 4, 6, 8
+wiring = cd.layered(tokens, 16, tokens, density=1.0, seed=1)
+engine = cd.Settlement(wiring, cd.learning_rule())
+inputs, outputs = list(wiring.sets["input"]), list(wiring.sets["output"])
+rng = np.random.default_rng(0)
+
+def simulate(current, critic, detune=0.1):
+    last = np.full(futures, current)
+    paths = [[] for _ in range(futures)]
+    for _ in range(steps):
+        drive = np.zeros((futures, wiring.n))
+        drive[np.arange(futures), last] = 1.0  # each future hears its own last event
+        drive[:, list(wiring.sets["hidden"])] += rng.normal(0, detune, (futures, 16))
+        state = engine.settle_batch(drive, steps=100, tolerance=1e-6)
+        p = np.exp(state.activation[:, outputs] / 0.1)
+        p /= p.sum(axis=1, keepdims=True)
+        last = np.array([rng.choice(tokens, p=row) for row in p])
+        for path, token in zip(paths, last):
+            path.append(int(token))
+    scores = np.array([critic(path) for path in paths])
+    return paths[int(scores.argmax())], scores
+
+best, scores = simulate(0, critic=lambda path: len(set(path)))  # prefer varied futures
+print(best, scores)
+```
+
+Commit the first action of the best future, or a whole segment when the output is
+a sequence. The winner's advantage over the other futures is a valence: pass it
+through `Valence`, and let a large advantage narrow the next detuning. Keep every
+candidate and its score for inspection.
+
+### With a supplied world model
 
 `imagine` copies the live state into isolated branches, applies a supplied
 transition, and scores terminal states with a read-only evaluator. The controller
@@ -338,16 +420,21 @@ plan = imagine(live, lambda s: (0, 1), move, value, lambda s: len(s) == 2, depth
 print(plan.futures[0].action, live == [])
 ```
 
-Imagined rewards are predictions. Learn from the real outcome after acting, and
-keep every branch's traces inside that branch. In Connect Four, the scores of
-completed search depths drive seven candidate owners, a value owner and a monitor
-that settle as one decision circuit; the settled candidates select the move.
-[`examples/deliberation.py`](../examples/deliberation.py) adds a learned terminal
-evaluator.
+In Connect Four, the scores of completed search depths drive seven candidate
+owners, a value owner and a monitor that settle as one decision circuit; the
+settled candidates select the move. [`examples/deliberation.py`](../examples/deliberation.py)
+adds a learned terminal evaluator.
 
-**Check:** the evaluator alone, fixed-depth search, and search with a wrong
-transition model. The transition model supplies information a learner may not
-have; count it in comparisons.
+### Review and revise
+
+Review a finished draft the way the world receives it: render it and measure the
+rendering. Re-simulate the weakest segment with more futures, splice the best one
+into the draft, and keep the change only when the whole draft scores higher and
+the rendered check holds.
+
+**Check:** the critic alone, a single unperturbed settlement, fixed-depth search,
+a wrong transition model and an independent quality measure. A supplied transition
+model carries information a learner may not have; count it in comparisons.
 
 ## Reading its own activity
 
@@ -376,41 +463,46 @@ abstains when confidence rests below a validation-chosen threshold.
 AUROC for predicting errors, and a frozen monitor. Compare with the softmax margin
 of a conventional classifier.
 
-## Rehearse, select, revise
+## Expectations as seams
 
-For generative output, settle several candidates from the same context in separate
-batch rows, each with bounded random drive on latent owners. Score the candidates
-with an explicit critic and commit the best. Records are written only from the
-committed output.
+Statistics learned over many experiences, such as which chord follows which, can
+become seams. Count transitions, turn each row into centered log probabilities,
+and use them as fixed seams from context-cue owners to expectation owners. Bridge
+the expectation owners into the intention owners. The current context drives its
+cue owner, and the expected continuations bias the joint settlement.
 
 ```python
 import numpy as np
 import cadence as cd
+from cadence.brains import couple
 
-wiring = cd.layered(4, 16, 4, density=1.0, seed=0)
-engine = cd.Settlement(wiring, cd.learning_rule())
-hidden, output = list(wiring.sets["hidden"]), list(wiring.sets["output"])
-rng = np.random.default_rng(0)
-
-def rehearse(context, critic, candidates=6, amplitude=0.3):
-    drive = np.repeat(context[None], candidates, axis=0)
-    drive[:, hidden] += amplitude * rng.standard_normal((candidates, len(hidden)))
-    state = engine.settle_batch(drive, steps=100, tolerance=1e-6)
-    scores = np.array([critic(row) for row in state.activation[:, output]])
-    return state.activation[scores.argmax(), output], scores
-
-context = np.zeros(wiring.n)
-context[list(wiring.sets["input"])] = [1.0, 0.0, 0.0, 1.0]
-choice, scores = rehearse(context, critic=lambda out: -float(np.abs(out - 0.2).sum()))
-print(scores.round(3))
+counts = np.array([[1, 8, 1], [1, 1, 8], [8, 1, 1]], float)  # observed transitions
+logp = np.log((counts + 0.5) / (counts + 0.5).sum(axis=1, keepdims=True))
+weights = np.clip(0.25 * (logp - logp.mean(axis=1, keepdims=True)), -1.2, 1.2)
+expectation = cd.Wiring.from_edges(
+    6, pre=np.repeat(np.arange(3), 3), post=np.tile(np.arange(3, 6), 3), sign=weights.ravel(),
+    sets={"cue": [0, 1, 2], "expected": [3, 4, 5]},
+)
+intention = cd.Wiring.from_edges(3, pre=[], post=[], sets={"next": [0, 1, 2]})
+brain = couple(
+    {"expectation": expectation, "intention": intention},
+    [("expectation", 3 + k, "intention", k, 0.35) for k in range(3)]
+    + [("intention", k, "expectation", 3 + k, 0.04) for k in range(3)],
+)
+engine = cd.Settlement(brain, cd.learning_rule(dt=1.0))
+drive = np.zeros(brain.n)
+drive[brain.sets["expectation/cue"][0]] = 2.5  # the current state is 0
+state = engine.settle(drive, steps=200, tolerance=1e-9)
+print(state.activation[list(brain.sets["intention/next"])].round(4))
 ```
 
-To revise a draft, re-imagine its weakest segment with more candidates and accept
-the replacement only when the score of the whole draft improves. A winner's
-advantage over the other candidates can narrow the next exploration amplitude.
+Encode relationships relative to the current context, such as intervals or
+key-relative chords, so one expectation serves every key or position. The same
+tables measure surprise, the negative log probability of what happened, which a
+critic or a valence can read. The tables keep no complete episode.
 
-**Check:** the critic's score and an independent quality measure, against a single
-unperturbed settlement and against a conventional sampler.
+**Check:** cutting the expectation bridges changes the intention owners, and
+held-out statistics are retained after every update.
 
 ## Signed feedback
 
@@ -428,7 +520,10 @@ if validation_loss(learner) > 1.01 * baseline:
 ```
 
 `drive`, `chosen`, `valence`, the replay set and `validation_loss` come from the
-application. Keep feedback at zero when nothing happened: a negative signal on
+application. A preference can instead teach [expectations](#expectations-as-seams):
+move the statistics touched by the rated output toward or away from what it
+contained, check held-out retention, and restore the previous tables when it
+drops. Exact outputs never enter that memory, and the trained seams stay unchanged. Keep feedback at zero when nothing happened: a negative signal on
 every quiet moment erodes seams.
 
 **Check:** retention on held-out data after each accepted update, and the count of
