@@ -86,3 +86,82 @@ The implementation has no energy-in-joules measurement. Timings include each
 training arm's validation passes and are ordinary CPU wall times. The benchmark
 is a small controlled text experiment, not a replacement for the larger R31/R32
 language evaluations.
+
+## Paired decoder follow-up
+
+`decoder.py` reconstructs the five validation-selected Echo checkpoints and
+checks exact replay of their validation scores. It compares a raw cosine cache
+read as positive output current, including the second settling pass and its
+feedback into Echo, with the same cache read as a probability mixture. Capacity
+is 128 and cache temperature is fixed at 0.1 for both arms. Amplitudes and output
+temperatures for injection, and mixture weights for probability readback, are
+chosen on validation. Even zero-current injection gets its second settling
+pass, exposing extra computation as a control. The new test excerpt starts at
+normalized character 31,000, disjoint from the first comparison's excerpt.
+These are different experiments and their test scores must not be pooled.
+
+The follow-up retains full float32 test probability vectors, the reconstructed
+checkpoints, all calibration outcomes, and a recursive source snapshot.
+`decoder.py --verify` checks source and probability hashes, normalization,
+selection and every test metric. `archive.py --verify` additionally verifies the
+complete archive. The archived decoder includes its originally read,
+otherwise-unused first test excerpt in the archive manifest; no original frozen
+file was replaced.
+
+`uniform_control.py` reads the same saved checkpoints and compares a calibrated
+mixture with the uniform frequency of the same preceding 128 observed tokens.
+It performs no training and obtains no content keys. The control binds both the
+checkpoint and the upstream probability artifact hashes, confirms validation
+replay, and independently recomputes its test distribution from the stored base
+predictions and causal token counts. Its source archive contains the full
+library; the upstream checkpoint/probability files remain in the adjacent
+`decoder/` result directory, referenced by hash.
+
+The [paired comparison receipt](runs/decoder_comparison/receipt.json) records
+the following held-out bits per character. Each seed scores the same 9,744
+characters; SD is the sample standard deviation across five initializations,
+not uncertainty across books. Lower is better.
+
+| Readout | Mean bpc | Sample SD |
+| --- | ---: | ---: |
+| Base Echo | 3.637577820 | 0.091145308 |
+| Positive output current | 3.640991449 | 0.075042154 |
+| Uniform prior-token frequency | 3.637681050 | 0.082647330 |
+| Content-based probability mixture | 3.568660021 | 0.079941144 |
+
+Positive paired differences below favor the content-based probability mixture.
+
+| Seed | Base minus content | Current minus content | Uniform minus content |
+| --- | ---: | ---: | ---: |
+| 0 | 0.073343039 | 0.081969738 | 0.065091335 |
+| 1 | 0.054291248 | 0.028126955 | 0.064906157 |
+| 2 | 0.062836409 | 0.107097149 | 0.070406766 |
+| 3 | 0.063772678 | 0.090507507 | 0.065516839 |
+| 4 | 0.090345621 | 0.053955793 | 0.079184049 |
+| Mean | 0.068917799 | 0.072331429 | 0.069021029 |
+| Sample SD | 0.013748871 | 0.031319409 | 0.006120892 |
+
+All five pairs favor probability readback over both current injection and
+uniform recent-token frequency. Thus the benefit here depends on content
+selection and its readout, rather than only recent character frequencies.
+This isolates a useful decoder pattern on one excerpt; it does not establish
+an advantage over the MLPs evaluated on the primary experiment's different
+excerpt. Reconstructed validation scores match their original values exactly
+in every seed.
+
+```sh
+PYTHONPATH=src python experiments/sequence_readback/decoder.py \
+  --verify experiments/sequence_readback/runs/decoder/receipt.json
+PYTHONPATH=src python experiments/sequence_readback/archive.py \
+  experiments/sequence_readback/runs/decoder/receipt.json --verify
+PYTHONPATH=src python experiments/sequence_readback/uniform_control.py \
+  --verify experiments/sequence_readback/runs/decoder_uniform/receipt.json
+PYTHONPATH=src python experiments/sequence_readback/summarize_decoder.py --verify
+```
+
+To execute new runs, omit `--verify` and supply a fresh `--output` directory.
+Run the decoder first; `uniform_control.py --decoder <decoder-output>` can then
+consume its saved checkpoints and probabilities. The current decoder defaults
+to the committed five-seed confirmation receipt, which fixes the reconstruction
+schedule before the new test excerpt is scored. This tests a reader repair, not
+original author training with an active notebook or general language ability.

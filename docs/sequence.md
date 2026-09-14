@@ -23,7 +23,10 @@ returns `SequenceRead(value, entropy, maximum_weight, entries)` without changing
 state. `observe(features, values)` writes an association and updates its running
 feature mean. Both stored raw features and the current cue are normalized in
 the same coordinate system when queried. `center_rate=0` selects ordinary
-uncentered cosine attention.
+uncentered cosine attention. Scaled centering and unit norms keep opposite
+large finite cues representable; softmax subtracts the maximum cosine before
+dividing by temperature, so read probabilities remain finite even at a very
+small positive temperature.
 
 ```python
 from cadence.sequence import SequenceCache
