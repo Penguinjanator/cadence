@@ -251,12 +251,12 @@ class PatternSeparator:
     """Pattern separation: expand a key into a wider random code and keep the strongest winners.
 
     ``inputs`` key neurons project through a fixed random matrix onto ``expansion`` code
-    neurons; the ``winners`` largest positive entries stay and the rest are zero. Correlated
-    keys land on codes that share few winners, so their records interfere little, and codes
-    with disjoint winners do not interfere at all: the interference of a write at one key on
-    the read at another is their dot product. ``center`` > 0 keeps a running mean of the keys
-    seen by ``observe`` (forgetting factor ``center``) and subtracts it first, removing what
-    every key shares. The dentate gyrus does this for the hippocampus.
+    neurons; the ``winners`` largest positive entries stay and the rest are zero. Expansion
+    can reduce overlap between correlated keys; it does not guarantee separate codes.
+    Codes with disjoint winners do not interfere: a delta write changes another key's read
+    in proportion to their dot product. ``center`` > 0 keeps a running mean of the keys
+    seen by ``observe`` (forgetting factor ``center``) and subtracts it first. Updating that
+    mean can move the code of a previously stored key.
     """
 
     inputs: int
@@ -281,8 +281,11 @@ class PatternSeparator:
         self.mean = np.zeros(self.inputs)
 
     def habituate(self, keys: np.ndarray) -> None:
-        """Set the running mean to the mean of ``keys``: adapt to the environment's statistics
-        before storing anything, so that later slow updates do not move the codes."""
+        """Initialize the running mean from ``keys`` before storing records.
+
+        With positive ``center``, later learning calls continue updating this mean;
+        initialization does not freeze the codes used to address stored records.
+        """
         x = np.asarray(keys, dtype=float)
         if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all() or not len(x):
             raise ValueError(f"keys must be a finite nonempty (batch, {self.inputs}) array")

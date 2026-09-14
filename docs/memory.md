@@ -119,8 +119,9 @@ A write at key `k` moves the read at key `q` by the dot product `q · k` times t
 so records interfere exactly as much as their keys overlap, and keys with disjoint supports
 do not interfere at all. `PatternSeparator` turns correlated keys into sparse codes before
 the record sees them: a fixed random projection onto a wider range, then the strongest
-`winners` entries kept and the rest set to zero. `center` subtracts a running mean of the
-observed keys first, which removes what every key shares.
+positive `winners` entries kept and the rest set to zero. This can reduce overlap but
+does not guarantee different codes. `center` subtracts a running mean of observed keys
+first; it does not learn which differences matter for a task.
 
 ```python
 import numpy as np
@@ -133,15 +134,16 @@ memory = cd.FastSynapses(pre=key_neurons, post=value_neurons, rule="delta", sepa
 ```
 
 `habituate` sets the running mean from a sample of the environment's keys before anything
-is stored; the slow `center` then tracks it. A fast running mean moves the codes between a
-write and its read, which is the one way to lose a record.
+is stored. With positive `center`, later writes continue updating that mean. Even slow
+updates can move the codes between a write and its read; habituation does not freeze
+addresses. Decay, interfering writes and insufficient code rank can also lose records.
 
 The record then has `expansion` rows per stream instead of `inputs`, which is the price:
 storage grows with the code, capacity grows with it too (exact storage is bounded by the
 code width, not the key width). Sixteen keys at cosine 0.9 that a plain delta record
 holds at a third are held exactly after separation; see `examples/certified_memory.py`
-and the certificate guide. The dentate gyrus expands and sparsifies entorhinal input before
-the hippocampus stores it for the same reason.
+and the certificate guide. This is a software pattern-separation mechanism; the
+[biological function map](biology.md) distinguishes inspiration from implementation.
 
 `SynapticMemory` supports the same expanded write/read coordinates, but requires
 `separator.center=0`: moving the separator's mean would move the address of persistent
