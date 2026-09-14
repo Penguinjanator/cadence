@@ -15,6 +15,16 @@ Biological names throughout, brain regions, and a generic brain.
   mean removed first. Correlated keys land on nearly disjoint codes and stop interfering.
   Documented in `docs/memory.md`; `examples/certified_memory.py` shows both.
 
+- `cadence.atlas_of(brain)` / `build_atlas(connectome)`: the brain atlas, one integrated
+  layout of the whole connectome. Regions (the populations) are placed by a force layout of
+  the region graph, neurons inside a region by a whitened spectral embedding of their
+  synapses, sheets by declared shapes, or by supplied coordinates. `atlas.frames` quantises
+  recorded settlings, `atlas.page` writes a self-contained page, and `brain_scan_script()`
+  returns the shipped WebGL2 renderer (`brain_scan.js`): tissue in region colours whose
+  brightness is the activation, a hot scan-coloured glow where neurons change, synapses that
+  light up as their presynaptic neuron changes, messages travelling along synapses, and an
+  EEG-style montage of every region. Documented in `docs/pages.md`;
+  `examples/brain_scan_page.py` writes a page that detunes and settles a certified brain live.
 - `GenericBrain.step` coordinates ongoing perception, previous-action feedback, optional
   current demonstrations and the next action, without a training/inference mode switch.
 - `SynapticMemory` adds shared persistent synapses and fading per-stream residuals.

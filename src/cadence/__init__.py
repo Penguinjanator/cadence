@@ -23,6 +23,7 @@ produced it.
 from __future__ import annotations
 
 from . import regions
+from .atlas import Atlas, atlas_of, brain_scan_script, build_atlas
 from .brain import Brain, BrainState, Equilibrium, Nudge, available_backends
 from .certificate import Certificate, certificate, lipschitz_constant, row_mass
 from .checkpoint import load, save
@@ -47,6 +48,10 @@ from .regions import Region
 from .stream import Afterglow, Echo, FastSynapses, PatternSeparator, Trace, stateful
 
 __all__ = [
+    "Atlas",
+    "atlas_of",
+    "build_atlas",
+    "brain_scan_script",
     "Certificate",
     "certificate",
     "lipschitz_constant",

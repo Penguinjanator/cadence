@@ -11,6 +11,7 @@ Install Cadence, then run any tutorial from this checkout with
 | [coupled_brain.py](coupled_brain.py) | `assemble` connects sensory and motor regions; `equilibrate` checks the joint equations within a bounded work budget. |
 | [deliberation.py](deliberation.py) | `imagine` compares isolated futures using a learned terminal evaluator. A wrong-world-model control fails despite successful search. Only real outcomes teach. |
 | [brain_patterns.py](brain_patterns.py) | `ActivityMonitor` reads uncertainty and requests deeper bounded, pruned adversarial imagination. |
+| [brain_scan_page.py](brain_scan_page.py) | The standard brain view: `atlas_of` lays the whole connectome out, `atlas.page` writes one page that replays recorded settlings and detunes and settles the same brain live, every neuron and synapse in view. |
 | [certified_memory.py](certified_memory.py) | `certificate` reads the contraction rate and bounds the remaining settling error; `PatternSeparator` keeps correlated keys from interfering in a delta-rule record. |
 | [worked_update.py](worked_update.py) | Inspect one local contrastive synaptic update and its teaching signal. |
 | [two_blobs.py](two_blobs.py) | Minimal supervised example with held-out evaluation. |

@@ -33,6 +33,7 @@ jobs:
           python examples/generic_brain.py
           python examples/deliberation.py
           python examples/certified_memory.py
+          python examples/brain_scan_page.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:
