@@ -71,34 +71,56 @@ backward computation graph. The equilibrium-gradient interpretation requires
 symmetric effective recurrent weights, converged phases, and a smooth stable
 equilibrium branch. [Learning](docs/learning.md) gives the equations and limits.
 
-## Examples with controls
+## Examples
 
-Open the [live composite brains](https://github.com/muellerberndt/cadence-examples#live-composite-brains).
-All five demos run locally in your browser with bundled assets; no GPU, account,
-or training run is needed to start. Each explains what is supplied, what learns,
-and what its comparison measures. A shared MRI-inspired circuit view shows real
-activity, slowed repair iterations, recurrent decay probes and memory writes.
+**Feed a worm, teach a mouse, or watch an arm draw.** The five
+[interactive websites](https://github.com/muellerberndt/cadence-examples#launch-any-demo)
+run locally in your browser with bundled assets. No GPU, account or training run
+is needed to start. Every demo includes an MRI-inspired view of its actual patch
+circuit: live activity, slowed repair iterations, transient input-release probes
+and memory writes.
 
-| Demo | What to try | What the control tests |
-|---|---|---|
-| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Start with three taught tasks, teach a fourth, and transfer it to a new maze | One-write task revision and retention; navigation against a frozen route and a BFS replanner |
-| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Draw an outline, upload an image, and disturb a joint | Joint visual/motor settlement with pose feedback enabled versus disabled |
-| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Watch learning on contact, then change the nectar | Residual memory versus online MLP updates; live agents collect different experiences |
-| [C. elegans circuit](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Paint food and walls, then inspect the public chemical graph | Reusing a supplied recurrent rule versus a bundled trained MLP surrogate and fixed unrolling |
-| [Changing memory](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Teach and revise records, run a stream, and increase key similarity | Identical observation streams for residual memory, MLP update budgets, and dictionary lookup |
+| Main example | What it does | Cadence circuit size | Biological size reference |
+|---|---|---|---|
+| [C. elegans habitat](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#food-and-walls-in-the-worm-habitat) | Detects local food cues, navigates around walls and consumes food patches on contact. Draw barriers, place food, erase a passage, or inspect and perturb the chemical circuit. | **297 patches · 3,604 seams**; supplied weights, no learned entries | Drawn from C. elegans anatomy; the adult hermaphrodite has **302 neurons** in its complete nervous system |
+| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Starts with cheese, home and water tasks. Teach a new destination, revise it without erasing other distinct cues, and carry the lesson into another maze. | **126 active ports / 259 allocated slots · 274 seams** in the starting maze; **32 adaptive entries** | Hundreds of software slots; C. elegans' **302-neuron** nervous system is a count reference |
+| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Sketches built-in outlines or edges from your uploaded image. Disturb a joint and watch visual/motor feedback correct the movement. | **4 patches · 8 directed seams**; geometry-derived weights, no learned entries | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
+| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Visits flowers, learns their nectar value on contact and updates its preferences when you change the nectar. Move flowers to change its world. | **12 memory ports · 32 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
+| [Changing memory](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Learns a key/value association in one write, replaces outdated records and shows retention or interference as keys become more similar. Compare online MLP updates on the same observations. | **12 memory ports · 32 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
 
-The [demo guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase)
-explains the advantages and boundaries: immediate record revision, reuse of a
-known circuit under interventions, and continuous body feedback. These are
-specific task comparisons; classical lookup, graph solvers and feedback
-controllers are relevant alternatives too. The worm uses anatomical connectivity
-with imposed dynamics, not a validated simulation of the complete animal.
+**Read the counts:** patches/ports hold state; seams carry weighted messages;
+adaptive entries are the values changed by learning. Active means unmasked,
+not necessarily nonzero at that instant. These are circuit counts,
+not total simulator parameters. The mouse allocates 247 spatial slots plus 12
+memory ports; its starting maze masks 133 wall slots and has 242 spatial seams
+plus 32 memory seams. Editing or regenerating the maze changes the active counts.
+Memory seams count all matrix entries, including zeros. Body rules, environmental
+fields and comparison MLPs are outside these circuit counts.
 
-Launch a website from the examples checkout with `python serve.py mouse`,
-`python serve.py eye-arm`, `python serve.py fly`, `python serve.py worm`, or
-`python serve.py memory`. Each command opens the browser on an available local
-port. The worm habitat lets you place food, draw walls and inspect the circuit;
-its body, sensory adapter and contact consumption are supplied rules.
+The biological references count neurons, not equivalent computing power. An adult
+C. elegans hermaphrodite has 302 neurons, including 20 in its pharyngeal feeding
+network ([WormAtlas](https://www.wormatlas.org/hermaphrodite/nervous/mainframe.htm)).
+A software patch is not a biological neuron; the smaller examples have no claimed
+whole-animal brain equivalent. The worm habitat uses supplied diffusion, heading,
+body movement and contact-consumption rules, rather than validated animal
+locomotion or digestion. The arm uses supplied geometry and image edge extraction.
+
+Launch any website from the examples checkout:
+
+```bash
+python serve.py worm
+python serve.py mouse
+python serve.py eye-arm
+python serve.py fly
+python serve.py memory
+```
+
+Each command opens the browser on an available local port. The
+[demo guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase)
+explains why Cadence fits each task and the measured comparison: dictionary and
+MLP memory controls, a circuit surrogate and tied recurrence, maze replanning,
+and drawing with readback enabled or disabled. These are specific task results,
+not a general efficiency theorem.
 
 ## Check your result
 
