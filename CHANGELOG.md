@@ -14,6 +14,8 @@ Biological names throughout, brain regions, and a generic brain.
 - Float64 Torch residual checks can stay on device; float32 keeps the independent
   host reference. Transport avoids unnecessary accelerator synchronizations.
   `ep_structure` checks effective free/free symmetry under declared fixed inputs.
+- Torch and MLX factor small phase contrasts before matrix multiplication to
+  reduce cancellation; Torch uses the same identity for per-stream reward traces.
 - `layered(skip=True, skip_init=0.0)` adds a learnable direct sensory-to-motor
   route with unchanged initial predictions; the existing initializer is the default.
 - Discrete reward eligibility now differentiates the sampled softmax policy even
@@ -33,7 +35,8 @@ Biological names throughout, brain regions, and a generic brain.
   certified below a row mass of 2. Documented in `docs/certificate.md`.
 - `PatternSeparator` and `FastSynapses(separator=...)`: keys pass through a fixed random
   expansion and a k-winners-take-all before the record sees them, with an optional running
-  mean removed first. Correlated keys land on nearly disjoint codes and stop interfering.
+  mean removed first. Expansion can reduce overlap between correlated keys;
+  exact noninterference requires disjoint supports and is not guaranteed by expansion.
   Documented in `docs/memory.md`; `examples/certified_memory.py` shows both.
 
 - `GenericBrain.step` coordinates ongoing perception, previous-action feedback, optional
