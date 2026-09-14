@@ -38,7 +38,12 @@ class SynapticMemory(FastSynapses):
             raise ValueError("SynapticMemory uses normalized delta plasticity")
         if not np.isfinite(self.consolidation) or not 0 <= self.consolidation <= 1:
             raise ValueError("consolidation must lie in [0, 1]")
-        self.consolidated = np.zeros((len(self.pre), len(self.post)))
+        if self.separator is not None and self.separator.center != 0:
+            raise ValueError(
+                "persistent memory requires a fixed separator coordinate system; "
+                "set separator.center=0 and apply any fixed centering to the input"
+            )
+        self.consolidated = np.zeros((self.key_width, len(self.post)))
 
     def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
         """Forget transient residuals; persistent synapses survive episode/batch changes."""
@@ -102,7 +107,10 @@ class SynapticMemory(FastSynapses):
         if not len(rows):
             self.strength, self.mass = strength, mass
             return
-        cue = self._delta_unit(key[rows])
+        cue = key[rows]
+        if self.separator is not None:
+            cue = self.separator.code(cue)
+        cue = self._delta_unit(cue)
         mask = observed[rows]
         # Clip before multiplying to avoid overflow for large finite salience.
         rate = self.consolidation + np.minimum(1.0, self.consolidation * salience[rows])

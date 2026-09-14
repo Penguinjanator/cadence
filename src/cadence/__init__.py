@@ -27,6 +27,7 @@ from .brain import Brain, BrainState, Equilibrium, Nudge, available_backends
 from .certificate import Certificate, certificate, lipschitz_constant, row_mass
 from .checkpoint import load, save
 from .connectome import Connectome
+from .content_memory import ContentMemory
 from .custody import Source, fetch, manifest
 from .generic import GenericBrain
 from .genome import Genome, Projection, develop, evolve
@@ -44,9 +45,12 @@ from .receipts import Receipt, canonical_json
 from .recording import SettlementRecord, record_settlements
 from .reference import conformance
 from .regions import Region
+from .replay import ReservoirReplay
 from .stream import Afterglow, Echo, FastSynapses, PatternSeparator, Trace, stateful
 
 __all__ = [
+    "ContentMemory",
+    "ReservoirReplay",
     "Certificate",
     "certificate",
     "lipschitz_constant",

@@ -11,6 +11,11 @@ shared synapses and fading per-stream residuals. New generic brains with `episod
 use this consolidation rule. The `FastSynapses` API below retains its original independent
 stream behavior and immediate residual-write rule.
 
+For retrieval from observed content, [competitive content memory](content_memory.md) learns
+bounded prototypes and selects one by cue similarity. For retention of past supervised
+tasks in a single output head, [explicit replay](replay.md) stores a declared reservoir of
+past feature/label pairs. Both add counted memory and neither learns a general address policy.
+
 ## One correction
 
 For a unit key `k`, value `v`, and matrix `M`:
@@ -137,3 +142,9 @@ code width, not the key width). Sixteen keys at cosine 0.9 that a plain delta re
 holds at a third are held exactly after separation; see `examples/certified_memory.py`
 and the certificate guide. The dentate gyrus expands and sparsifies entorhinal input before
 the hippocampus stores it for the same reason.
+
+`SynapticMemory` supports the same expanded write/read coordinates, but requires
+`separator.center=0`: moving the separator's mean would move the address of persistent
+records. If centering is needed, apply one fixed training-fitted transform to both inputs
+and queries. This protects a coordinate convention; it does not prevent interference
+between overlapping keys or representation drift in a separately trained encoder.
