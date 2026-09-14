@@ -157,9 +157,9 @@ class Nudge:
             out = np.zeros_like(s)
             for group in _softmax_groups(self):
                 z = s[:, group] / self.softmax_temperature
-                z = z - z.max(axis=1, keepdims=True)
+                z -= z.max(axis=1, keepdims=True)
                 p = np.exp(z)
-                p = p / p.sum(axis=1, keepdims=True)
+                p /= p.sum(axis=1, keepdims=True)
                 out[:, group] = self.beta * (full_target[:, group] - p)
         if self.weight is not None:
             if np.asarray(self.weight).shape != (len(s),):
@@ -811,7 +811,7 @@ class Brain:
                 total += nudge.drive(s)
             total -= v
             total *= neuron_model.dt
-            v = v + total  # neuron-local update: v <- v + dt (-v + total)
+            v += total  # neuron-local update: v <- v + dt (-v + total)
             if masked:
                 v *= keep
             previous = s
@@ -819,7 +819,7 @@ class Brain:
             if masked:
                 s *= keep
             if adapt is not None:
-                a = a + (s - a) / adapt.tau_steps
+                a += (s - a) / adapt.tau_steps
             if traj is not None:
                 traj[t] = s
             taken = t + 1
@@ -986,7 +986,7 @@ class _TorchKernel:
         r = torch.sigmoid(neuron_model.slope * (v - neuron_model.threshold)) - rest
         s = torch.relu(r) / (1.0 - rest)
         if neuron_model.leak:
-            s = s + neuron_model.leak * torch.clamp(r, max=0.0) / rest
+            s += neuron_model.leak * torch.clamp(r, max=0.0) / rest
         return s
 
     def contrast_tensors(self, s_plus: Any, s_minus: Any) -> tuple[Any, Any]:
@@ -1079,7 +1079,7 @@ class _TorchKernel:
                     synaptic_input = zeros.index_add_(1, self.post, s[:, self.pre] * self.w)
                 total = synaptic_input + d + self.bias
                 if adapt is not None:
-                    total = total - adapt.strength * a
+                    total -= adapt.strength * a
                 if nudge is not None:
                     if nudge.softmax_temperature is None:
                         push = nudge.beta * (target - s) * mask
@@ -1090,8 +1090,8 @@ class _TorchKernel:
                             p = torch.softmax(s[:, members] / nudge.softmax_temperature, dim=1)
                             push[:, members] = nudge.beta * (target[:, members] - p)
                     if weight is not None:
-                        push = push * weight
-                    total = total + push
+                        push *= weight
+                    total += push
                 v = (v + neuron_model.dt * (-v + total)) * k
                 previous = s
                 s = self._activation(v) * k
