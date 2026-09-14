@@ -107,6 +107,9 @@ was taken. Do not advance the live trace with shuffled training rows or targets.
 Reset transient state between episodes while preserving learned parameters.
 `Learner.save` does not save separately owned traces or experience buffers.
 
+For comparing candidate actions before acting, see the tested
+[deliberation pattern](deliberation.md).
+
 ## Several learners in one net
 
 Use separate `Learner` objects with `trainable_overlaps` and

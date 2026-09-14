@@ -106,3 +106,7 @@ Cadence grew from connectome and observer-patch experiments. Related methods inc
 [delta-rule linear transformers](https://arxiv.org/abs/2406.06484).
 
 MIT licensed.
+
+Compare predicted outcomes before acting with the tested
+[deliberation pattern](docs/deliberation.md): independent imagined branches,
+a learned evaluator, and feedback from real outcomes.
