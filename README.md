@@ -33,7 +33,8 @@ reward learning let a controller carry experience into its next decision.
 These are useful design choices, not a universal speed or capability advantage.
 Recurrent networks and memory-augmented transformers can also carry state and plan.
 Cadence makes the state, feedback and update rules explicit; performance needs a
-matched task, quality target and compute budget. [Comparison and limits](docs/concepts.md#compared-with-backprop-networks).
+matched task, quality target and compute budget. [Measured comparisons](docs/comparisons.md)
+and [architectural limits](docs/concepts.md#compared-with-backprop-networks).
 
 ## Install
 

@@ -53,3 +53,9 @@ names change when source bytes change, so an existing experiment bundle is never
 Timings are specific to the recorded hardware/software. No joules, CUDA performance,
 comparison against a conventional learner, or historical trained-checkpoint certificate
 is inferred from these receipts.
+
+A separate [isolated CUDA benchmark](device_energy/README.md) measures the same
+frozen runtime pair with long timed intervals and cumulative GPU energy counters.
+It reports raw device energy and an adjacent-idle subtraction separately, including
+the cold-residual regression under that subtraction. Its repetition boundary differs
+from the single-unit workstation timings above.

@@ -33,7 +33,7 @@ Records, traces and local learning keep what a task needs.
 
 ## Build and measure
 
-[Browser pages](pages.md) · [Backends and timing](backends.md) ·
+[Measured comparisons](comparisons.md) · [Browser pages](pages.md) · [Backends and timing](backends.md) ·
 [Protocols](protocols.md) · [Receipts](receipts.md) · [API reference](api.md)
 
 ## Examples
