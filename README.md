@@ -76,9 +76,9 @@ equilibrium branch. [Learning](docs/learning.md) gives the equations and limits.
 **Feed a worm, teach a mouse, or watch an arm draw.** The five
 [interactive websites](https://github.com/muellerberndt/cadence-examples#launch-any-demo)
 run locally in your browser with bundled assets. No GPU, account or training run
-is needed to start. Every demo includes an MRI-inspired view of its actual patch
-circuit: live activity, slowed repair iterations, transient input-release probes
-and memory writes.
+is needed to start. Every demo shows its actual patch circuit beside the body on
+desktop, grouped by function: activity, automatic repair cascades, transient
+input-release probes and memory writes. The layout stacks on mobile.
 
 | Main example | What it does | Cadence circuit size | Biological size reference |
 |---|---|---|---|

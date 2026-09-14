@@ -106,10 +106,16 @@ comparison. That comparison measures circuit responses, not foraging ability.
 
 ## Inspect the circuit
 
-All five websites include the same MRI-inspired schematic viewer. It plots
-actual owners, seams and activity, with slow numerical repair replay and observed
-associative-weight changes. An input-release probe exposes transient recurrent
-decay in an isolated copy. This diagnostic does not add behavioral short-term
+All five websites place the circuit beside the live body on desktop, with a
+stacked mobile layout. Actual owners and seams are grouped by function. Automatic
+replay reconstructs sampled settlements from captured inputs and couplings,
+slowing early repair steps and compressing later convergence. Body motion does
+not trigger a new cascade when the field stays unchanged. Observed associative
+weight changes have a separate plasticity view. Behavior badges label seeking,
+correction and positive outcomes; they do not measure feelings or chemicals.
+Violet repair trails fade as display history, not as controller memory. An
+input-release probe exposes transient recurrent decay in an isolated copy. This diagnostic does not add behavioral short-term
 memory to an application; use `Trace` or deliberately carried state where the
-task needs history. The visual layout is a metaphor, not anatomical reconstruction.
+task needs history. Supplied sensing, steering and geometry adapters are labeled
+separately from circuit owners.
 See the [viewer guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#read-the-brain-view).

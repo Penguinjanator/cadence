@@ -155,9 +155,12 @@ not neurotransmitter concentrations. A signed reward prediction error can serve
 as a modulatory learning signal without simulating dopamine chemistry. The current
 showcase does not expose dopamine, serotonin, glutamate or GABA concentration fields.
 
-The MRI-inspired silhouette is a layout metaphor. Real fMRI commonly measures
-blood-oxygen-related changes; PET investigates selected molecular targets with
-specific tracers. Neither is a generic live map of all neurotransmitters. See
+The viewer groups actual owners by computational function. Behavior badges label
+observed events such as food consumption or reaching a goal, not feelings.
+Its fading repair trails are display history; input-release probes show recurrent
+decay in an isolated copy. Neither adds behavioral short-term memory to a demo.
+Real fMRI commonly measures blood-oxygen-related changes; PET investigates
+selected molecular targets with specific tracers. Neither is a generic live map of all neurotransmitters. See
 [the viewer's imaging explanation and sources](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#brain-colors-and-neurotransmitters).
 
 ## Build a task from the map
