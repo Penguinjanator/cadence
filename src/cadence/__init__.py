@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from . import regions
 from .brain import Brain, BrainState, Equilibrium, Nudge, available_backends
+from .certificate import Certificate, certificate, lipschitz_constant, row_mass
 from .checkpoint import load, save
 from .connectome import Connectome
 from .custody import Source, fetch, manifest
@@ -43,9 +44,14 @@ from .receipts import Receipt, canonical_json
 from .recording import SettlementRecord, record_settlements
 from .reference import conformance
 from .regions import Region
-from .stream import Afterglow, Echo, FastSynapses, Trace, stateful
+from .stream import Afterglow, Echo, FastSynapses, PatternSeparator, Trace, stateful
 
 __all__ = [
+    "Certificate",
+    "certificate",
+    "lipschitz_constant",
+    "row_mass",
+    "PatternSeparator",
     "ActorCritic",
     "ActorCriticConfig",
     "Valence",

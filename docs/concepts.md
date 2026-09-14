@@ -61,6 +61,9 @@ reset state at independent episode boundaries. A unique attracting equilibrium
 under a fixed drive erases its initial condition; keeping history then requires
 an explicit record, a trace, or a drive that carries history.
 
+
+When every neuron's absolute incoming effective weight sum is below `1 / L`, with `L` the largest slope of the activation, one settling step is a contraction and the [certificate](certificate.md) bounds the remaining distance to the unique equilibrium from the last step's movement. `cd.certificate(brain)` reports it.
+
 ## Activation and adaptation
 
 `NeuronModel` rebases a sigmoid so that zero potential emits zero. With zero

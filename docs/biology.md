@@ -26,6 +26,8 @@ Examples refer to the [public websites](https://floatingpragma.io/cadence-exampl
 | `Learner` / `Nudge` | Synaptic plasticity and instructive feedback | Local free/nudged endpoint contrasts under documented assumptions |
 | `Trace` / `Afterglow` / `Echo` | Fading recent activity | One leaky stored value per source neuron and stream; it enters later as drive |
 | `FastSynapses` | Rapid associative memory | A bounded key/value matrix with Hebbian or delta writes; not hippocampal anatomy |
+| `PatternSeparator` | Pattern separation (dentate gyrus, mushroom body) | A fixed random expansion and a winners-take-all before a record; habituation removes the shared part of the cues |
+| `certificate` | None; a checkable condition | The contraction rate from the row mass and the neuron's slope: when settling is certified and how far it can be from the equilibrium |
 | `SynapticMemory` | Persistent synaptic change | Shared slow weights and fading per-stream residuals; repetition/salience consolidate actual observed values |
 | `GenericBrain.step` | Ongoing perception, feedback and action | One interaction clock coordinating neuronal settling and slower plasticity; no training-mode switch |
 | `ActorCritic` | Reward-guided action and eligibility | Sampled actions, per-stream traces and a linear value readout outside the connectome |

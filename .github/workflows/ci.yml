@@ -32,6 +32,7 @@ jobs:
           python examples/coupled_brain.py
           python examples/generic_brain.py
           python examples/deliberation.py
+          python examples/certified_memory.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:

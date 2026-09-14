@@ -107,3 +107,33 @@ and a trained transformer on identical streams. Its key/value parsing is supplie
 all methods. Count mutable matrix storage as well as trained parameters. Fixed storage
 is a capacity tradeoff: contradictory associations, nearly parallel keys, and more
 independent values than the key rank cannot all be represented exactly.
+
+## Pattern separation
+
+A write at key `k` moves the read at key `q` by the dot product `q · k` times the correction,
+so records interfere exactly as much as their keys overlap, and keys with disjoint supports
+do not interfere at all. `PatternSeparator` turns correlated keys into sparse codes before
+the record sees them: a fixed random projection onto a wider range, then the strongest
+`winners` entries kept and the rest set to zero. `center` subtracts a running mean of the
+observed keys first, which removes what every key shares.
+
+```python
+import numpy as np
+import cadence as cd
+
+key_neurons, value_neurons = np.arange(32), np.arange(32, 40)
+sep = cd.PatternSeparator(inputs=32, expansion=1024, winners=8, seed=0, center=0.99)
+sep.habituate(np.random.default_rng(0).standard_normal((256, 32)))  # the environment's keys
+memory = cd.FastSynapses(pre=key_neurons, post=value_neurons, rule="delta", separator=sep)
+```
+
+`habituate` sets the running mean from a sample of the environment's keys before anything
+is stored; the slow `center` then tracks it. A fast running mean moves the codes between a
+write and its read, which is the one way to lose a record.
+
+The record then has `expansion` rows per stream instead of `inputs`, which is the price:
+storage grows with the code, capacity grows with it too (exact storage is bounded by the
+code width, not the key width). Sixteen keys at cosine 0.9 that a plain delta record
+holds at a third are held exactly after separation; see `examples/certified_memory.py`
+and the certificate guide. The dentate gyrus expands and sparsifies entorhinal input before
+the hippocampus stores it for the same reason.

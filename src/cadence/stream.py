@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -246,6 +247,76 @@ class Afterglow(Trace):
 
 
 @dataclass
+class PatternSeparator:
+    """Pattern separation: expand a key into a wider random code and keep the strongest winners.
+
+    ``inputs`` key neurons project through a fixed random matrix onto ``expansion`` code
+    neurons; the ``winners`` largest positive entries stay and the rest are zero. Correlated
+    keys land on codes that share few winners, so their records interfere little, and codes
+    with disjoint winners do not interfere at all: the interference of a write at one key on
+    the read at another is their dot product. ``center`` > 0 keeps a running mean of the keys
+    seen by ``observe`` (forgetting factor ``center``) and subtracts it first, removing what
+    every key shares. The dentate gyrus does this for the hippocampus.
+    """
+
+    inputs: int
+    expansion: int
+    winners: int
+    seed: int = 0
+    center: float = 0.0
+    projection: np.ndarray = field(init=False, repr=False)
+    mean: np.ndarray = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        for name in ("inputs", "expansion", "winners"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+                raise ValueError(f"{name} must be a positive integer")
+        if self.winners > self.expansion:
+            raise ValueError("winners must not exceed the expansion")
+        if not 0 <= self.center < 1:
+            raise ValueError("center lies in [0, 1)")
+        rng = np.random.default_rng(self.seed)
+        self.projection = rng.standard_normal((self.inputs, self.expansion)) / np.sqrt(self.inputs)
+        self.mean = np.zeros(self.inputs)
+
+    def habituate(self, keys: np.ndarray) -> None:
+        """Set the running mean to the mean of ``keys``: adapt to the environment's statistics
+        before storing anything, so that later slow updates do not move the codes."""
+        x = np.asarray(keys, dtype=float)
+        if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all() or not len(x):
+            raise ValueError(f"keys must be a finite nonempty (batch, {self.inputs}) array")
+        self.mean = x.mean(axis=0)
+
+    def code(self, key: np.ndarray, learn: bool = False) -> np.ndarray:
+        """The sparse code of ``(batch, inputs)`` keys: ``(batch, expansion)``, ``winners``
+        nonzero entries per row at most. ``learn`` updates the running mean (writes only)."""
+        x = np.asarray(key, dtype=float)
+        if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all():
+            raise ValueError(f"key must be a finite (batch, {self.inputs}) array")
+        if self.center > 0.0:
+            if learn and len(x):
+                self.mean = self.center * self.mean + (1.0 - self.center) * x.mean(axis=0)
+            x = x - self.mean
+        drive = np.maximum(x @ self.projection, 0.0)
+        if self.winners >= self.expansion:
+            return np.asarray(drive)
+        keep = np.argpartition(-drive, self.winners - 1, axis=1)[:, : self.winners]
+        out: np.ndarray = np.zeros_like(drive)
+        np.put_along_axis(out, keep, np.take_along_axis(drive, keep, axis=1), axis=1)
+        return np.asarray(out)
+
+    def to_dict(self) -> dict[str, float | int]:
+        return {
+            "inputs": self.inputs,
+            "expansion": self.expansion,
+            "winners": self.winners,
+            "seed": self.seed,
+            "center": self.center,
+        }
+
+
+@dataclass
 class FastSynapses:
     """A bounded associative memory between two ranges, one matrix per stream.
 
@@ -270,6 +341,7 @@ class FastSynapses:
     normalize: bool = False  # unit keys and cue, the read divided by the decayed count of writes
     replace: bool = False  # a write clears what its active pre neurons held (a slot; one-hot keys)
     rule: str = "hebb"  # "delta": unit keys, residual writes, no count-averaged read
+    separator: PatternSeparator | None = None  # pattern separation of the keys before use
     strength: np.ndarray = field(init=False)
     mass: np.ndarray = field(init=False)  # (batch,) the decayed count of writes, for ``normalize``
     writes: int = 0
@@ -303,15 +375,22 @@ class FastSynapses:
                 raise ValueError(
                     "delta already normalises keys; normalize/replace are Hebbian modes"
                 )
+        if self.separator is not None and self.separator.inputs != len(self.pre):
+            raise ValueError("the separator's inputs must equal the number of pre neurons")
         self._pre_columns = columns(self.pre)
         self._post_columns = columns(self.post)
-        self.strength = np.zeros((0, len(self.pre), len(self.post)))
+        self.strength = np.zeros((0, self.key_width, len(self.post)))
         self.mass = np.zeros(0)
+
+    @property
+    def key_width(self) -> int:
+        """Rows of the strength matrix: the code width with a separator, else the pre count."""
+        return self.separator.expansion if self.separator is not None else int(len(self.pre))
 
     def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
         """Clear all streams, or only the selected streams at episode boundaries."""
         if rows is None or len(self.strength) != batch:
-            self.strength = np.zeros((batch, len(self.pre), len(self.post)))
+            self.strength = np.zeros((batch, self.key_width, len(self.post)))
             self.mass = np.zeros(batch)
         else:
             self.strength[rows] = 0.0
@@ -351,6 +430,8 @@ class FastSynapses:
         cue = self._port(key, len(self.pre), "key")
         if len(self.strength) != len(cue):
             self.reset(len(cue))
+        if self.separator is not None:
+            cue = self.separator.code(cue)
         if self.rule == "delta":
             cue = self._delta_unit(cue)
         elif self.normalize:
@@ -387,6 +468,8 @@ class FastSynapses:
         if not len(rows):
             return
         a, b = key[rows], value[rows]
+        if self.separator is not None:
+            a = self.separator.code(a, learn=True)
         if self.rule == "delta":
             a = self._delta_unit(a)
         elif self.normalize:
@@ -432,7 +515,7 @@ class FastSynapses:
             np.zeros(len(s), dtype=bool) if write is None else write,
         )
 
-    def to_dict(self) -> dict[str, float | int | str]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "pre": int(len(self.pre)),
             "post": int(len(self.post)),
@@ -442,5 +525,6 @@ class FastSynapses:
             "normalize": self.normalize,
             "replace": self.replace,
             "rule": self.rule,
+            "separator": None if self.separator is None else self.separator.to_dict(),
             "writes": self.writes,
         }

@@ -386,6 +386,37 @@ a rhythm region. Recall can enter a memory range of a larger brain as drive.
 **Check:** accuracy against lag or span length, with a context-only control that
 has no clock-keyed store.
 
+## Records addressed by sparse codes
+
+A write at one key moves the read at another by their dot product, so a record addressed by
+correlated cues drifts with every revision. Pass the cues through a `PatternSeparator`
+first: a fixed random expansion onto a wider range, the strongest few entries kept, the
+running mean of the environment's cues removed. Codes that share no winners do not interfere
+at all, and exact storage is bounded by the code width rather than the cue width.
+
+```python
+import numpy as np
+import cadence as cd
+
+rng = np.random.default_rng(0)
+shared = rng.standard_normal(32)
+cues = 0.95 * shared + 0.3 * rng.standard_normal((64, 32))       # 64 cues, strongly correlated
+background = 0.95 * shared + 0.3 * rng.standard_normal((256, 32))  # what the environment looks like
+values = np.eye(8)[rng.integers(0, 8, size=64)]
+
+sep = cd.PatternSeparator(inputs=32, expansion=1024, winners=8, seed=0, center=0.99)
+sep.habituate(background)
+record = cd.FastSynapses(np.arange(32), np.arange(32, 40), rule="delta", separator=sep)
+for t in rng.permutation(64):
+    record.observe(cues[t : t + 1], values[t : t + 1])
+reads = np.concatenate([record.recall(cues[t : t + 1]) for t in range(64)])
+print(float(np.mean(reads.argmax(axis=1) == values.argmax(axis=1))))  # 1.0
+```
+
+Check: the same stream through a plain delta record reads back a fraction of the cues; the
+separated record reads them all. Habituate before storing; a fast running mean moves a code
+between its write and its read.
+
 ## Fading context
 
 A `Trace` keeps a decaying copy of a source range and adds it as drive to a target

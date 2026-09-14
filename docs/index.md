@@ -22,7 +22,8 @@ Records, traces and local learning keep what a task needs.
 
 | Guide | What it covers |
 |---|---|
-| [Memory](memory.md), [consolidation](continuous.md) | Synaptic records, transient/persistent weights, salience, interference and resets |
+| [Memory](memory.md), [consolidation](continuous.md) | Synaptic records, transient/persistent weights, salience, interference, pattern separation and resets |
+| [Certificate](certificate.md) | When settling is a contraction: row mass, slope bound, the error bounds and the warm-start budget |
 | [Learning](learning.md) | Free and nudged phases, gradient conditions, every knob |
 | [Reward](reward.md) | Eligibility traces, a critic and the prediction error |
 | [Task recipes](tasks.md) | Input encoding, pattern targets, streams, several learners |

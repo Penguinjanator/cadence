@@ -4,6 +4,17 @@
 
 Biological names throughout, brain regions, and a generic brain.
 
+- `cadence.certificate(brain)`: the settling certificate. From the largest absolute incoming
+  effective weight sum (`row_mass`) and the neuron model's slope bound (`lipschitz_constant`)
+  it reports the contraction rate `1 - dt (1 - L rho)`, whether the free phase is certified,
+  the a posteriori error bound from the last step's movement, the a priori bound, and the
+  warm-start step budget after a stimulus change. Under `learning_neuron_model()` a brain is
+  certified below a row mass of 2. Documented in `docs/certificate.md`.
+- `PatternSeparator` and `FastSynapses(separator=...)`: keys pass through a fixed random
+  expansion and a k-winners-take-all before the record sees them, with an optional running
+  mean removed first. Correlated keys land on nearly disjoint codes and stop interfering.
+  Documented in `docs/memory.md`; `examples/certified_memory.py` shows both.
+
 - `GenericBrain.step` coordinates ongoing perception, previous-action feedback, optional
   current demonstrations and the next action, without a training/inference mode switch.
 - `SynapticMemory` adds shared persistent synapses and fading per-stream residuals.
