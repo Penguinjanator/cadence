@@ -1069,10 +1069,14 @@ class _TorchKernel:
         for k in range(lay.pairs):
             a0, a1, b0, b1 = lay.bounds(k)
             a_plus, a_minus = s_plus[:, a0:a1], s_minus[:, a0:a1]
-            if self.device.type == "cpu" and torch.equal(a_plus, a_minus):
-                block = a_plus.T @ (s_plus[:, b0:b1] - s_minus[:, b0:b1])
-            else:
-                block = a_plus.T @ s_plus[:, b0:b1] - a_minus.T @ s_minus[:, b0:b1]
+            b_plus, b_minus = s_plus[:, b0:b1], s_minus[:, b0:b1]
+            # Difference the phases before the products: subtracting two large Gram
+            # matrices can erase a small contrast, especially in float32. The identity
+            # A+^T(B+ - B-) + (A+ - A-)^T B- uses the same two matrix products.
+            block = a_plus.T @ (b_plus - b_minus)
+            # Keep the CPU shortcut; a GPU never needs a device-to-host boolean.
+            if self.device.type != "cpu" or not torch.equal(a_plus, a_minus):
+                block = block + (a_plus - a_minus).T @ b_minus
             flat[lay.offset[k] : lay.offset[k + 1]] = block.reshape(-1)
         edges = flat[self.index].to(self.param_dtype)
         neurons = (s_plus - s_minus).sum(dim=0).to(self.param_dtype)
@@ -1088,7 +1092,9 @@ class _TorchKernel:
                 torch.from_numpy(self._connectome.post).to(self.device),
             )
         pre, post = self._row_index
-        edges = s_plus[:, pre] * s_plus[:, post] - s_minus[:, pre] * s_minus[:, post]
+        a_plus, a_minus = s_plus[:, pre], s_minus[:, pre]
+        b_plus, b_minus = s_plus[:, post], s_minus[:, post]
+        edges = a_plus * (b_plus - b_minus) + (a_plus - a_minus) * b_minus
         edges = edges.to(self.param_dtype)
         neurons = (s_plus - s_minus).to(self.param_dtype)
         return edges, neurons
@@ -1265,10 +1271,8 @@ class _MlxKernel:
         for k in range(lay.pairs):
             a0, a1, b0, b1 = lay.bounds(k)
             a_plus, a_minus = s_plus[:, a0:a1], s_minus[:, a0:a1]
-            if bool(mx.array_equal(a_plus, a_minus).item()):
-                block = a_plus.T @ (s_plus[:, b0:b1] - s_minus[:, b0:b1])
-            else:
-                block = a_plus.T @ s_plus[:, b0:b1] - a_minus.T @ s_minus[:, b0:b1]
+            b_plus, b_minus = s_plus[:, b0:b1], s_minus[:, b0:b1]
+            block = a_plus.T @ (b_plus - b_minus) + (a_plus - a_minus).T @ b_minus
             pieces.append(block.reshape(-1))
         flat = mx.concatenate(pieces) if pieces else mx.zeros((0,), dtype=mx.float32)
         edges = np.array(flat[self.edge_index], dtype=np.float64)

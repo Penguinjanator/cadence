@@ -37,6 +37,20 @@ saving a checkpoint, or entering a host-only path materializes the required arra
 Public optimizer attributes remain mutable NumPy arrays; edits made through them are
 picked up by the next update. History uses float32 on MPS and float64 on torch CPU/CUDA.
 MLX contrast returns arrays to the host for the optimizer.
+
+Torch and MLX factor the phase contrast as
+`A_plus.T @ (B_plus - B_minus) + (A_plus - A_minus).T @ B_minus`.
+This is the same bilinear difference as subtracting the two phase Gram matrices,
+but avoids subtracting large products when the desired contrast is small. Torch uses
+the corresponding product identity for each row's eligibility trace. The accelerator
+path needs no host equality check. Identical phases give exactly zero contrast.
+Input rounding, reduction order and cancellation between distinct contributions still
+limit accuracy; float32 training trajectories need not match float64 at a fixed
+absolute error. RMS normalization can amplify small contrast errors. Gradient checks
+should use float64 CPU/CUDA and declare the nudge size and phase residuals. Historical
+runtime/energy receipts bind their exact frozen kernels; use the archived source for
+reproduction.
+
 Large connectomes whose blocks do not fit `dense_limit` use sparse transport. The CPU backend
 uses SciPy CSR when installed, and the NumPy segmented sum otherwise. PyTorch uses its
 gather/scatter path; `"mlx"` needs the blocks.
