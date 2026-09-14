@@ -82,7 +82,7 @@ def settle_neuron_by_neuron(
         cell = new_cell
         published = neuron_model.activation(cell)
         if adapt is not None:
-            adaptation = adaptation + (published - adaptation) / adapt.tau_steps
+            adaptation += (published - adaptation) / adapt.tau_steps
         trajectory[t] = published
     return trajectory, ledger
 
