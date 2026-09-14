@@ -1,0 +1,191 @@
+{
+  "summary": {
+    "centered_updates": [
+      {
+        "baseline_corrected_joules": 1.714039647948964,
+        "baseline_joules": 16.631391304347826,
+        "baseline_seconds": 0.25694871844927536,
+        "corrected_energy_ratio": 1.1670845972639292,
+        "current_corrected_joules": 1.4686507318897846,
+        "current_joules": 13.97340579710145,
+        "current_seconds": 0.2145022996521739,
+        "raw_energy_ratio": 1.1902174420353362,
+        "seed": 0,
+        "time_ratio": 1.1978832808129816
+      },
+      {
+        "baseline_corrected_joules": 1.66649651340038,
+        "baseline_joules": 16.522565217391303,
+        "baseline_seconds": 0.25404755063768114,
+        "corrected_energy_ratio": 1.1181510782386102,
+        "current_corrected_joules": 1.490403708258782,
+        "current_joules": 14.096985507246377,
+        "current_seconds": 0.21588750446376812,
+        "raw_energy_ratio": 1.1720637159553076,
+        "seed": 1,
+        "time_ratio": 1.176758938729209
+      },
+      {
+        "baseline_corrected_joules": 1.7581052437379225,
+        "baseline_joules": 16.714811594202896,
+        "baseline_seconds": 0.2560684430289855,
+        "corrected_energy_ratio": 1.466311069057512,
+        "current_corrected_joules": 1.1989988214901524,
+        "current_joules": 14.117855072463767,
+        "current_seconds": 0.21707132766666665,
+        "raw_energy_ratio": 1.183948376606045,
+        "seed": 2,
+        "time_ratio": 1.1796511579005156
+      },
+      {
+        "baseline_corrected_joules": 1.8052609608004715,
+        "baseline_joules": 16.865260869565216,
+        "baseline_seconds": 0.25442269742028983,
+        "corrected_energy_ratio": 1.2416725023483384,
+        "current_corrected_joules": 1.4538946118128855,
+        "current_joules": 14.128840579710145,
+        "current_seconds": 0.21347276960869566,
+        "raw_energy_ratio": 1.1936762096236497,
+        "seed": 3,
+        "time_ratio": 1.1918274067772534
+      },
+      {
+        "baseline_corrected_joules": 1.7997214081061936,
+        "baseline_joules": 17.126739130434782,
+        "baseline_seconds": 0.2585185151304348,
+        "corrected_energy_ratio": 1.2609002601898138,
+        "current_corrected_joules": 1.4273305073592946,
+        "current_joules": 14.209043478260869,
+        "current_seconds": 0.21550234910144928,
+        "raw_energy_ratio": 1.2053407505324227,
+        "seed": 4,
+        "time_ratio": 1.1996088033765948
+      }
+    ],
+    "fixed_steps": [
+      {
+        "baseline_corrected_joules": 0.22705373080428273,
+        "baseline_joules": 2.1229696458684657,
+        "baseline_seconds": 0.03305525499662732,
+        "corrected_energy_ratio": 1.4352319639380307,
+        "current_corrected_joules": 0.1582000237656958,
+        "current_joules": 1.7331247892074197,
+        "current_seconds": 0.026769491291736933,
+        "raw_energy_ratio": 1.2249375573465353,
+        "seed": 0,
+        "time_ratio": 1.2348107267481263
+      },
+      {
+        "baseline_corrected_joules": 0.23305860018210134,
+        "baseline_joules": 2.16118718381113,
+        "baseline_seconds": 0.032998784418212475,
+        "corrected_energy_ratio": 1.1692656510905053,
+        "current_corrected_joules": 0.1993204880043652,
+        "current_joules": 1.779787521079258,
+        "current_seconds": 0.027046167241146713,
+        "raw_energy_ratio": 1.2142950538840682,
+        "seed": 1,
+        "time_ratio": 1.2200909697847961
+      },
+      {
+        "baseline_corrected_joules": 0.2279335744978425,
+        "baseline_joules": 2.15766610455312,
+        "baseline_seconds": 0.03311634127318719,
+        "corrected_energy_ratio": 1.1536153174416022,
+        "current_corrected_joules": 0.19758195912597257,
+        "current_joules": 1.7779072512647554,
+        "current_seconds": 0.027055831101180438,
+        "raw_energy_ratio": 1.213598798822725,
+        "seed": 2,
+        "time_ratio": 1.2240001480398928
+      },
+      {
+        "baseline_corrected_joules": 0.20297881527774397,
+        "baseline_joules": 2.203763912310287,
+        "baseline_seconds": 0.033209990445193925,
+        "corrected_energy_ratio": 1.0296958701608778,
+        "current_corrected_joules": 0.19712501638569352,
+        "current_joules": 1.7784738617200675,
+        "current_seconds": 0.026795513961214164,
+        "raw_energy_ratio": 1.2391320219791682,
+        "seed": 3,
+        "time_ratio": 1.239386208201289
+      },
+      {
+        "baseline_corrected_joules": 0.23814613487636901,
+        "baseline_joules": 2.2030404721753793,
+        "baseline_seconds": 0.03314497318381113,
+        "corrected_energy_ratio": 1.200024928992,
+        "current_corrected_joules": 0.19845098974436107,
+        "current_joules": 1.8163625632377742,
+        "current_seconds": 0.027266277510961213,
+        "raw_energy_ratio": 1.2128858614264373,
+        "seed": 4,
+        "time_ratio": 1.2156031629358515
+      }
+    ],
+    "residual_cold": [
+      {
+        "baseline_corrected_joules": 0.12169296309511694,
+        "baseline_joules": 1.425030344827586,
+        "baseline_seconds": 0.022337876554482758,
+        "corrected_energy_ratio": 0.94807192642718,
+        "current_corrected_joules": 0.12835836575576948,
+        "current_joules": 1.3300855172413792,
+        "current_seconds": 0.020577326191724137,
+        "raw_energy_ratio": 1.0713824986104081,
+        "seed": 0,
+        "time_ratio": 1.0855577807512564
+      },
+      {
+        "baseline_corrected_joules": 0.11872018476679026,
+        "baseline_joules": 1.433168275862069,
+        "baseline_seconds": 0.022539154016551724,
+        "corrected_energy_ratio": 0.9165285479217788,
+        "current_corrected_joules": 0.12953244613709777,
+        "current_joules": 1.3378124137931033,
+        "current_seconds": 0.02067648620275862,
+        "raw_energy_ratio": 1.0712774534649465,
+        "seed": 1,
+        "time_ratio": 1.0900862842712893
+      },
+      {
+        "baseline_corrected_joules": 0.12150434772000342,
+        "baseline_joules": 1.4483503448275863,
+        "baseline_seconds": 0.022649488903448277,
+        "corrected_energy_ratio": 0.8883345029480574,
+        "current_corrected_joules": 0.13677769727143876,
+        "current_joules": 1.3450675862068966,
+        "current_seconds": 0.020613337184827586,
+        "raw_energy_ratio": 1.0767862965993762,
+        "seed": 2,
+        "time_ratio": 1.0987783637537059
+      },
+      {
+        "baseline_corrected_joules": 0.09584248482832584,
+        "baseline_joules": 1.4480606896551724,
+        "baseline_seconds": 0.02242627063034483,
+        "corrected_energy_ratio": 0.6839515242890416,
+        "current_corrected_joules": 0.14013052303370888,
+        "current_joules": 1.351431724137931,
+        "current_seconds": 0.020485419182068965,
+        "raw_energy_ratio": 1.0715011818883269,
+        "seed": 3,
+        "time_ratio": 1.0947430673019718
+      },
+      {
+        "baseline_corrected_joules": 0.12627732283602655,
+        "baseline_joules": 1.4550979310344827,
+        "baseline_seconds": 0.02245808311724138,
+        "corrected_energy_ratio": 0.9615066308988653,
+        "current_corrected_joules": 0.13133276337155997,
+        "current_joules": 1.356608275862069,
+        "current_seconds": 0.020745045851034483,
+        "raw_energy_ratio": 1.0725999221181424,
+        "seed": 4,
+        "time_ratio": 1.082575728128433
+      }
+    ]
+  },
+  "verified": true
+}

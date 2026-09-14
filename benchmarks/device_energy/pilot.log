@@ -1,0 +1,7 @@
+{"seed": 0, "workload": "fixed_steps", "arm": "baseline", "seconds_per_unit": 0.03131684999993922, "joules_per_unit": null}
+{"seed": 0, "workload": "fixed_steps", "arm": "current", "seconds_per_unit": 0.025299141000004965, "joules_per_unit": null}
+{"seed": 0, "workload": "centered_updates", "arm": "baseline", "seconds_per_unit": 0.25621303400009765, "joules_per_unit": null}
+{"seed": 0, "workload": "centered_updates", "arm": "current", "seconds_per_unit": 0.2181890569999041, "joules_per_unit": null}
+{"seed": 0, "workload": "residual_cold", "arm": "baseline", "seconds_per_unit": 0.02178979799998615, "joules_per_unit": null}
+{"seed": 0, "workload": "residual_cold", "arm": "current", "seconds_per_unit": 0.0207148629999665, "joules_per_unit": null}
+{"status": "complete", "locked_counts": {"fixed_steps": 593, "centered_updates": 69, "residual_cold": 725}, "estimated_seconds": 665.6145308346635}

@@ -1,0 +1,750 @@
+{
+  "errors": [],
+  "gpu_uuid": "GPU-de0d72bf-637f-f615-ce53-a02f88f2ff92",
+  "measurement_receipt_sha256": "6d500c2ff8a00fb919ecb891846719aafb721ccfbb44ff4fddb8c1b3a43757a8",
+  "measurement_sources_sha256": "b8e41ed45425ac62eef1140ffdeb36a33388cb509b85c223d41fa8262804ec46",
+  "occupancy_after": [
+    {
+      "kind": "Compute",
+      "pid": 4388,
+      "used_gpu_memory_bytes": 350224384
+    }
+  ],
+  "occupancy_before": [],
+  "pid": 4388,
+  "purpose": "untimed phase-count and reset validation",
+  "rows": [
+    {
+      "arm": "baseline",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-0-centered_updates-baseline.npz",
+      "measurement_snapshot_sha256": "237e0ff1e5e971cf8ecfe1d7d480fe4dd11f0b8e9cc5684c5b69b636efdf5435",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 0
+    },
+    {
+      "arm": "current",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-0-centered_updates-current.npz",
+      "measurement_snapshot_sha256": "9bbcbb5e8602233f5d96b05d3601d1f2e9902c15c324ea8b353aaf582ce27758",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 0
+    },
+    {
+      "arm": "baseline",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-1-centered_updates-baseline.npz",
+      "measurement_snapshot_sha256": "35f8a4d7f634a19df47b362c4d5359ee0ffeec4b00d8c2f8c1ecb4392b1fc517",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 1
+    },
+    {
+      "arm": "current",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-1-centered_updates-current.npz",
+      "measurement_snapshot_sha256": "7b8d139d8415efe7e79e2b2ce92c173004ffb33f8b1a8db30400df1bc09fec47",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 1
+    },
+    {
+      "arm": "baseline",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-2-centered_updates-baseline.npz",
+      "measurement_snapshot_sha256": "72444e30bf5fc22f4627898487d304e636b794126293717f6eea14428898277e",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 2
+    },
+    {
+      "arm": "current",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-2-centered_updates-current.npz",
+      "measurement_snapshot_sha256": "9a95d1bc16c1d138ff16bdeba86c02d55fca34a35ea6165a7755ad58591a2ea8",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 2
+    },
+    {
+      "arm": "baseline",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-3-centered_updates-baseline.npz",
+      "measurement_snapshot_sha256": "4256396bd4d08f1add5f642777048e610137b7c5c3088c1d399df2892c7c91e9",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 3
+    },
+    {
+      "arm": "current",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-3-centered_updates-current.npz",
+      "measurement_snapshot_sha256": "b743a73141cf6f94f2ba1ec1b02cdc0c7b10f63e14449671433f5170dc44078f",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 3
+    },
+    {
+      "arm": "baseline",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-4-centered_updates-baseline.npz",
+      "measurement_snapshot_sha256": "4a6cca9ce3582339961808274d174c621a2980ac460701edc8ac3d31b7c2693a",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 4
+    },
+    {
+      "arm": "current",
+      "max_abs_differences_from_measurement": [
+        0.0,
+        0.0
+      ],
+      "max_abs_repeat_difference": 0.0,
+      "measurement_snapshot": "snapshot-4-centered_updates-current.npz",
+      "measurement_snapshot_sha256": "22294407a7926bae1b37fedf033788810bac4ef714802e9c7eb5a2ae10242de8",
+      "repeats": [
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        },
+        {
+          "actual_total_steps": 400,
+          "phase_counts": [
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ],
+            [
+              40,
+              20,
+              20
+            ]
+          ]
+        }
+      ],
+      "seed": 4
+    }
+  ],
+  "sources_sha256": "284eb1eceb615570eafee4640e1ed6b7c211b8e5b6513f631dc4924a967d909a",
+  "status": "complete"
+}
