@@ -55,6 +55,10 @@ def test_adaptive_device_matches_numpy_with_mutable_masks(
             for learner in (host, dev):
                 learner.plastic_synapses[::3] = False
                 learner.plastic_neurons[::2] = False
+            frozen_host_scale = host.brain.efficacy[::3].copy()
+            frozen_host_bias = host.brain.bias[::2].copy()
+            frozen_device_scale = kernel.scale[::3].clone()
+            frozen_device_bias = kernel.bias_param[::2].clone()
         d, labels = sample(host, i)
         phase_h, _ = host.step(d, labels)
         phase_d, _ = dev.step(d, labels)
@@ -62,6 +66,12 @@ def test_adaptive_device_matches_numpy_with_mutable_masks(
         assert dev.__dict__["_device_moments"]["holder"] is kernel
         assert dev.brain._efficacy is None
         np.testing.assert_allclose(phase_d.free.activation, phase_h.free.activation, atol=2e-6)
+        if i >= 3:
+            # Mask correctness is exact, independent of backend trajectory rounding.
+            np.testing.assert_array_equal(host.brain.efficacy[::3], frozen_host_scale)
+            np.testing.assert_array_equal(host.brain.bias[::2], frozen_host_bias)
+            assert torch.equal(kernel.scale[::3], frozen_device_scale)
+            assert torch.equal(kernel.bias_param[::2], frozen_device_bias)
     for name in MOMENTS:
         np.testing.assert_allclose(getattr(dev, name), getattr(host, name), atol=2e-6)
     np.testing.assert_allclose(dev.brain.efficacy, host.brain.efficacy, atol=2e-6)
