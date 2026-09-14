@@ -5,6 +5,7 @@ Refuse replacement: a changed mechanism needs a new evidence bundle.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import zipfile
@@ -15,15 +16,20 @@ ROOT = HERE.parents[1]
 
 
 def main() -> None:
-    archive = HERE / "frozen_sources.zip"
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stem", default="frozen_sources")
+    parser.add_argument("--extra", type=Path, action="append", default=[])
+    args = parser.parse_args()
+    archive = HERE / (args.stem + ".zip")
     if archive.exists():
         raise SystemExit(
             "frozen source archive already exists; do not overwrite historical sources"
         )
     paths = [
-        *sorted((ROOT / "src/cadence").glob("*.py")),
+        *sorted((ROOT / "src/cadence").rglob("*.py")),
         HERE / "content.py",
         HERE / "continual.py",
+        *[path.resolve() for path in args.extra],
     ]
     manifest = {}
     with zipfile.ZipFile(archive, "x", compression=zipfile.ZIP_DEFLATED) as output:
@@ -41,7 +47,7 @@ def main() -> None:
         "files": manifest,
         "purpose": "historical reproducibility after library integration",
     }
-    (HERE / "frozen_sources.json").write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
+    archive.with_suffix(".json").write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n")
 
 
 if __name__ == "__main__":

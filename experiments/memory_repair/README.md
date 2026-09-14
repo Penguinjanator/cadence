@@ -10,7 +10,7 @@ address-policy discovery.
 `content.py` compares noisy content retrieval with delta fast synapses, separated delta
 synapses, FIFO nearest exemplars, and fixed prototypes. There are no supplied record
 addresses: the observed feature vector is the cue. Identical-cue aliases and overflow
-are mandatory controls. `content_spec.json` is written before the comparison; the receipt
+are mandatory controls. A specification is written before the comparison; the receipt
 retains the entire 5-seed, 4-condition, 5-arm grid. The extra sparse expansion is counted
 as fixed and mutable arrays rather than free capacity.
 
@@ -41,13 +41,17 @@ curl -L --fail https://storage.googleapis.com/tensorflow/tf-keras-datasets/mnist
   -o experiments/memory_repair/data/mnist.npz
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1
-PYTHONPATH=src python experiments/memory_repair/content.py
-PYTHONPATH=src python experiments/memory_repair/continual.py --mode split
-PYTHONPATH=src python experiments/memory_repair/continual.py --mode permuted
-PYTHONPATH=src python experiments/memory_repair/content.py --verify experiments/memory_repair/content.json
-PYTHONPATH=src python experiments/memory_repair/continual.py --verify experiments/memory_repair/split.json
-PYTHONPATH=src python experiments/memory_repair/continual.py --verify experiments/memory_repair/permuted.json
+PYTHONPATH=src python experiments/memory_repair/content.py --out /tmp/cadence-memory-repro/content.json
+PYTHONPATH=src python experiments/memory_repair/continual.py --mode split --out /tmp/cadence-memory-repro/split.json
+PYTHONPATH=src python experiments/memory_repair/continual.py --mode permuted --out /tmp/cadence-memory-repro/permuted.json
+PYTHONPATH=src python experiments/memory_repair/verify.py
 ```
+
+Current runners reject an existing output or specification instead of overwriting it.
+Use a new `--out` for each comparison; its `<out>.spec.json` is written beside it.
+The original `content_spec.json` filename is retained for historical custody only.
+For a fresh current-source result, the script's `--verify <new-result.json>` checks
+its digest, arithmetic, and current source hashes.
 
 The seed-99 split pilot uses 1,000 examples per task and is retained separately. It was
 used for execution checks, with no changes to the specified model hyperparameters.
@@ -56,9 +60,11 @@ full-image, thirty-task permuted-MNIST experiment and must not replace its negat
 result. The previous no-replay split-MNIST and long-horizon game drift likewise remain
 separate evidence.
 
-`frozen_sources.zip` contains the exact experiment scripts and complete Cadence Python
-package used for these comparisons; `frozen_sources.json` binds the archive and every
-member. `freeze.py` creates this archive once and refuses to overwrite it. After later
+`frozen_runtime.zip` contains the exact experiment scripts and complete Cadence Python
+package, recursively including `cadence/circuits/`; `frozen_runtime.json` binds the
+archive and every member. The earlier top-level-only `frozen_sources.zip` and its
+manifest are retained unchanged. `freeze.py` creates each named archive once and refuses
+to overwrite it. After later
 library changes, verify the historical receipts against these archived executable bytes:
 
 ```sh
@@ -71,3 +77,28 @@ Use the receipt's Python/NumPy/Torch versions when comparing exact numeric resul
 ordinary `--verify` commands above intentionally verify against the current working
 tree and may report a source mismatch after integration; archived-source verification
 preserves the original evidence rather than rebinding it to changed code.
+
+`drift.py` is a separate cause diagnostic with seeds 201–205. It trains thirty
+permuted tasks without replay, then forks the same trained learner for one unseen
+permutation. The forks carry all parameters, reset only the output/feedback weights
+and output biases, reset the complementary representation parameters, or reset all
+parameters. They receive the same 2,000 labeled examples in the same order and the
+same 63 updates. Test accuracy is read at updates 0, 16, 32, and 63. Within a seed the
+image subset stays fixed across permutations, removing changing image difficulty as
+a cause of differences. Known boundaries are supplied to these resets; they are
+diagnostic interventions, not a new claim of autonomous task discovery.
+
+The diagnostic also records hidden activity variance/saturation, parameter magnitudes,
+and a separately fitted ridge readout of each fork's final free hidden states. This
+readout uses only the current observed training labels and extra offline computation.
+It tests whether a conventional linear readout can recover information the current
+head does not use. Hidden states still receive feedback from the existing output head,
+so this readout alone does not isolate a purely feed-forward representation.
+
+```sh
+PYTHONPATH=src python experiments/memory_repair/drift.py --out /tmp/cadence-memory-repro/drift.json
+```
+
+Its complete outcome and code archive are `drift.json` and `drift_sources.zip`, with
+the latter separately bound by `drift_sources.json`. `verify.py` checks both archived
+versions. Neither archive replaces the other or the original negative receipts.

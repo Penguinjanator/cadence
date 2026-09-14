@@ -253,12 +253,17 @@ def main() -> None:
         print(message)
         raise SystemExit(0 if ok else 1)
     torch.set_num_threads(1)
-    data = load(args.data)
     spec = SPEC | {"mode": args.mode, "seeds": [99] if args.pilot else SPEC["seeds"]}
     if args.pilot:
         spec = spec | {"train_per_task": 1000}
     out = args.out or HERE / (args.mode + ("_pilot" if args.pilot else "") + ".json")
-    out.with_suffix(".spec.json").write_text(cd.canonical_json(spec) + "\n")
+    spec_path = out.with_suffix(".spec.json")
+    if out.exists() or spec_path.exists():
+        raise SystemExit("output or specification already exists; choose a new --out")
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.touch(exist_ok=False)
+    spec_path.write_text(cd.canonical_json(spec) + "\n")
+    data = load(args.data)
     rows = []
     for seed in spec["seeds"]:
         tasks = make_tasks(data, seed, args.mode, spec["train_per_task"])

@@ -50,9 +50,9 @@ def test_continual_receipt_cannot_hide_forgetting_or_extra_training() -> None:
 def test_frozen_source_verifier_detects_archive_mutation(tmp_path, monkeypatch) -> None:
     monkeypatch.syspath_prepend(str(HERE))
     verify = module("verify").verify
-    for name in ("content", "split_pilot", "split", "permuted"):
+    for name in ("content", "split_pilot", "split", "permuted", "drift"):
         assert verify(HERE / f"{name}.json")[0]
-    changed = bytearray((HERE / "frozen_sources.zip").read_bytes())
+    changed = bytearray((HERE / "frozen_runtime.zip").read_bytes())
     changed[len(changed) // 2] ^= 1
     bad = tmp_path / "changed.zip"
     bad.write_bytes(changed)

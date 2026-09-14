@@ -138,7 +138,12 @@ def main() -> None:
         ok, message = cd.Receipt.verify(args.verify, sources=sources(), check=check)
         print(message)
         raise SystemExit(0 if ok else 1)
-    (HERE / "content_spec.json").write_text(cd.canonical_json(SPEC) + "\n")
+    spec_path = args.out.with_suffix(".spec.json")
+    if args.out.exists() or spec_path.exists():
+        raise SystemExit("output or specification already exists; choose a new --out")
+    args.out.parent.mkdir(parents=True, exist_ok=True)
+    args.out.touch(exist_ok=False)  # reserve this run's output without replacing another run
+    spec_path.write_text(cd.canonical_json(SPEC) + "\n")
     rows = []
     for seed in SPEC["seeds"]:
         for condition in CONDITIONS:

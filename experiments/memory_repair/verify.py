@@ -10,19 +10,28 @@ from pathlib import Path
 
 import content
 import continual
+import drift
 
 from cadence.receipts import Receipt, canonical_sha256
 
 HERE = Path(__file__).resolve().parent
 
 
-def verify(path: Path, archive: Path = HERE / "frozen_sources.zip") -> tuple[bool, str]:
+def verify(path: Path, archive: Path | None = None) -> tuple[bool, str]:
     receipt = Receipt.read(path)
-    check = content.check if receipt.kind == "cadence/content-repair/v1" else continual.check
+    if receipt.kind == "cadence/content-repair/v1":
+        check, stem = content.check, "frozen_runtime"
+    elif receipt.kind == "cadence/continual-memory-repair/v1":
+        check, stem = continual.check, "frozen_runtime"
+    elif receipt.kind == "cadence/plasticity-diagnostic/v1":
+        check, stem = drift.check, "drift_sources"
+    else:
+        return False, "unknown receipt kind"
+    archive = archive or HERE / (stem + ".zip")
     valid, message = Receipt.verify(path, check=check)
     if not valid:
         return valid, message
-    manifest = json.loads((HERE / "frozen_sources.json").read_text())
+    manifest = json.loads((HERE / (stem + ".json")).read_text())
     if hashlib.sha256(archive.read_bytes()).hexdigest() != manifest["archive_sha256"]:
         return False, "frozen source archive digest differs"
     with zipfile.ZipFile(archive) as sources:
@@ -49,7 +58,7 @@ def main() -> None:
     parser.add_argument("receipts", nargs="*", type=Path)
     args = parser.parse_args()
     paths = args.receipts or [
-        HERE / (name + ".json") for name in ("content", "split_pilot", "split", "permuted")
+        HERE / (name + ".json") for name in ("content", "split_pilot", "split", "permuted", "drift")
     ]
     for path in paths:
         valid, message = verify(path)
