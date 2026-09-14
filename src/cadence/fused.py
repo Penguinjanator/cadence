@@ -335,10 +335,9 @@ if njit is not None:
         for b in range(batch):
             d = delta[b] / batch
             for e in range(edges):
-                c = (
-                    s_plus[b, pre[e]] * s_plus[b, post[e]]
-                    - s_minus[b, pre[e]] * s_minus[b, post[e]]
-                ) / span
+                a_plus, a_minus = s_plus[b, pre[e]], s_minus[b, pre[e]]
+                b_plus, b_minus = s_plus[b, post[e]], s_minus[b, post[e]]
+                c = (a_plus * (b_plus - b_minus) + (a_plus - a_minus) * b_minus) / span
                 t = decay * trace[b, e] + c
                 trace[b, e] = t
                 step_scale[e] += d * t
@@ -393,10 +392,9 @@ if njit is not None:
             out_neurons[i] = 0.0
         for b in range(batch):
             for e in range(edges):
-                out_edges[e] += (
-                    s_plus[b, pre[e]] * s_plus[b, post[e]]
-                    - s_minus[b, pre[e]] * s_minus[b, post[e]]
-                )
+                a_plus, a_minus = s_plus[b, pre[e]], s_minus[b, pre[e]]
+                b_plus, b_minus = s_plus[b, post[e]], s_minus[b, post[e]]
+                out_edges[e] += a_plus * (b_plus - b_minus) + (a_plus - a_minus) * b_minus
             for i in range(n):
                 out_neurons[i] += s_plus[b, i] - s_minus[b, i]
         scale = 1.0 / (batch * span)

@@ -176,9 +176,8 @@ def block_contrast(layout: Layout, s_plus: np.ndarray, s_minus: np.ndarray) -> n
         a0, a1, b0, b1 = layout.bounds(k)
         a_plus, a_minus = s_plus[:, a0:a1], s_minus[:, a0:a1]
         b_plus, b_minus = s_plus[:, b0:b1], s_minus[:, b0:b1]
-        if np.array_equal(a_plus, a_minus):
-            block = a_plus.T @ (b_plus - b_minus)
-        else:
-            block = a_plus.T @ b_plus - a_minus.T @ b_minus
+        block = a_plus.T @ (b_plus - b_minus)
+        if not np.array_equal(a_plus, a_minus):
+            block = block + (a_plus - a_minus).T @ b_minus
         g[layout.offset[k] : layout.offset[k + 1]] = block.ravel()
     return np.asarray(g[layout.edge_index])

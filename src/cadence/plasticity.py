@@ -494,9 +494,9 @@ class ActorCritic:
             if kind == "phases":
                 w = self.learner.brain.connectome
                 span = 2.0 * self.learner.config.beta
-                contrast = (
-                    first[:, w.pre] * first[:, w.post] - second[:, w.pre] * second[:, w.post]
-                ) / span
+                a_plus, a_minus = first[:, w.pre], second[:, w.pre]
+                b_plus, b_minus = first[:, w.post], second[:, w.post]
+                contrast = (a_plus * (b_plus - b_minus) + (a_plus - a_minus) * b_minus) / span
                 contrast_bias = (first - second) / span
             else:
                 contrast, contrast_bias = first, second

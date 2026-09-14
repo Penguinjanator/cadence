@@ -357,12 +357,15 @@ class Learner:
             chunk = max(1, 1_000_000 // len(s_plus))
             for start in range(0, w.synapses, chunk):
                 pre, post = w.pre[start : start + chunk], w.post[start : start + chunk]
-                products = s_plus[:, pre] * s_plus[:, post] - s_minus[:, pre] * s_minus[:, post]
+                a_plus, a_minus = s_plus[:, pre], s_minus[:, pre]
+                b_plus, b_minus = s_plus[:, post], s_minus[:, post]
+                products = a_plus * (b_plus - b_minus) + (a_plus - a_minus) * b_minus
                 edges[start : start + chunk] = products.mean(axis=0) / span
             return edges, (s_plus - s_minus).mean(axis=0) / span
-        hebb_plus = (s_plus[:, w.pre] * s_plus[:, w.post]).mean(axis=0)
-        hebb_minus = (s_minus[:, w.pre] * s_minus[:, w.post]).mean(axis=0)
-        return (hebb_plus - hebb_minus) / span, (s_plus - s_minus).mean(axis=0) / span
+        a_plus, a_minus = s_plus[:, w.pre], s_minus[:, w.pre]
+        b_plus, b_minus = s_plus[:, w.post], s_minus[:, w.post]
+        products = a_plus * (b_plus - b_minus) + (a_plus - a_minus) * b_minus
+        return products.mean(axis=0) / span, (s_plus - s_minus).mean(axis=0) / span
 
     def contrast_rows(
         self, free: BrainState, nudged: BrainState, opposite: BrainState | None = None
@@ -376,7 +379,9 @@ class Learner:
             s_minus, span = free.activation, beta
         else:
             s_minus, span = opposite.activation, 2.0 * beta
-        hebb = s_plus[:, w.pre] * s_plus[:, w.post] - s_minus[:, w.pre] * s_minus[:, w.post]
+        a_plus, a_minus = s_plus[:, w.pre], s_minus[:, w.pre]
+        b_plus, b_minus = s_plus[:, w.post], s_minus[:, w.post]
+        hebb = a_plus * (b_plus - b_minus) + (a_plus - a_minus) * b_minus
         return hebb / span, (s_plus - s_minus) / span
 
     def apply(self, delta_scale: np.ndarray, delta_bias: np.ndarray) -> dict[str, float]:
