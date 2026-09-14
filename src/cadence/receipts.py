@@ -104,4 +104,9 @@ class Receipt:
             problem = check(stored["body"])
             if problem:
                 return False, problem
-        return True, "canonical form, digest, sources, and arithmetic agree"
+        checked = ["canonical form", "digest"]
+        if sources is not None:
+            checked.append("sources")
+        if check is not None:
+            checked.append("arithmetic")
+        return True, ", ".join(checked) + " agree"

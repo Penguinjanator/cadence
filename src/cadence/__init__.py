@@ -1,64 +1,101 @@
-"""Cadence: machine learning by patch-net settlement.
+"""Cadence: brains that learn by settling.
 
-A patch net is a set of owners, each holding one patch of state, joined by
-declared overlaps. Nothing is computed globally: every owner repairs its
-own patch from what arrives over its overlaps, and the state the net comes
-to rest in is the answer. Cadence gives you the wiring, the owner rule,
-the settlement engine on CPU or an accelerator, an owner-by-owner
-reference engine with a message ledger to check the accelerated one
-against, a protocol layer for declared held-out tests with a shuffled
-control, and receipts that bind every result to the code and data that
+A brain is a network of neurons joined by declared synapses and organised into
+regions. Each neuron holds a membrane potential and publishes an activation; on
+every step it relaxes toward its synaptic input, stimulus and bias, and the whole
+brain settles toward one equilibrium. Traces and fast synapses keep observations
+between settling runs, and dopamine carries reward prediction errors to plastic
+synapses. Normalization and output softmax read their declared populations;
+conformance checks the synaptic transport rather than every auxiliary operation.
+Cadence gives you the connectome, the neuron model, the brain on CPU or an
+accelerator, a neuron-by-neuron reference with a transmission ledger to check the
+accelerated one against, a protocol layer for declared held-out tests with a
+shuffled control, and receipts that bind every result to the code and data that
 produced it.
 
     >>> import cadence as cd
-    >>> wiring = cd.Wiring.from_edges(4, pre=[0, 1, 2, 3], post=[1, 2, 3, 0], count=[120] * 4)
-    >>> engine = cd.Settlement(wiring, cd.GradedRule(gain=0.03))
-    >>> engine.settle(clamp={0: 3.0}, steps=60).activation.round(2)
+    >>> ring = dict(pre=[0, 1, 2, 3], post=[1, 2, 3, 0], count=[120] * 4)
+    >>> brain = cd.Brain(cd.Connectome.from_synapses(4, **ring), cd.NeuronModel(gain=0.03))
+    >>> brain.settle(stimulus={0: 3.0}, steps=60).activation.round(2)
     array([1., 1., 1., 1.])
 """
 
 from __future__ import annotations
 
+from . import regions
+from .brain import Brain, BrainState, Equilibrium, Nudge, available_backends
 from .checkpoint import load, save
+from .connectome import Connectome
 from .custody import Source, fetch, manifest
-from .learning import Learner, LearnerConfig, embedded, layered, learning_rule
+from .generic import GenericBrain
+from .genome import Genome, Projection, develop, evolve
+from .learning import Learner, LearnerConfig, embedded, layered, learning_neuron_model
+from .memory import SynapticMemory
+from .neuron import Adaptation, NeuronModel
+from .plasticity import (
+    ActorCritic,
+    ActorCriticConfig,
+    Bins,
+    Valence,
+)
 from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
-from .receipts import Receipt, canonical_json, canonical_sha256, source_manifest
-from .reference import Ledger, conformance, settle_owner_by_owner
-from .rules import Adaptation, GradedRule
-from .settle import Nudge, SettledState, Settlement, available_backends
-from .wiring import Wiring
+from .receipts import Receipt, canonical_json
+from .reference import conformance
+from .regions import Region
+from .stream import Afterglow, Echo, FastSynapses, Trace, stateful
 
 __all__ = [
+    "ActorCritic",
+    "ActorCriticConfig",
+    "Valence",
+    "Bins",
     "Adaptation",
-    "GradedRule",
+    "Region",
+    "GenericBrain",
+    "regions",
+    "Projection",
+    "Genome",
+    "Echo",
+    "Afterglow",
+    "Trace",
+    "FastSynapses",
+    "SynapticMemory",
+    "NeuronModel",
     "Learner",
     "LearnerConfig",
-    "Ledger",
     "Nudge",
     "Protocol",
     "Receipt",
     "Row",
-    "Settlement",
-    "SettledState",
+    "Brain",
+    "BrainState",
+    "Equilibrium",
     "Source",
-    "Wiring",
+    "Connectome",
     "available_backends",
     "canonical_json",
-    "canonical_sha256",
     "conformance",
     "embedded",
+    "develop",
+    "evolve",
     "evaluate_predicate",
     "fetch",
     "layered",
-    "learning_rule",
+    "learning_neuron_model",
     "load",
     "manifest",
     "save",
     "select_gain",
-    "settle_owner_by_owner",
     "shuffled",
-    "source_manifest",
+    "stateful",
 ]
 
-__version__ = "0.4.1"
+__version__ = "0.9.0"
+
+from . import legacy as _legacy  # noqa: E402  (the 0.8 names, deprecated)
+
+_legacy.install()
+
+
+def __getattr__(name: str) -> object:
+    return _legacy.old_name(name)

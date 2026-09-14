@@ -1,36 +1,40 @@
 # Cadence documentation
 
-Cadence is a library for *patch nets*: owners that each hold one patch of state, joined by
-declared overlaps, settling to rest by owner-local repair. Read in this order the first time:
+Cadence builds brains out of neurons that hold local state, exchange activity over
+declared synapses and relax toward their synaptic input until the brain settles.
+Records, traces and local learning keep what a task needs.
 
-| read | to learn |
+## Start here
+
+1. [Install Cadence](../README.md#install) and run the small learning example.
+2. [Quickstart](quickstart.md): settle a circuit, cut a relay, check the residual,
+   fit two labels and save a checkpoint.
+3. [Concepts](concepts.md): neurons, synapses, settling and the three state lifetimes.
+4. [Design a brain](design.md): choose capacity and ports, couple regions, imitate,
+   practice, correct and retain. [Patterns](patterns.md) supplies the component recipes.
+5. [Function map](biology.md): from a nervous-system function to its connectome and pattern.
+6. [A generic brain](patterns.md#a-generic-brain): a ready brain of standard regions that
+   learns labels, pictures and rewards.
+7. [One ongoing brain](continuous.md): continuous interaction, repetition, salience and
+   persistent synaptic consolidation.
+
+## Mechanisms
+
+| Guide | What it covers |
 |---|---|
-| [concepts](concepts.md) | what a patch net is, and why the library is shaped as it is |
-| [quickstart](quickstart.md) | the seven calls from a wiring to a verified receipt |
-| [learning](learning.md) | the free/nudged rule in full: every equation, a worked example with numbers, every knob |
-| [differences](differences.md) | how a patch net differs from a feed-forward network trained by backprop |
-| [games](games.md) | learning to play: imitating a search, and learning from reward |
-| [tasks](tasks.md) | recipes: how each kind of task becomes a clamp, a target, and a readout, tabular and regression included |
-| [pages](pages.md) | putting a trained net into a browser page that settles it live |
-| [protocols](protocols.md) | held-out tests, predicates with preconditions, the shuffled control, gain selection |
-| [backends](backends.md) | CPU and torch, precision, the dense transport |
-| [receipts](receipts.md) | what a verified result is, and what goes in one |
-| [embodied](embodied.md) | the sense, settle, act, learn loop in a body; several learners in one net; checkpoints |
-| [api](api.md) | every public class and function, module by module |
+| [Memory](memory.md), [consolidation](continuous.md) | Synaptic records, transient/persistent weights, salience, interference and resets |
+| [Learning](learning.md) | Free and nudged phases, gradient conditions, every knob |
+| [Reward](reward.md) | Eligibility traces, a critic and the prediction error |
+| [Task recipes](tasks.md) | Input encoding, pattern targets, streams, several learners |
 
-The worked, runnable versions of everything in [learning](learning.md) and [games](games.md)
-live in [cadence-examples](https://github.com/muellerberndt/cadence-examples): digits, MNIST,
-Connect Four, Pong, text, a sign-writing arm, chorales, cart-pole and the *C. elegans*
-connectome, each with a tutorial, a script, a receipt, and for the interactive ones a page.
+## Build and measure
 
-## What the ladder says the rule is good at
+[Browser pages](pages.md) · [Backends and timing](backends.md) ·
+[Protocols](protocols.md) · [Receipts](receipts.md) · [API reference](api.md)
 
-| kind of learning | rungs | result |
-|---|---|---|
-| supervised, dense low-dimensional input | digits, MNIST, Connect Four, sign writer | parity with a same-sized backprop network in fewer epochs; ten to a hundred times the wall-clock |
-| supervised, multi-label (a chord) | chorales | ahead of the same-shape MLP: F1 0.483 vs 0.470, 16.6 vs 24.7 bits per chord |
-| supervised, wide sparse one-hot input | text | behind: 3.33 bits per character vs 3.11 for the same-window MLP and 3.08 for a one-layer transformer |
-| from reward, advantage-weighted nudges | Pong, cart-pole | learns, and learns less than REINFORCE with Adam from the same rollouts (78% vs 93% of balls; 154 vs 392 steps) |
-| a measured, directed wiring under a protocol | *C. elegans* | the local rule cannot teach seams the nudge does not reach; a structural signal survives (5.3 vs 1.5 of 17 ablations), not a behavioural model |
-| a stream that drifts, one update per chunk | electricity, synthetic drift | learns and relearns; 0.851 against 0.873 for one-step logistic regression on electricity, 0.796 against 0.878 on the synthetic drift; ahead on one-pass MNIST (0.885 against 0.844) |
-| sixteen tabular tasks with the sparse-aware place code | OpenML-CC18 subset | mean 0.913 against logistic 0.906, MLP 0.921, boosting 0.901; ahead of boosting on nine, logistic on six |
+## Examples
+
+Six [interactive websites](https://floatingpragma.io/cadence-examples/) apply these
+patterns: an eye and drawing arm, a teachable mouse, a C. elegans habitat, a
+fly-inspired forager, changing memory and Connect Four. Their code, evidence and
+local launcher are in [cadence-examples](https://github.com/muellerberndt/cadence-examples).

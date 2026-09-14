@@ -1,81 +1,123 @@
 # Concepts
 
-## Owners, overlaps, settlement
+A Cadence brain is software state organised into neurons, synapses and regions,
+with readouts, records and a learning update. It is a design for computation. It
+does not ascribe experience to the software or establish a biological brain model.
 
-A patch net is not a function that maps inputs to outputs. It is a set of owners, each
-holding a patch of state, joined by overlaps that carry messages. There is no global step:
-every owner repairs its own patch from its own state, its inbox, its clamp, and its bias.
-Iterating that repair from rest is *settlement*, and the state the net rests in is what a
-readout sees.
+In OPH terms this is an observer-like, self-reading design: local state, declared
+synaptic boundaries, readback, records and feedback, with protocols and source-bound
+receipts for evidence. The biological names describe computational roles.
 
-The graded rule is
+The [biology-to-Cadence map](biology.md) connects nervous-system functions to
+these operations, from sensory reactions to memory and imagining futures.
 
-    v <- v + dt * ( -v + inbox + clamp + bias - strength * a )
-    inbox = sum over inbound overlaps of  gain * count * sign * exp(log_gain[pre]) * s[pre]
-    s(v)  = rectified sigmoid, exactly zero at rest
+## Neurons and synapses
 
-The drive is absolute per contact: a hub integrates every contact it receives, and the
-one global parameter is the drive of one contact. That follows the leaky integrate-and-fire
-convention used for the fly brain, and it is why gains are small numbers.
+A *neuron* holds a potential `v` and publishes an activation `s`. It is a graded
+(rate) unit and can stand for one biological neuron or, at coarse resolution, a
+population. A directed *synapse* carries one neuron's activation to another. A
+*reciprocal synapse pair* is a synapse and its reverse sharing one learned weight
+(`Learner(reciprocal=True)`, the default). `Connectome` declares the synapses and
+named populations of neurons, such as `input` and `output`.
 
-## Why rest emits nothing
+`Brain` holds the connectome, the neuron model and the parameter arrays. On each
+step it collects every neuron's synaptic input, then each neuron updates its own
+state:
 
-A plain sigmoid emits a few percent at rest. Multiplied by thousands of contacts on a hub
-that leak ignites the net with no input at all. The activation is therefore re-based so
-that an owner at exactly rest publishes exactly zero, in the engine's own precision. Rest
-is then a fixed point of the whole net, and "nothing in, nothing out" is a testable fact.
+```text
+synaptic_input[i] = sum(weights[e] * s[pre[e]] for synapses e ending at i)
+v[i] += dt * (synaptic_input[i] + drive[i] + bias[i] - strength * a[i] - v[i])
+s[i]  = activation(v[i])
+```
 
-## Why adaptation
+The adaptation term is absent unless enabled. The effective weight of synapse `e`
+is `gain * count[e] * efficacy[e] * exp(log_gain[pre[e]])`, where `count` is the
+number of synaptic contacts. The synaptic `efficacy` starts from the connectome's
+signs and can be learned. Transport follows the declared synapses; the neuron update
+reads its own state and synaptic input. Softmax and key normalization additionally
+read their declared groups.
 
-A graded rule with one time constant converges to a fixed point under a constant clamp:
-a posture, never a gait. Adaptation adds one slow variable per owner that follows its own
-activation and subtracts from its own drive. With mutual inhibition, which every real
-wiring has in abundance, that is the half-center oscillator, and the net can carry rhythm.
-It is still owner-local: an owner reads only its own adaptation. It is off by default, and
-a lane that turns it on says how it chose the two numbers.
+A *stimulus* supplies the external drive, which is added to the neuron's input on
+every step. The stimulus does not clamp the membrane potential, so synaptic input,
+bias and adaptation still move a stimulated neuron.
 
-## Why sparsity gates the gain
+## Settling and equilibrium
 
-Raise the gain enough and any wiring runs away: a large fraction of owners saturate and
-every readout lights. In that regime a protocol passes for reasons that have nothing to do
-with the wiring, and a shuffled control passes just as well. So a gain is admissible only
-while the net stays sparse under the training stimuli. The cap is declared, the table of
-gains tried is recorded, and the same rule is applied to the control.
+Named functional regions can share one connectome. Neuron-local updates cross the
+synapses between regions and seek a common fixed point of the whole brain under the
+current drive. Settle the brain once for that joint state; independent solves
+followed by a merged visualization do not couple the regions. See [patterns](patterns.md#several-regions-one-equilibrium).
 
-## Why learning is two settlements
+Settling runs the update from rest or from a supplied state. A returned
+`BrainState` can be a transient, a fixed point, or part of an oscillation.
+`steps` limits work and `tolerance` stops on small activation movement;
+`BrainState.activity_change` reports the total movement per row.
+`Brain.residual` separately measures the remaining fixed-point equation
+error. Saturation can produce small movement with a large residual.
 
-A patch net learns without a backward pass. It settles free, with only its input clamped;
-then it settles again from that state with its output owners nudged toward the target; then
-every overlap moves its own scale on the difference between what its two endpoints did in
-the two phases, and every owner moves its bias on its own difference. For a symmetric
-wiring and a small nudge that local contrast is the gradient of the nudge's loss, because
-the settlement descends an energy and the nudge tilts it. The goal enters through one door,
-the nudge, and the free phase, which is what a readout sees, never meets it. See
-[learning](learning.md).
+An equilibrium need not be unique or stable. Carrying a state between inputs can
+save work or select a different attractor. Test both cold and warm starts, and
+reset state at independent episode boundaries. A unique attracting equilibrium
+under a fixed drive erases its initial condition; keeping history then requires
+an explicit record, a trace, or a drive that carries history.
 
-## Why float64
+## Activation and adaptation
 
-Owners sit on knife edges. In the fly brain, one motor neuron under one taste settled to
-1.0 in one run and to 0.01 in another with the same wiring and clamp, because float32
-summation order differed. Receipts are made on the float64 CPU backend for that reason.
-Accelerated backends are for looking, and they come with a conformance number.
+`NeuronModel` rebases a sigmoid so that zero potential emits zero. With zero
+drive, zero bias, and zero adaptation, the all-zero state is an exact fixed
+point. `learning_neuron_model()` uses a gentler slope and a small negative leak to
+give the learner a responsive starting point. Neither setting guarantees convergence.
 
-## Why a shuffled control
+`Adaptation` adds one variable per neuron that follows its activation and
+subtracts from its drive. In suitable mutually inhibitory circuits this can
+produce an oscillation. The [half-center example](../examples/half_center.py)
+demonstrates one such circuit. Leave adaptation off when beginning with
+equilibrium learning; its gradient interpretation needs additional assumptions.
 
-A protocol scored on a wiring alone measures the protocol as much as the wiring. The
-control keeps everything about the wiring that is not the wiring: every count, every sign,
-every owner's out-degree, every named set; only who talks to whom is destroyed. What the
-wiring passes and the control fails is what the wiring predicted.
+## Three state lifetimes
 
-## Why receipts
+| State | What changes it | How to manage it |
+|---|---|---|
+| Potential, activation, adaptation | Settling steps | Pass `state=` to continue; omit it to start from rest |
+| A trace or fast-memory matrix | Explicit activity or observation updates | Reset at episode boundaries and preserve batch row identities |
+| Learned weights and biases | `Learner.step` or `Learner.update` | Save with `Learner.save`; evaluate with `predict` or `free` |
 
-Numbers in a notebook rot. A receipt is canonical JSON with its own digest, the digests of
-the code and data that produced it, and enough stored readings that every pass flag can be
-recomputed by the verifier. Editing any source file the receipt names invalidates it, on
-purpose: a result belongs to the code that made it.
+A [trace](api.md#streams-cadencestream) retains fading activity.
+[Fast memory](memory.md) retains associations between supplied keys and values.
+[Learning](learning.md) changes a reusable response through free/nudged endpoint
+contrasts. The centered learner uses three phases: free, positive nudge, and
+negative nudge. Under its equilibrium assumptions, the small-nudge contrast
+corresponds to a loss gradient with the stated parameter scaling.
 
-## What Cadence does not claim
+## Evidence and controls
 
-Settling a measured wiring and passing held-out facts is evidence that the wiring carries
-those facts under this rule. It is not a claim about biology beyond the scored predicates,
-and nothing in the library ascribes experience to anything.
+A [protocol](protocols.md) declares stimuli, readouts, interventions, and predicates.
+A shuffled connectome tests whether a response depends on the particular connections
+under the same neuron model. It is one control, not proof of a biological mechanism.
+High gains can saturate an excitatory circuit, so protocols can limit the active
+fraction during gain selection.
+
+`conformance` compares a trajectory with the neuron-by-neuron reference.
+It checks the tested transport and update. A [receipt](receipts.md) binds stored
+results to sources when those files are included and checked; its caller supplies
+the arithmetic verifier. Neither check establishes benchmark fairness.
+
+## Compared with backprop networks
+
+| | Feed-forward model trained by backprop | Cadence brain |
+|---|---|---|
+| Inference | Evaluate layers | Repeated neuron updates with a bounded solve and an optional residual check |
+| State between inputs | A cache or a separate memory | A settled state, trace or record, each explicit |
+| Credit | Reverse-mode differentiation | Free and nudged endpoint contrasts |
+| Exact gradient conditions | Differentiable computation | Stable smooth equilibrium, symmetric effective weights, converged phases, vanishing nudge |
+| Work | Forward and backward passes | Every step of the free and nudged phases plus the update |
+
+Measure inference, learning and record maintenance separately on the same held-out
+data, and include the simple algorithmic solver when a task has one.
+
+## When to add machinery
+
+Inference, memory and learning are separate operations because their state
+lifetimes differ. A new mechanism needs a failure it fixes and an ablation on the
+same inputs, budget and seeds, with its state and cost counted. Brain functions
+are compositions of the existing operations; [patterns](patterns.md) lists them.
