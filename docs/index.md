@@ -16,9 +16,11 @@ discrepancy, corrects it through declared seams, and keeps what the task needs.
 
 | Guide | What it covers |
 |---|---|
+| [Biology-to-Cadence map](biology.md) | Nervous-system functions, concrete mechanisms, architectural patterns, and biological limits |
 | [Memory](memory.md) | Direct key/value ports, residual writes, interference, and resets |
 | [Learning](learning.md) | Free/nudged phases, gradient assumptions, and numerical checks |
 | [Reward](reward.md) | Eligibility traces, a critic, and reward prediction error |
+| [Deliberation](deliberation.md) | Compare possible futures and learn from actual outcomes |
 | [Small core](condense.md) | State lifetimes and why the operations stay separate |
 | [Small component experiments](child.md) | What a few tested compositions add |
 

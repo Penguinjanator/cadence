@@ -98,6 +98,7 @@ answer different questions; [the quickstart](docs/quickstart.md) shows the first
 two, and [receipts](docs/receipts.md) explains reproducible comparisons.
 
 [Quickstart](docs/quickstart.md) · [Concepts](docs/concepts.md) ·
+[Biology-to-Cadence map](docs/biology.md) ·
 [Learning](docs/learning.md) · [Memory](docs/memory.md) ·
 [API](docs/api.md) · [All docs](docs/index.md)
 

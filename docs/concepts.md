@@ -4,6 +4,9 @@ Cadence's observer-like patch is a bounded piece of software state with ports,
 readback, records, and a feedback move. This is a design for computation; it does
 not ascribe experience to the software or establish a biological brain model.
 
+The [biology-to-Cadence map](biology.md) connects nervous-system functions to
+these operations, from sensory reactions to memory and imagining futures.
+
 ## Owners and seams
 
 An *owner* holds a potential `v` and publishes an activation `s`. A directed

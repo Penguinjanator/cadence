@@ -43,20 +43,26 @@ ac.learn(reward, done, next_drive)           # settle the next state, dopamine, 
 ## Public reward evidence
 
 The [Pong example](https://github.com/muellerberndt/cadence-examples/tree/main/04_pong)
-compares a reward-weighted free/nudged learner with backprop REINFORCE using the same
-interaction budget, reward and evaluation protocol. Its historical receipt reports
-about 88% of balls returned by the patch net and 93% by REINFORCE. The policies generate
-their own rollouts, so this comparison does not isolate one cause of their difference.
-It tests that example's learner, rather than the complete `ActorCritic` trace/critic
-composition described above. The tutorial identifies the preserved source version
-and explains how to verify or rerun it.
+starts with teacher imitation, then practices with advantage-weighted local
+nudges, teacher corrections, and rehearsal. Its policy sees one current pixel
+frame plus an input `Afterglow`. The shipped run retained the imitation
+checkpoint because practice did not improve validation win rate.
 
-Pong adds the undiscounted reduction in paddle-to-ball distance as a shaping reward.
-With the script's discount `gamma=0.5`, this is not guaranteed to preserve the best
-policy for the original return/miss reward. Discounted potential shaping would require
-`gamma * Phi(next) - Phi(now)`, with suitable terminal handling. Both policies receive
-the same implemented reward; final ball-return rate is evaluated separately from
-shaped training return.
+The reward-only backprop REINFORCE control receives no teacher demonstrations
+and uses different observations and reward/discount settings. These results do
+not isolate the learning rule or establish an efficiency advantage. They also
+do not test the complete `ActorCritic` trace/critic composition described above.
+The example's tutorial and receipts distinguish the training stages and controls.
+
+Pong uses a tracking-distance shaping term alongside game outcomes. Treat shaped
+training return as a separate metric from points won, lost, or drawn. An
+undiscounted potential difference does not generally preserve the original
+objective under discounting; that guarantee requires the discounted form
+`gamma * Phi(next) - Phi(now)` with appropriate terminal handling.
+
+The [biology-to-Cadence map](biology.md#memory-and-learning) distinguishes
+eligibility, prediction error, and memory, and explains the scope of the dopamine
+analogy.
 
 ## Deployment
 
