@@ -138,6 +138,7 @@ class Learner:
     # equal groups, or one size per group (a body's controller: a move of nine, a grip of two)
     slots: int | Sequence[int] = 1
     updates: int = 0
+    contrast_updates: int = 0  # optimizer history excludes externally applied reward updates
     velocity: np.ndarray = field(init=False, repr=False)
     velocity_bias: np.ndarray = field(init=False, repr=False)
     second_moment: np.ndarray = field(init=False, repr=False)
@@ -462,7 +463,7 @@ class Learner:
         if not (cfg.momentum or cfg.normalize):
             return edges, neurons
         held = self._moments_on_device(kernel)
-        count = self.updates + 1
+        count = self.contrast_updates + 1
         raw_edges, raw_neurons = edges, neurons
         if cfg.momentum:
             m = cfg.momentum
@@ -571,10 +572,12 @@ class Learner:
             edges, neurons = kernel.contrast_tensors(nudged.device["s"], minus_state.device["s"])
             norm = float(nudged.device["s"].shape[0]) * span
             edges, neurons = self._adaptive_device(kernel, edges / norm, neurons / norm)
-            return self._apply_device(kernel, cfg.eta * edges, cfg.eta_bias * neurons)
+            report = self._apply_device(kernel, cfg.eta * edges, cfg.eta_bias * neurons)
+            self.contrast_updates += 1
+            return report
         synapse_term, neuron_term = self.contrast(free, nudged, opposite)
         raw_synapse, raw_neuron = synapse_term, neuron_term
-        count = self.updates + 1  # this update's place in the history, for the corrections
+        count = self.contrast_updates + 1  # only this optimizer's own history
         if cfg.momentum > 0:  # still local: a synapse accumulates only its own contrast
             m = cfg.momentum
             self.velocity = m * self.velocity + (1 - m) * synapse_term
@@ -591,7 +594,9 @@ class Learner:
             synapse_term, neuron_term = synapse_term / rms, neuron_term / rms_bias
         delta_scale = cfg.eta * synapse_term
         delta_bias = cfg.eta_bias * neuron_term
-        return self.apply(delta_scale, delta_bias)
+        report = self.apply(delta_scale, delta_bias)
+        self.contrast_updates += 1
+        return report
 
     def step(
         self,
@@ -726,6 +731,7 @@ class Learner:
             "outputs": [int(i) for i in self.output_index],
             "slots": [int(k) for k in self.slot_sizes],
             "updates": self.updates,
+            "contrast_updates": self.contrast_updates,
             "parameters": self.parameters(),
             "brain": self.brain.to_dict(),
         }

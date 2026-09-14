@@ -121,6 +121,15 @@ give additional details. Prefer keyword arguments for optional configuration.
   identity, representation alignment, key interference, and checkpoint boundaries.
 - `cadence.stream.columns(index)`: a slice when the neurons are one contiguous range,
   else the index array. Slices can avoid the copies required by advanced indexing.
+- `SynapticMemory(pre, post, decay=0.9, rate=1.0, consolidation=0.05, ...)`:
+  normalized delta synapses with a shared persistent `consolidated` matrix and per-stream
+  effective `strength` matrices. `observe(key, value, write=None, *, salience=None,
+  value_mask=None)` consolidates only observed values. Salience is a finite nonnegative
+  `(batch,)` vector; the observed-value mask is boolean with the values' shape.
+  `reset(batch, rows=None)` clears transient residuals and retains persistent synapses,
+  including across batch changes. `clear()` erases both. Inherits `recall`, `read`,
+  `stimulate`, `update` and `keep`; its rule is always delta. Reads never learn.
+  See [the equations and lifecycle](continuous.md#repetition-and-salience-become-lasting-synaptic-changes).
 
 ## Regions (`cadence.regions`)
 
@@ -152,33 +161,40 @@ give additional details. Prefer keyword arguments for optional configuration.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `GenericBrain(connectome, *, episodic=False, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, seed=0, backend="cpu", device=None)`:
+- `GenericBrain(connectome, *, episodic=False, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, seed=0, backend="cpu", device=None)`:
   needs populations `sensory` or `visual/input`, `association` and `motor`, and uses
   `prefrontal` for a working memory when present. `learning` defaults to
   `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, nudged_steps=12, momentum=0.9)`,
   `reward` to `ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_critic=0.3)`.
   Attributes `connectome`, `brain`, `learner`, `basal_ganglia` (`ActorCritic` reading the
-  association cortex), `working_memory` (`Trace` or `None`), `hippocampus` (`FastSynapses`
-  from sensory to motor neurons, or `None`), `sensory_index`, `association_index`,
+  association cortex), `working_memory` (`Trace` or `None`), `hippocampus` (`SynapticMemory`
+  from sensory to motor neurons, or `None`; old checkpoints retain `FastSynapses`), `sensory_index`, `association_index`,
   `motor_index`.
   - `stimulus(observations, *, memory=True)`: the drive of a batch; with `memory`, the
     working memory and the hippocampal recall are added.
+  - `step(observations, *, reward=None, done=None, teacher=None, salience=None, bootstrap=None)`:
+    the ongoing interaction API, returning the next sampled actions. Reward/done concern
+    the preceding action; teacher labels concern the current observation. Omitted reward
+    means zero (no reward event). The first call cannot receive past-action feedback.
+    `last_learning` exposes the previous transition's report and demonstration count.
+    Supplied salience controls memory consolidation; by default it is absolute reward.
   - `fit(observations, labels, *, epochs=30, batch=32) -> list[float]` (training accuracy per
     epoch), `predict(observations)`, `accuracy(observations, labels)`: independent samples,
     without memory.
   - `act(observations, *, greedy=False) -> actions`: one row per stream; updates the working
-    memory. `learn(reward, done, next_observations, *, bootstrap=None) -> report`: the hippocampus records the
+    memory. `learn(reward, done, next_observations, *, bootstrap=None, salience=None) -> report`: the hippocampus records the
     reward of the chosen action for its situation, `done` rows reset their working memory,
     and the basal ganglia learn from dopamine. For truncated episodes `bootstrap` supplies
     the value of the old episode's final observation; `next_observations` holds the reset
     observation for ended rows. Reward and bootstrap are finite batch vectors; done is boolean.
   - `reset()` clears working state, action cache, eligibility and reward centering; hippocampal
-    records and slow parameters are kept. `parameters()` counts actor/critic parameters;
-    per-stream working state and episodic matrices are additional storage.
+    records and slow parameters are kept. `parameters()` counts actor/critic parameters
+    and the shared consolidated memory matrix; per-stream state is additional storage.
   - `save(path) -> Path`, `GenericBrain.load(path, *, backend="cpu", device=None, precision=None)`:
     complete composition checkpoints, including both optimizers, critic, random state,
-    stream traces, prepared next state and memories. Finish an action with `learn` or
-    reset it before saving. The archive is replaced atomically. A learner-only checkpoint
+    stream traces, prepared state, both memory timescales and any action awaiting feedback.
+    Format 2 also retains pending nudged states; format 1 still loads.
+    The archive is replaced atomically. A learner-only checkpoint
     is rejected by `GenericBrain.load`; `Learner.load` can extract a learner from either.
   Observations must be a nonempty finite batch, with image dimensions flattened per row.
   `fit` rejects noninteger labels and mismatched batches before updating. It resets current
@@ -261,7 +277,7 @@ give additional details. Prefer keyword arguments for optional configuration.
   `momentum` steps each synapse on a running average of its own contrast; `decay` shrinks every
   plastic synapse's efficacy and every plastic neuron's bias by that fraction on each update
   (a leak on the synapses, for streams).
-- `Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None, plastic_neurons=None, reciprocal=True, tie_groups=None, slots=1, updates=0)`:
+- `Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None, plastic_neurons=None, reciprocal=True, tie_groups=None, slots=1, updates=0, contrast_updates=0)`:
   `plastic_synapses` and `plastic_neurons` are bool masks over synapses and neurons; only those
   move and decay, so two learners can share one brain without one's decay eroding the other's
   synapses. With `reciprocal`, each reciprocal synapse pair shares one efficacy.
@@ -275,7 +291,8 @@ give additional details. Prefer keyword arguments for optional configuration.
   changing the original boolean array affects later updates. Rebuild the learner to
   change tie topology.
   `slots` splits the outputs into softmax groups (a count of equal groups, or one size per
-  group); `updates` is the update count.
+  group); `updates` counts all applied updates, while `contrast_updates` counts only
+  this learner's own optimizer history, excluding external reward/direct updates.
   - `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)`,
     `targets(labels)`, `nudge_for(target, beta, weight=None)`;
   - `contrast(free, nudged, opposite=None) -> (per_synapse, per_neuron)`,

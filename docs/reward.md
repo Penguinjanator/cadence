@@ -5,6 +5,11 @@ error without a backward computation graph. Each synapse keeps its own eligibili
 trace, and one broadcast dopamine signal gates every trace into a weight change.
 This page describes those components and the public evidence for reward-weighted learning.
 
+For application code, [`GenericBrain.step`](continuous.md) receives this moment's
+observation and the preceding action's reward, updates plasticity, and returns the next
+action. There is no separate training mode. The phase-level API below exposes the same
+mechanism for custom architectures and measurement.
+
 ## Eligibility traces and dopamine
 
 `ActorCritic` wraps a `Learner`. Acting runs the free phase; the action is a draw from the

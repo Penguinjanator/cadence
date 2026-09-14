@@ -16,10 +16,19 @@ reward learning let a controller carry experience into its next decision.
 
 - **Stateful interaction:** perception, memory inputs and motor intentions can influence
   one joint solve. Inspect the activity, intervene on a neuron, and measure the effect.
-- **Local learning:** the same dynamics handle inference and teaching, without storing
-  a backpropagation graph. Count all settling phases when comparing training cost.
-- **Immediate memory updates:** write or correct an addressed association after one
-  observation, then read it without retraining the slow weights.
+- **No backpropagation:** no backward pass, no autograd and no stored computation graph.
+  Each synapse changes from the activities of its own two neurons in free and nudged
+  phases. Under the [stated conditions](docs/learning.md#5-why-the-contrast-is-a-gradient)
+  that local change equals a gradient step, without differentiating the network.
+- **Continuous interaction:** `GenericBrain.step(observation, reward=...)` incorporates
+  feedback and chooses the next action in one ongoing loop. Demonstrations enter the
+  same loop through `teacher=`. Activity settles quickly; synapses change more slowly.
+  Count all internal free/nudged phases when comparing computation.
+- **Long-term memory through plasticity:** learned synaptic efficacies hold skills and
+  representations until later learning changes them. Fast synapses store an association
+  after one observation. `SynapticMemory` consolidates repeated or salient observations
+  into persistent synapses that survive transient-memory resets. Later evidence can
+  revise them. [Continuous learning and memory](docs/continuous.md).
 
 These are useful design choices, not a universal speed or capability advantage.
 Recurrent networks and memory-augmented transformers can also carry state and plan.

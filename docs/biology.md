@@ -26,6 +26,8 @@ Examples refer to the [public websites](https://floatingpragma.io/cadence-exampl
 | `Learner` / `Nudge` | Synaptic plasticity and instructive feedback | Local free/nudged endpoint contrasts under documented assumptions |
 | `Trace` / `Afterglow` / `Echo` | Fading recent activity | One leaky stored value per source neuron and stream; it enters later as drive |
 | `FastSynapses` | Rapid associative memory | A bounded key/value matrix with Hebbian or delta writes; not hippocampal anatomy |
+| `SynapticMemory` | Persistent synaptic change | Shared slow weights and fading per-stream residuals; repetition/salience consolidate actual observed values |
+| `GenericBrain.step` | Ongoing perception, feedback and action | One interaction clock coordinating neuronal settling and slower plasticity; no training-mode switch |
 | `ActorCritic` | Reward-guided action and eligibility | Sampled actions, per-stream traces and a linear value readout outside the connectome |
 | `Valence` | Signed reward modulation | Centering, scaling and capping a computed prediction-error signal; no emotion or chemistry |
 | `imagine` | Prospective evaluation | Isolated bounded search using a supplied transition and evaluator |
@@ -82,10 +84,11 @@ all animal learning follows Cadence's equations.
 | Afterimage, recent history | Implemented | `Trace`, `Echo` or `Afterglow` into context neurons | [Fading context](patterns.md#fading-context) | |
 | Working memory in prefrontal cortex | Partial | `prefrontal_cortex` driven by a `Trace` of the association cortex; `GenericBrain.build(..., working_memory=True)` | [A generic brain](patterns.md#a-generic-brain) | |
 | Holding an item, all-or-none report | Pattern | Self-exciting neuron pairs with mutual inhibition, coupled to answer neurons | [Holding an item](patterns.md#holding-an-item) | |
-| One-trial association of cue and outcome | Partial | `FastSynapses(rule="delta")`, read before acting and written after the outcome; `GenericBrain(episodic=True)` as a hippocampus | [Records in the loop](patterns.md#records-in-the-loop) | Mouse, forager, changing memory |
+| One-trial association of cue and outcome | Partial | Fast residual writes; `GenericBrain(episodic=True)` adds consolidation through `SynapticMemory` | [Records in the loop](patterns.md#records-in-the-loop) | Mouse, forager, changing memory |
 | Order and time since an event | Pattern | Clock or position neurons as record keys | [Records addressed by time](patterns.md#records-addressed-by-time) | |
 | Skills and learned representations | Implemented | Synaptic efficacies and biases trained by `Learner` | [Learning](learning.md) | |
-| Rehearsal and consolidation | Pattern | Stored real observations mixed into later updates | [A learning life](patterns.md#a-learning-life) | |
+| Repetition/salience-dependent synaptic consolidation | Implemented | `SynapticMemory` slowly learns observed values; salience increases its local write rate | [One ongoing brain](continuous.md) | |
+| Rehearsal and systems consolidation | Pattern | Stored real observations mixed into later cortical updates; no automatic transfer between regions | [A learning life](patterns.md#a-learning-life) | |
 | Forgetting and interference | Pattern | Trace decay, finite record capacity, later updates | [Memory](memory.md) | Changing memory |
 
 ## Learning
@@ -109,7 +112,7 @@ These entries prevent a role name from implying a completed cognitive system.
 | Cerebellar prediction and motor calibration | Prediction learning and sensorimotor error feedback | No standard cerebellar microcircuit or general motor-learning guarantee |
 | Selective attention and gating | Supplied drive/masks, lateral competition and salience | Learned attention control; a mask is not a learned thalamic circuit |
 | Spatial navigation and body schema | Task-coded map, body feedback and prediction | General learned maps and transfer across unfamiliar bodies are application work |
-| Episodic recollection and semantic memory | Fast records and slow learned representations | Learned addressing, autobiographical organization and consolidation that preserves earlier skills |
+| Episodic recollection and semantic memory | Fast residuals, consolidated synapses and slow learned representations | Learned addressing, autobiographical organization and general retention across interfering experiences |
 | Timing and sequence organization | State, traces, positional cues and adaptation | Long-horizon temporal credit and hierarchical sequence control need task-specific design |
 | Motivation, emotion and homeostasis | Reward, internal-state inputs and `Valence` | No integrated affective system; a positive reward signal does not establish happiness |
 | Reasoning and imagination | Learned/supplied transitions, bounded search and review | General reasoning and reliable learned simulators do not emerge automatically |

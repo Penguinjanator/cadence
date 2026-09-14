@@ -19,6 +19,7 @@ a larger brain adds capacity and settling cost, and still needs useful inputs an
 | Action selection | `motor_cortex(actions)` | One action neuron per discrete choice; `Bins` represents multiple continuous axes |
 | Fading working memory | `prefrontal_cortex(hidden)` and `Trace` | One trace value per source neuron per stream; wire its projection back into association |
 | Addressed event memory | `FastSynapses(rule="delta")` | A key-width × value-width matrix per stream; correlated keys interfere |
+| Lasting associations | `SynapticMemory` | Shared persistent synapses plus fading per-stream residuals; repetition/salience consolidate actual observed values |
 | Prediction/value | A learner's output population; `ActorCritic` critic | Predict observed transitions or returns; validate on held-out episodes |
 | Deliberation | `imagine` with a transition model and evaluator | Explicit branch state, horizon and node budget |
 | Self-monitoring | `ActivityMonitor`, or a learned readback region | Read activity and option scores; connect its request to an actual decision budget |
@@ -88,6 +89,11 @@ can be task dynamics rather than a learning failure. Plot both task quality and 
 
 ## Teach, practice, correct and retain
 
+These are kinds of experience in one ongoing loop. Use
+[`GenericBrain.step`](continuous.md) to receive feedback and choose the next action
+without switching modes; demonstrations can enter any moment through `teacher=`.
+The lower-level sequence below also supports controlled batch experiments.
+
 1. **Design capacity and feedback.** Declare senses, actions, memory lifetimes and regions.
    Confirm a target nudge reaches the hidden regions that should learn. Verify the coupled
    dynamics before scaling capacity or training time.
@@ -152,14 +158,15 @@ supply feedback; the critic's score is not an independent proof of beauty or cor
 
 ## State, checkpoints and cost
 
-`GenericBrain.save/load` preserves the full standard composition between decisions,
+`GenericBrain.save/load` preserves the full standard composition during interaction,
 including the critic, both optimizers, random generators, stream eligibility, next free
-phase, working memory and episodic matrix. Finish a pending action with `learn`, or call
-`reset`, before saving. Loading defaults to CPU and can select a different backend.
+phase, working memory, consolidated/transient synapses and pending-action states.
+Loading defaults to CPU and can select a different backend.
 Maintain saved row identities to continue the same streams. `reset()` clears working
-state and eligibility but keeps slow weights and hippocampal records; clear those records
-explicitly with `agent.hippocampus.reset(batch)` when they should not cross episodes.
-Changing batch size starts fresh stream memories. `Learner.save/load` saves only its own
+state and eligibility but keeps slow weights and hippocampal records. For new brains,
+`agent.hippocampus.reset(batch)` clears transient residuals; `clear()` also erases
+consolidated synapses. Changing batch size keeps shared consolidated knowledge and
+starts fresh transient streams. `Learner.save/load` saves only its own
 learned response and optimizer, and cannot save an application body or environment.
 
 Report neuron count, directed synapse count, `parameters()`, all additional mutable arrays,

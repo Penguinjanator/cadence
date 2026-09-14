@@ -30,6 +30,7 @@ from .custody import Source, fetch, manifest
 from .generic import GenericBrain
 from .genome import Genome, Projection, develop, evolve
 from .learning import Learner, LearnerConfig, embedded, layered, learning_neuron_model
+from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
 from .plasticity import (
     ActorCritic,
@@ -58,6 +59,7 @@ __all__ = [
     "Afterglow",
     "Trace",
     "FastSynapses",
+    "SynapticMemory",
     "NeuronModel",
     "Learner",
     "LearnerConfig",

@@ -11,7 +11,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 @pytest.mark.parametrize(
-    "page", ["README.md", "docs/quickstart.md", "docs/design.md", "docs/memory.md"]
+    "page",
+    ["README.md", "docs/quickstart.md", "docs/design.md", "docs/memory.md", "docs/continuous.md"],
 )
 def test_introductory_python_snippets(page, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)

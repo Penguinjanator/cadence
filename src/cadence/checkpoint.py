@@ -55,6 +55,7 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
         "reciprocal": bool(learner.reciprocal),
         "slots": [int(k) for k in learner.slot_sizes],
         "updates": int(learner.updates),
+        "contrast_updates": int(learner.contrast_updates),
         "backend": brain.backend,
         "precision": brain.precision,
         "dense_limit": int(brain.dense_limit),
@@ -174,8 +175,9 @@ def load(
             tie_groups=tie if len(tie) else None,
             slots=meta.get("slots", 1),
             updates=int(meta["updates"]),
+            contrast_updates=int(meta.get("contrast_updates", meta["updates"])),
         )
-        if learner.updates < 0:
+        if learner.updates < 0 or not 0 <= learner.contrast_updates <= learner.updates:
             raise ValueError("checkpoint update count must be nonnegative")
         for name in ("velocity", "velocity_bias", "second_moment", "second_moment_bias"):
             value = data[name].astype(float)

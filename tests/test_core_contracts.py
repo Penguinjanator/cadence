@@ -392,9 +392,11 @@ def test_failed_checkpoint_write_preserves_previous_file(tmp_path, monkeypatch):
 def test_pending_action_cannot_be_silently_lost_on_save(tmp_path):
     brain = cd.GenericBrain.build(2, 2, hidden=3)
     brain.act(np.eye(2))
-    with pytest.raises(RuntimeError, match="pending"):
-        brain.save(tmp_path / "brain.npz")
-    assert not list(tmp_path.iterdir())
+    restored = cd.GenericBrain.load(brain.save(tmp_path / "brain.npz"))
+    assert restored.basal_ganglia._pending is not None
+    for model in (brain, restored):
+        model.learn(np.ones(2), np.ones(2, bool), np.eye(2))
+    np.testing.assert_array_equal(brain.brain.efficacy, restored.brain.efficacy)
 
 
 def test_signed_working_memory_has_bounded_nonnegative_salience():

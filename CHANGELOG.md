@@ -4,6 +4,20 @@
 
 Biological names throughout, brain regions, and a generic brain.
 
+- `GenericBrain.step` coordinates ongoing perception, previous-action feedback, optional
+  current demonstrations and the next action, without a training/inference mode switch.
+- `SynapticMemory` adds shared persistent synapses and fading per-stream residuals.
+  Repetition and salience consolidate only actually observed value components. Persistent
+  weights survive episode/batch resets and can be revised or explicitly cleared. New
+  `episodic=True` brains use this rule; older checkpoints keep their original fast memory.
+- Complete brain checkpoints now include pending actions and their nudged states, so
+  interaction can resume before reward arrives. Generic checkpoint format 2 loads format 1.
+  `parameters()` includes consolidated synaptic storage. The continuous-learning guide
+  documents the clocks, equations, biological analogy and measured retention checks.
+- The imitation optimizer counts only its own contrasts for bias correction; interleaved
+  reward/direct updates no longer advance an optimizer whose moments did not change.
+  That count is checkpointed; older checkpoints retain their saved count as the fallback.
+
 - Names: `Connectome` (was `Wiring`), `Brain` (was `Settlement`), `BrainState`,
   `NeuronModel` (was `GradedRule`), `learning_neuron_model`, neurons and synapses (were
   owners, overlaps and seams), `populations` (were `sets`), `synapses` (was `edges`),
@@ -28,13 +42,13 @@ Biological names throughout, brain regions, and a generic brain.
   receptive fields), `cortex`, `motor_cortex` and `prefrontal_cortex`.
 - `GenericBrain`: a sensory region or visual cortex, an association cortex and a motor cortex
   in one connectome, with an external reward helper (`ActorCritic`), optional prefrontal working
-  memory (a `Trace` of the association cortex) and an optional hippocampus (`FastSynapses`)
+  memory (a `Trace` of the association cortex) and an optional hippocampus (`SynapticMemory`)
   for one-trial records. It learns from labels (`fit`) and reward (`act`, `learn`), and its
   genome can be evolved. `examples/generic_brain.py` runs it on pictures and a bandit.
 - `ActorCritic.state`: the free phase of the latest moment.
 - `Brain.equilibrate` checks the whole circuit's equation residual under an exact step
   budget and returns per-row convergence information, including for zero-budget checks.
-- `GenericBrain.save/load` preserves the standard composition between decisions: critic,
+- `GenericBrain.save/load` preserves the standard composition: critic,
   both optimizers, random state, eligibility, working memory and episodic records.
   Checkpoint replacement is atomic; malformed learner optimizer state is rejected.
 - Reward decisions now honor changed observations, own cached inputs, clear stale greedy

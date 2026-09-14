@@ -164,10 +164,16 @@ can save work within the same attracting basin; measure it on changing inputs.
 a visual cortex for pictures, an association cortex, and a motor cortex with one neuron
 per action and lateral inhibition. `basal_ganglia` names its `ActorCritic` helper:
 a linear critic reads association activity, and reward prediction error modulates local
-eligibility traces. `episodic=True` adds a `FastSynapses` store under the name
-`hippocampus`, recording cue-to-action rewards. These two helpers keep state outside
+eligibility traces. `episodic=True` adds `SynapticMemory` under the name
+`hippocampus`, recording cue-to-action rewards and consolidating repeated or salient
+observations into shared persistent synapses. These two helpers keep state outside
 the connectome; they are functional analogues, not anatomical simulations. Their
 readbacks and recalled drives influence the next joint solve.
+
+For a continuously interacting agent use [`step`](continuous.md), which incorporates
+the preceding outcome and chooses the next action. Demonstrations enter through
+`teacher=` in that same loop. The lower-level operations below are useful for controlled
+experiments and independent-sample benchmarks.
 
 It learns from labels with `fit`:
 

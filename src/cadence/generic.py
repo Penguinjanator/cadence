@@ -12,10 +12,12 @@
   dopamine prediction error moves every plastic synapse through its eligibility trace;
 * optionally a ``prefrontal_cortex`` driven by a ``Trace`` of the association cortex, a
   working memory of the moments before;
-* optionally a hippocampal-memory analogue, external ``FastSynapses`` from sensory to
-  motor neurons, recording after one trial which action a situation rewarded.
+* optionally a hippocampal-memory analogue, ``SynapticMemory`` from sensory to motor
+  neurons, recording outcomes quickly and consolidating them through repetition/salience.
 
-It learns from labels (``fit``) and from reward (``act`` and ``learn``). Its connectome comes
+``step`` runs one ongoing perceive/feedback/act loop; demonstrations and rewards are
+signals in that loop, without a train/eval mode. The lower-level ``fit``, ``act``
+and ``learn`` operations remain available for controlled experiments. Its connectome comes
 from a ``Genome``, so ``evolve`` can select the sizes and densities of its regions, and a
 designed region can replace any of them.
 """
@@ -32,6 +34,7 @@ from .brain import Backend, Brain, BrainState
 from .connectome import Connectome
 from .genome import Genome, Projection, develop
 from .learning import Learner, LearnerConfig, learning_neuron_model
+from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
 from .regions import Region, motor_cortex, prefrontal_cortex, visual_cortex
 from .stream import FastSynapses, Trace
@@ -76,6 +79,7 @@ class GenericBrain:
         connectome: Connectome,
         *,
         episodic: bool = False,
+        consolidation: float = 0.05,
         working_memory_decay: float = 0.2,
         working_memory_amplitude: float = 3.0,
         learning: LearnerConfig | None = None,
@@ -111,10 +115,13 @@ class GenericBrain:
             )
         self.hippocampus: FastSynapses | None = None
         if episodic:
-            self.hippocampus = FastSynapses(self.sensory_index, self.motor_index, rule="delta")
+            self.hippocampus = SynapticMemory(
+                self.sensory_index, self.motor_index, consolidation=consolidation
+            )
         self.rng = np.random.default_rng(seed)
         self._moment: tuple[np.ndarray, np.ndarray] | None = None
         self._prepared: np.ndarray | None = None  # the observations ``learn`` settled
+        self.last_learning: dict[str, float] = {}
 
     @property
     def brain(self) -> Brain:
@@ -268,7 +275,64 @@ class GenericBrain:
     def accuracy(self, observations: Any, labels: Any) -> float:
         return self.learner.accuracy(self.stimulus(observations, memory=False), np.asarray(labels))
 
-    # -- learning from reward
+    # -- ongoing interaction
+
+    def step(
+        self,
+        observations: Any,
+        *,
+        reward: Any = None,
+        done: Any = None,
+        teacher: Any = None,
+        salience: Any = None,
+        bootstrap: Any = None,
+    ) -> np.ndarray:
+        """One moment: sense, incorporate real feedback, and choose the next action.
+
+        Reward/done describe the preceding action; an omitted reward means no
+        reward event (zero). ``teacher`` labels the current observation. The first
+        call has no previous action to reward. Later calls retain the batch's row
+        identities; call ``reset`` before starting different streams. Salience is
+        nonnegative, per row, and defaults to absolute reward for consolidation.
+        There is no training/inference switch. For a frozen measurement use a
+        separate instance's ``predict``/greedy ``act``.
+        """
+        x = self._observations(observations)
+        batch = len(x)
+        r = np.zeros(batch) if reward is None else np.asarray(reward, dtype=float)
+        ended = np.zeros(batch, bool) if done is None else np.asarray(done)
+        if r.shape != (batch,) or not np.isfinite(r).all():
+            raise ValueError("reward must be a finite vector matching the observation batch")
+        if ended.shape != (batch,) or ended.dtype != np.bool_:
+            raise ValueError("done must be a boolean vector matching the observation batch")
+        importance = SynapticMemory.salience_vector(
+            np.abs(r) if salience is None else salience, batch
+        )
+        labels = None if teacher is None else self.learner._labels(np.asarray(teacher))
+        if labels is not None and len(labels) != batch:
+            raise ValueError("teacher must match the observation batch")
+        if bootstrap is not None:
+            bootstrap = np.asarray(bootstrap, dtype=float)
+            if bootstrap.shape != (batch,) or not np.isfinite(bootstrap).all():
+                raise ValueError("bootstrap must be a finite vector matching the batch")
+        pending = self.basal_ganglia._pending is not None
+        if not pending and (reward is not None or done is not None or bootstrap is not None):
+            raise RuntimeError("feedback needs a preceding action; start with step(observations)")
+        # All feedback and demonstrations are checked before changing any state.
+        if pending:
+            self.last_learning = self.learn(r, ended, x, bootstrap=bootstrap, salience=importance)
+        else:
+            self.last_learning = {}
+        if labels is not None:
+            drive = self.stimulus(x)
+            self.learner.step(drive, labels)
+            # A demonstration teaches the slow policy, not an invented reward value.
+            self._prepared = None
+            self.basal_ganglia._drive = None
+            self.last_learning["demonstrations"] = float(batch)
+        return self.act(x)
+
+    # -- lower-level interaction operations
 
     def act(self, observations: Any, *, greedy: bool = False) -> np.ndarray:
         """Settle on the observations of a batch of streams and choose an action per stream."""
@@ -285,7 +349,13 @@ class GenericBrain:
         return action
 
     def learn(
-        self, reward: Any, done: Any, next_observations: Any, *, bootstrap: Any = None
+        self,
+        reward: Any,
+        done: Any,
+        next_observations: Any,
+        *,
+        bootstrap: Any = None,
+        salience: Any = None,
     ) -> dict[str, float]:
         """Dopamine from the reward of the last action; ``done`` rows start a new episode.
 
@@ -297,11 +367,23 @@ class GenericBrain:
         reward, done, _, bootstrap = self.basal_ganglia._validated_transition(
             reward, done, self.stimulus(following, memory=False), bootstrap
         )
+        importance = SynapticMemory.salience_vector(
+            np.abs(reward) if salience is None else salience, len(following)
+        )
         if self.hippocampus is not None and self._moment is not None:
             keys, action = self._moment
-            target = self.hippocampus.recall(keys)
-            target[np.arange(len(action)), action] = reward
-            self.hippocampus.observe(keys, target)
+            if isinstance(self.hippocampus, SynapticMemory):
+                target = np.zeros((len(action), len(self.motor_index)))
+                target[np.arange(len(action)), action] = reward
+                observed = np.zeros(target.shape, bool)
+                observed[np.arange(len(action)), action] = True
+                self.hippocampus.observe(
+                    keys, target, salience=importance, value_mask=observed
+                )
+            else:
+                target = self.hippocampus.recall(keys)
+                target[np.arange(len(action)), action] = reward
+                self.hippocampus.observe(keys, target)
         if self.working_memory is not None and done.any():
             self.working_memory.reset(len(done), rows=np.flatnonzero(done))
         report = self.basal_ganglia.learn(reward, done, self.stimulus(following), bootstrap)
@@ -316,27 +398,30 @@ class GenericBrain:
             self.working_memory.reset(0)
         self._moment = None
         self._prepared = None
+        self.last_learning = {}
 
     def parameters(self) -> int:
-        """Learned actor/critic numbers; per-stream traces and episodic storage are additional."""
-        return self.basal_ganglia.parameters()
+        """Actor/critic and consolidated weights; per-stream transient storage is additional."""
+        return self.basal_ganglia.parameters() + (
+            self.hippocampus.consolidated.size
+            if isinstance(self.hippocampus, SynapticMemory)
+            else 0
+        )
 
     def save(self, path: str | Path) -> Path:
-        """Save the complete composition between decisions, after ``learn`` or ``reset``.
+        """Save the complete composition, including an action awaiting its real outcome.
 
         Includes critic, optimizer, random generators, working and episodic memories,
-        eligibility and the next free phase. An action awaiting reward cannot be saved.
+        eligibility, the current free phase and any pending action's nudged states.
         ``Learner.save`` remains available for the slow learned response alone.
         """
         from .checkpoint import _learner_data, _write
         from .receipts import canonical_json
 
         agent = self.basal_ganglia
-        if agent._pending is not None:
-            raise RuntimeError("finish the pending action with learn, or reset before saving")
         data = _learner_data(self.learner)
         metadata: dict[str, Any] = {
-            "format": "cadence-generic/1",
+            "format": "cadence-generic/2",
             "reward": agent.config.to_dict(),
             "rng": self.rng.bit_generator.state,
             "actor_rng": agent.rng.bit_generator.state,
@@ -347,7 +432,20 @@ class GenericBrain:
             else self.working_memory.to_dict(),
             "hippocampus": None if self.hippocampus is None else self.hippocampus.to_dict(),
             "free_steps": None if agent.state is None else agent.state.steps,
+            "pending": agent._pending is not None,
+            "last_learning": self.last_learning,
         }
+        if agent._pending is not None:
+            kind, plus, minus, value = agent._pending
+            if kind != "states":
+                raise ValueError("GenericBrain checkpoints require its standard action states")
+            data["pending/value"] = value
+            for name, phase in (("plus", plus), ("minus", minus)):
+                metadata["pending_" + name + "_steps"] = phase.steps
+                for field in ("v", "activation", "adaptation"):
+                    data[f"pending/{name}/{field}"] = np.asarray(getattr(phase, field))
+            if self._moment is not None:
+                data["moment/observations"], data["moment/action"] = self._moment
         for name in _REWARD_ARRAYS:
             value = getattr(agent, name)
             if value is not None:
@@ -368,6 +466,8 @@ class GenericBrain:
         if self.hippocampus is not None:
             for name in ("pre", "post", "strength", "mass"):
                 data["episodic/" + name] = getattr(self.hippocampus, name)
+            if isinstance(self.hippocampus, SynapticMemory):
+                data["episodic/consolidated"] = self.hippocampus.consolidated
         data["generic"] = np.array(canonical_json(metadata))
         return _write(data, path)
 
@@ -391,7 +491,7 @@ class GenericBrain:
             if "generic" not in data:
                 raise ValueError("not a GenericBrain checkpoint; use Learner.load for a learner")
             meta = json.loads(str(data["generic"]))
-            if meta.get("format") != "cadence-generic/1":
+            if meta.get("format") not in ("cadence-generic/1", "cadence-generic/2"):
                 raise ValueError("unsupported GenericBrain checkpoint format")
             learner = Learner.load(path, backend=backend, device=device, precision=precision)
             result = cls(learner.brain.connectome, reward=ActorCriticConfig(**meta["reward"]))
@@ -417,6 +517,23 @@ class GenericBrain:
                     int(meta["free_steps"]),
                 )
             result._prepared = data["prepared"].copy() if "prepared" in data else None
+            result.last_learning = meta.get("last_learning", {})
+            if meta.get("pending", False):
+                phases = []
+                for name in ("plus", "minus"):
+                    phases.append(
+                        BrainState(
+                            data[f"pending/{name}/v"].copy(),
+                            data[f"pending/{name}/activation"].copy(),
+                            data[f"pending/{name}/adaptation"].copy(),
+                            int(meta["pending_" + name + "_steps"]),
+                        )
+                    )
+                agent._pending = ("states", phases[0], phases[1], data["pending/value"].copy())
+                if "moment/observations" in data:
+                    result._moment = (
+                        data["moment/observations"].copy(), data["moment/action"].copy()
+                    )
             working = meta["working_memory"]
             result.working_memory = None
             if working is not None:
@@ -431,7 +548,15 @@ class GenericBrain:
                     setattr(result.working_memory, name, data["working/" + name].copy())
             episodic = meta["hippocampus"]
             if episodic is not None:
-                result.hippocampus = FastSynapses(
+                memory_class = (
+                    SynapticMemory if episodic.get("kind") == "consolidating" else FastSynapses
+                )
+                memory_options = (
+                    {"consolidation": episodic["consolidation"]}
+                    if memory_class is SynapticMemory
+                    else {}
+                )
+                result.hippocampus = memory_class(
                     data["episodic/pre"],
                     data["episodic/post"],
                     **{
@@ -446,7 +571,16 @@ class GenericBrain:
                             "writes",
                         )
                     },
+                    **memory_options,
                 )
                 result.hippocampus.strength = data["episodic/strength"].copy()
                 result.hippocampus.mass = data["episodic/mass"].copy()
+                if isinstance(result.hippocampus, SynapticMemory):
+                    weights = data["episodic/consolidated"].copy()
+                    if (
+                        weights.shape != result.hippocampus.consolidated.shape
+                        or not np.isfinite(weights).all()
+                    ):
+                        raise ValueError("invalid consolidated synaptic weights")
+                    result.hippocampus.consolidated = weights
         return result

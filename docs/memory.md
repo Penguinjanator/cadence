@@ -6,6 +6,11 @@ the key and value widths; it does not grow with the number of observations. Slow
 can learn representations around that store, but the store does not learn its own keys
 or decide when an observation is trustworthy.
 
+For repeated and salient experiences, [`SynapticMemory`](continuous.md) adds persistent
+shared synapses and fading per-stream residuals. New generic brains with `episodic=True`
+use this consolidation rule. The `FastSynapses` API below retains its original independent
+stream behavior and immediate residual-write rule.
+
 ## One correction
 
 For a unit key `k`, value `v`, and matrix `M`:

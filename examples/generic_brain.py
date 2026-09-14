@@ -2,7 +2,8 @@
 
 The brain is one connectome of standard regions: a visual cortex or a sensory region, an
 association cortex and a motor cortex, with basal ganglia that learn from dopamine. The
-same class learns from labels with ``fit`` and from reward with ``act`` and ``learn``.
+same class can take demonstrations and reward in its ongoing ``step`` loop.
+``fit`` below is a compact independent-picture benchmark, not a required life stage.
 """
 
 import numpy as np
@@ -42,11 +43,11 @@ def bandit() -> float:
         return np.eye(4)[c], c
 
     x, c = contexts(32)
+    action = brain.step(x)
     for _ in range(400):
-        action = brain.act(x)
         reward = (action == c).astype(float)
         x, c = contexts(32)
-        brain.learn(reward, np.ones(32, dtype=bool), x)
+        action = brain.step(x, reward=reward, done=np.ones(32, dtype=bool))
     test, answer = contexts(400)
     brain.reset()
     rate = float((brain.act(test, greedy=True) == answer).mean())
@@ -54,6 +55,23 @@ def bandit() -> float:
     return rate
 
 
+def lasting_memory() -> list[float]:
+    """Clear transient state and compare ordinary, repeated and salient experiences."""
+    result = []
+    for repetitions, salience in ((1, 0.0), (40, 0.0), (1, 19.0)):
+        memory = cd.SynapticMemory(np.arange(2), np.arange(2, 4))
+        for _ in range(repetitions):
+            memory.observe(
+                np.array([[1., 0.]]), np.array([[1., 0.]]), salience=np.array([salience])
+            )
+        memory.reset(1)
+        result.append(float(memory.recall(np.array([[1., 0.]]))[0, 0]))
+    print("lasting association after clearing transient memory:", np.round(result, 4))
+    return result
+
+
 if __name__ == "__main__":
     assert pictures() >= 0.85
     assert bandit() >= 0.9
+    retained = lasting_memory()
+    assert retained[0] < 0.1 and retained[1] > 0.85 and retained[2] == 1

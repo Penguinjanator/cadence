@@ -15,12 +15,14 @@ Records, traces and local learning keep what a task needs.
 5. [Function map](biology.md): from a nervous-system function to its connectome and pattern.
 6. [A generic brain](patterns.md#a-generic-brain): a ready brain of standard regions that
    learns labels, pictures and rewards.
+7. [One ongoing brain](continuous.md): continuous interaction, repetition, salience and
+   persistent synaptic consolidation.
 
 ## Mechanisms
 
 | Guide | What it covers |
 |---|---|
-| [Memory](memory.md) | Key/value records, residual writes, interference and resets |
+| [Memory](memory.md), [consolidation](continuous.md) | Synaptic records, transient/persistent weights, salience, interference and resets |
 | [Learning](learning.md) | Free and nudged phases, gradient conditions, every knob |
 | [Reward](reward.md) | Eligibility traces, a critic and the prediction error |
 | [Task recipes](tasks.md) | Input encoding, pattern targets, streams, several learners |
