@@ -5,6 +5,29 @@ an action from output ports. Learning is a separate choice: update when a target
 or reward arrives. The [games guide](games.md) shows public imitation and reward
 examples; [reward](reward.md) describes the eligibility-trace composition.
 
+## Try the composite brains
+
+The [live showcase](https://github.com/muellerberndt/cadence-examples#live-composite-brains)
+includes a teachable mouse, a drawing arm, and a fly-inspired forager. Run
+`python serve.py` in cadence-examples to open them. Their simple bodies and
+sensor adapters are supplied; their retained records and feedback are visible.
+
+The mouse learns explicit task-cue/destination associations with `FastSeams`.
+A visual map gates the recurrent spatial field, and the body's position feeds
+the next action selection. Teaching a new association and learning to infer an
+unknown map are different tasks; this example demonstrates the former.
+
+The arm places two visual-error owners and two motor-correction owners in one
+`Wiring`. The visual owners receive negative feedback from predicted movement;
+the motor owners receive visual residuals through the supplied arm Jacobian.
+They settle together, the joints move, and actual pose readback supplies the
+next drive. Disabling readback provides an open-loop disturbance control.
+The image adapter extracts outlines; this is not learned image understanding.
+
+These examples use existing operations. The browser numerical kernels are
+checked against Python Cadence, and the showcase records navigation, task
+retention, drawing coverage and the relevant conventional controls.
+
 ## The loop
 
 This application sketch assumes a saved learner and application-defined

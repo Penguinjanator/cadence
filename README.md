@@ -73,6 +73,11 @@ equilibrium branch. [Learning](docs/learning.md) gives the equations and limits.
 
 ## Examples with controls
 
+Start with the [live composite brains](https://github.com/muellerberndt/cadence-examples#live-composite-brains):
+teach a mouse a new task, disturb a drawing arm, or watch a forager revise its
+memory. The web demos expose their supplied body rules, learned records, and
+measured controls. The original tutorials remain available below.
+
 | Example | What you can explore |
 |---|---|
 | [01 digits](https://github.com/muellerberndt/cadence-examples/tree/main/01_digits) | classification, validation selection, and an MLP comparison |
