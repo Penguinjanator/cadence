@@ -84,13 +84,13 @@ For pictures, working memory and reward, start with [`GenericBrain`](docs/patter
 | Neurons, synapses and a shared equilibrium | [Concepts](docs/concepts.md), [`equilibrate`](docs/api.md#brain-cadencebrain) |
 | Standard visual, association, motor and working-memory regions | [Brain design guide](docs/design.md) |
 | Imitation, practice and corrective teaching | [Learning lifecycle](docs/design.md#teach-practice-correct-and-retain) |
-| Short- and long-term memory | [Function map](docs/biology.md), [memory](docs/memory.md) |
+| Short- and long-term memory | [Function map](docs/biology.md), [memory](docs/memory.md), [content retrieval](docs/content_memory.md), [rehearsal](docs/replay.md) |
 | Imagined futures, review and self-monitoring | [Patterns](docs/patterns.md#future-simulation) |
 | Biological counterparts and what is still missing | [Biology mapping](docs/biology.md) |
 
 ## Examples
 
-Six brains run in the browser with nothing to install. Each shows its live circuit
+Five brains run in the browser with nothing to install. Each shows its live circuit
 beside the body.
 
 | Example | What it does | Circuit |

@@ -480,3 +480,22 @@ module paths `cadence.wiring`, `cadence.rules`, `cadence.settle`, `cadence.const
 `.edges`, `.wiring`, `.rule`, `.repair`, `clamp_levels()` and `Trace.clamp()`. The module
 docstring lists the full map. `cadence.legacy.OLD_NAMES` maps old names to
 `(module, name)`.
+
+## Bounded memory and rehearsal
+
+- `ContentMemory(inputs, outputs, capacity, match=0.75, key_rate=0.1, value_rate=1.0)`:
+  `select(cue)` returns slots/scores; `recall(cue)` reads without mutation;
+  `observe(cue, value, write=None)` learns from observed values; `clear()` erases
+  the shared store. Novel cues allocate or evict a slot. See [content memory](content_memory.md).
+- `ReservoirReplay(capacity, inputs, seed=0)`: `sample(count)` returns owned prior
+  feature/label rows; `observe(features, labels)` admits actual observations into
+  a uniform bounded reservoir. Learning and checkpointing are caller-owned.
+  See [rehearsal](replay.md) for information and storage costs.
+- `cadence.sequence.SequenceCache(features, values, capacity=128, temperature=0.1,
+  center_rate=0.02)`: per-stream content readback; call `reset(batch)`, then
+  `read(features)` before `observe(features, observed_values)`.
+  `SequenceRead` exposes value, entropy, maximum weight and record count.
+- `cadence.sequence.BoundedTrace(width, decay=0.5, radius=1.0, center=True)`:
+  `reset(batch)`, `observe(value)` and non-mutating `read()`. Readback has at most
+  the declared L2 radius; this is no guarantee of better sequence prediction.
+  See [sequence readback](sequence.md).

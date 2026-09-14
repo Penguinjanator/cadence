@@ -59,10 +59,11 @@ def test_unequal_categorical_slots_never_sample_padding_and_learn_together():
     assert not ac.trace.any()
 
 
-def test_reward_nudge_matches_the_log_policy_derivative():
-    ac, drive = actor("quadratic")
+@pytest.mark.parametrize("slots", [1, [2, 3]])
+def test_reward_nudge_matches_the_log_policy_derivative(slots):
+    ac, drive = actor("quadratic", slots=slots)
     drive = drive[:1]
-    choice = int(ac.act(drive)[0])
+    choice = ac.act(drive)[0]
     _, plus, minus, _ = ac._pending
     # Motor bias derivative has no reciprocal-weight multiplicity ambiguity.
     contrast = (plus.activation[0] - minus.activation[0]) / (2 * ac.learner.config.beta)
@@ -75,7 +76,13 @@ def test_reward_nudge_matches_the_log_policy_derivative():
             bias[i] += sign * 1e-5
             ac.learner.brain = original.with_parameters(bias=bias)
             state = ac.learner.free(drive)
-            logs.append(np.log(ac.probabilities(state)[0, choice]))
+            probabilities = ac.probabilities(state)[0]
+            selected = (
+                probabilities[choice]
+                if probabilities.ndim == 1
+                else probabilities[np.arange(len(choice)), choice]
+            )
+            logs.append(np.log(selected).sum())
         numeric.append((logs[1] - logs[0]) / 2e-5)
     ac.learner.brain = original
     # Cadence's nudge uses target-p, hence differentiates -T*log(p).
@@ -119,3 +126,31 @@ def test_critic_keeps_reward_units_when_actor_dopamine_is_centred_or_clipped(bac
     np.testing.assert_allclose(results[1][0], 10.0, atol=0.1)
     assert results[1][1]["delta"] <= 0.01
     assert results[1][1]["td_error"] < 0.1
+
+
+@pytest.mark.parametrize("backend", ["cpu", "torch"])
+def test_calibrated_critic_padding_does_not_change_real_transitions(backend):
+    from dataclasses import replace
+
+    if backend == "torch":
+        pytest.importorskip("torch")
+    outcomes = []
+    for padded in (False, True):
+        ac, drive = actor(backend=backend)
+        drive = drive[:2]
+        if padded:
+            drive = np.concatenate([drive, np.zeros_like(drive[:1])])
+        ac.config = replace(ac.config, critic_signal="td", dopamine_center=0.9)
+        # Fix phase work: a padding row may otherwise change batchwise stopping.
+        ac.learner.config = replace(ac.learner.config, tolerance=None)
+        for step in range(6):
+            ac.rng = np.random.default_rng(step)
+            ac.act(drive)
+            reward = np.array([10.0, -3.0, 999.0]) if padded else np.array([10.0, -3.0])
+            observed = np.array([True, True, False]) if padded else None
+            ac.learn(reward, np.full(len(drive), step == 5), drive, observed=observed)
+        outcomes.append(
+            (ac.learner.brain.efficacy, ac.learner.brain.bias, ac.w_critic, np.array([ac.b_critic]))
+        )
+    for a, b in zip(*outcomes, strict=True):
+        np.testing.assert_allclose(a, b, atol=1e-8)

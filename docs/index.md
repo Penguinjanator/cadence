@@ -23,6 +23,9 @@ Records, traces and local learning keep what a task needs.
 | Guide | What it covers |
 |---|---|
 | [Memory](memory.md), [consolidation](continuous.md) | Synaptic records, transient/persistent weights, salience, interference, pattern separation and resets |
+| [Content prototypes](content_memory.md) | Content-selected associations, novelty, stable coordinates and capacity limits |
+| [Rehearsal](replay.md) | Bounded past observations, explicit labels and extra training work |
+| [Sequence readback](sequence.md) | A causal content cache and bounded fading traces |
 | [Certificate](certificate.md) | When settling is a contraction: row mass, slope bound, the error bounds and the warm-start budget |
 | [Learning](learning.md) | Free and nudged phases, gradient conditions, every knob |
 | [Reward](reward.md) | Eligibility traces, a critic and the prediction error |
@@ -35,7 +38,7 @@ Records, traces and local learning keep what a task needs.
 
 ## Examples
 
-Six [interactive websites](https://floatingpragma.io/cadence-examples/) apply these
+Five [interactive websites](https://floatingpragma.io/cadence-examples/) apply these
 patterns: an eye and drawing arm, a teachable mouse, a C. elegans habitat, a
-fly-inspired forager, changing memory and Connect Four. Their code, evidence and
+fly-inspired forager and Connect Four. Their code, evidence and
 local launcher are in [cadence-examples](https://github.com/muellerberndt/cadence-examples).

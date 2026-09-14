@@ -47,8 +47,8 @@ includes aliases and capacity overflow. Reproduce and verify its entire comparis
 grid with:
 
 ```sh
-PYTHONPATH=src python experiments/memory_repair/content.py
-PYTHONPATH=src python experiments/memory_repair/content.py --verify experiments/memory_repair/content.json
+PYTHONPATH=src python experiments/memory_repair/content.py --out /tmp/cadence-content-new.json
+PYTHONPATH=src python experiments/memory_repair/verify.py
 ```
 
 The mechanism is compatible with the broad complementary-learning-systems motivation
