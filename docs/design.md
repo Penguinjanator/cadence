@@ -80,6 +80,16 @@ neuron equations. To put a memory population inside the joint solve, drive its r
 ports and connect those neurons to the other regions. Draw every auxiliary store and
 readout in the architecture as well as the neurons; a combined picture alone is not coupling.
 
+For a task that needs ordered history, first test whether its state carrier preserves
+the relevant observations. A leaky average can erase their order. In the
+[repeat-card experiment](../experiments/temporal_address/README.md), a three-stage
+sensory register reads its oldest entry before shifting in the current observation.
+Both patch policies and a smaller linear policy learn perfectly with that history;
+masking it leaves both near chance. This register is controller state outside the
+joint solve, with a task-specific lag. It is a diagnostic design pattern, not a
+learned temporal address or a default memory module. Count its storage and give
+comparison models the same history.
+
 ## Equilibrium, error and surprise
 
 These quantities answer different questions:
