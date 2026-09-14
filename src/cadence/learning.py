@@ -622,13 +622,16 @@ class Learner:
 
     def parameters(self) -> int:
         """Trainable numbers: one per seam (a tied pair or group counts once) plus the biases."""
-        assert self.trainable_overlaps is not None
-        tied_twice = (self.reverse >= 0) & self.trainable_overlaps
+        assert self.trainable_overlaps is not None and self.trainable_owners is not None
+        # A frozen partner contributes no second trainable number.
+        paired = self.reverse >= 0
+        tied_twice = paired & self.trainable_overlaps
+        tied_twice[paired] &= self.trainable_overlaps[self.reverse[paired]]
         seams = int(self.trainable_overlaps.sum() - tied_twice.sum() // 2)
         if self.tie_groups is not None:
             member = (self.tie_groups >= 0) & self.trainable_overlaps
             seams -= int(member.sum()) - len(np.unique(self.tie_groups[member]))
-        return seams + self.engine.wiring.n
+        return seams + int(np.count_nonzero(self.trainable_owners))
 
     def to_dict(self) -> dict[str, Any]:
         return {

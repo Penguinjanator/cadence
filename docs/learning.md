@@ -232,11 +232,13 @@ it, export `engine.dense()` for a page, put `to_dict()` in a receipt.
 | `normalize`, `normalize_floor` | `LearnerConfig` | divide each seam's step by its bias-corrected running RMS plus a floor | 0 (off); tune on validation; combining momentum and RMS gives an Adam-style update |
 | `symmetric` | `Learner` | tie an overlap and its reverse into one seam | `True` |
 | `trainable_overlaps` | `Learner` | bool per overlap; freeze the rest | all |
+| `trainable_owners` | `Learner` | bool per owner bias; freeze the rest | all |
 | `leak`, `slope`, `dt` | `learning_rule` | sub-rest response, activation slope, step of the owner update | 0.1, 1.0, 0.5 to 1.0 |
 | `density`, `feedback`, `lateral`, `init`, `skip` | `layered` | input→hidden density, feedback scale, output↔output scale, initial magnitude, direct input→output seams | 1.0, 1.0, 0, 1.0, `False` |
 
-`Learner.parameters()` counts one number per tied seam group plus one bias per
-owner. Report optimizer arrays and episodic memory separately when comparing
+`Learner.parameters()` counts trainable seam scales (shared pairs/groups count
+once) plus unfrozen owner biases. A seam whose reverse is frozen still contributes
+one trainable scale. Report optimizer arrays and episodic memory separately when comparing
 storage; parameter count alone does not measure execution cost.
 
 ## 8. Warm starts, costs, and what to expect

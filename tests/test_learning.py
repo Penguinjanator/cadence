@@ -270,6 +270,27 @@ def test_trainable_masks_leave_the_rest_of_the_net_alone() -> None:
     assert not np.array_equal(learner.engine.bias[owners], bias0[owners])
 
 
+@pytest.mark.parametrize("symmetric", [True, False])
+def test_parameters_count_only_trainable_seams_and_biases(symmetric: bool) -> None:
+    wiring = cd.Wiring.from_edges(n=4, pre=[0, 1, 2, 3], post=[1, 0, 3, 2])
+    overlaps = wiring.pre % 2 == 0  # two separate pairs, one trainable side in each
+    owners = np.array([False, True, False, True])
+    learner = cd.Learner(
+        cd.Settlement(wiring, cd.learning_rule()),
+        [1, 3],
+        symmetric=symmetric,
+        trainable_overlaps=overlaps,
+        trainable_owners=owners,
+    )
+    assert learner.parameters() == 4  # two independent moving seams and two biases
+    overlaps[:] = True
+    assert learner.parameters() == (4 if symmetric else 6)
+    owners[:] = False
+    assert learner.parameters() == (2 if symmetric else 4)
+    overlaps[:] = False
+    assert learner.parameters() == 0
+
+
 @pytest.mark.parametrize("backend", ["torch", "mlx"])
 def test_contrast_on_the_device_matches_the_host(backend: str) -> None:
     if backend not in cd.available_backends():
