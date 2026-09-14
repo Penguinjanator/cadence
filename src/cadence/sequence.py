@@ -83,24 +83,45 @@ class SequenceCache:
 
     @staticmethod
     def _unit(x: np.ndarray) -> np.ndarray:
-        return np.asarray(x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-12))
+        scale = np.max(np.abs(x), axis=-1, keepdims=True)
+        scaled = x / np.where(scale > 0, scale, 1.0)
+        norm = np.linalg.norm(scaled, axis=-1, keepdims=True)
+        return np.asarray(scaled / np.where(norm > 0, norm, 1.0))
+
+    @classmethod
+    def _centered_unit(cls, x: np.ndarray, mean: np.ndarray) -> np.ndarray:
+        # A positive scalar per vector cancels under unit normalization. Scaling
+        # BEFORE subtracting the same mean avoids overflow for opposite extremes.
+        scale = np.maximum(
+            np.max(np.abs(x), axis=-1, keepdims=True), np.max(np.abs(mean), axis=-1, keepdims=True)
+        )
+        scale = np.where(scale > 0, scale, 1.0)
+        return cls._unit(x / scale - mean / scale)
 
     def read(self, features: np.ndarray) -> SequenceRead:
         """Query only; this never updates the centre, keys, values, or head."""
         x = self._features(features)
-        unit_keys = self._unit(self.keys - self.mean[:, None, :])
-        unit_cue = self._unit(x - self.mean)
-        logits = (unit_keys @ unit_cue[:, :, None])[:, :, 0] / self.temperature
-        # A finite sentinel also makes the entirely empty row well-defined.
-        logits = np.where(self.filled, logits, -1e300)
         if not len(x):
             return SequenceRead(
                 np.zeros((0, self.values)), np.zeros(0), np.zeros(0), np.zeros(0, dtype=int)
             )
-        logits -= logits.max(axis=1, keepdims=True)
-        weights = np.where(self.filled, np.exp(logits), 0.0)
-        weights /= np.maximum(weights.sum(axis=1, keepdims=True), 1e-300)
-        value = (weights[:, None, :] @ self.records)[:, 0, :]
+        unit_keys = self._centered_unit(self.keys, self.mean[:, None, :])
+        unit_cue = self._centered_unit(x, self.mean)
+        cosine = (unit_keys @ unit_cue[:, :, None])[:, :, 0]
+        maximum = np.where(self.filled, cosine, -np.inf).max(axis=1, keepdims=True)
+        maximum = np.where(self.filled.any(axis=1, keepdims=True), maximum, 0.0)
+        # Subtract in cosine units first. Tiny positive temperatures may produce
+        # negative infinity, whose exponential is safely zero, never +inf / inf.
+        difference = np.where(self.filled, cosine - maximum, -np.inf)
+        with np.errstate(over="ignore", under="ignore"):
+            weights = np.exp(difference / self.temperature)
+        total = weights.sum(axis=1, keepdims=True)
+        weights /= np.where(total > 0, total, 1.0)
+        value_scale = np.max(np.abs(self.records), axis=1, keepdims=True)
+        value_scale = np.where(value_scale > 0, value_scale, 1.0)
+        scaled_value = (weights[:, None, :] @ (self.records / value_scale))[:, 0, :]
+        # A convex mean cannot exceed the largest absolute stored value.
+        value = np.clip(scaled_value, -1.0, 1.0) * value_scale[:, 0, :]
         entropy = -(weights * np.log(np.maximum(weights, 1e-300))).sum(axis=1)
         return SequenceRead(value, entropy, weights.max(axis=1), self.filled.sum(axis=1))
 
@@ -115,15 +136,20 @@ class SequenceCache:
         y = np.asarray(values, dtype=float)
         if y.shape != (len(x), self.values) or not np.isfinite(y).all():
             raise ValueError(f"values must be a finite (batch, {self.values}) array")
+        next_mean = self.mean
+        if self.center_rate:
+            with np.errstate(over="ignore", invalid="ignore"):
+                next_mean = (1.0 - self.center_rate) * self.mean + self.center_rate * x
+            next_mean = np.where(self.observations[:, None] == 0, x, next_mean)
+            if not np.isfinite(next_mean).all():
+                raise ValueError("feature magnitudes exceed stable mean range")
         rows = np.arange(len(x))
         self.keys[rows, self.head] = x
         self.records[rows, self.head] = y
         self.filled[rows, self.head] = True
         self.head = (self.head + 1) % self.capacity
-        if self.center_rate:
-            self.mean += self.center_rate * (x - self.mean)
-            # The first sample initializes the mean, avoiding a long cold bias.
-            self.mean[self.observations == 0] = x[self.observations == 0]
+        self.mean = next_mean
+
         self.observations += 1
 
 
@@ -155,13 +181,22 @@ class BoundedTrace:
         self.trace = np.zeros((batch, self.width))
 
     def read(self) -> np.ndarray:
-        x = self.trace - self.trace.mean(axis=1, keepdims=True) if self.center else self.trace
-        return x * np.minimum(
-            1.0, self.radius / np.maximum(np.linalg.norm(x, axis=1, keepdims=True), 1e-12)
-        )
+        scale = np.max(np.abs(self.trace), axis=1, keepdims=True)
+        safe_scale = np.where(scale > 0, scale, 1.0)
+        scaled = self.trace / safe_scale
+        if self.center:
+            scaled = scaled - scaled.mean(axis=1, keepdims=True)
+        norm = np.linalg.norm(scaled, axis=1, keepdims=True)
+        with np.errstate(over="ignore", under="ignore"):
+            length = np.minimum(scale * norm, self.radius)
+        return np.asarray(scaled / np.where(norm > 0, norm, 1.0) * length)
 
     def observe(self, value: np.ndarray) -> None:
         x = np.asarray(value, dtype=float)
         if x.shape != self.trace.shape or not np.isfinite(x).all():
             raise ValueError("value must be finite and have the current trace shape")
-        self.trace = self.decay * self.trace + (1 - self.decay) * x
+        with np.errstate(over="ignore", invalid="ignore"):
+            candidate = self.decay * self.trace + (1 - self.decay) * x
+        if not np.isfinite(candidate).all():
+            raise ValueError("feature magnitudes exceed stable trace range")
+        self.trace = candidate

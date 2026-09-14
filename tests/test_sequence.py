@@ -132,3 +132,56 @@ def test_trace_is_owned_and_bounded_after_reused_input_mutation() -> None:
 def test_bad_cache_configuration(kwargs) -> None:
     with pytest.raises(ValueError):
         SequenceCache(2, 2, **kwargs)
+
+
+def test_subnormal_temperature_selects_without_nonfinite_probabilities() -> None:
+    cache = SequenceCache(2, 2, center_rate=0, temperature=1e-320)
+    cache.reset(1)
+    cache.observe([[1, 0]], [[1, 0]])
+    cache.observe([[0, 1]], [[0, 1]])
+    with np.errstate(all="raise"):
+        result = cache.read([[1, 0]])
+    np.testing.assert_array_equal(result.value, [[1, 0]])
+    assert np.isfinite(result.entropy).all()
+
+
+def test_opposite_large_finite_features_have_finite_center_and_read() -> None:
+    cache = SequenceCache(2, 2, center_rate=0.5, temperature=0.1)
+    cache.reset(1)
+    with np.errstate(all="raise"):
+        cache.observe([[1e308, 0]], [[1, 0]])
+        cache.observe([[-1e308, 0]], [[0, 1]])
+        result = cache.read([[1e308, 0]])
+    np.testing.assert_array_equal(cache.mean, [[0, 0]])
+    assert result.value[0, 0] > 0.999
+    assert np.isfinite(cache.keys).all()
+
+
+def test_center_subtraction_and_convex_values_cannot_overflow() -> None:
+    cache = SequenceCache(2, 2, center_rate=1, temperature=0.1)
+    cache.reset(1)
+    with np.errstate(all="raise"):
+        cache.observe([[1e308, 0]], [[1e308, -1e308]])
+        cache.observe([[-1e308, 0]], [[1e308, -1e308]])
+        result = cache.read([[1e308, 0]])
+    np.testing.assert_allclose(result.value, [[1e308, -1e308]])
+    assert np.isfinite(result.value).all()
+
+
+def test_tiny_nonzero_keys_retain_their_direction() -> None:
+    cache = SequenceCache(2, 2, center_rate=0, temperature=0.01)
+    cache.reset(1)
+    cache.observe([[1e-310, 0]], [[1, 0]])
+    cache.observe([[0, 1e-310]], [[0, 1]])
+    assert cache.read([[1e-310, 0]]).value[0, 0] > 0.999
+
+
+def test_large_finite_trace_has_finite_bounded_readback() -> None:
+    trace = BoundedTrace(3, decay=0.5, radius=1, center=True)
+    trace.reset(1)
+    with np.errstate(all="raise"):
+        trace.observe([[1e308, 1e308, -1e308]])
+        result = trace.read()
+    assert np.isfinite(result).all()
+    np.testing.assert_allclose(np.linalg.norm(result), 1)
+    np.testing.assert_allclose(result.sum(), 0, atol=1e-15)
