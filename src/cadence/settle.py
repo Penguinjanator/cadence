@@ -547,7 +547,10 @@ class Settlement:
         elif self.backend in ("torch", "mlx"):  # the kernels never write the host arrays
             v, a = np.atleast_2d(state.v), np.atleast_2d(state.adaptation)
         else:
-            v, a = np.atleast_2d(state.v).copy(), np.atleast_2d(state.adaptation).copy()
+            # CPU kernels update in place; integer or float32 warm states must not
+            # truncate potentials or silently lower the documented float64 precision.
+            v = np.array(state.v, dtype=np.float64, copy=True, ndmin=2)
+            a = np.array(state.adaptation, dtype=np.float64, copy=True, ndmin=2)
         if v is not None and (v.shape != (batch, n) or a.shape != (batch, n)):
             raise ValueError("state batch does not match the drive batch")
         handle = None
@@ -747,7 +750,9 @@ class Settlement:
             "sparse_kernel": (
                 None
                 if self._csr is None
-                else "scipy_csr" if self._csr[1] is not None else "numpy_segmented"
+                else "scipy_csr"
+                if self._csr[1] is not None
+                else "numpy_segmented"
             ),
             "layout": self.layout.to_dict(),
             "edge_scale_changed": int((self.edge_scale != self.wiring.sign).sum()),

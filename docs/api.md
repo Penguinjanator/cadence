@@ -235,7 +235,14 @@ give additional details. Prefer keyword arguments for optional configuration.
 
 ## Optional task compositions
 
-`from cadence.brains import sensor_motor, imagine, ActivityMonitor` imports small
+`from cadence.brains import couple, sensor_motor, imagine, ActivityMonitor` imports small
 motor, counterfactual-search and self-reading compositions. See [task brains](brains.md)
 for ports, budgets, supplied-model boundaries and examples. These are optional
 architectural helpers; the owner rule and ordinary learning API are unchanged.
+
+`couple(regions, bridges=()) -> Wiring` merges an insertion-ordered mapping of
+region names to wirings. Each bridge is `(source_region, local_owner,
+target_region, local_owner, weight)`. Full region sets and `region/child_set`
+ports remain addressable. Use the result with one `Settlement` and concatenate
+drives in region insertion order. Invalid ports, self-bridges and nonfinite
+weights are rejected. This helper adds topology, not a convergence guarantee.

@@ -118,7 +118,9 @@ def test_device_mask_continuations_match_owner_equations(
         device = "cpu" if backend == "torch_cpu" else "mps"
         if device == "mps" and not torch.backends.mps.is_available():
             pytest.skip("MPS unavailable")
-        engine = cd.Settlement(wiring, rule, backend="torch", device=device, dense_limit=dense_limit)
+        engine = cd.Settlement(
+            wiring, rule, backend="torch", device=device, dense_limit=dense_limit
+        )
     else:
         if dense_limit == 1:
             pytest.skip("MLX requires block transport")
@@ -172,3 +174,26 @@ def test_device_mask_continuations_match_owner_equations(
         strict=True,
     ):
         np.testing.assert_allclose(value, expected, atol=tolerance, rtol=0)
+
+
+@pytest.mark.parametrize("dtype", [np.int64, np.float32, np.float64])
+@pytest.mark.parametrize("dense_limit", [0, 2048])
+def test_cpu_warm_state_keeps_potentials_and_activations_consistent(dtype, dense_limit):
+    engine = cd.Settlement(
+        cd.Wiring.from_edges(2, pre=[0], post=[1], sign=[0.3]),
+        cd.GradedRule(gain=1, slope=2, threshold=0, leak=1, dt=1, clamp_amplitude=1),
+        dense_limit=dense_limit,
+    )
+    initial = cd.SettledState(
+        v=np.zeros(2, dtype=dtype),
+        activation=np.zeros(2, dtype=dtype),
+        adaptation=np.zeros(2, dtype=dtype),
+        steps=0,
+    )
+    drive = np.array([0.4, 0.0])
+    state = engine.settle(drive, state=initial, steps=20, tolerance=0)
+    assert state.v.dtype == np.float64 and state.adaptation.dtype == np.float64
+    np.testing.assert_allclose(state.v, [0.4, 0.3 * np.tanh(0.4)], atol=1e-14)
+    np.testing.assert_allclose(state.activation, engine.rule.activation(state.v), atol=1e-14)
+    assert engine.residual(drive, state)[0] < 1e-14
+    np.testing.assert_array_equal(initial.v, [0, 0])

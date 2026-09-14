@@ -5,6 +5,17 @@ an action from output ports. Learning is a separate choice: update when a target
 or reward arrives. The [games guide](games.md) describes historical imitation and reward
 examples; [reward](reward.md) describes the eligibility-trace composition.
 
+## One shared control state
+
+The public task brains connect their named sensory, memory, spatial and motor
+regions before settling. Every local repair contributes to one joint equilibrium
+for the current observation. Actions change the next observation; lessons update
+records between phases. The display reports the combined equation residual and
+can replay repairs across region boundaries. A converged circuit still needs a
+behavior test: self-consistency alone does not establish an optimal controller.
+See [coupling regions](brains.md#different-regions-one-equilibrium) for the small
+`couple` wiring helper and the complete working example.
+
 ## Try the composite brains
 
 The [live showcase](https://github.com/muellerberndt/cadence-examples#live-composite-brains)

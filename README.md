@@ -71,6 +71,13 @@ backward computation graph. The equilibrium-gradient interpretation requires
 symmetric effective recurrent weights, converged phases, and a smooth stable
 equilibrium branch. [Learning](docs/learning.md) gives the equations and limits.
 
+Different functions can share one equilibrium: vision, memory and motor regions
+exchange local repairs through their seams until the combined circuit is
+self-consistent under its current input. The body acts, changes that input, and
+repair continues. [`couple`](docs/brains.md#different-regions-one-equilibrium)
+assembles labeled regions for one settlement. A fixed point is not a guarantee
+of the globally best action.
+
 ## Examples
 
 **Feed a worm, teach a mouse, draw with an arm, or challenge a reasoner.** The six
@@ -82,13 +89,13 @@ input-release probes and memory writes. The layout stacks on mobile.
 
 | Main example | What it does | Cadence circuit size | Biological size reference |
 |---|---|---|---|
-| [C. elegans habitat](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#food-and-walls-in-the-worm-habitat) | Detects local food cues, navigates around walls and consumes food patches on contact. Draw barriers, place food, erase a passage, or inspect and perturb the chemical circuit. | **309 owners · 3,612 seams** in the habitat (297-cell chemical graph plus 12 directional sensor/motor owners); no learned entries | Drawn from C. elegans anatomy; the adult hermaphrodite has **302 neurons** in its complete nervous system |
-| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Starts with cheese, home and water tasks. Teach a new destination, revise it without erasing other distinct cues, and carry the lesson into another maze. | **132 active ports / 265 allocated slots · 278 seams** in the starting maze; **32 adaptive entries** | Hundreds of software slots; C. elegans' **302-neuron** nervous system is a count reference |
-| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Reads your drawing pad or uploaded line image through a retina, then drives shoulder, elbow and pencil-lift motors to copy it. Disturb a joint or disable a motor population. | **593 owners · 20 seams** (576 retinal + 17 controller); supplied geometry and weights | Hundreds of software coordinates; no biological brain equivalence |
-| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Visits flowers, learns their nectar value on contact and updates its preferences when you change the nectar. Move flowers to change its world. | **18 owners · 36 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
+| [C. elegans habitat](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#food-and-walls-in-the-worm-habitat) | Detects local food cues, navigates around walls and consumes food patches on contact. Draw barriers, place food, erase a passage, or inspect and perturb the chemical circuit. | **309 owners · up to 4,108 seams** in the habitat (297-cell chemical graph plus 12 directional sensor/motor owners); no learned entries | Drawn from C. elegans anatomy; the adult hermaphrodite has **302 neurons** in its complete nervous system |
+| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Starts with cheese, home and water tasks. Teach a new destination, revise it without erasing other distinct cues, and carry the lesson into another maze. | **132 active ports / 265 allocated slots · 285 seams** in the starting maze; **32 adaptive entries** | Hundreds of software slots; C. elegans' **302-neuron** nervous system is a count reference |
+| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Reads your drawing pad or uploaded line image through a retina, then drives shoulder, elbow and pencil-lift motors to copy it. Disturb a joint or disable a motor population. | **593 owners · up to 28 seams** (576 retinal + 17 controller); supplied geometry and weights | Hundreds of software coordinates; no biological brain equivalence |
+| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Visits flowers, learns their nectar value on contact and updates its preferences when you change the nectar. Move flowers to change its world. | **18 owners · up to 44 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
 | [Changing memory](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Learns a key/value association in one write, replaces outdated records and shows retention or interference as keys become more similar. Compare online MLP updates on the same observations. | **12 memory ports · 32 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
 
-| [Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four) | Play against bounded adversarial search; inspect hypothetical replies and a self-monitor that can request more thought. | **61 displayed ports · 11 seams**: board, value, candidate records and monitor; supplied rules/weights | Engineered task circuit; no animal-equivalence claim |
+| [Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four) | Play against bounded adversarial search; inspect hypothetical replies and a self-monitor that can request more thought. | **19 owners · 39 seams**: features, value, candidates and monitor; supplied rules/weights | Engineered task circuit; no animal-equivalence claim |
 
 **Read the counts:** patches/ports hold state; seams carry weighted messages;
 adaptive entries are the values changed by learning. Active means unmasked,

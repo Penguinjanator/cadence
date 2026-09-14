@@ -35,6 +35,11 @@ owner also receives feedback or bias.
 
 ## Settlement and equilibrium
 
+Named functional regions can inhabit one wiring. Local repairs cross their seams
+and seek a common fixed point of the combined system under the current boundary.
+Use one settlement for that joint state; independent solves followed by a merged
+visualization do not couple the regions. See [task brains](brains.md).
+
 Settlement means running the update, from rest or a supplied state. A returned
 `SettledState` can be a transient, a fixed point, or part of an oscillation.
 `steps` limits work and `tolerance` stops on small activation movement.

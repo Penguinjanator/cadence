@@ -179,6 +179,11 @@ not require a new core class for every biological function. The
 
 ## Reusable task wiring and self-reading
 
+The optional [`couple`](brains.md#different-regions-one-equilibrium) helper puts
+named regions in one connected wiring: local readback and repair seek a joint
+fixed point for the current sensory boundary. This is an engineered composition,
+not evidence that biological nervous systems always settle or optimize globally.
+
 The optional [task brains](brains.md) compose motor populations, isolated future
 branches and an activity monitor. The monitor reads the controller's own changing
 candidate values and can request deeper reasoning. This is a testable

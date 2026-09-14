@@ -1,16 +1,17 @@
 # Reusable task brains
 
 Task-specific wiring is useful when its ports and causal role are explicit.
-Cadence's optional `cadence.brains` module supplies three small compositions over
+Cadence's optional `cadence.brains` module supplies small compositions over
 the existing owner rule. They are engineered designs, not claims that nature has
 one universal circuit for each capability.
 
 ```python
-from cadence.brains import ActivityMonitor, imagine, sensor_motor
+from cadence.brains import ActivityMonitor, couple, imagine, sensor_motor
 ```
 
 | Component | Inputs and outputs | Role |
 |---|---|---|
+| `couple(regions, bridges)` | Named wirings and directed connections between their ports | Assemble one graph for one settlement; keep functional region labels. |
 | `sensor_motor(axes)` | One sensory error and an opposing motor pair per axis | A body reads positive-rate minus negative-rate activity to actuate a joint or direction. Continue settlement state between ticks. |
 | `imagine(...)` | Live state, legal actions, transition model, evaluator and terminal predicate | Copy state into bounded candidate futures; return action scores and predicted sequences. Alternate max/min for adversarial tasks. |
 | `ActivityMonitor` | Controller activity, candidate scores and budget pressure | Read activity change and ambiguity into a six-owner circuit; its output can request more computation. |
@@ -19,6 +20,65 @@ Bodies, sensors, transition models, action semantics and evaluators are supplied
 by the application. A monitor has an effect only when its readout actually gates
 computation; merely drawing it is insufficient. Imagined outcomes are predictions,
 not observed rewards or training examples.
+
+## Different regions, one equilibrium
+
+A composite brain is one connected graph with named regions. Each owner reads
+messages from its incoming seams and repairs its local potential; those changes
+become its neighbors' next readback. Vision, memory, planning and movement have
+different functions, but participate in the **same joint state**. Concatenating
+pictures of independently settled regions would not implement this interaction.
+
+For the simple graded rule used by the browser task brains:
+
+```text
+activation[i] = tanh(potential[i])
+error[i] = drive[i] + sum(weight[j,i] * activation[j]) - potential[i]
+potential[i] += dt * error[i]
+```
+
+All owners read the previous joint state in a synchronous iteration. A masked
+owner emits zero activation and is projected to zero potential. Geometry,
+observations and weights stay fixed during a control phase. The body consumes
+the settled motor readout, changes the sensory boundary, and starts another
+phase. Observed lessons can change memory weights between phases. This uses the
+existing `GradedRule`; it introduces no additional learning law.
+
+```python
+from cadence.brains import couple, sensor_motor
+import cadence as cd
+
+vision = cd.Wiring.from_edges(1, pre=[], post=[])
+brain = couple(
+    {"vision": vision, "movement": sensor_motor(1)},
+    [
+        ("vision", 0, "movement", 0, 0.5),
+        ("movement", 1, "vision", 0, -0.1),
+        ("movement", 2, "vision", 0, 0.1),
+    ],
+)
+# One Settlement(brain, rule), with drives/state in region insertion order.
+# brain.sets["movement/motor"] identifies the resulting motor ports.
+```
+
+Run `python examples/coupled_brain.py` for the complete executable example.
+Bridges use region-local owner indices; original contacts, signs and named sets
+are preserved. All regions currently share the settlement's rule. `couple` does
+not automatically choose useful feedback gains, sensory encodings or a body.
+
+Check `engine.residual(drive, state)` on the **combined** wiring. It measures the
+potential equations, independently of how small the integration step is. A small
+residual establishes self-consistency for this boundary, not stability, a unique
+solution or a globally best action. Feedback can destabilize otherwise stable
+parts. Tune and test the combined system, including interventions and useful
+behavior. For a contraction under fixed input, full settlement eventually erases
+differences due only to initial state; durable lessons need retained records.
+
+Each public demo labels its functional regions and reports a global and regional
+equation error. Its replay reconstructs one captured joint trajectory. External
+world models and mutually exclusive imagined branches remain separate; the
+strategy brain integrates their candidate scores in a shared decision circuit.
+See the [six task designs and tests](https://github.com/muellerberndt/cadence-examples/blob/main/showcase/COUPLED_BRAINS.md).
 
 ## Motor control
 
@@ -56,8 +116,9 @@ Transitions must not mutate external objects; evaluators must remain read-only.
 
 The Connect Four website uses a specialized alpha-beta search with iterative
 deepening and a node budget. It retains only completed depths. Its threat readout
-feeds a six-owner graded evaluator; candidate values then feed the activity
-monitor. An ambiguous decision can extend four-ply search to six plies. The UI
+feeds a six-owner graded evaluator. For each completed depth, the current value,
+seven candidate owners and six monitor owners settle in one coupled decision
+circuit; that state selects a legal move and the further-work request. An ambiguous decision can extend four-ply search to six plies. The UI
 shows the hypothetical continuation separately from the real board.
 
 This is explicit architectural deliberation. Recurrence alone does not guarantee

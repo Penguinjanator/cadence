@@ -17,6 +17,7 @@ import numpy as np
 from ..rules import GradedRule
 from ..settle import SettledState, Settlement
 from ..wiring import Wiring
+from .coupling import couple
 
 S = TypeVar("S")
 A = TypeVar("A")
@@ -190,4 +191,12 @@ class ActivityMonitor:
         )
 
 
-__all__ = ["ActivityMonitor", "Deliberation", "Future", "Readback", "imagine", "sensor_motor"]
+__all__ = [
+    "ActivityMonitor",
+    "Deliberation",
+    "Future",
+    "Readback",
+    "couple",
+    "imagine",
+    "sensor_motor",
+]
