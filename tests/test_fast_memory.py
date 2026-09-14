@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from cadence import FastSeams
+from cadence import FastSynapses
 
 
 @pytest.mark.parametrize("rate", [0.0, 0.2, 1.0])
 def test_delta_matches_independent_normalized_lms(rate):
     rng = np.random.default_rng(37)
-    memory = FastSeams(np.arange(5), np.arange(5, 8), rule="delta", rate=rate, decay=0.97)
+    memory = FastSynapses(np.arange(5), np.arange(5, 8), rule="delta", rate=rate, decay=0.97)
     weights = np.zeros((4, 5, 3))
     count = 0
     for _ in range(30):
@@ -31,7 +31,7 @@ def test_delta_matches_independent_normalized_lms(rate):
 
 
 def test_delta_latest_write_is_exact_and_a_repeat_is_quiet():
-    memory = FastSeams(np.arange(3), np.arange(3, 5), rule="delta", amplitude=2)
+    memory = FastSynapses(np.arange(3), np.arange(3, 5), rule="delta", amplitude=2)
     key = np.array([[0.4, 0.5, 0.9]])
     memory.observe(key, np.array([[1.0, 0.0]]))
     memory.observe(key, np.array([[0.0, 1.0]]))
@@ -42,7 +42,7 @@ def test_delta_latest_write_is_exact_and_a_repeat_is_quiet():
 
 
 def test_delta_nonorthogonal_update_changes_other_keys():
-    memory = FastSeams(np.arange(2), np.arange(2, 4), rule="delta")
+    memory = FastSynapses(np.arange(2), np.arange(2, 4), rule="delta")
     first, second = np.array([[1.0, 0.0]]), np.array([[0.6, 0.8]])
     memory.observe(first, np.array([[1.0, 0.0]]))
     memory.observe(second, np.array([[0.0, 1.0]]))
@@ -51,7 +51,7 @@ def test_delta_nonorthogonal_update_changes_other_keys():
 
 
 def test_zero_delta_keys_do_not_write_but_time_still_decays():
-    memory = FastSeams(np.arange(2), np.arange(2, 3), rule="delta", decay=0.5)
+    memory = FastSynapses(np.arange(2), np.arange(2, 3), rule="delta", decay=0.5)
     memory.observe(np.array([[1.0, 0.0], [0.0, 1.0]]), np.ones((2, 1)))
     before, count = memory.strength.copy(), memory.writes
     memory.observe(np.zeros((2, 2)), np.ones((2, 1)))
@@ -63,7 +63,7 @@ def test_zero_delta_keys_do_not_write_but_time_still_decays():
     "bad", ["key_nan", "value_inf", "key_shape", "value_shape", "batch", "mask_shape", "mask_type"]
 )
 def test_invalid_observation_does_not_decay_reset_or_partially_write(bad):
-    memory = FastSeams(np.arange(2), np.arange(2, 4), rule="delta", decay=0.5)
+    memory = FastSynapses(np.arange(2), np.arange(2, 4), rule="delta", decay=0.5)
     memory.observe(np.eye(2), np.eye(2))
     old = memory.strength.copy(), memory.mass.copy(), memory.writes
     keys, values, gate = np.eye(2), np.eye(2), np.ones(2, dtype=bool)
@@ -89,7 +89,7 @@ def test_invalid_observation_does_not_decay_reset_or_partially_write(bad):
 
 
 def test_invalid_recall_does_not_reset_memory():
-    memory = FastSeams(np.arange(2), np.arange(2, 3), rule="delta")
+    memory = FastSynapses(np.arange(2), np.arange(2, 3), rule="delta")
     memory.observe(np.eye(2), np.ones((2, 1)))
     before = memory.strength.copy()
     with pytest.raises(ValueError):
@@ -98,7 +98,7 @@ def test_invalid_recall_does_not_reset_memory():
 
 
 def test_row_reset_keep_and_batch_change_are_isolated():
-    memory = FastSeams(np.arange(2), np.arange(2, 3), rule="delta")
+    memory = FastSynapses(np.arange(2), np.arange(2, 3), rule="delta")
     memory.observe(np.array([[1.0, 0.0]] * 3), np.array([[1.0], [2.0], [3.0]]))
     memory.reset(3, rows=np.array([False, True, False]))
     np.testing.assert_allclose(memory.recall(np.array([[1.0, 0.0]] * 3)), [[1.0], [0.0], [3.0]])
@@ -112,7 +112,7 @@ def test_row_reset_keep_and_batch_change_are_isolated():
 )
 def test_legacy_hebb_update_matches_original_formula(normalize, replace):
     rng = np.random.default_rng(13)
-    memory = FastSeams(
+    memory = FastSynapses(
         np.array([1, 3]),
         np.array([0, 4]),
         normalize=normalize,
@@ -153,7 +153,7 @@ def test_legacy_hebb_update_matches_original_formula(normalize, replace):
 
 @pytest.mark.parametrize("size", [1e-300, 1e300])
 def test_delta_normalization_handles_finite_key_extremes(size):
-    memory = FastSeams(np.arange(2), np.arange(2, 3), rule="delta")
+    memory = FastSynapses(np.arange(2), np.arange(2, 3), rule="delta")
     key = size * np.array([[1.0, 2.0]])
     memory.observe(key, np.array([[0.7]]))
     np.testing.assert_allclose(memory.recall(key), [[0.7]], atol=1e-14)

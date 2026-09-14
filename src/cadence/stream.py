@@ -1,19 +1,19 @@
-"""Owned state as a clamp: a net that carries its last equilibrium into the next one.
+"""Carried state as a stimulus: a brain that carries its last equilibrium into the next one.
 
-If a settlement has a unique attracting fixed point, fully settling the next input
-erases the starting state. Multiple attractors and interrupted settlement can retain
-history, but are not a reliable addressed store. Here a range of *context* owners,
-one per hidden owner, is clamped to a leaky trace of the hidden owners' own activation at
+If settling has a unique attracting fixed point, fully settling the next input
+erases the starting state. Multiple attractors and interrupted settling can retain
+history, but are not a reliable addressed store. Here a range of *context* neurons,
+one per hidden neuron, is stimulated to a leaky trace of the hidden neurons' own activation at
 the previous inputs:
 
     c <- decay * c + (1 - decay) * h
 
 so the state reverberates and fades over about ``1 / (1 - decay)`` inputs rather than
-vanishing at once. The context owners hear nothing (they are a source range of the block
-transport, so their product is computed once per settlement) and their seams into the
-hidden owners learn under the same free/nudged rule as every other seam. Credit does not
-flow back through time: the trace is a clamp the rule sees, not a path it differentiates.
-``stateful`` builds the wiring, ``Echo`` keeps the trace for a batch of streams.
+vanishing at once. The context neurons hear nothing (they are a source range of the block
+transport, so their product is computed once per settling run) and their synapses into the
+hidden neurons learn under the same free/nudged rule as every other synapse. Credit does not
+flow back through time: the trace is a stimulus the rule sees, not a path it differentiates.
+``stateful`` builds the connectome, ``Echo`` keeps the trace for a batch of streams.
 """
 
 from __future__ import annotations
@@ -23,11 +23,11 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .brain import BrainState
+from .connectome import Connectome
 from .learning import embedded
-from .settle import SettledState
-from .wiring import Wiring
 
-__all__ = ["Trace", "Afterglow", "stateful", "Echo", "FastSeams", "columns"]
+__all__ = ["Trace", "Afterglow", "stateful", "Echo", "FastSynapses", "columns"]
 
 
 def stateful(
@@ -40,24 +40,24 @@ def stateful(
     seed: int = 0,
     init: float = 1.0,
     context_init: float = 1.0,
-) -> tuple[Wiring, np.ndarray]:
-    """``embedded`` plus a context range of ``hidden`` owners wired densely into the hidden owners.
+) -> tuple[Connectome, np.ndarray]:
+    """``embedded`` plus a context range of ``hidden`` neurons connected densely to the hidden ones.
 
-    Owners: ``positions`` blocks of ``vocabulary`` one-hot inputs, then ``hidden`` context
-    owners, then the embedding, hidden and output owners of ``embedded``. Sets: ``input``,
-    ``context``, ``embedding``, ``hidden``, ``output``. Returns the wiring and the tie groups
+    Neurons: ``positions`` blocks of ``vocabulary`` one-hot inputs, then ``hidden`` context
+    neurons, then the embedding, hidden and output neurons of ``embedded``. Sets: ``input``,
+    ``context``, ``embedding``, ``hidden``, ``output``. Returns the connectome and the tie groups
     of the embedding (pass to ``Learner(tie_groups=...)``).
     """
     base, base_tie = embedded(vocabulary, positions, dim, hidden, outputs, seed=seed, init=init)
     n_in = positions * vocabulary
     c0 = n_in  # the context range sits right after the inputs
-    shift = hidden  # every non-input owner of the base moves up by the context range
+    shift = hidden  # every non-input neuron of the base moves up by the context range
 
     def moved(index: np.ndarray) -> np.ndarray:
         return np.where(index >= n_in, index + shift, index)
 
     rng = np.random.default_rng(seed + 1)
-    hidden_members = np.asarray(base.sets["hidden"]) + shift
+    hidden_members = np.asarray(base.populations["hidden"]) + shift
     ctx, hid = np.meshgrid(np.arange(hidden), hidden_members, indexing="ij")
     magnitude = rng.uniform(0.0, 1.0, size=hidden * hidden) * np.sqrt(6.0 / (2 * hidden))
     signs = rng.choice([-1.0, 1.0], size=hidden * hidden) * magnitude * context_init
@@ -66,27 +66,32 @@ def stateful(
     count = np.concatenate([base.count, np.ones(hidden * hidden)])
     sign = np.concatenate([base.sign, signs])
     tie = np.concatenate([base_tie, np.full(hidden * hidden, -1)])
-    sets: dict[str, Iterable[int]] = {"input": range(0, n_in), "context": range(c0, c0 + hidden)}
-    sets.update({k: [int(i) + shift for i in v] for k, v in base.sets.items() if k != "input"})
-    wiring = Wiring.from_edges(
+    populations: dict[str, Iterable[int]] = {
+        "input": range(0, n_in),
+        "context": range(c0, c0 + hidden),
+    }
+    populations.update(
+        {k: [int(i) + shift for i in v] for k, v in base.populations.items() if k != "input"}
+    )
+    connectome = Connectome.from_synapses(
         base.n + hidden,
         pre=pre,
         post=post,
         count=count,
         sign=sign,
-        sets=sets,
+        populations=populations,
         label=f"stateful:{positions}x{vocabulary}->{dim}->{hidden}(+{hidden} context)->{outputs}",
     )
     key = {(int(a), int(b)): int(g) for a, b, g in zip(pre, post, tie, strict=True)}
     groups = np.array(
-        [key[(int(a), int(b))] for a, b in zip(wiring.pre, wiring.post, strict=True)],
+        [key[(int(a), int(b))] for a, b in zip(connectome.pre, connectome.post, strict=True)],
         dtype=np.int64,
     )
-    return wiring, groups
+    return connectome, groups
 
 
 def columns(index: np.ndarray) -> slice | np.ndarray:
-    """A slice when the owners are one contiguous range, else the index array.
+    """A slice when the neurons are one contiguous range, else the index array.
 
     Reading or writing the columns of a wide batch through a slice is a strided pass;
     through an index array it is a gather that comes back Fortran-ordered (and a scatter
@@ -99,23 +104,24 @@ def columns(index: np.ndarray) -> slice | np.ndarray:
 
 @dataclass
 class Trace:
-    """A quantity decaying across moments, kept per stream, entering the next settlement as a
-    clamp: the memory of the moment before.
+    """A quantity decaying across moments, kept per stream, entering the next settling run
+    as a stimulus: the memory of the moment before.
 
     Over a range's activation it is the trace of that range (the Echo of the interpretation
-    at ``focus`` 0); weighted by how much each owner moved since the last moment (its share
+    at ``focus`` 0); weighted by how much each neuron moved since the last moment (its share
     of the row's mean movement, to the power ``focus``) it is brightest where the moment
-    changed, and of the input owners it is an afterimage of the picture itself, the memory
-    that reads a cue against a static background (``tests/test_child.py``). What the
-    settlement just had to repair stays lit; what stood still fades.
+    changed, and of the input neurons it is an afterimage of the picture itself, the memory
+    that reads a cue against a static background (``tests/test_child.py``). What had
+    to change while settling stays lit; what stood still fades.
     """
 
-    wiring: Wiring
+    connectome: Connectome
     decay: float = 0.5
-    amplitude: float = 1.0  # the clamp amplitude of the rule
+    amplitude: float = 1.0  # the stimulus amplitude of the neuron model
     focus: float = 0.0
     source: str = "hidden"  # the range traced
-    target: str = "context"  # the range the trace enters as a clamp, one owner per source owner
+    # the range the trace enters as a stimulus, one neuron per source neuron
+    target: str = "context"
     trace: np.ndarray = field(init=False)
     last: np.ndarray = field(init=False)
     cold: np.ndarray = field(init=False)
@@ -123,10 +129,12 @@ class Trace:
     def __post_init__(self) -> None:
         if not 0 <= self.decay < 1:
             raise ValueError("decay lies in [0, 1)")
-        self.glow = np.asarray(self.wiring.sets[self.target], dtype=np.int64)
-        self.hidden = np.asarray(self.wiring.sets[self.source], dtype=np.int64)
+        if not np.isfinite([self.amplitude, self.focus]).all() or self.focus < 0:
+            raise ValueError("amplitude and focus must be finite; focus must be nonnegative")
+        self.glow = np.asarray(self.connectome.populations[self.target], dtype=np.int64)
+        self.hidden = np.asarray(self.connectome.populations[self.source], dtype=np.int64)
         if len(self.glow) != len(self.hidden):
-            raise ValueError(f"one {self.target} owner per {self.source} owner")
+            raise ValueError(f"one {self.target} neuron per {self.source} neuron")
         self._glow_columns = columns(self.glow)
         self._hidden_columns = columns(self.hidden)
         self.reset(0)
@@ -146,7 +154,7 @@ class Trace:
         """Keep the traces of ``rows`` only (streams that ended are dropped)."""
         self.trace, self.last, self.cold = self.trace[rows], self.last[rows], self.cold[rows]
 
-    def clamp(self, drive: np.ndarray) -> np.ndarray:
+    def stimulate(self, drive: np.ndarray) -> np.ndarray:
         """Write the trace into the target columns of ``drive`` (a copy is returned)."""
         out = np.array(drive, dtype=float)
         if len(self.trace) != len(out):
@@ -154,8 +162,8 @@ class Trace:
         out[:, self._glow_columns] = self.amplitude * self.trace
         return out
 
-    def update(self, state: SettledState) -> None:
-        """After a free settlement: the trace decays toward the source owners' activation, each
+    def update(self, state: BrainState) -> None:
+        """After the free phase: the trace decays toward the source neurons' activation, each
         weighted by its movement since the last moment when ``focus`` is above zero; a cold
         stream's first moment weighs one."""
         h = self._source_activation(state)
@@ -171,10 +179,10 @@ class Trace:
         self.last = h.copy()  # own the previous moment even if the caller reuses state storage
         self.cold[:] = False
 
-    def _source_activation(self, state: SettledState) -> np.ndarray:
+    def _source_activation(self, state: BrainState) -> np.ndarray:
         """The source range's activation as a host array. A state that rests on a torch device
         is sliced there and only the slice comes to the host: for an afterimage of a retina
-        of thousands of owners that is the trace's whole cost."""
+        of thousands of neurons that is the trace's whole cost."""
         device = getattr(state, "device", None)
         s = device.get("s") if isinstance(device, dict) else None
         if s is not None and hasattr(s, "device") and hasattr(s, "cpu"):
@@ -189,13 +197,16 @@ class Trace:
         return np.ascontiguousarray(np.atleast_2d(state.activation)[:, self._hidden_columns])
 
     def ringing(self, floor: float = 0.1) -> np.ndarray:
-        """Each source owner's share of what is still ringing (its trace over the row's mean, plus
-        ``floor``), one for every other owner: a salience for the eligibility of the seams out of
-        them, so that what is still ringing is what a signal writes through
+        """Each source neuron's trace magnitude over the row's mean magnitude, plus ``floor``;
+        one for every other neuron: a salience for the eligibility of the synapses
+        out of them, so that what is still ringing is what a signal writes through
         (``ActorCritic.salience``)."""
-        out = np.ones((len(self.trace), self.wiring.n))
-        mean = self.trace.mean(axis=1, keepdims=True) + 1e-9
-        out[:, self._hidden_columns] = floor + self.trace / mean
+        if not np.isfinite(floor) or floor < 0:
+            raise ValueError("floor must be finite and nonnegative")
+        out = np.ones((len(self.trace), self.connectome.n))
+        magnitude = np.abs(self.trace)
+        mean = magnitude.mean(axis=1, keepdims=True) + 1e-9
+        out[:, self._hidden_columns] = floor + magnitude / mean
         return out
 
     def to_dict(self) -> dict[str, float | int | str]:
@@ -205,7 +216,7 @@ class Trace:
             "focus": self.focus,
             "source": self.source,
             "target": self.target,
-            "owners": int(len(self.glow)),
+            "neurons": int(len(self.glow)),
         }
 
 
@@ -235,7 +246,7 @@ class Afterglow(Trace):
 
 
 @dataclass
-class FastSeams:
+class FastSynapses:
     """A bounded associative memory between two ranges, one matrix per stream.
 
     ``rule="hebb"`` adds an outer product, preserving the original behaviour.
@@ -247,7 +258,7 @@ class FastSeams:
 
     ``observe``/``recall`` operate directly on key/value ports. ``update``/``read``
     adapt the same operations to settled states and full drives. Key normalisation
-    reads a whole key patch; a seam uses its key coordinate and the post owner's
+    reads the whole key vector; a synapse uses its key coordinate and the post neuron's
     prediction error. Strengths decay once per observation/update, never on reads.
     """
 
@@ -257,20 +268,28 @@ class FastSeams:
     rate: float = 1.0
     amplitude: float = 1.0
     normalize: bool = False  # unit keys and cue, the read divided by the decayed count of writes
-    replace: bool = False  # a write clears what its active pre owners held (a slot; one-hot keys)
+    replace: bool = False  # a write clears what its active pre neurons held (a slot; one-hot keys)
     rule: str = "hebb"  # "delta": unit keys, residual writes, no count-averaged read
     strength: np.ndarray = field(init=False)
     mass: np.ndarray = field(init=False)  # (batch,) the decayed count of writes, for ``normalize``
     writes: int = 0
 
     def __post_init__(self) -> None:
+        for name in ("pre", "post"):
+            raw = np.asarray(getattr(self, name))
+            if (
+                raw.dtype.kind not in "iuf"
+                or not np.isfinite(raw).all()
+                or (raw != np.floor(raw)).any()
+            ):
+                raise ValueError(f"{name} must contain integer neuron indices")
         self.pre = np.asarray(self.pre, dtype=np.int64)
         self.post = np.asarray(self.post, dtype=np.int64)
-        for name, owners in (("pre", self.pre), ("post", self.post)):
-            if owners.ndim != 1 or not len(owners) or np.any(owners < 0):
-                raise ValueError(f"{name} must be a nonempty vector of owner indices")
-            if len(np.unique(owners)) != len(owners):
-                raise ValueError(f"{name} owner indices must be unique")
+        for name, neurons in (("pre", self.pre), ("post", self.post)):
+            if neurons.ndim != 1 or not len(neurons) or np.any(neurons < 0):
+                raise ValueError(f"{name} must be a nonempty vector of neuron indices")
+            if len(np.unique(neurons)) != len(neurons):
+                raise ValueError(f"{name} neuron indices must be unique")
         if not 0 <= self.decay <= 1:
             raise ValueError("decay lies in [0, 1]")
         if not np.isfinite(self.rate) or self.rate < 0 or not np.isfinite(self.amplitude):
@@ -341,9 +360,7 @@ class FastSeams:
             out = out / np.maximum(self.mass, 1e-12)[:, None]
         return np.asarray(self.amplitude * out)
 
-    def observe(
-        self, key: np.ndarray, value: np.ndarray, write: np.ndarray | None = None
-    ) -> None:
+    def observe(self, key: np.ndarray, value: np.ndarray, write: np.ndarray | None = None) -> None:
         """Decay once, then write selected rows from the key and observed-value ports.
 
         Inputs are ``(batch, pre)`` and ``(batch, post)``. ``write=None`` writes
@@ -383,7 +400,7 @@ class FastSeams:
         self.writes += len(rows)
 
     def read(self, drive: np.ndarray) -> np.ndarray:
-        """The post owners' drive from the pre range's clamp in ``drive``: ``(batch, post)``.
+        """The post neurons' drive from the pre range's stimulus in ``drive``: ``(batch, post)``.
 
         Normalized Hebbian mode uses unit keys and cue, then divides the read by the
         decayed count of writes. Cosine weights can be signed, so this need not be a
@@ -391,7 +408,7 @@ class FastSeams:
         """
         return self.recall(drive[:, self._pre_columns])
 
-    def clamp(self, drive: np.ndarray, inplace: bool = False) -> np.ndarray:
+    def stimulate(self, drive: np.ndarray, inplace: bool = False) -> np.ndarray:
         """Add the read to the post columns of ``drive`` (a copy, unless ``inplace``)."""
         out = drive if inplace else np.array(drive, dtype=float)
         out[:, self._post_columns] += self.read(out)
@@ -399,13 +416,13 @@ class FastSeams:
 
     def update(
         self,
-        state: SettledState,
+        state: BrainState,
         write: np.ndarray | None = None,
         post: np.ndarray | None = None,
     ) -> None:
-        """After a settlement: strengths fade; the rows in ``write`` add their outer product.
+        """After settling: strengths fade; the rows in ``write`` add their outer product.
 
-        ``post`` replaces the post owners' activations for the write, ``(batch, post)``: what
+        ``post`` replaces the post neurons' activations for the write, ``(batch, post)``: what
         actually followed (the next symbols read) rather than what the net settled on.
         """
         s = np.atleast_2d(state.activation)

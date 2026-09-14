@@ -4,118 +4,210 @@ Top-level exports and module-qualified helpers are listed below. Begin with the
 [quickstart](quickstart.md) for complete runnable examples; the source docstrings
 give additional details. Prefer keyword arguments for optional configuration.
 
-## Wiring (`cadence.wiring`)
+## Connectome (`cadence.connectome`)
 
-- `Wiring.from_edges(n, *, pre, post, count=None, sign=None, sets=None, label="wiring", min_count=0.0)`:
-  build from edge lists. Parallel overlaps merge (counts add), autapses drop, overlaps
-  below `min_count` drop, and the arrays are sorted by `(post, pre)`. `count` defaults to
-  1 and `sign` to +1.
-- Fields: `n`, `pre`, `post`, `count`, `sign` (arrays), `sets` (name → tuple of owners),
-  `label`. Property `edges`.
-- `members(*names)`, `with_sets(**sets)`, `in_degree()`, `out_degree()`, `summary()`,
-  `digest()` (SHA-256 of the sorted arrays).
+- `Connectome.from_synapses(n, *, pre, post, count=None, sign=None, populations=None, label="connectome", min_count=0.0)`:
+  build from synapse lists. Parallel synapses merge (counts add), autapses drop, synapses
+  below `min_count` drop, and the arrays are sorted by `(post, pre)`. `count` (synaptic
+  contacts per synapse) defaults to 1 and `sign` to +1.
+- Fields: `n`, `pre`, `post`, `count`, `sign` (arrays), `populations` (name → tuple of
+  neurons), `label`. Property `synapses` (the number of synapses).
+- `members(*names)`, `with_populations(**populations)`, `in_degree()`, `out_degree()`,
+  `summary()`, `digest()` (SHA-256 of the sorted arrays).
 
-## Rules (`cadence.rules`)
+## Neuron model (`cadence.neuron`)
 
-- `GradedRule(dt=0.2, slope=4.0, threshold=1.5, gain=0.02, clamp_amplitude=3.0, adaptation=None, leak=0.0)`:
-  the owner rule. `activation(v)` is the rectified, re-based sigmoid with optional leak;
+- `NeuronModel(dt=0.2, slope=4.0, threshold=1.5, gain=0.02, stimulus_amplitude=3.0, adaptation=None, leak=0.0)`:
+  the graded (rate) neuron. `activation(v)` is the rectified, re-based sigmoid with optional leak;
   `slope_at(v)` its derivative; `rest_emission` the raw sigmoid's value at rest, which is
   subtracted so rest publishes zero. `replace(**changes)`, `to_dict()`.
-- `Adaptation(tau_steps=50.0, strength=1.0)`: a slow per-owner variable that can
+- `Adaptation(tau_steps=50.0, strength=1.0)`: a slow per-neuron variable that can
   produce rhythm in suitable circuits.
-- `learning_rule(gain=1.0, *, slope=1.0, leak=0.1, dt=0.5, clamp_amplitude=1.0)` (in
-  `cadence.learning`): the rule settings a learnable net needs.
+- `learning_neuron_model(gain=1.0, *, slope=1.0, leak=0.1, dt=0.5, stimulus_amplitude=1.0)` (in
+  `cadence.learning`): responsive starting settings for local learning, to validate for your task.
 
-## Settlement (`cadence.settle`)
+## Brain (`cadence.brain`)
 
-- `Settlement(wiring, rule, *, backend="cpu" | "torch" | "mlx", edge_scale=None, log_gain=None, bias=None, device=None, dense_limit=2048, layout=None, precision=None)`:
-  the engine. `edge_scale` defaults to the wiring's signs; `log_gain` and `bias` to zero.
-  When the wiring's dense blocks fit in `dense_limit` squared entries the transport is the
-  block transport (see `cadence.blocks`); `layout` passes a precomputed cut, as
-  `with_parameters` does. `engine.layout` is the cut in use. `precision` (torch only) is
-  `"float32"` or `"float64"`; the default is float64 except on MPS. Float32 is the speed of a
-  consumer GPU; compare it with float64 and record the measured precision error.
-- `settle(clamp=None, *, steps=60, state=None, mask=None, trajectory=False, nudge=None, tolerance=None) -> SettledState`:
-  one clamp; `clamp` is a list of owners at full amplitude, a `{owner: level}` map, or a
-  dense vector. Map values are levels multiplied by `clamp_amplitude`; dense vectors
+- `Brain(connectome, neuron_model, *, backend="cpu" | "torch" | "mlx", efficacy=None, log_gain=None, bias=None, device=None, dense_limit=2048, layout=None, precision=None)`:
+  the runnable brain. `efficacy` (the learned synaptic efficacy) defaults to the connectome's
+  signs; `log_gain` and `bias` to zero. Attributes include `connectome`, `neuron_model`,
+  `efficacy`, `log_gain` and `bias`. When the connectome's dense blocks fit in `dense_limit`
+  squared entries the transport is the block transport (see `cadence.blocks`); `layout`
+  passes a precomputed cut, as `with_parameters` does. `brain.layout` is the cut in use.
+  `precision` (torch only) is `"float32"` or `"float64"`; the default is float64 except on
+  MPS. Float32 is the speed of a consumer GPU; compare it with float64 and record the
+  measured precision error.
+- `settle(stimulus=None, *, steps=60, state=None, mask=None, trajectory=False, nudge=None, tolerance=None) -> BrainState`:
+  one stimulus; `stimulus` is a list of neurons at full amplitude, a `{neuron: level}` map, or a
+  dense vector. Map values are levels multiplied by `stimulus_amplitude`; dense vectors
   are drives directly. `settle_batch(drive, ...)` takes `(batch, n)` drives.
-  `mask` accepts `(n,)`, `(1, n)`, or `(batch, n)`; zero suppresses an owner.
-  Both methods stop at the activation-movement `tolerance` and report steps taken.
+  `mask` accepts `(n,)`, `(1, n)`, or `(batch, n)`, with finite values in `[0, 1]`; zero suppresses a neuron.
+  With a positive `tolerance`, both methods stop once every activation moves less than
+  that amount in a step. `None` or zero uses the full step cap. Nonfinite drives and warm
+  potentials/adaptation are rejected. Use floating arrays for dense drives and maps for
+  selected indices: the legacy integer vector of length `n` containing only 0/1 is a drive.
+- `equilibrate(drive, *, budget=512, chunk=32, tolerance=1e-5, state=None, mask=None, nudge=None) -> Equilibrium`:
+  seek a joint state whose equation residual is below tolerance, checking after each chunk.
+  `budget` caps additional settling steps exactly, including a short final chunk;
+  zero checks the starting state. Checks use one host transport each. The returned
+  `Equilibrium` has `state`, per-row `residual`, total `steps`, `tolerance`, and a boolean
+  per-row `converged` property. `state.steps` is the last chunk's count. Convergence here
+  does not prove stability, uniqueness or task quality.
 - `residual(drive, state, *, nudge=None, mask=None)`: per-row maximum remaining
   fixed-point equation discrepancy, including adaptation when enabled. One CPU transport
-  evaluation, no state change; a diagnostic rather than a stability/uniqueness proof.
-- `clamp_vector(clamp)`, `clamp_levels(levels)` (levels in [0, 1] times the clamp amplitude),
-  `readings(state, names)`, `with_parameters(*, edge_scale, log_gain, bias)`, `weights`
-  (effective drive per overlap), `dense()` (the `W[pre, post]` matrix), `to_dict()`.
-- `Settlement.contrast_on_device(plus, minus)`: the learning rule's per-overlap and per-owner
+  evaluation, no state change. It is a diagnostic and does not prove stability or uniqueness.
+- `stimulus_vector(stimulus)`, `stimulus_levels(levels)` (finite levels times the stimulus
+  amplitude, with signed values allowed), `readings(state, names, i=0)`, `with_parameters(*, efficacy=None, log_gain=None, bias=None)`,
+  `weights` (effective drive per synapse), `dense()` (the `W[pre, post]` matrix), `to_dict()`.
+- `Brain.contrast_on_device(plus, minus)`: the learning rule's per-synapse and per-neuron
   contrast computed on the device when both states carry its handle; `None` otherwise.
-- `SettledState`: `v`, `activation`, `adaptation`, `steps`, `trajectory`, `device` (the
-  same state on the accelerator that produced it, or `None`), `repair` (the total
-  movement of the activations, per row). State arrays have shape `(n,)` from `settle`
-  or `(batch, n)` from `settle_batch`; trajectories add a leading step axis. `row(i)`,
-  `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`.
+- `BrainState`: `v`, `activation`, `adaptation`, `steps`, `trajectory`, `activity_change`
+  (the total movement of the activations while settling, per row), `device` (the same
+  state on the accelerator that produced it, or `None`). State arrays have shape `(n,)`
+  from `settle` or `(batch, n)` from `settle_batch`; trajectories add a leading step axis.
+  `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`,
+  `batched`.
 - `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None)`: extra drive
-  `beta · (target − s)` on the masked owners, or `beta · (target − softmax(s/T))` over the
+  `beta · (target − s)` on the masked neurons, or `beta · (target − softmax(s/T))` over the
   masked group with a temperature; `weight` scales rows. `groups` assigns a separate
-  softmax group per owner (`-1` excludes an owner). `drive(s)`.
+  softmax group per neuron (`-1` excludes a neuron). `drive(s)`.
 - `available_backends()`: `{"cpu": "numpy float64", "torch": "mps float32" | "cuda float64" | "cpu float64", "mlx": "gpu float32"}`, for what is installed.
 
 ## Blocks (`cadence.blocks`)
 
-- `layout(wiring, *, max_pairs=256) -> Layout`: cut the owners into contiguous ranges at the
-  boundaries of the wiring's contiguous named sets and pair the ranges that carry overlaps.
-  A wiring with no contiguous sets, or one that fragments into more than `max_pairs` blocks,
-  gets one block: the full matrix.
+- `layout(connectome, *, max_pairs=256) -> Layout`: cut the neurons into contiguous ranges at
+  the boundaries of the connectome's contiguous populations and pair the ranges that carry
+  synapses. A connectome with no contiguous populations, or one that fragments into more
+  than `max_pairs` blocks, gets one block, the full matrix.
 - `Layout`: `starts`, `pair_pre`, `pair_post`, `offset`, `edge_index`; `ranges`, `pairs`,
-  `size`, `bounds(k)`, `sources()` (ranges that hear nothing), `flat(weights)`,
+  `size`, `bounds(k)`, `sources()` (ranges that receive no synapses), `flat(weights)`,
   `blocks(flat)`, `to_dict()`.
-- `BlockTransport(layout, flat)`: `inbox(s)` for one settlement, reusing the product of every
-  source range that did not move since the previous call.
-- `block_contrast(layout, s_plus, s_minus)`: the learning rule's per-overlap contrast as one
+- `BlockTransport(layout, flat)`: `synaptic_input(s)` returns the synaptic input for the
+  activations `s`, reusing the product of every source range that did not move since the
+  previous call.
+- `block_contrast(layout, s_plus, s_minus)`: the learning rule's per-synapse contrast as one
   Gram product per block.
 
 ## Streams (`cadence.stream`)
 
-- `stateful(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0, context_init=1.0) -> (Wiring, tie_groups)`:
-  `embedded` plus a `context` range of `hidden` owners that hear nothing and reach every
-  hidden owner. Sets `input`, `context`, `embedding`, `hidden`, `output`.
-- `Trace(wiring, decay=0.5, amplitude=1.0, focus=0.0, source="hidden", target="context")`:
-  the memory of the moment before, per stream: the trace of the `source` range's activation,
-  entering the next settlement as a clamp on the paired `target` range (one owner per source
-  owner). `focus` above zero weights each owner by its movement since the last moment (its
-  share of the row's mean movement, to that power): brightest where the moment changed.
-  `reset(batch, rows=None)`, `clamp(drive)`, `update(state)`, `keep(rows)`, `ringing(floor=0.1)`
-  (each source owner's share of what is still ringing, one elsewhere: a salience for
-  `ActorCritic.salience`), `to_dict()`.
-- `Echo(wiring, decay, amplitude)`: the `Trace` at focus 0 into the `context` range (the
-  carried state of the earlier releases, unchanged).
-- `Afterglow(wiring, decay, amplitude, focus=1.0, source="hidden", target="afterglow")`: the
-  focused `Trace`; with `source="input"` an afterimage of the picture itself, the memory that
-  reads a cue against a static background (`tests/test_child.py`: 1.00 where the Echo reads
-  chance).
-- `FastSeams(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb")`:
-  one mutable `(pre, post)` matrix per stream. `rule="delta"` uses unit keys and writes
-  `rate * outer(key, value - prediction)`; it rejects `normalize`/`replace` and rates
-  outside `[0, 1]`. The default preserves additive Hebbian memory, including optional
-  count-averaged reads (`normalize`) and one-hot row replacement (`replace`).
+- `stateful(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0, context_init=1.0) -> (Connectome, tie_groups)`:
+  `embedded` plus a `context` range of `hidden` neurons that receive no synapses and reach
+  every hidden neuron. Populations `input`, `context`, `embedding`, `hidden`, `output`.
+- `Trace(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="hidden", target="context")`:
+  the memory of the moment before, per stream. It keeps a trace of the `source` range's
+  activation and adds it to the next settling as a stimulus on the paired `target` range
+  (one neuron per source neuron). `focus` above zero weights each neuron by its movement
+  since the last moment (its share of the row's mean movement, to that power), so the trace
+  is brightest where the moment changed. `reset(batch, rows=None)`, `stimulate(drive)`,
+  `update(state)`, `keep(rows)`, `ringing(floor=0.1)` (each source neuron's share of what is
+  still ringing, one elsewhere; a salience for `ActorCritic.salience`), `to_dict()`.
+- `Echo(connectome, decay=0.5, amplitude=1.0, ...)`: a `Trace` with the same defaults, used at
+  focus 0 into the `context` range (the carried state of the earlier moments).
+- `Afterglow(connectome, decay=0.5, amplitude=1.0, focus=1.0, source="hidden", target="afterglow")`:
+  the focused `Trace`. With `source="input"` it is an afterimage of the picture itself, the
+  memory that reads a cue against a static background (`tests/test_child.py`: 1.00 where the
+  Echo reads chance).
+- `FastSynapses(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb", writes=0)`:
+  one mutable `(pre, post)` matrix per stream; `writes` counts the rows written. `rule="delta"`
+  uses unit keys and writes `rate * outer(key, value - prediction)`; it rejects
+  `normalize`/`replace` and rates outside `[0, 1]`. The default `rule="hebb"` is additive
+  Hebbian memory, with optional count-averaged reads (`normalize`) and one-hot row
+  replacement (`replace`).
   `observe(key, value, write=None)` uses `(batch, width)` ports and writes all rows unless
   given a boolean mask; `recall(key)` reads without decay. `update(state, write=None, post=None)`
-  instead reads named owner activations and defaults to decay-only; `read(drive)` reads
-  key owners' drive columns. `clamp(drive, inplace=False)` adds the read into post columns.
+  reads named neuron activations instead and defaults to decay-only; `read(drive)` reads
+  key neurons' drive columns. `stimulate(drive, inplace=False)` adds the read into post columns.
   `reset(batch, rows=None)`, `keep(rows)`, `to_dict()`. See [memory](memory.md) for stream
   identity, representation alignment, key interference, and checkpoint boundaries.
-- `cadence.stream.columns(index)`: a slice when the owners are one contiguous range,
+- `cadence.stream.columns(index)`: a slice when the neurons are one contiguous range,
   else the index array. Slices can avoid the copies required by advanced indexing.
 
-## Constitution (`cadence.constitution`)
+## Regions (`cadence.regions`)
 
-- `Region(name, size)`, `Projection(pre, post, density=1.0, sign=0.0, scale=1.0, count=1.0, symmetric=True)`,
-  `Constitution(regions, projections, label)`: a wiring before it is grown.
-- `grow(constitution, seed=0) -> Wiring`: development, deterministic in the seed; sets named
-  after the regions, contiguous.
-- `cadence.constitution.mutate(constitution, rng, *, size_step=0.25, fixed=())`: one offspring (module level; `evolve` uses it).
-- `evolve(fitness, constitution, *, generations=10, population=8, keep=2, seed=0, **mutation) -> Lineage`:
-  selection under `fitness(wiring, seed) -> float`; `Lineage.best`, `.best_fitness`, `.generations`.
+- `Region(name, size=0, circuit=None, inputs=None, outputs=None)`: a named group of neurons.
+  A blank region has a `size` and no synapses of its own. A designed region has a `circuit`
+  (a `Connectome`) and takes its size from it; `inputs` and `outputs` name the circuit
+  populations that receive and send projections, and default to the whole region.
+  `designed`, `neurons(population=None)` (region-local indices), `to_dict()`.
+- `visual_cortex(height, width, *, channels=1, features=8, field=3, stride=1, init=1.0, seed=0, name="visual")`:
+  population `input` with one neuron per pixel and channel, in the order of an image array
+  `(height, width, channels)` flattened row by row, and population `output` with `features`
+  feature maps. Each feature neuron receives synapses from one `field` by `field` window of
+  the input; windows step by `stride`. Efficacies start random and fan-scaled.
+- `cortex(size, *, lateral=0.0, name="association")`: a blank region, or with a negative
+  `lateral` a designed one whose neurons inhibit each other pairwise.
+- `motor_cortex(actions, *, lateral=0.0, name="motor")`: population `actions` with one neuron
+  per action and optional pairwise lateral inhibition.
+- `prefrontal_cortex(holds, *, name="prefrontal")`: a blank region with one neuron per neuron
+  of `holds` (a `Region` or a size), for a `Trace` from the held region.
+
+## Generic brain (`cadence.generic`)
+
+- `GenericBrain.build(inputs, actions, *, hidden=64, density=1.0, lateral=-0.5, working_memory=False, memory_scale=12.0, episodic=False, features=8, field=3, seed=0, **options)`:
+  develops `GenericBrain.genome(...)` and wraps it. `inputs` is a vector length, or an image
+  shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
+  to the constructor.
+- `GenericBrain.genome(inputs, actions, ...) -> Genome`: regions `sensory` (or `visual`),
+  `association` (`hidden` neurons), `motor` (`motor_cortex(actions, lateral=lateral)`) and,
+  with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
+  visual cortex), association to motor (reciprocal), and prefrontal to association at
+  `memory_scale`.
+- `GenericBrain(connectome, *, episodic=False, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, seed=0, backend="cpu", device=None)`:
+  needs populations `sensory` or `visual/input`, `association` and `motor`, and uses
+  `prefrontal` for a working memory when present. `learning` defaults to
+  `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, nudged_steps=12, momentum=0.9)`,
+  `reward` to `ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_critic=0.3)`.
+  Attributes `connectome`, `brain`, `learner`, `basal_ganglia` (`ActorCritic` reading the
+  association cortex), `working_memory` (`Trace` or `None`), `hippocampus` (`FastSynapses`
+  from sensory to motor neurons, or `None`), `sensory_index`, `association_index`,
+  `motor_index`.
+  - `stimulus(observations, *, memory=True)`: the drive of a batch; with `memory`, the
+    working memory and the hippocampal recall are added.
+  - `fit(observations, labels, *, epochs=30, batch=32) -> list[float]` (training accuracy per
+    epoch), `predict(observations)`, `accuracy(observations, labels)`: independent samples,
+    without memory.
+  - `act(observations, *, greedy=False) -> actions`: one row per stream; updates the working
+    memory. `learn(reward, done, next_observations, *, bootstrap=None) -> report`: the hippocampus records the
+    reward of the chosen action for its situation, `done` rows reset their working memory,
+    and the basal ganglia learn from dopamine. For truncated episodes `bootstrap` supplies
+    the value of the old episode's final observation; `next_observations` holds the reset
+    observation for ended rows. Reward and bootstrap are finite batch vectors; done is boolean.
+  - `reset()` clears working state, action cache, eligibility and reward centering; hippocampal
+    records and slow parameters are kept. `parameters()` counts actor/critic parameters;
+    per-stream working state and episodic matrices are additional storage.
+  - `save(path) -> Path`, `GenericBrain.load(path, *, backend="cpu", device=None, precision=None)`:
+    complete composition checkpoints, including both optimizers, critic, random state,
+    stream traces, prepared next state and memories. Finish an action with `learn` or
+    reset it before saving. The archive is replaced atomically. A learner-only checkpoint
+    is rejected by `GenericBrain.load`; `Learner.load` can extract a learner from either.
+  Observations must be a nonempty finite batch, with image dimensions flattened per row.
+  `fit` rejects noninteger labels and mismatched batches before updating. It resets current
+  action/working state but keeps episodic records. `brain` always returns the current
+  `learner.brain`, including after training.
+
+## Genome (`cadence.genome`)
+
+- `Projection(pre, post, density=1.0, sign=0.0, scale=1.0, count=1.0, reciprocal=True)`:
+  synapses from `pre` to a fraction `density` of `post`. An end is a region name, meaning
+  the region's `outputs` (for `pre`) or `inputs` (for `post`), or `region/population`.
+  `sign` is the mean sign (−1 all inhibitory, +1 all excitatory, 0 mixed); `scale`
+  multiplies the fan-scaled magnitudes; `reciprocal` adds the reverse synapses with the
+  same weights.
+  `Genome(regions, projections, label="genome")`: a connectome before development;
+  `region(name)`, `to_dict()`, `Genome.from_dict(d, designed=None)` (a record keeps a
+  designed region's circuit label and digest, and `designed` supplies the region by name).
+- `develop(genome, seed=0) -> Connectome`: development, deterministic in the seed. Regions
+  are laid out in order as contiguous populations named after them; a designed region adds
+  its circuit's synapses and its populations as `region/population`; each projection is
+  drawn between its ends.
+- `cadence.genome.mutate(genome, rng, *, size_step=0.25, fixed=(), tied=())`: one offspring
+  (module level; `evolve` uses it). Designed regions and regions in `fixed` keep their size;
+  each `(leader, follower)` pair in `tied` keeps the follower the size of the leader.
+- `evolve(fitness, genome, *, generations=10, population=8, keep=2, seed=0, mapper=map, report=None, **mutation) -> Lineage`:
+  selection under `fitness(connectome, seed) -> float`. `mapper` runs a generation's
+  developed connectomes (a process pool's `map` needs a picklable `fitness`); `report` is
+  called with the lineage after every generation. `Lineage.best`, `.best_fitness`,
+  `.generations`.
 
 ## Timing (`cadence.timing`)
 
@@ -125,82 +217,105 @@ give additional details. Prefer keyword arguments for optional configuration.
 - `environment()`: machine, cores, Python, thread limits, pinned cores (Linux), load average,
   library versions.
 
-## Reference engine (`cadence.reference`)
+## Neuron-by-neuron reference (`cadence.reference`)
 
-- `cadence.reference.settle_owner_by_owner(wiring, rule, clamp, *, steps, log_gain=None, bias=None, edge_scale=None) -> (trajectory, Ledger)` (module level; `conformance` uses it):
-  one owner at a time, reading only its own row and its inbox slice, counting one delivery
-  per declared overlap per step.
-- `conformance(engine, clamp, *, steps=60) -> dict`: the engine against the reference on
-  the same clamp; `max_abs_deviation`, the ledger, the backend.
-- `cadence.reference.Ledger`: `declared_overlaps`, `steps`, `deliveries`, `undeclared`; `clean` in `to_dict()`.
+- `cadence.reference.settle_neuron_by_neuron(connectome, neuron_model, stimulus, *, steps, log_gain=None, bias=None, efficacy=None) -> (trajectory, Ledger)` (module level; `conformance` uses it):
+  one neuron at a time, each reading only its own state and its synaptic input, counting one
+  transmission per declared synapse per step.
+- `conformance(brain, stimulus, *, steps=60) -> dict`: the brain against the reference on
+  the same stimulus; `max_abs_deviation`, the ledger, the backend.
+- `cadence.reference.Ledger`: `declared_synapses`, `steps`, `transmissions`, `undeclared`;
+  property `clean`, also reported by `to_dict()`.
 
 ## Protocols (`cadence.protocol`)
 
 - `Row(id, stimulus, readout, predicate, reference="", ablate=(), relative_to="", tier="experiment")`.
-- `Protocol(stimuli, rows, training=(), levels=Levels(), steps=60)`: `score(engine)`,
-  `clamp_for(wiring, stimulus)`, `to_dict()`.
+- `Protocol(stimuli, rows, training=(), levels=Levels(), steps=60)`: `score(brain)`,
+  `neurons_for(connectome, stimulus)`, `to_dict()`. `stimuli` maps each stimulus name to the
+  populations it drives at full amplitude.
 - `cadence.protocol.Levels(active=0.5, inactive=0.2, margin=0.15, sparse_min=0.005, sparse_max=0.2, densify_margin=0.05)` (module level).
 - `evaluate_predicate(predicate, value, reference, levels=None) -> bool`; `PREDICATES`
   maps each name to its definition.
-- `shuffled(wiring, seed, *, keep=None) -> Wiring`: the control.
-- `select_gain(make_engine, protocol, grid, *, sparsity_cap=0.05) -> (gain, table)`:
+- `shuffled(connectome, seed, *, keep=None) -> Connectome`: the control.
+- `select_gain(make_brain, protocol, grid, *, sparsity_cap=0.05) -> (gain, table)`:
   among admissible gains, maximize training facts passed and break ties by smallest
-  gain. An empty grid or no admissible gain raises `ValueError`.
+  gain. `sparsity_cap=None` admits every gain. An empty grid or no admissible gain raises
+  `ValueError`.
 
 ## Checkpoints (`cadence.checkpoint`)
 
 - `save(learner, path) -> Path` and `load(path, *, backend=None, device=None, config=None, precision=None) -> Learner`,
-  also as `Learner.save(path)` and `Learner.load(path, ...)`: one `.npz` file holding the wiring,
-  every seam's scale, every owner's gain and bias, the rule, the configuration, the masks, tie
-  groups, momentum and normalisation state, and the update count. `backend` and `device` may
-  differ from the saved ones; `precision` overrides saved precision and `config`
-  replaces the saved configuration. Inference through `predict` or `free` does
-  not update parameters. Separate `FastSeams` and `Trace` objects are not saved.
+  also as `Learner.save(path)` and `Learner.load(path, ...)`: one `.npz` file holding the
+  connectome, every synapse's efficacy, every neuron's gain and bias, the neuron model, the
+  configuration, the outputs and slots, the plasticity masks, tie groups, momentum and
+  normalisation state, and the update count. `backend` and `device` may differ from the
+  saved ones; `precision` overrides saved precision and `config` replaces the saved
+  configuration. Inference through `predict` or `free` does not update parameters.
+  Separate `FastSynapses`, `Trace` and `ActorCritic` objects are not saved by this API.
+  Use `GenericBrain.save/load` for the full standard composition. Archive replacement is
+  atomic, so a failed write leaves the previous checkpoint intact.
 
 ## Learning (`cadence.learning`)
 
 - `LearnerConfig(beta=0.1, eta=0.2, eta_bias=0.02, centered=True, free_steps=100, nudged_steps=50, tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0, normalize_floor=1e-3, momentum=0.0, decay=0.0)`:
-  `momentum` steps each seam on a running average of its own contrast; `decay` shrinks every
-  trainable seam and bias by that fraction on each update (a leak on the seams, for streams).
-- `Learner(engine, outputs, config=LearnerConfig(), trainable_overlaps=None, trainable_owners=None, symmetric=True, tie_groups=None, slots=1)`:
-  `trainable_overlaps` and `trainable_owners` are bool masks over overlaps and owners; only those
-  move and decay, so two learners can share one net without one's decay eroding the other's seams;
-  `tie_groups` is an int per overlap (−1 for none); overlaps in a group share one scale and
-  move by the mean of their contrasts, which is how an embedding is shared across positions;
+  `momentum` steps each synapse on a running average of its own contrast; `decay` shrinks every
+  plastic synapse's efficacy and every plastic neuron's bias by that fraction on each update
+  (a leak on the synapses, for streams).
+- `Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None, plastic_neurons=None, reciprocal=True, tie_groups=None, slots=1, updates=0)`:
+  `plastic_synapses` and `plastic_neurons` are bool masks over synapses and neurons; only those
+  move and decay, so two learners can share one brain without one's decay eroding the other's
+  synapses. With `reciprocal`, each reciprocal synapse pair shares one efficacy.
+  `tie_groups` is an int per synapse (−1 for none); synapses in a group share one efficacy and
+  move by the mean of their contrasts, which is how an embedding is shared across positions.
+  Overlapping reciprocal/explicit ties form one group; arbitrary group IDs are compacted.
+  Ties constrain increments, so initialize tied values equally to keep them equal. Frozen
+  members keep their values, including under decay and clipping, and contribute zero to
+  the group's mean increment. Reciprocal learning rejects ambiguous parallel pairs;
+  merge those with `from_synapses`, or use `reciprocal=False`. Masks remain mutable;
+  changing the original boolean array affects later updates. Rebuild the learner to
+  change tie topology.
+  `slots` splits the outputs into softmax groups (a count of equal groups, or one size per
+  group); `updates` is the update count.
   - `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)`,
     `targets(labels)`, `nudge_for(target, beta, weight=None)`;
-  - `contrast(free, nudged, opposite=None) -> (per_overlap, per_owner)`,
+  - `contrast(free, nudged, opposite=None) -> (per_synapse, per_neuron)`,
     `update(free, nudged, opposite=None) -> {"scale_step", "bias_step"}`,
     `step(drive, labels, warm=None, weight=None) -> (LearnedState, report)`;
     labels are integer indices within each output group: `(batch,)` for one group,
     `(batch, slots)` for several; `accuracy` averages all row/slot choices;
   - `calibrate(drive, *, level=0.5, grid=None)`, `predict(drive)`, `accuracy(drive, labels, batch=256)`,
-    `parameters()`, `to_dict()`; attributes `engine`, `reverse` (index of each overlap's
+    `parameters()`, `to_dict()`; attributes `brain`, `reverse` (index of each synapse's
     reverse, or −1), `second_moment` (when normalising).
-- `layered(inputs, hidden, outputs, *, density=0.3, feedback=1.0, lateral=0.0, seed=0, count=1.0, init=1.0, skip=False, excitatory_forward=False) -> Wiring`
-  with sets `input`, `hidden`, `output`.
-- `embedded(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0) -> (Wiring, tie_groups)`:
+- `layered(inputs, hidden, outputs, *, density=0.3, feedback=1.0, lateral=0.0, seed=0, count=1.0, init=1.0, skip=False, excitatory_forward=False) -> Connectome`
+  with populations `input`, `hidden`, `output`.
+- `embedded(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0) -> (Connectome, tie_groups)`:
   a window of one-hot tokens through one embedding table shared across positions, then a
-  dense hidden layer and the outputs, feedback seams tied in pairs; sets `input`,
+  dense hidden layer and the outputs, feedback synapses tied in pairs; populations `input`,
   `embedding`, `hidden`, `output`.
-- `LearnedState(free, nudged, opposite)`.
+- `LearnedState(free, nudged, opposite=None)`.
 
 ## The agent and the valence (`cadence.plasticity`)
 
 - `ActorCritic(learner, critic, config=None, seed=0, population=None)`: the agent of a stream
   of moments, the composition of the elements (`reward.md`). `learner` is a `Learner` whose
-  outputs are the action owners; `critic` the owners whose settled activation, read through a
+  outputs are the action neurons; `critic` the neurons whose settled activation, read through a
   learned linear readout, is the expectation of the reward to come; `population` a `Bins` for
   a continuous action.
-  - `act(drive, greedy=False) -> action`: one free settlement, then a draw from the softmax
-    over the output owners (with `Bins`, one draw per dimension), or the most probable;
+  - `act(drive, greedy=False) -> action`: one free phase, then a draw from the softmax
+    over the output neurons (with `Bins`, one draw per dimension), or the most probable.
+    Cache reuse requires the same drive; caller buffers are copied. A greedy action clears
+    pending eligibility and cannot be followed by `learn`. Repeated `act` replaces the
+    pending decision. `Bins` requires at least two levels per dimension; a multi-slot
+    learner needs a matching population code;
   - `learn(reward, done, next_drive, bootstrap=None) -> report`: the prediction error
     `reward + gamma * V(next) - V(now)` made into the dopamine by the valence and written
-    through every seam's eligibility, the trace of the last act's contrast decaying by
+    through every synapse's eligibility, the trace of the last act's contrast decaying by
     `gamma * lam` a moment; the critic's readout moves by its own trace and the same error.
     `done` rows start their next life from rest; a truncated row passes `value_of` its last
     observation as `bootstrap`;
-  - `reset()` (the traces cleared, at a life's end), `probabilities(state)`, `settle(drive)`,
+  - `reset()` (cached input/state, eligibility, salience and centering cleared; learned
+    parameters and optimizer history retained), `probabilities(state)` (shape `(batch, actions)`
+    or `(batch, dims, size)` with `Bins`), `settle(drive)`,
     `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
     `salience`, `delta_mean`, `delta_var`.
 - `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=0.05, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True)`:
@@ -213,21 +328,24 @@ give additional details. Prefer keyword arguments for optional configuration.
   divides the critic's step by its trace's energy.
 - `Bins(dims, size=9)`: the population code for `dims` continuous dimensions, each a softmax
   over `size` bins (`centres`, `groups`, `read`, `size`).
-- `Valence(level=0.0, floor=0.0, cap=1.0, units=True)`: the reward less its
-  expectation, made into the dopamine. Called on `delta` (a prediction error, or the reward
-  alone): less its running level per stream (`level` is the forgetting factor; 0 for none),
-  in the reward's own units or over its running scale (`units`), nothing within `floor`
-  scales of the level (quiet while the reward is what it usually is), capped at `cap`.
-  `reset()`. `ActorCritic.valence` is the agent's, built from `dopamine_center`,
-  `dopamine_floor` and `center_scale` of its config, per stream always; the cap is
-  `dopamine_cap`, applied by `learn`.
-- `ActorCritic.salience`: `(batch, owners)`, set before `learn`; each seam's eligibility is
-  weighted by its pre owner's entry (a `Trace.ringing`), so that what is still ringing is
+- `Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True, mean=0.0, var=1.0)`: the
+  reward less its expectation, made into the dopamine. Called on `delta` (a prediction error,
+  or the reward alone), it subtracts the running level (`level` is the forgetting factor; 0 for
+  none), kept per stream with `per_stream` or shared across streams otherwise; `mean` and
+  `var` hold that running level and variance. The result is in the reward's own units or over
+  its running scale (`units`), zero within `floor` scales of the level (quiet while the reward
+  is what it usually is), and capped at `cap` (0 for no cap). `reset()`. `ActorCritic.valence`
+  is the agent's, built per stream from `dopamine_center`, `dopamine_floor` and `center_scale`
+  of its config; the cap is `dopamine_cap`, applied by `learn`.
+- `ActorCritic.state`: the free phase of the latest moment, the state `act` read or `learn`
+  settled; `None` after `reset`.
+- `ActorCritic.salience`: `(batch, neurons)`, set before `learn`; each synapse's eligibility is
+  weighted by its pre neuron's entry (a `Trace.ringing`), so that what is still ringing is
   what a signal writes through. None by default.
 
 ## Receipts and custody (`cadence.receipts`, `cadence.custody`)
 
-- `Receipt.build(kind, body, sources=()) -> Receipt`; `write(path)`;
+- `Receipt.build(kind, body, sources=()) -> Receipt`; `write(path)`; `Receipt.read(path)`;
   `Receipt.verify(path, *, sources=None, check=None) -> (ok, message)`; `to_dict()`.
 - `canonical_json(value)`; `cadence.receipts.canonical_sha256(value)` and `cadence.receipts.source_manifest(files)` at module level.
 - `Source(key, file, url, sha256, citation="")`, `fetch(sources, root, *, allow_download=False)`,
@@ -235,14 +353,44 @@ give additional details. Prefer keyword arguments for optional configuration.
 
 ## Optional task compositions
 
-`from cadence.brains import couple, sensor_motor, imagine, ActivityMonitor` imports small
-motor, counterfactual-search and self-reading compositions. See [patterns](patterns.md)
-for ports, budgets, supplied-model boundaries and examples. These are optional
-architectural helpers; the owner rule and ordinary learning API are unchanged.
+`from cadence.circuits import assemble, reflex_arc, imagine, ActivityMonitor` imports small
+sensorimotor, counterfactual-search and self-reading compositions. See [patterns](patterns.md)
+for ports, budgets, supplied-model boundaries and examples. These optional architectural
+helpers compose ordinary neuron dynamics with explicit host-side orchestration.
 
-`couple(regions, bridges=()) -> Wiring` merges an insertion-ordered mapping of
-region names to wirings. Each bridge is `(source_region, local_owner,
-target_region, local_owner, weight)`. Full region sets and `region/child_set`
-ports remain addressable. Use the result with one `Settlement` and concatenate
-drives in region insertion order. Invalid ports, self-bridges and nonfinite
-weights are rejected. This helper adds topology, not a convergence guarantee.
+`assemble(regions, synapses=()) -> Connectome` merges an insertion-ordered mapping of
+region names to connectomes into one connectome. Each entry of `synapses` is
+`(source_region, local_neuron, target_region, local_neuron, weight)`, a directed synapse
+with count 1 and sign `weight`. Each region remains addressable as a population, and each
+of its populations as `region/population`. Use the result with one `Brain` and concatenate
+drives in region insertion order. Unknown regions, neurons outside their region, autapses
+and nonfinite weights are rejected. The helper adds topology only; convergence depends on
+the combined system.
+
+
+- `imagine(live, actions, transition, evaluate, terminal, *, depth=2, max_nodes=10000, adversarial=False, prune=False, clone=deepcopy) -> Deliberation`:
+  compare copied futures. Scores use the root actor's perspective; adversarial layers
+  alternate min/max. Pruning uses alpha-beta bounds with fresh bounds per root action.
+  `clone` must isolate mutable branch state; other callbacks must not mutate external
+  objects. Invalid budgets/nonfinite scores raise. Exhaustion raises before the next
+  transition and returns no partial ranking. `Deliberation.futures` are sorted by score;
+  each `Future` holds `action`, `score`, `sequence`, `state`. `nodes` counts visited
+  successor states, and `depth` records the requested horizon.
+- `ActivityMonitor().read(activity, scores, *, pressure=0) -> Readback`: finite 1D vectors
+  and pressure in `[0, 1]`. Returns `activity_change`, `ambiguity`, `pressure`, `uncertainty`,
+  `request_more`, `state`. `reset()` clears its previous reading and state. This heuristic
+  does not learn by itself and does not establish consciousness.
+- `reflex_arc(axes=2)`: sensory error ports and opposing motor pairs; the application
+  supplies body dynamics and interprets the motor readout.
+
+## Deprecated names (`cadence.legacy`)
+
+Every name of cadence 0.8 resolves for one release to its current counterpart with a
+`DeprecationWarning` naming the replacement: top-level names such as `Wiring`,
+`Settlement`, `GradedRule`, `FastSeams`, `Constitution`, `grow` and `learning_rule`; the
+module paths `cadence.wiring`, `cadence.rules`, `cadence.settle`, `cadence.constitution` and
+`cadence.brains`; keyword arguments such as `clamp=`, `sets=`, `edge_scale=`, `engine=`,
+`trainable_overlaps=` and `symmetric=`; and attributes and methods such as `.sets`,
+`.edges`, `.wiring`, `.rule`, `.repair`, `clamp_levels()` and `Trace.clamp()`. The module
+docstring lists the full map. `cadence.legacy.OLD_NAMES` maps old names to
+`(module, name)`.

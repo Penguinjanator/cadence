@@ -15,10 +15,10 @@ MOMENTS = ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
 def make(device: str | None, momentum: float, normalize: float) -> cd.Learner:
     w, groups = cd.embedded(7, 2, 4, 9, 3, seed=11)
     return cd.Learner(
-        cd.Settlement(
-            w, cd.learning_rule(dt=1), backend="cpu" if device is None else "torch", device=device
+        cd.Brain(
+            w, cd.learning_neuron_model(dt=1), backend="cpu" if device is None else "torch", device=device
         ),
-        w.sets["output"],
+        w.populations["output"],
         cd.LearnerConfig(
             momentum=momentum,
             normalize=normalize,
@@ -35,7 +35,7 @@ def make(device: str | None, momentum: float, normalize: float) -> cd.Learner:
 
 def sample(learner: cd.Learner, seed: int) -> tuple[np.ndarray, np.ndarray]:
     rng = np.random.default_rng(seed)
-    drive = np.zeros((5, learner.engine.wiring.n))
+    drive = np.zeros((5, learner.brain.connectome.n))
     drive[:, :14] = rng.uniform(0, 0.4, (5, 14))
     return drive, rng.integers(3, size=5)
 
@@ -48,24 +48,24 @@ def test_adaptive_device_matches_numpy_with_mutable_masks(
     if device == "mps" and not torch.backends.mps.is_available():
         pytest.skip("MPS unavailable")
     host, dev = make(None, momentum, normalize), make(device, momentum, normalize)
-    kernel = dev.engine._torch
+    kernel = dev.brain._torch
     for i in range(7):
         if i == 3:
             # In-place mask edits must invalidate device caches, even with the same object id.
             for learner in (host, dev):
-                learner.trainable_overlaps[::3] = False
-                learner.trainable_owners[::2] = False
+                learner.plastic_synapses[::3] = False
+                learner.plastic_neurons[::2] = False
         d, labels = sample(host, i)
         phase_h, _ = host.step(d, labels)
         phase_d, _ = dev.step(d, labels)
-        assert dev.engine._torch is kernel
-        assert dev.__dict__["_device_moments"]["owner"] is kernel
-        assert dev.engine._edge_scale is None
+        assert dev.brain._torch is kernel
+        assert dev.__dict__["_device_moments"]["holder"] is kernel
+        assert dev.brain._efficacy is None
         np.testing.assert_allclose(phase_d.free.activation, phase_h.free.activation, atol=2e-6)
     for name in MOMENTS:
         np.testing.assert_allclose(getattr(dev, name), getattr(host, name), atol=2e-6)
-    np.testing.assert_allclose(dev.engine.edge_scale, host.engine.edge_scale, atol=2e-6)
-    np.testing.assert_allclose(dev.engine.bias, host.engine.bias, atol=2e-6)
+    np.testing.assert_allclose(dev.brain.efficacy, host.brain.efficacy, atol=2e-6)
+    np.testing.assert_allclose(dev.brain.bias, host.brain.bias, atol=2e-6)
     assert dev.updates == host.updates == 7
 
 
@@ -83,7 +83,7 @@ def test_history_read_edit_and_checkpoint_continue(tmp_path: Path) -> None:
         for learner in (host, dev, loaded):
             learner.step(*sample(learner, i))
     for learner in (dev, loaded):
-        np.testing.assert_allclose(learner.engine.edge_scale, host.engine.edge_scale, atol=1e-11)
+        np.testing.assert_allclose(learner.brain.efficacy, host.brain.efficacy, atol=1e-11)
         for name in MOMENTS:
             np.testing.assert_allclose(getattr(learner, name), getattr(host, name), atol=1e-11)
 
@@ -99,16 +99,16 @@ def test_switch_to_host_contrast_and_back_preserves_history() -> None:
             plus = dev.nudged(d, free, target)
             minus = dev.nudged(d, free, target, sign=-1)
             states = [
-                cd.SettledState(s.v.copy(), s.activation.copy(), s.adaptation.copy(), s.steps)
+                cd.BrainState(s.v.copy(), s.activation.copy(), s.adaptation.copy(), s.steps)
                 for s in (free, plus, minus)
             ]
             dev.update(*states)
-            assert str(dev.engine._torch.device) == "cpu"
+            assert str(dev.brain._torch.device) == "cpu"
         else:
             dev.step(d, labels)
-    np.testing.assert_allclose(dev.engine.edge_scale, host.engine.edge_scale, atol=1e-11)
+    np.testing.assert_allclose(dev.brain.efficacy, host.brain.efficacy, atol=1e-11)
     np.testing.assert_allclose(dev.second_moment, host.second_moment, atol=1e-11)
-    # Calibration rebuilds the engine, and must retain an explicit device too.
+    # Calibration rebuilds the brain, and must retain an explicit device too.
     assert str(dev._with_gain(0.8)._torch.device) == "cpu"
     dev.config = replace(dev.config, momentum=0, normalize=0)
     dev.step(*sample(dev, 6))

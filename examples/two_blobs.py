@@ -1,4 +1,4 @@
-"""A patch net learns to tell two noisy patterns apart with the free/nudged rule.
+"""A brain learns to tell two noisy patterns apart with the free/nudged rule.
 
 Run:  python examples/two_blobs.py
 """
@@ -23,12 +23,14 @@ x, y = patterns(60, seed=0)
 test_x, test_y = patterns(30, seed=42)  # separate examples, never used for an update
 rng = np.random.default_rng(1)
 
-wiring = cd.layered(8, 16, 2, density=0.6, seed=1)  # sets: input, hidden, output
+connectome = cd.layered(8, 16, 2, density=0.6, seed=1)  # sets: input, hidden, output
 learner = cd.Learner(
-    cd.Settlement(wiring, cd.learning_rule()), wiring.sets["output"], cd.LearnerConfig(eta=2.0)
+    cd.Brain(connectome, cd.learning_neuron_model()),
+    connectome.populations["output"],
+    cd.LearnerConfig(eta=2.0),
 )
-drive = learner.engine.clamp_levels(np.pad(x, ((0, 0), (0, wiring.n - 8))))
-test_drive = learner.engine.clamp_levels(np.pad(test_x, ((0, 0), (0, wiring.n - 8))))
+drive = learner.brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 8))))
+test_drive = learner.brain.stimulus_levels(np.pad(test_x, ((0, 0), (0, connectome.n - 8))))
 
 print(f"before learning: held-out accuracy {learner.accuracy(test_drive, test_y):.2f}")
 for epoch in range(3):

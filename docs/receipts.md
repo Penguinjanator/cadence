@@ -64,8 +64,8 @@ Source and arithmetic checks are optional and must be supplied by the caller:
 
 ## What belongs in the body
 
-- the wiring summary and digest, and the custody block for measured data;
-- the rule and the engine description;
+- the connectome summary and digest, and the custody block for measured data;
+- the neuron model and the brain description (`Brain.to_dict()`);
 - the gain selection table, every gain tried, with its admissibility;
 - the protocol as data, including the reference for every row;
 - the score, with readings and reference readings on every row;
@@ -82,7 +82,7 @@ as well as a library version, since a version string can cover several source
 revisions. Verification does not launch an experiment automatically.
 
 A historical receipt remains evidence for its original source snapshot. Preserve its
-bytes and verify against that snapshot; do not re-sign an old result against new code.
-A new run should record library source hashes, data generation/seeds, every scheduled
+bytes and verify against that snapshot; do not re-sign an old result against later code.
+Each run should record library source hashes, data generation/seeds, every scheduled
 condition, predictions and targets, and validation choices. A verifier should reject
-missing outcomes, not merely recompute averages of whichever rows remain.
+missing outcomes instead of recomputing averages over whichever rows remain.

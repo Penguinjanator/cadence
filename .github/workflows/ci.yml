@@ -6,9 +6,12 @@ on:
 jobs:
   minimal-install:
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -27,6 +30,8 @@ jobs:
           python examples/ring_protocol.py
           python examples/brain_patterns.py
           python examples/coupled_brain.py
+          python examples/generic_brain.py
+          python examples/deliberation.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:

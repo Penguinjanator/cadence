@@ -1,11 +1,11 @@
-"""Timing a settlement: latency per decision, its spread, and what the machine was doing.
+"""Timing a settling run: latency per decision, its spread, and what the machine was doing.
 
 A wall-clock number in a receipt is a fact about a program on a machine on a
 day. This module records enough of the machine to read it: how many threads
 the arithmetic libraries were allowed, which cores the process was pinned to
 when the platform can say, the load average, and how many times the scheduler
 took the core away during the measurement. ``latency`` times one warm
-settlement per decision, many times, and reports the distribution rather than
+settling run per decision, many times, and reports the distribution rather than
 a mean, because a controller in a body cares about the slow tail.
 """
 
@@ -13,13 +13,17 @@ from __future__ import annotations
 
 import os
 import platform
-import resource
 import sys
 import time
 from collections.abc import Callable
 from typing import Any
 
 import numpy as np
+
+try:
+    import resource
+except ImportError:  # Windows has no getrusage.
+    resource = None  # type: ignore[assignment]
 
 __all__ = ["environment", "latency"]
 
@@ -40,7 +44,7 @@ def environment() -> dict[str, Any]:
         affinity = sorted(os.sched_getaffinity(0))
     try:
         load: tuple[float, ...] | None = os.getloadavg()
-    except OSError:  # pragma: no cover
+    except (OSError, AttributeError):  # pragma: no cover
         load = None
     out: dict[str, Any] = {
         "machine": platform.machine(),
@@ -67,15 +71,18 @@ def latency(decide: Callable[[], Any], *, repeats: int = 1000, warmup: int = 20)
     core was taken), from ``getrusage``. A tail far above the median with many
     involuntary switches is the machine, not the net.
     """
+    for name, value, minimum in (("repeats", repeats, 1), ("warmup", warmup, 0)):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < minimum:
+            raise ValueError(f"{name} must be an integer >= {minimum}")
     for _ in range(warmup):
         decide()
-    before = resource.getrusage(resource.RUSAGE_SELF)
+    before = resource.getrusage(resource.RUSAGE_SELF) if resource is not None else None
     samples = np.empty(repeats)
     for i in range(repeats):
         t0 = time.perf_counter_ns()
         decide()
         samples[i] = time.perf_counter_ns() - t0
-    after = resource.getrusage(resource.RUSAGE_SELF)
+    after = resource.getrusage(resource.RUSAGE_SELF) if resource is not None else None
     micro = samples / 1000.0
     p = np.percentile(micro, [50, 90, 99, 100])
     return {
@@ -86,7 +93,9 @@ def latency(decide: Callable[[], Any], *, repeats: int = 1000, warmup: int = 20)
         "max_us": float(p[3]),
         "mean_us": float(micro.mean()),
         "jitter": float((p[2] - p[0]) / p[0]) if p[0] > 0 else None,  # (p99 - p50) / p50
-        "voluntary_switches": int(after.ru_nvcsw - before.ru_nvcsw),
-        "involuntary_switches": int(after.ru_nivcsw - before.ru_nivcsw),
+        "voluntary_switches": int(after.ru_nvcsw - before.ru_nvcsw) if before and after else None,
+        "involuntary_switches": int(after.ru_nivcsw - before.ru_nivcsw)
+        if before and after
+        else None,
         "environment": environment(),
     }

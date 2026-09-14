@@ -43,7 +43,7 @@ def test_branches_do_not_share_live_or_other_branch_memory():
 
 def test_imagination_reads_without_changing_learner():
     brain = m.Evaluator()
-    before = brain.learner.engine.dense().copy()
+    before = brain.learner.brain.dense().copy()
     state = {
         "phase": 0,
         "safe": 1,
@@ -53,7 +53,7 @@ def test_imagination_reads_without_changing_learner():
         "trail": [],
     }
     m.compare_futures(state, (0, 1), m.transition, brain.value)
-    np.testing.assert_array_equal(brain.learner.engine.dense(), before)
+    np.testing.assert_array_equal(brain.learner.brain.dense(), before)
     assert brain.learner.updates == 0
     with pytest.raises(ValueError):
         m.compare_futures(state, (0, 1), m.transition, brain.value, horizon=20)

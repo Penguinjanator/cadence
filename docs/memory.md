@@ -1,8 +1,8 @@
 # Memory: read before writing
 
-A bounded observer-like patch needs records it can read back and correct through its
-ports. `FastSeams` stores a key-to-value matrix per stream. Its storage is fixed by the
-key and value widths; it does not grow with the number of observations. Slow weights
+A brain with bounded state needs records it can read back and correct. `FastSynapses`
+stores a key-to-value matrix of fast synaptic weights per stream. Its storage is fixed by
+the key and value widths; it does not grow with the number of observations. Slow weights
 can learn representations around that store, but the store does not learn its own keys
 or decide when an observation is trustworthy.
 
@@ -22,22 +22,23 @@ and does not accumulate strength. For an earlier key `q`, the change in its read
 `rate * dot(q, k) * error`: orthogonal records are preserved, correlated ones interfere.
 This identity explains both the useful behaviour and its limit.
 
-Cadence normalizes delta keys and queries to unit length. Normalization reads the key
-patch's whole vector; the seam update then reads its key coordinate and the receiving
-owner's error. This is normalized delta learning, closely related to normalized LMS and
-[delta-rule fast weights](https://arxiv.org/abs/2406.06484), not a new learning theorem.
-A read is linear transport, not softmax attention or a recurrent settlement.
+Cadence normalizes delta keys and queries to unit length. Normalization reads the whole
+key vector; each fast synapse then updates from its presynaptic key coordinate and its
+postsynaptic neuron's error. This is normalized delta learning, closely related to
+normalized LMS and [delta-rule fast weights](https://arxiv.org/abs/2406.06484).
+A read is one linear transport from key to value; it involves no softmax attention and
+no settling.
 
-## Direct ports
+## Reading and writing directly
 
 ```python
 import numpy as np
 import cadence as cd
 
-memory = cd.FastSeams(np.arange(4), np.arange(4, 6), rule="delta")
+memory = cd.FastSynapses(np.arange(4), np.arange(4, 6), rule="delta")
 keys = np.eye(4)[:2]                   # two independent streams
 values = np.array([[1., 0.], [0., 1.]])
-before = memory.recall(keys)          # query before revealing the new values
+before = memory.recall(keys)          # query before revealing the values
 memory.observe(keys, values)          # one observation in each stream
 assert np.allclose(memory.recall(keys), values)
 memory.reset(2, rows=np.array([True, False]))  # only the first episode ended
@@ -51,35 +52,47 @@ without changing the target used by the write rule. A changed batch size starts 
 streams; use `keep(rows)` when dropping streams while preserving their identities.
 `reset` clears records; `writes` counts lifetime write events.
 
-## With an existing patch net
+## With an existing brain
 
-The same memory can read key owners and drive value owners:
+The same memory can read key neurons and drive value neurons:
 
 ```python
-# pre/post are declared owner indices in this wiring.
-fast = cd.FastSeams(np.array(w.sets["key"]), np.array(w.sets["value"]), rule="delta")
-drive_with_record = fast.clamp(drive)
-state = engine.settle_batch(drive_with_record)
+connectome = cd.Connectome.from_synapses(
+    6, pre=[0, 1, 2, 3], post=[4, 4, 5, 5], count=[1] * 4,
+    populations={"key": range(4), "value": (4, 5)},
+)
+brain = cd.Brain(connectome, cd.learning_neuron_model())
+drive = np.zeros((2, connectome.n))
+drive[:, :4] = np.eye(4)[:2]
+
+# pre/post are declared neuron indices in this connectome.
+fast = cd.FastSynapses(
+    np.array(connectome.populations["key"]), np.array(connectome.populations["value"]), rule="delta"
+)
+drive_with_record = fast.stimulate(drive)
+state = brain.settle_batch(drive_with_record)
 # Later, after observing what actually followed:
+observed_rows = np.array([True, False])
+observed_values = np.array([[1.0, 0.0], [0.0, 0.0]])
 fast.update(state, write=observed_rows, post=observed_values)
 ```
 
-The key used by `update` is the key owners' *activation*, while `read`/`clamp` uses the
+The key used by `update` is the key neurons' *activation*, while `read`/`stimulate` uses the
 key range of the supplied *drive*. Supply compatible representations; nonlinear
 activation can change a dense key's direction. Use direct `observe`/`recall` when the
-same external key port should be used for both operations. Avoid writing the model's
+same external key should be used for both operations. Avoid writing the brain's
 own prediction as if it were new evidence.
 
-`update(state, write=None)` retains the older API's decay-only behaviour. This differs
-from `observe(..., write=None)`, which writes every row. Episodic fast state belongs to
-the caller: `Learner.save` does not save a separate `FastSeams` or `Trace` object.
+`update(state, write=None)` only decays the stored strengths, while
+`observe(..., write=None)` writes every row. The caller owns episodic fast state;
+`Learner.save` does not save a separate `FastSynapses` or `Trace` object.
 
-## Existing additive memory
+## Additive memory
 
-The default `rule="hebb"` preserves earlier experiments: each write adds `rate * k vᵀ`.
+The default `rule="hebb"` adds `rate * k vᵀ` on each write.
 `normalize=True` unit-normalizes keys and divides a read by decayed write mass.
 `replace=True` clears matrix rows whose key coordinates are positive before adding the
-new association. That is useful for one-hot slots, but erases unrelated records with
+association. That is useful for one-hot slots, but erases unrelated records with
 dense positive keys. Both flags are rejected in delta mode to avoid mixing incompatible
 read and write semantics.
 

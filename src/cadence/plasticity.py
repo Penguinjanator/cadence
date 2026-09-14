@@ -1,11 +1,11 @@
-"""Three factors: a trace at every seam, a critic, and a dopamine owner.
+"""Three factors: a trace at every synapse, a critic, and a dopamine neuron.
 
 Learning from reward in a body is not a nudge at the end of a rollout. Every
-seam keeps an eligibility trace, the recent history of what it would have
+synapse keeps an eligibility trace, the recent history of what it would have
 moved by for the actions that were taken; a critic population reads the
-settled state and learns to predict return; and a dopamine owner broadcasts
+settled state and learns to predict return; and a dopamine neuron broadcasts
 the temporal-difference error of that prediction. The three multiply, at
-every seam, every step:
+every synapse, every step:
 
     e[e]     <- gamma * lam * e[e] + contrast[e]        (the action's eligibility)
     delta    =  r + gamma * V(s') - V(s)                 (the dopamine signal)
@@ -15,9 +15,9 @@ There is no buffer and no epoch: one life, one pass. The contrast is the
 free/nudged difference the learner already computes, per row, with the
 nudge's target the action that was taken, so the eligibility is the score of
 that action and the goal still enters only through the nudge. The critic is a
-linear reading of the owners named for it, trained by its own trace and the
-same dopamine, so every update reads a seam's two endpoints and one broadcast
-number. ``normalize`` divides each seam's step by the running RMS of its own
+linear reading of the neurons named for it, trained by its own trace and the
+same dopamine, so every update reads a synapse's two endpoints and one broadcast
+number. ``normalize`` divides each synapse's step by the running RMS of its own
 steps, the local counterpart of an adaptive optimiser.
 """
 
@@ -29,9 +29,9 @@ from typing import Any
 
 import numpy as np
 
+from .brain import _FUSED as _FUSED_TRACE
+from .brain import BrainState, Nudge
 from .learning import Learner
-from .settle import _FUSED as _FUSED_TRACE
-from .settle import Nudge, SettledState
 
 __all__ = [
     "ActorCritic",
@@ -44,8 +44,8 @@ __all__ = [
 class Bins:
     """A continuous action as one softmax choice per dimension over ``size`` levels.
 
-    Each dimension owns ``size`` output owners standing for levels in ``[-1, 1]``; an
-    action is a draw from the softmax over each dimension's owners (a discrete choice
+    Each dimension owns ``size`` output neurons standing for levels in ``[-1, 1]``; an
+    action is a draw from the softmax over each dimension's neurons (a discrete choice
     per dimension), and learning is the cross-entropy nudge of that group toward the
     level taken, the same rule that learns a discrete action. Discretised actions match
     Gaussian ones on continuous control (Tang and Agrawal 2020); here they let one rule
@@ -54,6 +54,16 @@ class Bins:
 
     dims: int
     size: int = 9
+
+    def __post_init__(self) -> None:
+        for name, minimum in (("dims", 1), ("size", 2)):
+            value = getattr(self, name)
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, np.integer))
+                or value < minimum
+            ):
+                raise ValueError(f"{name} must be an integer >= {minimum}")
 
     @property
     def centres(self) -> np.ndarray:
@@ -72,7 +82,7 @@ class Bins:
 
 @dataclass
 class Valence:
-    """The reward less its expectation, made into the signal that moves the seams: the dopamine.
+    """The reward less its expectation, made into the signal that moves the synapses: the dopamine.
 
     ``delta`` is what came less what was expected (a critic's prediction error, or the
     reward alone). The valence takes it less its running level per stream (``level`` is the
@@ -89,8 +99,16 @@ class Valence:
     mean: Any = 0.0
     var: Any = 1.0
 
+    def __post_init__(self) -> None:
+        if not 0 <= self.level < 1:
+            raise ValueError("level must lie in [0, 1)")
+        if not np.isfinite([self.floor, self.cap]).all() or min(self.floor, self.cap) < 0:
+            raise ValueError("floor and cap must be finite and nonnegative")
+
     def __call__(self, delta: np.ndarray) -> np.ndarray:
         delta = np.asarray(delta, dtype=float)
+        if delta.ndim != 1 or not delta.size or not np.isfinite(delta).all():
+            raise ValueError("delta must be a nonempty finite vector, one value per stream")
         if self.level > 0:
             rho = self.level
             if self.per_stream:
@@ -123,8 +141,8 @@ class ActorCriticConfig:
     eta: float = 0.5  # actor step per unit dopamine per unit trace
     eta_bias: float = 0.05
     eta_critic: float = 0.05
-    normalize: float = 0.0  # >0: forgetting factor of the per-seam RMS that divides its step
-    # >0: each seam steps on a running average of its own steps, so sign noise cancels before
+    normalize: float = 0.0  # >0: forgetting factor of the per-synapse RMS that divides its step
+    # >0: each synapse steps on a running average of its own steps, so sign noise cancels before
     # the RMS divides it
     momentum: float = 0.0
     dopamine_cap: float = 1.0  # the broadcast saturates: |delta| is clipped here (0: no cap)
@@ -141,6 +159,18 @@ class ActorCriticConfig:
         True  # the critic's step is divided by its trace's energy, so its step size is scale-free
     )
 
+    def __post_init__(self) -> None:
+        for name in ("gamma", "lam"):
+            if not 0 <= getattr(self, name) <= 1:
+                raise ValueError(f"{name} must lie in [0, 1]")
+        for name in ("normalize", "momentum", "dopamine_center"):
+            if not 0 <= getattr(self, name) < 1:
+                raise ValueError(f"{name} must lie in [0, 1)")
+        for name in ("eta", "eta_bias", "eta_critic", "dopamine_cap", "dopamine_floor"):
+            value = getattr(self, name)
+            if not np.isfinite(value) or value < 0:
+                raise ValueError(f"{name} must be finite and nonnegative")
+
     def to_dict(self) -> dict[str, Any]:
         return {k: getattr(self, k) for k in self.__slots__}
 
@@ -150,13 +180,13 @@ class ActorCritic:
 
     Use::
 
-        ac = ActorCritic(learner, critic=wiring.sets["hidden"])
+        ac = ActorCritic(learner, critic=connectome.populations["hidden"])
         action = ac.act(drive)                 # settle, sample, keep eligibility
         obs, reward, done = env.step(action)
         ac.learn(reward, done, next_drive)     # settle the next state, dopamine, update
 
-    ``act`` reuses the settlement ``learn`` already made for the next state, so a
-    step costs one free settlement and two nudged ones.
+    ``act`` reuses the free phase ``learn`` already settled for the next state, so a
+    step costs one free phase and two nudged ones.
     """
 
     def __init__(
@@ -173,71 +203,110 @@ class ActorCritic:
             population is not None
             and len(learner.output_index) != population.dims * population.size
         ):
-            raise ValueError("the output set must hold dims * size owners for a population code")
+            raise ValueError("the output set must hold dims * size neurons for a population code")
         self.bins = population
+        if population is None and learner.slot_count != 1:
+            raise ValueError("multiple action slots need a Bins population code")
         if self.bins is not None:
             self.group_id: np.ndarray | None = self.bins.groups(
-                learner.output_index, learner.engine.wiring.n
+                learner.output_index, learner.brain.connectome.n
             )
-        self.critic_index = np.asarray(list(critic), dtype=np.int64)
+        index = np.asarray(list(critic))
+        if (
+            index.ndim != 1
+            or not index.size
+            or not np.issubdtype(index.dtype, np.integer)
+            or (index < 0).any()
+            or (index >= learner.brain.connectome.n).any()
+            or np.unique(index).size != index.size
+        ):
+            raise ValueError(
+                "critic must contain distinct integer neuron indices in the connectome"
+            )
+        self.critic_index = index.astype(np.int64)
         self.w_critic = np.zeros(len(self.critic_index))
         self.b_critic = 0.0
         self.rng = np.random.default_rng(seed)
-        w = learner.engine.wiring
-        self.edges, self.n = w.edges, w.n
+        w = learner.brain.connectome
+        self.synapses, self.n = w.synapses, w.n
         self.trace: np.ndarray | None = None
         self.trace_bias: np.ndarray | None = None
         self.trace_critic: np.ndarray | None = None
         # one stream's traces on the torch device, when it settles there
         self._trace_device: Any = None
-        self.second_moment = np.zeros(self.edges)
+        self.second_moment = np.zeros(self.synapses)
         self.second_moment_bias = np.zeros(self.n)
-        self.velocity = np.zeros(self.edges)
+        self.velocity = np.zeros(self.synapses)
         self.velocity_bias = np.zeros(self.n)
         self._valence: Valence | None = None
-        # (batch, owners): each seam's eligibility is weighted by its pre owner's salience, when
+        # (batch, neurons): each synapse's eligibility is weighted by its pre neuron's salience,
+        # when
         # set before ``learn`` (a ``Trace.ringing``: what is still ringing is what gets written)
         self.salience: np.ndarray | None = None
         self._drive: np.ndarray | None = None
-        self._free: SettledState | None = None
+        self._free: BrainState | None = None
         # ("phases", plus, minus, value) as activations, or ("states", plus, minus, value) as states
         self._pending: tuple[str, Any, Any, np.ndarray] | None = None
         self.updates = 0
 
     # -- readings
 
-    def value(self, state: SettledState) -> np.ndarray:
+    @property
+    def state(self) -> BrainState | None:
+        """The free phase of the latest moment: the state ``act`` read, or ``learn`` settled."""
+        return self._free
+
+    def value(self, state: BrainState) -> np.ndarray:
         return np.asarray(state.activation[:, self.critic_index] @ self.w_critic + self.b_critic)
 
-    def probabilities(self, state: SettledState) -> np.ndarray:
+    def probabilities(self, state: BrainState) -> np.ndarray:
+        """Action probabilities, or ``(batch, dims, size)`` probabilities for Bins."""
         s = state.activation[:, self.learner.output_index]
+        if self.bins is not None:
+            s = s.reshape(len(s), self.bins.dims, self.bins.size)
         z = s / self.learner.config.temperature
-        z = z - z.max(axis=1, keepdims=True)
+        z = z - z.max(axis=-1, keepdims=True)
         p = np.exp(z)
-        return np.asarray(p / p.sum(axis=1, keepdims=True))
+        return np.asarray(p / p.sum(axis=-1, keepdims=True))
 
-    def settle(self, drive: np.ndarray) -> SettledState:
-        """The free settlement for ``drive``, warm from the last one; cached for ``act``."""
+    def settle(self, drive: np.ndarray) -> BrainState:
+        """The free phase for ``drive``, warm from the last one; cached for ``act``."""
+        drive = self._validated_drive(drive)
         if self._free is not None and self._free.v.shape[0] != len(drive):
-            self._free = None
+            self.reset()
         self._free = self.learner.free(drive, warm=self._free)
-        self._drive = drive
+        self._drive = drive.copy()
+        self._pending = None
         return self._free
+
+    def _validated_drive(self, drive: np.ndarray) -> np.ndarray:
+        drive = np.asarray(drive, dtype=float)
+        if (
+            drive.ndim != 2
+            or drive.shape[1] != self.n
+            or not len(drive)
+            or not np.isfinite(drive).all()
+        ):
+            raise ValueError(f"drive must be a nonempty finite (batch, {self.n}) array")
+        return drive
 
     # -- acting
 
     def act(self, drive: np.ndarray, greedy: bool = False) -> np.ndarray:
-        """Settle (or reuse the cached settlement), sample an action per row, keep its eligibility.
+        """Settle (or reuse the cached free phase), sample an action per row, keep its eligibility.
 
-        Discrete: an action index per row from the softmax over the output owners.
+        Discrete: an action index per row from the softmax over the output neurons.
         With ``Bins``: one softmax draw per dimension of a population code.
         """
+        drive = self._validated_drive(drive)
         free = (
             self._free
-            if self._free is not None and self._free.v.shape[0] == len(drive)
+            if self._free is not None
+            and self._drive is not None
+            and np.array_equal(self._drive, drive)
             else self.settle(drive)
         )
-        self._drive = drive
+        self._pending = None  # eligibility always belongs to this decision, including greedy reads
         if self.bins is not None:
             return self._act_bins(drive, free, greedy)
         p = self.probabilities(free)
@@ -254,18 +323,14 @@ class ActorCritic:
             self._pending = ("states", plus, minus, self.value(free))
         return np.asarray(action, dtype=np.int64)
 
-    def _act_bins(self, drive: np.ndarray, free: SettledState, greedy: bool) -> np.ndarray:
+    def _act_bins(self, drive: np.ndarray, free: BrainState, greedy: bool) -> np.ndarray:
         """One softmax draw per dimension; the taken levels' one-hots are the nudge's target,
         per group."""
         bins = self.bins
         assert bins is not None
         cfg = self.learner.config
         batch = len(drive)
-        s = free.activation[:, self.learner.output_index].reshape(batch, bins.dims, bins.size)
-        z = s / cfg.temperature
-        z = z - z.max(axis=2, keepdims=True)
-        p = np.exp(z)
-        p /= p.sum(axis=2, keepdims=True)
+        p = self.probabilities(free)
         if greedy:
             choice = np.argmax(p, axis=2)
         else:
@@ -284,8 +349,8 @@ class ActorCritic:
         return out
 
     def _nudged_groups(
-        self, drive: np.ndarray, free: SettledState, target: np.ndarray, beta: float
-    ) -> SettledState:
+        self, drive: np.ndarray, free: BrainState, target: np.ndarray, beta: float
+    ) -> BrainState:
         cfg = self.learner.config
         nudge = Nudge(
             target,
@@ -294,7 +359,7 @@ class ActorCritic:
             softmax_temperature=cfg.temperature,
             groups=self.group_id,
         )
-        return self.learner.engine.settle_batch(
+        return self.learner.brain.settle_batch(
             drive, steps=cfg.nudged_steps, state=free, nudge=nudge, tolerance=cfg.tolerance
         )
 
@@ -340,20 +405,20 @@ class ActorCritic:
         next_drive: np.ndarray,
         bootstrap: np.ndarray | None = None,
     ) -> dict[str, float]:
-        """Dopamine from the reward and the next state's value; every seam moves on its trace.
+        """Dopamine from the reward and the next state's value; every synapse moves on its trace.
 
         ``done`` rows start their next life from rest and, unless ``bootstrap`` gives them
         a value, bootstrap from zero. A time limit is not a terminal state: pass the
         value of the last observation (``value_of``) as ``bootstrap`` for a truncated row.
         """
+        reward, done, next_drive, bootstrap = self._validated_transition(
+            reward, done, next_drive, bootstrap
+        )
         cfg = self.config
-        if self._pending is None:
-            raise RuntimeError("learn needs an act first")
+        assert self._pending is not None
         kind, first, second, value = self._pending
         free = self._free
         assert free is not None
-        reward = np.asarray(reward, dtype=float)
-        done = np.asarray(done, dtype=bool)
         batch = len(reward)
         decay = cfg.gamma * cfg.lam
         device_kernel = None
@@ -367,8 +432,13 @@ class ActorCritic:
             return self._learn_device(
                 device_kernel, first, second, value, reward, done, next_drive, bootstrap
             )
+        if self._trace_device is not None:
+            self.trace, self.trace_bias = (
+                tensor.detach().cpu().double().numpy().copy() for tensor in self._trace_device
+            )
+            self._trace_device = None
         if self.trace is None or self.trace.shape[0] != batch:
-            self.trace = np.zeros((batch, self.edges))
+            self.trace = np.zeros((batch, self.synapses))
             self.trace_bias = np.zeros((batch, self.n))
             self.trace_critic = np.zeros((batch, len(self.critic_index) + 1))
         assert self.trace_bias is not None and self.trace_critic is not None
@@ -380,7 +450,7 @@ class ActorCritic:
             )  # the contrast, trace, and dopamine-weighted sum are one fused pass in learn
         else:
             if kind == "phases":
-                w = self.learner.engine.wiring
+                w = self.learner.brain.connectome
                 span = 2.0 * self.learner.config.beta
                 contrast = (
                     first[:, w.pre] * first[:, w.post] - second[:, w.pre] * second[:, w.post]
@@ -389,7 +459,7 @@ class ActorCritic:
             else:
                 contrast, contrast_bias = first, second
             if self.salience is not None:
-                contrast = contrast * self.salience[:, self.learner.engine.wiring.pre]
+                contrast = contrast * self.salience[:, self.learner.brain.connectome.pre]
             self.trace *= decay
             self.trace += contrast
             self.trace_bias *= decay
@@ -398,15 +468,7 @@ class ActorCritic:
         self.trace_critic[:, :-1] += free.activation[:, self.critic_index]
         self.trace_critic[:, -1] += 1.0
         # the next state, warm from this one; a finished row starts its next life from rest
-        next_state = self.learner.free(next_drive, warm=free)
-        if done.any():
-            v = next_state.v.copy()
-            a = next_state.adaptation.copy()
-            v[done] = 0.0
-            a[done] = 0.0
-            next_state = self.learner.free(
-                next_drive, warm=SettledState(v, next_state.activation, a, next_state.steps)
-            )
+        next_state = self._next_state(next_drive, done)
         next_value_raw = self.value(next_state)
         next_value = np.where(
             done, 0.0 if bootstrap is None else np.asarray(bootstrap, dtype=float), next_value_raw
@@ -421,7 +483,7 @@ class ActorCritic:
         if fused is not None:
             from .fused import trace_step
 
-            w = self.learner.engine.wiring
+            w = self.learner.brain.connectome
             step_scale, step_bias = trace_step(
                 self.trace,
                 self.trace_bias,
@@ -440,24 +502,20 @@ class ActorCritic:
         raw_scale, raw_bias = step_scale, step_bias
         if (
             cfg.momentum > 0
-        ):  # a running average of each seam's own steps, corrected for its short history
+        ):  # a running average of each synapse's own steps, corrected for its short history
             self.velocity = cfg.momentum * self.velocity + (1 - cfg.momentum) * step_scale
             self.velocity_bias = cfg.momentum * self.velocity_bias + (1 - cfg.momentum) * step_bias
             correction = 1.0 - cfg.momentum**self.updates
             step_scale, step_bias = self.velocity / correction, self.velocity_bias / correction
         if (
             cfg.normalize > 0
-        ):  # divided by the running RMS of each seam's own raw steps, corrected likewise
+        ):  # divided by the running RMS of each synapse's own raw steps, corrected likewise
             rho = cfg.normalize
             self.second_moment = rho * self.second_moment + (1 - rho) * raw_scale**2
             self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_bias**2
             correction = 1.0 - rho**self.updates
-            step_scale = step_scale / (
-                np.sqrt(self.second_moment / correction) + 1e-3
-            )
-            step_bias = step_bias / (
-                np.sqrt(self.second_moment_bias / correction) + 1e-3
-            )
+            step_scale = step_scale / (np.sqrt(self.second_moment / correction) + 1e-3)
+            step_bias = step_bias / (np.sqrt(self.second_moment_bias / correction) + 1e-3)
         step_scale = cfg.eta * step_scale
         step_bias = cfg.eta_bias * step_bias
         report = self.learner.apply(step_scale, step_bias)
@@ -473,18 +531,56 @@ class ActorCritic:
             self.trace_bias[done] = 0.0
             self.trace_critic[done] = 0.0
         self._free = next_state
-        self._drive = next_drive
+        self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
         report["value"] = float(value.mean())
         report["free_steps"] = float(next_state.steps)
         return report
 
+    def _validated_transition(
+        self,
+        reward: np.ndarray,
+        done: np.ndarray,
+        next_drive: np.ndarray,
+        bootstrap: np.ndarray | None = None,
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None]:
+        """Reject a malformed transition before any trace, critic or parameter changes."""
+        if self._pending is None:
+            raise RuntimeError("learn needs a non-greedy act first")
+        batch = len(self._pending[3])
+        reward, done = np.asarray(reward, dtype=float), np.asarray(done)
+        if reward.shape != (batch,) or not np.isfinite(reward).all():
+            raise ValueError("reward must be a finite vector matching the action batch")
+        if done.shape != (batch,) or done.dtype != np.bool_:
+            raise ValueError("done must be a boolean vector matching the action batch")
+        next_drive = self._validated_drive(next_drive)
+        if len(next_drive) != batch:
+            raise ValueError("next_drive must match the action batch")
+        if bootstrap is not None:
+            bootstrap = np.asarray(bootstrap, dtype=float)
+            if bootstrap.shape != (batch,) or not np.isfinite(bootstrap).all():
+                raise ValueError("bootstrap must be a finite vector matching the action batch")
+        if self.salience is not None:
+            salience = np.asarray(self.salience)
+            if salience.shape != (batch, self.n) or not np.isfinite(salience).all():
+                raise ValueError("salience must be a finite (batch, neurons) array")
+        return reward, done, next_drive, bootstrap
+
+    def _next_state(self, drive: np.ndarray, done: np.ndarray) -> BrainState:
+        warm = self._free
+        assert warm is not None
+        if done.any():
+            v, a = warm.v.copy(), warm.adaptation.copy()
+            v[done], a[done] = 0.0, 0.0
+            warm = BrainState(v, warm.activation, a, warm.steps)
+        return self.learner.free(drive, warm=warm)
+
     def _learn_device(
         self,
         kernel: Any,
-        plus: SettledState,
-        minus: SettledState,
+        plus: BrainState,
+        minus: BrainState,
         value: np.ndarray,
         reward: np.ndarray,
         done: np.ndarray,
@@ -493,23 +589,32 @@ class ActorCritic:
     ) -> dict[str, float]:
         """``learn`` for streams whose phases rest on the torch device: each stream's contrast,
         eligibility trace and the mean step never come to the host; the critic and the
-        dopamine do (a value per stream and a row of the critic's owners)."""
+        dopamine do (a value per stream and a row of the critic's neurons)."""
         cfg = self.config
         torch = kernel.torch
         span = 2.0 * self.learner.config.beta
         decay = cfg.gamma * cfg.lam
         batch = len(reward)
-        edges, owners = kernel.contrast_rows(plus.device["s"], minus.device["s"])
+        edges, neurons = kernel.contrast_rows(plus.device["s"], minus.device["s"])
         if self.salience is not None:
             salience = torch.as_tensor(
                 np.asarray(self.salience), dtype=edges.dtype, device=edges.device
             )
             edges = edges * salience[:, kernel._row_index[0]]
         if self._trace_device is None or self._trace_device[0].shape != edges.shape:
-            self._trace_device = (torch.zeros_like(edges), torch.zeros_like(owners))
+            if self.trace is not None and self.trace.shape == tuple(edges.shape):
+                self._trace_device = (
+                    torch.as_tensor(self.trace, dtype=edges.dtype, device=edges.device).clone(),
+                    torch.as_tensor(
+                        self.trace_bias, dtype=neurons.dtype, device=neurons.device
+                    ).clone(),
+                )
+            else:
+                self._trace_device = (torch.zeros_like(edges), torch.zeros_like(neurons))
+            self.trace = self.trace_bias = None
         trace, trace_bias = self._trace_device
         trace = decay * trace + edges / span
-        trace_bias = decay * trace_bias + owners / span
+        trace_bias = decay * trace_bias + neurons / span
         if self.trace_critic is None or self.trace_critic.shape[0] != batch:
             self.trace_critic = np.zeros((batch, len(self.critic_index) + 1))
         free = self._free
@@ -517,15 +622,7 @@ class ActorCritic:
         self.trace_critic *= cfg.gamma * cfg.lam
         self.trace_critic[:, :-1] += free.activation[:, self.critic_index]
         self.trace_critic[:, -1] += 1.0
-        next_state = self.learner.free(next_drive, warm=free)
-        if done.any():
-            v = next_state.v.copy()
-            a = next_state.adaptation.copy()
-            v[done] = 0.0
-            a[done] = 0.0
-            next_state = self.learner.free(
-                next_drive, warm=SettledState(v, next_state.activation, a, next_state.steps)
-            )
+        next_state = self._next_state(next_drive, done)
         next_value_raw = self.value(next_state)
         next_value = np.where(
             done, 0.0 if bootstrap is None else np.asarray(bootstrap, dtype=float), next_value_raw
@@ -555,7 +652,7 @@ class ActorCritic:
             self.trace_critic[done] = 0.0
         self._trace_device = (trace, trace_bias)
         self._free = next_state
-        self._drive = next_drive
+        self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
         report["value"] = float(value.mean())
@@ -567,10 +664,15 @@ class ActorCritic:
         return self.value(self.learner.free(drive))
 
     def reset(self) -> None:
+        """Clear stream state and eligibility; keep learned parameters and optimizer history."""
         self._free = None
+        self._drive = None
         self._pending = None
         self.trace = self.trace_bias = self.trace_critic = None
         self._trace_device = None
+        self.salience = None
+        if self._valence is not None:
+            self._valence.reset()
 
     def parameters(self) -> int:
         return self.learner.parameters() + len(self.w_critic) + 1

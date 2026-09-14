@@ -1,15 +1,15 @@
-"""A fused settlement kernel for dense wirings on the CPU.
+"""A fused settling kernel for dense connectomes on the CPU.
 
 The reference loop in ``settle`` does one NumPy operation per term per step
 and pays interpreter and memory traffic for each. This kernel does the same
 arithmetic, in the same order and the same float64, in one compiled loop:
 transport as the block products of ``cadence.blocks`` (a block whose source
-range did not move since the previous step is reused), then every owner's
-repair, activation, adaptation, and nudge in place. It is used by ``Settlement`` on the CPU
-backend when the wiring is dense and no trajectory is requested; the
-conformance check and ``settle_owner_by_owner`` remain the reference it is
-measured against. Nothing an owner could not see enters: the kernel reads
-the same inbox, clamp, bias, and nudge the reference reads.
+range did not move since the previous step is reused), then every neuron's
+update, activation, adaptation, and nudge in place. It is used by ``Brain`` on the CPU
+backend when the connectome is dense and no trajectory is requested; the
+conformance check and ``settle_neuron_by_neuron`` remain the reference it is
+measured against. Nothing a neuron could not see enters: the kernel reads
+the same synaptic input, stimulus, bias, and nudge the reference reads.
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ except ImportError:  # pragma: no cover
 
 if TYPE_CHECKING:
     from .blocks import Layout
-    from .rules import GradedRule
-    from .settle import Nudge
+    from .brain import Nudge
+    from .neuron import NeuronModel
 
 
 __all__ = ["available", "fused_settle"]
@@ -74,7 +74,7 @@ if njit is not None:
         pair_pre,
         pair_post,
         offset,
-        has_inbox,
+        has_synaptic_input,
         freezable,
         keep,
         masked,
@@ -100,11 +100,11 @@ if njit is not None:
     ):
         batch, n = v.shape
         group = np.flatnonzero(nmask > 0.0)
-        position = np.full(n, -1, dtype=np.int64)  # an output owner's place in the softmax group
+        position = np.full(n, -1, dtype=np.int64)  # an output neuron's place in the softmax group
         for k in range(group.shape[0]):
             position[group[k]] = k
         taken = 0
-        repair = np.zeros(batch)
+        activity_change = np.zeros(batch)
         p = np.empty(group.shape[0])
         zmax = np.empty(max(ngroups, 1))
         total = np.empty(max(ngroups, 1))
@@ -116,16 +116,16 @@ if njit is not None:
             b = pair_post[k]
             cache_offset[k + 1] = cache_offset[k] + batch * (starts[b + 1] - starts[b])
         cache = np.zeros(cache_offset[pairs])
-        moved_range = np.ones(ranges, dtype=np.bool_)  # activation changed in the last repair pass
+        moved_range = np.ones(ranges, dtype=np.bool_)  # activation changed in the last step
         moved_potential = np.ones(ranges, dtype=np.bool_)
         frozen = np.zeros(ranges, dtype=np.bool_)  # a range that can never change again
-        inbox = np.zeros((batch, n))
+        synaptic_input = np.zeros((batch, n))
         for t in range(steps):
             for r in range(ranges):
-                if has_inbox[r]:
+                if has_synaptic_input[r]:
                     for b in range(batch):
                         for i in range(starts[r], starts[r + 1]):
-                            inbox[b, i] = 0.0
+                            synaptic_input[b, i] = 0.0
             for k in range(pairs):
                 a0, a1 = starts[pair_pre[k]], starts[pair_pre[k] + 1]
                 b0, b1 = starts[pair_post[k]], starts[pair_post[k] + 1]
@@ -139,7 +139,7 @@ if njit is not None:
                             cache[c0 + b * nb + j] = product[b, j]
                 for b in range(batch):
                     for j in range(nb):
-                        inbox[b, b0 + j] += cache[c0 + b * nb + j]
+                        synaptic_input[b, b0 + j] += cache[c0 + b * nb + j]
             for r in range(ranges):
                 moved_range[r] = False
                 moved_potential[r] = False
@@ -166,11 +166,11 @@ if njit is not None:
                     if frozen[r]:
                         continue
                     for i in range(starts[r], starts[r + 1]):
-                        tot = inbox[b, i] + standing[b, i]
+                        tot = synaptic_input[b, i] + standing[b, i]
                         if has_adapt:
                             tot -= adapt_strength * a[b, i]
                         if has_nudge and nmask[i] > 0.0 and softmax_t <= 0.0:
-                            tot += beta * weight[b] * (target[b, i] - s[b, i])
+                            tot += beta * weight[b] * nmask[i] * (target[b, i] - s[b, i])
                         tot -= v[b, i]
                         vn = v[b, i] + dt * tot
                         if has_nudge and softmax_t > 0.0 and nmask[i] > 0.0:
@@ -179,14 +179,14 @@ if njit is not None:
                             vn *= keep[b, i]
                         if (
                             vn != v[b, i]
-                        ):  # an owner whose potential did not move publishes what it did
+                        ):  # a neuron whose potential did not move publishes what it did
                             moved_potential[r] = True
                             v[b, i] = vn
                             sn = _act_scalar(vn, slope, threshold, rest, leak)
                             if masked:
                                 sn *= keep[b, i]
                             d = abs(sn - s[b, i])
-                            repair[b] += d
+                            activity_change[b] += d
                             if d > 0.0:
                                 moved_range[r] = True
                                 if d > moved:
@@ -202,7 +202,7 @@ if njit is not None:
             taken = t + 1
             if use_tolerance and moved < tolerance:
                 break
-        return taken, repair
+        return taken, activity_change
 
 
 def fused_settle(
@@ -213,13 +213,13 @@ def fused_settle(
     layout: Layout,
     flat: np.ndarray,
     keep: np.ndarray,
-    rule: GradedRule,
+    neuron_model: NeuronModel,
     nudge: Nudge | None,
     steps: int,
     tolerance: float | None,
     activation: np.ndarray | None = None,
 ) -> tuple[np.ndarray, int, np.ndarray]:
-    """Run the fused kernel in place on ``v`` and ``a``; returns ``(s, taken, repair)``.
+    """Run the fused kernel in place on ``v`` and ``a``; returns ``(s, taken, activity_change)``.
 
     ``activation`` is accepted for compatibility. Publication is recomputed
     from ``v`` under the current mask, since cached readback may use an old mask.
@@ -230,18 +230,20 @@ def fused_settle(
     masked = bool((keep != 1.0).any())
     # A broadcast view preserves shared masks without allocating a batch-sized copy.
     keep = np.broadcast_to(np.asarray(keep, float), (batch, n))
-    if not v.any():  # from rest every owner publishes the same thing
+    if not v.any():  # from rest every neuron publishes the same thing
         row = np.empty(n)
-        _activation(np.zeros(n), rule.slope, rule.threshold, rule.rest_emission, rule.leak, row)
+        m = neuron_model
+        _activation(np.zeros(n), m.slope, m.threshold, m.rest_emission, m.leak, row)
         s = np.empty((batch, n))
         s[:] = row
     else:
         s = np.empty_like(v)
         for b in range(batch):
-            _activation(v[b], rule.slope, rule.threshold, rule.rest_emission, rule.leak, s[b])
+            m = neuron_model
+            _activation(v[b], m.slope, m.threshold, m.rest_emission, m.leak, s[b])
     if masked:
         s *= keep
-    adapt = rule.adaptation
+    adapt = neuron_model.adaptation
     has_adapt = adapt is not None
     if nudge is not None:
         target = np.ascontiguousarray(np.broadcast_to(nudge.target, (batch, n)).astype(float))
@@ -261,6 +263,8 @@ def fused_settle(
             for k, g in enumerate(ids):
                 gid[raw == g] = k
             ngroups = len(ids)
+        if softmax_t > 0:
+            nmask = np.where(gid >= 0, nmask, 0.0)
     else:
         target = np.zeros((1, 1))
         nmask = np.zeros(n)
@@ -268,15 +272,15 @@ def fused_settle(
         ngroups = 0
         softmax_t, weight, beta = 0.0, np.ones(batch), 0.0
     lay = layout
-    has_inbox = np.zeros(lay.ranges, dtype=np.bool_)
-    has_inbox[lay.pair_post] = True
-    freezable = ~has_inbox  # nothing arrives: once still, still for good
+    has_synaptic_input = np.zeros(lay.ranges, dtype=np.bool_)
+    has_synaptic_input[lay.pair_post] = True
+    freezable = ~has_synaptic_input  # nothing arrives: once still, still for good
     if has_adapt:
         freezable = np.zeros(lay.ranges, dtype=np.bool_)
     elif nudge is not None:
         nudged = np.searchsorted(lay.starts, np.flatnonzero(nmask > 0), side="right") - 1
         freezable[nudged] = False
-    taken, repair = _kernel(
+    taken, activity_change = _kernel(
         v,
         a,
         s,
@@ -286,15 +290,15 @@ def fused_settle(
         lay.pair_pre,
         lay.pair_post,
         lay.offset,
-        has_inbox,
+        has_synaptic_input,
         freezable,
         np.asarray(keep, float),
         masked,
-        rule.dt,
-        rule.slope,
-        rule.threshold,
-        rule.rest_emission,
-        rule.leak,
+        neuron_model.dt,
+        neuron_model.slope,
+        neuron_model.threshold,
+        neuron_model.rest_emission,
+        neuron_model.leak,
         has_adapt,
         0.0 if adapt is None else adapt.strength,
         1.0 if adapt is None else adapt.tau_steps,
@@ -310,7 +314,7 @@ def fused_settle(
         float(tolerance) if tolerance is not None else 0.0,
         tolerance is not None,
     )
-    return s, taken, repair
+    return s, taken, activity_change
 
 
 if njit is not None:
@@ -379,14 +383,14 @@ def trace_step(
 if njit is not None:
 
     @njit(cache=True)
-    def _contrast_mean(s_plus, s_minus, pre, post, span, out_edges, out_owners):
-        """Batch-mean contrast per overlap and per owner, one pass, no (batch, edges) temporary."""
+    def _contrast_mean(s_plus, s_minus, pre, post, span, out_edges, out_neurons):
+        """Batch-mean contrast per synapse and per neuron, one pass, no (batch, edges) temporary."""
         batch, n = s_plus.shape
         edges = pre.shape[0]
         for e in range(edges):
             out_edges[e] = 0.0
         for i in range(n):
-            out_owners[i] = 0.0
+            out_neurons[i] = 0.0
         for b in range(batch):
             for e in range(edges):
                 out_edges[e] += (
@@ -394,21 +398,21 @@ if njit is not None:
                     - s_minus[b, pre[e]] * s_minus[b, post[e]]
                 )
             for i in range(n):
-                out_owners[i] += s_plus[b, i] - s_minus[b, i]
+                out_neurons[i] += s_plus[b, i] - s_minus[b, i]
         scale = 1.0 / (batch * span)
         for e in range(edges):
             out_edges[e] *= scale
         for i in range(n):
-            out_owners[i] *= scale
+            out_neurons[i] *= scale
 
 
 def contrast_mean(
     s_plus: np.ndarray, s_minus: np.ndarray, pre: np.ndarray, post: np.ndarray, span: float
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Fused ``Learner.contrast``: ``(per_overlap, per_owner)`` batch means divided by ``span``."""
+    """Fused ``Learner.contrast``: ``(per_synapse, per_neuron)`` batch means divided by ``span``."""
     assert njit is not None
     out_edges = np.empty(pre.shape[0])
-    out_owners = np.empty(s_plus.shape[1])
+    out_neurons = np.empty(s_plus.shape[1])
     _contrast_mean(
         np.ascontiguousarray(s_plus),
         np.ascontiguousarray(s_minus),
@@ -416,6 +420,6 @@ def contrast_mean(
         post,
         float(span),
         out_edges,
-        out_owners,
+        out_neurons,
     )
-    return out_edges, out_owners
+    return out_edges, out_neurons

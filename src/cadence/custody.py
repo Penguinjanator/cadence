@@ -1,6 +1,6 @@
 """Custody: pinned public sources, fetched once, verified every time.
 
-A lane that reads measured wiring declares each source file by URL and
+A lane that reads measured connectome declares each source file by URL and
 SHA-256. Nothing downloads unless asked; a download lands in a temporary
 file and is renamed only after its digest matches, so a corrupt payload
 never becomes the cached source. The manifest of the sources is what a

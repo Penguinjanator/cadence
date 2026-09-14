@@ -1,6 +1,65 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 (unreleased)
+
+Biological names throughout, brain regions, and a generic brain.
+
+- Names: `Connectome` (was `Wiring`), `Brain` (was `Settlement`), `BrainState`,
+  `NeuronModel` (was `GradedRule`), `learning_neuron_model`, neurons and synapses (were
+  owners, overlaps and seams), `populations` (were `sets`), `synapses` (was `edges`),
+  `stimulus` (was `clamp`), `efficacy` (was `edge_scale`), `plastic_synapses` and
+  `plastic_neurons` (were `trainable_overlaps` and `trainable_owners`), `reciprocal` (was
+  `symmetric`), `activity_change` (was `repair`), `FastSynapses` (was `FastSeams`),
+  `Genome` and `develop` (were `Constitution` and `grow`), `cadence.circuits` with
+  `assemble` and `reflex_arc` (were `cadence.brains`, `couple` and `sensor_motor`), and the
+  modules `cadence.connectome`, `cadence.neuron`, `cadence.brain` and `cadence.genome`.
+- `cadence.legacy` keeps every 0.8 name, module path, keyword, attribute and method as a
+  deprecated alias for one release; each use warns with its replacement.
+- Checkpoints are written in format 2 with the new entry names; format 1 loads.
+- Dictionaries use the new names: `Connectome.summary()["populations"]`,
+  `Brain.to_dict()["neuron_model"]` and `["efficacy_changed"]`, `Learner.to_dict()["brain"]`,
+  and the conformance ledger's `declared_synapses`, `transmissions` and
+  `undeclared_transmissions`. Error messages use the new vocabulary.
+- `Region`: a blank group of neurons or a designed region with its own circuit, inputs and
+  outputs. A `Genome` mixes both; `develop` lays designed circuits into the connectome and
+  draws projections between region populations (`region/population`), and `mutate` keeps
+  designed regions' sizes. Blank genomes develop to the same connectome as in 0.8.
+- `cadence.regions`: `visual_cortex` (retinotopic input and feature maps with local
+  receptive fields), `cortex`, `motor_cortex` and `prefrontal_cortex`.
+- `GenericBrain`: a sensory region or visual cortex, an association cortex and a motor cortex
+  in one connectome, with an external reward helper (`ActorCritic`), optional prefrontal working
+  memory (a `Trace` of the association cortex) and an optional hippocampus (`FastSynapses`)
+  for one-trial records. It learns from labels (`fit`) and reward (`act`, `learn`), and its
+  genome can be evolved. `examples/generic_brain.py` runs it on pictures and a bandit.
+- `ActorCritic.state`: the free phase of the latest moment.
+- `Brain.equilibrate` checks the whole circuit's equation residual under an exact step
+  budget and returns per-row convergence information, including for zero-budget checks.
+- `GenericBrain.save/load` preserves the standard composition between decisions: critic,
+  both optimizers, random state, eligibility, working memory and episodic records.
+  Checkpoint replacement is atomic; malformed learner optimizer state is rejected.
+- Reward decisions now honor changed observations, own cached inputs, clear stale greedy
+  eligibility and reset ended rows before one next-state phase. Batch neighbours no longer
+  receive extra settling when another stream ends. Eligibility survives host/device transitions.
+- Generic learning validates labels and transitions before mutation, owns observation/action
+  buffers, exposes the current learned brain and accepts truncation bootstrap values.
+- Fixed renamed device-cache keys, dense transport dropping parallel synapses, frozen
+  weights changing under clipping, and overlapping reciprocal/explicit ties. Large tie IDs
+  no longer allocate by label magnitude. Complete parameter assignment refreshes each backend.
+  Sparse learning uses a bounded-memory host contrast instead of an unsupported device
+  block operation or a potentially full dense Gram allocation; bias-only reports stay finite.
+- Fused nudges honor fractional quadratic masks and excluded softmax groups. Signed
+  traces produce nonnegative bounded salience; population-code probabilities normalize per axis.
+- Added validation for reward settings, masks, nudges, neuron indices, region ports and sizes,
+  genome constraints and optimizer state. Zero-density layered projections are supported.
+- `imagine` accepts optional adversarial pruning and an isolated `clone` callback, supports
+  array-valued action sequences, and checks its budget before invoking another transition.
+  `ActivityMonitor.reset` starts an independent monitoring episode.
+- Documentation now includes a runnable README quickstart, a complete brain-design guide,
+  biological-object/function mapping with support boundaries, and tested introductory snippets
+  and links. Standard cortex builders remain optional functional analogues.
+- Timing tolerates unavailable Unix statistics. Minimal wheel CI also runs on Windows.
+
+## Unreleased before 0.9.0
 
 - Class-label and output-port validation prevents negative indices, duplicate outputs
   and accidental batch broadcasting. Slotted accuracy averages over every row and slot.

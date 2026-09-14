@@ -1,77 +1,108 @@
 """Checkpoints: a trained learner to one file and back, for deployment.
 
-``save`` writes a single ``.npz`` holding the wiring (owners, overlaps, contacts, signs, sets),
-the settlement's parameters (every seam's scale, every owner's gain and bias), the rule, the
-learner's configuration, masks, tie groups, momentum and normalisation state, and the update
-count, plus the library version that wrote it. ``load`` rebuilds a ``Learner`` on any backend,
-so a net trained on an accelerator runs on a CPU in a body and keeps learning where it left off.
+``save`` writes a single ``.npz`` holding the connectome (neurons, synapses, contacts, signs,
+populations), the brain's parameters (every synapse's efficacy, every neuron's gain and bias),
+the neuron model, the learner's configuration, plasticity masks, tie groups, momentum and
+normalisation state, and the update count, plus the library version that wrote it. ``load``
+rebuilds a ``Learner`` on any backend, so a brain trained on an accelerator runs on a CPU in a
+body and keeps learning where it left off. Checkpoints in the first format load as well.
 """
 
 from __future__ import annotations
 
 import dataclasses
 import json
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 
+from .brain import Backend, Brain
+from .connectome import Connectome
 from .learning import Learner, LearnerConfig
-from .rules import Adaptation, GradedRule
-from .settle import Backend, Settlement
-from .wiring import Wiring
+from .neuron import Adaptation, NeuronModel
 
-FORMAT = "cadence-checkpoint/1"
+FORMAT = "cadence-checkpoint/2"
+FIRST_FORMAT = "cadence-checkpoint/1"
 
 __all__ = ["FORMAT", "load", "save"]
 
+# The first format's names for the entries that the second format renamed.
+_FIRST_META = {"populations": "sets", "neuron_model": "rule", "reciprocal": "symmetric"}
+_FIRST_ARRAYS = {
+    "efficacy": "edge_scale",
+    "plastic_synapses": "trainable_overlaps",
+    "plastic_neurons": "trainable_owners",
+}
+_FIRST_MODEL: dict[str, str] = {"clamp_amplitude": "stimulus_amplitude"}
 
-def save(learner: Learner, path: str | Path) -> Path:
-    """Write ``learner`` to ``path`` (``.npz``); returns the path written."""
+
+def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
     from . import __version__
 
-    engine = learner.engine
-    w = engine.wiring
+    brain = learner.brain
+    c = brain.connectome
     meta = {
         "format": FORMAT,
         "version": __version__,
-        "n": int(w.n),
-        "label": w.label,
-        "sets": {k: [int(i) for i in v] for k, v in w.sets.items()},
-        "rule": engine.rule.to_dict(),
+        "n": int(c.n),
+        "label": c.label,
+        "populations": {k: [int(i) for i in v] for k, v in c.populations.items()},
+        "neuron_model": brain.neuron_model.to_dict(),
         "config": learner.config.to_dict(),
-        "symmetric": bool(learner.symmetric),
+        "reciprocal": bool(learner.reciprocal),
         "slots": [int(k) for k in learner.slot_sizes],
         "updates": int(learner.updates),
-        "backend": engine.backend,
-        "precision": engine.precision,
-        "dense_limit": int(engine.dense_limit),
+        "backend": brain.backend,
+        "precision": brain.precision,
+        "dense_limit": int(brain.dense_limit),
     }
-    assert learner.trainable_overlaps is not None and learner.trainable_owners is not None
-    path = Path(path)
-    if path.suffix != ".npz":
-        path = path.with_suffix(path.suffix + ".npz")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez_compressed(
-        path,
+    assert learner.plastic_synapses is not None and learner.plastic_neurons is not None
+    return dict(
         meta=np.array(json.dumps(meta, sort_keys=True)),
-        pre=w.pre,
-        post=w.post,
-        count=w.count,
-        sign=w.sign,
-        edge_scale=engine.edge_scale,
-        log_gain=engine.log_gain,
-        bias=engine.bias,
+        pre=c.pre,
+        post=c.post,
+        count=c.count,
+        sign=c.sign,
+        efficacy=brain.efficacy,
+        log_gain=brain.log_gain,
+        bias=brain.bias,
         outputs=learner.output_index,
-        trainable_overlaps=learner.trainable_overlaps,
-        trainable_owners=learner.trainable_owners,
+        plastic_synapses=learner.plastic_synapses,
+        plastic_neurons=learner.plastic_neurons,
         tie_groups=learner.tie_groups if learner.tie_groups is not None else np.zeros(0, np.int64),
         velocity=learner.velocity,
         velocity_bias=learner.velocity_bias,
         second_moment=learner.second_moment,
         second_moment_bias=learner.second_moment_bias,
     )
+
+
+def _write(data: dict[str, Any], path: str | Path) -> Path:
+    """Replace only after a complete archive has been written, keeping the previous checkpoint."""
+    path = Path(path)
+    if path.suffix != ".npz":
+        path = path.with_suffix(path.suffix + ".npz")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".npz", delete=False) as handle:
+            temporary = Path(handle.name)
+            np.savez_compressed(handle, **data)
+            handle.flush()
+            os.fsync(handle.fileno())
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
     return path
+
+
+def save(learner: Learner, path: str | Path) -> Path:
+    """Atomically write ``learner`` to ``path`` (``.npz``); returns the path written."""
+    return _write(_learner_data(learner), path)
 
 
 def _known_config(saved: dict[str, Any]) -> dict[str, Any]:
@@ -92,29 +123,40 @@ def load(
     """Rebuild a learner from a checkpoint; ``backend`` and ``device`` may differ from the saved.
 
     ``config`` replaces the saved learner configuration (a deployment may learn at another rate,
-    or not at all: set ``eta`` and ``eta_bias`` to zero and the net only settles).
+    or not at all: set ``eta`` and ``eta_bias`` to zero and the brain only settles).
     """
     with np.load(Path(path), allow_pickle=False) as data:
         meta: dict[str, Any] = json.loads(str(data["meta"]))
-        if meta.get("format") != FORMAT:
+        first = meta.get("format") == FIRST_FORMAT
+        if not first and meta.get("format") != FORMAT:
             raise ValueError(f"not a cadence checkpoint: {meta.get('format')!r}")
-        wiring = Wiring(
+
+        def entry(name: str) -> Any:
+            return meta[_FIRST_META[name] if first else name]
+
+        def array(name: str) -> np.ndarray:
+            return np.asarray(data[_FIRST_ARRAYS[name] if first else name])
+
+        connectome = Connectome(
             n=int(meta["n"]),
             pre=data["pre"],
             post=data["post"],
             count=data["count"],
             sign=data["sign"],
-            sets={k: tuple(v) for k, v in meta["sets"].items()},
+            populations={k: tuple(v) for k, v in entry("populations").items()},
             label=str(meta["label"]),
         )
-        rule_dict = dict(meta["rule"])
-        adaptation = rule_dict.pop("adaptation", None)
-        rule = GradedRule(**rule_dict, adaptation=Adaptation(**adaptation) if adaptation else None)
-        engine = Settlement(
-            wiring,
-            rule,
+        saved_model: dict[str, Any] = dict(entry("neuron_model"))
+        model = {(_FIRST_MODEL[k] if k in _FIRST_MODEL else k): v for k, v in saved_model.items()}
+        adaptation = model.pop("adaptation", None)
+        neuron_model = NeuronModel(
+            **model, adaptation=Adaptation(**adaptation) if adaptation else None
+        )
+        brain = Brain(
+            connectome,
+            neuron_model,
             backend=backend or meta["backend"],
-            edge_scale=data["edge_scale"],
+            efficacy=array("efficacy"),
             log_gain=data["log_gain"],
             bias=data["bias"],
             device=device,
@@ -123,18 +165,24 @@ def load(
         )
         tie = data["tie_groups"]
         learner = Learner(
-            engine,
-            [int(i) for i in data["outputs"]],
+            brain,
+            data["outputs"].tolist(),
             config or LearnerConfig(**_known_config(meta["config"])),
-            trainable_overlaps=data["trainable_overlaps"].astype(bool),
-            trainable_owners=data["trainable_owners"].astype(bool),
-            symmetric=bool(meta["symmetric"]),
+            plastic_synapses=array("plastic_synapses"),
+            plastic_neurons=array("plastic_neurons"),
+            reciprocal=bool(entry("reciprocal")),
             tie_groups=tie if len(tie) else None,
             slots=meta.get("slots", 1),
             updates=int(meta["updates"]),
         )
-        learner.velocity = data["velocity"].astype(float)
-        learner.velocity_bias = data["velocity_bias"].astype(float)
-        learner.second_moment = data["second_moment"].astype(float)
-        learner.second_moment_bias = data["second_moment_bias"].astype(float)
+        if learner.updates < 0:
+            raise ValueError("checkpoint update count must be nonnegative")
+        for name in ("velocity", "velocity_bias", "second_moment", "second_moment_bias"):
+            value = data[name].astype(float)
+            size = connectome.n if name.endswith("bias") else connectome.synapses
+            if value.shape != (size,) or not np.isfinite(value).all():
+                raise ValueError(f"invalid checkpoint optimizer array: {name}")
+            if name.startswith("second_moment") and (value < 0).any():
+                raise ValueError(f"negative checkpoint second moment: {name}")
+            setattr(learner, name, value)
     return learner

@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 
-from cadence.brains import ActivityMonitor, imagine, sensor_motor
+from cadence.circuits import ActivityMonitor, imagine, reflex_arc
 
 
 def test_imagination_preserves_nested_live_state_and_responds_to_adversary():
@@ -47,7 +47,7 @@ def test_monitor_requests_work_for_ambiguous_choices_but_respects_budget():
     uncertain = monitor.read(np.zeros(4), np.array([0.1, 0.1]))
     assert uncertain.request_more
     pressured = monitor.read(np.ones(4), np.array([0.1, 0.1]), pressure=1)
-    assert pressured.repair == 1 and not pressured.request_more
+    assert pressured.activity_change == 1 and not pressured.request_more
     certain = ActivityMonitor().read(np.zeros(4), np.array([-100.0, 100.0]))
     assert not certain.request_more
     with pytest.raises(ValueError):
@@ -55,10 +55,10 @@ def test_monitor_requests_work_for_ambiguous_choices_but_respects_budget():
 
 
 def test_sensor_motor_population_counts():
-    wiring = sensor_motor(3)
-    assert wiring.n == 9 and wiring.edges == 6
-    assert wiring.sets["sensory"] == (0, 1, 2)
-    assert wiring.sets["positive"] == (3, 5, 7)
-    assert wiring.sets["negative"] == (4, 6, 8)
+    connectome = reflex_arc(3)
+    assert connectome.n == 9 and connectome.synapses == 6
+    assert connectome.populations["sensory"] == (0, 1, 2)
+    assert connectome.populations["positive"] == (3, 5, 7)
+    assert connectome.populations["negative"] == (4, 6, 8)
     with pytest.raises(ValueError):
-        sensor_motor(0)
+        reflex_arc(0)

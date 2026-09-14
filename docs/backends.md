@@ -9,7 +9,7 @@ python -m pip install "cadence-net[fast] @ git+https://github.com/muellerberndt/
 
 Replace `[fast]` with `[accel]` for PyTorch or `[apple]` for MLX. From a checkout,
 use `python -m pip install -e ".[fast]"`. An installed accelerator library is
-not enough to select it: pass `backend="torch"` or `backend="mlx"` to `Settlement`.
+not enough to select it: pass `backend="torch"` or `backend="mlx"` to `Brain`.
 
 ```python
 import cadence as cd
@@ -25,45 +25,45 @@ cd.available_backends()
 | `"mlx"` | Apple silicon GPU through MLX, unified memory | float32 | `cadence-net[apple]` | an alternative Apple backend; benchmark the actual workload |
 | `"torch"` on CPU | torch CPU | float64 | `cadence-net[accel]` | one code path on a box without a GPU |
 
-The backends implement the same owner equations with different kernels and precision.
-For blocked wiring, transport uses dense blocks between owner ranges; unchanged
-ranges can reuse their products. Each step then applies the owner update, nudge,
-adaptation, mask, and stopping check. The
-device backends keep the settled state on the device (`state.device`) so that a phase that
-continues from it starts there, and the learning rule's contrast is read on the device
-(`Settlement.contrast_on_device`). For blocked PyTorch learners, contrast, momentum,
-RMS normalization and parameter updates remain on the device. Scalar step reports
-synchronize. Reading parameters or optimizer history, saving a checkpoint, or entering a
-host-only path materializes the required arrays. Public optimizer attributes remain
-mutable NumPy arrays; edits made through them are picked up by the next update. History
-uses float32 on MPS and float64 on torch CPU/CUDA. MLX contrast returns arrays
-to the host for the optimizer.
-Large wirings whose blocks do not fit `dense_limit` use sparse transport. The CPU backend
+The backends implement the same neuron equations with different kernels and precision.
+For a blocked connectome, transport uses dense blocks between neuron ranges; unchanged
+ranges can reuse their products. Each step then applies the neuron update, nudge,
+adaptation, mask, and stopping check. The device backends keep the settled state on the
+device (`state.device`) so that a phase that continues from it starts there, and the
+learning rule's contrast is read on the device (`Brain.contrast_on_device`). For blocked
+PyTorch learners, contrast, momentum, RMS normalization and parameter updates remain on
+the device. Scalar step reports synchronize. Reading parameters or optimizer history,
+saving a checkpoint, or entering a host-only path materializes the required arrays.
+Public optimizer attributes remain mutable NumPy arrays; edits made through them are
+picked up by the next update. History uses float32 on MPS and float64 on torch CPU/CUDA.
+MLX contrast returns arrays to the host for the optimizer.
+Large connectomes whose blocks do not fit `dense_limit` use sparse transport. The CPU backend
 uses SciPy CSR when installed, and the NumPy segmented sum otherwise. PyTorch uses its
 gather/scatter path; `"mlx"` needs the blocks.
 
 ## Sparse CPU transport
 
-A CSR row holds the overlaps heard by one owner. The matrix multiplies the published
+A CSR row holds the synapses onto one neuron. The matrix multiplies the published
 activations directly, avoiding the NumPy fallback's temporary array with one value per
-batch row and overlap. This changes transport only: local repair, nudges, masks,
+batch row and synapse. This changes transport only: the neuron update, nudges, masks,
 adaptation and stopping conditions are the same. Floating-point summation order can
 change slightly, so compare complete trajectories at the precision a task requires.
 
 SciPy comes with `cadence-net[fast]`; the NumPy-only installation remains supported.
-Sparse indices are cached on the wiring, and each engine's matrix shares its current
-weights. Replacing parameters drops the old matrix wrapper; the topology can be reused.
-For a batch of size B with E overlaps and N owners, one avoided float64 message array
+Sparse indices are cached on the connectome, and each brain's matrix shares its current
+weights. Sparse learner contrasts use bounded chunks on the host, including when their
+settling phases ran through PyTorch gather/scatter; they do not allocate a dense Gram matrix. Replacing parameters drops the old matrix wrapper; the topology can be reused.
+For a batch of size B with E synapses and N neurons, one avoided float64 message array
 occupies `8 * B * E` bytes, while the result occupies `8 * B * N` bytes. The CSR index
 cache adds approximately `4 * (E + N + 1)` bytes when 32-bit indices suffice.
 
-`engine.to_dict()["transport"]` retains `"segmented"` for sparse wiring compatibility.
-`"sparse_kernel"` is `null` before a sparse CPU multiply runs, then `"scipy_csr"` or
-`"numpy_segmented"`. Inspection does not instantiate a kernel.
+`brain.to_dict()["transport"]` is `"dense"` for a blocked connectome and `"segmented"` for
+a sparse one. `"sparse_kernel"` is `null` before a sparse CPU multiply runs, then
+`"scipy_csr"` or `"numpy_segmented"`. Inspection does not instantiate a kernel.
 
 ## Which hardware
 
-Choose using the actual changing-input workload. Small nets can spend more time
+Choose using the actual changing-input workload. Small brains can spend more time
 launching GPU operations than doing arithmetic; large batches and dense blocks can
 benefit from accelerator matrix products. Sparse graphs require a separate measurement.
 Warm up the backend and synchronize the GPU around wall-clock measurements.
@@ -71,10 +71,10 @@ Warm up the backend and synchronize the GPU around wall-clock measurements.
 The CPU backend uses NumPy float64, with optional numba and SciPy acceleration through
 `cadence-net[fast]`. Cap BLAS threads when running independent experiment workers;
 `cadence.timing.environment()` records thread settings. PyTorch supports CPU, CUDA and
-Apple MPS, while MLX provides an additional Apple path. A single net uses one
+Apple MPS, while MLX provides an additional Apple path. A single brain uses one
 device. Neither backend choice nor parameter count establishes efficiency by itself.
 
-CUDA defaults to float64; `precision="float32"` selects float32 settlement. Hardware
+CUDA defaults to float64; `precision="float32"` selects float32 settling. Hardware
 throughput and the useful precision depend on the device and problem. Compare outputs,
 residuals and learning curves with float64, especially near multiple equilibria. MPS
 uses float32 for parameters and state because it does not support float64.
@@ -82,13 +82,15 @@ uses float32 for parameters and state because it does not support float64.
 ## Choosing a device
 
 ```python
-cd.Settlement(w, rule, backend="torch")                          # cuda, else mps, else cpu
-cd.Settlement(w, rule, backend="torch", device="cpu")             # force
-cd.Settlement(w, rule, backend="torch", precision="float32")      # speed on a consumer GPU
-cd.Settlement(w, rule, backend="mlx")                             # Apple silicon through MLX
+connectome = cd.layered(4, 16, 2, seed=0)
+neuron_model = cd.learning_neuron_model()
+cd.Brain(connectome, neuron_model, backend="torch")                          # cuda, else mps, else cpu
+cd.Brain(connectome, neuron_model, backend="torch", device="cpu")             # force
+cd.Brain(connectome, neuron_model, backend="torch", precision="float32")      # speed on a consumer GPU
+cd.Brain(connectome, neuron_model, backend="mlx")                             # Apple silicon through MLX
 ```
 
-A learner built on a device engine trains there; `Learner.load(path, backend="cpu")`
+A learner built on a device brain trains there; `Learner.load(path, backend="cpu")`
 brings a checkpoint back to the receipt backend, whatever trained it.
 
 ## Precision matters
@@ -101,34 +103,33 @@ it should declare precision and include the relevant numerical checks.
 
 ## Extending to another device
 
-The two device kernels, `settle._TorchKernel` and `settle._MlxKernel`, are each one class
-with the same five operations: block products between owner ranges (a matrix product per
-pair), the elementwise owner update, a softmax over the nudged group, an equality check on
-the still ranges, and a max over the movement for the tolerance. Any array library with
-those five can host a backend; the owner-by-owner reference and `conformance` are what
-you check it against, and `tests/test_settle.py` has the test each kernel passes.
+The two device kernels, `_TorchKernel` and `_MlxKernel` in `cadence.brain`, are each one
+class with the same five operations: block products between neuron ranges (a matrix product
+per pair), the elementwise neuron update, a softmax over the nudged group, an equality check
+on the still ranges, and a max over the movement for the tolerance. Any array library with
+those five can host a backend. Check it against the neuron-by-neuron reference and
+`conformance`; `tests/test_brain.py` has the tests each kernel passes.
 
 
 ## The fused kernel
 
 With Numba installed through `[fast]`, the CPU backend settles blocked
-wirings in one compiled loop: the block transport, then every owner's repair, activation,
-adaptation and nudge in place. Floating-point implementations are compared against
-the reference in the tests. Two cache rules avoid repeated work: an owner
-whose potential did not move keeps the activation it published, and a range that hears
-nothing is skipped for good once it is still, because such an owner's update is a fixed
-function of its own state. It is used automatically when the wiring is blocked and no
+connectomes in one compiled loop: the block transport, then every neuron's potential
+update, activation, adaptation and nudge in place. Floating-point implementations are
+compared against the reference in the tests. Two cache rules avoid repeated work: a neuron
+whose potential did not move keeps the activation it published, and a range that receives no
+synapses is skipped for good once it is still, because such a neuron's update is a fixed
+function of its own state. It is used automatically when the connectome is blocked and no
 trajectory is requested; `CADENCE_FUSED=0` in the environment forces the NumPy loop. The
-owner-by-owner reference and `conformance` are unchanged and remain what any kernel is
-measured against.
+neuron-by-neuron reference and `conformance` remain what any kernel is measured against.
 
-Settlement accepts a shared mask of shape `(n,)` or `(1, n)`, or a separate
+Settling accepts a shared mask of shape `(n,)` or `(1, n)`, or a separate
 mask for each row with shape `(batch, n)`, across CPU and device paths. The
 fused kernel reads a broadcast view, so sharing a mask does not allocate a copy
-per row. Masks apply to potential and activation at each step; zero removes an
-owner's published activity, while any existing adaptation continues to decay.
-Warm starts recompute the publication under the current mask before transporting
-messages, including when a previous fractional mask is changed or removed.
+per row. Masks apply to potential and activation at each step; zero removes a
+neuron's published activity, while any existing adaptation continues to decay.
+Warm starts recompute the published activation under the current mask before
+transporting it, including when a previous fractional mask is changed or removed.
 
 ## Timing a decision
 
@@ -145,3 +146,13 @@ For a changing-input workload, `decide()` must advance an input sequence and car
 reset state according to the deployment contract. Repeating an unchanged input measures
 a stable-state fast path. Report cold and warm results, output quality, and residuals
 separately; elapsed time on that fast path does not establish general inference speed.
+
+On Windows, load averages and context-switch counts may be unavailable and are
+reported as `None`. `latency` requires positive `repeats` and nonnegative `warmup`.
+Synchronize asynchronous accelerator work inside the timed callable.
+
+Use `brain.with_parameters(...)` for parameter changes. Assigning a complete `efficacy`
+or `bias` array also refreshes the running backend. Do not mutate parameter or connectome
+arrays in place: derived transport caches assume their values stay fixed. Rebuild a
+connectome when changing topology. After a device update, always read `learner.brain`;
+older Brain objects can share the updated kernel while retaining stale host copies.

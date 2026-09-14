@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from cadence.brains import ActivityMonitor, imagine
+from cadence.circuits import ActivityMonitor, imagine
 
 
 def move(state: list[int], action: int) -> list[int]:

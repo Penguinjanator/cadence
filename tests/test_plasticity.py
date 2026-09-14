@@ -16,15 +16,15 @@ def _contextual_bandit(rng: np.random.Generator, batch: int) -> tuple[np.ndarray
 
 
 def test_actor_critic_learns_a_contextual_bandit_from_dopamine() -> None:
-    wiring = cd.layered(4, 8, 2, density=1.0, seed=0)
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
     learner = cd.Learner(
-        cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
-        wiring.sets["output"],
+        cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)),
+        connectome.populations["output"],
         cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
     )
     ac = cd.ActorCritic(
         learner,
-        wiring.sets["hidden"],
+        connectome.populations["hidden"],
         cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0, eta_critic=0.3),
         seed=0,
     )
@@ -32,7 +32,7 @@ def test_actor_critic_learns_a_contextual_bandit_from_dopamine() -> None:
     batch = 32
 
     def drive_of(x: np.ndarray) -> np.ndarray:
-        return learner.engine.clamp_levels(np.pad(x, ((0, 0), (0, wiring.n - 4))))
+        return learner.brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 4))))
 
     def hit_rate() -> float:
         x, context = _contextual_bandit(rng, 200)
@@ -55,34 +55,34 @@ def test_actor_critic_learns_a_contextual_bandit_from_dopamine() -> None:
 
 
 def test_traces_reset_on_done_and_updates_are_local() -> None:
-    wiring = cd.layered(4, 6, 2, density=1.0, seed=1)
+    connectome = cd.layered(4, 6, 2, density=1.0, seed=1)
     learner = cd.Learner(
-        cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
-        wiring.sets["output"],
+        cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)),
+        connectome.populations["output"],
         cd.LearnerConfig(eta=1.0),
     )
     ac = cd.ActorCritic(
-        learner, wiring.sets["hidden"], cd.ActorCriticConfig(gamma=0.9, lam=0.5, eta=0.1), seed=1
+        learner, connectome.populations["hidden"], cd.ActorCriticConfig(gamma=0.9, lam=0.5, eta=0.1), seed=1
     )
     rng = np.random.default_rng(1)
     x, _ = _contextual_bandit(rng, 4)
-    drive = learner.engine.clamp_levels(np.pad(x, ((0, 0), (0, wiring.n - 4))))
+    drive = learner.brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 4))))
     ac.act(drive)
     ac.learn(np.zeros(4), np.array([True, False, False, True]), drive)
     assert ac.trace is not None
     assert np.all(ac.trace[[0, 3]] == 0.0)
     assert np.any(ac.trace[[1, 2]] != 0.0)
-    # every seam's step is delta times its own trace: recompute one step by hand
-    learner.symmetric = False
+    # every synapse's step is delta times its own trace: recompute one step by hand
+    learner.reciprocal = False
     learner.reverse[:] = -1
     ac.act(drive)
     kind, plus, minus, value = ac._pending
     plus, minus = plus.activation, minus.activation  # the pending phases are states
-    w = wiring
+    w = connectome
     contrast = (plus[:, w.pre] * plus[:, w.post] - minus[:, w.pre] * minus[:, w.post]) / (
         2.0 * learner.config.beta
     )
-    before = learner.engine.edge_scale.copy()
+    before = learner.brain.efficacy.copy()
     trace_before = ac.trace.copy()
     w_critic, b_critic = ac.w_critic.copy(), ac.b_critic
     reward = np.array([1.0, 0.0, 0.5, 0.0])
@@ -93,44 +93,44 @@ def test_traces_reset_on_done_and_updates_are_local() -> None:
     delta = reward + 0.9 * next_value - value
     expected_trace = 0.9 * 0.5 * trace_before + contrast
     expected = 0.1 * (delta[:, None] * expected_trace).mean(axis=0)
-    got = learner.engine.edge_scale - before
+    got = learner.brain.efficacy - before
     clipped = np.abs(before + expected) > SCALE_CAP
     assert np.allclose(got[~clipped], expected[~clipped])
 
 
 def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuous_bandit() -> None:
 
-    from cadence import settle as S
+    from cadence import brain as S
 
     bins = cd.Bins(dims=2, size=5)
-    wiring = cd.layered(4, 8, bins.dims * bins.size, density=1.0, seed=3)
-    engine = cd.Settlement(wiring, cd.learning_rule(dt=1.0))
+    connectome = cd.layered(4, 8, bins.dims * bins.size, density=1.0, seed=3)
+    brain = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0))
     rng = np.random.default_rng(3)
-    drive = engine.clamp_levels(np.pad(rng.random((6, 4)), ((0, 0), (0, wiring.n - 4))))
-    out = np.asarray(wiring.sets["output"])
-    target = np.zeros((6, wiring.n))
+    drive = brain.stimulus_levels(np.pad(rng.random((6, 4)), ((0, 0), (0, connectome.n - 4))))
+    out = np.asarray(connectome.populations["output"])
+    target = np.zeros((6, connectome.n))
     target[:, out[[0, 7]]] = 1.0
-    mask = np.zeros(wiring.n)
+    mask = np.zeros(connectome.n)
     mask[out] = 1.0
-    nudge = cd.Nudge(target, mask, 0.1, softmax_temperature=0.2, groups=bins.groups(out, wiring.n))
-    free = engine.settle_batch(drive, steps=60, tolerance=3e-3)
-    fused = engine.settle_batch(drive, steps=12, state=free, nudge=nudge, tolerance=3e-3)
+    nudge = cd.Nudge(target, mask, 0.1, softmax_temperature=0.2, groups=bins.groups(out, connectome.n))
+    free = brain.settle_batch(drive, steps=60, tolerance=3e-3)
+    fused = brain.settle_batch(drive, steps=12, state=free, nudge=nudge, tolerance=3e-3)
     was = S._FUSED
     S._FUSED = False
     try:
-        plain = engine.settle_batch(drive, steps=12, state=free, nudge=nudge, tolerance=3e-3)
+        plain = brain.settle_batch(drive, steps=12, state=free, nudge=nudge, tolerance=3e-3)
     finally:
         S._FUSED = was
     assert np.abs(fused.activation - plain.activation).max() < 1e-12
 
     learner = cd.Learner(
-        engine,
-        wiring.sets["output"],
+        brain,
+        connectome.populations["output"],
         cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
     )
     ac = cd.ActorCritic(
         learner,
-        wiring.sets["hidden"],
+        connectome.populations["hidden"],
         cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0, eta_critic=0.3),
         seed=3,
         population=bins,
@@ -142,7 +142,7 @@ def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuou
         x = np.zeros((k, 4))
         x[np.arange(k), 2 * c] = 1.0
         x[np.arange(k), 2 * c + 1] = 1.0
-        return engine.clamp_levels(np.pad(x, ((0, 0), (0, wiring.n - 4)))), c
+        return brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 4)))), c
 
     def error() -> float:
         d, c = batch(200)
@@ -163,12 +163,12 @@ def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuou
 
 def test_one_stream_learns_the_same_on_the_device_as_on_the_host() -> None:
     """With one stream settled on the torch kernel, the trace and the step stay on the device
-    and the seams end where the host path puts them."""
+    and the synapses end where the host path puts them."""
     import pytest
 
     if "torch" not in cd.available_backends():
         pytest.skip("no torch")
-    wiring = cd.layered(6, 10, 4, density=1.0, seed=1)
+    connectome = cd.layered(6, 10, 4, density=1.0, seed=1)
     config = cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.3, tolerance=1e-6, nudged_steps=30, free_steps=200)
     ac_config = cd.ActorCriticConfig(gamma=0.9, lam=0.8, eta=0.3, eta_bias=0.03, eta_critic=0.1, dopamine_cap=1.0)
     rng = np.random.default_rng(3)
@@ -176,17 +176,17 @@ def test_one_stream_learns_the_same_on_the_device_as_on_the_host() -> None:
     rewards = [0.5, -0.2, 1.0, 0.0, 0.3, -1.0]
     results = []
     for backend in ("cpu", "torch"):
-        engine = cd.Settlement(wiring, cd.learning_rule(dt=1.0), backend=backend, device="cpu" if backend == "torch" else None, precision="float64" if backend == "torch" else None)  # type: ignore[arg-type]
-        learner = cd.Learner(engine, wiring.sets["output"], config, slots=2)
-        ac = cd.ActorCritic(learner, wiring.sets["hidden"], ac_config, seed=0, population=cd.Bins(dims=2, size=2))
+        brain = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0), backend=backend, device="cpu" if backend == "torch" else None, precision="float64" if backend == "torch" else None)  # type: ignore[arg-type]
+        learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
+        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0, population=cd.Bins(dims=2, size=2))
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())
             ac.learn(np.array([rewards[k]]), np.array([k == 3]), drives[k + 1])
-        results.append((np.stack(actions), np.asarray(ac.learner.engine.edge_scale), np.asarray(ac.learner.engine.bias), ac.w_critic.copy()))
+        results.append((np.stack(actions), np.asarray(ac.learner.brain.efficacy), np.asarray(ac.learner.brain.bias), ac.w_critic.copy()))
     (a_host, s_host, b_host, c_host), (a_dev, s_dev, b_dev, c_dev) = results
     assert np.array_equal(a_host, a_dev)
-    assert np.allclose(s_host, s_dev, atol=1e-6) and np.abs(s_host - wiring.sign).max() > 1e-4
+    assert np.allclose(s_host, s_dev, atol=1e-6) and np.abs(s_host - connectome.sign).max() > 1e-4
     assert np.allclose(b_host, b_dev, atol=1e-6)
     assert np.allclose(c_host, c_dev, atol=1e-6)
 
@@ -196,7 +196,7 @@ def test_a_batch_of_streams_learns_the_same_on_the_device_as_on_the_host() -> No
 
     if "torch" not in cd.available_backends():
         pytest.skip("no torch")
-    wiring = cd.layered(6, 10, 4, density=1.0, seed=2)
+    connectome = cd.layered(6, 10, 4, density=1.0, seed=2)
     config = cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.3, tolerance=1e-6, nudged_steps=30, free_steps=200)
     ac_config = cd.ActorCriticConfig(gamma=0.9, lam=0.8, eta=0.3, eta_bias=0.03, eta_critic=0.1, dopamine_cap=1.0)
     rng = np.random.default_rng(5)
@@ -207,17 +207,17 @@ def test_a_batch_of_streams_learns_the_same_on_the_device_as_on_the_host() -> No
     dones[2][1] = True
     results = []
     for backend in ("cpu", "torch"):
-        engine = cd.Settlement(wiring, cd.learning_rule(dt=1.0), backend=backend, device="cpu" if backend == "torch" else None, precision="float64" if backend == "torch" else None)  # type: ignore[arg-type]
-        learner = cd.Learner(engine, wiring.sets["output"], config, slots=2)
-        ac = cd.ActorCritic(learner, wiring.sets["hidden"], ac_config, seed=0, population=cd.Bins(dims=2, size=2))
+        brain = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0), backend=backend, device="cpu" if backend == "torch" else None, precision="float64" if backend == "torch" else None)  # type: ignore[arg-type]
+        learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
+        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0, population=cd.Bins(dims=2, size=2))
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())
             ac.learn(rewards[k], dones[k], drives[k + 1])
-        results.append((np.stack(actions), np.asarray(ac.learner.engine.edge_scale), np.asarray(ac.learner.engine.bias), ac.w_critic.copy()))
+        results.append((np.stack(actions), np.asarray(ac.learner.brain.efficacy), np.asarray(ac.learner.brain.bias), ac.w_critic.copy()))
     (a_host, s_host, b_host, c_host), (a_dev, s_dev, b_dev, c_dev) = results
     assert np.array_equal(a_host, a_dev)
-    assert np.allclose(s_host, s_dev, atol=1e-6) and np.abs(s_host - wiring.sign).max() > 1e-4
+    assert np.allclose(s_host, s_dev, atol=1e-6) and np.abs(s_host - connectome.sign).max() > 1e-4
     assert np.allclose(b_host, b_dev, atol=1e-6)
     assert np.allclose(c_host, c_dev, atol=1e-6)
 
@@ -225,21 +225,21 @@ def test_a_batch_of_streams_learns_the_same_on_the_device_as_on_the_host() -> No
 def test_actor_critic_centres_the_dopamine_per_stream() -> None:
     """Two streams with rewards of different sizes each keep their own level: the agent's
     valence is per stream, so the small-reward stream is not always below the mean."""
-    wiring = cd.layered(4, 8, 2, density=1.0, seed=0)
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
     learner = cd.Learner(
-        cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
-        wiring.sets["output"],
+        cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)),
+        connectome.populations["output"],
         cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
     )
     ac = cd.ActorCritic(
         learner,
-        wiring.sets["hidden"],
+        connectome.populations["hidden"],
         cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.1, eta_critic=0.0, dopamine_center=0.5),
         seed=0,
     )
     rng = np.random.default_rng(1)
     x = rng.random((2, 4))
-    drive = np.pad(x, ((0, 0), (0, wiring.n - 4)))
+    drive = np.pad(x, ((0, 0), (0, connectome.n - 4)))
     rewards = np.array([10.0, 0.1])  # stream 0 is paid a hundred times stream 1
     ac.act(drive)
     for _ in range(20):
@@ -250,45 +250,45 @@ def test_actor_critic_centres_the_dopamine_per_stream() -> None:
 
 def test_actor_critic_dopamine_floor_is_quiet_for_the_usual_reward() -> None:
     """With a floor, a reward at its usual level gives no dopamine and no step; a surprise does."""
-    wiring = cd.layered(4, 8, 2, density=1.0, seed=0)
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
     learner = cd.Learner(
-        cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
-        wiring.sets["output"],
+        cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)),
+        connectome.populations["output"],
         cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
     )
     ac = cd.ActorCritic(
         learner,
-        wiring.sets["hidden"],
+        connectome.populations["hidden"],
         cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.1, eta_critic=0.0, dopamine_center=0.5, dopamine_floor=1.0),
         seed=0,
     )
     rng = np.random.default_rng(2)
-    drive = np.pad(rng.random((2, 4)), ((0, 0), (0, wiring.n - 4)))
+    drive = np.pad(rng.random((2, 4)), ((0, 0), (0, connectome.n - 4)))
     ac.act(drive)
     for _ in range(30):
         ac.learn(np.array([1.0, 1.0]), np.zeros(2, dtype=bool), drive)
         ac.act(drive)
-    before = learner.engine.weights.copy()
+    before = learner.brain.weights.copy()
     ac.learn(np.array([1.0, 1.0]), np.zeros(2, dtype=bool), drive)  # the usual reward: quiet
     ac.act(drive)
-    assert np.array_equal(learner.engine.weights, before)
+    assert np.array_equal(learner.brain.weights, before)
     ac.learn(np.array([50.0, 50.0]), np.zeros(2, dtype=bool), drive)  # a surprise: a step
-    assert not np.array_equal(learner.engine.weights, before)
+    assert not np.array_equal(learner.brain.weights, before)
 
 
 def test_actor_critic_centre_without_the_scale_keeps_the_rewards_size() -> None:
     """Unscaled, the centred dopamine is in the reward's own units: a big surprise is big."""
-    wiring = cd.layered(4, 8, 2, density=1.0, seed=0)
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
 
     def make(scale: bool) -> cd.ActorCritic:
         learner = cd.Learner(
-            cd.Settlement(wiring, cd.learning_rule(dt=1.0)),
-            wiring.sets["output"],
+            cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)),
+            connectome.populations["output"],
             cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
         )
         return cd.ActorCritic(
             learner,
-            wiring.sets["hidden"],
+            connectome.populations["hidden"],
             cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.0, eta_critic=0.0, dopamine_center=0.5, dopamine_cap=0.0, center_scale=scale),
             seed=0,
         )

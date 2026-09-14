@@ -1,41 +1,40 @@
 """The free/nudged learning rule.
 
-Learning in a patch net is two settlements and one local comparison. The
-net settles *free*, with only its input clamped; that settled state is its
+Learning in a brain is two settling phases and one local comparison. The
+net settles *free*, with only its input stimulated; that settled state is its
 answer, and nothing about the goal enters it. Then, starting from that
-state, the net settles again *nudged*: the output owners feel an extra
+state, the net settles again *nudged*: the output neurons feel an extra
 drive toward the target, and the nudge spreads back over the feedback
-overlaps into the rest of the net. Every overlap then moves its own scale
+synapses into the rest of the net. Every synapse then moves its own scale
 on the difference between what its two endpoints did in the two phases:
 
     scale[e] += eta / beta * ( s+[pre] * s+[post] - s0[pre] * s0[post] )
     bias[i]  += eta_b / beta * ( s+[i] - s0[i] )
 
-That is a contrastive Hebbian rule. It reads two numbers per overlap and
-one per owner, so it is as local as the settlement itself; and the goal
+That is a contrastive Hebbian rule. It reads two numbers per synapse and
+one per neuron, so it is as local as settling itself; and the goal
 enters through exactly one door, the nudge of the second phase. With
 ``centered`` set the learner runs the nudge both ways, ``+beta`` and
 ``-beta``, from the same free state and contrasts those two; that cancels
-the first-order error of a one-sided nudge and is what the digits example
-uses.
+the leading error of a one-sided nudge on a smooth equilibrium branch.
 
-For the rule to reach hidden owners the wiring needs feedback: an overlap
-from the output owners back toward the hidden ones. ``layered`` builds such
-a wiring, with forward and feedback overlaps tied into one seam per pair,
-optional lateral inhibition among the outputs, and named sets for the
+For the rule to reach hidden neurons the connectome needs feedback: a synapse
+from the output neurons back toward the hidden ones. ``layered`` builds such
+a connectome, with forward and feedback synapses tied into one reciprocal pair,
+optional lateral inhibition among the outputs, and named populations for the
 layers.
 
 The rule is exact in a limit. With symmetric effective recurrent weights and a
 smooth stable equilibrium
 branch, converged phases give a gradient in the small-nudge limit. The
-raw contrast concerns effective weights; edge_scale derivatives also need
+raw contrast concerns effective weights; efficacy derivatives also need
 the contact/gain factor. The cross-entropy nudge uses T times that loss.
 See docs/learning.md for the parameter convention and finite-step limits. Two
-things break that in practice, and ``learning_rule`` is chosen so they do
-not: an owner below rest with a hard rectifier publishes nothing and cannot
-be moved (hence a small ``leak``), and an owner on a steep sigmoid sits
-either silent or saturated (hence unit slope). The digits example checks
-the alignment of the rule against finite differences and records it.
+things break that in practice, and ``learning_neuron_model`` is chosen so they do
+not: a neuron below rest with a hard rectifier publishes nothing and cannot
+be moved (hence a small ``leak``), and a neuron on a steep sigmoid sits
+either silent or saturated (hence unit slope). The equilibrium tests check
+the alignment of the rule against finite differences.
 """
 
 from __future__ import annotations
@@ -48,34 +47,41 @@ from typing import Any, cast
 import numpy as np
 
 from .blocks import block_contrast
-from .rules import GradedRule
-from .settle import Backend, Nudge, SettledState, Settlement
-from .wiring import Wiring
+from .brain import Backend, Brain, BrainState, Nudge
+from .connectome import Connectome
+from .neuron import NeuronModel
 
-__all__ = ["Learner", "LearnerConfig", "layered", "embedded", "learning_rule", "LearnedState"]
+__all__ = [
+    "Learner",
+    "LearnerConfig",
+    "layered",
+    "embedded",
+    "learning_neuron_model",
+    "LearnedState",
+]
 
 
-SCALE_CAP = 8.0  # the magnitude a seam may not exceed
+SCALE_CAP = 8.0  # the magnitude a synapse may not exceed
 _MOMENTS = ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
 
 
 @dataclass(frozen=True, slots=True)
 class LearnerConfig:
     beta: float = 0.1  # nudge strength
-    eta: float = 0.2  # overlap learning rate, divided by beta in the update
+    eta: float = 0.2  # synapse learning rate, divided by beta in the update
     eta_bias: float = 0.02
     centered: bool = True  # contrast +beta against -beta rather than against the free state
-    free_steps: int = 100  # most steps a free settlement may take
-    nudged_steps: int = 50  # most steps a nudged settlement may take
-    tolerance: float | None = 1e-4  # a settlement stops once no owner moves more than this
+    free_steps: int = 100  # most steps the free phase may take
+    nudged_steps: int = 50  # most steps a nudged phase may take
+    tolerance: float | None = 1e-4  # settling stops once no neuron moves more than this
     nudge: str = "cross_entropy"  # "quadratic" or "cross_entropy"
     temperature: float = 0.2  # softmax temperature of the cross-entropy nudge
-    # >0: forgetting factor of the per-overlap RMS of its raw contrast that divides its step;
-    # with momentum this is the adaptive local step (Adam written per seam), bias-corrected
+    # >0: forgetting factor of the per-synapse RMS of its raw contrast that divides its step;
+    # with momentum this is the adaptive local step (Adam written per synapse), bias-corrected
     normalize: float = 0.0
-    normalize_floor: float = 1e-3  # added to the RMS so a quiet overlap does not blow up
-    momentum: float = 0.0  # >0: each overlap steps on a running average of its own contrast
-    decay: float = 0.0  # >0: every update shrinks each trainable overlap and bias by this fraction
+    normalize_floor: float = 1e-3  # added to the RMS so a quiet synapse does not blow up
+    momentum: float = 0.0  # >0: each synapse steps on a running average of its own contrast
+    decay: float = 0.0  # >0: every update shrinks each trainable synapse and bias by this fraction
 
     def __post_init__(self) -> None:
         if self.nudge not in ("quadratic", "cross_entropy"):
@@ -97,9 +103,13 @@ class LearnerConfig:
             raise ValueError("decay is a fraction in [0, 1)")
         if not np.isfinite(self.temperature) or self.temperature <= 0:
             raise ValueError("temperature must be finite and positive")
+        if not np.isfinite(self.normalize_floor) or self.normalize_floor <= 0:
+            raise ValueError("normalize_floor must be finite and positive")
+        if self.tolerance is not None and (not np.isfinite(self.tolerance) or self.tolerance < 0):
+            raise ValueError("tolerance must be finite and nonnegative, or None")
         for name in ("free_steps", "nudged_steps"):
             value = getattr(self, name)
-            if not isinstance(value, (int, np.integer)) or value < 0:
+            if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 0:
                 raise ValueError(f"{name} must be a nonnegative integer")
 
     def to_dict(self) -> dict[str, Any]:
@@ -108,22 +118,22 @@ class LearnerConfig:
 
 @dataclass(frozen=True)
 class LearnedState:
-    free: SettledState
-    nudged: SettledState
-    opposite: SettledState | None = None  # the -beta phase, when centered
+    free: BrainState
+    nudged: BrainState
+    opposite: BrainState | None = None  # the -beta phase, when centered
 
 
 @dataclass
 class Learner:
-    """Owns the trainable ``edge_scale`` and ``bias`` of a settlement and applies the rule."""
+    """Owns the plastic ``efficacy`` and ``bias`` of a brain and applies the learning rule."""
 
-    engine: Settlement
+    brain: Brain
     outputs: Sequence[int]
     config: LearnerConfig = field(default_factory=LearnerConfig)
-    trainable_overlaps: np.ndarray | None = None  # bool per overlap; default all
-    trainable_owners: np.ndarray | None = None  # bool per owner: whose bias moves and decays
-    symmetric: bool = True  # an overlap and its reverse share one scale: one seam, one weight
-    tie_groups: np.ndarray | None = None  # int per overlap (-1: none); a group shares one scale
+    plastic_synapses: np.ndarray | None = None  # bool per synapse; default all
+    plastic_neurons: np.ndarray | None = None  # bool per neuron: whose bias moves and decays
+    reciprocal: bool = True  # a synapse and its reverse share one efficacy: a reciprocal pair
+    tie_groups: np.ndarray | None = None  # int per synapse (-1: none); a group shares one scale
     # the outputs as groups, each its own softmax choice, all nudged together: a count of
     # equal groups, or one size per group (a body's controller: a move of nine, a grip of two)
     slots: int | Sequence[int] = 1
@@ -136,44 +146,55 @@ class Learner:
     def __post_init__(self) -> None:
         outputs = np.asarray(list(self.outputs))
         if outputs.ndim != 1 or outputs.size == 0:
-            raise ValueError("outputs must contain at least one owner index")
+            raise ValueError("outputs must contain at least one neuron index")
         if not np.issubdtype(outputs.dtype, np.integer):
-            raise ValueError("outputs must contain integer owner indices")
-        if (outputs < 0).any() or (outputs >= self.engine.wiring.n).any():
-            raise ValueError("output owner index is outside the wiring")
+            raise ValueError("outputs must contain integer neuron indices")
+        if (outputs < 0).any() or (outputs >= self.brain.connectome.n).any():
+            raise ValueError("output neuron index is outside the connectome")
         if np.unique(outputs).size != outputs.size:
-            raise ValueError("outputs must contain distinct owner indices")
+            raise ValueError("outputs must contain distinct neuron indices")
         self.output_index = outputs.astype(np.int64)
-        self.output_mask = np.zeros(self.engine.wiring.n)
+        self.output_mask = np.zeros(self.brain.connectome.n)
         self.output_mask[self.output_index] = 1.0
-        if isinstance(self.slots, int):
-            if self.slots < 1 or len(self.output_index) % self.slots:
-                raise ValueError("slots must divide the number of output owners")
+        if isinstance(self.slots, (int, np.integer)):
+            if (
+                isinstance(self.slots, bool)
+                or self.slots < 1
+                or len(self.output_index) % self.slots
+            ):
+                raise ValueError("slots must divide the number of output neurons")
             sizes = [len(self.output_index) // self.slots] * self.slots
         else:
+            if any(isinstance(k, bool) or not isinstance(k, (int, np.integer)) for k in self.slots):
+                raise ValueError("slot sizes must be integers")
             sizes = [int(k) for k in self.slots]
             if not sizes or min(sizes) < 1 or sum(sizes) != len(self.output_index):
-                raise ValueError("slot sizes must be positive and add up to the output owners")
+                raise ValueError("slot sizes must be positive and add up to the output neurons")
         self.slot_sizes = np.asarray(sizes, dtype=np.int64)
         self.slot_offsets = np.concatenate([[0], np.cumsum(self.slot_sizes)[:-1]]).astype(np.int64)
         self.slot_count = len(sizes)  # ``slots`` keeps what was asked for
         self.slot_size = int(self.slot_sizes[0]) if len(set(sizes)) == 1 else 0  # equal, or not
         self.output_groups: np.ndarray | None = None
         if self.slot_count > 1:  # one softmax per slot: a whole utterance settles at once
-            self.output_groups = np.full(self.engine.wiring.n, -1, dtype=np.int64)
+            self.output_groups = np.full(self.brain.connectome.n, -1, dtype=np.int64)
             groups = np.repeat(np.arange(self.slot_count), self.slot_sizes)
             self.output_groups[self.output_index] = groups
-        if self.trainable_overlaps is None:
-            self.trainable_overlaps = np.ones(self.engine.wiring.edges, dtype=bool)
-        if self.trainable_owners is None:
-            self.trainable_owners = np.ones(self.engine.wiring.n, dtype=bool)
-        w = self.engine.wiring
-        self.second_moment = np.zeros(w.edges)  # per overlap, for normalized steps
+        if self.plastic_synapses is None:
+            self.plastic_synapses = np.ones(self.brain.connectome.synapses, dtype=bool)
+        if self.plastic_neurons is None:
+            self.plastic_neurons = np.ones(self.brain.connectome.n, dtype=bool)
+        w = self.brain.connectome
+        for name, size in (("plastic_synapses", w.synapses), ("plastic_neurons", w.n)):
+            mask = np.asarray(getattr(self, name))
+            if mask.shape != (size,) or mask.dtype != np.bool_:
+                raise ValueError(f"{name} must be a boolean vector of length {size}")
+            setattr(self, name, mask)
+        self.second_moment = np.zeros(w.synapses)  # per synapse, for normalized steps
         self.second_moment_bias = np.zeros(w.n)
-        self.velocity = np.zeros(w.edges)  # per overlap, for momentum
+        self.velocity = np.zeros(w.synapses)  # per synapse, for momentum
         self.velocity_bias = np.zeros(w.n)
-        self.reverse = np.full(w.edges, -1, dtype=np.int64)
-        if self.symmetric and w.edges:
+        self.reverse = np.full(w.synapses, -1, dtype=np.int64)
+        if self.reciprocal and w.synapses:
             key = w.post * w.n + w.pre
             reverse_key = w.pre * w.n + w.post
             order = np.argsort(key)
@@ -181,31 +202,65 @@ class Learner:
             hit = np.minimum(hit, len(order) - 1)
             found = key[order][hit] == reverse_key
             self.reverse[found] = order[hit[found]]
-        # Index arrays for the update, made once: the paired overlaps and the tied members,
-        # so an update touches those and not every overlap of a wide net.
+        # Index arrays for the update, made once: the paired synapses and the tied members,
+        # so an update touches those and not every synapse of a wide net.
         self._paired = np.flatnonzero(self.reverse >= 0)
         self._paired_reverse = self.reverse[self._paired]
+        if not np.array_equal(self.reverse[self._paired_reverse], self._paired):
+            raise ValueError(
+                "reciprocal learning needs unique pairs; merge with from_synapses first"
+            )
         self._members = np.zeros(0, dtype=np.int64)
         self._member_groups = np.zeros(0, dtype=np.int64)
         self._member_count = np.zeros(0)
         if self.tie_groups is not None:
-            self._members = np.flatnonzero(np.asarray(self.tie_groups) >= 0)
-            self._member_groups = np.asarray(self.tie_groups)[self._members]
+            groups = np.asarray(self.tie_groups)
+            if (
+                groups.shape != (w.synapses,)
+                or not np.issubdtype(groups.dtype, np.integer)
+                or (groups < -1).any()
+            ):
+                raise ValueError("tie_groups must be an integer per synapse, -1 for untied")
+            self.tie_groups = groups.copy()
+            members = np.flatnonzero(groups >= 0)
+            partners = self.reverse[members]
+            self._members = np.union1d(members, partners[partners >= 0])
             if len(self._members):
+                # Close explicit ties over reciprocal partners. Compact IDs avoid allocating
+                # an array up to the largest user-supplied label, and overlapping ties compose.
+                parent = {int(i): int(i) for i in self._members}
+
+                def root(i: int) -> int:
+                    while parent[i] != i:
+                        parent[i] = parent[parent[i]]
+                        i = parent[i]
+                    return i
+
+                representatives: dict[int, int] = {}
+                for i in self._members:
+                    if self.reverse[i] >= 0:
+                        parent[root(int(i))] = root(int(self.reverse[i]))
+                    group = int(groups[i])
+                    if group >= 0:
+                        representative = representatives.setdefault(group, int(i))
+                        parent[root(int(i))] = root(representative)
+                _, self._member_groups = np.unique(
+                    [root(int(i)) for i in self._members], return_inverse=True
+                )
                 self._member_count = np.bincount(self._member_groups).astype(float)
 
     # -- phases
 
-    def free(self, drive: np.ndarray, warm: SettledState | None = None) -> SettledState:
-        """Settle with the input clamped and nothing else: the net's own answer.
+    def free(self, drive: np.ndarray, warm: BrainState | None = None) -> BrainState:
+        """Settle with the input stimulated and nothing else: the net's own answer.
 
-        ``warm`` starts the settlement from an earlier state instead of rest,
+        ``warm`` starts settling from an earlier state instead of rest,
         say the state the same inputs settled to on the previous pass. Within
         one attracting basin this can save steps; multiple attractors can
         give different answers from different starts.
         """
         cfg = self.config
-        return self.engine.settle_batch(
+        return self.brain.settle_batch(
             drive, steps=cfg.free_steps, state=warm, tolerance=cfg.tolerance
         )
 
@@ -226,19 +281,19 @@ class Learner:
     def nudged(
         self,
         drive: np.ndarray,
-        free: SettledState,
+        free: BrainState,
         target: np.ndarray,
         sign: float = 1.0,
         weight: np.ndarray | None = None,
-    ) -> SettledState:
-        """From the free state, settle with the output owners pulled toward ``target``.
+    ) -> BrainState:
+        """From the free state, settle with the output neurons pulled toward ``target``.
 
         ``sign`` of -1 pushes them away instead: the opposite phase of a centered
         contrast. ``weight`` scales the pull row by row (an advantage, when the
         target is an action that was taken).
         """
         cfg = self.config
-        return self.engine.settle_batch(
+        return self.brain.settle_batch(
             drive,
             steps=cfg.nudged_steps,
             state=free,
@@ -260,14 +315,14 @@ class Learner:
         return labels.astype(np.int64, copy=False)
 
     def targets(self, labels: np.ndarray) -> np.ndarray:
-        """Per-owner target activation for class labels: ``(batch,)``, or ``(batch, slots)``."""
+        """Per-neuron target activation for class labels: ``(batch,)``, or ``(batch, slots)``."""
         labels = self._labels(labels)
         batch = len(labels)
-        target = np.zeros((batch, self.engine.wiring.n))
+        target = np.zeros((batch, self.brain.connectome.n))
         target[:, self.output_index] = 0.0
         if self.slot_count > 1:
-            owners = self.output_index[labels + self.slot_offsets[None, :]]
-            target[np.arange(batch)[:, None], owners] = 1.0
+            neurons = self.output_index[labels + self.slot_offsets[None, :]]
+            target[np.arange(batch)[:, None], neurons] = 1.0
         else:
             target[np.arange(batch), self.output_index[labels]] = 1.0
         return target
@@ -275,35 +330,45 @@ class Learner:
     # -- the rule
 
     def contrast(
-        self, free: SettledState, nudged: SettledState, opposite: SettledState | None = None
+        self, free: BrainState, nudged: BrainState, opposite: BrainState | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
-        """The per-overlap and per-owner differences the rule reads, already divided by beta.
+        """The per-synapse and per-neuron differences the rule reads, already divided by beta.
 
         One-sided: ``(nudged - free) / beta``. Centered: ``(nudged - opposite) / (2 beta)``.
         """
-        w = self.engine.wiring
+        w = self.brain.connectome
         beta = self.config.beta
         minus_state, span = (free, beta) if opposite is None else (opposite, 2.0 * beta)
-        on_device = self.engine.contrast_on_device(nudged, minus_state)
+        on_device = self.brain.contrast_on_device(nudged, minus_state)
         if on_device is not None:  # both phases still on the accelerator: read the contrast there
-            edges, owners = on_device
+            edges, neurons = on_device
             assert nudged.device is not None
             batch = int(nudged.device["s"].shape[0])
-            return edges / (batch * span), owners / (batch * span)
+            return edges / (batch * span), neurons / (batch * span)
         s_plus, s_minus = nudged.activation, minus_state.activation
-        if w.edges > 4 * w.n:  # the pairwise products as block products, read at the overlaps
-            gram = block_contrast(self.engine.layout, s_plus, s_minus)
+        if self.brain._blocked and w.synapses > 4 * w.n:
+            gram = block_contrast(self.brain.layout, s_plus, s_minus)
             return gram / (len(s_plus) * span), (s_plus - s_minus).mean(axis=0) / span
+        if not self.brain._blocked:
+            # Sparse graphs must not materialize the layout's potentially n-by-n matrix.
+            # Bound each temporary to about one million batch/synapse entries.
+            edges = np.empty(w.synapses)
+            chunk = max(1, 1_000_000 // len(s_plus))
+            for start in range(0, w.synapses, chunk):
+                pre, post = w.pre[start : start + chunk], w.post[start : start + chunk]
+                products = s_plus[:, pre] * s_plus[:, post] - s_minus[:, pre] * s_minus[:, post]
+                edges[start : start + chunk] = products.mean(axis=0) / span
+            return edges, (s_plus - s_minus).mean(axis=0) / span
         hebb_plus = (s_plus[:, w.pre] * s_plus[:, w.post]).mean(axis=0)
         hebb_minus = (s_minus[:, w.pre] * s_minus[:, w.post]).mean(axis=0)
         return (hebb_plus - hebb_minus) / span, (s_plus - s_minus).mean(axis=0) / span
 
     def contrast_rows(
-        self, free: SettledState, nudged: SettledState, opposite: SettledState | None = None
+        self, free: BrainState, nudged: BrainState, opposite: BrainState | None = None
     ) -> tuple[np.ndarray, np.ndarray]:
         """The same differences as ``contrast``, one row per batch element: ``(batch, edges)``
         and ``(batch, n)``. What a per-row eligibility trace reads."""
-        w = self.engine.wiring
+        w = self.brain.connectome
         beta = self.config.beta
         s_plus = nudged.activation
         if opposite is None:
@@ -314,19 +379,27 @@ class Learner:
         return hebb / span, (s_plus - s_minus) / span
 
     def apply(self, delta_scale: np.ndarray, delta_bias: np.ndarray) -> dict[str, float]:
-        """Apply a per-overlap and per-owner step: masks, tying, decay, bounds; then set the engine.
+        """Apply a per-synapse and per-neuron step: masks, tying, decay, bounds; then set the brain.
 
         This is the last half of ``update``; a rule that computes its own step (a
         three-factor trace, say) hands it here so every learner shares one notion of
-        which overlaps move, how a tied pair moves, and what bounds hold.
+        which synapses move, how a tied pair moves, and what bounds hold.
         """
         cfg = self.config
-        assert self.trainable_overlaps is not None
-        all_trainable = bool(self.trainable_overlaps.all())
+        assert self.plastic_synapses is not None
+        all_trainable = bool(self.plastic_synapses.all())
         delta_scale = np.array(delta_scale, dtype=float)  # this update's own copy
+        delta_bias = np.asarray(delta_bias, dtype=float)
+        if (
+            delta_scale.shape != (self.brain.connectome.synapses,)
+            or delta_bias.shape != (self.brain.connectome.n,)
+            or not np.isfinite(delta_scale).all()
+            or not np.isfinite(delta_bias).all()
+        ):
+            raise ValueError("steps must be finite vectors, one per synapse and one per neuron")
         if not all_trainable:
-            delta_scale[~self.trainable_overlaps] = 0.0
-        if len(self._paired):  # one seam, one weight: both directions move by the same amount
+            delta_scale[~self.plastic_synapses] = 0.0
+        if len(self._paired):  # one synapse, one weight: both directions move by the same amount
             mean = 0.5 * (delta_scale[self._paired] + delta_scale[self._paired_reverse])
             delta_scale[self._paired] = mean
         if len(self._members):  # a group moves by the mean of its members' contrasts
@@ -334,30 +407,30 @@ class Learner:
             delta_scale[self._members] = (total / np.maximum(self._member_count, 1.0))[
                 self._member_groups
             ]
-        if not all_trainable:  # tying never moves a frozen overlap
-            delta_scale[~self.trainable_overlaps] = 0.0
-        scale = self.engine.edge_scale + delta_scale
-        assert self.trainable_owners is not None
-        delta_bias = np.where(self.trainable_owners, delta_bias, 0.0)
-        bias = self.engine.bias + delta_bias
-        if cfg.decay > 0:  # a leak on the seams: what is not relearned fades away
-            scale = np.where(self.trainable_overlaps, scale * (1.0 - cfg.decay), scale)
-            bias = np.where(self.trainable_owners, bias * (1.0 - cfg.decay), bias)
-        scale = np.clip(scale, -SCALE_CAP, SCALE_CAP)
-        self.engine = self.engine.with_parameters(edge_scale=scale, bias=bias)
+        if not all_trainable:  # tying never moves a frozen synapse
+            delta_scale[~self.plastic_synapses] = 0.0
+        scale = self.brain.efficacy + delta_scale
+        assert self.plastic_neurons is not None
+        delta_bias = np.where(self.plastic_neurons, delta_bias, 0.0)
+        bias = self.brain.bias + delta_bias
+        if cfg.decay > 0:  # a leak on the synapses: what is not relearned fades away
+            scale = np.where(self.plastic_synapses, scale * (1.0 - cfg.decay), scale)
+            bias = np.where(self.plastic_neurons, bias * (1.0 - cfg.decay), bias)
+        scale = np.where(self.plastic_synapses, np.clip(scale, -SCALE_CAP, SCALE_CAP), scale)
+        self.brain = self.brain.with_parameters(efficacy=scale, bias=bias)
         self.updates += 1
         return {
-            "scale_step": float(np.abs(delta_scale).mean()),
+            "scale_step": float(np.abs(delta_scale).mean()) if delta_scale.size else 0.0,
             "bias_step": float(np.abs(delta_bias).mean()),
         }
 
-    def _device_kernel(self, plus: SettledState, minus: SettledState) -> Any:
+    def _device_kernel(self, plus: BrainState, minus: BrainState) -> Any:
         """The torch kernel both states rest on, when the update can stay on the device."""
-        kernel = self.engine._torch
+        kernel = self.brain._torch
         if kernel is None or kernel.layout is None:
             return None
         for state in (plus, minus):
-            if state.device is None or state.device.get("owner") is not kernel:
+            if state.device is None or state.device.get("holder") is not kernel:
                 return None
         return kernel
 
@@ -371,9 +444,9 @@ class Learner:
 
     def _moments_on_device(self, kernel: Any) -> dict[str, Any]:
         held = self.__dict__.get("_device_moments")
-        if held is None or held["owner"] is not kernel:
+        if held is None or held["holder"] is not kernel:
             self._host_moments()
-            held = {"owner": kernel}
+            held = {"holder": kernel}
             for name in _MOMENTS:
                 held[name] = (
                     kernel.torch.from_numpy(np.ascontiguousarray(self.__dict__["_" + name]))
@@ -383,55 +456,55 @@ class Learner:
             self.__dict__["_device_moments"] = held
         return cast(dict[str, Any], held)
 
-    def _adaptive_device(self, kernel: Any, edges: Any, owners: Any) -> tuple[Any, Any]:
+    def _adaptive_device(self, kernel: Any, edges: Any, neurons: Any) -> tuple[Any, Any]:
         """The host update's bias-corrected momentum/RMS, with history on the device."""
         cfg = self.config
         if not (cfg.momentum or cfg.normalize):
-            return edges, owners
+            return edges, neurons
         held = self._moments_on_device(kernel)
         count = self.updates + 1
-        raw_edges, raw_owners = edges, owners
+        raw_edges, raw_neurons = edges, neurons
         if cfg.momentum:
             m = cfg.momentum
             held["velocity"].mul_(m).add_(edges, alpha=1.0 - m)
-            held["velocity_bias"].mul_(m).add_(owners, alpha=1.0 - m)
+            held["velocity_bias"].mul_(m).add_(neurons, alpha=1.0 - m)
             correction = 1.0 - m**count
             edges = held["velocity"] / correction
-            owners = held["velocity_bias"] / correction
+            neurons = held["velocity_bias"] / correction
         if cfg.normalize:
             rho = cfg.normalize
             held["second_moment"].mul_(rho).addcmul_(raw_edges, raw_edges, value=1.0 - rho)
-            held["second_moment_bias"].mul_(rho).addcmul_(raw_owners, raw_owners, value=1.0 - rho)
+            held["second_moment_bias"].mul_(rho).addcmul_(raw_neurons, raw_neurons, value=1.0 - rho)
             correction = 1.0 - rho**count
             edges = edges / ((held["second_moment"] / correction).sqrt() + cfg.normalize_floor)
-            owners = owners / (
+            neurons = neurons / (
                 (held["second_moment_bias"] / correction).sqrt() + cfg.normalize_floor
             )
-        return edges, owners
+        return edges, neurons
 
     def _device_indices(self, kernel: Any) -> dict[str, Any]:
         """Index tensors of the update on the kernel's device, made once per kernel and masks."""
         torch = kernel.torch
-        assert self.trainable_overlaps is not None and self.trainable_owners is not None
-        key = (id(kernel), id(self.trainable_overlaps), id(self.trainable_owners))
+        assert self.plastic_synapses is not None and self.plastic_neurons is not None
+        key = (id(kernel), id(self.plastic_synapses), id(self.plastic_neurons))
         cache = self.__dict__.setdefault("_device_cache", {})
         if (
             cache.get("key") != key
-            or not np.array_equal(cache.get("host_overlaps"), self.trainable_overlaps)
-            or not np.array_equal(cache.get("host_owners"), self.trainable_owners)
+            or not np.array_equal(cache.get("host_synapses"), self.plastic_synapses)
+            or not np.array_equal(cache.get("host_neurons"), self.plastic_neurons)
         ):
             dev = kernel.device
 
             def to(x: np.ndarray, dtype: Any = None) -> Any:
                 return torch.from_numpy(np.ascontiguousarray(x)).to(dev, dtype)
 
-            all_overlaps = bool(self.trainable_overlaps.all())
-            all_owners = bool(self.trainable_owners.all())
+            all_synapses = bool(self.plastic_synapses.all())
+            all_neurons = bool(self.plastic_neurons.all())
             cache.clear()
             cache.update(
                 key=key,
-                host_overlaps=self.trainable_overlaps.copy(),
-                host_owners=self.trainable_owners.copy(),
+                host_synapses=self.plastic_synapses.copy(),
+                host_neurons=self.plastic_neurons.copy(),
                 paired=to(self._paired) if len(self._paired) else None,
                 paired_reverse=to(self._paired_reverse) if len(self._paired) else None,
                 members=to(self._members) if len(self._members) else None,
@@ -439,8 +512,8 @@ class Learner:
                 member_count=to(self._member_count, kernel.param_dtype)
                 if len(self._members)
                 else None,
-                overlaps=None if all_overlaps else to(self.trainable_overlaps, kernel.param_dtype),
-                owners=None if all_owners else to(self.trainable_owners, kernel.param_dtype),
+                synapses=None if all_synapses else to(self.plastic_synapses, kernel.param_dtype),
+                neurons=None if all_neurons else to(self.plastic_neurons, kernel.param_dtype),
             )
         return cast(dict[str, Any], cache)
 
@@ -449,11 +522,11 @@ class Learner:
         torch, cfg = kernel.torch, self.config
         ix = self._device_indices(kernel)
         d = delta_scale.clone()
-        if ix["overlaps"] is not None:
-            d = d * ix["overlaps"]
+        if ix["synapses"] is not None:
+            d = d * ix["synapses"]
         if (
             ix["paired"] is not None
-        ):  # one seam, one weight: both directions move by the same amount
+        ):  # one synapse, one weight: both directions move by the same amount
             d[ix["paired"]] = 0.5 * (d[ix["paired"]] + d[ix["paired_reverse"]])
         if ix["members"] is not None:  # a group moves by the mean of its members' contrasts
             total = torch.zeros(len(ix["member_count"]), dtype=d.dtype, device=d.device)
@@ -461,61 +534,70 @@ class Learner:
             d[ix["members"]] = (total / torch.clamp(ix["member_count"], min=1.0))[
                 ix["member_groups"]
             ]
-        if ix["overlaps"] is not None:  # tying never moves a frozen overlap
-            d = d * ix["overlaps"]
+        if ix["synapses"] is not None:  # tying never moves a frozen synapse
+            d = d * ix["synapses"]
         scale = kernel.scale + d
-        db = delta_bias if ix["owners"] is None else delta_bias * ix["owners"]
+        db = delta_bias if ix["neurons"] is None else delta_bias * ix["neurons"]
         bias = kernel.bias_param + db
-        if cfg.decay > 0:  # a leak on the seams: what is not relearned fades away
+        if cfg.decay > 0:  # a leak on the synapses: what is not relearned fades away
             keep_scale = (
-                1.0 - cfg.decay if ix["overlaps"] is None else 1.0 - cfg.decay * ix["overlaps"]
+                1.0 - cfg.decay if ix["synapses"] is None else 1.0 - cfg.decay * ix["synapses"]
             )
-            keep_bias = 1.0 - cfg.decay if ix["owners"] is None else 1.0 - cfg.decay * ix["owners"]
+            plastic = ix["neurons"]
+            keep_bias = 1.0 - cfg.decay if plastic is None else 1.0 - cfg.decay * plastic
             scale = scale * keep_scale
             bias = bias * keep_bias
-        scale = torch.clamp(scale, -SCALE_CAP, SCALE_CAP)
-        self.engine = self.engine._with_device_parameters(scale, bias)
+        bounded = torch.clamp(scale, -SCALE_CAP, SCALE_CAP)
+        scale = (
+            bounded
+            if ix["synapses"] is None
+            else torch.where(ix["synapses"].bool(), bounded, kernel.scale)
+        )
+        self.brain = self.brain._with_device_parameters(scale, bias)
         self.updates += 1
-        return {"scale_step": float(d.abs().mean()), "bias_step": float(db.abs().mean())}
+        return {
+            "scale_step": float(d.abs().mean()) if d.numel() else 0.0,
+            "bias_step": float(db.abs().mean()),
+        }
 
     def update(
-        self, free: SettledState, nudged: SettledState, opposite: SettledState | None = None
+        self, free: BrainState, nudged: BrainState, opposite: BrainState | None = None
     ) -> dict[str, float]:
-        """Move every trainable overlap and every owner on its own two-phase difference."""
+        """Move every trainable synapse and every neuron on its own two-phase difference."""
         cfg = self.config
         minus_state, span = (free, cfg.beta) if opposite is None else (opposite, 2.0 * cfg.beta)
         kernel = self._device_kernel(nudged, minus_state)
         if kernel is not None:  # both phases rest on the torch device: the whole update stays there
-            edges, owners = kernel.contrast_tensors(nudged.device["s"], minus_state.device["s"])
+            edges, neurons = kernel.contrast_tensors(nudged.device["s"], minus_state.device["s"])
             norm = float(nudged.device["s"].shape[0]) * span
-            edges, owners = self._adaptive_device(kernel, edges / norm, owners / norm)
-            return self._apply_device(kernel, cfg.eta * edges, cfg.eta_bias * owners)
-        overlap_term, owner_term = self.contrast(free, nudged, opposite)
-        raw_overlap, raw_owner = overlap_term, owner_term
+            edges, neurons = self._adaptive_device(kernel, edges / norm, neurons / norm)
+            return self._apply_device(kernel, cfg.eta * edges, cfg.eta_bias * neurons)
+        synapse_term, neuron_term = self.contrast(free, nudged, opposite)
+        raw_synapse, raw_neuron = synapse_term, neuron_term
         count = self.updates + 1  # this update's place in the history, for the corrections
-        if cfg.momentum > 0:  # still local: an overlap accumulates only its own contrast
+        if cfg.momentum > 0:  # still local: a synapse accumulates only its own contrast
             m = cfg.momentum
-            self.velocity = m * self.velocity + (1 - m) * overlap_term
-            self.velocity_bias = m * self.velocity_bias + (1 - m) * owner_term
+            self.velocity = m * self.velocity + (1 - m) * synapse_term
+            self.velocity_bias = m * self.velocity_bias + (1 - m) * neuron_term
             correction = 1.0 - m**count  # a short history is an average over fewer updates
-            overlap_term, owner_term = self.velocity / correction, self.velocity_bias / correction
-        if cfg.normalize > 0:  # still local: an overlap reads only its own history
+            synapse_term, neuron_term = self.velocity / correction, self.velocity_bias / correction
+        if cfg.normalize > 0:  # still local: a synapse reads only its own history
             rho = cfg.normalize
-            self.second_moment = rho * self.second_moment + (1 - rho) * raw_overlap**2
-            self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_owner**2
+            self.second_moment = rho * self.second_moment + (1 - rho) * raw_synapse**2
+            self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_neuron**2
             correction = 1.0 - rho**count
             rms = np.sqrt(self.second_moment / correction) + cfg.normalize_floor
             rms_bias = np.sqrt(self.second_moment_bias / correction) + cfg.normalize_floor
-            overlap_term, owner_term = overlap_term / rms, owner_term / rms_bias
-        delta_scale = cfg.eta * overlap_term
-        delta_bias = cfg.eta_bias * owner_term
+            synapse_term, neuron_term = synapse_term / rms, neuron_term / rms_bias
+        delta_scale = cfg.eta * synapse_term
+        delta_bias = cfg.eta_bias * neuron_term
         return self.apply(delta_scale, delta_bias)
 
     def step(
         self,
         drive: np.ndarray,
         labels: np.ndarray,
-        warm: SettledState | None = None,
+        warm: BrainState | None = None,
         weight: np.ndarray | None = None,
     ) -> tuple[LearnedState, dict[str, float]]:
         """One free phase, the nudged phase(s), one update; returns the states and step sizes.
@@ -555,11 +637,18 @@ class Learner:
         and the chosen value is returned for the receipt.
         """
         candidates = list(grid) if grid is not None else [0.02 * 1.3**k for k in range(16)]
+        if (
+            not candidates
+            or not np.isfinite(candidates).all()
+            or min(candidates) <= 0
+            or not np.isfinite(level)
+        ):
+            raise ValueError("calibration needs finite positive gains and a finite target level")
         best_gain, best_gap = candidates[0], float("inf")
         for gain in candidates:
-            engine = self._with_gain(gain)
+            brain = self._with_gain(gain)
             mean_out = float(
-                engine.settle_batch(
+                brain.settle_batch(
                     drive, steps=self.config.free_steps, tolerance=self.config.tolerance
                 )
                 .activation[:, self.output_index]
@@ -568,27 +657,27 @@ class Learner:
             gap = abs(mean_out - level)
             if gap < best_gap:
                 best_gain, best_gap = gain, gap
-        self.engine = self._with_gain(best_gain)
+        self.brain = self._with_gain(best_gain)
         return best_gain
 
-    def _with_gain(self, gain: float) -> Settlement:
-        return Settlement(
-            self.engine.wiring,
-            self.engine.rule.replace(gain=gain),
-            backend=self.engine.backend,
-            device=str(self.engine._torch.device) if self.engine._torch is not None else None,
-            edge_scale=self.engine.edge_scale,
-            log_gain=self.engine.log_gain,
-            bias=self.engine.bias,
-            dense_limit=self.engine.dense_limit,
-            layout=self.engine.layout,
-            precision=self.engine.precision,
+    def _with_gain(self, gain: float) -> Brain:
+        return Brain(
+            self.brain.connectome,
+            self.brain.neuron_model.replace(gain=gain),
+            backend=self.brain.backend,
+            device=str(self.brain._torch.device) if self.brain._torch is not None else None,
+            efficacy=self.brain.efficacy,
+            log_gain=self.brain.log_gain,
+            bias=self.brain.bias,
+            dense_limit=self.brain.dense_limit,
+            layout=self.brain.layout,
+            precision=self.brain.precision,
         )
 
     # -- readout
 
     def predict(self, drive: np.ndarray) -> np.ndarray:
-        """Most active output owner after a free settlement; ``(batch, slots)`` when slotted."""
+        """Most active output neuron after the free phase; ``(batch, slots)`` when slotted."""
         free = self.free(drive)
         out = free.activation[:, self.output_index]
         if self.slot_count > 1 and self.slot_size == 0:  # unequal slots: one argmax each
@@ -621,17 +710,15 @@ class Learner:
         return hits / labels.size
 
     def parameters(self) -> int:
-        """Trainable numbers: one per seam (a tied pair or group counts once) plus the biases."""
-        assert self.trainable_overlaps is not None and self.trainable_owners is not None
-        # A frozen partner contributes no second trainable number.
+        """Trainable numbers: one per synapse (a tied pair or group counts once) plus the biases."""
+        assert self.plastic_synapses is not None and self.plastic_neurons is not None
+        keys = np.arange(self.brain.connectome.synapses)
         paired = self.reverse >= 0
-        tied_twice = paired & self.trainable_overlaps
-        tied_twice[paired] &= self.trainable_overlaps[self.reverse[paired]]
-        seams = int(self.trainable_overlaps.sum() - tied_twice.sum() // 2)
-        if self.tie_groups is not None:
-            member = (self.tie_groups >= 0) & self.trainable_overlaps
-            seams -= int(member.sum()) - len(np.unique(self.tie_groups[member]))
-        return seams + int(np.count_nonzero(self.trainable_owners))
+        keys[paired] = np.minimum(keys[paired], self.reverse[paired])
+        if len(self._members):
+            keys[self._members] = self.brain.connectome.synapses + self._member_groups
+        synapses = len(np.unique(keys[self.plastic_synapses]))
+        return synapses + int(np.count_nonzero(self.plastic_neurons))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -640,13 +727,13 @@ class Learner:
             "slots": [int(k) for k in self.slot_sizes],
             "updates": self.updates,
             "parameters": self.parameters(),
-            "engine": self.engine.to_dict(),
+            "brain": self.brain.to_dict(),
         }
 
     # -- checkpoints
 
     def save(self, path: str | Path) -> Path:
-        """Write this learner, wiring and parameters included, to one ``.npz`` file."""
+        """Write this learner, connectome and parameters included, to one ``.npz`` file."""
         from .checkpoint import save
 
         return save(self, path)
@@ -698,20 +785,27 @@ def layered(
     init: float = 1.0,
     skip: bool = False,
     excitatory_forward: bool = False,
-) -> Wiring:
-    """Input, hidden, and output owners with forward, feedback, and lateral overlaps.
+) -> Connectome:
+    """Input, hidden, and output neurons with forward, feedback, and lateral synapses.
 
-    Forward overlaps run input to hidden (random, ``density``) and hidden to
-    output (dense); feedback overlaps run output to hidden with scale
-    ``feedback`` so the nudge can reach the hidden owners; lateral overlaps
+    Forward synapses run input to hidden (random, ``density``) and hidden to
+    output (dense); feedback synapses run output to hidden with scale
+    ``feedback`` so the nudge can reach the hidden neurons; lateral synapses
     among the outputs carry ``lateral`` (negative: winner takes most); with
     ``skip`` every input also reaches every output directly.
-    Forward overlaps start with random signs and fan-scaled magnitudes times
+    Forward synapses start with random signs and fan-scaled magnitudes times
     ``init`` (positive only when ``excitatory_forward``); each feedback
-    overlap starts equal to its forward partner scaled by ``feedback``, so a
-    symmetric learner sees one seam with one weight. Sets: ``input``,
+    synapse starts equal to its forward partner scaled by ``feedback``, so a
+    symmetric learner sees one synapse with one weight. Sets: ``input``,
     ``hidden``, ``output``.
     """
+    for name, value in (("inputs", inputs), ("hidden", hidden), ("outputs", outputs)):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if not 0 <= density <= 1:
+        raise ValueError("density must lie in [0, 1]")
+    if not np.isfinite([feedback, lateral, count, init]).all() or min(count, init) < 0:
+        raise ValueError("connection settings must be finite; count and init nonnegative")
     rng = np.random.default_rng(seed)
     n = inputs + hidden + outputs
     i0, h0, o0 = 0, inputs, inputs + hidden
@@ -721,6 +815,8 @@ def layered(
 
     def forward_signs(size: int, fan_in: float, fan_out: float) -> np.ndarray:
         # Fan-scaled magnitudes (Glorot), so a fresh layer's drive is of order one.
+        if size == 0:
+            return np.zeros(0)
         magnitude = rng.uniform(0.0, 1.0, size=size) * np.sqrt(6.0 / (fan_in + fan_out)) * init
         if excitatory_forward:
             return np.asarray(magnitude, dtype=float)
@@ -752,13 +848,13 @@ def layered(
     pre.append(o0 + a.ravel()[keep])
     post.append(o0 + b.ravel()[keep])
     sign.append(np.full(int(keep.sum()), lateral))
-    return Wiring.from_edges(
+    return Connectome.from_synapses(
         n,
         pre=np.concatenate(pre),
         post=np.concatenate(post),
         count=np.full(sum(len(p) for p in pre), count),
         sign=np.concatenate(sign),
-        sets={
+        populations={
             "input": range(i0, h0),
             "hidden": range(h0, o0),
             "output": range(o0, n),
@@ -776,17 +872,28 @@ def embedded(
     *,
     seed: int = 0,
     init: float = 1.0,
-) -> tuple[Wiring, np.ndarray]:
-    """A window of one-hot tokens through a shared embedding: the wiring and its tie groups.
+) -> tuple[Connectome, np.ndarray]:
+    """A window of one-hot tokens through a shared embedding: the connectome and its tie groups.
 
-    Input owners: ``positions`` blocks of ``vocabulary`` one-hot owners. Embedding owners:
-    ``positions`` blocks of ``dim`` owners; the seam from token ``t`` at any position to
+    Input neurons: ``positions`` blocks of ``vocabulary`` one-hot neurons. Embedding neurons:
+    ``positions`` blocks of ``dim`` neurons; the synapse from token ``t`` at any position to
     embedding unit ``d`` of that position is one tie group, so every position reads the
-    same embedding. Then a dense layer from all embedding owners to ``hidden`` owners, and
-    from those to ``outputs``, with feedback seams tied in pairs as in ``layered``. Pass
+    same embedding. Then a dense layer from all embedding neurons to ``hidden`` neurons, and
+    from those to ``outputs``, with feedback synapses tied in pairs as in ``layered``. Pass
     the tie groups to ``Learner(tie_groups=...)``. Sets: ``input``, ``embedding``,
     ``hidden``, ``output``.
     """
+    for name, value in (
+        ("vocabulary", vocabulary),
+        ("positions", positions),
+        ("dim", dim),
+        ("hidden", hidden),
+        ("outputs", outputs),
+    ):
+        if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
+            raise ValueError(f"{name} must be a positive integer")
+    if not np.isfinite(init) or init < 0:
+        raise ValueError("init must be finite and nonnegative")
     rng = np.random.default_rng(seed)
     n_in, n_emb = positions * vocabulary, positions * dim
     i0, e0, h0, o0 = 0, n_in, n_in + n_emb, n_in + n_emb + hidden
@@ -822,12 +929,12 @@ def embedded(
     post += [o0 + out.ravel(), h0 + hid2.ravel()]
     sign += [forward, forward]
     tie += [np.full(hidden * outputs, -1), np.full(hidden * outputs, -1)]
-    wiring = Wiring.from_edges(
+    connectome = Connectome.from_synapses(
         n,
         pre=np.concatenate(pre),
         post=np.concatenate(post),
         sign=np.concatenate(sign),
-        sets={
+        populations={
             "input": range(i0, e0),
             "embedding": range(e0, h0),
             "hidden": range(h0, o0),
@@ -835,36 +942,41 @@ def embedded(
         },
         label=f"embedded:{positions}x{vocabulary}->{dim}->{hidden}->{outputs}",
     )
-    # Wiring.from_edges sorts overlaps; recover each overlap's tie group by (pre, post)
+    # Connectome.from_synapses sorts synapses; recover each synapse's tie group by (pre, post)
     all_pre, all_post, all_tie = np.concatenate(pre), np.concatenate(post), np.concatenate(tie)
     key: dict[tuple[int, int], int] = {
         (int(a), int(b)): int(g) for a, b, g in zip(all_pre, all_post, all_tie, strict=True)
     }
     groups = np.array(
-        [key[(int(a), int(b))] for a, b in zip(wiring.pre, wiring.post, strict=True)],
+        [key[(int(a), int(b))] for a, b in zip(connectome.pre, connectome.post, strict=True)],
         dtype=np.int64,
     )
-    return wiring, groups
+    return connectome, groups
 
 
-def learning_rule(
+def learning_neuron_model(
     gain: float = 1.0,
     *,
     slope: float = 1.0,
     leak: float = 0.1,
     dt: float = 0.5,
-    clamp_amplitude: float = 1.0,
-) -> GradedRule:
-    """A graded rule for nets that learn: unit slope, a zero threshold, a small leak, unit clamp.
+    stimulus_amplitude: float = 1.0,
+) -> NeuronModel:
+    """A graded rule for nets that learn: unit slope, a zero threshold, a small leak, unit stimulus.
 
     At threshold zero the re-based sigmoid emits nothing at rest and rises
     smoothly for positive drive; with unit slope it saturates only around a
     drive of four, so a fan-scaled layer sits in the responsive range rather
-    than silent or saturated. The leak lets an owner below rest publish a
-    small negative activation, so the rule can still move it. A unit clamp
-    amplitude makes an input owner read its level roughly linearly, and the
+    than silent or saturated. The leak lets a neuron below rest publish a
+    small negative activation, so the rule can still move it. A unit stimulus
+    amplitude makes an input neuron read its level roughly linearly, and the
     larger step converges in tens of steps rather than hundreds.
     """
-    return GradedRule(
-        dt=dt, slope=slope, threshold=0.0, gain=gain, clamp_amplitude=clamp_amplitude, leak=leak
+    return NeuronModel(
+        dt=dt,
+        slope=slope,
+        threshold=0.0,
+        gain=gain,
+        stimulus_amplitude=stimulus_amplitude,
+        leak=leak,
     )

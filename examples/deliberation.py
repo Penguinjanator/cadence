@@ -53,15 +53,17 @@ def compare_futures(
 
 
 class Evaluator:
-    """A tiny patch net learns whether a predicted terminal observation is good or bad."""
+    """A tiny brain learns whether a predicted terminal observation is good or bad."""
 
     def __init__(self, seed: int = 0) -> None:
-        wiring = cd.layered(2, 8, 2, density=1, seed=seed)
+        connectome = cd.layered(2, 8, 2, density=1, seed=seed)
         config = cd.LearnerConfig(eta=3, eta_bias=0.03, temperature=0.1, tolerance=1e-4)
         self.learner = cd.Learner(
-            cd.Settlement(wiring, cd.learning_rule(dt=1)), wiring.sets["output"], config
+            cd.Brain(connectome, cd.learning_neuron_model(dt=1)),
+            connectome.populations["output"],
+            config,
         )
-        self.n = wiring.n
+        self.n = connectome.n
 
     def drive(self, features: np.ndarray) -> np.ndarray:
         return np.pad(features, ((0, 0), (0, self.n - 2)))

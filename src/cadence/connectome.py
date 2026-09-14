@@ -1,9 +1,9 @@
-"""Owners and overlaps as arrays.
+"""Neurons and synapses as arrays.
 
-A ``Wiring`` is the declared topology of a patch net: ``n`` owners and a
-list of directed overlaps, each carrying a synapse count and a sign. It is
+A ``Connectome`` is the declared topology of a brain: ``n`` neurons and a
+list of directed synapses, each carrying a synapse count and a sign. It is
 immutable, sorted by (post, pre), and it knows nothing about dynamics.
-Named sets of owners live alongside it so protocols can speak in names.
+Named populations of neurons live alongside it so protocols can speak in names.
 """
 
 from __future__ import annotations
@@ -15,17 +15,17 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["Wiring"]
+__all__ = ["Connectome"]
 
 
-def _owner_indices(values: Sequence[int] | np.ndarray, n: int, name: str) -> np.ndarray:
+def _neuron_indices(values: Sequence[int] | np.ndarray, n: int, name: str) -> np.ndarray:
     array = np.asarray(values)
     if array.ndim != 1 or array.dtype.kind not in "iuf":
-        raise ValueError(f"{name} must be a vector of integer owner indices")
+        raise ValueError(f"{name} must be a vector of integer neuron indices")
     if array.dtype.kind == "f" and (
         not np.isfinite(array).all() or np.any(array != np.floor(array))
     ):
-        raise ValueError(f"{name} must contain integer owner indices")
+        raise ValueError(f"{name} must contain integer neuron indices")
     if np.any(array < 0) or np.any(array >= n):
         raise ValueError(f"{name} indices must lie in [0, n)")
     return array.astype(np.int64, copy=False)
@@ -40,35 +40,35 @@ def _edge_arrays(
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     if not isinstance(n, (int, np.integer)) or isinstance(n, bool) or n < 0:
         raise ValueError("n must be a nonnegative integer")
-    pre_a = _owner_indices(pre, n, "pre")
-    post_a = _owner_indices(post, n, "post")
+    pre_a = _neuron_indices(pre, n, "pre")
+    post_a = _neuron_indices(post, n, "post")
     count_a = np.ones(len(pre_a)) if count is None else np.asarray(count, dtype=np.float64)
     sign_a = np.ones(len(pre_a)) if sign is None else np.asarray(sign, dtype=np.float64)
     if any(a.shape != pre_a.shape for a in (post_a, count_a, sign_a)):
-        raise ValueError("pre, post, count, and sign must have one entry per overlap")
+        raise ValueError("pre, post, count, and sign must have one entry per synapse")
     if not np.isfinite(count_a).all() or not np.isfinite(sign_a).all():
         raise ValueError("count and sign must be finite")
     return pre_a, post_a, count_a, sign_a
 
 
 @dataclass(frozen=True)
-class Wiring:
-    """``n`` owners; overlaps ``pre[i] -> post[i]`` with ``count[i]`` contacts and ``sign[i]``."""
+class Connectome:
+    """``n`` neurons; synapses ``pre[i] -> post[i]`` with ``count[i]`` contacts and ``sign[i]``."""
 
     n: int
     pre: np.ndarray
     post: np.ndarray
     count: np.ndarray
     sign: np.ndarray
-    sets: dict[str, tuple[int, ...]] = field(default_factory=dict)
-    label: str = "wiring"
+    populations: dict[str, tuple[int, ...]] = field(default_factory=dict)
+    label: str = "connectome"
 
     def __post_init__(self) -> None:
         arrays = _edge_arrays(self.n, self.pre, self.post, self.count, self.sign)
         for name, value in zip(("pre", "post", "count", "sign"), arrays, strict=True):
             object.__setattr__(self, name, value)
         if np.any(self.pre == self.post):
-            raise ValueError("an overlap joins two distinct owners; drop autapses first")
+            raise ValueError("a synapse joins two distinct neurons; drop autapses first")
         order = np.lexsort((self.pre, self.post))
         for name in ("pre", "post"):
             object.__setattr__(self, name, getattr(self, name)[order].astype(np.int64))
@@ -76,17 +76,17 @@ class Wiring:
         object.__setattr__(self, "sign", self.sign[order].astype(np.float64))
         object.__setattr__(
             self,
-            "sets",
+            "populations",
             {
-                k: tuple(int(i) for i in np.unique(_owner_indices(tuple(v), self.n, k)))
-                for k, v in self.sets.items()
+                k: tuple(int(i) for i in np.unique(_neuron_indices(tuple(v), self.n, k)))
+                for k, v in self.populations.items()
             },
         )
 
     # -- construction
 
     @classmethod
-    def from_edges(
+    def from_synapses(
         cls,
         n: int,
         *,
@@ -94,14 +94,14 @@ class Wiring:
         post: Sequence[int] | np.ndarray,
         count: Sequence[float] | np.ndarray | None = None,
         sign: Sequence[float] | np.ndarray | None = None,
-        sets: Mapping[str, Iterable[int]] | None = None,
-        label: str = "wiring",
+        populations: Mapping[str, Iterable[int]] | None = None,
+        label: str = "connectome",
         min_count: float = 0.0,
-    ) -> Wiring:
-        """Build from edge lists; ``count`` defaults to 1 and ``sign`` to +1 everywhere.
+    ) -> Connectome:
+        """Build from synapse lists; ``count`` defaults to 1 and ``sign`` to +1 everywhere.
 
-        Overlaps with fewer than ``min_count`` contacts are dropped, and
-        parallel overlaps between the same pair are merged by summing counts.
+        Synapses with fewer than ``min_count`` contacts are dropped, and
+        parallel synapses between the same pair are merged by summing counts.
         """
         pre_a, post_a, count_a, sign_a = _edge_arrays(n, pre, post, count, sign)
         keep = (pre_a != post_a) & (count_a >= min_count)
@@ -122,18 +122,18 @@ class Wiring:
             post=uniq // n,
             count=merged_count,
             sign=merged_sign,
-            sets={k: tuple(v) for k, v in (sets or {}).items()},
+            populations={k: tuple(v) for k, v in (populations or {}).items()},
             label=label,
         )
 
-    def with_sets(self, **sets: Iterable[int]) -> Wiring:
-        merged = {**self.sets, **{k: tuple(v) for k, v in sets.items()}}
-        return Wiring(self.n, self.pre, self.post, self.count, self.sign, merged, self.label)
+    def with_populations(self, **populations: Iterable[int]) -> Connectome:
+        merged = {**self.populations, **{k: tuple(v) for k, v in populations.items()}}
+        return Connectome(self.n, self.pre, self.post, self.count, self.sign, merged, self.label)
 
     # -- queries
 
     @property
-    def edges(self) -> int:
+    def synapses(self) -> int:
         return int(len(self.pre))
 
     def in_degree(self) -> np.ndarray:
@@ -143,30 +143,30 @@ class Wiring:
         return np.bincount(self.pre, minlength=self.n)
 
     def members(self, *names: str) -> tuple[int, ...]:
-        """Union of named sets."""
+        """Union of named populations."""
         out: set[int] = set()
         for name in names:
-            out.update(self.sets[name])
+            out.update(self.populations[name])
         return tuple(sorted(out))
 
     def digest(self) -> str:
-        """SHA-256 of the sorted overlap arrays and the named sets."""
+        """SHA-256 of the sorted synapse arrays and the named populations."""
         h = sha256()
         h.update(str(self.n).encode())
         for array in (self.pre, self.post, self.count, self.sign):
             h.update(np.ascontiguousarray(array).tobytes())
-        for name in sorted(self.sets):
+        for name in sorted(self.populations):
             h.update(name.encode())
-            h.update(np.asarray(self.sets[name], dtype=np.int64).tobytes())
+            h.update(np.asarray(self.populations[name], dtype=np.int64).tobytes())
         return h.hexdigest()
 
     def summary(self) -> dict[str, Any]:
         return {
-            "owners": self.n,
-            "overlaps": self.edges,
+            "neurons": self.n,
+            "synapses": self.synapses,
             "contacts": float(self.count.sum()),
             "excitatory": int((self.sign > 0).sum()),
             "inhibitory": int((self.sign < 0).sum()),
-            "sets": {k: len(v) for k, v in self.sets.items()},
+            "populations": {k: len(v) for k, v in self.populations.items()},
             "digest": self.digest(),
         }

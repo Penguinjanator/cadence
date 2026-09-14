@@ -1,15 +1,15 @@
-"""A constitution grows into a wiring; mutation and selection change it toward a fitness."""
+"""A genome grows into a connectome; mutation and selection change it toward a fitness."""
 
 from __future__ import annotations
 
 import numpy as np
 
 import cadence as cd
-from cadence.constitution import Constitution, Projection, Region, evolve, grow, mutate
+from cadence.genome import Genome, Projection, Region, develop, evolve, mutate
 
 
-def two_region() -> Constitution:
-    return Constitution(
+def two_region() -> Genome:
+    return Genome(
         regions=(Region("input", 6), Region("hidden", 8), Region("output", 3)),
         projections=(Projection("input", "hidden", density=0.5), Projection("hidden", "output")),
         label="toy",
@@ -18,15 +18,15 @@ def two_region() -> Constitution:
 
 def test_grow_is_deterministic_and_names_contiguous_sets() -> None:
     c = two_region()
-    a, b = grow(c, seed=3), grow(c, seed=3)
+    a, b = develop(c, seed=3), develop(c, seed=3)
     assert a.digest() == b.digest() and a.n == 17
-    assert a.sets["hidden"] == tuple(range(6, 14)) and a.sets["output"] == tuple(range(14, 17))
+    assert a.populations["hidden"] == tuple(range(6, 14)) and a.populations["output"] == tuple(range(14, 17))
     assert (
-        a.in_degree()[list(a.sets["input"])].sum() > 0
-    )  # symmetric: inputs hear the hidden owners
-    engine = cd.Settlement(a, cd.learning_rule())
-    assert engine.layout.ranges == 3
-    assert grow(c, seed=4).digest() != a.digest()
+        a.in_degree()[list(a.populations["input"])].sum() > 0
+    )  # symmetric: inputs hear the hidden neurons
+    brain = cd.Brain(a, cd.learning_neuron_model())
+    assert brain.layout.ranges == 3
+    assert develop(c, seed=4).digest() != a.digest()
 
 
 def test_mutate_keeps_the_shape_and_respects_fixed_regions() -> None:
@@ -38,10 +38,10 @@ def test_mutate_keeps_the_shape_and_respects_fixed_regions() -> None:
 
 
 def test_evolve_moves_toward_the_fitness() -> None:
-    # fitness: a hidden region of about twelve owners with dense input projections
-    def fitness(w: cd.Wiring, seed: int) -> float:
-        hidden = len(w.sets["hidden"])
-        density = w.in_degree()[list(w.sets["hidden"])].mean() / 6
+    # fitness: a hidden region of about twelve neurons with dense input projections
+    def fitness(w: cd.Connectome, seed: int) -> float:
+        hidden = len(w.populations["hidden"])
+        density = w.in_degree()[list(w.populations["hidden"])].mean() / 6
         return -abs(hidden - 12) + density
 
     lineage = evolve(
@@ -58,8 +58,8 @@ def test_evolve_moves_toward_the_fitness() -> None:
     assert last >= first and abs(lineage.best.region("hidden").size - 12) <= 3
 
 
-def _hidden_size(w: cd.Wiring, seed: int) -> float:
-    return -abs(len(w.sets["hidden"]) - 12)
+def _hidden_size(w: cd.Connectome, seed: int) -> float:
+    return -abs(len(w.populations["hidden"]) - 12)
 
 
 def test_evolve_runs_the_lives_through_the_mapper() -> None:
@@ -73,9 +73,9 @@ def test_evolve_runs_the_lives_through_the_mapper() -> None:
 
 
 def test_mutate_keeps_tied_regions_the_same_size() -> None:
-    c = Constitution(
+    c = Genome(
         regions=(Region("input", 6), Region("context", 8), Region("hidden", 8), Region("output", 3)),
-        projections=(Projection("input", "hidden"), Projection("context", "hidden", symmetric=False), Projection("hidden", "output")),
+        projections=(Projection("input", "hidden"), Projection("context", "hidden", reciprocal=False), Projection("hidden", "output")),
     )
     rng = np.random.default_rng(5)
     for _ in range(20):
@@ -91,8 +91,8 @@ def test_evolve_reports_after_every_generation() -> None:
     assert seen == [1, 2, 3] and len(lineage.generations) == 3
 
 
-def test_constitution_round_trips_through_its_dict() -> None:
+def test_genome_round_trips_through_its_dict() -> None:
     c = two_region()
-    again = Constitution.from_dict(c.to_dict())
+    again = Genome.from_dict(c.to_dict())
     assert again == c
-    assert grow(again, seed=4).edges == grow(c, seed=4).edges
+    assert develop(again, seed=4).synapses == develop(c, seed=4).synapses

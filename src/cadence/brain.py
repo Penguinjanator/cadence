@@ -1,35 +1,35 @@
-"""The settlement engine.
+"""The brain: neurons and synapses settling under a stimulus.
 
-One ``Settlement`` holds a wiring and a rule and runs the owner rule for a
-number of steps from rest, or from a given state, under a clamp. Two
+One ``Brain`` holds a connectome and a neuron model and runs the neuron update for a
+number of steps from rest, or from a given state, under a stimulus. Two
 backends do the same arithmetic:
 
 * ``"cpu"``: NumPy in float64. The transport is one segmented sum per
-  step, a scatter of every overlap's message into its owner's inbox; for
-  wirings whose dense blocks fit (at most ``dense_limit`` squared entries,
+  step, a scatter of every synapse's message into its neuron's synaptic input; for
+  connectomes whose dense blocks fit (at most ``dense_limit`` squared entries,
   see ``cadence.blocks``) the same sum is done as block matrix products,
-  reusing the product of every range of owners that did not move since
+  reusing the product of every range of neurons that did not move since
   the previous step, which is far faster when the interpreter overhead of
-  the scatter would dominate and lets a settlement step cost what its
-  moving owners cost rather than what the whole net does. This is the
+  the scatter would dominate and lets a settling step cost what its
+  moving neurons cost rather than what the whole net does. This is the
   receipt-grade backend: deterministic, exact to rounding, and the one the
-  owner-by-owner reference engine is compared against.
+  neuron-by-neuron reference is compared against.
 * ``"torch"``: the same scatter with ``index_add_`` on whatever device
   torch offers, CUDA in float64, Apple silicon in float32 (MPS has no
   float64), CPU in float64. Use it for interactive work and for very large
-  wirings, and keep a conformance check against ``"cpu"``; the fly brain
-  has owners on knife edges where float32 flips a bistable readout.
+  connectomes, and keep a conformance check against ``"cpu"``; the fly brain
+  has neurons on knife edges where float32 flips a bistable readout.
 
-Three kinds of parameter sit on a settlement, all defaulting to the wiring:
-``edge_scale``, one signed number per overlap (the wiring's sign unless a
-learner has moved it); ``log_gain``, one per owner on its outgoing
-overlaps, how a lane declares a stimulus rate or a region's gain; and
-``bias``, one per owner. The effective drive of overlap ``e`` per unit
-presynaptic activation is ``gain * count[e] * edge_scale[e] *
+Three kinds of parameter sit on a brain, all defaulting to the connectome:
+``efficacy``, one signed number per synapse (the connectome's sign unless a
+learner has moved it); ``log_gain``, one per neuron on its outgoing
+synapses, how a lane declares a stimulus rate or a region's gain; and
+``bias``, one per neuron. The effective drive of synapse ``e`` per unit
+presynaptic activation is ``gain * count[e] * efficacy[e] *
 exp(log_gain[pre[e]])``.
 
-Settlements run on a batch of clamps at once; ``settle`` is the one-clamp
-convenience. A ``Nudge`` adds a drive that pulls chosen owners toward a
+Settling runs on a batch of stimuli at once; ``settle`` is the one-stimulus
+convenience. A ``Nudge`` adds a drive that pulls chosen neurons toward a
 target activation, which is how the learning rule's second phase enters.
 """
 
@@ -44,10 +44,10 @@ import numpy as np
 
 from .blocks import BlockTransport, Layout
 from .blocks import layout as make_layout
-from .rules import GradedRule
-from .wiring import Wiring
+from .connectome import Connectome, _neuron_indices
+from .neuron import NeuronModel
 
-__all__ = ["Settlement", "SettledState", "Nudge", "available_backends", "Backend"]
+__all__ = ["Brain", "BrainState", "Equilibrium", "Nudge", "available_backends", "Backend"]
 
 Backend = Literal["cpu", "torch", "mlx"]
 
@@ -94,11 +94,11 @@ def available_backends() -> dict[str, str]:
 
 @dataclass(frozen=True)
 class Nudge:
-    """Extra drive ``beta * (target - s)`` on the owners where ``mask`` is one.
+    """Extra drive ``beta * (target - s)`` on the neurons where ``mask`` is one.
 
-    With ``softmax_temperature`` set, the owners under the mask compete: the
+    With ``softmax_temperature`` set, the neurons under the mask compete: the
     drive is ``beta * (target - softmax(s / T))`` over that group, a
-    cross-entropy nudge, so pushing one owner up pushes the others down only
+    cross-entropy nudge, so pushing one neuron up pushes the others down only
     as much as their share. ``weight``, one number per batch row, scales the
     nudge row by row; a negative weight pushes away from the target. That is
     how a reward enters: the target is the action taken and the weight its
@@ -110,29 +110,45 @@ class Nudge:
     beta: float
     softmax_temperature: float | None = None
     weight: np.ndarray | None = None  # (batch,)
-    groups: np.ndarray | None = None  # (n,) group id per owner, -1 for none: one softmax per group
+    groups: np.ndarray | None = None  # (n,) group id per neuron, -1 for none: one softmax per group
 
     def __post_init__(self) -> None:
         mask, target = np.asarray(self.mask), np.asarray(self.target)
         if mask.ndim != 1:
-            raise ValueError("nudge mask must have one entry per owner")
+            raise ValueError("nudge mask must have one entry per neuron")
         if target.ndim not in (1, 2) or target.shape[-1] != mask.size:
-            raise ValueError("nudge target must have one entry per owner, optionally per batch row")
+            raise ValueError(
+                "nudge target must have one entry per neuron, optionally per batch row"
+            )
         if not np.isfinite(self.beta):
             raise ValueError("nudge beta must be finite")
+        if not np.isfinite(target).all() or not np.isfinite(mask).all() or (mask < 0).any():
+            raise ValueError("nudge target and mask must be finite; mask must be nonnegative")
+        object.__setattr__(self, "target", target.astype(float, copy=True))
+        object.__setattr__(self, "mask", mask.astype(float, copy=True))
         temperature = self.softmax_temperature
         if temperature is not None and (not np.isfinite(temperature) or temperature <= 0):
             raise ValueError("softmax_temperature must be finite and positive")
         if self.weight is not None and np.asarray(self.weight).ndim != 1:
             raise ValueError("nudge weight must have one entry per batch row")
         if self.groups is not None and np.asarray(self.groups).shape != mask.shape:
-            raise ValueError("nudge groups must have one entry per owner")
+            raise ValueError("nudge groups must have one entry per neuron")
+        if self.groups is not None:
+            groups = np.asarray(self.groups)
+            if not np.issubdtype(groups.dtype, np.integer) or (groups < -1).any():
+                raise ValueError("nudge groups must be integer IDs, -1 for ungrouped neurons")
+            object.__setattr__(self, "groups", groups.copy())
+        if self.weight is not None:
+            weight = np.asarray(self.weight, dtype=float)
+            if not np.isfinite(weight).all():
+                raise ValueError("nudge weight must be finite")
+            object.__setattr__(self, "weight", weight.copy())
 
     def drive(self, s: np.ndarray) -> np.ndarray:
         s = np.asarray(s, dtype=float)
         single = s.ndim == 1
         if s.ndim not in (1, 2) or s.shape[-1] != len(self.mask):
-            raise ValueError("activation must have one entry per owner, optionally per batch row")
+            raise ValueError("activation must have one entry per neuron, optionally per batch row")
         s = np.atleast_2d(s)
         full_target = np.broadcast_to(self.target, s.shape)
         if self.softmax_temperature is None:
@@ -153,7 +169,7 @@ class Nudge:
 
 
 def _softmax_groups(nudge: Nudge) -> list[np.ndarray]:
-    """The masked owners as one index array per softmax group (one group without ``groups``)."""
+    """The masked neurons as one index array per softmax group (one group without ``groups``)."""
     masked = np.flatnonzero(np.asarray(nudge.mask) > 0)
     if nudge.groups is None:
         return [masked.astype(np.int64)] if masked.size else []
@@ -162,11 +178,11 @@ def _softmax_groups(nudge: Nudge) -> list[np.ndarray]:
 
 
 @dataclass(frozen=True)
-class SettledState:
-    """State after a settlement run: potentials, activations, adaptation, trajectory.
+class BrainState:
+    """State after settling: potentials, activations, adaptation, trajectory.
 
     A step cap or activation movement tolerance need not imply equilibrium;
-    use ``Settlement.residual`` to check the remaining owner-equation error.
+    use ``Brain.residual`` to check the remaining neuron-equation error.
 
     From ``settle`` every array is ``(n,)`` and ``trajectory`` is ``(steps, n)``;
     from ``settle_batch`` they carry a leading batch axis.
@@ -177,7 +193,8 @@ class SettledState:
     adaptation: np.ndarray
     steps: int
     trajectory: np.ndarray | None = None
-    repair: np.ndarray | None = None  # per row: the total movement of the published activations
+    # per row: the total movement of the published activations while settling
+    activity_change: np.ndarray | None = None
     device: Any = (
         None  # the same state on an accelerator, so a continuation or a contrast stays there
     )
@@ -203,6 +220,24 @@ class SettledState:
         return int((self.row(i) >= level).sum())
 
 
+@dataclass(frozen=True)
+class Equilibrium:
+    """A bounded solve and its measured equation error, one entry per batch row.
+
+    ``steps`` counts all steps in this call. ``state.steps`` is the last chunk's count.
+    Convergence here means a small residual, not uniqueness, stability or task quality.
+    """
+
+    state: BrainState
+    residual: np.ndarray
+    steps: int
+    tolerance: float
+
+    @property
+    def converged(self) -> np.ndarray:
+        return np.asarray(self.residual <= self.tolerance)
+
+
 def _lazy(name: str, key: str) -> property:
     """A host array of a settled state that is fetched from the device on first use.
 
@@ -211,7 +246,7 @@ def _lazy(name: str, key: str) -> property:
     so it is made only when something reads it.
     """
 
-    def get(self: SettledState) -> np.ndarray:
+    def get(self: BrainState) -> np.ndarray:
         value = self.__dict__.get(name)
         if value is None:
             handle = self.__dict__.get("device")
@@ -221,24 +256,24 @@ def _lazy(name: str, key: str) -> property:
             self.__dict__[name] = value
         return np.asarray(value)
 
-    def put(self: SettledState, value: np.ndarray | None) -> None:
+    def put(self: BrainState, value: np.ndarray | None) -> None:
         self.__dict__[name] = value
 
     return property(get, put)
 
 
 for _name, _key in (("v", "v"), ("activation", "s"), ("adaptation", "a")):
-    setattr(SettledState, _name, _lazy(_name, _key))
+    setattr(BrainState, _name, _lazy(_name, _key))
 
 
-class Settlement:
+class Brain:
     def __init__(
         self,
-        wiring: Wiring,
-        rule: GradedRule,
+        connectome: Connectome,
+        neuron_model: NeuronModel,
         *,
         backend: Backend = "cpu",
-        edge_scale: np.ndarray | None = None,
+        efficacy: np.ndarray | None = None,
         log_gain: np.ndarray | None = None,
         bias: np.ndarray | None = None,
         device: str | None = None,
@@ -246,42 +281,50 @@ class Settlement:
         layout: Layout | None = None,
         precision: str | None = None,
     ) -> None:
-        self.wiring = wiring
-        self.rule = rule
+        self.connectome = connectome
+        self.neuron_model = neuron_model
         self.backend: Backend = backend
         self.dense_limit = dense_limit
         self.precision = precision  # torch only: "float64" or "float32"; default by device
-        self.layout: Layout = make_layout(wiring) if layout is None else layout
+        self.layout: Layout = make_layout(connectome) if layout is None else layout
         # The parameters live on the host, or on the torch device once a learner has moved
         # them there; the host arrays are then fetched when something reads them.
-        self._edge_scale: np.ndarray | None = (
-            wiring.sign.copy() if edge_scale is None else np.asarray(edge_scale, float).copy()
+        self._efficacy: np.ndarray | None = (
+            connectome.sign.copy() if efficacy is None else np.asarray(efficacy, float).copy()
         )
-        self.log_gain = np.zeros(wiring.n) if log_gain is None else np.asarray(log_gain, float)
+        self.log_gain = np.zeros(connectome.n) if log_gain is None else np.array(log_gain, float)
         self._bias: np.ndarray | None = (
-            np.zeros(wiring.n) if bias is None else np.asarray(bias, float)
+            np.zeros(connectome.n) if bias is None else np.array(bias, float)
         )
-        assert self._edge_scale is not None and self._bias is not None
-        if self._edge_scale.shape != (wiring.edges,):
-            raise ValueError("edge_scale must have one entry per overlap")
-        if self.log_gain.shape != (wiring.n,) or self._bias.shape != (wiring.n,):
-            raise ValueError("log_gain and bias must have one entry per owner")
-        self._gain_pre: np.ndarray = rule.gain * wiring.count * np.exp(self.log_gain)[wiring.pre]
-        self._weights_host: np.ndarray | None = self._gain_pre * self._edge_scale
-        # Segment boundaries of the (post-sorted) overlap arrays, for the segmented sum.
-        segments = wiring.__dict__.get("_segments")  # kept on the wiring: one pass per wiring
+        assert self._efficacy is not None and self._bias is not None
+        if self._efficacy.shape != (connectome.synapses,):
+            raise ValueError("efficacy must have one entry per synapse")
+        if self.log_gain.shape != (connectome.n,) or self._bias.shape != (connectome.n,):
+            raise ValueError("log_gain and bias must have one entry per neuron")
+        if not all(np.isfinite(x).all() for x in (self._efficacy, self.log_gain, self._bias)):
+            raise ValueError("brain parameters must be finite")
+        with np.errstate(over="ignore", invalid="ignore"):
+            self._gain_pre: np.ndarray = (
+                neuron_model.gain * connectome.count * np.exp(self.log_gain)[connectome.pre]
+            )
+        self._weights_host: np.ndarray | None = self._gain_pre * self._efficacy
+        if not np.isfinite(self._weights_host).all():
+            raise ValueError("effective synaptic weights must be finite; reduce gain or efficacy")
+        # Segment boundaries of the (post-sorted) synapse arrays, for the segmented sum.
+        # kept on the connectome: one pass per connectome
+        segments = connectome.__dict__.get("_segments")
         if segments is None:
-            post = wiring.post
-            if wiring.edges:
+            post = connectome.post
+            if connectome.synapses:
                 change = np.flatnonzero(np.diff(post)) + 1
                 starts = np.concatenate([[0], change]).astype(np.int64)
                 segments = (starts, post[starts])
             else:
                 segments = (np.zeros(0, np.int64), np.zeros(0, np.int64))
-            wiring.__dict__["_segments"] = segments
+            connectome.__dict__["_segments"] = segments
         self._starts: np.ndarray = segments[0]
-        self._owners_with_inbox: np.ndarray = segments[1]
-        # The block transport: dense blocks between owner ranges, when they fit.
+        self._neurons_with_synaptic_input: np.ndarray = segments[1]
+        # The block transport: dense blocks between neuron ranges, when they fit.
         blocked = self.layout.size <= dense_limit * dense_limit
         self._blocked = blocked
         self._flat: np.ndarray | None = None  # the host blocks, made on first use (cpu paths)
@@ -290,25 +333,25 @@ class Settlement:
         self._mlx: Any = None
         if backend == "torch":  # the kernel scatters the weights into its blocks on the device
             self._torch = _TorchKernel(
-                wiring,
-                self._edge_scale,
+                connectome,
+                self._efficacy,
                 self._gain_pre,
                 self._bias,
-                rule,
+                neuron_model,
                 device,
                 self.layout if blocked else None,
                 precision,
             )
         elif backend == "mlx":
             if not blocked:
-                raise ValueError("the mlx backend needs a wiring whose blocks fit dense_limit")
-            self._mlx = _MlxKernel(wiring, self._weights, self.bias, rule, self.layout)
+                raise ValueError("the mlx backend needs a connectome whose blocks fit dense_limit")
+            self._mlx = _MlxKernel(connectome, self._weights, self.bias, neuron_model, self.layout)
         elif backend != "cpu":
             raise ValueError(f"unknown backend {backend!r}")
 
     @property
     def _blocks(self) -> np.ndarray | None:
-        """The flat host blocks when the wiring is blocked; scattered once, on first use."""
+        """The flat host blocks when the connectome is blocked; scattered once, on first use."""
         if not self._blocked:
             return None
         if self._flat is None:
@@ -318,23 +361,21 @@ class Settlement:
     # -- parameters
 
     @property
-    def edge_scale(self) -> np.ndarray:
-        """One signed number per overlap; fetched from the device when a learner keeps it there."""
-        if self._edge_scale is None:
+    def efficacy(self) -> np.ndarray:
+        """One signed number per synapse; fetched from the device when a learner keeps it there."""
+        if self._efficacy is None:
             assert self._torch is not None
-            self._edge_scale = self._torch.host_scale()
-        return self._edge_scale
+            self._efficacy = self._torch.host_scale()
+        return self._efficacy
 
-    @edge_scale.setter
-    def edge_scale(self, value: np.ndarray) -> None:
-        self._edge_scale = np.asarray(value, float)
-        self._weights_host = None
-        self._flat = None
-        self._csr = None
+    @efficacy.setter
+    def efficacy(self, value: np.ndarray) -> None:
+        updated = self.with_parameters(efficacy=value)
+        self.__dict__.update(updated.__dict__)
 
     @property
     def bias(self) -> np.ndarray:
-        """One number per owner; fetched from the device when a learner keeps it there."""
+        """One number per neuron; fetched from the device when a learner keeps it there."""
         if self._bias is None:
             assert self._torch is not None
             self._bias = self._torch.host_bias()
@@ -342,24 +383,25 @@ class Settlement:
 
     @bias.setter
     def bias(self, value: np.ndarray) -> None:
-        self._bias = np.asarray(value, float)
+        updated = self.with_parameters(bias=value)
+        self.__dict__.update(updated.__dict__)
 
     @property
     def _weights(self) -> np.ndarray:
         if self._weights_host is None:
-            self._weights_host = self._gain_pre * self.edge_scale
+            self._weights_host = self._gain_pre * self.efficacy
         return self._weights_host
 
-    def _with_device_parameters(self, scale: Any, bias: Any) -> Settlement:
-        """The settlement with new parameters that stay on the torch device.
+    def _with_device_parameters(self, scale: Any, bias: Any) -> Brain:
+        """The brain with new parameters that stay on the torch device.
 
         The kernel is shared and updated in place, so a state settled on it continues on it;
-        the settlement this was called on is superseded (its host copies, if any, are stale).
+        the brain this was called on is superseded (its host copies, if any, are stale).
         """
         assert self._torch is not None
         self._torch.set_parameters(scale, bias)
         new = copy.copy(self)
-        new._edge_scale = None
+        new._efficacy = None
         new._bias = None
         new._weights_host = None
         new._flat = None
@@ -369,36 +411,36 @@ class Settlement:
     def with_parameters(
         self,
         *,
-        edge_scale: np.ndarray | None = None,
+        efficacy: np.ndarray | None = None,
         log_gain: np.ndarray | None = None,
         bias: np.ndarray | None = None,
-    ) -> Settlement:
-        """A new settlement on the same wiring with some parameters replaced.
+    ) -> Brain:
+        """A new brain on the same connectome with some parameters replaced.
 
-        On the host engine, new seams and biases alone make a copy whose derived arrays
-        (the weights, the blocks) are remade on first use, not a rebuilt engine.
+        On the host, new efficacies and biases alone make a copy whose derived arrays
+        (the weights, the blocks) are remade on first use, not a rebuilt brain.
         """
         if self.backend == "cpu" and log_gain is None:
             new = copy.copy(self)
-            if edge_scale is not None:
-                scale = np.asarray(edge_scale, float)
-                if scale.shape != (self.wiring.edges,):
-                    raise ValueError("edge_scale must have one entry per overlap")
-                new._edge_scale = scale.copy()
+            if efficacy is not None:
+                scale = np.asarray(efficacy, float)
+                if scale.shape != (self.connectome.synapses,) or not np.isfinite(scale).all():
+                    raise ValueError("efficacy must have one finite entry per synapse")
+                new._efficacy = scale.copy()
                 new._weights_host = None
                 new._flat = None
                 new._csr = None
             if bias is not None:
                 b = np.asarray(bias, float)
-                if b.shape != (self.wiring.n,):
-                    raise ValueError("bias must have one entry per owner")
+                if b.shape != (self.connectome.n,) or not np.isfinite(b).all():
+                    raise ValueError("bias must have one finite entry per neuron")
                 new._bias = b.copy()
             return new
-        return Settlement(
-            self.wiring,
-            self.rule,
+        return Brain(
+            self.connectome,
+            self.neuron_model,
             backend=self.backend,
-            edge_scale=self.edge_scale if edge_scale is None else edge_scale,
+            efficacy=self.efficacy if efficacy is None else efficacy,
             log_gain=self.log_gain if log_gain is None else log_gain,
             bias=self.bias if bias is None else bias,
             device=str(self._torch.device) if self._torch is not None else None,
@@ -409,71 +451,82 @@ class Settlement:
 
     @property
     def weights(self) -> np.ndarray:
-        """Effective drive per unit presynaptic activation, one per overlap."""
+        """Effective drive per unit presynaptic activation, one per synapse."""
         return self._weights
 
     def dense(self) -> np.ndarray:
-        """The overlap matrix ``W[pre, post]``: the inbox of a batch ``s`` is ``s @ W``.
+        """The synapse matrix ``W[pre, post]``: the synaptic input of a batch ``s`` is ``s @ W``.
 
         Built on demand; this is what a page that settles the net in a browser embeds.
         """
-        dense = np.zeros((self.wiring.n, self.wiring.n))
-        np.add.at(dense, (self.wiring.pre, self.wiring.post), self._weights)
+        dense = np.zeros((self.connectome.n, self.connectome.n))
+        np.add.at(dense, (self.connectome.pre, self.connectome.post), self._weights)
         return dense
 
-    # -- clamps
+    # -- stimuli
 
-    def clamp_vector(
-        self, clamp: Mapping[int, float] | Sequence[int] | np.ndarray | None
+    def stimulus_vector(
+        self, stimulus: Mapping[int, float] | Sequence[int] | np.ndarray | None
     ) -> np.ndarray:
-        """A dense drive vector, a list of owners at full amplitude, or a {owner: level} map."""
-        out = np.zeros(self.wiring.n)
-        if clamp is None:
+        """A dense drive vector, a list of neurons at full amplitude, or a {neuron: level} map."""
+        out = np.zeros(self.connectome.n)
+        if stimulus is None:
             return out
-        if isinstance(clamp, Mapping):
-            for owner, level in clamp.items():
-                out[int(owner)] = max(out[int(owner)], self.rule.clamp_amplitude * float(level))
+        if isinstance(stimulus, Mapping):
+            for neuron, level in stimulus.items():
+                amplitude = self.neuron_model.stimulus_amplitude
+                index = _neuron_indices([neuron], self.connectome.n, "stimulus")[0]
+                if not np.isfinite(level):
+                    raise ValueError("stimulus levels must be finite")
+                out[index] = amplitude * float(level)
             return out
-        array = np.asarray(clamp)
+        array = np.asarray(stimulus)
         if (
             array.dtype.kind in "iu"
             and array.ndim == 1
-            and (array.shape[0] != self.wiring.n or array.max(initial=0) > 1)
+            and (array.shape[0] != self.connectome.n or array.max(initial=0) > 1)
         ):
-            out[array] = self.rule.clamp_amplitude
+            out[_neuron_indices(array, self.connectome.n, "stimulus")] = (
+                self.neuron_model.stimulus_amplitude
+            )
             return out
-        if array.shape == (self.wiring.n,):
+        if array.shape == (self.connectome.n,):
             return array.astype(float)
-        out[array.astype(np.int64)] = self.rule.clamp_amplitude
+        out[_neuron_indices(array, self.connectome.n, "stimulus")] = (
+            self.neuron_model.stimulus_amplitude
+        )
         return out
 
-    def clamp_levels(self, levels: np.ndarray) -> np.ndarray:
-        """Dense drive from per-owner levels in [0, 1], batched or not."""
-        return np.asarray(levels, float) * self.rule.clamp_amplitude
+    def stimulus_levels(self, levels: np.ndarray) -> np.ndarray:
+        """Scale dense per-neuron levels by stimulus amplitude; signed levels are allowed."""
+        levels = np.asarray(levels, float)
+        if not np.isfinite(levels).all():
+            raise ValueError("stimulus levels must be finite")
+        return levels * self.neuron_model.stimulus_amplitude
 
-    # -- settlement
+    # -- settling
 
     def settle(
         self,
-        clamp: Mapping[int, float] | Sequence[int] | np.ndarray | None = None,
+        stimulus: Mapping[int, float] | Sequence[int] | np.ndarray | None = None,
         *,
         steps: int = 60,
-        state: SettledState | None = None,
+        state: BrainState | None = None,
         mask: np.ndarray | None = None,
         trajectory: bool = False,
         nudge: Nudge | None = None,
         tolerance: float | None = None,
-    ) -> SettledState:
-        """Run the owner rule for ``steps`` steps from rest, or from ``state``, under one clamp.
+    ) -> BrainState:
+        """Run the neuron model for ``steps`` steps from rest or from ``state``, under one stimulus.
 
-        ``mask`` zeros ablated owners. The trajectory, when requested, holds
+        ``mask`` zeros ablated neurons. The trajectory, when requested, holds
         the activation after every step. With ``tolerance`` set the run stops
-        early once no owner's activation moved more than that in a step;
+        early once no neuron's activation moved more than that in a step;
         ``steps`` is then the most it will run, and the state reports how
         many steps it took. ``None`` or zero disables early stopping without
         reading a device scalar at every iteration.
         """
-        drive = self.clamp_vector(clamp)[None, :]
+        drive = self.stimulus_vector(stimulus)[None, :]
         out = self.settle_batch(
             drive,
             steps=steps,
@@ -483,26 +536,64 @@ class Settlement:
             nudge=nudge,
             tolerance=tolerance,
         )
-        return SettledState(
+        return BrainState(
             v=out.v[0],
             activation=out.activation[0],
             adaptation=out.adaptation[0],
             steps=out.steps,
             trajectory=None if out.trajectory is None else out.trajectory[:, 0, :],
-            repair=None if out.repair is None else out.repair[0],
+            activity_change=None if out.activity_change is None else out.activity_change[0],
         )
+
+    def equilibrate(
+        self,
+        drive: np.ndarray,
+        *,
+        budget: int = 512,
+        chunk: int = 32,
+        tolerance: float = 1e-5,
+        state: BrainState | None = None,
+        mask: np.ndarray | None = None,
+        nudge: Nudge | None = None,
+    ) -> Equilibrium:
+        """Continue a joint state until its equations hold or the exact step budget expires.
+
+        Unlike ``settle_batch(tolerance=...)``, this tests the potential and adaptation
+        equations, including the same mask and nudge. Checks cost one extra host transport
+        per chunk. All rows advance together; a row's small residual does not freeze it.
+        ``drive`` is dense, with one column per neuron, as in ``settle_batch``.
+        """
+        for name, value, minimum in (("budget", budget, 0), ("chunk", chunk, 1)):
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, np.integer))
+                or value < minimum
+            ):
+                raise ValueError(f"{name} must be an integer >= {minimum}")
+        if not np.isfinite(tolerance) or tolerance < 0:
+            raise ValueError("tolerance must be finite and nonnegative")
+        current = self.settle_batch(drive, steps=0, state=state, mask=mask, nudge=nudge)
+        error = self.residual(drive, current, mask=mask, nudge=nudge)
+        used = 0
+        while used < budget and not np.all(error <= tolerance):
+            current = self.settle_batch(
+                drive, steps=min(chunk, budget - used), state=current, mask=mask, nudge=nudge
+            )
+            used += current.steps
+            error = self.residual(drive, current, mask=mask, nudge=nudge)
+        return Equilibrium(current, error, used, tolerance)
 
     def settle_batch(
         self,
         drive: np.ndarray,
         *,
         steps: int = 60,
-        state: SettledState | None = None,
+        state: BrainState | None = None,
         mask: np.ndarray | None = None,
         trajectory: bool = False,
         nudge: Nudge | None = None,
         tolerance: float | None = None,
-    ) -> SettledState:
+    ) -> BrainState:
         """Settle a batch of dense drives ``(batch, n)`` at once; see ``settle``.
 
         ``mask`` has shape ``(n,)`` or ``(1, n)`` for shared ablations, or
@@ -512,8 +603,8 @@ class Settlement:
         if drive.ndim == 1:
             drive = drive[None, :]
         if drive.ndim != 2 or drive.shape[0] == 0:
-            raise ValueError("drive must have shape (batch, owners) with at least one row")
-        if not isinstance(steps, (int, np.integer)) or steps < 0:
+            raise ValueError("drive must have shape (batch, neurons) with at least one row")
+        if isinstance(steps, bool) or not isinstance(steps, (int, np.integer)) or steps < 0:
             raise ValueError("steps must be a nonnegative integer")
         if tolerance is not None and (not np.isfinite(tolerance) or tolerance < 0):
             raise ValueError("tolerance must be finite and nonnegative")
@@ -522,23 +613,28 @@ class Settlement:
         if tolerance == 0:
             tolerance = None
         batch, n = drive.shape
-        if n != self.wiring.n:
-            raise ValueError("drive must have one column per owner")
+        if n != self.connectome.n:
+            raise ValueError("drive must have one column per neuron")
+        if n == 0 or not np.isfinite(drive).all():
+            raise ValueError("drive must be finite and the brain must contain neurons")
         keep = np.ones(n) if mask is None else np.asarray(mask, float)
         if keep.shape not in ((n,), (1, n), (batch, n)):
-            raise ValueError("mask must have one entry per owner, optionally per batch row")
+            raise ValueError("mask must have one entry per neuron, optionally per batch row")
+        if not np.isfinite(keep).all() or ((keep < 0) | (keep > 1)).any():
+            raise ValueError("mask must contain finite fractions in [0, 1]")
         if nudge is not None:
             if np.asarray(nudge.mask).shape != (n,):
-                raise ValueError("nudge mask must have one entry per owner")
+                raise ValueError("nudge mask must have one entry per neuron")
             if np.asarray(nudge.target).shape not in ((n,), (1, n), (batch, n)):
-                raise ValueError("nudge target must match the drive's owners and batch size")
+                raise ValueError("nudge target must match the drive's neurons and batch size")
             if nudge.weight is not None and np.asarray(nudge.weight).shape != (batch,):
                 raise ValueError("nudge weight must have one entry per batch row")
         on_kernel = (
             state is not None
             and state.device is not None
             and self.backend in ("torch", "mlx")
-            and state.device.get("owner") is (self._torch if self.backend == "torch" else self._mlx)
+            and state.device.get("holder")
+            is (self._torch if self.backend == "torch" else self._mlx)
         )
         v: Any
         a: Any
@@ -558,16 +654,18 @@ class Settlement:
             a = np.array(state.adaptation, dtype=np.float64, copy=True, ndmin=2)
         if v is not None and (v.shape != (batch, n) or a.shape != (batch, n)):
             raise ValueError("state batch does not match the drive batch")
+        if v is not None and (not np.isfinite(v).all() or not np.isfinite(a).all()):
+            raise ValueError("warm potentials and adaptation must be finite")
         handle = None
         if self.backend in ("torch", "mlx"):
             kernel = self._torch if self.backend == "torch" else self._mlx
-            v, a, s, traj, taken, repair, handle = kernel.run(
+            v, a, s, traj, taken, activity_change, handle = kernel.run(
                 v, a, drive, keep, steps, trajectory, nudge, tolerance, state
             )
         elif self._blocks is not None and not trajectory and _FUSED:
             from .fused import fused_settle
 
-            s, taken, repair = fused_settle(
+            s, taken, activity_change = fused_settle(
                 v,
                 a,
                 drive,
@@ -575,38 +673,38 @@ class Settlement:
                 self.layout,
                 self._blocks,
                 keep,
-                self.rule,
+                self.neuron_model,
                 nudge,
                 steps,
                 tolerance,
             )
             traj = None
         else:
-            v, a, s, traj, taken, repair = self._run_numpy(
+            v, a, s, traj, taken, activity_change = self._run_numpy(
                 v, a, drive, keep, steps, trajectory, nudge, tolerance
             )
-        return SettledState(
+        return BrainState(
             v=v,
             activation=s,
             adaptation=a,
             steps=taken,
             trajectory=traj,
-            repair=repair,
+            activity_change=activity_change,
             device=handle,
         )
 
     def contrast_on_device(
-        self, plus: SettledState, minus: SettledState
+        self, plus: BrainState, minus: BrainState
     ) -> tuple[np.ndarray, np.ndarray] | None:
-        """``sum_b s+ s+ - s- s-`` per overlap and ``sum_b (s+ - s-)`` per owner, on the device.
+        """``sum_b s+ s+ - s- s-`` per synapse and ``sum_b (s+ - s-)`` per neuron, on the device.
 
-        Returns ``None`` when either state does not carry this engine's device
+        Returns ``None`` when either state does not carry this brain's device
         handle; the learner then reads the activations on the host.
         """
         kernel = self._torch if self.backend == "torch" else self._mlx
-        if kernel is None or plus.device is None or minus.device is None:
+        if kernel is None or kernel.layout is None or plus.device is None or minus.device is None:
             return None
-        if plus.device.get("kernel") != self.backend or minus.device.get("kernel") != self.backend:
+        if plus.device.get("holder") is not kernel or minus.device.get("holder") is not kernel:
             return None
         out: tuple[np.ndarray, np.ndarray] = kernel.contrast(plus.device["s"], minus.device["s"])
         return out
@@ -614,18 +712,18 @@ class Settlement:
     def residual(
         self,
         drive: np.ndarray,
-        state: SettledState,
+        state: BrainState,
         *,
         nudge: Nudge | None = None,
         mask: np.ndarray | None = None,
     ) -> np.ndarray:
         """Maximum absolute fixed-point equation residual per row, without settling.
 
-        For unmasked owners the potential equation is ``inbox + drive + bias
+        For unmasked neurons the potential equation is ``synaptic input + drive + bias
         - adaptation_strength * a + nudge - v = 0``. When adaptation is enabled,
         ``activation(v) - a = 0`` must hold too. Neither error is reduced by a
         small integration step or a long adaptation time constant. A mask uses
-        the actual potential projection of ``settle_batch``; ablated owners
+        the actual potential projection of ``settle_batch``; ablated neurons
         must have zero potential, and their adaptation must decay to zero.
 
         A small residual certifies these equations at this state, not stability,
@@ -638,47 +736,49 @@ class Settlement:
         d = np.asarray(drive, dtype=float)
         if d.ndim == 1:
             d = d[None, :]
-        if d.ndim != 2 or d.shape[1] != self.wiring.n:
-            raise ValueError("drive must have one column per owner")
+        if d.ndim != 2 or d.shape[1] != self.connectome.n:
+            raise ValueError("drive must have one column per neuron")
         v = np.atleast_2d(state.v)
         a = np.atleast_2d(state.adaptation)
         if v.shape != d.shape or a.shape != d.shape:
             raise ValueError("state batch does not match the drive batch")
-        keep = np.ones(self.wiring.n) if mask is None else np.asarray(mask, dtype=float)
-        if keep.shape not in ((self.wiring.n,), (1, self.wiring.n), d.shape):
-            raise ValueError("mask must have one entry per owner, optionally per batch row")
-        s = self.rule.activation(v) * keep
+        keep = np.ones(self.connectome.n) if mask is None else np.asarray(mask, dtype=float)
+        if keep.shape not in ((self.connectome.n,), (1, self.connectome.n), d.shape):
+            raise ValueError("mask must have one entry per neuron, optionally per batch row")
+        s = self.neuron_model.activation(v) * keep
         blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
-        error = self._inbox(s, blocks) + d + self.bias - v
-        adapt = self.rule.adaptation
+        error = self._synaptic_input(s, blocks) + d + self.bias - v
+        adapt = self.neuron_model.adaptation
         if adapt is not None:
             error -= adapt.strength * a
         if nudge is not None:
             error += nudge.drive(s)
         # (projected_next_v - v) / dt, written without cancellation for keep=1.
-        error = keep * error + (keep - 1.0) * v / self.rule.dt
+        error = keep * error + (keep - 1.0) * v / self.neuron_model.dt
         result = np.max(np.abs(error), axis=1, initial=0.0)
         if adapt is not None:
             result = np.maximum(result, np.max(np.abs(s - a), axis=1, initial=0.0))
         return np.where(np.isfinite(result), result, np.inf)
 
-    def _inbox(self, s: np.ndarray, blocks: BlockTransport | None = None) -> np.ndarray:
+    def _synaptic_input(self, s: np.ndarray, blocks: BlockTransport | None = None) -> np.ndarray:
         """Transport through fitting blocks, optional CSR, or the NumPy segmented sum."""
         if blocks is not None:
-            return blocks.inbox(s)
-        if self.wiring.edges:
+            return blocks.synaptic_input(s)
+        if self.connectome.synapses:
             weights = self._weights
             if self._csr is None or self._csr[0] is not weights:
                 from .sparse import transport
 
-                self._csr = weights, transport(self.wiring, weights)
+                self._csr = weights, transport(self.connectome, weights)
             if self._csr[1] is not None:
                 return np.asarray(self._csr[1].dot(s.T).T)
-        inbox = np.zeros_like(s)
-        if self.wiring.edges:
-            messages = s[:, self.wiring.pre] * self._weights
-            inbox[:, self._owners_with_inbox] = np.add.reduceat(messages, self._starts, axis=1)
-        return inbox
+        synaptic_input = np.zeros_like(s)
+        if self.connectome.synapses:
+            messages = s[:, self.connectome.pre] * self._weights
+            synaptic_input[:, self._neurons_with_synaptic_input] = np.add.reduceat(
+                messages, self._starts, axis=1
+            )
+        return synaptic_input
 
     def _run_numpy(
         self,
@@ -691,31 +791,31 @@ class Settlement:
         nudge: Nudge | None,
         tolerance: float | None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
-        rule = self.rule
-        adapt = rule.adaptation
+        neuron_model = self.neuron_model
+        adapt = neuron_model.adaptation
         traj = np.zeros((steps, *v.shape)) if want else None
         masked = bool((keep != 1.0).any())
-        standing = drive + self.bias  # the part of every owner's drive that does not move
+        standing = drive + self.bias  # the part of every neuron's drive that does not move
         blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
-        s = rule.activation(v)
+        s = neuron_model.activation(v)
         if masked:
             s *= keep
         taken = 0
-        repair = np.zeros(len(v))
+        activity_change = np.zeros(len(v))
         for t in range(steps):
-            total = self._inbox(s, blocks)
+            total = self._synaptic_input(s, blocks)
             total += standing
             if adapt is not None:
                 total -= adapt.strength * a
             if nudge is not None:
                 total += nudge.drive(s)
             total -= v
-            total *= rule.dt
-            v = v + total  # owner-local repair: v <- v + dt (-v + total)
+            total *= neuron_model.dt
+            v = v + total  # neuron-local update: v <- v + dt (-v + total)
             if masked:
                 v *= keep
             previous = s
-            s = rule.activation(v)
+            s = neuron_model.activation(v)
             if masked:
                 s *= keep
             if adapt is not None:
@@ -724,21 +824,21 @@ class Settlement:
                 traj[t] = s
             taken = t + 1
             movement = np.abs(s - previous)
-            repair += movement.sum(axis=1)
+            activity_change += movement.sum(axis=1)
             if tolerance is not None and float(movement.max()) < tolerance:
                 break
         if traj is not None:
             traj = traj[:taken]
-        return v, a, s, traj, taken, repair
+        return v, a, s, traj, taken, activity_change
 
     def readings(
-        self, state: SettledState, names: Sequence[str], i: int = 0
+        self, state: BrainState, names: Sequence[str], i: int = 0
     ) -> dict[str, dict[str, float]]:
         """Mean and fraction-active of named sets, for batch row ``i``."""
         return {
             name: {
-                "mean": state.mean(self.wiring.sets[name], i),
-                "fraction": state.fraction_active(self.wiring.sets[name], i=i),
+                "mean": state.mean(self.connectome.populations[name], i),
+                "fraction": state.fraction_active(self.connectome.populations[name], i=i),
             }
             for name in names
         }
@@ -748,8 +848,8 @@ class Settlement:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "wiring": self.wiring.summary(),
-            "rule": self.rule.to_dict(),
+            "connectome": self.connectome.summary(),
+            "neuron_model": self.neuron_model.to_dict(),
             "backend": self.backend,
             "transport": "dense" if self._is_dense() else "segmented",
             "sparse_kernel": (
@@ -760,22 +860,22 @@ class Settlement:
                 else "numpy_segmented"
             ),
             "layout": self.layout.to_dict(),
-            "edge_scale_changed": int((self.edge_scale != self.wiring.sign).sum()),
+            "efficacy_changed": int((self.efficacy != self.connectome.sign).sum()),
             "log_gain_nonzero": int((self.log_gain != 0).sum()),
             "bias_nonzero": int((self.bias != 0).sum()),
         }
 
 
 class _TorchKernel:
-    """Gather-scatter settlement on a torch device; float32 on MPS, float64 elsewhere."""
+    """Gather-scatter settling on a torch device; float32 on MPS, float64 elsewhere."""
 
     def __init__(
         self,
-        wiring: Wiring,
-        edge_scale: np.ndarray,
+        connectome: Connectome,
+        efficacy: np.ndarray,
         gain_pre: np.ndarray,
         bias: np.ndarray,
-        rule: GradedRule,
+        neuron_model: NeuronModel,
         device: str | None,
         layout: Layout | None = None,
         precision: str | None = None,
@@ -808,10 +908,10 @@ class _TorchKernel:
         self.gain_pre = torch.from_numpy(np.ascontiguousarray(gain_pre)).to(
             self.device, self.param_dtype
         )
-        self.rule = rule
-        self.n = wiring.n
+        self.neuron_model = neuron_model
+        self.n = connectome.n
         self.layout = layout
-        self._wiring = wiring  # for the per-row contrast's edge index, made on first use
+        self._connectome = connectome  # for the per-row contrast's edge index, made on first use
         self._row_index: Any = None
         self.blocks: list[Any] = []
         self.index: Any = None  # the layout's edge index on the device, shared across rebuilds
@@ -823,11 +923,11 @@ class _TorchKernel:
                 a0, a1, b0, b1 = layout.bounds(k)
                 block = self.flat[int(layout.offset[k]) : int(layout.offset[k + 1])]
                 self.blocks.append(block.view(a1 - a0, b1 - b0))
-        else:  # per-overlap arrays serve only the gather-scatter path
-            self.pre = torch.from_numpy(wiring.pre).to(self.device)
-            self.post = torch.from_numpy(wiring.post).to(self.device)
+        else:  # per-synapse arrays serve only the gather-scatter path
+            self.pre = torch.from_numpy(connectome.pre).to(self.device)
+            self.post = torch.from_numpy(connectome.post).to(self.device)
         self.set_parameters(
-            torch.from_numpy(np.ascontiguousarray(edge_scale)).to(self.device, self.param_dtype),
+            torch.from_numpy(np.ascontiguousarray(efficacy)).to(self.device, self.param_dtype),
             torch.from_numpy(np.ascontiguousarray(bias)).to(self.device, self.param_dtype),
         )
 
@@ -836,8 +936,11 @@ class _TorchKernel:
         self.scale = scale
         self.bias_param = bias
         weights = (self.gain_pre * scale).to(self.dtype)
-        if self.layout is not None:  # every entry with an overlap is overwritten; the rest stay 0
-            self.flat[self.index] = weights
+        if self.layout is not None:
+            if self.layout.parallel_synapses:
+                self.flat.zero_().index_add_(0, self.index, weights)
+            else:
+                self.flat[self.index] = weights
         else:
             self.w = weights
         self.bias = bias.to(self.dtype)
@@ -856,7 +959,7 @@ class _TorchKernel:
             held[key] = self.torch.from_numpy(layout.edge_index).to(self.device)
         return held[key]
 
-    def _inbox(self, s: Any, previous: Any, cache: list[Any]) -> Any:
+    def _synaptic_input(self, s: Any, previous: Any, cache: list[Any]) -> Any:
         """The block transport on the device, reusing the products of still ranges."""
         torch, lay = self.torch, self.layout
         assert lay is not None
@@ -874,18 +977,20 @@ class _TorchKernel:
         return out
 
     def _activation(self, v: Any) -> Any:
-        torch, rule = self.torch, self.rule
+        torch, neuron_model = self.torch, self.neuron_model
         if self._rest is None:  # one scalar on the device, made once
-            self._rest = torch.tensor(rule.rest_emission, dtype=self.dtype, device=self.device)
+            self._rest = torch.tensor(
+                neuron_model.rest_emission, dtype=self.dtype, device=self.device
+            )
         rest = self._rest
-        r = torch.sigmoid(rule.slope * (v - rule.threshold)) - rest
+        r = torch.sigmoid(neuron_model.slope * (v - neuron_model.threshold)) - rest
         s = torch.relu(r) / (1.0 - rest)
-        if rule.leak:
-            s = s + rule.leak * torch.clamp(r, max=0.0) / rest
+        if neuron_model.leak:
+            s = s + neuron_model.leak * torch.clamp(r, max=0.0) / rest
         return s
 
     def contrast_tensors(self, s_plus: Any, s_minus: Any) -> tuple[Any, Any]:
-        """The block Gram contrast on the device, per overlap and per owner, as tensors."""
+        """The block Gram contrast on the device, per synapse and per neuron, as tensors."""
         torch, lay = self.torch, self.layout
         assert lay is not None
         flat = torch.zeros(lay.size, dtype=self.dtype, device=self.device)
@@ -898,28 +1003,28 @@ class _TorchKernel:
                 block = a_plus.T @ s_plus[:, b0:b1] - a_minus.T @ s_minus[:, b0:b1]
             flat[lay.offset[k] : lay.offset[k + 1]] = block.reshape(-1)
         edges = flat[self.index].to(self.param_dtype)
-        owners = (s_plus - s_minus).sum(dim=0).to(self.param_dtype)
-        return edges, owners
+        neurons = (s_plus - s_minus).sum(dim=0).to(self.param_dtype)
+        return edges, neurons
 
     def contrast_rows(self, s_plus: Any, s_minus: Any) -> tuple[Any, Any]:
-        """The contrast per row, ``(batch, edges)`` and ``(batch, owners)``, as tensors: each
+        """The contrast per row, ``(batch, edges)`` and ``(batch, neurons)``, as tensors: each
         stream's own product of the two phases, for an eligibility trace kept per stream."""
         torch = self.torch
         if self._row_index is None:
             self._row_index = (
-                torch.from_numpy(self._wiring.pre).to(self.device),
-                torch.from_numpy(self._wiring.post).to(self.device),
+                torch.from_numpy(self._connectome.pre).to(self.device),
+                torch.from_numpy(self._connectome.post).to(self.device),
             )
         pre, post = self._row_index
         edges = s_plus[:, pre] * s_plus[:, post] - s_minus[:, pre] * s_minus[:, post]
         edges = edges.to(self.param_dtype)
-        owners = (s_plus - s_minus).to(self.param_dtype)
-        return edges, owners
+        neurons = (s_plus - s_minus).to(self.param_dtype)
+        return edges, neurons
 
     def contrast(self, s_plus: Any, s_minus: Any) -> tuple[np.ndarray, np.ndarray]:
-        """The block Gram contrast on the device; only the per-overlap result comes back."""
-        edges, owners = self.contrast_tensors(s_plus, s_minus)
-        return edges.cpu().double().numpy(), owners.cpu().double().numpy()
+        """The block Gram contrast on the device; only the per-synapse result comes back."""
+        edges, neurons = self.contrast_tensors(s_plus, s_minus)
+        return edges.cpu().double().numpy(), neurons.cpu().double().numpy()
 
     def run(
         self,
@@ -931,9 +1036,9 @@ class _TorchKernel:
         want: bool,
         nudge: Nudge | None,
         tolerance: float | None = None,
-        state: SettledState | None = None,
+        state: BrainState | None = None,
     ) -> tuple[Any, Any, Any, np.ndarray | None, int, np.ndarray, Any]:
-        torch, rule = self.torch, self.rule
+        torch, neuron_model = self.torch, self.neuron_model
 
         def to(x: np.ndarray) -> Any:  # no host copy when already contiguous float64
             y = np.ascontiguousarray(x, dtype=float)
@@ -942,13 +1047,13 @@ class _TorchKernel:
             return torch.from_numpy(y).to(self.device, self.dtype)
 
         handle = state.device if state is not None and state.device is not None else None
-        if handle is not None and handle.get("owner") is self:
+        if handle is not None and handle.get("holder") is self:
             v, a = handle["v"].clone(), handle["a"].clone()  # the state never left the device
         else:
             v, a = to(v0), to(a0)
         d, k = to(drive), to(keep)
         batch = v.shape[0]
-        adapt = rule.adaptation
+        adapt = neuron_model.adaptation
         target = mask = weight = None
         groups: list[Any] = []
         if nudge is not None:
@@ -961,24 +1066,24 @@ class _TorchKernel:
                 weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
         traj = []
         taken = 0
-        repair = torch.zeros(batch, dtype=self.dtype, device=self.device)
+        activity_change = torch.zeros(batch, dtype=self.dtype, device=self.device)
         cache: list[Any] = [None] * (0 if self.layout is None else self.layout.pairs)
         previous = None
         with torch.no_grad():
             s = self._activation(v) * k
             for t in range(steps):
                 if self.layout is not None:
-                    inbox = self._inbox(s, previous, cache)
+                    synaptic_input = self._synaptic_input(s, previous, cache)
                 else:
-                    inbox = torch.zeros(batch, self.n, dtype=self.dtype, device=self.device)
-                    inbox = inbox.index_add_(1, self.post, s[:, self.pre] * self.w)
-                total = inbox + d + self.bias
+                    zeros = torch.zeros(batch, self.n, dtype=self.dtype, device=self.device)
+                    synaptic_input = zeros.index_add_(1, self.post, s[:, self.pre] * self.w)
+                total = synaptic_input + d + self.bias
                 if adapt is not None:
                     total = total - adapt.strength * a
                 if nudge is not None:
                     if nudge.softmax_temperature is None:
                         push = nudge.beta * (target - s) * mask
-                    else:  # one softmax per group of competing owners
+                    else:  # one softmax per group of competing neurons
                         assert target is not None
                         push = torch.zeros_like(s)
                         for members in groups:
@@ -987,7 +1092,7 @@ class _TorchKernel:
                     if weight is not None:
                         push = push * weight
                     total = total + push
-                v = (v + rule.dt * (-v + total)) * k
+                v = (v + neuron_model.dt * (-v + total)) * k
                 previous = s
                 s = self._activation(v) * k
                 if adapt is not None:
@@ -996,7 +1101,7 @@ class _TorchKernel:
                     traj.append(s.detach().cpu().double().numpy())
                 taken = t + 1
                 movement = (s - previous).abs()
-                repair = repair + movement.sum(dim=1)
+                activity_change = activity_change + movement.sum(dim=1)
                 if tolerance is not None and float(movement.max()) < tolerance:
                     break
         tensors = {"v": v, "a": a, "s": s}
@@ -1006,35 +1111,35 @@ class _TorchKernel:
 
         # fetch closes over the tensors, never over the handle: a cycle there would hold the
         # device memory of every settled state until a garbage-collection pass
-        held = {"kernel": self.backend_name, "owner": self, "fetch": fetch, **tensors}
+        held = {"kernel": self.backend_name, "holder": self, "fetch": fetch, **tensors}
         return (
             None,
             None,
             None,
             (np.stack(traj) if traj else np.empty((0, batch, self.n))) if want else None,
             taken,
-            repair.cpu().double().numpy(),
+            activity_change.cpu().double().numpy(),
             held,
         )
 
 
 class _MlxKernel:
-    """The block settlement on Apple silicon through MLX: float32, unified memory, lazy graphs."""
+    """Block settling on Apple silicon through MLX: float32, unified memory, lazy graphs."""
 
     def __init__(
         self,
-        wiring: Wiring,
+        connectome: Connectome,
         weights: np.ndarray,
         bias: np.ndarray,
-        rule: GradedRule,
+        neuron_model: NeuronModel,
         layout: Layout,
     ) -> None:
         import mlx.core as mx
 
         self.mx = mx
         self.backend_name = "mlx"
-        self.rule = rule
-        self.n = wiring.n
+        self.neuron_model = neuron_model
+        self.n = connectome.n
         self.layout = layout
         self.bias = mx.array(bias.astype(np.float32))
         flat = layout.flat(weights)
@@ -1048,15 +1153,15 @@ class _MlxKernel:
         self.edge_index = mx.array(layout.edge_index)
 
     def _activation(self, v: Any) -> Any:
-        mx, rule = self.mx, self.rule
-        rest = rule.rest_emission
-        r = mx.sigmoid(rule.slope * (v - rule.threshold)) - rest
+        mx, neuron_model = self.mx, self.neuron_model
+        rest = neuron_model.rest_emission
+        r = mx.sigmoid(neuron_model.slope * (v - neuron_model.threshold)) - rest
         s = mx.maximum(r, 0.0) / (1.0 - rest)
-        if rule.leak:
-            s = s + rule.leak * mx.minimum(r, 0.0) / rest
+        if neuron_model.leak:
+            s = s + neuron_model.leak * mx.minimum(r, 0.0) / rest
         return s
 
-    def _inbox(self, s: Any, previous: Any, cache: list[Any]) -> Any:
+    def _synaptic_input(self, s: Any, previous: Any, cache: list[Any]) -> Any:
         mx, lay = self.mx, self.layout
         moved = [True] * lay.ranges
         if previous is not None:
@@ -1077,7 +1182,7 @@ class _MlxKernel:
         return mx.concatenate(parts, axis=1)
 
     def contrast(self, s_plus: Any, s_minus: Any) -> tuple[np.ndarray, np.ndarray]:
-        """The block Gram contrast on the device; only the per-overlap result comes back."""
+        """The block Gram contrast on the device; only the per-synapse result comes back."""
         mx, lay = self.mx, self.layout
         pieces = []
         for k in range(lay.pairs):
@@ -1090,8 +1195,8 @@ class _MlxKernel:
             pieces.append(block.reshape(-1))
         flat = mx.concatenate(pieces) if pieces else mx.zeros((0,), dtype=mx.float32)
         edges = np.array(flat[self.edge_index], dtype=np.float64)
-        owners = np.array((s_plus - s_minus).sum(axis=0), dtype=np.float64)
-        return edges, owners
+        neurons = np.array((s_plus - s_minus).sum(axis=0), dtype=np.float64)
+        return edges, neurons
 
     def run(
         self,
@@ -1103,22 +1208,22 @@ class _MlxKernel:
         want: bool,
         nudge: Nudge | None,
         tolerance: float | None = None,
-        state: SettledState | None = None,
+        state: BrainState | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray, Any]:
-        mx, rule = self.mx, self.rule
+        mx, neuron_model = self.mx, self.neuron_model
 
         def to(x: np.ndarray) -> Any:
             return mx.array(np.asarray(x, dtype=np.float32))
 
         handle = state.device if state is not None and state.device is not None else None
-        if handle is not None and handle.get("owner") is self:
+        if handle is not None and handle.get("holder") is self:
             v, a = handle["v"], handle["a"]
         else:
             v, a = to(v0), to(a0)
         d, k = to(drive), to(keep)
         batch = v.shape[0]
         masked = bool((keep != 1.0).any())
-        adapt = rule.adaptation
+        adapt = neuron_model.adaptation
         target = mask = weight = None
         groups: list[Any] = []
         if nudge is not None:
@@ -1129,7 +1234,7 @@ class _MlxKernel:
                 weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
         traj = []
         taken = 0
-        repair = mx.zeros((batch,), dtype=mx.float32)
+        activity_change = mx.zeros((batch,), dtype=mx.float32)
         cache: list[Any] = [None] * self.layout.pairs
         previous = None
         s = self._activation(v)
@@ -1137,15 +1242,15 @@ class _MlxKernel:
             s = s * k
         standing = d + self.bias
         for t in range(steps):
-            inbox = self._inbox(s, previous, cache)
-            total = inbox + standing
+            synaptic_input = self._synaptic_input(s, previous, cache)
+            total = synaptic_input + standing
             if adapt is not None:
                 total = total - adapt.strength * a
             if nudge is not None:
                 assert target is not None and mask is not None
                 if nudge.softmax_temperature is None:
                     push = nudge.beta * (target - s) * mask
-                else:  # one softmax per group of competing owners
+                else:  # one softmax per group of competing neurons
                     push = mx.zeros_like(s)
                     for members in groups:
                         p = mx.softmax(s[:, members] / nudge.softmax_temperature, axis=1)
@@ -1153,7 +1258,7 @@ class _MlxKernel:
                 if weight is not None:
                     push = push * weight
                 total = total + push
-            v = v + rule.dt * (-v + total)
+            v = v + neuron_model.dt * (-v + total)
             if masked:
                 v = v * k
             previous = s
@@ -1163,8 +1268,8 @@ class _MlxKernel:
             if adapt is not None:
                 a = a + (s - a) / adapt.tau_steps
             movement = mx.abs(s - previous)
-            repair = repair + movement.sum(axis=1)
-            mx.eval(v, s, a, repair)  # one graph per step; the tolerance needs the number
+            activity_change = activity_change + movement.sum(axis=1)
+            mx.eval(v, s, a, activity_change)  # one graph per step; the tolerance needs the number
             if want:
                 traj.append(np.array(s, dtype=np.float64))
             taken = t + 1
@@ -1176,6 +1281,6 @@ class _MlxKernel:
             np.array(s, dtype=np.float64),
             (np.stack(traj) if traj else np.empty((0, batch, self.n))) if want else None,
             taken,
-            np.array(repair, dtype=np.float64),
-            {"kernel": "mlx", "owner": self, "v": v, "a": a, "s": s},
+            np.array(activity_change, dtype=np.float64),
+            {"kernel": "mlx", "holder": self, "v": v, "a": a, "s": s},
         )

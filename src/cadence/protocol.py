@@ -1,12 +1,12 @@
-"""Declared tests: named sets, stimuli, rows with predicates, and a shuffled control.
+"""Declared tests: named populations, stimuli, rows with predicates, and a shuffled control.
 
-A protocol is data. It says which owners a stimulus clamps, which owners a
+A protocol is data. It says which neurons a stimulus drives, which neurons a
 readout reads, which few facts a model may be shown, and which facts are
 held out and scored. Predicates carry their preconditions, so a dead net
 cannot pass "no response after ablation" vacuously. The control is the
-same protocol on a wiring whose postsynaptic endpoints were permuted with
-every count and sign kept: if the wiring predicts the held-out facts and
-the permuted wiring does not, the prediction came from the wiring.
+same protocol on a connectome whose postsynaptic endpoints were permuted with
+every count and sign kept: if the connectome predicts the held-out facts and
+the permuted connectome does not, the prediction came from the connectome.
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from typing import Any
 
 import numpy as np
 
-from .settle import Settlement
-from .wiring import Wiring
+from .brain import Brain
+from .connectome import Connectome
 
 __all__ = ["Row", "Protocol", "evaluate_predicate", "shuffled", "select_gain", "PREDICATES"]
 
@@ -99,7 +99,7 @@ class Row:
 
 @dataclass
 class Protocol:
-    stimuli: dict[str, tuple[str, ...]]  # stimulus name -> set names clamped together
+    stimuli: dict[str, tuple[str, ...]]  # stimulus name -> set names stimulated together
     rows: Sequence[Row]
     training: Sequence[
         tuple[str, str, str]
@@ -107,29 +107,31 @@ class Protocol:
     levels: Levels = field(default_factory=Levels)
     steps: int = 60
 
-    def clamp_for(self, wiring: Wiring, stimulus: str) -> tuple[int, ...]:
-        return wiring.members(*self.stimuli[stimulus])
+    def neurons_for(self, connectome: Connectome, stimulus: str) -> tuple[int, ...]:
+        return connectome.members(*self.stimuli[stimulus])
 
-    def score(self, engine: Settlement) -> dict[str, Any]:
+    def score(self, brain: Brain) -> dict[str, Any]:
         """Settle every needed (stimulus, ablation) pair once and score training facts and rows."""
-        wiring = engine.wiring
+        connectome = brain.connectome
         cache: dict[tuple[str, tuple[str, ...]], dict[str, dict[str, float]]] = {}
         readouts = sorted(
             {r.readout for r in self.rows}
             | {t[1] for t in self.training}
-            | {r.relative_to for r in self.rows if r.relative_to in wiring.sets}
+            | {r.relative_to for r in self.rows if r.relative_to in connectome.populations}
         )
 
         def readings(stimulus: str, ablate: tuple[str, ...] = ()) -> dict[str, dict[str, float]]:
             key = (stimulus, ablate)
             if key not in cache:
-                mask = np.ones(wiring.n)
+                mask = np.ones(connectome.n)
                 if ablate:
-                    mask[list(wiring.members(*ablate))] = 0.0
-                state = engine.settle(
-                    list(self.clamp_for(wiring, stimulus)), steps=self.steps, mask=mask
+                    mask[list(connectome.members(*ablate))] = 0.0
+                state = brain.settle(
+                    {i: 1.0 for i in self.neurons_for(connectome, stimulus)},
+                    steps=self.steps,
+                    mask=mask,
                 )
-                out = engine.readings(state, readouts)
+                out = brain.readings(state, readouts)
                 out["_all"] = {
                     "mean": float(state.activation.mean()),
                     "fraction": state.fraction_active(),
@@ -152,11 +154,12 @@ class Protocol:
         rows: list[dict[str, Any]] = []
         for row in self.rows:
             value = readings(row.stimulus, row.ablate)[row.readout]
-            if row.predicate in ("exceeds", "lateralized") and row.relative_to in wiring.sets:
+            relative = row.relative_to in connectome.populations
+            if row.predicate in ("exceeds", "lateralized") and relative:
                 reference = readings(row.stimulus, row.ablate)[row.relative_to]
             elif row.relative_to in self.stimuli:
                 reference = readings(row.relative_to)[row.readout]
-            elif row.relative_to in wiring.sets:
+            elif row.relative_to in connectome.populations:
                 reference = readings(row.stimulus, row.ablate)[row.relative_to]
             elif row.relative_to:
                 raise KeyError(f"unknown relative_to: {row.relative_to!r}")
@@ -210,23 +213,23 @@ class Protocol:
         }
 
 
-def shuffled(wiring: Wiring, seed: int, *, keep: np.ndarray | None = None) -> Wiring:
-    """Permute postsynaptic endpoints; counts, signs, out-degrees, and named sets are kept.
+def shuffled(connectome: Connectome, seed: int, *, keep: np.ndarray | None = None) -> Connectome:
+    """Permute postsynaptic endpoints; counts, signs, out-degrees, and named populations are kept.
 
-    ``keep`` is a boolean mask over overlaps that are left untouched, for
+    ``keep`` is a boolean mask over synapses that are left untouched, for
     example the bridges between two joined datasets.
     """
     rng = np.random.default_rng(seed)
-    post = wiring.post.copy()
-    movable = np.ones(wiring.edges, dtype=bool) if keep is None else ~np.asarray(keep, bool)
-    if movable.shape != (wiring.edges,):
-        raise ValueError("keep must have one entry per overlap")
+    post = connectome.post.copy()
+    movable = np.ones(connectome.synapses, dtype=bool) if keep is None else ~np.asarray(keep, bool)
+    if movable.shape != (connectome.synapses,):
+        raise ValueError("keep must have one entry per synapse")
     rows = np.flatnonzero(movable)
     post[rows] = post[rows][rng.permutation(len(rows))]
-    # A permutation can land an overlap on its own owner; swap those endpoints with random
+    # A permutation can land a synapse on its own neuron; swap those endpoints with random
     # movable rows until none is left, which keeps the multiset of endpoints intact.
     for _ in range(100):
-        clash = rows[post[rows] == wiring.pre[rows]]
+        clash = rows[post[rows] == connectome.pre[rows]]
         if len(clash) == 0:
             break
         partner = rng.choice(rows, size=len(clash))
@@ -236,19 +239,19 @@ def shuffled(wiring: Wiring, seed: int, *, keep: np.ndarray | None = None) -> Wi
             post[a], post[b] = post[b], post[a]
     else:
         raise ValueError("could not shuffle without autapses")
-    return Wiring(
-        wiring.n,
-        wiring.pre,
+    return Connectome(
+        connectome.n,
+        connectome.pre,
         post,
-        wiring.count,
-        wiring.sign,
-        wiring.sets,
-        f"{wiring.label}:shuffled:{seed}",
+        connectome.count,
+        connectome.sign,
+        connectome.populations,
+        f"{connectome.label}:shuffled:{seed}",
     )
 
 
 def select_gain(
-    make_engine: Callable[[float], Settlement],
+    make_brain: Callable[[float], Brain],
     protocol: Protocol,
     grid: Sequence[float],
     *,
@@ -257,8 +260,8 @@ def select_gain(
     """One global gain from the training facts alone: most facts passed, smallest gain on ties.
 
     A gain is admissible only while the net stays sparse under every
-    training stimulus (at most ``sparsity_cap`` of owners active). Runaway
-    activity lights every readout and is not a fact about the wiring.
+    training stimulus (at most ``sparsity_cap`` of neurons active). Runaway
+    activity lights every readout and is not a fact about the connectome.
     Raises ``ValueError`` for an empty grid or when no gain is admissible.
     """
     if len(grid) == 0:
@@ -266,16 +269,17 @@ def select_gain(
     table = []
     best: tuple[int, float] | None = None
     for gain in grid:
-        engine = make_engine(gain)
-        wiring = engine.wiring
+        brain = make_brain(gain)
+        connectome = brain.connectome
         passed = 0
         fraction = 0.0
         detail = {}
         for stimulus, readout, predicate in protocol.training:
-            state = engine.settle(list(protocol.clamp_for(wiring, stimulus)), steps=protocol.steps)
+            neurons = list(protocol.neurons_for(connectome, stimulus))
+            state = brain.settle({i: 1.0 for i in neurons}, steps=protocol.steps)
             value = {
-                "mean": state.mean(wiring.sets[readout]),
-                "fraction": state.fraction_active(wiring.sets[readout]),
+                "mean": state.mean(connectome.populations[readout]),
+                "fraction": state.fraction_active(connectome.populations[readout]),
             }
             passed += int(evaluate_predicate(predicate, value, value, protocol.levels))
             fraction = max(fraction, state.fraction_active())

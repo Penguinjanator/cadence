@@ -1,18 +1,18 @@
-"""Owner rules: what one owner does with what arrives over its overlaps.
+"""The neuron model: what one neuron does with what arrives over its synapses.
 
-The graded rule is the one every connectome lane so far has used. An owner
+The graded rate model is the one every connectome lane uses. A neuron
 holds a potential ``v`` and publishes an activation ``s(v)``; each step it
-moves ``v`` toward the sum of its inbox, its clamp, and its bias:
+moves ``v`` toward the sum of its synaptic input, its stimulus, and its bias:
 
-    v <- v + dt * ( -v + inbox + clamp + bias - strength * a )
-    inbox = sum over inbound overlaps of  gain * count * sign * exp(log_gain[pre]) * s[pre]
+    v <- v + dt * ( -v + synaptic input + stimulus + bias - strength * a )
+    synaptic input = sum over inbound synapses of  gain * count * sign * exp(log_gain[pre]) * s[pre]
     s(v) = rectified sigmoid, exactly zero at rest
 
-With ``leak`` above zero an owner below rest publishes a small negative
-activation, ``-leak`` at most, so the rule that learns can still tell a
-silent owner from a dead one; rest stays an exact zero. Connectome lanes
-leave it at zero. ``a`` is an optional adaptation variable, one per owner, following its own
-activation with a slow time constant. It is what lets a wiring with mutual
+With ``leak`` above zero a neuron below rest publishes a small negative
+activation, ``-leak`` at most, so the learning rule can still tell a
+silent neuron from a dead one; rest stays an exact zero. Connectome lanes
+leave it at zero. ``a`` is an optional adaptation variable, one per neuron, following its own
+activation with a slow time constant. It is what lets a connectome with mutual
 inhibition produce rhythm instead of a fixed point. It is off by default.
 """
 
@@ -23,14 +23,14 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["Adaptation", "GradedRule"]
+__all__ = ["Adaptation", "NeuronModel"]
 
 
 @dataclass(frozen=True, slots=True)
 class Adaptation:
     """Spike-frequency adaptation: ``a <- a + (s - a) / tau_steps``; drive loses ``strength * a``.
 
-    Owner-local: an owner reads only its own ``a``.
+    Neuron-local: a neuron reads only its own ``a``.
     """
 
     tau_steps: float = 50.0
@@ -44,18 +44,18 @@ class Adaptation:
 
 
 @dataclass(frozen=True, slots=True)
-class GradedRule:
+class NeuronModel:
     dt: float = 0.2
     slope: float = 4.0
     threshold: float = 1.5
     gain: float = 0.02
-    clamp_amplitude: float = 3.0
+    stimulus_amplitude: float = 3.0
     adaptation: Adaptation | None = None
     leak: float = 0.0
 
     def __post_init__(self) -> None:
         if not np.isfinite(
-            [self.dt, self.slope, self.threshold, self.gain, self.clamp_amplitude, self.leak]
+            [self.dt, self.slope, self.threshold, self.gain, self.stimulus_amplitude, self.leak]
         ).all():
             raise ValueError("rule parameters must be finite")
         if not 0 < self.dt <= 1:
@@ -89,13 +89,13 @@ class GradedRule:
         return np.where(r > 0.0, r * (1.0 / (1.0 - rest)), r * (self.leak / rest))
 
     def slope_at(self, v: np.ndarray) -> np.ndarray:
-        """Derivative of the activation, for reports on how responsive owners are."""
+        """Derivative of the activation, for reports on how responsive neurons are."""
         rest = self.rest_emission
         sig = 1.0 / (1.0 + np.exp(-self.slope * (v - self.threshold)))
         d = self.slope * sig * (1.0 - sig)
         return np.where(sig > rest, d / (1.0 - rest), self.leak * d / rest)
 
-    def replace(self, **changes: Any) -> GradedRule:
+    def replace(self, **changes: Any) -> NeuronModel:
         return replace(self, **changes)
 
     def to_dict(self) -> dict[str, Any]:

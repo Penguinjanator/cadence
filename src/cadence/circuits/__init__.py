@@ -1,6 +1,6 @@
-"""Optional task compositions: motor wiring, bounded futures and self-reading control.
+"""Circuits: a reflex arc, bounded futures and a self-reading monitor.
 
-These use the existing graded owner rule. They are engineered patterns, not
+These use the graded neuron model. They are engineered patterns, not
 claims of biological universality, autonomous world-model learning or consciousness.
 """
 
@@ -14,16 +14,16 @@ from typing import Generic, TypeVar
 
 import numpy as np
 
-from ..rules import GradedRule
-from ..settle import SettledState, Settlement
-from ..wiring import Wiring
-from .coupling import couple
+from ..brain import Brain, BrainState
+from ..connectome import Connectome
+from ..neuron import NeuronModel
+from .assembly import assemble
 
 S = TypeVar("S")
 A = TypeVar("A")
 
 
-def sensor_motor(axes: int = 2) -> Wiring:
+def reflex_arc(axes: int = 2) -> Connectome:
     """Sensory error ports followed by opposing motor pairs for each axis.
 
     A body reads ``max(0, positive) - max(0, negative)``. Body physics and sensor
@@ -31,12 +31,12 @@ def sensor_motor(axes: int = 2) -> Wiring:
     """
     if isinstance(axes, bool) or not isinstance(axes, int) or axes < 1:
         raise ValueError("axes must be a positive integer")
-    return Wiring.from_edges(
+    return Connectome.from_synapses(
         3 * axes,
         pre=[i for i in range(axes) for _ in range(2)],
         post=[axes + i for i in range(2 * axes)],
         sign=[v for _ in range(axes) for v in (2.0, -2.0)],
-        sets={
+        populations={
             "sensory": range(axes),
             "motor": range(axes, 3 * axes),
             "positive": range(axes, 3 * axes, 2),
@@ -71,11 +71,16 @@ def imagine(
     depth: int = 2,
     max_nodes: int = 10000,
     adversarial: bool = False,
+    prune: bool = False,
+    clone: Callable[[S], S] = deepcopy,
 ) -> Deliberation[S, A]:
     """Compare isolated futures; alternate max/min when ``adversarial=True``.
 
     Values are always from the root actor's perspective. The transition receives
-    its own deep copy. Evaluators/actions must be read-only and must not mutate
+    its own deep copy (or an isolated snapshot supplied by ``clone``).
+    ``prune=True`` skips adversarial branches by alpha-beta bounds, preserving exact
+    scores for every root action. Each root action starts with fresh bounds.
+    Evaluators/actions must be read-only and must not mutate
     external objects. No observations or training are fabricated. A hard budget
     failure raises rather than silently returning partially searched moves.
     """
@@ -90,69 +95,93 @@ def imagine(
         raise ValueError("depth and max_nodes must be positive integers")
     nodes = 0
 
-    def visit(state: S, remaining: int, maximize: bool) -> tuple[float, tuple[A, ...], S]:
+    def advance(state: S, action: A) -> S:
+        if nodes >= max_nodes:
+            raise ValueError("imagination node budget exceeded")
+        return transition(clone(state), action)
+
+    def visit(
+        state: S,
+        remaining: int,
+        maximize: bool,
+        alpha: float = -float("inf"),
+        beta: float = float("inf"),
+    ) -> tuple[float, tuple[A, ...], S]:
         nonlocal nodes
         nodes += 1
         if nodes > max_nodes:
             raise ValueError("imagination node budget exceeded")
         choices = () if remaining == 0 or terminal(state) else actions(state)
-        if not choices:
+        if len(choices) == 0:
             value = float(evaluate(state))
             if not isfinite(value):
                 raise ValueError("evaluator returned a nonfinite value")
             return value, (), state
-        candidates = []
+        best: tuple[float, tuple[A, ...], S] | None = None
         for action in choices:
-            after = transition(deepcopy(state), action)
-            score, suffix, end = visit(after, remaining - 1, not maximize if adversarial else True)
-            candidates.append((score, (action, *suffix), end))
-        return (max if maximize else min)(candidates, key=lambda row: row[0])
+            after = advance(state, action)
+            score, suffix, end = visit(
+                after, remaining - 1, not maximize if adversarial else True, alpha, beta
+            )
+            if best is None or (score > best[0] if maximize else score < best[0]):
+                best = (score, (action, *suffix), end)
+            if prune and adversarial:
+                if maximize:
+                    alpha = max(alpha, score)
+                else:
+                    beta = min(beta, score)
+                if alpha >= beta:
+                    break
+        assert best is not None
+        return best
 
-    initial = deepcopy(live)
+    initial = clone(live)
     if terminal(initial):
         return Deliberation((), 0, depth)
     futures = []
     for action in actions(initial):
-        score, sequence, end = visit(
-            transition(deepcopy(initial), action), depth - 1, not adversarial
-        )
+        score, sequence, end = visit(advance(initial, action), depth - 1, not adversarial)
         futures.append(Future(action, score, (action, *sequence), end))
     return Deliberation(tuple(sorted(futures, key=lambda f: -f.score)), nodes, depth)
 
 
 @dataclass(frozen=True)
 class Readback:
-    repair: float
+    activity_change: float
     ambiguity: float
     pressure: float
     uncertainty: float
     request_more: bool
-    state: SettledState
+    state: BrainState
 
 
 class ActivityMonitor:
     """Read the controller's activity and alternatives, then gate more deliberation.
 
-    This six-owner monitor observes normalized activity change, option ambiguity,
+    This six-neuron monitor observes normalized activity change, option ambiguity,
     budget pressure and their integration. Its readout can request more work;
     an application must connect that output to its actual compute budget. The
     signal is a heuristic, not a calibrated probability or a consciousness test.
     """
 
     def __init__(self) -> None:
-        self.engine = Settlement(
-            Wiring.from_edges(
+        self.brain = Brain(
+            Connectome.from_synapses(
                 6,
                 pre=[0, 1, 2, 3, 4, 2],
                 post=[4, 4, 4, 4, 5, 5],
                 sign=[0.6, 0.8, -0.4, 0.4, 1.0, -1.0],
-                sets={"readback": range(4), "integration": [4], "request": [5]},
+                populations={"readback": range(4), "integration": [4], "request": [5]},
                 label="activity-monitor",
             ),
-            GradedRule(gain=1, slope=2, threshold=0, leak=1, dt=0.25, clamp_amplitude=1),
+            NeuronModel(gain=1, slope=2, threshold=0, leak=1, dt=0.25, stimulus_amplitude=1),
         )
-        self.state: SettledState | None = None
+        self.state: BrainState | None = None
         self.previous: np.ndarray | None = None
+
+    def reset(self) -> None:
+        """Start monitoring an independent episode without a previous activity comparison."""
+        self.state, self.previous = None, None
 
     def read(self, activity: np.ndarray, scores: np.ndarray, *, pressure: float = 0) -> Readback:
         activity, scores = np.asarray(activity, float), np.asarray(scores, float)
@@ -167,7 +196,7 @@ class ActivityMonitor:
             or not 0 <= pressure <= 1
         ):
             raise ValueError("finite vectors and pressure in [0, 1] required")
-        repair = (
+        activity_change = (
             0.0
             if self.previous is None or self.previous.shape != activity.shape
             else float(
@@ -177,12 +206,14 @@ class ActivityMonitor:
         ordered = np.sort(scores)
         gap = float(ordered[-1] - ordered[-2]) if scores.size > 1 else float("inf")
         ambiguity = 1.0 / (1.0 + gap)
-        drive = np.array([min(1, repair), ambiguity, pressure, float(scores.size > 1), 0, 0])
-        self.state = self.engine.settle(drive, state=self.state, steps=40, tolerance=0)
+        drive = np.array(
+            [min(1, activity_change), ambiguity, pressure, float(scores.size > 1), 0, 0]
+        )
+        self.state = self.brain.settle(drive, state=self.state, steps=40, tolerance=0)
         self.previous = activity.copy()
         uncertainty = float(self.state.activation[4])
         return Readback(
-            repair,
+            activity_change,
             ambiguity,
             pressure,
             uncertainty,
@@ -196,7 +227,7 @@ __all__ = [
     "Deliberation",
     "Future",
     "Readback",
-    "couple",
+    "assemble",
     "imagine",
-    "sensor_motor",
+    "reflex_arc",
 ]
