@@ -9,10 +9,10 @@ patterns.
 
 | Pattern | Use it when | Public example |
 |---|---|---|
-| [Several regions, one equilibrium](#several-regions-one-equilibrium) | Functions must influence each other within one decision | All six websites |
+| [Several regions, one equilibrium](#several-regions-one-equilibrium) | Functions must influence each other within one decision | All five websites |
 | [Settle until the equations hold](#settle-until-the-equations-hold) | A result must be a checked equilibrium | |
 | [Sensor, opposing motors, body](#sensor-opposing-motors-body) | A body moves toward a target or away from an error | Eye & arm, mouse, forager, worm |
-| [Records in the loop](#records-in-the-loop) | One observation must set or revise an association | Mouse, forager, changing memory |
+| [Records in the loop](#records-in-the-loop) | One observation must set or revise an association | Mouse, forager |
 | [Records addressed by time](#records-addressed-by-time) | The answer is what happened n steps ago or at a position | |
 | [Fading context](#fading-context) | Recent inputs matter after they disappear | |
 | [Holding an item](#holding-an-item) | A report must ignite all-or-none and persist | |
@@ -74,7 +74,7 @@ concerns, leave the trained synapses unchanged, and write the recall synapses on
 after an output is committed. Drive the cue of each position while that position
 is produced and release it afterwards so the output can develop. The trained graph
 and the new record then settle together. [`COUPLED_BRAINS.md`](https://github.com/muellerberndt/cadence-examples/blob/main/COUPLED_BRAINS.md)
-lists the regions and cross-region synapses of all six websites.
+lists the regions and cross-region synapses of all five websites.
 
 ## Designed and evolved regions
 

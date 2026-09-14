@@ -73,5 +73,5 @@ strip of squares with opacity as activation. Print the number of steps taken. Th
 [cadence-examples](https://github.com/muellerberndt/cadence-examples) websites
 separate small numerical kernels from rendering and check them against Python.
 Their `shared/shell.html` and view modules are starting points, and
-`python tools/build_showcase.py` regenerates the six websites and the gallery.
+`python tools/build_showcase.py` regenerates the five websites and the gallery.
 The [hosted versions](https://floatingpragma.io/cadence-examples/) serve the same files.

@@ -60,7 +60,7 @@ all animal learning follows Cadence's equations.
 
 | Function | Support | Cadence connectome | Pattern | Example |
 |---|---|---|---|---|
-| Specialized regions exchanging signals | Implemented | Named connectomes merged by `assemble`, or `Region`, `Projection` and `develop` | [Several regions, one equilibrium](patterns.md#several-regions-one-equilibrium) | All six |
+| Specialized regions exchanging signals | Implemented | Named connectomes merged by `assemble`, or `Region`, `Projection` and `develop` | [Several regions, one equilibrium](patterns.md#several-regions-one-equilibrium) | All five |
 | Retinotopy and receptive fields | Implemented | `visual_cortex`: feature neurons each reading one local window of the picture | [Designed and evolved regions](patterns.md#designed-and-evolved-regions) | |
 | Cortical areas and competition | Implemented | `cortex` with optional lateral inhibition; `motor_cortex` with one neuron per action | [A generic brain](patterns.md#a-generic-brain) | |
 | Action selection by the basal ganglia | Partial | `GenericBrain.basal_ganglia`: an `ActorCritic` whose critic reads the association cortex and whose dopamine error drives plasticity | [A generic brain](patterns.md#a-generic-brain) | |
@@ -84,12 +84,12 @@ all animal learning follows Cadence's equations.
 | Afterimage, recent history | Implemented | `Trace`, `Echo` or `Afterglow` into context neurons | [Fading context](patterns.md#fading-context) | |
 | Working memory in prefrontal cortex | Partial | `prefrontal_cortex` driven by a `Trace` of the association cortex; `GenericBrain.build(..., working_memory=True)` | [A generic brain](patterns.md#a-generic-brain) | |
 | Holding an item, all-or-none report | Pattern | Self-exciting neuron pairs with mutual inhibition, coupled to answer neurons | [Holding an item](patterns.md#holding-an-item) | |
-| One-trial association of cue and outcome | Partial | Fast residual writes; `GenericBrain` includes consolidation by default through `SynapticMemory` | [Records in the loop](patterns.md#records-in-the-loop) | Mouse, forager, changing memory |
+| One-trial association of cue and outcome | Partial | Fast residual writes; `GenericBrain` includes consolidation by default through `SynapticMemory` | [Records in the loop](patterns.md#records-in-the-loop) | Mouse, forager |
 | Order and time since an event | Pattern | Clock or position neurons as record keys | [Records addressed by time](patterns.md#records-addressed-by-time) | |
 | Skills and learned representations | Implemented | Synaptic efficacies and biases trained by `Learner` | [Learning](learning.md) | |
 | Repetition/salience-dependent synaptic consolidation | Implemented | `SynapticMemory` slowly learns observed values; salience increases its local write rate | [One ongoing brain](continuous.md) | |
 | Rehearsal and systems consolidation | Pattern | Stored real observations mixed into later cortical updates; no automatic transfer between regions | [A learning life](patterns.md#a-learning-life) | |
-| Forgetting and interference | Pattern | Trace decay, finite record capacity, later updates | [Memory](memory.md) | Changing memory |
+| Forgetting and interference | Pattern | Trace decay, finite record capacity, later updates | [Memory](memory.md) | Mouse, forager |
 
 ## Learning
 
