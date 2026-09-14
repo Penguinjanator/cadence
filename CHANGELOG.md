@@ -14,8 +14,8 @@ Biological names throughout, brain regions, and a generic brain.
 - Float64 Torch residual checks can stay on device; float32 keeps the independent
   host reference. Transport avoids unnecessary accelerator synchronizations.
   `ep_structure` checks effective free/free symmetry under declared fixed inputs.
-- Torch and MLX factor small phase contrasts before matrix multiplication to
-  reduce cancellation; Torch uses the same identity for per-stream reward traces.
+- Host, compiled and accelerator paths factor small phase contrasts before products
+  to reduce cancellation, including per-stream reward traces and restored phases.
 - `layered(skip=True, skip_init=0.0)` adds a learnable direct sensory-to-motor
   route with unchanged initial predictions; the existing initializer is the default.
 - Discrete reward eligibility now differentiates the sampled softmax policy even

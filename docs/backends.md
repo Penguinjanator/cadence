@@ -43,8 +43,9 @@ Torch and MLX factor the phase contrast as
 This is the same bilinear difference as subtracting the two phase Gram matrices,
 but avoids subtracting large products when the desired contrast is small. Torch uses
 the corresponding product identity for each row's eligibility trace. The accelerator
-path needs no host equality check. NumPy and Numba use the same factorization when
-processing phase values restored from a checkpoint. Identical phases give exactly zero contrast.
+path needs no host equality check. NumPy and Numba use the same factorization,
+including when processing phase values restored from a checkpoint. Identical phases
+give exactly zero contrast.
 Input rounding, reduction order and cancellation between distinct contributions still
 limit accuracy; float32 training trajectories need not match float64 at a fixed
 absolute error. RMS normalization can amplify small contrast errors. Gradient checks
