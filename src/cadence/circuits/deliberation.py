@@ -125,7 +125,16 @@ class Deliberator(Generic[S, A]):
             except Exception:
                 self.cancel()
                 raise
-        return deepcopy(self.result)
+        if self.result is None:
+            return None
+        return Deliberation(
+            tuple(
+                Future(deepcopy(f.action), f.score, deepcopy(f.sequence), self.clone(f.state))
+                for f in self.result.futures
+            ),
+            self.result.nodes,
+            self.result.depth,
+        )
 
     def _deepen(self, initial: S) -> Generator[Deliberation[S, A] | None, None, None]:
         for depth in range(1, self.depth + 1):

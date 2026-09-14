@@ -163,3 +163,27 @@ def test_explicit_memory_opt_out_and_checkpoint_preserve_configuration(tmp_path)
     assert brain.hippocampus is None
     assert cd.GenericBrain.load(brain.save(tmp_path / "without.npz")).hippocampus is None
     assert isinstance(cd.GenericBrain(brain.connectome).hippocampus, cd.SynapticMemory)
+
+
+def test_custom_state_cloner_also_isolates_published_results():
+    class State:
+        def __init__(self, value):
+            self.value = value
+
+        def __deepcopy__(self, memo):
+            raise AssertionError("a caller-supplied state cloner must be used")
+
+    p = Deliberator(
+        lambda _: (1,),
+        lambda s, a: State(s.value + a),
+        lambda s: s.value,
+        lambda s: s.value >= 2,
+        depth=2,
+        clone=lambda s: State(s.value),
+    )
+    p.start(State(0))
+    finish(p)
+    published = p.tick()
+    assert published.futures[0].state.value == 2
+    published.futures[0].state.value = 99
+    assert p.tick().futures[0].state.value == 2
