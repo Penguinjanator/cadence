@@ -17,6 +17,10 @@ Biological names throughout, brain regions, and a generic brain.
 - The imitation optimizer counts only its own contrasts for bias correction; interleaved
   reward/direct updates no longer advance an optimizer whose moments did not change.
   That count is checkpointed; older checkpoints retain their saved count as the fallback.
+- Tests pin the default batch row of `fraction_active`, integer stimulus indices, the
+  60-step `settle` default, and a host warm state that the float64 torch kernel shares
+  memory with and must not write. The NumPy and torch settling loops update fresh arrays
+  in place (#1, Jonathan Hill).
 
 - Names: `Connectome` (was `Wiring`), `Brain` (was `Settlement`), `BrainState`,
   `NeuronModel` (was `GradedRule`), `learning_neuron_model`, neurons and synapses (were
