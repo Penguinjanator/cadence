@@ -77,6 +77,12 @@ equations. A zero contraction rate (`dt=1`, zero coupling) needs at most one ste
 changed input. The warm-start budget assumes the old state is already the old equilibrium;
 an approximate warm state has its own remaining error, even when the stimulus is unchanged.
 
+For an unmasked free phase without adaptation, `Brain.residual` reports the equation
+error before multiplication by the integration step. Convert it to potential movement
+with `brain.neuron_model.dt * brain.residual(drive, state)` before passing it to
+`cert.error_bound`. This conversion and distance guarantee require the certificate's
+conditions; a small equation residual alone does not establish contraction.
+
 ## Equilibrium-propagation scope
 
 `ep_structure(brain, fixed_inputs=...)` checks effective weight symmetry among the free
