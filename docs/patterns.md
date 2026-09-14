@@ -9,18 +9,18 @@ patterns.
 
 | Pattern | Use it when | Public example |
 |---|---|---|
-| [Several regions, one equilibrium](#several-regions-one-equilibrium) | Functions must influence each other within one decision | All five websites |
+| [Several regions, one equilibrium](#several-regions-one-equilibrium) | Functions must influence each other within one decision | All five examples |
 | [Settle until the equations hold](#settle-until-the-equations-hold) | A result must be a checked equilibrium | |
-| [Sensor, opposing motors, body](#sensor-opposing-motors-body) | A body moves toward a target or away from an error | Eye & arm, mouse, forager, worm |
-| [Records in the loop](#records-in-the-loop) | One observation must set or revise an association | Mouse, forager |
-| [Records addressed by time](#records-addressed-by-time) | The answer is what happened n steps ago or at a position | |
-| [Fading context](#fading-context) | Recent inputs matter after they disappear | |
+| [Sensor, opposing motors, body](#sensor-opposing-motors-body) | A body moves toward a target or away from an error | Eye & arm, forager, worm |
+| [Records in the loop](#records-in-the-loop) | One observation must set or revise an association | Forager, composer |
+| [Records addressed by time](#records-addressed-by-time) | The answer is what happened n steps ago or at a position | Composer |
+| [Fading context](#fading-context) | Recent inputs matter after they disappear | Composer |
 | [Holding an item](#holding-an-item) | A report must ignite all-or-none and persist | |
 | [Rhythm](#rhythm) | Output must alternate without a clock | [`half_center.py`](../examples/half_center.py) |
 | [Restlessness](#restlessness) | A controller repeats choices without progress | |
-| [Future simulation](#future-simulation) | The consequences of an action should be assessed before acting | Connect Four |
+| [Future simulation](#future-simulation) | The consequences of an action should be assessed before acting | Connect Four, composer |
 | [Reading its own activity](#reading-its-own-activity) | Compute or abstention should depend on confidence | Connect Four |
-| [Expectations as synapses](#expectations-as-synapses) | Statistics learned over many experiences should shape what comes next | |
+| [Expectations as synapses](#expectations-as-synapses) | Statistics learned over many experiences should shape what comes next | Composer |
 | [Signed feedback](#signed-feedback) | Reward or preference should change learned synapses | |
 | [A learning life](#a-learning-life) | A skill is taught, practiced and kept | |
 
@@ -353,8 +353,8 @@ checkpoint does not include the store. [Memory](memory.md) gives the update and
 its interference limits.
 
 **Check:** retention of earlier distinct keys after new writes, interference as
-keys become similar, and a dictionary or exact-lookup control. The mouse stores
-task cue to destination, the forager flower to nectar.
+keys become similar, and a dictionary or exact-lookup control. The forager stores
+flower to nectar.
 
 ## Records addressed by time
 

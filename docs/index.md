@@ -38,7 +38,7 @@ Records, traces and local learning keep what a task needs.
 
 ## Examples
 
-Five [interactive websites](https://floatingpragma.io/cadence-examples/) apply these
-patterns: an eye and drawing arm, a teachable mouse, a C. elegans habitat, a
-fly-inspired forager and Connect Four. Their code, evidence and
-local launcher are in [cadence-examples](https://github.com/muellerberndt/cadence-examples).
+Five [official examples](https://floatingpragma.io/cadence-examples/) apply these
+patterns: an eye and drawing arm, a C. elegans habitat, a composer, a fly-inspired
+forager and Connect Four. Their code, evidence, local launcher and a catalogue of
+reusable cortices are in [cadence-examples](https://github.com/muellerberndt/cadence-examples).

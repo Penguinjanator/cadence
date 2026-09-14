@@ -92,14 +92,14 @@ For pictures, working memory and reward, start with [`GenericBrain`](docs/patter
 
 ## Examples
 
-Five brains run in the browser with nothing to install. Each shows its live circuit
-beside the body.
+Five official examples, each with its live circuit beside the task. Four run in the
+browser with nothing to install. The composer runs locally with its pretrained model.
 
 | Example | What it does | Circuit |
 |---|---|---|
 | **Eye & arm**<br>[Web demo](https://floatingpragma.io/cadence-examples/eye-arm/)<br>[Code](https://github.com/muellerberndt/cadence-examples/tree/main/eye-arm) | A retina reads your drawing, and shoulder, elbow and pencil motors copy it. Push a joint or disable a motor population. | 3N + 17 neurons, up to 2N + 28 synapses (N sampled dark pixels) |
-| **Teachable mouse**<br>[Web demo](https://floatingpragma.io/cadence-examples/mouse/)<br>[Code](https://github.com/muellerberndt/cadence-examples/tree/main/mouse) | Teach it a new destination, revise the lesson, and carry it into a new maze. | 265 neurons, 285 synapses, 32 persistent + 32 transient weights |
 | **C. elegans habitat**<br>[Web demo](https://floatingpragma.io/cadence-examples/worm/)<br>[Code](https://github.com/muellerberndt/cadence-examples/tree/main/worm) | The worm's chemical connectome follows food cues around walls you draw. Stimulate or lesion its neurons. | 309 neurons, 4,108 synapses |
+| **Composer**<br>[Studio page](https://floatingpragma.io/cadence-examples/composer/)<br>[Model card](https://github.com/muellerberndt/cadence-examples/blob/main/composer/MODEL_CARD.md)<br>[Code](https://github.com/muellerberndt/cadence-examples/tree/main/composer) | maestro-1, a pretrained musician of wired cortices, composes from a mood. It imagines continuations, listens to the whole draft and edits its weakest passage, with every neuron in view. | 17,855 neurons, 68,570,458 synapses |
 | **Fly-inspired forager**<br>[Web demo](https://floatingpragma.io/cadence-examples/fly/)<br>[Code](https://github.com/muellerberndt/cadence-examples/tree/main/fly) | Learns nectar values on contact and changes its preferences when you change the flowers. | 18 neurons, 44 synapses, 32 persistent + 32 transient weights |
 | **Connect Four**<br>[Web demo](https://floatingpragma.io/cadence-examples/connect-four/)<br>[Code](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four) | Imagines replies before moving, and a self-monitor asks for deeper search when the choice is close. | 19 neurons, 39 synapses |
 
@@ -108,6 +108,9 @@ adult C. elegans has 302 neurons. The
 [methods](https://github.com/muellerberndt/cadence-examples/blob/main/METHODS.md)
 give the supplied parts and the comparisons for each example. From a clone of
 cadence-examples, `python serve.py <example>` runs one offline.
+The [cortex catalogue](https://github.com/muellerberndt/cadence-examples/tree/main/cortices) in the same repository builds basic
+regions (senses, association, motor, working memory, clocked record, conditioning) and
+assembles them into one brain.
 
 ## Docs
 

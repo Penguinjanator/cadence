@@ -1,6 +1,6 @@
 # Core tutorials
 
-These small programs explain the library. The six interactive task brains live in
+These small programs explain the library. The five official task examples live in
 [cadence-examples](https://github.com/muellerberndt/cadence-examples).
 Install Cadence, then run any tutorial from this checkout with
 `python examples/<name>.py`. Only NumPy is required.

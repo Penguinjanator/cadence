@@ -55,7 +55,7 @@ all animal learning follows Cadence's equations.
 | Sensory transduction | Pattern | An application encoder drives named input neurons | [Sensor, motors, body](patterns.md#sensor-opposing-motors-body) | Eye & arm retina, worm odor |
 | Proprioception | Pattern | Body state returns to input ports every tick | [Sensor, motors, body](patterns.md#sensor-opposing-motors-body) | Eye & arm |
 | Approach and withdrawal | Pattern | Sensory error drives an opposing motor pair that moves the body | [Sensor, motors, body](patterns.md#sensor-opposing-motors-body) | Worm, forager |
-| Antagonist muscles, motor recruitment | Pattern | Positive and negative motor neurons read as a rectified difference; `Bins` for population codes | [Sensor, motors, body](patterns.md#sensor-opposing-motors-body) | Eye & arm, mouse |
+| Antagonist muscles, motor recruitment | Pattern | Positive and negative motor neurons read as a rectified difference; `Bins` for population codes | [Sensor, motors, body](patterns.md#sensor-opposing-motors-body) | Eye & arm |
 | Combining senses | Pattern | Separate input populations projecting into shared neurons, trained as one learner | [A learning life](patterns.md#a-learning-life) | Eye & arm |
 | Central pattern generator | Pattern | Mutual inhibition plus `Adaptation` | [Rhythm](patterns.md#rhythm) | [`half_center.py`](../examples/half_center.py) |
 | Adaptation to a sustained stimulus | Implemented | `Adaptation` subtracts a slow activity trace | [Rhythm](patterns.md#rhythm) | |
@@ -70,7 +70,7 @@ all animal learning follows Cadence's equations.
 | Cortical areas and competition | Implemented | `cortex` with optional lateral inhibition; `motor_cortex` with one neuron per action | [A generic brain](patterns.md#a-generic-brain) | |
 | Action selection by the basal ganglia | Partial | `GenericBrain.basal_ganglia`: an `ActorCritic` whose critic reads the association cortex and whose dopamine error drives plasticity | [A generic brain](patterns.md#a-generic-brain) | |
 | Regions laid down by the genome | Implemented | `Genome` of blank and designed regions, `develop`, `mutate` and `evolve` | [Designed and evolved regions](patterns.md#designed-and-evolved-regions) | |
-| Spatial map and route finding | Pattern | A spatial field region gated by a visual map, position error to directional motors | [Several regions, one equilibrium](patterns.md#several-regions-one-equilibrium) | Mouse |
+| Spatial map and route finding | Pattern | A spatial field region gated by a visual map, position error to directional motors | [Several regions, one equilibrium](patterns.md#several-regions-one-equilibrium) | |
 | Choosing among options | Pattern | Candidate neurons settling with a value neuron and a monitor | [Future simulation](patterns.md#future-simulation) | Connect Four |
 | Simulating consequences before acting | Pattern | Futures rolled forward through the brain's own predictions in isolated batch rows, scored by a critic | [Future simulation](patterns.md#future-simulation) | |
 | Planning with a world model | Implemented | `imagine` or resumable `Deliberator` over isolated copies with a supplied transition model | [Future simulation](patterns.md#with-a-supplied-world-model) | Connect Four |
@@ -89,13 +89,13 @@ all animal learning follows Cadence's equations.
 | Afterimage, recent history | Implemented | `Trace`, `Echo` or `Afterglow` into context neurons | [Fading context](patterns.md#fading-context) | |
 | Working memory in prefrontal cortex | Partial | `prefrontal_cortex` driven by a `Trace` of the association cortex; `GenericBrain.build(..., working_memory=True)` | [A generic brain](patterns.md#a-generic-brain) | |
 | Holding an item, all-or-none report | Pattern | Self-exciting neuron pairs with mutual inhibition, coupled to answer neurons | [Holding an item](patterns.md#holding-an-item) | |
-| One-trial association of cue and outcome | Partial | Fast residual writes; `GenericBrain` includes consolidation by default through `SynapticMemory` | [Records in the loop](patterns.md#records-in-the-loop) | Mouse, forager |
+| One-trial association of cue and outcome | Partial | Fast residual writes; `GenericBrain` includes consolidation by default through `SynapticMemory` | [Records in the loop](patterns.md#records-in-the-loop) | Forager |
 | Recollection by content | Partial | `ContentMemory` learns competitive cue prototypes; `SequenceCache` mixes records causally; stable supplied feature coordinates are required | [Content retrieval](content_memory.md), [sequences](sequence.md) | |
 | Order and time since an event | Pattern | Clock or position neurons as record keys | [Records addressed by time](patterns.md#records-addressed-by-time) | |
 | Skills and learned representations | Implemented | Synaptic efficacies and biases trained by `Learner` | [Learning](learning.md) | |
 | Repetition/salience-dependent synaptic consolidation | Implemented | `SynapticMemory` slowly learns observed values; salience increases its local write rate | [One ongoing brain](continuous.md) | |
 | Rehearsal and systems consolidation | Partial | `ReservoirReplay` stores actual labeled observations for later updates; no automatic transfer between regions or sleep schedule | [Rehearsal](replay.md) | |
-| Forgetting and interference | Pattern | Trace decay, finite record capacity, later updates | [Memory](memory.md) | Mouse, forager |
+| Forgetting and interference | Pattern | Trace decay, finite record capacity, later updates | [Memory](memory.md) | Forager |
 
 ## Learning
 
