@@ -46,6 +46,7 @@ from .blocks import BlockTransport, Layout
 from .blocks import layout as make_layout
 from .connectome import Connectome, _neuron_indices
 from .neuron import NeuronModel
+from .recording import _Capture, _capture
 
 __all__ = ["Brain", "BrainState", "Equilibrium", "Nudge", "available_backends", "Backend"]
 
@@ -656,13 +657,14 @@ class Brain:
             raise ValueError("state batch does not match the drive batch")
         if v is not None and (not np.isfinite(v).all() or not np.isfinite(a).all()):
             raise ValueError("warm potentials and adaptation must be finite")
+        capture = _capture()
         handle = None
         if self.backend in ("torch", "mlx"):
             kernel = self._torch if self.backend == "torch" else self._mlx
             v, a, s, traj, taken, activity_change, handle = kernel.run(
-                v, a, drive, keep, steps, trajectory, nudge, tolerance, state
+                v, a, drive, keep, steps, trajectory, nudge, tolerance, state, capture
             )
-        elif self._blocks is not None and not trajectory and _FUSED:
+        elif self._blocks is not None and not trajectory and capture is None and _FUSED:
             from .fused import fused_settle
 
             s, taken, activity_change = fused_settle(
@@ -681,9 +683,9 @@ class Brain:
             traj = None
         else:
             v, a, s, traj, taken, activity_change = self._run_numpy(
-                v, a, drive, keep, steps, trajectory, nudge, tolerance
+                v, a, drive, keep, steps, trajectory, nudge, tolerance, capture
             )
-        return BrainState(
+        result = BrainState(
             v=v,
             activation=s,
             adaptation=a,
@@ -692,6 +694,9 @@ class Brain:
             activity_change=activity_change,
             device=handle,
         )
+        if capture is not None:
+            capture.finish(self, drive, keep, nudge, result)
+        return result
 
     def contrast_on_device(
         self, plus: BrainState, minus: BrainState
@@ -790,6 +795,7 @@ class Brain:
         want: bool,
         nudge: Nudge | None,
         tolerance: float | None,
+        capture: _Capture | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray]:
         neuron_model = self.neuron_model
         adapt = neuron_model.adaptation
@@ -800,6 +806,8 @@ class Brain:
         s = neuron_model.activation(v)
         if masked:
             s *= keep
+        if capture is not None:
+            capture.step(v, s, a)
         taken = 0
         activity_change = np.zeros(len(v))
         for t in range(steps):
@@ -820,6 +828,8 @@ class Brain:
                 s *= keep
             if adapt is not None:
                 a += (s - a) / adapt.tau_steps
+            if capture is not None:
+                capture.step(v, s, a)
             if traj is not None:
                 traj[t] = s
             taken = t + 1
@@ -1037,6 +1047,7 @@ class _TorchKernel:
         nudge: Nudge | None,
         tolerance: float | None = None,
         state: BrainState | None = None,
+        capture: _Capture | None = None,
     ) -> tuple[Any, Any, Any, np.ndarray | None, int, np.ndarray, Any]:
         torch, neuron_model = self.torch, self.neuron_model
 
@@ -1071,6 +1082,8 @@ class _TorchKernel:
         previous = None
         with torch.no_grad():
             s = self._activation(v) * k
+            if capture is not None:
+                capture.step(v.cpu().numpy(), s.cpu().numpy(), a.cpu().numpy())
             for t in range(steps):
                 if self.layout is not None:
                     synaptic_input = self._synaptic_input(s, previous, cache)
@@ -1097,6 +1110,8 @@ class _TorchKernel:
                 s = self._activation(v) * k
                 if adapt is not None:
                     a = a + (s - a) / adapt.tau_steps
+                if capture is not None:
+                    capture.step(v.cpu().numpy(), s.cpu().numpy(), a.cpu().numpy())
                 if want:
                     traj.append(s.detach().cpu().double().numpy())
                 taken = t + 1
@@ -1209,6 +1224,7 @@ class _MlxKernel:
         nudge: Nudge | None,
         tolerance: float | None = None,
         state: BrainState | None = None,
+        capture: _Capture | None = None,
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray | None, int, np.ndarray, Any]:
         mx, neuron_model = self.mx, self.neuron_model
 
@@ -1241,6 +1257,8 @@ class _MlxKernel:
         if masked:
             s = s * k
         standing = d + self.bias
+        if capture is not None:
+            capture.step(np.array(v), np.array(s), np.array(a))
         for t in range(steps):
             synaptic_input = self._synaptic_input(s, previous, cache)
             total = synaptic_input + standing
@@ -1270,6 +1288,8 @@ class _MlxKernel:
             movement = mx.abs(s - previous)
             activity_change = activity_change + movement.sum(axis=1)
             mx.eval(v, s, a, activity_change)  # one graph per step; the tolerance needs the number
+            if capture is not None:
+                capture.step(np.array(v), np.array(s), np.array(a))
             if want:
                 traj.append(np.array(s, dtype=np.float64))
             taken = t + 1

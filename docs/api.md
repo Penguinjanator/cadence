@@ -416,6 +416,43 @@ the combined system.
 - `reflex_arc(axes=2)`: sensory error ports and opposing motor pairs; the application
   supplies body dynamics and interprets the motor readout.
 
+## Record every settling step
+
+`record_settlements(callback, label="")` captures calls made inside its context,
+including calls inside `Learner`, `ActorCritic` and supplied imagination routines.
+The callback receives a `SettlementRecord` after each call. It contains the
+connectome, neuron model, effective weights, bias, drive, mask, nudge and full
+potential, activation and adaptation histories. Histories have shape
+`(steps + 1, batch, neurons)`: the first row is the initial state, then one row
+for every actual iteration. Differences of successive potentials are the signed
+local repairs. Even a zero-step call has its initial row.
+
+```python
+records = []
+with cd.record_settlements(records.append, label="observe and act"):
+    result = brain.settle(stimulus={0: 1.0}, steps=32)
+repairs = np.diff(records[0].potential, axis=0)
+```
+
+Recording is opt-in. It copies every neuron's state after every step and can be
+expensive for large brains. Write bounded chunks from the callback rather than
+keeping an entire long task in RAM. Callback diagnostics do not recursively
+record themselves; nested recording contexts restore the previous callback on
+exit. Callback failures propagate. State and parameter arrays own their storage;
+subsequent learning cannot change those saved arrays. Treat the shared connectome
+as read-only.
+
+CPU recording uses the inspectable NumPy kernel rather than the fused path, so
+round-off and wall time may differ. These are measurements of the recorded run,
+not reconstructions of a previous unrecorded run. Iteration traces are simulated
+neural activity, not measured biological EEG or neurotransmitter concentrations.
+
+`ActorCritic.learn` reports signed mean `dopamine` alongside the existing mean
+absolute `delta`. For a one-stream agent it is that transition's signed,
+centered and capped learning signal. It is a global modulation signal; spatial
+neurotransmitter diffusion is not part of this model.
+
+
 ## Deprecated names (`cadence.legacy`)
 
 Every name of cadence 0.8 resolves for one release to its current counterpart with a

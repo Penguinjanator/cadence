@@ -553,6 +553,7 @@ class ActorCritic:
         self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
+        report["dopamine"] = float(delta.mean())
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         return report
@@ -676,6 +677,7 @@ class ActorCritic:
         self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
+        report["dopamine"] = float(delta.mean())
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         return report

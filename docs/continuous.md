@@ -220,3 +220,12 @@ remain unchanged during hypothetical evaluation. [Memory tests](../tests/test_co
 measure lasting retention, correction and checkpoint recovery. Continuous operation
 and prospective search are useful architectural functions; neither establishes
 subjective experience or guarantees good plans with an inaccurate world model.
+
+For a replay synchronized with a task, wrap each decision's feedback and action
+in `record_settlements` and attach the records to the exact observation that
+produced them. Save the actual motor command, signed `ActorCritic.learn` dopamine,
+and the task's own frame or timestamp alongside the neural records. A normal-speed
+screen cannot display every iteration separately: keep all steps in the recording
+and provide pause and single-step inspection. Do not synthesize extra oscillations
+or infer a signed reward signal from the absolute `delta` statistic. See the
+[recording API](api.md#record-every-settling-step) for its cost and precision limits.

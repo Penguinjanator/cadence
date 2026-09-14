@@ -40,6 +40,7 @@ from .plasticity import (
 )
 from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
 from .receipts import Receipt, canonical_json
+from .recording import SettlementRecord, record_settlements
 from .reference import conformance
 from .regions import Region
 from .stream import Afterglow, Echo, FastSynapses, Trace, stateful
@@ -66,6 +67,8 @@ __all__ = [
     "Nudge",
     "Protocol",
     "Receipt",
+    "SettlementRecord",
+    "record_settlements",
     "Row",
     "Brain",
     "BrainState",
