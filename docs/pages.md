@@ -37,7 +37,7 @@ dependencies. Inline it in a page (drop the `export` keywords) or serve it as a 
 ```javascript
 const scan = new BrainScan(canvas, ATLAS, { labels: labelsDiv, strip: stripCanvas });
 scan.reset(activation);      // a new stimulus: the next step measures change from here
-scan.step(activation);       // after every settling step: activation per neuron
+scan.step(activation);       // after every settling step: activation per neuron ({draw: false} defers the frame)
 scan.set(activation);        // show a state without measuring change
 scan.show(activation, heat, { level });  // a page's own signals: messages, glow, brightness
 scan.setWeights(weights);    // the synapses learned; scan.setVisible(mask) hides lesioned neurons
