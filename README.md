@@ -19,7 +19,8 @@ reward learning let a controller carry experience into its next decision.
 - **No backpropagation:** no backward pass, no autograd and no stored computation graph.
   Each synapse changes from the activities of its own two neurons in free and nudged
   phases. Under the [stated conditions](docs/learning.md#5-why-the-contrast-is-a-gradient)
-  that local change equals a gradient step, without differentiating the network.
+  that contrast estimates a gradient as phases converge and the nudge becomes small,
+  without differentiating an unrolled network.
 - **Continuous interaction:** `GenericBrain.step(observation, reward=...)` incorporates
   feedback and chooses the next action in one ongoing loop. Demonstrations enter the
   same loop through `teacher=`. Activity settles quickly; synapses change more slowly.
