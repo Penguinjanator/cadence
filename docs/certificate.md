@@ -67,3 +67,36 @@ the equations at the state they measure, and nothing about uniqueness or converg
 - Warm-start streams. The step bound is logarithmic in the change, and an unchanged input
   costs no step at all.
 - Lesions keep the certificate: cutting synapses can only lower the row mass.
+
+The movement passed to `error_bound` is **potential** movement. The ordinary
+`settle_batch(tolerance=...)` option measures activation movement instead and must not be
+substituted into that bound. `equilibrate` directly checks the potential and adaptation
+equations. A zero contraction rate (`dt=1`, zero coupling) needs at most one step after a
+changed input. The warm-start budget assumes the old state is already the old equilibrium;
+an approximate warm state has its own remaining error, even when the stimulus is unchanged.
+
+## Equilibrium-propagation scope
+
+`ep_structure(brain, fixed_inputs=...)` checks effective weight symmetry among the free
+neurons. Its `compatible` flag is a structural diagnostic, separate from the contraction
+certificate. Efficacy tying alone does not establish effective symmetry when contact counts
+or presynaptic gains differ.
+
+The [original equilibrium-propagation model](https://arxiv.org/abs/1602.05179) keeps its
+inputs clamped. In Cadence, source neurons with no incoming effective weight settle to
+potentials set by their fixed drive and bias. After convergence, their projections into
+the free neurons act as external fields. These projections need no reverse edge for the
+free-state energy argument. The diagnostic checks that excluded inputs are actually
+sources; calling a recurrent neuron an input does not make it clamped.
+
+Keep the excluded inputs unchanged and unnudged between phases. The derivative statement
+then concerns projection weights, recurrent weights and free-neuron biases with the source
+parameters held fixed. A positive structural check alone does not establish a gradient:
+phases must converge on a smooth stable branch, finite beta retains estimation bias, and
+adaptation lies outside this free-state argument. Convert the raw contrast using the
+contact/gain factor and the loss-temperature convention in [learning](learning.md).
+
+`benchmarks/ep_inputs.py` checks one-way input projection and tied recurrent derivatives
+against finite differences across five seeds and three beta values. It includes actual
+free/free asymmetry as a negative control. The receipts establish that bounded example;
+they do not retrospectively certify the trained networks in historical experiments.

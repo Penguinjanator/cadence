@@ -24,7 +24,14 @@ from __future__ import annotations
 
 from . import regions
 from .brain import Brain, BrainState, Equilibrium, Nudge, available_backends
-from .certificate import Certificate, certificate, lipschitz_constant, row_mass
+from .certificate import (
+    Certificate,
+    EPStructure,
+    certificate,
+    ep_structure,
+    lipschitz_constant,
+    row_mass,
+)
 from .checkpoint import load, save
 from .connectome import Connectome
 from .content_memory import ContentMemory
@@ -52,7 +59,9 @@ __all__ = [
     "ContentMemory",
     "ReservoirReplay",
     "Certificate",
+    "EPStructure",
     "certificate",
+    "ep_structure",
     "lipschitz_constant",
     "row_mass",
     "PatternSeparator",

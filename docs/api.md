@@ -49,13 +49,21 @@ give additional details. Prefer keyword arguments for optional configuration.
 - `equilibrate(drive, *, budget=512, chunk=32, tolerance=1e-5, state=None, mask=None, nudge=None) -> Equilibrium`:
   seek a joint state whose equation residual is below tolerance, checking after each chunk.
   `budget` caps additional settling steps exactly, including a short final chunk;
-  zero checks the starting state. Checks use one host transport each. The returned
+  zero checks the starting state. Each check uses one transport; unread float64 Torch
+  states stay on their device and return one scalar per row. The returned
   `Equilibrium` has `state`, per-row `residual`, total `steps`, `tolerance`, and a boolean
   per-row `converged` property. `state.steps` is the last chunk's count. Convergence here
   does not prove stability, uniqueness or task quality.
-- `residual(drive, state, *, nudge=None, mask=None)`: per-row maximum remaining
-  fixed-point equation discrepancy, including adaptation when enabled. One CPU transport
-  evaluation, no state change. It is a diagnostic and does not prove stability or uniqueness.
+- `residual(drive, state, *, nudge=None, mask=None, on_device=True)`: per-row maximum remaining
+  fixed-point equation discrepancy, including adaptation when enabled. One transport
+  evaluation, no state change. Unread float64 Torch states use the resident kernel;
+  float32 states and other backends use the float64 CPU reference. `on_device=False`
+  selects that reference explicitly. It is a diagnostic and does not prove stability or uniqueness.
+- `ep_structure(brain, *, fixed_inputs=(), tolerance=1e-12) -> EPStructure`: reports the
+  maximum asymmetry of effective free/free weights, incoming mass on excluded source
+  neurons, and adaptation. Its `compatible` flag covers structure only: inspect phase
+  residuals, unchanged unnudged inputs, smoothness, stability, finite-beta bias, and
+  parameter/loss units separately. See [the certificate guide](certificate.md#equilibrium-propagation-scope).
 - `stimulus_vector(stimulus)`, `stimulus_levels(levels)` (finite levels times the stimulus
   amplitude, with signed values allowed), `readings(state, names, i=0)`, `with_parameters(*, efficacy=None, log_gain=None, bias=None)`,
   `weights` (effective drive per synapse), `dense()` (the `W[pre, post]` matrix), `to_dict()`.

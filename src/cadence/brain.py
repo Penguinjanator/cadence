@@ -560,8 +560,9 @@ class Brain:
         """Continue a joint state until its equations hold or the exact step budget expires.
 
         Unlike ``settle_batch(tolerance=...)``, this tests the potential and adaptation
-        equations, including the same mask and nudge. Checks cost one extra host transport
-        per chunk. All rows advance together; a row's small residual does not freeze it.
+        equations, including the same mask and nudge. Checks cost one extra transport
+        per chunk. Resident float64 Torch states are checked on their device. All rows
+        advance together; a row's small residual does not freeze it.
         ``drive`` is dense, with one column per neuron, as in ``settle_batch``.
         """
         for name, value, minimum in (("budget", budget, 0), ("chunk", chunk, 1)):
@@ -721,6 +722,7 @@ class Brain:
         *,
         nudge: Nudge | None = None,
         mask: np.ndarray | None = None,
+        on_device: bool = True,
     ) -> np.ndarray:
         """Maximum absolute fixed-point equation residual per row, without settling.
 
@@ -734,8 +736,10 @@ class Brain:
         A small residual certifies these equations at this state, not stability,
         uniqueness, or convergence from another start. Activation-movement
         tolerance and reaching a step cap do not provide this certificate.
-        The calculation performs one transport on the CPU; accelerator states
-        and parameters are fetched if needed. No state or parameter is changed.
+        The calculation performs one transport. An unread resident float64 Torch state
+        is checked on its device, returning only one scalar per row. Other states use
+        the float64 CPU reference, including float32 accelerator states; ``on_device=False``
+        forces that reference. No state or parameter is changed.
         A single state returns a length-one array; nonfinite errors return infinity.
         """
         d = np.asarray(drive, dtype=float)
@@ -743,13 +747,26 @@ class Brain:
             d = d[None, :]
         if d.ndim != 2 or d.shape[1] != self.connectome.n:
             raise ValueError("drive must have one column per neuron")
+        keep = np.ones(self.connectome.n) if mask is None else np.asarray(mask, dtype=float)
+        if keep.shape not in ((self.connectome.n,), (1, self.connectome.n), d.shape):
+            raise ValueError("mask must have one entry per neuron, optionally per batch row")
+        handle, kernel = state.device, self._torch
+        if (
+            on_device
+            and kernel is not None
+            and kernel.dtype == kernel.torch.float64
+            and handle is not None
+            and handle.get("holder") is kernel
+            and state.__dict__.get("v") is None
+            and state.__dict__.get("adaptation") is None
+        ):
+            if tuple(handle["v"].shape) != d.shape or tuple(handle["a"].shape) != d.shape:
+                raise ValueError("state batch does not match the drive batch")
+            return np.asarray(kernel.residual(d, handle["v"], handle["a"], keep, nudge))
         v = np.atleast_2d(state.v)
         a = np.atleast_2d(state.adaptation)
         if v.shape != d.shape or a.shape != d.shape:
             raise ValueError("state batch does not match the drive batch")
-        keep = np.ones(self.connectome.n) if mask is None else np.asarray(mask, dtype=float)
-        if keep.shape not in ((self.connectome.n,), (1, self.connectome.n), d.shape):
-            raise ValueError("mask must have one entry per neuron, optionally per batch row")
         s = self.neuron_model.activation(v) * keep
         blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
         error = self._synaptic_input(s, blocks) + d + self.bias - v
@@ -921,6 +938,7 @@ class _TorchKernel:
         self.neuron_model = neuron_model
         self.n = connectome.n
         self.layout = layout
+        self.sources = [] if layout is None else layout.sources()
         self._connectome = connectome  # for the per-row contrast's edge index, made on first use
         self._row_index: Any = None
         self.blocks: list[Any] = []
@@ -975,8 +993,11 @@ class _TorchKernel:
         assert lay is not None
         out = torch.zeros_like(s)
         moved = [True] * lay.ranges
-        if previous is not None:
-            for r in lay.sources():
+        # torch.equal returns a host bool. On accelerators its synchronization costs
+        # more than these source products on small settling graphs. Recompute there;
+        # CPU keeps the exact cache, with no change to the neuron equations.
+        if previous is not None and self.device.type == "cpu":
+            for r in self.sources:
                 a0, a1 = int(lay.starts[r]), int(lay.starts[r + 1])
                 moved[r] = not torch.equal(s[:, a0:a1], previous[:, a0:a1])
         for k in range(lay.pairs):
@@ -994,10 +1015,51 @@ class _TorchKernel:
             )
         rest = self._rest
         r = torch.sigmoid(neuron_model.slope * (v - neuron_model.threshold)) - rest
-        s = torch.relu(r) / (1.0 - rest)
-        if neuron_model.leak:
-            s += neuron_model.leak * torch.clamp(r, max=0.0) / rest
-        return s
+        # One leaky-rectifier primitive replaces separate positive/negative arrays.
+        # This is the same piecewise-linear map, including exact silence at rest.
+        rest_value = neuron_model.rest_emission
+        negative_slope = neuron_model.leak * (1.0 - rest_value) / rest_value
+        return torch.nn.functional.leaky_relu(r, negative_slope=negative_slope) / (1.0 - rest)
+
+    def residual(
+        self, drive: np.ndarray, v: Any, a: Any, keep: np.ndarray, nudge: Nudge | None
+    ) -> np.ndarray:
+        """Float64 equation check, with only the per-row result returning to the host."""
+        torch, model = self.torch, self.neuron_model
+
+        def to(x: np.ndarray) -> Any:
+            return torch.tensor(np.asarray(x), dtype=self.dtype, device=self.device)
+
+        with torch.no_grad():
+            k = to(keep)
+            s = self._activation(v) * k  # do not trust a separately cached activation
+            if self.layout is None:
+                total = torch.zeros_like(s).index_add_(1, self.post, s[:, self.pre] * self.w)
+            else:
+                total = self._synaptic_input(s, None, [None] * self.layout.pairs)
+            error = total + to(drive) + self.bias - v
+            if model.adaptation is not None:
+                error -= model.adaptation.strength * a
+            if nudge is not None:
+                target = to(nudge.target)
+                if nudge.softmax_temperature is None:
+                    push = nudge.beta * (target - s) * to(nudge.mask)
+                else:
+                    target = target.expand_as(s)
+                    push = torch.zeros_like(s)
+                    for members in _softmax_groups(nudge):
+                        index = torch.tensor(members, dtype=torch.long, device=self.device)
+                        p = torch.softmax(s[:, index] / nudge.softmax_temperature, dim=1)
+                        push[:, index] = nudge.beta * (target[:, index] - p)
+                if nudge.weight is not None:
+                    push *= to(nudge.weight)[:, None]
+                error += push
+            error = k * error + (k - 1.0) * v / model.dt
+            result = error.abs().amax(dim=1)
+            if model.adaptation is not None:
+                result = torch.maximum(result, (s - a).abs().amax(dim=1))
+            result = torch.where(torch.isfinite(result), result, torch.inf)
+        return np.asarray(result.cpu().numpy())
 
     def contrast_tensors(self, s_plus: Any, s_minus: Any) -> tuple[Any, Any]:
         """The block Gram contrast on the device, per synapse and per neuron, as tensors."""
@@ -1007,7 +1069,7 @@ class _TorchKernel:
         for k in range(lay.pairs):
             a0, a1, b0, b1 = lay.bounds(k)
             a_plus, a_minus = s_plus[:, a0:a1], s_minus[:, a0:a1]
-            if torch.equal(a_plus, a_minus):
+            if self.device.type == "cpu" and torch.equal(a_plus, a_minus):
                 block = a_plus.T @ (s_plus[:, b0:b1] - s_minus[:, b0:b1])
             else:
                 block = a_plus.T @ s_plus[:, b0:b1] - a_minus.T @ s_minus[:, b0:b1]

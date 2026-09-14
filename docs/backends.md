@@ -79,6 +79,31 @@ throughput and the useful precision depend on the device and problem. Compare ou
 residuals and learning curves with float64, especially near multiple equilibria. MPS
 uses float32 for parameters and state because it does not support float64.
 
+## Residual checks and synchronization
+
+`Brain.equilibrate` chooses work from the measured potential/adaptation equation residual.
+An unchanged warm state already within tolerance takes zero settling steps, but still costs
+one residual check. `chunk` trades check frequency against overshoot: every row advances
+together and the final check must meet the same tolerance regardless of chunk size. Step
+count measures numerical settling work; it is not a measure of surprise or task quality.
+
+For unread float64 Torch states, residual transport and reduction stay on the device and
+only one scalar per row returns. Reading or editing the host potential/adaptation selects
+the host reference, as does `residual(..., on_device=False)`. Float32 Torch and MPS states
+also retain the float64 host reference, so faster checks do not quietly weaken its precision.
+Accelerator block products no longer read `torch.equal` flags on the host at each step;
+they recompute source products. CPU blocks retain the exact source cache. This changes
+the cost, not the equation. The activation uses one leaky-rectifier primitive for its two
+linear branches. A positive movement tolerance still requires a scalar check every step;
+fixed step counts and the inner chunks of `equilibrate` avoid that check.
+
+The reproducible comparison is `benchmarks/runtime.py`: five seeds, baseline functions
+from the declared Git revision, identical dtype, steps, tolerances and centered updates,
+warmup samples, alternating arm order, synchronized timing, host-reference residuals and
+state/parameter differences. `benchmarks/receipts/` retains the measured CPU and local MPS
+outcomes. These small fixed-topology measurements do not establish a CUDA result, a
+speedup over an MLP, training quality at scale, or energy use in joules.
+
 ## Choosing a device
 
 ```python

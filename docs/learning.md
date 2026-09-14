@@ -194,8 +194,11 @@ below rest; it does not remove saturation or make the piecewise activation globa
 A contrast is zero if neither the presynaptic nor the postsynaptic neuron changes under
 the nudge. Hidden neurons therefore need a directed feedback path from nudged outputs.
 `layered` supplies tied feedback between hidden and output neurons. A general
-directed graph may provide some such paths and omit others; asymmetry also breaks
-the energy-gradient argument above. Feedback reachability alone does not ensure
+directed graph may provide some such paths and omit others. Asymmetry among free neurons
+breaks the energy-gradient argument above. One-way projections from fixed external inputs
+do not: a source neuron at its unchanged equilibrium supplies a constant field to the free
+subsystem. `ep_structure(brain, fixed_inputs=...)` checks this structural distinction; it
+does not check convergence or certify finite-beta accuracy. Feedback reachability alone does not ensure
 useful credit if activations saturate or phases fail to converge.
 
 For a measured connectome, distinguish the supplied topology from an assumed learning
