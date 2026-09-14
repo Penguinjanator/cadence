@@ -80,29 +80,29 @@ of the globally best action.
 
 ## Examples
 
-**Feed a worm, teach a mouse, draw with an arm, or challenge a reasoner.** The six
-[interactive websites](https://github.com/muellerberndt/cadence-examples#launch-any-demo)
-run locally in your browser with bundled assets. No GPU, account or training run
-is needed to start. Every demo shows its actual patch circuit beside the body on
-desktop, grouped by function: activity, automatic repair cascades, transient
-input-release probes and memory writes. The layout stacks on mobile.
+**Draw with an arm, teach a mouse, feed a worm, or challenge a reasoner.** The six
+[interactive websites](https://floatingpragma.io/cadence-examples/) open in the
+browser. No install, GPU, account or training run is needed. Every demo shows its
+actual patch circuit beside the body on desktop, grouped by function: activity,
+automatic repair cascades, transient input-release probes and memory writes. The
+layout stacks on mobile.
 
-| Main example | What it does | Cadence circuit size | Biological size reference |
-|---|---|---|---|
-| [C. elegans habitat](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#food-and-walls-in-the-worm-habitat) | Detects local food cues, navigates around walls and consumes food patches on contact. Draw barriers, place food, erase a passage, or inspect and perturb the chemical circuit. | **309 owners · up to 4,108 seams** in the habitat (297-cell chemical graph plus 12 directional sensor/motor owners); no learned entries | Drawn from C. elegans anatomy; the adult hermaphrodite has **302 neurons** in its complete nervous system |
-| [Teachable mouse](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Starts with cheese, home and water tasks. Teach a new destination, revise it without erasing other distinct cues, and carry the lesson into another maze. | **132 active ports / 265 allocated slots · 285 seams** in the starting maze; **32 adaptive entries** | Hundreds of software slots; C. elegans' **302-neuron** nervous system is a count reference |
-| [Eye & arm](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#why-cadence-fits-each-task) | Reads your drawing pad or uploaded line image through a retina, then drives shoulder, elbow and pencil-lift motors to copy it. Disturb a joint or disable a motor population. | **593 owners · up to 28 seams** (576 retinal + 17 controller); supplied geometry and weights | Hundreds of software coordinates; no biological brain equivalence |
-| [Fly-inspired forager](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#ready-to-run-and-watch-learning) | Visits flowers, learns their nectar value on contact and updates its preferences when you change the nectar. Move flowers to change its world. | **18 owners · up to 44 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
-| [Changing memory](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#results-and-comparison-contract) | Learns a key/value association in one write, replaces outdated records and shows retention or interference as keys become more similar. Compare online MLP updates on the same observations. | **12 memory ports · 32 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** |
+| Example | What it does | Cadence circuit size | Biological size reference | Links |
+|---|---|---|---|---|
+| Eye & arm | Reads your drawing pad or uploaded line image through a retina, then drives shoulder, elbow and pencil-lift motors to copy it. Disturb a joint or disable a motor population. | **593 owners · up to 28 seams** (576 retinal + 17 controller); supplied geometry and weights | Hundreds of software coordinates; no biological brain equivalence | [web demo](https://floatingpragma.io/cadence-examples/eye-arm/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/eye-arm) |
+| Teachable mouse | Starts with cheese, home and water tasks. Teach a new destination, revise it without erasing other distinct cues, and carry the lesson into another maze. | **132 active / 265 allocated owners · 285 seams** in the starting maze; **32 adaptive entries** | Hundreds of software slots; C. elegans' **302-neuron** nervous system is a count reference | [web demo](https://floatingpragma.io/cadence-examples/mouse/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/mouse) |
+| C. elegans habitat | Detects local food cues, navigates around walls and consumes food patches on contact. Draw barriers, place food, erase a passage, or inspect and perturb the chemical circuit. | **309 owners · up to 4,108 seams** in the habitat (297-cell chemical graph plus 12 directional sensor/motor owners); no learned entries | Drawn from C. elegans anatomy; the adult hermaphrodite has **302 neurons** in its complete nervous system | [web demo](https://floatingpragma.io/cadence-examples/worm/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/worm) |
+| Fly-inspired forager | Visits flowers, learns their nectar value on contact and updates its preferences when you change the nectar. Move flowers to change its world. | **18 owners · up to 44 seams** (12 memory + 6 sensory/motor); **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** | [web demo](https://floatingpragma.io/cadence-examples/fly/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/fly) |
+| Changing memory | Learns a key/value association in one write, replaces outdated records and shows retention or interference as keys become more similar. Compare online MLP updates on the same observations. | **12 owners · 32 seams**; **32 adaptive entries** | Small subcircuit scale; fewer units than the **20-neuron C. elegans feeding network** | [web demo](https://floatingpragma.io/cadence-examples/memory/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/memory) |
+| Connect Four | Play against bounded adversarial search; inspect hypothetical replies and a self-monitor that can request more thought. | **19 owners · 39 seams** (6 evaluator + 7 candidates + 6 monitor); supplied rules and weights | Engineered task circuit; no animal-equivalence claim | [web demo](https://floatingpragma.io/cadence-examples/connect-four/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four) |
 
-| [Connect Four](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four) | Play against bounded adversarial search; inspect hypothetical replies and a self-monitor that can request more thought. | **19 owners · 39 seams**: features, value, candidates and monitor; supplied rules/weights | Engineered task circuit; no animal-equivalence claim |
-
-**Read the counts:** patches/ports hold state; seams carry weighted messages;
+**Read the counts:** owners hold state; seams carry weighted messages;
 adaptive entries are the values changed by learning. Active means unmasked,
 not necessarily nonzero at that instant. These are circuit counts,
 not total simulator parameters. The mouse allocates 247 spatial slots plus 12
 memory ports and six sensory/motor owners; its starting maze masks 133 wall
-slots and has 242 spatial seams, 32 memory seams and four motor seams. Editing or regenerating the maze changes the active counts.
+slots and has 242 spatial seams, 32 memory seams, four motor seams and seven
+task/field/feedback bridges. Editing or regenerating the maze changes the active counts.
 Memory seams count all matrix entries, including zeros. Body rules, environmental
 fields and comparison MLPs are outside these circuit counts.
 
@@ -114,7 +114,9 @@ whole-animal brain equivalent. The worm habitat uses supplied diffusion and a di
 simplified body/contact rules. The arm uses supplied geometry, pixel sensing
 and attention. These are task controllers, not validated animal reconstructions.
 
-Launch any website from the examples checkout:
+To run the websites offline, clone
+[cadence-examples](https://github.com/muellerberndt/cadence-examples) and launch
+one with Python's standard library:
 
 ```bash
 python serve.py worm
@@ -126,7 +128,7 @@ python serve.py connect-four
 ```
 
 Each command opens the browser on an available local port. The
-[demo guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase)
+[demo guide](https://github.com/muellerberndt/cadence-examples/blob/main/METHODS.md)
 explains why Cadence fits each task and the measured comparison: dictionary and
 MLP memory controls, a circuit surrogate and tied recurrence, maze replanning,
 and drawing with readback enabled or disabled. These are specific task results,

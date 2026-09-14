@@ -149,7 +149,7 @@ without another neural rule. Edits invalidate the pending command. Search in
 Connect Four has its own explicit thinking/preview phase. A settlement's step
 count measures numerical work, not semantic difficulty.
 
-See the [viewer guide](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#read-the-brain-view).
+See the [viewer guide](https://github.com/muellerberndt/cadence-examples/blob/main/METHODS.md#read-the-brain-view).
 
 The graded motor potentials persist between control ticks. They provide transient
 neural state during behavior; the one-second visual repair trail is separately

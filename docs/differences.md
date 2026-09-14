@@ -33,7 +33,7 @@ verifies custody; it cannot repair mismatched budgets or an unlearned baseline.
 
 ## Public comparisons
 
-The [current showcase](https://github.com/muellerberndt/cadence-examples/tree/main/showcase)
+The [current showcase](https://github.com/muellerberndt/cadence-examples/blob/main/METHODS.md)
 measures specific benefits: residual writes replace distinct-key records in one
 observation; a supplied recurrent circuit responds accurately to interventions;
 and visual/motor feedback repairs disturbed drawing. The mouse separates taught

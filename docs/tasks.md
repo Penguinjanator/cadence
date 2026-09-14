@@ -6,7 +6,7 @@ results. Dataset encoding and the evaluation split belong to your application.
 
 | Task | Input | Operation and output | Example or guide |
 |---|---|---|---|
-| Known interacting constraints | A drive and a declared wiring | Settle; read output activations and residual | [Circuit quickstart](quickstart.md), [C. elegans circuit](https://github.com/muellerberndt/cadence-examples/tree/main/showcase) |
+| Known interacting constraints | A drive and a declared wiring | Settle; read output activations and residual | [Circuit quickstart](quickstart.md), [C. elegans circuit](https://github.com/muellerberndt/cadence-examples/tree/main/worm) |
 | Revise an addressed record | Key and observed value | `FastSeams.observe`, then `recall` | [Memory](memory.md) |
 | Classification | Feature values on input owners | `Learner.step(drive, labels)`; `predict` returns class indices | [Label-fitting quickstart](quickstart.md#learn-a-response) |
 | Imitation | An observation and a teacher's action | Classification over actions, with legal-action masking at deployment | [Learning recipes](learning.md), [game pattern](games.md) |

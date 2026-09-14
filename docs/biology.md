@@ -162,7 +162,7 @@ decay in an isolated copy. The moving demos also carry graded motor potentials b
 is transient neural state; it does not establish learned working-memory behavior.
 Real fMRI commonly measures blood-oxygen-related changes; PET investigates
 selected molecular targets with specific tracers. Neither is a generic live map of all neurotransmitters. See
-[the viewer's imaging explanation and sources](https://github.com/muellerberndt/cadence-examples/tree/main/showcase#brain-colors-and-neurotransmitters).
+[the viewer's imaging explanation and sources](https://github.com/muellerberndt/cadence-examples/blob/main/METHODS.md#brain-colors-and-neurotransmitters).
 
 ## Build a task from the map
 

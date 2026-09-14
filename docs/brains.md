@@ -78,7 +78,7 @@ Each public demo labels its functional regions and reports a global and regional
 equation error. Its replay reconstructs one captured joint trajectory. External
 world models and mutually exclusive imagined branches remain separate; the
 strategy brain integrates their candidate scores in a shared decision circuit.
-See the [six task designs and tests](https://github.com/muellerberndt/cadence-examples/blob/main/showcase/COUPLED_BRAINS.md).
+See the [six task designs and tests](https://github.com/muellerberndt/cadence-examples/blob/main/COUPLED_BRAINS.md).
 
 ## Motor control
 
