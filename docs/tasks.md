@@ -81,6 +81,32 @@ selected rows and `keep(rows)` retains a subset without changing identities.
 Changing the batch size through an ordinary read or update can initialize fresh
 fast state; use the explicit stream operations when records must survive.
 
+## A game player's learning life
+
+Start by designing the state ranges and connections for the task, with enough
+capacity to fit a held-out portion of the teacher's demonstrations. A temporal
+task should receive the current observation and carry its own `Trace` state;
+a fully visible board need not carry an extra temporal copy.
+
+Use this sequence for the game examples:
+
+1. Fit teacher demonstrations with `Learner.step(drive, target)`.
+2. Play and experiment. An action and its reward-derived advantage can use
+   `Learner.step(drive, action, weight=advantage)`; `ActorCritic` supplies a
+   continuing reward learner with eligibility and a critic.
+3. Inspect recurring failures and obtain additional teacher demonstrations on
+   those states. Mix them with earlier examples to retain prior skills.
+4. Keep collecting experience in later games and save the learned parameters
+   with `Learner.save`. Retain a reusable episode record and rehearsal examples.
+
+Evaluate candidate updates on separate validation episodes, then measure the
+selected checkpoint on untouched test episodes. Every game supplies experience;
+not every update improves performance. Report rejected updates as well as gains.
+During reward replay, use the observation and trace available when the action
+was taken. Do not advance the live trace with shuffled training rows or targets.
+Reset transient state between episodes while preserving learned parameters.
+`Learner.save` does not save separately owned traces or experience buffers.
+
 ## Several learners in one net
 
 Use separate `Learner` objects with `trainable_overlaps` and
