@@ -11,7 +11,7 @@ back their current activity; records and feedback make the system self-reading.
 import numpy as np
 import cadence as cd
 
-brain = cd.GenericBrain.build(4, 4, hidden=32, episodic=True, seed=0)
+brain = cd.GenericBrain.build(4, 4, hidden=32, seed=0)
 observation = np.eye(4)[[0]]
 action = brain.step(observation)
 # The environment now executes that action and reveals the next moment.
@@ -52,7 +52,8 @@ Use a separate instance for frozen `predict` or greedy `act` measurements.
 
 ## Repetition and salience become lasting synaptic changes
 
-`GenericBrain.build(..., episodic=True)` adds `SynapticMemory`. It has a persistent
+`GenericBrain.build(...)` includes `SynapticMemory` by default (`episodic=True`).
+Use `episodic=False` to omit this associative pathway. It has a persistent
 matrix `C` shared across streams and a transient residual `F` per stream. Each entry is
 a synapse from a declared key neuron to a declared value neuron. The effective weight
 is `C + F`; there is no list of remembered examples. For one unit key `k` and an actually
@@ -128,3 +129,86 @@ must be saved separately. Old generic checkpoints retain their original fast-mem
 are additional storage. Persistent memory costs `key_width × value_width` numbers,
 plus the same amount per stream for effective fast weights. Reads do not consolidate
 or decay memory; only a new observation advances its update clock.
+
+## Defaults and the thinking clock
+
+| Mechanism | Default | When it advances |
+| --- | --- | --- |
+| Persistent neuronal state | On in `GenericBrain.step` | Each actual interaction continues the previous state |
+| Reward plasticity and current demonstrations | On in `step` | Real transitions and supplied labels; no train/eval switch |
+| Lasting associative synapses | On: `episodic=True`, `consolidation=0.05` | Observed outcomes; repetition and salience change persistent weights |
+| Extra working-memory trace population | Off: `working_memory=False` | Opt in when the task needs a separate fading trace |
+| Deliberation between actions | Available through `Deliberator`; application calls `tick` | Internal hypotheses, using supplied actions, transition and evaluator |
+| Hidden background thread | None | The application owns scheduling, pause and shutdown |
+
+These are defaults for the composed `GenericBrain`, not arbitrary raw `Brain` graphs.
+Existing checkpoints preserve their saved memory configuration. Enabling the default
+associative pathway adds `sensory_width × action_count` persistent parameters and the
+same number of fast weights per stream; disable it explicitly when reproducing an old
+memory-free control. Supervised `fit`/`predict` remain independent-sample operations.
+
+A task can stay active while the world waits. Use a separate **thinking clock** for
+hypotheses and retained neural activity. Do not call `step` merely because another UI
+frame passed: that would consume a real-action transition and replace its eligibility.
+Continue raw neuronal dynamics with `Brain.settle(..., state=state)` when needed;
+repeated settling under an unchanged drive may simply reach the same fixed point.
+Deliberation changes hypothetical input so there is something new to evaluate.
+
+`cadence.circuits.Deliberator` retains unfinished search across bounded ticks. It shares
+its search rule with synchronous `imagine`, and publishes only fully completed depths.
+Here a tempting immediate choice hides a bad later outcome:
+
+```python
+from cadence.circuits import Deliberator
+
+# Supplied toy rules and evaluator, always scored for the same decision maker.
+def value(path):
+    if len(path) == 1:
+        return 1.0 if path[0] == "tempting" else 0.0
+    return -1.0 if path[0] == "tempting" else 1.0
+
+thought = Deliberator(
+    actions=lambda path: ("tempting", "safe") if not path else ("continue",),
+    transition=lambda path, move: (*path, move),
+    evaluate=value,
+    terminal=lambda path: len(path) == 2,
+    depth=2,
+)
+thought.start(())
+while thought.pending:  # In a UI, call tick once per scheduled slice instead.
+    completed = thought.tick(nodes=1)
+assert completed.futures[0].action == "safe"
+assert completed.depth == 2
+```
+
+In a running application, process incoming events first, then give thought a bounded
+slice. `pause()` retains unfinished work, `resume()` permits more, and `cancel()` discards
+obsolete work and candidate actions. `start(new_state)` snapshots the new observation
+and replaces old work. Once the depth or total node budget is reached, ticks stop
+spending compute; a persistent system need not busy-loop. If the budget cannot complete
+even depth one, the result is `None`: the application must wait or use a labeled fallback.
+`nodes` counts all visited positions, including unfinished and earlier search depths;
+`result.nodes` describes the work at its last completed depth.
+
+Use a fixed, read-only model/evaluator during each search. For a learned value readout,
+`brain.basal_ganglia.value_of(brain.stimulus(hypothetical_observation))` settles an
+isolated evaluation without replacing pending action credit. Imagined outcomes do not
+write the live hippocampus or train the actor. After actual feedback updates the model,
+restart the search so candidates do not mix old and new weights. The application must
+explicitly connect completed candidate scores to its action-selection circuit; adding
+a `Deliberator` does not automatically override `GenericBrain.step`'s sampled action.
+
+The node budget bounds transitions and evaluations, not wall time inside a callback.
+Expensive world models need their own bounded evaluation or a worker. The browser
+[Connect Four example](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four)
+uses cooperative worker slices, ponders human replies by default, and retains a bounded
+cache of exact compatible game states. That cache is task-specific working storage,
+not learned long-term synapses. This core planner restarts on new observations and
+retains work between ticks of the same search; it does not cache across observations.
+
+[Deliberation tests](../tests/test_deliberator.py) compare against independent minimax,
+exercise pause/cancel/budget behavior and check real-action eligibility and memory
+remain unchanged during hypothetical evaluation. [Memory tests](../tests/test_continuous.py)
+measure lasting retention, correction and checkpoint recovery. Continuous operation
+and prospective search are useful architectural functions; neither establishes
+subjective experience or guarantees good plans with an inaccurate world model.

@@ -30,7 +30,7 @@ Examples refer to the [public websites](https://floatingpragma.io/cadence-exampl
 | `GenericBrain.step` | Ongoing perception, feedback and action | One interaction clock coordinating neuronal settling and slower plasticity; no training-mode switch |
 | `ActorCritic` | Reward-guided action and eligibility | Sampled actions, per-stream traces and a linear value readout outside the connectome |
 | `Valence` | Signed reward modulation | Centering, scaling and capping a computed prediction-error signal; no emotion or chemistry |
-| `imagine` | Prospective evaluation | Isolated bounded search using a supplied transition and evaluator |
+| `imagine`, `Deliberator` | Prospective evaluation | Isolated bounded search using a supplied transition and evaluator; resumable thought between actions |
 | `ActivityMonitor` | Monitoring uncertainty and one's own activity | A six-neuron heuristic readback circuit; the caller must act on its request |
 | `equilibrate` | Checking a circuit's settled state | A numerical equation-residual check with an exact work budget |
 
@@ -68,7 +68,7 @@ all animal learning follows Cadence's equations.
 | Spatial map and route finding | Pattern | A spatial field region gated by a visual map, position error to directional motors | [Several regions, one equilibrium](patterns.md#several-regions-one-equilibrium) | Mouse |
 | Choosing among options | Pattern | Candidate neurons settling with a value neuron and a monitor | [Future simulation](patterns.md#future-simulation) | Connect Four |
 | Simulating consequences before acting | Pattern | Futures rolled forward through the brain's own predictions in isolated batch rows, scored by a critic | [Future simulation](patterns.md#future-simulation) | |
-| Planning with a world model | Implemented | `imagine` over isolated copies with a supplied transition model | [Future simulation](patterns.md#with-a-supplied-world-model) | Connect Four |
+| Planning with a world model | Implemented | `imagine` or resumable `Deliberator` over isolated copies with a supplied transition model | [Future simulation](patterns.md#with-a-supplied-world-model) | Connect Four |
 | Expectation and surprise | Pattern | Transition statistics as synapses from context cues to expectation neurons | [Expectations as synapses](patterns.md#expectations-as-synapses) | |
 | Self-review | Pattern | Render the draft, re-simulate its weakest part, keep only whole-draft improvements | [Review and revise](patterns.md#review-and-revise) | |
 | Confidence, knowing when to think longer | Partial | `ActivityMonitor`, or a learned confidence neuron | [Reading its own activity](patterns.md#reading-its-own-activity) | Connect Four |
@@ -84,7 +84,7 @@ all animal learning follows Cadence's equations.
 | Afterimage, recent history | Implemented | `Trace`, `Echo` or `Afterglow` into context neurons | [Fading context](patterns.md#fading-context) | |
 | Working memory in prefrontal cortex | Partial | `prefrontal_cortex` driven by a `Trace` of the association cortex; `GenericBrain.build(..., working_memory=True)` | [A generic brain](patterns.md#a-generic-brain) | |
 | Holding an item, all-or-none report | Pattern | Self-exciting neuron pairs with mutual inhibition, coupled to answer neurons | [Holding an item](patterns.md#holding-an-item) | |
-| One-trial association of cue and outcome | Partial | Fast residual writes; `GenericBrain(episodic=True)` adds consolidation through `SynapticMemory` | [Records in the loop](patterns.md#records-in-the-loop) | Mouse, forager, changing memory |
+| One-trial association of cue and outcome | Partial | Fast residual writes; `GenericBrain` includes consolidation by default through `SynapticMemory` | [Records in the loop](patterns.md#records-in-the-loop) | Mouse, forager, changing memory |
 | Order and time since an event | Pattern | Clock or position neurons as record keys | [Records addressed by time](patterns.md#records-addressed-by-time) | |
 | Skills and learned representations | Implemented | Synaptic efficacies and biases trained by `Learner` | [Learning](learning.md) | |
 | Repetition/salience-dependent synaptic consolidation | Implemented | `SynapticMemory` slowly learns observed values; salience increases its local write rate | [One ongoing brain](continuous.md) | |

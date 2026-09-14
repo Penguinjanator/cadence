@@ -152,7 +152,7 @@ give additional details. Prefer keyword arguments for optional configuration.
 
 ## Generic brain (`cadence.generic`)
 
-- `GenericBrain.build(inputs, actions, *, hidden=64, density=1.0, lateral=-0.5, working_memory=False, memory_scale=12.0, episodic=False, features=8, field=3, seed=0, **options)`:
+- `GenericBrain.build(inputs, actions, *, hidden=64, density=1.0, lateral=-0.5, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, **options)`:
   develops `GenericBrain.genome(...)` and wraps it. `inputs` is a vector length, or an image
   shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
   to the constructor.
@@ -161,7 +161,7 @@ give additional details. Prefer keyword arguments for optional configuration.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `GenericBrain(connectome, *, episodic=False, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, seed=0, backend="cpu", device=None)`:
+- `GenericBrain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, seed=0, backend="cpu", device=None)`:
   needs populations `sensory` or `visual/input`, `association` and `motor`, and uses
   `prefrontal` for a working memory when present. `learning` defaults to
   `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, nudged_steps=12, momentum=0.9)`,
@@ -370,7 +370,7 @@ give additional details. Prefer keyword arguments for optional configuration.
 
 ## Optional task compositions
 
-`from cadence.circuits import assemble, reflex_arc, imagine, ActivityMonitor` imports small
+`from cadence.circuits import assemble, reflex_arc, imagine, Deliberator, ActivityMonitor` imports small
 sensorimotor, counterfactual-search and self-reading compositions. See [patterns](patterns.md)
 for ports, budgets, supplied-model boundaries and examples. These optional architectural
 helpers compose ordinary neuron dynamics with explicit host-side orchestration.
@@ -385,6 +385,17 @@ and nonfinite weights are rejected. The helper adds topology only; convergence d
 the combined system.
 
 
+- `Deliberator(actions, transition, evaluate, terminal, *, depth=6, max_nodes=10000, adversarial=False, prune=False, clone=deepcopy)`:
+  resumable iterative deepening over isolated futures. `start(live)` snapshots new input
+  and replaces old work; `tick(nodes=128)` visits at most that many new positions and
+  returns an isolated copy of the last completed `Deliberation`, or `None`.
+  `pending` reports unfinished work; `pause()`/`resume()` preserve it; `cancel()` drops
+  the continuation and obsolete result. `nodes` counts total work for this observation,
+  `budget_exhausted` reports the hard limit, and `result` is the last completed depth.
+  No work starts until the caller supplies input and ticks. Callbacks obey `imagine`'s
+  isolation contract and remain fixed for one search; node limits do not preempt callbacks.
+  This object stores no learned weights and writes no real-action feedback.
+  See [defaults and scheduling](continuous.md#defaults-and-the-thinking-clock).
 - `imagine(live, actions, transition, evaluate, terminal, *, depth=2, max_nodes=10000, adversarial=False, prune=False, clone=deepcopy) -> Deliberation`:
   compare copied futures. Scores use the root actor's perspective; adversarial layers
   alternate min/max. Pruning uses alpha-beta bounds with fresh bounds per root action.

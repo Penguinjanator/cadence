@@ -164,7 +164,7 @@ can save work within the same attracting basin; measure it on changing inputs.
 a visual cortex for pictures, an association cortex, and a motor cortex with one neuron
 per action and lateral inhibition. `basal_ganglia` names its `ActorCritic` helper:
 a linear critic reads association activity, and reward prediction error modulates local
-eligibility traces. `episodic=True` adds `SynapticMemory` under the name
+eligibility traces. `episodic=True` (the default) supplies `SynapticMemory` under the name
 `hippocampus`, recording cue-to-action rewards and consolidating repeated or salient
 observations into shared persistent synapses. These two helpers keep state outside
 the connectome; they are functional analogues, not anatomical simulations. Their
@@ -577,6 +577,9 @@ through `Valence`, and let a large advantage narrow the next detuning. Keep ever
 candidate and its score for inspection.
 
 ### With a supplied world model
+
+For work between actions, use [`Deliberator`](continuous.md#defaults-and-the-thinking-clock):
+it retains unfinished hypotheses across bounded ticks while actual feedback keeps its own clock.
 
 `imagine` copies the live state into isolated branches, applies a supplied
 transition, and scores terminal states with a read-only evaluator. The controller

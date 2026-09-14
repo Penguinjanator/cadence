@@ -71,6 +71,10 @@ learner.save("tiny_brain.npz")
 
 This fits two responses, as an API demonstration. The [quickstart](docs/quickstart.md)
 explains the phases, checks an equilibrium, intervenes on a circuit and reloads a model.
+`GenericBrain` includes lasting synaptic memory by default. For thought between actions,
+connect a `Deliberator` to your task loop; it keeps unfinished futures without inventing
+new rewards. See [defaults, scheduling and tests](docs/continuous.md#defaults-and-the-thinking-clock).
+
 For pictures, working memory and reward, start with [`GenericBrain`](docs/patterns.md#a-generic-brain).
 
 ## Build your brain

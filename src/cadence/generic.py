@@ -12,7 +12,7 @@
   dopamine prediction error moves every plastic synapse through its eligibility trace;
 * optionally a ``prefrontal_cortex`` driven by a ``Trace`` of the association cortex, a
   working memory of the moments before;
-* optionally a hippocampal-memory analogue, ``SynapticMemory`` from sensory to motor
+* a default hippocampal-memory analogue, ``SynapticMemory`` from sensory to motor
   neurons, recording outcomes quickly and consolidating them through repetition/salience.
 
 ``step`` runs one ongoing perceive/feedback/act loop; demonstrations and rewards are
@@ -67,7 +67,7 @@ def _reward() -> ActorCriticConfig:
 
 
 class GenericBrain:
-    """Senses, an association cortex, a motor cortex, basal ganglia and optional memories.
+    """Senses, an association cortex, a motor cortex, basal ganglia and consolidating memory.
 
     ``connectome`` needs populations ``sensory`` (or ``visual/input`` for an image),
     ``association`` and ``motor``, and ``prefrontal`` for a working memory; ``genome`` builds
@@ -78,7 +78,7 @@ class GenericBrain:
         self,
         connectome: Connectome,
         *,
-        episodic: bool = False,
+        episodic: bool = True,
         consolidation: float = 0.05,
         working_memory_decay: float = 0.2,
         working_memory_amplitude: float = 3.0,
@@ -187,7 +187,7 @@ class GenericBrain:
         lateral: float = -0.5,
         working_memory: bool = False,
         memory_scale: float = 12.0,
-        episodic: bool = False,
+        episodic: bool = True,
         features: int = 8,
         field: int = 3,
         seed: int = 0,
@@ -377,9 +377,7 @@ class GenericBrain:
                 target[np.arange(len(action)), action] = reward
                 observed = np.zeros(target.shape, bool)
                 observed[np.arange(len(action)), action] = True
-                self.hippocampus.observe(
-                    keys, target, salience=importance, value_mask=observed
-                )
+                self.hippocampus.observe(keys, target, salience=importance, value_mask=observed)
             else:
                 target = self.hippocampus.recall(keys)
                 target[np.arange(len(action)), action] = reward
@@ -494,7 +492,9 @@ class GenericBrain:
             if meta.get("format") not in ("cadence-generic/1", "cadence-generic/2"):
                 raise ValueError("unsupported GenericBrain checkpoint format")
             learner = Learner.load(path, backend=backend, device=device, precision=precision)
-            result = cls(learner.brain.connectome, reward=ActorCriticConfig(**meta["reward"]))
+            result = cls(
+                learner.brain.connectome, episodic=False, reward=ActorCriticConfig(**meta["reward"])
+            )
             result.learner = learner
             agent = result.basal_ganglia
             agent.learner = learner
@@ -532,7 +532,8 @@ class GenericBrain:
                 agent._pending = ("states", phases[0], phases[1], data["pending/value"].copy())
                 if "moment/observations" in data:
                     result._moment = (
-                        data["moment/observations"].copy(), data["moment/action"].copy()
+                        data["moment/observations"].copy(),
+                        data["moment/action"].copy(),
                     )
             working = meta["working_memory"]
             result.working_memory = None

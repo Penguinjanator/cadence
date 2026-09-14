@@ -12,7 +12,7 @@ from typing import Any
 import numpy as np
 
 import cadence as cd
-from cadence.circuits import imagine
+from cadence.circuits import Deliberator
 
 
 def compare_futures(
@@ -44,8 +44,7 @@ def compare_futures(
             "done": done,
         }
 
-    result = imagine(
-        {"world": live, "reward": 0.0, "elapsed": 0, "done": False},
+    thought = Deliberator(
         lambda branch: actions,
         advance,
         lambda branch: branch["reward"] + discount ** branch["elapsed"] * value(branch["world"]),
@@ -53,6 +52,13 @@ def compare_futures(
         depth=horizon,
         max_nodes=8192,
     )
+    thought.start({"world": live, "reward": 0.0, "elapsed": 0, "done": False})
+    while thought.pending:
+        # A UI schedules one bounded slice while waiting for input.
+        thought.tick(nodes=16)
+    result = thought.result
+    if result is None or result.depth != horizon:
+        raise ValueError("the budget could not finish the requested horizon")
     return [
         {"actions": future.sequence, "score": future.score, "state": future.state["world"]}
         for future in result.futures

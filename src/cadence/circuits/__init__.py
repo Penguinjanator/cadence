@@ -6,11 +6,8 @@ claims of biological universality, autonomous world-model learning or consciousn
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from copy import deepcopy
 from dataclasses import dataclass
 from math import isfinite
-from typing import Generic, TypeVar
 
 import numpy as np
 
@@ -18,9 +15,7 @@ from ..brain import Brain, BrainState
 from ..connectome import Connectome
 from ..neuron import NeuronModel
 from .assembly import assemble
-
-S = TypeVar("S")
-A = TypeVar("A")
+from .deliberation import Deliberation, Deliberator, Future, imagine
 
 
 def reflex_arc(axes: int = 2) -> Connectome:
@@ -44,105 +39,6 @@ def reflex_arc(axes: int = 2) -> Connectome:
         },
         label="sensory-motor",
     )
-
-
-@dataclass(frozen=True)
-class Future(Generic[S, A]):
-    action: A
-    score: float
-    sequence: tuple[A, ...]
-    state: S
-
-
-@dataclass(frozen=True)
-class Deliberation(Generic[S, A]):
-    futures: tuple[Future[S, A], ...]
-    nodes: int
-    depth: int
-
-
-def imagine(
-    live: S,
-    actions: Callable[[S], Sequence[A]],
-    transition: Callable[[S, A], S],
-    evaluate: Callable[[S], float],
-    terminal: Callable[[S], bool],
-    *,
-    depth: int = 2,
-    max_nodes: int = 10000,
-    adversarial: bool = False,
-    prune: bool = False,
-    clone: Callable[[S], S] = deepcopy,
-) -> Deliberation[S, A]:
-    """Compare isolated futures; alternate max/min when ``adversarial=True``.
-
-    Values are always from the root actor's perspective. The transition receives
-    its own deep copy (or an isolated snapshot supplied by ``clone``).
-    ``prune=True`` skips adversarial branches by alpha-beta bounds, preserving exact
-    scores for every root action. Each root action starts with fresh bounds.
-    Evaluators/actions must be read-only and must not mutate
-    external objects. No observations or training are fabricated. A hard budget
-    failure raises rather than silently returning partially searched moves.
-    """
-    if (
-        isinstance(depth, bool)
-        or not isinstance(depth, int)
-        or depth < 1
-        or isinstance(max_nodes, bool)
-        or not isinstance(max_nodes, int)
-        or max_nodes < 1
-    ):
-        raise ValueError("depth and max_nodes must be positive integers")
-    nodes = 0
-
-    def advance(state: S, action: A) -> S:
-        if nodes >= max_nodes:
-            raise ValueError("imagination node budget exceeded")
-        return transition(clone(state), action)
-
-    def visit(
-        state: S,
-        remaining: int,
-        maximize: bool,
-        alpha: float = -float("inf"),
-        beta: float = float("inf"),
-    ) -> tuple[float, tuple[A, ...], S]:
-        nonlocal nodes
-        nodes += 1
-        if nodes > max_nodes:
-            raise ValueError("imagination node budget exceeded")
-        choices = () if remaining == 0 or terminal(state) else actions(state)
-        if len(choices) == 0:
-            value = float(evaluate(state))
-            if not isfinite(value):
-                raise ValueError("evaluator returned a nonfinite value")
-            return value, (), state
-        best: tuple[float, tuple[A, ...], S] | None = None
-        for action in choices:
-            after = advance(state, action)
-            score, suffix, end = visit(
-                after, remaining - 1, not maximize if adversarial else True, alpha, beta
-            )
-            if best is None or (score > best[0] if maximize else score < best[0]):
-                best = (score, (action, *suffix), end)
-            if prune and adversarial:
-                if maximize:
-                    alpha = max(alpha, score)
-                else:
-                    beta = min(beta, score)
-                if alpha >= beta:
-                    break
-        assert best is not None
-        return best
-
-    initial = clone(live)
-    if terminal(initial):
-        return Deliberation((), 0, depth)
-    futures = []
-    for action in actions(initial):
-        score, sequence, end = visit(advance(initial, action), depth - 1, not adversarial)
-        futures.append(Future(action, score, (action, *sequence), end))
-    return Deliberation(tuple(sorted(futures, key=lambda f: -f.score)), nodes, depth)
 
 
 @dataclass(frozen=True)
@@ -225,6 +121,7 @@ class ActivityMonitor:
 __all__ = [
     "ActivityMonitor",
     "Deliberation",
+    "Deliberator",
     "Future",
     "Readback",
     "assemble",
