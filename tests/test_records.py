@@ -122,3 +122,28 @@ def test_the_mean_settles_to_the_average_of_the_readings() -> None:
         records.code(row, adapt=True)
     np.testing.assert_allclose(records.mean, readings.mean(axis=0), atol=1e-9)
     assert records.seen == 500
+
+
+def test_task_sets_give_each_task_its_own_value_cells_and_share_the_plain_code() -> None:
+    rng = np.random.default_rng(3)
+    options = {"cells": 2000, "active": 20, "valued": ["value"], "habituation": 0.0, "seed": 8}
+    gated = cd.Records(12, {"y": 1, "value": 1}, tasks=[10, 11], **options)
+    plain = cd.Records(12, {"y": 1, "value": 1}, **options)
+    assert np.array_equal(gated.projection, plain.projection)
+    assert sorted(np.bincount(gated.task_of_cell)) == [1000, 1000]
+    first, second = np.zeros(12), np.zeros(12)
+    first[:10] = second[:10] = rng.random(10)
+    first[10], second[11] = 1.0, 1.0
+    codes, reference = gated.code(np.stack([first, second])), plain.code(np.stack([first, second]))
+    assert np.array_equal(codes[0], reference[0])
+    assert (gated.task_of_cell[codes[1, 0] > 0] == 0).all() and (gated.task_of_cell[codes[1, 1] > 0] == 1).all()
+    assert codes[1, 0] @ codes[1, 1] == 0.0
+    silent = np.zeros(12)
+    silent[:10] = first[:10]
+    assert np.array_equal(gated.code(silent)[1], plain.code(silent)[1])
+    gated.write(gated.code(first)[:, 0], {"value": np.array([1.0])})
+    assert gated.read(gated.code(second)[:, 0])["value"][0] == 0.0
+    again = cd.Records(12, {"y": 1, "value": 1}, tasks=[10, 11], **options)
+    assert np.array_equal(again.task_of_cell, gated.task_of_cell)
+    with pytest.raises(ValueError):
+        cd.Records(12, {"y": 1}, cells=30, active=20, tasks=[10, 11])

@@ -113,7 +113,7 @@ correction; the records of every cell the first reading left inactive stay zero.
 
 ### Habituation
 
-With `habituation` above zero (0.002 by default), `code(..., adapt=True)` first moves the
+With `habituation` above zero (`1e-5` by default), `code(..., adapt=True)` first moves the
 running mean `mean` toward each witnessed reading, and every code subtracts `mean` before
 the expansion. `seen` counts the witnessed readings, and the mean moves at the rate
 `max(habituation, 1 / seen)`: it is the plain average of the readings until one over their
@@ -174,6 +174,30 @@ print(round(float(codes[1, 0] @ codes[1, 1]), 2))      # their valued codes: 0.1
 A consequence field at a slow rate averages a regularity over many outcomes. A valued
 field at rate 1.0 writes in one exposure: after one write, its read at that reading equals
 the target.
+
+### Task sets
+
+`tasks` indexes the reading's task units, a goal port with one active unit. The cells are
+then divided into one group per task unit, drawn from the seed, and a reading's valued
+code takes its winners from the group of the unit with the largest value; a reading whose
+task units are all zero draws from every cell. The plain code and the consequence records
+stay shared by every task. A reward earned under one goal is written into cells no other
+goal reads, so a value learned for one task survives the rewards of the tasks that follow.
+`task_of_cell` holds each cell's group.
+
+```python
+tasked = cd.Records(
+    12, {"y": 1, "value": 1}, valued=["value"], cells=2000, active=20, habituation=0.0,
+    tasks=[10, 11], seed=8,
+)
+first, second = np.zeros(12), np.zeros(12)
+first[:10] = second[:10] = np.random.default_rng(3).random(10)   # the same scene
+first[10], second[11] = 1.0, 1.0                                # two tasks
+codes = tasked.code(np.stack([first, second]))
+print(np.array_equal(codes[0, 0], codes[0, 1]), round(float(codes[1, 0] @ codes[1, 1]), 2))   # True 0.0
+tasked.write(tasked.code(first)[:, 0], {"value": np.array([1.0])})
+print(tasked.read(tasked.code(second)[:, 0])["value"])                                          # [0.]
+```
 
 ### Known entries
 

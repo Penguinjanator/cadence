@@ -20,6 +20,13 @@ count falls to the habituation rate, and follows at that rate after. A settled m
 code of a reading where its records were written; a mean that keeps moving would carry old
 readings onto cells that were never written.
 
+Task sets keep the values of one task away from the values of another. When ``tasks`` names
+the reading's task units (a goal port with one active unit), the cells are divided into one
+group per task unit, and a reading's valued code draws its winners from the group of the
+active task; the plain code and the consequence records stay shared by every task. A reward
+earned under one goal is then written into cells no other goal reads, and a cue learned for
+one task survives the rewards of the tasks that follow.
+
 The projection is drawn from ``Mulberry32``, the generator of ``brain_scan.js``, so a page
 rebuilds the same cells from the seed.
 """
@@ -72,6 +79,16 @@ class Mulberry32:
         return out[:n]
 
 
+def _shuffle(n: int, generator: Mulberry32) -> np.ndarray:
+    """A permutation of ``range(n)`` by Fisher-Yates from ``n - 1`` draws of the generator."""
+    order = np.arange(n)
+    draws = generator.batch(max(n - 1, 0))
+    for i in range(n - 1, 0, -1):
+        j = int(draws[n - 1 - i] * (i + 1))
+        order[i], order[j] = order[j], order[i]
+    return order
+
+
 def _positive_int(name: str, value: int) -> int:
     if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
         raise ValueError(f"{name} must be a positive integer")
@@ -93,8 +110,11 @@ class Records:
     the fields that read and write through the valued code, at ``valued_rate``.
     ``habituation`` is the slowest rate of each unit's running mean (0 subtracts nothing).
     ``pathways`` are index arrays into the reading whose running norms, at ``pathway_rate``,
-    equalise their say in the valued code. ``bias`` scales the cells' fixed offsets. ``seed``
-    starts the generator of the projection and the offsets.
+    equalise their say in the valued code. ``tasks`` indexes the reading's task units; the
+    cells are then divided into one group per task unit, and the valued code of a reading
+    draws its winners from the group of the unit with the largest value (every cell when no
+    task unit is positive). ``bias`` scales the cells' fixed offsets. ``seed`` starts the
+    generator of the projection, the offsets and the division into groups.
     """
 
     def __init__(
@@ -107,10 +127,11 @@ class Records:
         rate: float = 0.2,
         valued: Iterable[str] = (),
         valued_rate: float = 1.0,
-        habituation: float = 0.002,
+        habituation: float = 1e-5,
         bias: float = 0.3,
         pathways: Sequence[Sequence[int] | np.ndarray] = (),
         pathway_rate: float = 0.002,
+        tasks: Sequence[int] | np.ndarray = (),
         seed: int = 0,
     ) -> None:
         self.inputs = _positive_int("inputs", inputs)
@@ -141,14 +162,35 @@ class Records:
         for p in self.pathways:
             if p.ndim != 1 or p.min() < 0 or p.max() >= self.inputs:
                 raise ValueError("a pathway is a one-dimensional index array into the reading")
+        self.tasks = np.asarray(tasks, dtype=np.int64).reshape(-1)
+        if len(self.tasks) and (self.tasks.min() < 0 or self.tasks.max() >= self.inputs):
+            raise ValueError("tasks is an index array into the reading")
+        if len(self.tasks) and self.cells // len(self.tasks) < self.active:
+            raise ValueError("every task group needs at least active cells")
+        self.task_of_cell = np.zeros(self.cells, dtype=np.int64)
+        if len(self.tasks):
+            order = _shuffle(self.cells, generator)
+            for k, group in enumerate(np.array_split(order, len(self.tasks))):
+                self.task_of_cell[group] = k
         self.mean = np.zeros(self.inputs)
         self.seen = 0
         self.pathway_norm = np.ones(len(self.pathways))
         self.tables = {name: np.zeros((self.cells, width)) for name, width in self.fields.items()}
         self.writes = 0
 
-    def _winners(self, x: np.ndarray) -> np.ndarray:
+    def _allowed(self, readings: np.ndarray) -> np.ndarray | None:
+        """The cells each reading's active task allows for the valued code, or None."""
+        if not len(self.tasks):
+            return None
+        units = readings[:, self.tasks]
+        allowed: np.ndarray = self.task_of_cell[None, :] == units.argmax(axis=1)[:, None]
+        allowed[units.max(axis=1) <= 0.0] = True
+        return allowed
+
+    def _winners(self, x: np.ndarray, allowed: np.ndarray | None = None) -> np.ndarray:
         drive = x @ self.projection + self.offset
+        if allowed is not None:
+            drive = np.where(allowed, drive, -np.inf)
         k = self.active
         out = np.zeros_like(drive)
         index = np.argpartition(-drive, k - 1, axis=1)[:, :k]
@@ -166,6 +208,7 @@ class Records:
         x = np.atleast_2d(np.asarray(readings, dtype=float))
         if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all():
             raise ValueError(f"readings must be a finite (batch, {self.inputs}) array")
+        allowed = self._allowed(x)
         if self.habituation > 0:
             if adapt:
                 for row in x:
@@ -181,7 +224,9 @@ class Records:
                     for value in norms:
                         self.pathway_norm[k] += self.pathway_rate * (value - self.pathway_norm[k])
                 v[:, pathway] /= self.pathway_norm[k] + 1e-3
-            valued = self._winners(v)
+            valued = self._winners(v, allowed)
+        elif allowed is not None:
+            valued = self._winners(x, allowed)
         else:
             valued = plain
         return np.stack([plain, valued])
@@ -246,5 +291,6 @@ class Records:
             "bias": self.bias,
             "pathways": [p.tolist() for p in self.pathways],
             "pathway_rate": self.pathway_rate,
+            "tasks": self.tasks.tolist(),
             "seed": self.seed,
         }

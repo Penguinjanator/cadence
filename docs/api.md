@@ -157,19 +157,24 @@ optional configuration.
 
 ## Records (`cadence.records`)
 
-- `Records(inputs, fields, *, cells=8000, active=40, rate=0.2, valued=(), valued_rate=1.0, habituation=0.002, bias=0.3, pathways=(), pathway_rate=0.002, seed=0)`:
+- `Records(inputs, fields, *, cells=8000, active=40, rate=0.2, valued=(), valued_rate=1.0, habituation=1e-5, bias=0.3, pathways=(), pathway_rate=0.002, tasks=(), seed=0)`:
   the records cortex over readings of `inputs` units. `fields` maps each predicted field to
   its width; of `cells` code cells, `active` stay per reading. `rate` is the write rate of
   the consequence fields; `valued` names the fields that read and write through the valued
   code, at `valued_rate`. `habituation` is the slowest rate of each unit's running mean (0
   subtracts nothing). `pathways` are one-dimensional index arrays into the reading whose
   running norms, moved at `pathway_rate`, equalise their say in the valued code; empty
-  pathways are dropped. `bias` scales the cells' fixed offsets. `seed` starts the
-  `Mulberry32` generator that draws the projection and then the offsets. Raises
+  pathways are dropped. `tasks` indexes the reading's task units: the cells are divided into
+  one group per task unit, and the valued code of a reading draws its winners from the group
+  of the unit with the largest value, from every cell when no unit is positive. `bias`
+  scales the cells' fixed offsets. `seed` starts the `Mulberry32` generator that draws the
+  projection, then the offsets, then the division into groups (a Fisher-Yates shuffle of the
+  cells from `cells - 1` uniform draws). Raises
   `ValueError` for a nonpositive `inputs`, `cells`, `active` or field width, `active` above
   `cells`, no fields, a valued name outside `fields`, `rate` or `valued_rate` outside
   `[0, 2]`, `habituation` or `pathway_rate` outside `[0, 1]`, a negative or nonfinite `bias`,
-  and a pathway index outside the reading. See [records](memory.md#records).
+  a pathway or task index outside the reading, and fewer than `active` cells per task
+  group. See [records](memory.md#records).
   - `code(readings, *, adapt=False) -> ndarray`: the codes of `(batch, inputs)` readings, or
     of one `(inputs,)` reading, as `(2, batch, cells)`: the plain code, then the valued code.
     With `habituation` above zero, `adapt=True` first counts each reading in `seen` and moves
@@ -193,15 +198,16 @@ optional configuration.
   - `parameters() -> int`: the record entries, `cells` times each field's width, summed.
   - `to_dict() -> dict`: the configuration (`inputs`, `fields`, `cells`, `active`, `rate`,
     `valued` as a sorted list, `valued_rate`, `habituation`, `bias`, `pathways` as lists,
-    `pathway_rate`, `seed`); `Records(**records.to_dict())` rebuilds the same `projection`
-    and `offset`.
+    `pathway_rate`, `tasks` as a list, `seed`); `Records(**records.to_dict())` rebuilds the
+    same `projection`, `offset` and `task_of_cell`.
   - Attributes: `projection`, `(inputs, cells)` standard normal draws divided by
     `sqrt(inputs)`; `offset`, `(cells,)` standard normal draws times `bias`; `mean`, the
     `(inputs,)` running mean, zero at construction; `seen`, the witnessed readings counted
     into the mean; `pathway_norm`, one running norm per pathway, one at construction;
     `tables`, a dict from field name to its `(cells, width)` records, zero at construction;
-    `writes`, the number of field writes. `mean`, `seen`, `pathway_norm`, `tables` and
-    `writes` are the learned state. The configuration is readable as `inputs`, `fields`,
+    `writes`, the number of field writes; `tasks`, the task units, and `task_of_cell`, the
+    `(cells,)` group of every cell (all zero without tasks). `mean`, `seen`, `pathway_norm`,
+    `tables` and `writes` are the learned state. The configuration is readable as `inputs`, `fields`,
     `cells`, `active`, `rate`, `valued` (a frozenset), `valued_rate`, `habituation`, `bias`,
     `pathways`, `pathway_rate` and `seed` (reduced to 32 bits).
 - `Mulberry32(seed)`: the 32-bit generator `mulberry` of `brain_scan.js`, so a page draws
