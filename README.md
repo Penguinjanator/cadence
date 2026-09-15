@@ -4,7 +4,13 @@
 
 # Cadence
 
-**Build recurrent brains that settle together and learn locally.**
+**Decentralized neural networks that learn through symmetry breaking.**
+
+Human brains do not learn by gradient descent and backpropagation, and they do not
+freeze their weights after pretraining. Neither does Cadence. A Cadence network is made
+of cortices that settle together into equilibria, where a transformer stacks feedforward
+layers with attention. Each synapse changes from the activity of its own two neurons, so
+there is no backward pass, and the network keeps learning while it runs.
 
 Cadence is a Python library for neurons, synapses and named functional regions.
 Each neuron reads its own state and incoming activity, then relaxes toward their
@@ -12,24 +18,25 @@ combined drive. Feedback carries changes between regions as they seek a common
 equilibrium. Local free/nudged contrasts teach responses; traces, fast memory and
 reward learning let a controller carry experience into its next decision.
 
-## Why use it?
+## Why Cadence
 
-- **Stateful interaction:** perception, memory inputs and motor intentions can influence
-  one joint solve. Inspect the activity, intervene on a neuron, and measure the effect.
-- **No backpropagation:** no backward pass, no autograd and no stored computation graph.
-  Each synapse changes from the activities of its own two neurons in free and nudged
-  phases. Under the [stated conditions](docs/learning.md#5-why-the-contrast-is-a-gradient)
-  that contrast estimates a gradient as phases converge and the nudge becomes small,
-  without differentiating an unrolled network.
-- **Continuous interaction:** `GenericBrain.step(observation, reward=...)` incorporates
-  feedback and chooses the next action in one ongoing loop. Demonstrations enter the
-  same loop through `teacher=`. Activity settles quickly; synapses change more slowly.
-  Count all internal free/nudged phases when comparing computation.
-- **Long-term memory through plasticity:** learned synaptic efficacies hold skills and
-  representations until later learning changes them. Fast synapses store an association
-  after one observation. `SynapticMemory` consolidates repeated or salient observations
-  into persistent synapses that survive transient-memory resets. Later evidence can
-  revise them. [Continuous learning and memory](docs/continuous.md).
+- **No backpropagation.** Each synapse learns from its own two neurons. No neuron reads a
+  global error, and no computation graph is stored.
+- **No frozen weights.** Learning happens during use. A brain keeps adapting to new
+  observations and rewards for as long as it runs.
+- **Short-term memory arises naturally.** Activity fades slowly and feeds back into the
+  next settle, so thoughts linger in the brain.
+- **Long-term memory arises naturally.** Plasticity stores salient and repeated facts in
+  persistent synapses. A fast synapse holds a new association after a single observation.
+  [Memory](docs/memory.md).
+- **A continuous stream of thought.** A Cadence brain does not run in shots or discrete
+  invocations. It is one ongoing loop, and each observation and reward arrives while the
+  brain is still thinking. [Continuous learning](docs/continuous.md).
+- **Imagined futures.** Small random drive breaks the symmetry of a settled state and
+  pushes the brain toward nearby alternatives. The brain settles each version of the
+  future, compares them and acts on the best one.
+- **Built like biology.** Neurons, synapses, cortices, basal ganglia and hippocampus are
+  the building blocks, and real connectomes load as plain data.
 
 These are useful design choices, not a universal speed or capability advantage.
 Recurrent networks and memory-augmented transformers can also carry state and plan.
