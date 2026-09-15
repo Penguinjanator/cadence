@@ -4,27 +4,49 @@
 
 # Cadence
 
-**Neural systems that learn through an ongoing stream of experience.**
+**Decentralized networks of neurons that learn through symmetry breaking, from an
+ongoing stream of experience.**
 
-Build a brain together with its learning life: what it observes, remembers,
-predicts, wants and does. Its experience shapes the decisions it makes next.
+Human brains do not learn by gradient descent and backpropagation, and they do not
+freeze their weights after pretraining. Neither does Cadence. A Cadence brain is made of
+cortices that settle together into equilibria, where a transformer stacks feedforward
+layers with attention. Each synapse changes from the activity of its own two neurons, and
+the same brain acts and learns throughout its life. Build a brain together with its
+learning life: what it observes, remembers, predicts, wants and does.
 
-## One mode: ongoing experience
+## Why Cadence
 
-**The same brain acts and learns throughout its life.** Each `GenericBrain.step`
-incorporates an observation and the previous action's outcome, updates its
-memories and synapses, and chooses the next action. There is no training/inference
-switch, separate deployment model or point at which learning must stop.
+- **No backpropagation.** Each synapse learns from its own two neurons and one broadcast
+  error. No neuron reads a global gradient, and no computation graph is stored.
+- **No training and inference steps.** There is one mode. Each `GenericBrain.step`
+  takes in an observation and the previous action's outcome, updates memories and
+  synapses, and chooses the next action. There is no switch between learning and use, no
+  separate deployment model and no point at which learning must stop.
+- **No frozen weights.** Learning happens during use. A brain keeps adapting to new
+  observations, rewards and corrections for as long as it runs.
+- **Short-term memory arises naturally.** Settled regions carry context across a delay
+  and complete a partial reading, so thoughts linger in the brain.
+- **Long-term memory arises naturally.** Salient and repeated facts are written into the
+  records the current reading touches, and plasticity keeps them in persistent synapses.
+  One stream, no replay ring.
+- **A continuous stream of thought.** A Cadence brain does not run in shots or discrete
+  invocations. It is one ongoing loop, and each observation and reward arrives while the
+  brain is still thinking.
+- **Imagined futures.** Small random drive breaks the symmetry of a settled state and
+  pushes the brain toward nearby alternatives. The brain settles each imagined future in
+  isolation, compares the recorded consequences and acts on the best one. Imagined
+  outcomes never become witnessed facts.
+- **Built like biology.** Neurons, synapses, cortices, a critic and an associative
+  reward memory are the building blocks, and real connectomes load as plain data.
+
+## How the brain works
 
 **Observe → remember → predict → act or communicate → learn from the outcome.**
 
-Thinking reads the current state; actual observations, rewards and corrections
-change what is learned. Imagined outcomes never become witnessed facts. The
-application controls when each event arrives. Keep the issued action pending until
-its real outcome arrives; a clock tick alone is not new feedback.
-Start with the [single-loop quickstart](docs/quickstart.md).
-
-## What the brain is made of
+Thinking reads the current state; actual observations, rewards and corrections change
+what is learned. The application controls when each event arrives. Keep the issued action
+pending until its real outcome arrives; a clock tick alone is not new feedback. Start with
+the [single-loop quickstart](docs/quickstart.md).
 
 - **Local neural state:** neurons exchange activity over declared synapses; the settled
   regions reach a joint fixed point that completes a partial reading, carries context
@@ -33,16 +55,16 @@ Start with the [single-loop quickstart](docs/quickstart.md).
   winner-take-all inhibition; each active cell keeps a record of what followed; the
   prediction is the activity-weighted sum of the records the reading touches; the
   witnessed outcome is written into exactly those, at a slow rate for consequences and a
-  fast rate for reward. One stream, no replay ring.
+  fast rate for reward.
 - **Local learning in the settled regions:** free and nudged phases and eligibility
   traces change synapses from their own two neurons' activity and one broadcast error,
   with no backward computation graph.
 - **Prediction and goals:** imagined consequences are record reads; a supplied search
   over them and isolated imagined futures guide a choice.
 
-These are observer-like, self-reading software patches: bounded local state,
-declared ports, readback, records and feedback/repair, with checkable evidence.
-The [experience guide](docs/experience.md) connects the functions and curriculum.
+These are observer-like, self-reading software patches: bounded local state, declared
+ports, readback, records and feedback/repair, with checkable evidence. The
+[experience guide](docs/experience.md) connects the functions and curriculum.
 `GenericBrain` is the ready composition of settled regions: a recurrent policy, a critic
 and an associative reward memory. The records cortex is `cd.Records`
 ([records](docs/memory.md#records)). Learned goals and language are not supplied.

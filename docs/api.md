@@ -294,7 +294,7 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   Observations must be a nonempty finite batch, with image dimensions flattened per row.
   `fit` rejects noninteger labels and mismatched batches before updating. It resets current
   action/working state but keeps episodic records. `brain` always returns the current
-  `learner.brain`, including after training. See [compose a brain](brain.md#genericbrain).
+  `learner.brain`, including after learning. See [compose a brain](brain.md#genericbrain).
 
 ## Genome (`cadence.genome`)
 
@@ -369,7 +369,7 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   momentum and normalisation state, and the update count. `compressed=False` writes an
   uncompressed archive, faster for a very large brain. `backend` and `device` may differ from the
   saved ones; `precision` overrides saved precision and `config` replaces the saved
-  configuration. Inference through `predict` or `free` does not update parameters.
+  configuration. `predict` and `free` read the parameters and update nothing.
   Separate `FastSynapses`, `Trace` and `ActorCritic` objects are not saved by this API.
   Use `GenericBrain.save/load` for the full standard composition. Archive replacement is
   atomic, so a failed write leaves the previous checkpoint intact.

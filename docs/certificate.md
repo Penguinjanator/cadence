@@ -65,7 +65,7 @@ The certificate concerns the settled regions; records are read and written witho
 - Report `cert.to_dict()` in every receipt next to the residual.
 - Keep learned brains under the limit where you can: bound efficacies (the learner clips
   each plastic efficacy at magnitude eight), scale the gain by the fan-in, and watch
-  `row_mass` over training. A brain that crosses the limit may settle in practice; the
+  `row_mass` over a life. A brain that crosses the limit may settle in practice; the
   certificate then says nothing.
 - Warm-start streams. The step bound is logarithmic in the change, and an unchanged input
   needs no repair step; checking that it is unchanged still has a cost.

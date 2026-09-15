@@ -225,7 +225,7 @@ A free phase may start from an earlier state (`learner.free(drive, warm=state)` 
 `learner.step(..., warm=state)`). Within the same attracting basin this can save settling
 steps; with multiple attractors it can change the answer. A capped warm phase deliberately
 retains transients and is not necessarily an equilibrium. Reset state at independent
-episode boundaries and compare warm and cold inference on changing inputs.
+episode boundaries and compare warm and cold settling on changing inputs.
 
 Each centered update runs three settling phases. Measure all phase steps and wall time; fewer
 epochs do not by themselves mean greater sample efficiency or lower compute. When the

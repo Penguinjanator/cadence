@@ -20,8 +20,8 @@ cd.available_backends()
 | backend | where it runs | precision | install | use it for |
 |---|---|---|---|---|
 | `"cpu"` | NumPy; optional Numba and SciPy | float64 | base install; `[fast]` for acceleration | first examples, numerical checks, sparse graphs |
-| `"torch"` on CUDA | NVIDIA GPU | float64, or float32 with `precision="float32"` | `cadence-net[accel]` | training at scale; receipts too, in float64 |
-| `"torch"` on MPS | Apple silicon GPU through Metal | float32 | `cadence-net[accel]` | training on a Mac when torch is what you have |
+| `"torch"` on CUDA | NVIDIA GPU | float64, or float32 with `precision="float32"` | `cadence-net[accel]` | large brains and long lives; receipts too, in float64 |
+| `"torch"` on MPS | Apple silicon GPU through Metal | float32 | `cadence-net[accel]` | a Mac when torch is what you have |
 | `"mlx"` | Apple silicon GPU through MLX, unified memory | float32 | `cadence-net[apple]` | an alternative Apple backend; benchmark the actual workload |
 | `"torch"` on CPU | torch CPU | float64 | `cadence-net[accel]` | one code path on a box without a GPU |
 
@@ -47,7 +47,7 @@ path needs no host equality check. NumPy and Numba use the same factorization,
 including when processing phase values restored from a checkpoint. Identical phases
 give exactly zero contrast.
 Input rounding, reduction order and cancellation between distinct contributions still
-limit accuracy; float32 training trajectories need not match float64 at a fixed
+limit accuracy; float32 learning trajectories need not match float64 at a fixed
 absolute error. RMS normalization can amplify small contrast errors. Gradient checks
 should use float64 CPU/CUDA and declare the nudge size and phase residuals.
 
@@ -117,7 +117,7 @@ To compare two implementations, run both on the same workload with identical dty
 steps, tolerances and centered updates over several seeds; warm up, alternate their order,
 synchronize the device around each timed call, and compare residuals, states and
 parameters as well as time. A small fixed-topology timing says nothing about another
-device, a comparison with an MLP, training quality at scale or energy use in joules.
+device, a comparison with an MLP, learning quality at scale or energy use in joules.
 
 ## Choosing a device
 
@@ -130,8 +130,8 @@ cd.Brain(connectome, neuron_model, backend="torch", precision="float32")      # 
 cd.Brain(connectome, neuron_model, backend="mlx")                             # Apple silicon through MLX
 ```
 
-A learner built on a device brain trains there; `Learner.load(path, backend="cpu")`
-brings a checkpoint back to the receipt backend, whatever trained it.
+A learner built on a device brain learns there; `Learner.load(path, backend="cpu")`
+brings a checkpoint back to the receipt backend, whatever backend it learned on.
 
 ## Precision matters
 
@@ -185,7 +185,7 @@ profile before assigning a cause to a slow tail.
 For a changing-input workload, `decide()` must advance an input sequence and carry or
 reset state according to the deployment contract. Repeating an unchanged input measures
 a stable-state fast path. Report cold and warm results, output quality, and residuals
-separately; elapsed time on that fast path does not establish general inference speed.
+separately; elapsed time on that fast path does not establish general settling speed.
 
 On Windows, load averages and context-switch counts may be unavailable and are
 reported as `None`. `latency` requires positive `repeats` and nonnegative `warmup`.

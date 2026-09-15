@@ -179,13 +179,13 @@ the arithmetic verifier. Neither check establishes benchmark fairness.
 
 | | Feed-forward model trained by backprop | Cadence brain |
 |---|---|---|
-| Inference | Evaluate layers | Repeated neuron updates with a bounded solve and an optional residual check |
+| Reading an answer | Evaluate layers | Repeated neuron updates with a bounded solve and an optional residual check |
 | State between inputs | A cache or a separate memory | A settled state, trace or record, each explicit |
 | Credit | Reverse-mode differentiation | Free and nudged endpoint contrasts; delta-rule writes for records |
 | Exact gradient conditions | Differentiable computation | Stable smooth equilibrium, symmetric effective weights, converged phases, vanishing nudge |
 | Work | Forward and backward passes | Every step of the free and nudged phases plus the update |
 
-Measure inference, learning and record maintenance separately on the same held-out
+Measure settling, learning and record maintenance separately on the same held-out
 data, and include the simple algorithmic solver when a task has one.
 
 This table compares update mechanisms.
@@ -196,7 +196,7 @@ and what changes when its environment changes.
 
 ## When to add machinery
 
-Inference, memory and learning are separate operations because their state
-lifetimes differ. A new mechanism needs a failure it fixes and an ablation on the
+Settling, memory and learning are distinct operations of one ongoing step because their
+state lifetimes differ. A new mechanism needs a failure it fixes and an ablation on the
 same inputs, budget and seeds, with its state and cost counted. Brain functions
 are compositions of the existing operations; [experience](experience.md) connects them.

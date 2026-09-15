@@ -15,7 +15,7 @@ from cadence.replay import ReservoirReplay
 
 replay = ReservoirReplay(capacity=256, inputs=196, seed=0)
 
-# In the existing online training loop, after obtaining a labeled minibatch x, y:
+# In the ongoing loop, after obtaining a labeled minibatch x, y:
 # old_x, old_y = replay.sample(len(x))            # only previously seen observations
 # train_x = np.concatenate([x, old_x])
 # train_y = np.concatenate([y, old_y])

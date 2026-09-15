@@ -97,7 +97,7 @@ engine. Write the returned `html` with `Path("brain.html").write_text(html, enco
 
 ## A page with its own engine
 
-For inference without adaptation, a page can store the effective weight matrix, the bias
+For settling without adaptation, a page can store the effective weight matrix, the bias
 vector and the neuron model's activation, and settle the brain locally, then feed every
 step to the scan. `Brain.dense()` returns the synapse matrix with every effective drive
 folded in (`gain`, `count`, `efficacy`, `log_gain`).
