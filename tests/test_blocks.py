@@ -95,7 +95,9 @@ def test_layout_survives_with_parameters_and_learning() -> None:
 def test_torch_precision_option_and_block_transport_agree_with_cpu() -> None:
     w = cd.layered(9, 7, 3, density=1.0, seed=8)
     neuron_model = cd.learning_neuron_model(dt=1.0)
-    drive = cd.Brain(w, neuron_model).stimulus_levels(np.random.default_rng(9).random((3, w.n)) * 0.5)
+    drive = cd.Brain(w, neuron_model).stimulus_levels(
+        np.random.default_rng(9).random((3, w.n)) * 0.5
+    )
     cpu = cd.Brain(w, neuron_model).settle_batch(drive, steps=30)
     single = cd.Brain(w, neuron_model, backend="torch", device="cpu", precision="float32")
     double = cd.Brain(w, neuron_model, backend="torch", device="cpu", precision="float64")

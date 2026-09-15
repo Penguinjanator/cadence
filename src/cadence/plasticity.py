@@ -40,6 +40,14 @@ __all__ = [
 ]
 
 
+def _batch_of(state: BrainState) -> int:
+    """The rows of a settled state, read from the device shape when the state rests there."""
+    handle = state.device
+    if handle is not None and "s" in handle and state.__dict__.get("v") is None:
+        return int(handle["s"].shape[0])
+    return int(np.atleast_2d(state.v).shape[0])
+
+
 @dataclass(frozen=True)
 class Bins:
     """A continuous action as one softmax choice per dimension over ``size`` levels.
@@ -281,7 +289,7 @@ class ActorCritic:
     def settle(self, drive: np.ndarray) -> BrainState:
         """The free phase for ``drive``, warm from the last one; cached for ``act``."""
         drive = self._validated_drive(drive)
-        if self._free is not None and self._free.v.shape[0] != len(drive):
+        if self._free is not None and _batch_of(self._free) != len(drive):
             self.reset()
         self._free = self.learner.free(drive, warm=self._free)
         self._drive = drive.copy()
@@ -591,9 +599,21 @@ class ActorCritic:
         warm = self._free
         assert warm is not None
         if done.any():
-            v, a = warm.v.copy(), warm.adaptation.copy()
-            v[done], a[done] = 0.0, 0.0
-            warm = BrainState(v, warm.activation, a, warm.steps)
+            kernel = self.learner.brain._torch
+            handle = warm.device
+            if kernel is not None and handle is not None and handle.get("holder") is kernel:
+                # the finished rows return to rest on the device; nothing comes to the host
+                warm = BrainState(
+                    None,  # type: ignore[arg-type]
+                    None,  # type: ignore[arg-type]
+                    None,  # type: ignore[arg-type]
+                    warm.steps,
+                    device=kernel.keep_rows(handle, ~done),
+                )
+            else:
+                v, a = warm.v.copy(), warm.adaptation.copy()
+                v[done], a[done] = 0.0, 0.0
+                warm = BrainState(v, warm.activation, a, warm.steps)
         return self.learner.free(drive, warm=warm)
 
     def _learn_device(

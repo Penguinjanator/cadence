@@ -39,7 +39,7 @@ The adaptive local step uses `momentum` and `normalize` to keep a running mean a
 of each synapse's own steps, with corrections for its short history. Each synapse reads its
 own optimizer state; this does not guarantee stable learning for every task or setting.
 
-Continue with the learner and drive from the [quickstart](quickstart.md#learn-a-response):
+Continue with the learner and drive from the [quickstart](quickstart.md#learn-from-an-observed-consequence):
 
 ```python
 ac = cd.ActorCritic(learner, critic=connectome.populations["hidden"],
@@ -87,8 +87,8 @@ undiscounted potential difference does not generally preserve the original
 objective under discounting; that guarantee requires the discounted form
 `gamma * Phi(next) - Phi(now)` with appropriate terminal handling.
 
-The [function map](biology.md#learning) places eligibility, prediction error
-and valence among the other mechanisms.
+The [experience guide](experience.md) connects eligibility, prediction error
+and valence to the rest of the learning life.
 
 ## Deployment
 

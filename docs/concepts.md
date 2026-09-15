@@ -8,8 +8,57 @@ In OPH terms this is an observer-like, self-reading design: local state, declare
 synaptic boundaries, readback, records and feedback, with protocols and source-bound
 receipts for evidence. The biological names describe computational roles.
 
-The [biology-to-Cadence map](biology.md) connects nervous-system functions to
-these operations, from sensory reactions to memory and imagining futures.
+The [experience guide](experience.md) starts from an ongoing learning life, connecting
+world prediction, episodes, goals, action and communication. The
+[composition guide](experience.md#connect-functions-through-actual-ports) connects those functions through actual ports.
+The architecture is a hypothesis to test, not an obligatory biological inventory.
+
+## Three principles
+
+Local repair and checked convergence describe the numerical substrate. Detuning is
+an optional technique for proposing alternatives within a learning application.
+
+**Local repair.** Each neuron reads its own potential, its synaptic input and its drive,
+and moves toward their sum. `brain.settle_batch(drive,
+steps=..., tolerance=...)` runs that update for every neuron of a batch; `brain.settle(stimulus)`
+does the same for one stimulus. The synapse follows the same rule. `Learner.step(drive, labels)`
+runs a free phase and nudged phases on the same brain, then changes each synapse from the
+activities of its own two neurons in those phases. Output nudges can read a target
+and an output group; reward learning broadcasts a prediction-error signal. These
+teaching signals are explicit. No backward computation graph is stored through the brain.
+
+**Checked convergence.** A step cap is a work limit, not an equilibrium. The fixed-point
+equations decide. `brain.residual(drive, state)` returns the largest equation error per row.
+`brain.equilibrate(drive, budget=..., chunk=..., tolerance=...)` settles until every row's
+residual is below the tolerance or the budget is spent, and returns the state with `steps`,
+the per-row `residual` and the per-row `converged` flags. Pass the same `mask` and `nudge`
+to a settle and to its residual check. A spent budget is a result to report, not an
+equilibrium to claim.
+
+**Equilibrium detuning.** A settled brain gives one answer under one drive. To sample
+alternatives, add bounded random drive to the latent neurons and settle again. Each batch
+row supplies a separate candidate; check whether it reaches an equilibrium:
+
+```python
+import numpy as np
+import cadence as cd
+
+connectome = cd.layered(4, 16, 4, density=1.0, seed=1)
+brain = cd.Brain(connectome, cd.learning_neuron_model())
+latent = list(connectome.populations["hidden"])
+rng = np.random.default_rng(0)
+
+drive = np.zeros((8, connectome.n))          # eight rows, the same input in each
+drive[:, list(connectome.populations["input"])] = np.eye(4)[0]
+drive[:, latent] += rng.uniform(-0.1, 0.1, (8, len(latent)))  # bounded detuning
+result = brain.equilibrate(drive, budget=512, chunk=32, tolerance=1e-6)
+print(result.converged.all(), result.state.activation[:, list(connectome.populations["output"])].round(3))
+```
+
+Each added drive lies in `[-0.1, 0.1]`. A Gaussian standard deviation would describe
+a scale, not a hard bound. Check residuals, then rank candidates with a validated
+critic or readout. Detuning does not teach a model of consequences; only a model
+with useful learned or supplied dynamics can make these predictions useful for action.
 
 ## Neurons and synapses
 
@@ -46,7 +95,7 @@ bias and adaptation still move a stimulated neuron.
 Named functional regions can share one connectome. Neuron-local updates cross the
 synapses between regions and seek a common fixed point of the whole brain under the
 current drive. Settle the brain once for that joint state; independent solves
-followed by a merged visualization do not couple the regions. See [patterns](patterns.md#several-regions-one-equilibrium).
+followed by a merged visualization do not couple the regions. See [composition](experience.md#connect-functions-through-actual-ports).
 
 Settling runs the update from rest or from a supplied state. A returned
 `BrainState` can be a transient, a fixed point, or part of an oscillation.
@@ -73,8 +122,8 @@ give the learner a responsive starting point. Neither setting guarantees converg
 
 `Adaptation` adds one variable per neuron that follows its activation and
 subtracts from its drive. In suitable mutually inhibitory circuits this can
-produce an oscillation. The [half-center example](../examples/half_center.py)
-demonstrates one such circuit. Leave adaptation off when beginning with
+produce an oscillation; [the dynamics tests](../tests/test_cadence.py)
+check that behavior. Leave adaptation off when beginning with
 equilibrium learning; its gradient interpretation needs additional assumptions.
 
 ## Three state lifetimes
@@ -83,14 +132,17 @@ equilibrium learning; its gradient interpretation needs additional assumptions.
 |---|---|---|
 | Potential, activation, adaptation | Settling steps | Pass `state=` to continue; omit it to start from rest |
 | A trace or fast-memory matrix | Explicit activity or observation updates | Reset at episode boundaries and preserve batch row identities |
-| Learned weights and biases | `Learner.step` or `Learner.update` | Save with `Learner.save`; evaluate with `predict` or `free` |
+| Learned weights, biases and consolidated associations | Local learner updates, reward/eligibility or `SynapticMemory.observe` | Save each owning component; evaluate on a separate snapshot |
 
 A [trace](api.md#streams-cadencestream) retains fading activity.
 [Fast memory](memory.md) retains associations between supplied keys and values.
 [Learning](learning.md) changes a reusable response through free/nudged endpoint
 contrasts. The centered learner uses three phases: free, positive nudge, and
 negative nudge. Under its equilibrium assumptions, the small-nudge contrast
-corresponds to a loss gradient with the stated parameter scaling.
+corresponds to a loss gradient with the stated parameter scaling. A raw `Brain`
+does not update its weights simply because time passes or it is settled again.
+`GenericBrain.step` schedules real-action learning; custom compositions own their
+update clocks. A unique fixed point alone cannot preserve all past observations.
 
 ## Evidence and controls
 
@@ -118,9 +170,15 @@ the arithmetic verifier. Neither check establishes benchmark fairness.
 Measure inference, learning and record maintenance separately on the same held-out
 data, and include the simple algorithmic solver when a task has one.
 
+This table compares update mechanisms, not the full learning lives of their users.
+Networks trained by backpropagation can also be recurrent, online, model-based and
+memory-using. Matrix multiplication is an implementation operation. The experience
+tests ask what the system acquires and transfers, how it uses goals and memories,
+and what changes when its environment changes.
+
 ## When to add machinery
 
 Inference, memory and learning are separate operations because their state
 lifetimes differ. A new mechanism needs a failure it fixes and an ablation on the
 same inputs, budget and seeds, with its state and cost counted. Brain functions
-are compositions of the existing operations; [patterns](patterns.md) lists them.
+are compositions of the existing operations; [experience](experience.md) connects them.

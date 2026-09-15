@@ -7,9 +7,7 @@ and a control.
 
 ## Stimuli, rows, training facts
 
-For a complete runnable circuit and protocol, see
-[`examples/ring_protocol.py`](../examples/ring_protocol.py). This smaller example
-builds a brain whose connectome has `sensors` and `motors` populations inside a
+This example builds a brain whose connectome has `sensors` and `motors` populations inside a
 connectome of 100 neurons:
 
 ```python

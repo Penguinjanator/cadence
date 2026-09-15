@@ -128,12 +128,11 @@ memory = cd.FastSynapses(pre=key_neurons, post=value_neurons, rule="delta", sepa
 ```
 
 `habituate` sets the running mean from a sample of the environment's keys before anything
-is stored; the slow `center` then tracks it. A fast running mean moves the codes between a
-write and its read, which is the one way to lose a record.
+is stored; the slow `center` then tracks it. A fast running mean can move codes between a write and its read;
+code overlap, finite capacity and contradictory values can also impair recall.
 
 The record then has `expansion` rows per stream instead of `inputs`, which is the price:
 storage grows with the code, capacity grows with it too (exact storage is bounded by the
-code width, not the key width). Sixteen keys at cosine 0.9 that a plain delta record
-holds at a third are held exactly after separation; see `examples/certified_memory.py`
-and the certificate guide. The dentate gyrus expands and sparsifies entorhinal input before
-the hippocampus stores it for the same reason.
+code width, not the key width). Measure retention with and without separation under the same observed keys; see
+the [separation tests](../tests/test_separation.py). Biological expansion and sparse
+coding motivate the construction, but do not establish equivalence to hippocampal learning.

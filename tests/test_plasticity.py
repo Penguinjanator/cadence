@@ -62,7 +62,10 @@ def test_traces_reset_on_done_and_updates_are_local() -> None:
         cd.LearnerConfig(eta=1.0),
     )
     ac = cd.ActorCritic(
-        learner, connectome.populations["hidden"], cd.ActorCriticConfig(gamma=0.9, lam=0.5, eta=0.1), seed=1
+        learner,
+        connectome.populations["hidden"],
+        cd.ActorCriticConfig(gamma=0.9, lam=0.5, eta=0.1),
+        seed=1,
     )
     rng = np.random.default_rng(1)
     x, _ = _contextual_bandit(rng, 4)
@@ -112,7 +115,9 @@ def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuou
     target[:, out[[0, 7]]] = 1.0
     mask = np.zeros(connectome.n)
     mask[out] = 1.0
-    nudge = cd.Nudge(target, mask, 0.1, softmax_temperature=0.2, groups=bins.groups(out, connectome.n))
+    nudge = cd.Nudge(
+        target, mask, 0.1, softmax_temperature=0.2, groups=bins.groups(out, connectome.n)
+    )
     free = brain.settle_batch(drive, steps=60, tolerance=3e-3)
     fused = brain.settle_batch(drive, steps=12, state=free, nudge=nudge, tolerance=3e-3)
     was = S._FUSED
@@ -169,21 +174,44 @@ def test_one_stream_learns_the_same_on_the_device_as_on_the_host() -> None:
     if "torch" not in cd.available_backends():
         pytest.skip("no torch")
     connectome = cd.layered(6, 10, 4, density=1.0, seed=1)
-    config = cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.3, tolerance=1e-6, nudged_steps=30, free_steps=200)
-    ac_config = cd.ActorCriticConfig(gamma=0.9, lam=0.8, eta=0.3, eta_bias=0.03, eta_critic=0.1, dopamine_cap=1.0)
+    config = cd.LearnerConfig(
+        beta=0.1, eta=1.0, temperature=0.3, tolerance=1e-6, nudged_steps=30, free_steps=200
+    )
+    ac_config = cd.ActorCriticConfig(
+        gamma=0.9, lam=0.8, eta=0.3, eta_bias=0.03, eta_critic=0.1, dopamine_cap=1.0
+    )
     rng = np.random.default_rng(3)
     drives = [np.concatenate([rng.random(6), np.zeros(14)])[None] for _ in range(6)]
     rewards = [0.5, -0.2, 1.0, 0.0, 0.3, -1.0]
     results = []
     for backend in ("cpu", "torch"):
-        brain = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0), backend=backend, device="cpu" if backend == "torch" else None, precision="float64" if backend == "torch" else None)  # type: ignore[arg-type]
+        brain = cd.Brain(
+            connectome,
+            cd.learning_neuron_model(dt=1.0),
+            backend=backend,
+            device="cpu" if backend == "torch" else None,
+            precision="float64" if backend == "torch" else None,
+        )  # type: ignore[arg-type]
         learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
-        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0, population=cd.Bins(dims=2, size=2))
+        ac = cd.ActorCritic(
+            learner,
+            connectome.populations["hidden"],
+            ac_config,
+            seed=0,
+            population=cd.Bins(dims=2, size=2),
+        )
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())
             ac.learn(np.array([rewards[k]]), np.array([k == 3]), drives[k + 1])
-        results.append((np.stack(actions), np.asarray(ac.learner.brain.efficacy), np.asarray(ac.learner.brain.bias), ac.w_critic.copy()))
+        results.append(
+            (
+                np.stack(actions),
+                np.asarray(ac.learner.brain.efficacy),
+                np.asarray(ac.learner.brain.bias),
+                ac.w_critic.copy(),
+            )
+        )
     (a_host, s_host, b_host, c_host), (a_dev, s_dev, b_dev, c_dev) = results
     assert np.array_equal(a_host, a_dev)
     assert np.allclose(s_host, s_dev, atol=1e-6) and np.abs(s_host - connectome.sign).max() > 1e-4
@@ -197,24 +225,49 @@ def test_a_batch_of_streams_learns_the_same_on_the_device_as_on_the_host() -> No
     if "torch" not in cd.available_backends():
         pytest.skip("no torch")
     connectome = cd.layered(6, 10, 4, density=1.0, seed=2)
-    config = cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.3, tolerance=1e-6, nudged_steps=30, free_steps=200)
-    ac_config = cd.ActorCriticConfig(gamma=0.9, lam=0.8, eta=0.3, eta_bias=0.03, eta_critic=0.1, dopamine_cap=1.0)
+    config = cd.LearnerConfig(
+        beta=0.1, eta=1.0, temperature=0.3, tolerance=1e-6, nudged_steps=30, free_steps=200
+    )
+    ac_config = cd.ActorCriticConfig(
+        gamma=0.9, lam=0.8, eta=0.3, eta_bias=0.03, eta_critic=0.1, dopamine_cap=1.0
+    )
     rng = np.random.default_rng(5)
     batch = 3
-    drives = [np.concatenate([rng.random((batch, 6)), np.zeros((batch, 14))], axis=1) for _ in range(6)]
+    drives = [
+        np.concatenate([rng.random((batch, 6)), np.zeros((batch, 14))], axis=1) for _ in range(6)
+    ]
     rewards = [rng.normal(size=batch) for _ in range(6)]
     dones = [np.zeros(batch, dtype=bool) for _ in range(6)]
     dones[2][1] = True
     results = []
     for backend in ("cpu", "torch"):
-        brain = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0), backend=backend, device="cpu" if backend == "torch" else None, precision="float64" if backend == "torch" else None)  # type: ignore[arg-type]
+        brain = cd.Brain(
+            connectome,
+            cd.learning_neuron_model(dt=1.0),
+            backend=backend,
+            device="cpu" if backend == "torch" else None,
+            precision="float64" if backend == "torch" else None,
+        )  # type: ignore[arg-type]
         learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
-        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0, population=cd.Bins(dims=2, size=2))
+        ac = cd.ActorCritic(
+            learner,
+            connectome.populations["hidden"],
+            ac_config,
+            seed=0,
+            population=cd.Bins(dims=2, size=2),
+        )
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())
             ac.learn(rewards[k], dones[k], drives[k + 1])
-        results.append((np.stack(actions), np.asarray(ac.learner.brain.efficacy), np.asarray(ac.learner.brain.bias), ac.w_critic.copy()))
+        results.append(
+            (
+                np.stack(actions),
+                np.asarray(ac.learner.brain.efficacy),
+                np.asarray(ac.learner.brain.bias),
+                ac.w_critic.copy(),
+            )
+        )
     (a_host, s_host, b_host, c_host), (a_dev, s_dev, b_dev, c_dev) = results
     assert np.array_equal(a_host, a_dev)
     assert np.allclose(s_host, s_dev, atol=1e-6) and np.abs(s_host - connectome.sign).max() > 1e-4
@@ -248,6 +301,7 @@ def test_actor_critic_centres_the_dopamine_per_stream() -> None:
     assert isinstance(ac.delta_mean, np.ndarray) and ac.delta_mean.shape == (2,)
     assert ac.delta_mean[0] > ac.delta_mean[1] + 5.0  # each stream's level is its own reward's
 
+
 def test_actor_critic_dopamine_floor_is_quiet_for_the_usual_reward() -> None:
     """With a floor, a reward at its usual level gives no dopamine and no step; a surprise does."""
     connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
@@ -259,7 +313,9 @@ def test_actor_critic_dopamine_floor_is_quiet_for_the_usual_reward() -> None:
     ac = cd.ActorCritic(
         learner,
         connectome.populations["hidden"],
-        cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.1, eta_critic=0.0, dopamine_center=0.5, dopamine_floor=1.0),
+        cd.ActorCriticConfig(
+            gamma=0.0, lam=0.0, eta=0.1, eta_critic=0.0, dopamine_center=0.5, dopamine_floor=1.0
+        ),
         seed=0,
     )
     rng = np.random.default_rng(2)
@@ -289,7 +345,15 @@ def test_actor_critic_centre_without_the_scale_keeps_the_rewards_size() -> None:
         return cd.ActorCritic(
             learner,
             connectome.populations["hidden"],
-            cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.0, eta_critic=0.0, dopamine_center=0.5, dopamine_cap=0.0, center_scale=scale),
+            cd.ActorCriticConfig(
+                gamma=0.0,
+                lam=0.0,
+                eta=0.0,
+                eta_critic=0.0,
+                dopamine_center=0.5,
+                dopamine_cap=0.0,
+                center_scale=scale,
+            ),
             seed=0,
         )
 
@@ -304,7 +368,9 @@ def test_actor_critic_centre_without_the_scale_keeps_the_rewards_size() -> None:
     # reads root two whatever its size, since the surprise inflates its own scale
     assert abs(big_raw[0] - 5.0) < 0.1
     assert abs(big_scaled[0] - np.sqrt(2.0)) < 0.05
-    assert abs(raw._centre(np.array([101.0, 101.0]))[0] - 47.5) < 0.5  # ten times the surprise, ten times the signal
+    assert (
+        abs(raw._centre(np.array([101.0, 101.0]))[0] - 47.5) < 0.5
+    )  # ten times the surprise, ten times the signal
 
 
 def test_padding_cannot_teach_the_actor_critic_or_change_the_active_update() -> None:
@@ -316,28 +382,50 @@ def test_padding_cannot_teach_the_actor_critic_or_change_the_active_update() -> 
             continue
         results = []
         for batch in (1, 2):
-            dynamics = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0), backend=backend,
-                                device="cpu" if backend == "torch" else None,
-                                precision="float64" if backend == "torch" else None)
-            learner = cd.Learner(dynamics, connectome.populations["output"],
-                                 cd.LearnerConfig(tolerance=1e-8, free_steps=200, nudged_steps=40))
-            actor = cd.ActorCritic(learner, connectome.populations["hidden"],
-                                  cd.ActorCriticConfig(eta=0.1, dopamine_center=0.9), seed=3)
+            dynamics = cd.Brain(
+                connectome,
+                cd.learning_neuron_model(dt=1.0),
+                backend=backend,
+                device="cpu" if backend == "torch" else None,
+                precision="float64" if backend == "torch" else None,
+            )
+            learner = cd.Learner(
+                dynamics,
+                connectome.populations["output"],
+                cd.LearnerConfig(tolerance=1e-8, free_steps=200, nudged_steps=40),
+            )
+            actor = cd.ActorCritic(
+                learner,
+                connectome.populations["hidden"],
+                cd.ActorCriticConfig(eta=0.1, dopamine_center=0.9),
+                seed=3,
+            )
             drive = np.zeros((batch, connectome.n))
             drive[:, :2] = [0.3, 0.7]
             actor.act(drive)
             pending = actor._pending
             with pytest.raises(ValueError, match="observed"):
-                actor.learn(np.ones(batch), np.zeros(batch, bool), drive, observed=np.zeros(batch, bool))
+                actor.learn(
+                    np.ones(batch), np.zeros(batch, bool), drive, observed=np.zeros(batch, bool)
+                )
             assert actor._pending is pending
             observed = np.arange(batch) == 0
-            actor.learn(np.array([1., 999.])[:batch], np.ones(batch, bool), drive, observed=observed)
+            actor.learn(
+                np.array([1.0, 999.0])[:batch], np.ones(batch, bool), drive, observed=observed
+            )
             assert actor._pending is None
             if actor.trace is not None:
                 assert not actor.trace.any()
             if actor._trace_device is not None:
                 assert not actor._trace_device[0].any().item()
-            results.append((np.asarray(learner.brain.efficacy), np.asarray(learner.brain.bias), actor.w_critic, actor.b_critic))
+            results.append(
+                (
+                    np.asarray(learner.brain.efficacy),
+                    np.asarray(learner.brain.bias),
+                    actor.w_critic,
+                    actor.b_critic,
+                )
+            )
         for alone, padded in zip(results[0], results[1], strict=True):
             assert np.allclose(alone, padded, atol=1e-8), backend
 
@@ -346,10 +434,10 @@ def test_unobserved_rewards_do_not_enter_shared_or_per_stream_valence() -> None:
     for per_stream in (False, True):
         alone = cd.Valence(level=0.9, per_stream=per_stream)
         padded = cd.Valence(level=0.9, per_stream=per_stream)
-        for reward in (1., -0.5, 2.):
+        for reward in (1.0, -0.5, 2.0):
             expected = alone(np.array([reward]))
-            actual = padded(np.array([reward, 10000.]), observed=np.array([True, False]))
+            actual = padded(np.array([reward, 10000.0]), observed=np.array([True, False]))
             assert actual[1] == 0 and np.allclose(actual[:1], expected)
         before = np.array(padded.mean, copy=True)
-        assert not padded(np.array([1., 2.]), observed=np.zeros(2, bool)).any()
+        assert not padded(np.array([1.0, 2.0]), observed=np.zeros(2, bool)).any()
         assert np.array_equal(before, padded.mean)

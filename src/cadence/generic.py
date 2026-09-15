@@ -17,8 +17,9 @@
 
 ``step`` runs one ongoing perceive/feedback/act loop; demonstrations and rewards are
 signals in that loop, without a train/eval mode. The lower-level ``fit``, ``act``
-and ``learn`` operations remain available for controlled experiments. Its connectome comes
-from a ``Genome``, so ``evolve`` can select the sizes and densities of its regions, and a
+and ``learn`` operations expose individual mechanisms for controlled experiments.
+This composition does not include a learned world model, hierarchical goals or language.
+Its connectome comes from a ``Genome``, so ``evolve`` can select its region sizes/densities, and a
 designed region can replace any of them.
 """
 

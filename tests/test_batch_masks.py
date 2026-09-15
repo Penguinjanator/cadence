@@ -93,14 +93,18 @@ def test_warm_start_recomputes_publication_after_changing_mask(next_mask: str) -
     }[next_mask]
     keep = np.ones(3) if mask is None else mask
     published = brain.neuron_model.activation(state.v) * keep
-    expected_v = (state.v + brain.neuron_model.dt * (published @ brain.dense() + drive - state.v)) * keep
+    expected_v = (
+        state.v + brain.neuron_model.dt * (published @ brain.dense() + drive - state.v)
+    ) * keep
     expected_activation = brain.neuron_model.activation(expected_v) * keep
     expected_activity_change = np.abs(expected_activation - published).sum(axis=1)
     for trajectory in (False, True):
         actual = brain.settle_batch(drive, steps=1, state=state, mask=mask, trajectory=trajectory)
         np.testing.assert_allclose(actual.v, expected_v, atol=1e-14, rtol=0)
         np.testing.assert_allclose(actual.activation, expected_activation, atol=1e-14, rtol=0)
-        np.testing.assert_allclose(actual.activity_change, expected_activity_change, atol=1e-14, rtol=0)
+        np.testing.assert_allclose(
+            actual.activity_change, expected_activity_change, atol=1e-14, rtol=0
+        )
 
 
 @pytest.mark.parametrize("backend", ["torch_cpu", "torch_mps", "mlx"])

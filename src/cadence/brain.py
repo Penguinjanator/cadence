@@ -202,6 +202,9 @@ class BrainState:
 
     @property
     def batched(self) -> bool:
+        handle = self.__dict__.get("device")
+        if self.__dict__.get("v") is None and handle is not None and "s" in handle:
+            return len(handle["s"].shape) == 2  # the shape alone; no fetch from the device
         return self.v.ndim == 2
 
     def row(self, i: int = 0) -> np.ndarray:
@@ -560,8 +563,10 @@ class Brain:
         """Continue a joint state until its equations hold or the exact step budget expires.
 
         Unlike ``settle_batch(tolerance=...)``, this tests the potential and adaptation
-        equations, including the same mask and nudge. Checks cost one extra host transport
-        per chunk. All rows advance together; a row's small residual does not freeze it.
+        equations, including the same mask and nudge. A check on a state that rests on
+        the torch device runs there and brings back one number per row; on the host it
+        costs one transport per chunk. All rows advance together; a row's small residual
+        does not freeze it.
         ``drive`` is dense, with one column per neuron, as in ``settle_batch``.
         """
         for name, value, minimum in (("budget", budget, 0), ("chunk", chunk, 1)):
@@ -734,8 +739,10 @@ class Brain:
         A small residual certifies these equations at this state, not stability,
         uniqueness, or convergence from another start. Activation-movement
         tolerance and reaching a step cap do not provide this certificate.
-        The calculation performs one transport on the CPU; accelerator states
-        and parameters are fetched if needed. No state or parameter is changed.
+        A state that rests on the torch device is checked there (the same equations,
+        the per-row error fetched); otherwise the calculation performs one transport on
+        the CPU, fetching accelerator states and parameters if needed. No state or
+        parameter is changed.
         A single state returns a length-one array; nonfinite errors return infinity.
         """
         d = np.asarray(drive, dtype=float)
@@ -743,13 +750,38 @@ class Brain:
             d = d[None, :]
         if d.ndim != 2 or d.shape[1] != self.connectome.n:
             raise ValueError("drive must have one column per neuron")
+        keep = np.ones(self.connectome.n) if mask is None else np.asarray(mask, dtype=float)
+        if keep.shape not in ((self.connectome.n,), (1, self.connectome.n), d.shape):
+            raise ValueError("mask must have one entry per neuron, optionally per batch row")
+        handle = state.device
+        if (
+            handle is not None
+            and self._torch is not None
+            and handle.get("holder") is self._torch
+            and tuple(handle["v"].shape) == d.shape
+        ):
+            # The state never left the torch device: the same equations there, and only
+            # the per-row error comes back, so a checked settle costs no host transport.
+            if nudge is not None and np.asarray(nudge.target).shape not in (
+                (self.connectome.n,),
+                (1, self.connectome.n),
+                d.shape,
+            ):
+                raise ValueError("nudge target must match the drive's neurons and batch size")
+            checked: np.ndarray = self._torch.residual(d, keep, nudge, handle)
+            return checked
         v = np.atleast_2d(state.v)
         a = np.atleast_2d(state.adaptation)
         if v.shape != d.shape or a.shape != d.shape:
             raise ValueError("state batch does not match the drive batch")
-        keep = np.ones(self.connectome.n) if mask is None else np.asarray(mask, dtype=float)
-        if keep.shape not in ((self.connectome.n,), (1, self.connectome.n), d.shape):
-            raise ValueError("mask must have one entry per neuron, optionally per batch row")
+        if self._blocks is not None and _FUSED:
+            # the same equations in one compiled pass: a checked settle on the CPU then
+            # costs one transport per chunk, not one NumPy operation per term
+            from .fused import fused_residual
+
+            return fused_residual(
+                v, a, d, self.bias, self.layout, self._blocks, keep, self.neuron_model, nudge
+            )
         s = self.neuron_model.activation(v) * keep
         blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
         error = self._synaptic_input(s, blocks) + d + self.bias - v
@@ -912,6 +944,8 @@ class _TorchKernel:
             self.dtype = torch.float32 if precision == "float32" else torch.float64
         else:
             raise ValueError("precision must be 'float32' or 'float64'")
+        if self.device.type == "mps" and self.dtype == torch.float64:
+            raise ValueError("MPS has no float64; use precision='float32' or another device")
         # The parameters, kept on the device in float64 (float32 on MPS, which has no float64)
         # so a learner can move them there without a host round trip per update.
         self.param_dtype = torch.float32 if self.device.type == "mps" else torch.float64
@@ -999,6 +1033,93 @@ class _TorchKernel:
             s += neuron_model.leak * torch.clamp(r, max=0.0) / rest
         return s
 
+    def _nudge_tensors(self, nudge: Nudge | None, batch: int) -> tuple[Any, Any, list[Any], Any]:
+        """The nudge's target, mask, softmax groups and row weights as device tensors."""
+        torch = self.torch
+        if nudge is None:
+            return None, None, [], None
+
+        def to(x: np.ndarray) -> Any:
+            y = np.ascontiguousarray(x, dtype=float)
+            if not y.flags.writeable:
+                y = y.copy()
+            return torch.from_numpy(y).to(self.device, self.dtype)
+
+        target = to(np.broadcast_to(nudge.target, (batch, self.n)))
+        mask = to(nudge.mask)
+        groups = [torch.from_numpy(members).to(self.device) for members in _softmax_groups(nudge)]
+        weight = None
+        if nudge.weight is not None:
+            weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
+        return target, mask, groups, weight
+
+    def _push(
+        self, s: Any, nudge: Nudge, target: Any, mask: Any, groups: list[Any], weight: Any
+    ) -> Any:
+        """The nudge drive at activation ``s``: ``Nudge.drive`` on the device."""
+        torch = self.torch
+        if nudge.softmax_temperature is None:
+            push = nudge.beta * (target - s) * mask
+        else:  # one softmax per group of competing neurons
+            push = torch.zeros_like(s)
+            for members in groups:
+                p = torch.softmax(s[:, members] / nudge.softmax_temperature, dim=1)
+                push[:, members] = nudge.beta * (target[:, members] - p)
+        if weight is not None:
+            push = push * weight
+        return push
+
+    def residual(
+        self, drive: np.ndarray, keep: np.ndarray, nudge: Nudge | None, handle: dict[str, Any]
+    ) -> np.ndarray:
+        """``Brain.residual`` for a state on this device; the same equations, one row each."""
+        torch, neuron_model = self.torch, self.neuron_model
+
+        def to(x: np.ndarray) -> Any:
+            return torch.from_numpy(np.ascontiguousarray(x, dtype=float)).to(
+                self.device, self.dtype
+            )
+
+        v, a = handle["v"], handle["a"]
+        batch = v.shape[0]
+        d, k = to(drive), to(keep)
+        target, mask, groups, weight = self._nudge_tensors(nudge, batch)
+        with torch.no_grad():
+            s = self._activation(v) * k
+            if self.layout is not None:
+                synaptic_input = self._synaptic_input(s, None, [None] * self.layout.pairs)
+            else:
+                zeros = torch.zeros(batch, self.n, dtype=self.dtype, device=self.device)
+                synaptic_input = zeros.index_add_(1, self.post, s[:, self.pre] * self.w)
+            error = synaptic_input + d + self.bias - v
+            adapt = neuron_model.adaptation
+            if adapt is not None:
+                error = error - adapt.strength * a
+            if nudge is not None:
+                error = error + self._push(s, nudge, target, mask, groups, weight)
+            error = k * error + (k - 1.0) * v / neuron_model.dt
+            result = error.abs().amax(dim=1)
+            if adapt is not None:
+                result = torch.maximum(result, (s - a).abs().amax(dim=1))
+        out = result.cpu().double().numpy()
+        return np.where(np.isfinite(out), out, np.inf)
+
+    def keep_rows(self, handle: dict[str, Any], keep: np.ndarray) -> dict[str, Any]:
+        """The state with every row where ``keep`` is false returned to rest, still on the device.
+
+        A stream whose episode ended starts its next life from rest; the other rows continue
+        untouched, and none of them comes to the host for it.
+        """
+        torch = self.torch
+        k = torch.from_numpy(np.ascontiguousarray(keep, dtype=float)).to(self.device, self.dtype)
+        k = k[:, None]
+        tensors = {key: handle[key] * k for key in ("v", "a", "s")}
+
+        def fetch(key: str) -> np.ndarray:
+            return np.asarray(tensors[key].cpu().double().numpy())
+
+        return {"kernel": self.backend_name, "holder": self, "fetch": fetch, **tensors}
+
     def contrast_tensors(self, s_plus: Any, s_minus: Any) -> tuple[Any, Any]:
         """The block Gram contrast on the device, per synapse and per neuron, as tensors."""
         torch, lay = self.torch, self.layout
@@ -1065,16 +1186,7 @@ class _TorchKernel:
         d, k = to(drive), to(keep)
         batch = v.shape[0]
         adapt = neuron_model.adaptation
-        target = mask = weight = None
-        groups: list[Any] = []
-        if nudge is not None:
-            target = to(np.broadcast_to(nudge.target, (batch, self.n)))
-            mask = to(nudge.mask)
-            groups = [
-                torch.from_numpy(members).to(self.device) for members in _softmax_groups(nudge)
-            ]
-            if nudge.weight is not None:
-                weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
+        target, mask, groups, weight = self._nudge_tensors(nudge, batch)
         traj = []
         taken = 0
         activity_change = torch.zeros(batch, dtype=self.dtype, device=self.device)
@@ -1094,17 +1206,7 @@ class _TorchKernel:
                 if adapt is not None:
                     total -= adapt.strength * a
                 if nudge is not None:
-                    if nudge.softmax_temperature is None:
-                        push = nudge.beta * (target - s) * mask
-                    else:  # one softmax per group of competing neurons
-                        assert target is not None
-                        push = torch.zeros_like(s)
-                        for members in groups:
-                            p = torch.softmax(s[:, members] / nudge.softmax_temperature, dim=1)
-                            push[:, members] = nudge.beta * (target[:, members] - p)
-                    if weight is not None:
-                        push *= weight
-                    total += push
+                    total += self._push(s, nudge, target, mask, groups, weight)
                 v = (v + neuron_model.dt * (-v + total)) * k
                 previous = s
                 s = self._activation(v) * k

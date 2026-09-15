@@ -59,7 +59,9 @@ def test_designed_regions_develop_into_one_connectome_and_keep_their_size() -> N
     assert p["motor/actions"] == tuple(range(34, 37))
     # the projection starts at the visual outputs, never at the pixels
     to_association = connectome.post >= 24
-    assert set(connectome.pre[to_association & (connectome.pre < 24)].tolist()) <= set(range(16, 24))
+    assert set(connectome.pre[to_association & (connectome.pre < 24)].tolist()) <= set(
+        range(16, 24)
+    )
     # the motor cortex keeps its lateral inhibition
     lateral = (connectome.pre >= 34) & (connectome.post >= 34)
     assert lateral.sum() == 6 and np.allclose(connectome.sign[lateral], -0.5)

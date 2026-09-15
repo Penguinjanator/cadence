@@ -103,9 +103,7 @@ _KEYWORDS: dict[tuple[str, str, str | None], dict[str, str]] = {
     ("cadence.genome", "develop", None): {"constitution": "genome"},
     ("cadence.genome", "mutate", None): {"constitution": "genome"},
     ("cadence.genome", "evolve", None): {"constitution": "genome"},
-    ("cadence.learning", "learning_neuron_model", None): {
-        "clamp_amplitude": "stimulus_amplitude"
-    },
+    ("cadence.learning", "learning_neuron_model", None): {"clamp_amplitude": "stimulus_amplitude"},
     ("cadence.protocol", "select_gain", None): {"make_engine": "make_brain"},
     ("cadence.protocol", "shuffled", None): {"wiring": "connectome"},
     ("cadence.blocks", "layout", None): {"wiring": "connectome"},

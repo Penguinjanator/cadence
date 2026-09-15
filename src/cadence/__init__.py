@@ -1,17 +1,16 @@
-"""Cadence: brains that learn by settling.
+"""Cadence: stateful neural systems that learn through ongoing experience.
 
-A brain is a network of neurons joined by declared synapses and organised into
-regions. Each neuron holds a membrane potential and publishes an activation; on
-every step it relaxes toward its synaptic input, stimulus and bias, and the whole
-brain settles toward one equilibrium. Traces and fast synapses keep observations
-between settling runs, and dopamine carries reward prediction errors to plastic
-synapses. Normalization and output softmax read their declared populations;
-conformance checks the synaptic transport rather than every auxiliary operation.
-Cadence gives you the connectome, the neuron model, the brain on CPU or an
-accelerator, a neuron-by-neuron reference with a transmission ledger to check the
-accelerated one against, a protocol layer for declared held-out tests with a
-shuffled control, and receipts that bind every result to the code and data that
-produced it.
+Neural patches carry local state, exchange activity over declared synapses and
+read back their responses. Memories retain observed associations; local updates
+and reward eligibility repair future predictions and decisions. ``GenericBrain.step``
+coordinates observation, feedback and action in one ongoing loop, without separate
+training/inference modes. The application supplies its environment and update clocks;
+settling or imagination alone does not teach synapses.
+
+Raw ``Brain`` dynamics seek a fixed point or follow a transient; convergence must
+be checked. Normalization and output softmax read declared groups. Protocols,
+conformance and source-bound receipts check the stated numerical claims, not
+human-like capability.
 
     >>> import cadence as cd
     >>> ring = dict(pre=[0, 1, 2, 3], post=[1, 2, 3, 0], count=[120] * 4)

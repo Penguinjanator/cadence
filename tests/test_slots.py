@@ -12,7 +12,9 @@ import cadence as cd
 
 def test_slotted_targets_and_predictions_have_one_choice_per_slot() -> None:
     w = cd.layered(6, 8, 3 * 4, density=1.0, seed=0)  # three slots of four choices
-    learner = cd.Learner(cd.Brain(w, cd.learning_neuron_model(dt=1.0)), w.populations["output"], slots=3)
+    learner = cd.Learner(
+        cd.Brain(w, cd.learning_neuron_model(dt=1.0)), w.populations["output"], slots=3
+    )
     target = learner.targets(np.array([[0, 1, 3], [2, 2, 2]]))
     out = target[:, learner.output_index].reshape(2, 3, 4)
     assert out.sum(axis=2).tolist() == [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]
@@ -52,7 +54,9 @@ def test_a_slotted_net_learns_a_whole_pattern_at_once() -> None:
 def test_slots_of_unequal_size_choose_and_learn_per_group(tmp_path) -> None:
     """A controller of a move (three choices) and a grip (two): sizes instead of a count."""
     w = cd.layered(6, 8, 5, density=1.0, seed=3)
-    learner = cd.Learner(cd.Brain(w, cd.learning_neuron_model(dt=1.0)), w.populations["output"], slots=(3, 2))
+    learner = cd.Learner(
+        cd.Brain(w, cd.learning_neuron_model(dt=1.0)), w.populations["output"], slots=(3, 2)
+    )
     assert learner.slot_count == 2 and learner.slot_size == 0
     target = learner.targets(np.array([[2, 0], [1, 1]]))
     out = target[:, learner.output_index]

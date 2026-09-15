@@ -84,7 +84,9 @@ def test_torch_backend_agrees_with_cpu_within_its_precision() -> None:
     )
     neuron_model = cd.NeuronModel(gain=0.02)
     cpu = cd.Brain(w, neuron_model).settle(list(range(10)), steps=30, trajectory=True)
-    acc = cd.Brain(w, neuron_model, backend="torch").settle(list(range(10)), steps=30, trajectory=True)
+    acc = cd.Brain(w, neuron_model, backend="torch").settle(
+        list(range(10)), steps=30, trajectory=True
+    )
     assert cpu.trajectory is not None and acc.trajectory is not None
     tolerance = 1e-3 if "float32" in cd.available_backends()["torch"] else 1e-9
     assert np.abs(cpu.trajectory - acc.trajectory).max() < tolerance
@@ -147,10 +149,15 @@ def test_custody_refuses_unpinned_files(tmp_path: Path) -> None:
     data = tmp_path / "connectome.csv"
     data.write_text("a,b\n")
     good = cd.Source(
-        "connectome", "connectome.csv", "https://example.invalid/connectome.csv", cd.custody.sha256_of(data)
+        "connectome",
+        "connectome.csv",
+        "https://example.invalid/connectome.csv",
+        cd.custody.sha256_of(data),
     )
     assert cd.fetch([good], tmp_path)["connectome"] == data
-    bad = cd.Source("connectome", "connectome.csv", "https://example.invalid/connectome.csv", "0" * 64)
+    bad = cd.Source(
+        "connectome", "connectome.csv", "https://example.invalid/connectome.csv", "0" * 64
+    )
     with pytest.raises(cd.custody.CustodyError):
         cd.fetch([bad], tmp_path)
     with pytest.raises(cd.custody.CustodyError):

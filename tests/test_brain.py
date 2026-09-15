@@ -57,7 +57,9 @@ def test_stimulus_vector_and_levels() -> None:
 
 def test_dense_and_segmented_transports_agree_with_nudges_and_adaptation() -> None:
     connectome = cd.layered(5, 4, 3, density=1.0, seed=3)
-    neuron_model = cd.learning_neuron_model(dt=0.5).replace(adaptation=cd.Adaptation(tau_steps=10, strength=0.2))
+    neuron_model = cd.learning_neuron_model(dt=0.5).replace(
+        adaptation=cd.Adaptation(tau_steps=10, strength=0.2)
+    )
     dense = cd.Brain(connectome, neuron_model, dense_limit=10_000)
     segmented = cd.Brain(connectome, neuron_model, dense_limit=1)
     assert (
@@ -77,7 +79,9 @@ def test_dense_and_segmented_transports_agree_with_nudges_and_adaptation() -> No
         b = segmented.settle_batch(drive, steps=30, nudge=nudge)
         assert np.allclose(a.activation, b.activation, atol=1e-9)
         assert np.allclose(a.adaptation, b.adaptation, atol=1e-9)
-    assert dense.dense().shape == (connectome.n, connectome.n) and dense.weights.shape == (connectome.synapses,)
+    assert dense.dense().shape == (connectome.n, connectome.n) and dense.weights.shape == (
+        connectome.synapses,
+    )
 
 
 def test_nudge_drive_shapes() -> None:
@@ -145,7 +149,11 @@ def test_torch_kernel_matches_cpu_with_every_feature() -> None:
             assert np.allclose(a.activation, b.activation, atol=1e-4), brain.to_dict()["transport"]
             assert np.allclose(a.adaptation, b.adaptation, atol=1e-4)
     traced = torch_dense.settle_batch(drive, steps=6, trajectory=True, tolerance=1e-9)
-    assert traced.trajectory is not None and traced.trajectory.shape == (traced.steps, 4, connectome.n)
+    assert traced.trajectory is not None and traced.trajectory.shape == (
+        traced.steps,
+        4,
+        connectome.n,
+    )
     warm = torch_dense.settle_batch(drive, steps=3, state=traced)
     assert warm.activation.shape == (4, connectome.n)
 

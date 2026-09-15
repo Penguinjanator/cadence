@@ -68,7 +68,9 @@ def test_load_can_change_backend_and_freeze(tmp_path: Path) -> None:
 
 def test_rule_with_adaptation_and_masks_survive(tmp_path: Path) -> None:
     connectome = cd.layered(4, 3, 2, density=1.0, seed=1)
-    neuron_model = cd.NeuronModel(dt=0.5, adaptation=cd.Adaptation(tau_steps=20, strength=0.3), leak=0.1)
+    neuron_model = cd.NeuronModel(
+        dt=0.5, adaptation=cd.Adaptation(tau_steps=20, strength=0.3), leak=0.1
+    )
     synapses = np.zeros(connectome.synapses, dtype=bool)
     synapses[::2] = True
     neurons = np.zeros(connectome.n, dtype=bool)
@@ -98,7 +100,11 @@ def test_a_checkpoint_from_an_earlier_release_loads_without_its_retired_knobs(tm
     import json
 
     connectome = cd.layered(3, 4, 2, density=1.0, seed=0)
-    learner = cd.Learner(cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)), connectome.populations["output"], cd.LearnerConfig(eta=0.5))
+    learner = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)),
+        connectome.populations["output"],
+        cd.LearnerConfig(eta=0.5),
+    )
     path = tmp_path / "old.npz"
     learner.save(path)
     data = dict(np.load(path, allow_pickle=False))
@@ -117,7 +123,11 @@ def test_checkpoint_preserves_explicit_precision_and_allows_override(tmp_path: P
     connectome = cd.layered(3, 4, 2, density=1.0, seed=0)
     learner = cd.Learner(
         cd.Brain(
-            connectome, cd.learning_neuron_model(), backend="torch", device="cpu", precision="float32"
+            connectome,
+            cd.learning_neuron_model(),
+            backend="torch",
+            device="cpu",
+            precision="float32",
         ),
         connectome.populations["output"],
     )

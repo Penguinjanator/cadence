@@ -1,9 +1,8 @@
 # Learning: the free/nudged rule
 
-Start with the runnable [two-label example](quickstart.md#learn-a-response).
-This page explains supervised free/nudged learning without adaptation: the neuron
+Start with [an observed consequence](quickstart.md#learn-from-an-observed-consequence).
+This page explains local prediction repair and demonstrations without adaptation: the neuron
 equations, a numerical update, the gradient assumptions, and configuration choices.
-Full comparisons live in [cadence-examples](https://github.com/muellerberndt/cadence-examples).
 
 ## 1. What is being learned
 
@@ -88,55 +87,18 @@ it does not retain a backward computation graph. Softmax reads its declared outp
 group, and weight tying aggregates the members of a declared tie group. These two
 operations read a group of neurons or synapses, beyond the per-synapse contrast.
 
-## 4. A worked example, with the numbers
+## 4. One observation repairs a prediction
 
-Six neurons: inputs 0 and 1, hidden 2 and 3, outputs 4 and 5. `cd.layered(2, 2, 2,
-density=1.0, seed=3)` gives dense forward synapses, feedback synapses tied to them, and
-two lateral synapses between the outputs starting at 0. The neuron model is
-`learning_neuron_model(dt=1.0)`; the learner uses `eta=1.0`, `beta=0.1`, `T=0.2`, and
-tolerance `1e-9` so that every phase settles tightly.
-The input is `x = (1.0, 0.2)` with label 1.
+The [quickstart](quickstart.md#learn-from-an-observed-consequence) saves a free
+prediction under the current room and proposed action. Only after the environment
+executes the action does its observed destination enter the teaching target.
+Both nudged phases start from that same free state under the original drive.
+Their endpoint contrast changes synapses for future encounters.
 
-Initial efficacies (each hidden↔output synapse shares its efficacy with its reverse):
-
-    0→2 +0.115   1→2 −0.587   0→3 +0.530   1→3 −0.196
-    2→4 −0.479   3→4 +0.527   2→5 +0.633   3→5 +0.719     (feedback 4→2, 4→3, 5→2, 5→3 equal)
-    4→5  0.000   5→4  0.000
-
-Stimulus: neuron 0 gets 1.0, neuron 1 gets 0.2, every other neuron 0.
-
-Free phase, 27 steps to rest:
-
-    v = [1.000, 0.200, 0.011, 0.282, 0.071, 0.104]
-    s = [0.462, 0.100, 0.005, 0.140, 0.036, 0.052]
-
-Output neurons publish 0.036 and 0.052; `softmax(s/T)` is (0.480, 0.520); the answer is
-class 1, which happens to be right, but barely. Target: neuron 5 at 1, neuron 4 at 0.
-
-Nudge drive at the first `+beta` step: `0.1 · ((0, 1) − (0.480, 0.520)) = (−0.048, +0.048)`
-on neurons 4 and 5. Nudged rest states:
-
-    +beta (26 steps): s = [0.462, 0.100,  0.019, 0.143, 0.012, 0.078]
-    −beta (21 steps): s = [0.462, 0.100, −0.001, 0.136, 0.064, 0.021]
-
-Neuron 5 went up and neuron 4 went down under `+beta`, the reverse under `−beta`; the
-hidden neurons moved too, through the feedback synapses, which is the only way the target
-reaches them. Contrasts, `(s⁺s⁺ − s⁻s⁻) / 0.2`:
-
-    0→2 +0.047   1→2 +0.010   0→3 +0.016   1→3 +0.003
-    2→4 +0.002   3→4 −0.035   2→5 +0.008   3→5 +0.042
-    4→5 −0.002   5→4 −0.002
-
-Read the two largest. Pair 3↔5: hidden neuron 3 was active (0.14) in both phases and output
-5 rose under the nudge, so their product rose and the pair strengthens by +0.042. Pair
-3↔4: the same hidden neuron and output 4, which fell, so the pair weakens by −0.035. The
-input synapses onto neuron 3 also strengthen (0→3 by +0.016) because neuron 3 itself ended a
-little higher under `+beta` than `−beta`, which is the credit that flowed back. With
-`eta = 1` those contrasts are the efficacy changes. Biases move by `eta_b · bias_term`:
-neuron 5 +0.0057, neuron 4 −0.0052. After this single update a fresh free phase gives
-outputs (0.028, 0.067) instead of (0.036, 0.052): the right answer, with more room.
-
-From a checkout, rerun the calculation with `python examples/worked_update.py`.
+This is the local repair inside an ongoing learning life. It does not assign
+credit across arbitrary delays: use explicit temporal state and
+[reward eligibility](reward.md) where the task needs them. Score outcomes before
+updating, and keep imagined or teacher-nudged states out of witnessed-event memory.
 
 ## 5. Why the contrast is a gradient
 
@@ -204,14 +166,14 @@ with controls rather than treating it as a biological consequence.
 
 ## 6. Using it
 
-The [quickstart](quickstart.md#learn-a-response) creates and trains a learner from
-scratch. For a dataset, construct `(batch, connectome.n)` drives and put features in
-the input columns. `step` takes integer class indices within the output group;
+The [quickstart](quickstart.md#learn-from-an-observed-consequence) repairs a prediction
+from an observed transition. Construct `(batch, connectome.n)` drives from the
+pre-action context. `step` takes integer outcome/action indices within the output group;
 for `slots`, use one index per row and slot. `accuracy` is the fraction of correct
 choices over all rows and slots. Use [explicit target patterns](tasks.md#pattern-targets)
 for regression or reconstruction.
 
-`LearnerConfig` is frozen. To change the learning rate between epochs:
+`LearnerConfig` is frozen. To change the learning rate between completed updates:
 
 ```python
 from dataclasses import replace
@@ -230,7 +192,7 @@ it, export `learner.brain.dense()` for a page, or put its `to_dict()` in a recei
 | `beta` | `LearnerConfig` | nudge strength; smaller is closer to the gradient, larger a stronger signal | 0.1 |
 | `free_steps`, `nudged_steps` | `LearnerConfig` | the most steps a free and a nudged phase may take before the contrast is read | 100, 50 |
 | `tolerance` | `LearnerConfig` | settling stops once no neuron's activation moves more than this (None: the step cap alone) | 1e-4 |
-| `eta` | `LearnerConfig` | efficacy step; the contrast is divided by `2 beta` | default 0.2; the two-label quickstart uses 2.0; tune on validation |
+| `eta` | `LearnerConfig` | efficacy step; the contrast is divided by `2 beta` | default 0.2; tune on held-out experience |
 | `eta_bias` | `LearnerConfig` | bias step | `eta / 100` |
 | `temperature` | `LearnerConfig` | softmax temperature of the cross-entropy nudge; also the policy temperature when sampling actions | 0.1 (labels), 0.2 (actions) |
 | `centered` | `LearnerConfig` | contrast `+beta` against `−beta` (two nudged phases) rather than against the free state | `True` |

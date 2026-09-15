@@ -31,7 +31,7 @@ if TYPE_CHECKING:
     from .neuron import NeuronModel
 
 
-__all__ = ["available", "fused_settle"]
+__all__ = ["available", "fused_residual", "fused_settle"]
 
 
 def available() -> bool:
@@ -205,6 +205,42 @@ if njit is not None:
         return taken, activity_change
 
 
+def _nudge_arrays(
+    nudge: Nudge | None, batch: int, n: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, float, float, np.ndarray]:
+    """The nudge as the dense arrays the kernels read: target, mask, group id per neuron
+    (0..ngroups-1, -1 for none), the group count, beta, the softmax temperature (0 for a
+    plain nudge) and the per-row weight. A softmax nudge drives only grouped neurons."""
+    if nudge is None:
+        return (
+            np.zeros((1, 1)),
+            np.zeros(n),
+            np.full(n, -1, dtype=np.int64),
+            0,
+            0.0,
+            0.0,
+            np.ones(batch),
+        )
+    target = np.ascontiguousarray(np.broadcast_to(nudge.target, (batch, n)).astype(float))
+    nmask = np.asarray(nudge.mask, float)
+    softmax_t = float(nudge.softmax_temperature) if nudge.softmax_temperature is not None else 0.0
+    weight = np.ones(batch) if nudge.weight is None else np.asarray(nudge.weight, float)
+    beta = float(nudge.beta)
+    if nudge.groups is None:
+        gid = np.where(nmask > 0, 0, -1).astype(np.int64)
+        ngroups = 1
+    else:
+        raw = np.asarray(nudge.groups, dtype=np.int64)
+        ids = np.unique(raw[raw >= 0])
+        gid = np.full(n, -1, dtype=np.int64)
+        for k, g in enumerate(ids):
+            gid[raw == g] = k
+        ngroups = len(ids)
+    if softmax_t > 0:
+        nmask = np.where(gid >= 0, nmask, 0.0)
+    return target, nmask, gid, ngroups, beta, softmax_t, weight
+
+
 def fused_settle(
     v: np.ndarray,
     a: np.ndarray,
@@ -245,32 +281,7 @@ def fused_settle(
         s *= keep
     adapt = neuron_model.adaptation
     has_adapt = adapt is not None
-    if nudge is not None:
-        target = np.ascontiguousarray(np.broadcast_to(nudge.target, (batch, n)).astype(float))
-        nmask = np.asarray(nudge.mask, float)
-        softmax_t = (
-            float(nudge.softmax_temperature) if nudge.softmax_temperature is not None else 0.0
-        )
-        weight = np.ones(batch) if nudge.weight is None else np.asarray(nudge.weight, float)
-        beta = float(nudge.beta)
-        if nudge.groups is None:
-            gid = np.where(nmask > 0, 0, -1).astype(np.int64)
-            ngroups = 1
-        else:
-            raw = np.asarray(nudge.groups, dtype=np.int64)
-            ids = np.unique(raw[raw >= 0])
-            gid = np.full(n, -1, dtype=np.int64)
-            for k, g in enumerate(ids):
-                gid[raw == g] = k
-            ngroups = len(ids)
-        if softmax_t > 0:
-            nmask = np.where(gid >= 0, nmask, 0.0)
-    else:
-        target = np.zeros((1, 1))
-        nmask = np.zeros(n)
-        gid = np.full(n, -1, dtype=np.int64)
-        ngroups = 0
-        softmax_t, weight, beta = 0.0, np.ones(batch), 0.0
+    target, nmask, gid, ngroups, beta, softmax_t, weight = _nudge_arrays(nudge, batch, n)
     lay = layout
     has_synaptic_input = np.zeros(lay.ranges, dtype=np.bool_)
     has_synaptic_input[lay.pair_post] = True
@@ -315,6 +326,155 @@ def fused_settle(
         tolerance is not None,
     )
     return s, taken, activity_change
+
+
+if njit is not None:
+
+    @njit(cache=True)
+    def _residual_kernel(
+        v,
+        a,
+        s,
+        standing,
+        flat,
+        starts,
+        pair_pre,
+        pair_post,
+        offset,
+        keep,
+        masked,
+        dt,
+        has_adapt,
+        adapt_strength,
+        has_nudge,
+        target,
+        nmask,
+        gid,
+        ngroups,
+        beta,
+        softmax_t,
+        weight,
+        out,
+    ):
+        """The fixed-point equation error of every row at the published activations ``s``:
+        one block transport, then the same terms the settle kernel adds, without a step."""
+        batch, n = v.shape
+        pairs = pair_pre.shape[0]
+        synaptic_input = np.zeros((batch, n))
+        for k in range(pairs):
+            a0, a1 = starts[pair_pre[k]], starts[pair_pre[k] + 1]
+            b0, b1 = starts[pair_post[k]], starts[pair_post[k] + 1]
+            nb = b1 - b0
+            block = flat[offset[k] : offset[k + 1]].reshape(a1 - a0, nb)
+            product = np.dot(np.ascontiguousarray(s[:, a0:a1]), block)
+            for b in range(batch):
+                for j in range(nb):
+                    synaptic_input[b, b0 + j] += product[b, j]
+        group = np.flatnonzero(nmask > 0.0)
+        position = np.full(n, -1, dtype=np.int64)
+        for k in range(group.shape[0]):
+            position[group[k]] = k
+        p = np.empty(group.shape[0])
+        zmax = np.empty(max(ngroups, 1))
+        total = np.empty(max(ngroups, 1))
+        for b in range(batch):
+            if has_nudge and softmax_t > 0.0:
+                for g in range(ngroups):
+                    zmax[g] = -1e300
+                    total[g] = 0.0
+                for k in range(group.shape[0]):
+                    g = gid[group[k]]
+                    z = s[b, group[k]] / softmax_t
+                    p[k] = z
+                    if z > zmax[g]:
+                        zmax[g] = z
+                for k in range(group.shape[0]):
+                    g = gid[group[k]]
+                    p[k] = np.exp(p[k] - zmax[g])
+                    total[g] += p[k]
+                for k in range(group.shape[0]):
+                    p[k] /= total[gid[group[k]]]
+            worst = 0.0
+            finite = True
+            for i in range(n):
+                tot = synaptic_input[b, i] + standing[b, i] - v[b, i]
+                if has_adapt:
+                    tot -= adapt_strength * a[b, i]
+                if has_nudge and nmask[i] > 0.0:
+                    if softmax_t > 0.0:
+                        tot += beta * weight[b] * (target[b, i] - p[position[i]])
+                    else:
+                        tot += beta * weight[b] * nmask[i] * (target[b, i] - s[b, i])
+                k_ = keep[b, i] if masked else 1.0
+                err = abs(k_ * tot + (k_ - 1.0) * v[b, i] / dt)
+                if has_adapt:
+                    gap = abs(s[b, i] - a[b, i])
+                    if gap > err:
+                        err = gap
+                if not (err <= 1e300):
+                    finite = False
+                elif err > worst:
+                    worst = err
+            out[b] = worst if finite else np.inf
+
+
+def fused_residual(
+    v: np.ndarray,
+    a: np.ndarray,
+    drive: np.ndarray,
+    bias: np.ndarray,
+    layout: Layout,
+    flat: np.ndarray,
+    keep: np.ndarray,
+    neuron_model: NeuronModel,
+    nudge: Nudge | None,
+) -> np.ndarray:
+    """``Brain.residual`` for a host state of a blocked connectome, in one compiled pass.
+
+    The same equations as the NumPy path: the activation of ``v`` under the mask, one block
+    transport, the potential equation with adaptation and nudge, the mask's projection, and
+    the adaptation equation; the maximum absolute error per row, infinity where it is not
+    finite. Nothing is changed.
+    """
+    assert njit is not None
+    batch, n = v.shape
+    m = neuron_model
+    s = np.empty((batch, n))
+    for b in range(batch):
+        _activation(np.ascontiguousarray(v[b]), m.slope, m.threshold, m.rest_emission, m.leak, s[b])
+    keep = np.broadcast_to(np.asarray(keep, float), (batch, n))
+    masked = bool((keep != 1.0).any())
+    if masked:
+        s *= keep
+    adapt = m.adaptation
+    target, nmask, gid, ngroups, beta, softmax_t, weight = _nudge_arrays(nudge, batch, n)
+    out = np.empty(batch)
+    _residual_kernel(
+        np.ascontiguousarray(v, dtype=float),
+        np.ascontiguousarray(a, dtype=float),
+        s,
+        np.ascontiguousarray(drive + bias),
+        flat,
+        layout.starts,
+        layout.pair_pre,
+        layout.pair_post,
+        layout.offset,
+        np.ascontiguousarray(keep, dtype=float),
+        masked,
+        m.dt,
+        adapt is not None,
+        0.0 if adapt is None else adapt.strength,
+        nudge is not None,
+        target,
+        nmask,
+        gid,
+        ngroups,
+        beta,
+        softmax_t,
+        weight,
+        out,
+    )
+    return out
 
 
 if njit is not None:

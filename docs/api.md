@@ -376,7 +376,7 @@ give additional details. Prefer keyword arguments for optional configuration.
 ## Optional task compositions
 
 `from cadence.circuits import assemble, reflex_arc, imagine, Deliberator, ActivityMonitor` imports small
-sensorimotor, counterfactual-search and self-reading compositions. See [patterns](patterns.md)
+sensorimotor, counterfactual-search and self-reading compositions. See [experience](experience.md)
 for ports, budgets, supplied-model boundaries and examples. These optional architectural
 helpers compose ordinary neuron dynamics with explicit host-side orchestration.
 

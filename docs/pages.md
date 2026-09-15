@@ -84,7 +84,7 @@ a new stimulus on the input region and the brain settles into its new equilibriu
 step, at the chosen rate, with the certificate's error bound in the status line when the
 brain is certified. The dense matrix is `n * n` numbers, so the live option is capped at
 2,000 neurons (`limit=` raises it). Larger brains use recorded frames or their page's own
-engine. `examples/brain_scan_page.py` writes such a page.
+engine. Write the returned `html` with `Path("brain.html").write_text(html, encoding="utf-8")`.
 
 ## A page with its own engine
 
@@ -133,7 +133,5 @@ Compare its outputs against `brain.settle` on the CPU backend with `steps=100` a
 `tolerance=1e-4` on representative drives. JavaScript uses double-precision numbers, but
 operation ordering can change rounding. An activation stopping tolerance alone does not
 certify an equilibrium; the [certificate](certificate.md) does, and a page can show its
-bound from the last movement. The
-[cadence-examples](https://github.com/muellerberndt/cadence-examples) websites separate
-small numerical kernels from rendering, check them against Python, and draw every brain
-with this component.
+bound from the last movement. Keep a website's numerical kernel separate from its
+rendering so the same recorded observations can check it against Python.

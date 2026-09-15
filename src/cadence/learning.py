@@ -134,6 +134,9 @@ class Learner:
     plastic_neurons: np.ndarray | None = None  # bool per neuron: whose bias moves and decays
     reciprocal: bool = True  # a synapse and its reverse share one efficacy: a reciprocal pair
     tie_groups: np.ndarray | None = None  # int per synapse (-1: none); a group shares one scale
+    # float per synapse multiplying its step (default one): a fan-in scale, a per-projection
+    # rate; a wide population's inbound synapses need a smaller step than a narrow one's
+    synapse_rate: np.ndarray | None = None
     # the outputs as groups, each its own softmax choice, all nudged together: a count of
     # equal groups, or one size per group (a body's controller: a move of nine, a grip of two)
     slots: int | Sequence[int] = 1
@@ -190,6 +193,13 @@ class Learner:
             if mask.shape != (size,) or mask.dtype != np.bool_:
                 raise ValueError(f"{name} must be a boolean vector of length {size}")
             setattr(self, name, mask)
+        if self.synapse_rate is not None:
+            rate = np.asarray(self.synapse_rate, dtype=float)
+            if rate.shape != (w.synapses,) or not np.isfinite(rate).all() or (rate < 0).any():
+                raise ValueError(
+                    f"synapse_rate must be a finite nonnegative vector of length {w.synapses}"
+                )
+            self.synapse_rate = rate
         self.second_moment = np.zeros(w.synapses)  # per synapse, for normalized steps
         self.second_moment_bias = np.zeros(w.n)
         self.velocity = np.zeros(w.synapses)  # per synapse, for momentum
@@ -400,6 +410,8 @@ class Learner:
             raise ValueError("steps must be finite vectors, one per synapse and one per neuron")
         if not all_trainable:
             delta_scale[~self.plastic_synapses] = 0.0
+        if self.synapse_rate is not None:  # each synapse's own step, before tying
+            delta_scale *= self.synapse_rate
         if len(self._paired):  # one synapse, one weight: both directions move by the same amount
             mean = 0.5 * (delta_scale[self._paired] + delta_scale[self._paired_reverse])
             delta_scale[self._paired] = mean
@@ -418,7 +430,18 @@ class Learner:
             scale = np.where(self.plastic_synapses, scale * (1.0 - cfg.decay), scale)
             bias = np.where(self.plastic_neurons, bias * (1.0 - cfg.decay), bias)
         scale = np.where(self.plastic_synapses, np.clip(scale, -SCALE_CAP, SCALE_CAP), scale)
-        self.brain = self.brain.with_parameters(efficacy=scale, bias=bias)
+        kernel = self.brain._torch
+        if kernel is None:
+            self.brain = self.brain.with_parameters(efficacy=scale, bias=bias)
+        else:
+            # The kernel keeps the parameters on its device and is updated in place, so a
+            # state that rests on it continues there; rebuilding the brain would re-upload
+            # every weight and strand every settled state on a kernel no longer used.
+            torch = kernel.torch
+            self.brain = self.brain._with_device_parameters(
+                torch.from_numpy(np.ascontiguousarray(scale)).to(kernel.device, kernel.param_dtype),
+                torch.from_numpy(np.ascontiguousarray(bias)).to(kernel.device, kernel.param_dtype),
+            )
         self.updates += 1
         return {
             "scale_step": float(np.abs(delta_scale).mean()) if delta_scale.size else 0.0,
@@ -487,12 +510,22 @@ class Learner:
         """Index tensors of the update on the kernel's device, made once per kernel and masks."""
         torch = kernel.torch
         assert self.plastic_synapses is not None and self.plastic_neurons is not None
-        key = (id(kernel), id(self.plastic_synapses), id(self.plastic_neurons))
+        key = (
+            id(kernel),
+            id(self.plastic_synapses),
+            id(self.plastic_neurons),
+            id(self.synapse_rate),
+        )
         cache = self.__dict__.setdefault("_device_cache", {})
         if (
             cache.get("key") != key
             or not np.array_equal(cache.get("host_synapses"), self.plastic_synapses)
             or not np.array_equal(cache.get("host_neurons"), self.plastic_neurons)
+            or (
+                cache.get("host_rate") is not None
+                if self.synapse_rate is None
+                else not np.array_equal(cache.get("host_rate"), self.synapse_rate)
+            )
         ):
             dev = kernel.device
 
@@ -506,6 +539,10 @@ class Learner:
                 key=key,
                 host_synapses=self.plastic_synapses.copy(),
                 host_neurons=self.plastic_neurons.copy(),
+                host_rate=None if self.synapse_rate is None else self.synapse_rate.copy(),
+                rate=None
+                if self.synapse_rate is None
+                else to(self.synapse_rate, kernel.param_dtype),
                 paired=to(self._paired) if len(self._paired) else None,
                 paired_reverse=to(self._paired_reverse) if len(self._paired) else None,
                 members=to(self._members) if len(self._members) else None,
@@ -525,6 +562,8 @@ class Learner:
         d = delta_scale.clone()
         if ix["synapses"] is not None:
             d = d * ix["synapses"]
+        if ix["rate"] is not None:  # each synapse's own step, before tying
+            d = d * ix["rate"]
         if (
             ix["paired"] is not None
         ):  # one synapse, one weight: both directions move by the same amount
@@ -717,13 +756,16 @@ class Learner:
     def parameters(self) -> int:
         """Trainable numbers: one per synapse (a tied pair or group counts once) plus the biases."""
         assert self.plastic_synapses is not None and self.plastic_neurons is not None
-        keys = np.arange(self.brain.connectome.synapses)
+        synapses = self.brain.connectome.synapses
+        keys = np.arange(synapses)
         paired = self.reverse >= 0
         keys[paired] = np.minimum(keys[paired], self.reverse[paired])
         if len(self._members):
-            keys[self._members] = self.brain.connectome.synapses + self._member_groups
-        synapses = len(np.unique(keys[self.plastic_synapses]))
-        return synapses + int(np.count_nonzero(self.plastic_neurons))
+            keys[self._members] = synapses + self._member_groups
+        # one flag per distinct key, not a sort of every key: linear in the synapses
+        counted = np.zeros(synapses + len(self._member_count), dtype=bool)
+        counted[keys[self.plastic_synapses]] = True
+        return int(np.count_nonzero(counted)) + int(np.count_nonzero(self.plastic_neurons))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -738,11 +780,12 @@ class Learner:
 
     # -- checkpoints
 
-    def save(self, path: str | Path) -> Path:
-        """Write this learner, connectome and parameters included, to one ``.npz`` file."""
+    def save(self, path: str | Path, *, compressed: bool = True) -> Path:
+        """Write this learner, connectome and parameters included, to one ``.npz`` file;
+        ``compressed=False`` trades disk space for a fast write of a very large brain."""
         from .checkpoint import save
 
-        return save(self, path)
+        return save(self, path, compressed=compressed)
 
     @classmethod
     def load(

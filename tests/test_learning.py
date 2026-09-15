@@ -23,7 +23,9 @@ def two_blobs(n_per: int = 60, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
 def test_learner_separates_two_classes_and_the_rule_is_local() -> None:
     connectome = cd.layered(8, 16, 2, density=0.6, seed=1)
     learner = cd.Learner(
-        cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], cd.LearnerConfig(eta=2.0)
+        cd.Brain(connectome, cd.learning_neuron_model()),
+        connectome.populations["output"],
+        cd.LearnerConfig(eta=2.0),
     )
     x, y = two_blobs()
     drive = learner.brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 8))))
@@ -63,7 +65,9 @@ def test_learner_separates_two_classes_and_the_rule_is_local() -> None:
 
 def test_free_phase_never_sees_the_target() -> None:
     connectome = cd.layered(4, 6, 2, seed=2)
-    learner = cd.Learner(cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"])
+    learner = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"]
+    )
     drive = learner.brain.stimulus_levels(np.pad(np.eye(4)[:2], ((0, 0), (0, connectome.n - 4))))
     a = learner.free(drive).activation
     b = learner.free(drive).activation
@@ -82,7 +86,9 @@ def test_contrast_tracks_the_loss_gradient() -> None:
     """The centered contrast points along the finite-difference gradient of the nudge's loss."""
     connectome = cd.layered(8, 12, 3, density=0.7, seed=3)
     config = cd.LearnerConfig(beta=0.05, tolerance=1e-9, free_steps=400, nudged_steps=400)
-    learner = cd.Learner(cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config)
+    learner = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config
+    )
     rng = np.random.default_rng(0)
     x = rng.random((16, 8))
     labels = rng.integers(0, 3, 16)
@@ -155,7 +161,9 @@ def test_dense_and_segmented_transport_agree() -> None:
 def test_weighted_nudge_pushes_each_row_its_own_way() -> None:
     connectome = cd.layered(4, 6, 2, seed=6)
     config = cd.LearnerConfig(tolerance=1e-12, free_steps=1000, nudged_steps=200)
-    learner = cd.Learner(cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config)
+    learner = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config
+    )
     drive = learner.brain.stimulus_levels(np.pad(np.eye(4)[:2], ((0, 0), (0, connectome.n - 4))))
     free = learner.free(drive)
     target = learner.targets(np.array([0, 0]))
@@ -170,7 +178,9 @@ def test_weighted_nudge_pushes_each_row_its_own_way() -> None:
 def test_normalized_steps_stay_local_and_bounded() -> None:
     connectome = cd.layered(4, 6, 2, seed=8)
     config = cd.LearnerConfig(eta=0.05, normalize=0.9)
-    learner = cd.Learner(cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config)
+    learner = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config
+    )
     drive = learner.brain.stimulus_levels(np.pad(np.eye(4)[:2], ((0, 0), (0, connectome.n - 4))))
     before = learner.brain.efficacy.copy()
     learner.step(drive, np.array([0, 1]))
@@ -189,7 +199,9 @@ def test_adaptive_local_step_is_bias_corrected() -> None:
     config = cd.LearnerConfig(
         eta=0.01, eta_bias=0.0, momentum=0.9, normalize=0.999, normalize_floor=1e-12
     )
-    learner = cd.Learner(cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config)
+    learner = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], config
+    )
     drive = learner.brain.stimulus_levels(np.pad(np.eye(4)[:2], ((0, 0), (0, connectome.n - 4))))
     before = learner.brain.efficacy.copy()
     learner.step(drive, np.array([0, 1]))
@@ -211,7 +223,9 @@ def test_adaptive_local_step_is_bias_corrected() -> None:
 def test_tie_groups_share_one_scale_across_positions() -> None:
     connectome, groups = cd.embedded(vocabulary=5, positions=3, dim=2, hidden=4, outputs=2, seed=1)
     learner = cd.Learner(
-        cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"], tie_groups=groups
+        cd.Brain(connectome, cd.learning_neuron_model()),
+        connectome.populations["output"],
+        tie_groups=groups,
     )
     # every (token, unit) synapse starts equal across the positions and stays equal after an update
     tied = groups >= 0
@@ -260,7 +274,11 @@ def test_trainable_masks_leave_the_rest_of_the_net_alone() -> None:
     neurons[list(connectome.populations["output"])] = True
     config = cd.LearnerConfig(eta=0.5, eta_bias=0.5, decay=0.1)
     learner = cd.Learner(
-        brain, connectome.populations["output"], config, plastic_synapses=synapses, plastic_neurons=neurons
+        brain,
+        connectome.populations["output"],
+        config,
+        plastic_synapses=synapses,
+        plastic_neurons=neurons,
     )
     scale0, bias0 = learner.brain.efficacy.copy(), learner.brain.bias.copy()
     drive = brain.stimulus_levels(np.ones((2, connectome.n)) * 0.5)

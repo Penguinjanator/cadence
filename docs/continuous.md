@@ -207,11 +207,8 @@ explicitly connect completed candidate scores to its action-selection circuit; a
 a `Deliberator` does not automatically override `GenericBrain.step`'s sampled action.
 
 The node budget bounds transitions and evaluations, not wall time inside a callback.
-Expensive world models need their own bounded evaluation or a worker. The browser
-[Connect Four example](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four)
-uses cooperative worker slices, ponders human replies by default, and retains a bounded
-cache of exact compatible game states. That cache is task-specific working storage,
-not learned long-term synapses. This core planner restarts on new observations and
+Expensive world models need their own bounded evaluation or a worker.
+This core planner restarts on new observations and
 retains work between ticks of the same search; it does not cache across observations.
 
 [Deliberation tests](../tests/test_deliberator.py) compare against independent minimax,
