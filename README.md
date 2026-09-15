@@ -86,21 +86,18 @@ On Windows activate with `.venv\Scripts\Activate.ps1`.
 ## Examples
 
 Two applications built on this loop, each with its page, its acceptance receipt and the
-verifier that recomputes the receipt from the event logs.
+verifier that recomputes the receipt from the event logs, are in the
+[examples gallery](https://github.com/muellerberndt/cadence-examples).
 
-- [Arm](https://floatingpragma.io/cadence-examples/arm/): a two-link arm learns its own
-  body from motor babbling, reaches targets through a search over the consequences it has
-  recorded, adapts to a longer link without a reset and returns to its original body.
-  [Receipt](https://github.com/muellerberndt/cadence-examples/blob/main/arm/receipt.json).
-- [World](https://floatingpragma.io/cadence-examples/world/): in a 6 by 6 world seen one
-  cell at a time, one life learns the consequences of its actions, remembers where it saw
-  an object, corrects that memory when the object moves, holds a cue across a delay and
-  grounds words in objects.
-  [Receipt](https://github.com/muellerberndt/cadence-examples/blob/main/world/receipt.json).
+- **Arm:** a two-link arm learns its own body from motor babbling, reaches targets through
+  a search over the consequences it has recorded, adapts to a longer link without a reset
+  and returns to its original body.
+- **World:** in a 6 by 6 world seen one cell at a time, one life learns the consequences
+  of its actions, remembers where it saw an object, corrects that memory when the object
+  moves, holds a cue across a delay and grounds words in objects.
 
 Both learn from one stream with no replay ring: the world model is a records cortex and
 the settled regions complete partial readings, carry context and hold the policy.
-[Gallery](https://github.com/muellerberndt/cadence-examples).
 
 ## Reference
 
