@@ -55,7 +55,7 @@ The adaptive local step uses `momentum` and `normalize` to keep a running mean a
 of each synapse's own steps, with corrections for its short history. Each synapse reads its
 own optimizer state; this does not guarantee stable learning for every task or setting.
 
-Continue with the learner and drive from the [quickstart](quickstart.md#learn-a-response):
+Continue with the learner and drive from the [quickstart](quickstart.md#learn-from-an-observed-consequence):
 
 ```python
 ac = cd.ActorCritic(learner, critic=connectome.populations["hidden"],
@@ -72,9 +72,10 @@ Drives are nonempty finite `(batch, neurons)` arrays. Rewards and optional boots
 values have shape `(batch,)`; `done` is boolean. Validation precedes trace and parameter
 updates. Each batch row keeps its own potential, adaptation, eligibility and reward
 centering. Ended rows reset before the next free phase; their neighbours get the usual
-single phase. The next free phase is computed before the parameter update and reused
-for the next action if its drive matches. This is a finite-step approximation; compare
-it with freshly settled deployment behavior when tuning budgets.
+single phase. The next free phase estimates the bootstrap value before the parameter
+update. The next action settles again from that warm state under the updated parameters.
+A cached free phase is reused only when both the drive and the brain parameters are
+unchanged. Budget for both free phases and the action’s two nudged phases.
 
 `act(..., greedy=True)` is an evaluation read: it clears eligibility and cannot be
 followed by `learn`. Calling another `act` replaces the pending action. Finish the
@@ -103,8 +104,8 @@ undiscounted potential difference does not generally preserve the original
 objective under discounting; that guarantee requires the discounted form
 `gamma * Phi(next) - Phi(now)` with appropriate terminal handling.
 
-The [function map](biology.md#learning) places eligibility, prediction error
-and valence among the other mechanisms.
+The [experience guide](experience.md) connects eligibility, prediction error
+and valence to the rest of the learning life.
 
 ## Deployment
 

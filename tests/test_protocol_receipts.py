@@ -93,9 +93,9 @@ def test_protocol_scores_and_shuffled_control_and_gain_selection() -> None:
     assert gain in (0.01, 0.03, 0.1) and len(table) == 3
     control = cd.shuffled(connectome, seed=0)
     assert control.synapses == connectome.synapses
-    assert protocol.score(cd.Brain(control, cd.NeuronModel(gain=gain, dt=0.5)))[
-        "passed"
-    ] <= len(protocol.rows)
+    assert protocol.score(cd.Brain(control, cd.NeuronModel(gain=gain, dt=0.5)))["passed"] <= len(
+        protocol.rows
+    )
 
 
 def test_gain_selection_breaks_ties_by_gain_not_grid_order() -> None:
@@ -112,7 +112,9 @@ def test_gain_selection_breaks_ties_by_gain_not_grid_order() -> None:
 
 @pytest.mark.parametrize("predicate", ["exceeds", "lateralized"])
 def test_readout_comparison_uses_readout_when_stimulus_has_the_same_name(predicate: str) -> None:
-    connectome = cd.Connectome.from_synapses(2, pre=[], post=[], populations={"left": [0], "right": [1]})
+    connectome = cd.Connectome.from_synapses(
+        2, pre=[], post=[], populations={"left": [0], "right": [1]}
+    )
     protocol = cd.Protocol(
         stimuli={"trial": ("right",), "left": ("right",)},
         rows=[cd.Row("compare", "trial", "right", predicate, relative_to="left")],
@@ -164,7 +166,9 @@ def test_shuffled_preserves_endpoint_multiset_and_attached_edge_data(n: int) -> 
         order = np.argsort(shuffled.count)
         original = np.argsort(connectome.count)
         for name in ("pre", "count", "sign"):
-            np.testing.assert_array_equal(getattr(shuffled, name)[order], getattr(connectome, name)[original])
+            np.testing.assert_array_equal(
+                getattr(shuffled, name)[order], getattr(connectome, name)[original]
+            )
 
 
 def test_shuffled_keeps_selected_edges_and_validates_mask_shape() -> None:
@@ -172,7 +176,15 @@ def test_shuffled_keeps_selected_edges_and_validates_mask_shape() -> None:
     keep = np.zeros(connectome.synapses, dtype=bool)
     keep[::2] = True
     shuffled = cd.shuffled(connectome, seed=0, keep=keep)
-    original = list(zip(connectome.pre[keep], connectome.post[keep], connectome.count[keep], connectome.sign[keep], strict=True))
+    original = list(
+        zip(
+            connectome.pre[keep],
+            connectome.post[keep],
+            connectome.count[keep],
+            connectome.sign[keep],
+            strict=True,
+        )
+    )
     result = list(zip(shuffled.pre, shuffled.post, shuffled.count, shuffled.sign, strict=True))
     for edge in original:
         result.remove(edge)

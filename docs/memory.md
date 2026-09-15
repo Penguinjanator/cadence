@@ -58,9 +58,13 @@ memory.reset(2, rows=np.array([True, False]))  # only the first episode ended
 a boolean `write` mask gates each stream. Every call decays all strengths by `decay`
 before writing selected rows. Reads do not decay state. `rate` lies in `[0, 1]` in delta
 mode. A zero key cannot write an association. `amplitude` scales reads as a drive,
-without changing the target used by the write rule. A changed batch size starts fresh
-streams; use `keep(rows)` when dropping streams while preserving their identities.
+without changing the target used by the write rule. Reading a different batch size returns
+the empty-stream baseline without changing live records. Observing a different batch
+size starts fresh streams; use `keep(rows)` when dropping streams while preserving
+their identities.
 `reset` clears records; `writes` counts lifetime write events.
+An overflowing write raises `ValueError` and preserves the previous records and
+separator state. Scale keys and values to the range your application needs.
 
 ## With an existing brain
 
@@ -134,16 +138,14 @@ memory = cd.FastSynapses(pre=key_neurons, post=value_neurons, rule="delta", sepa
 ```
 
 `habituate` sets the running mean from a sample of the environment's keys before anything
-is stored. With positive `center`, later writes continue updating that mean. Even slow
-updates can move the codes between a write and its read; habituation does not freeze
-addresses. Decay, interfering writes and insufficient code rank can also lose records.
+is stored; the slow `center` then tracks it. A fast running mean can move codes between a write and its read;
+code overlap, finite capacity and contradictory values can also impair recall.
 
 The record then has `expansion` rows per stream instead of `inputs`, which is the price:
 storage grows with the code, capacity grows with it too (exact storage is bounded by the
-code width, not the key width). Sixteen keys at cosine 0.9 that a plain delta record
-holds at a third are held exactly after separation; see `examples/certified_memory.py`
-and the certificate guide. This is a software pattern-separation mechanism; the
-[biological function map](biology.md) distinguishes inspiration from implementation.
+code width, not the key width). Measure retention with and without separation under the same observed keys; see
+the [separation tests](../tests/test_separation.py). Biological expansion and sparse
+coding motivate the construction, but do not establish equivalence to hippocampal learning.
 
 `SynapticMemory` supports the same expanded write/read coordinates, but requires
 `separator.center=0`: moving the separator's mean would move the address of persistent

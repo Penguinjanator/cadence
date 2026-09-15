@@ -20,7 +20,10 @@ def test_stateful_connectome_has_a_context_source_range_into_the_hidden_neurons(
     brain = cd.Brain(w, cd.learning_neuron_model(dt=1.0))
     lay = brain.layout
     assert 1 in lay.sources()  # the context range is a source of the block transport
-    assert cd.conformance(brain, list(w.populations["input"])[:2], steps=20)["max_abs_deviation"] < 1e-12
+    assert (
+        cd.conformance(brain, list(w.populations["input"])[:2], steps=20)["max_abs_deviation"]
+        < 1e-12
+    )
 
 
 def test_echo_decays_toward_the_hidden_activation_and_enters_the_clamp() -> None:
@@ -181,7 +184,9 @@ def test_afterglow_is_brightest_where_the_moment_changed() -> None:
     """The afterglow weighs each hidden neuron's trace by its movement since the last moment:
     a neuron that changed glows, one that stood still fades; with focus 0 it is the Echo."""
     w, _ = cd.stateful(3, 1, 2, 3, 3, seed=1)
-    w.populations["afterglow"] = w.populations["context"]  # the same paired range, under the afterglow's name
+    w.populations["afterglow"] = w.populations[
+        "context"
+    ]  # the same paired range, under the afterglow's name
     brain = cd.Brain(w, cd.learning_neuron_model(dt=1.0))
     glow = cd.Afterglow(w, decay=0.5, focus=1.0)
     echo = cd.Afterglow(w, decay=0.5, focus=0.0)
@@ -220,12 +225,20 @@ def test_the_trace_reads_a_state_on_the_device_the_same_as_on_the_host() -> None
     drive = np.zeros((2, w.n))
     drive[:, 0] = 1.0
     host = cd.Brain(w, cd.learning_neuron_model(dt=1.0)).settle_batch(drive, steps=30)
-    dev = cd.Brain(w, cd.learning_neuron_model(dt=1.0), backend="torch", device="cpu").settle_batch(drive, steps=30)
+    dev = cd.Brain(w, cd.learning_neuron_model(dt=1.0), backend="torch", device="cpu").settle_batch(
+        drive, steps=30
+    )
     a, b = cd.Afterglow(w, decay=0.5, source="input"), cd.Afterglow(w, decay=0.5, source="input")
     a.update(host)
     b.update(dev)
     assert np.allclose(a.trace, b.trace)
     drive[:, 1] = 1.0
-    a.update(cd.Brain(w, cd.learning_neuron_model(dt=1.0)).settle_batch(drive, steps=30, state=host))
-    b.update(cd.Brain(w, cd.learning_neuron_model(dt=1.0), backend="torch", device="cpu").settle_batch(drive, steps=30, state=dev))
+    a.update(
+        cd.Brain(w, cd.learning_neuron_model(dt=1.0)).settle_batch(drive, steps=30, state=host)
+    )
+    b.update(
+        cd.Brain(w, cd.learning_neuron_model(dt=1.0), backend="torch", device="cpu").settle_batch(
+            drive, steps=30, state=dev
+        )
+    )
     assert np.allclose(a.trace, b.trace, atol=1e-6)

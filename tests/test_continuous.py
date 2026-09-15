@@ -111,7 +111,9 @@ def test_demonstrations_can_enter_the_same_ongoing_loop():
 def test_reward_updates_do_not_advance_imitation_optimizer_history(tmp_path, backend):
     if backend not in cd.available_backends():
         pytest.skip(backend)
-    options = dict(hidden=4, seed=0, backend=backend, learning=cd.LearnerConfig(momentum=0.9, normalize=0.95))
+    options = dict(
+        hidden=4, seed=0, backend=backend, learning=cd.LearnerConfig(momentum=0.9, normalize=0.95)
+    )
     if backend == "torch":
         options["device"] = "cpu"
     a, b = (cd.GenericBrain.build(2, 2, **options).learner for _ in range(2))
@@ -119,7 +121,9 @@ def test_reward_updates_do_not_advance_imitation_optimizer_history(tmp_path, bac
     for i in range(4):
         a.apply(np.zeros(a.brain.connectome.synapses), np.zeros(a.brain.connectome.n))
         if i == 2:
-            a = cd.Learner.load(a.save(tmp_path / "optimizer.npz"), backend=backend, device=options.get("device"))
+            a = cd.Learner.load(
+                a.save(tmp_path / "optimizer.npz"), backend=backend, device=options.get("device")
+            )
         a.step(drive, np.arange(2))
         b.step(drive, np.arange(2))
         np.testing.assert_allclose(a.brain.efficacy, b.brain.efficacy, atol=1e-12)
@@ -153,7 +157,9 @@ def test_continuous_step_matches_explicit_loop_and_resumes_pending_action(tmp_pa
         np.testing.assert_array_equal(ongoing.step(x, reward=reward, done=done), explicit.act(x))
     saved = ongoing.save(tmp_path / "live.npz")
     restored = cd.GenericBrain.load(saved, backend=backend, device=options.get("device"))
-    np.testing.assert_array_equal(ongoing.hippocampus.consolidated, restored.hippocampus.consolidated)
+    np.testing.assert_array_equal(
+        ongoing.hippocampus.consolidated, restored.hippocampus.consolidated
+    )
     for _ in range(3):
         for a in (ongoing, restored):
             a.step(x, reward=np.array([0.7, 0.0]))

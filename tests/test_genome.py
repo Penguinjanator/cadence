@@ -20,7 +20,9 @@ def test_grow_is_deterministic_and_names_contiguous_sets() -> None:
     c = two_region()
     a, b = develop(c, seed=3), develop(c, seed=3)
     assert a.digest() == b.digest() and a.n == 17
-    assert a.populations["hidden"] == tuple(range(6, 14)) and a.populations["output"] == tuple(range(14, 17))
+    assert a.populations["hidden"] == tuple(range(6, 14)) and a.populations["output"] == tuple(
+        range(14, 17)
+    )
     assert (
         a.in_degree()[list(a.populations["input"])].sum() > 0
     )  # symmetric: inputs hear the hidden neurons
@@ -65,17 +67,45 @@ def _hidden_size(w: cd.Connectome, seed: int) -> float:
 def test_evolve_runs_the_lives_through_the_mapper() -> None:
     from multiprocessing.pool import ThreadPool
 
-    sequential = evolve(_hidden_size, two_region(), generations=3, population=4, keep=2, seed=3, fixed=("input", "output"))
+    sequential = evolve(
+        _hidden_size,
+        two_region(),
+        generations=3,
+        population=4,
+        keep=2,
+        seed=3,
+        fixed=("input", "output"),
+    )
     with ThreadPool(2) as pool:
-        parallel = evolve(_hidden_size, two_region(), generations=3, population=4, keep=2, seed=3, fixed=("input", "output"), mapper=pool.map)
-    assert [g["best_fitness"] for g in parallel.generations] == [g["best_fitness"] for g in sequential.generations]
+        parallel = evolve(
+            _hidden_size,
+            two_region(),
+            generations=3,
+            population=4,
+            keep=2,
+            seed=3,
+            fixed=("input", "output"),
+            mapper=pool.map,
+        )
+    assert [g["best_fitness"] for g in parallel.generations] == [
+        g["best_fitness"] for g in sequential.generations
+    ]
     assert parallel.best == sequential.best
 
 
 def test_mutate_keeps_tied_regions_the_same_size() -> None:
     c = Genome(
-        regions=(Region("input", 6), Region("context", 8), Region("hidden", 8), Region("output", 3)),
-        projections=(Projection("input", "hidden"), Projection("context", "hidden", reciprocal=False), Projection("hidden", "output")),
+        regions=(
+            Region("input", 6),
+            Region("context", 8),
+            Region("hidden", 8),
+            Region("output", 3),
+        ),
+        projections=(
+            Projection("input", "hidden"),
+            Projection("context", "hidden", reciprocal=False),
+            Projection("hidden", "output"),
+        ),
     )
     rng = np.random.default_rng(5)
     for _ in range(20):
@@ -87,7 +117,16 @@ def test_mutate_keeps_tied_regions_the_same_size() -> None:
 
 def test_evolve_reports_after_every_generation() -> None:
     seen: list[int] = []
-    lineage = evolve(_hidden_size, two_region(), generations=3, population=4, keep=2, seed=3, fixed=("input", "output"), report=lambda lin: seen.append(len(lin.generations)))
+    lineage = evolve(
+        _hidden_size,
+        two_region(),
+        generations=3,
+        population=4,
+        keep=2,
+        seed=3,
+        fixed=("input", "output"),
+        report=lambda lin: seen.append(len(lin.generations)),
+    )
     assert seen == [1, 2, 3] and len(lineage.generations) == 3
 
 

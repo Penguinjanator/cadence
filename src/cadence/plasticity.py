@@ -31,7 +31,7 @@ from typing import Any, Literal
 import numpy as np
 
 from .brain import _FUSED as _FUSED_TRACE
-from .brain import BrainState, Nudge
+from .brain import Brain, BrainState, Nudge
 from .learning import Learner
 
 __all__ = [
@@ -39,6 +39,14 @@ __all__ = [
     "ActorCriticConfig",
     "Bins",
 ]
+
+
+def _batch_of(state: BrainState) -> int:
+    """The rows of a settled state, read from the device shape when the state rests there."""
+    handle = state.device
+    if handle is not None and "s" in handle and state.__dict__.get("v") is None:
+        return int(handle["s"].shape[0])
+    return int(np.atleast_2d(state.v).shape[0])
 
 
 @dataclass(frozen=True)
@@ -200,8 +208,8 @@ class ActorCritic:
         obs, reward, done = env.step(action)
         ac.learn(reward, done, next_drive)     # settle the next state, dopamine, update
 
-    ``act`` reuses the free phase ``learn`` already settled for the next state, so a
-    step costs one free phase and two nudged ones.
+    ``learn`` settles the next state for bootstrapping before changing weights.
+    ``act`` refreshes that warm state under the updated weights before sampling.
     """
 
     def __init__(
@@ -260,6 +268,7 @@ class ActorCritic:
         self.salience: np.ndarray | None = None
         self._drive: np.ndarray | None = None
         self._free: BrainState | None = None
+        self._free_brain: Brain | None = None  # parameters that produced the cached phase
         # ("phases", plus, minus, value) as activations, or ("states", plus, minus, value) as states
         self._pending: tuple[str, Any, Any, np.ndarray] | None = None
         self.updates = 0
@@ -300,9 +309,10 @@ class ActorCritic:
     def settle(self, drive: np.ndarray) -> BrainState:
         """The free phase for ``drive``, warm from the last one; cached for ``act``."""
         drive = self._validated_drive(drive)
-        if self._free is not None and self._free.v.shape[0] != len(drive):
+        if self._free is not None and _batch_of(self._free) != len(drive):
             self.reset()
         self._free = self.learner.free(drive, warm=self._free)
+        self._free_brain = self.learner.brain
         self._drive = drive.copy()
         self._pending = None
         return self._free
@@ -331,6 +341,7 @@ class ActorCritic:
             self._free
             if self._free is not None
             and self._drive is not None
+            and self._free_brain is self.learner.brain
             and np.array_equal(self._drive, drive)
             else self.settle(drive)
         )
@@ -562,6 +573,7 @@ class ActorCritic:
             step_bias = step_bias / (np.sqrt(self.second_moment_bias / correction) + 1e-3)
         step_scale = cfg.eta * step_scale
         step_bias = cfg.eta_bias * step_bias
+        next_brain = self.learner.brain
         report = self.learner.apply(step_scale, step_bias)
         critic_trace = self.trace_critic
         if cfg.critic_normalize:
@@ -582,6 +594,7 @@ class ActorCritic:
             self.trace_bias[done] = 0.0
             self.trace_critic[done] = 0.0
         self._free = next_state
+        self._free_brain = next_brain
         self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
@@ -624,9 +637,21 @@ class ActorCritic:
         warm = self._free
         assert warm is not None
         if done.any():
-            v, a = warm.v.copy(), warm.adaptation.copy()
-            v[done], a[done] = 0.0, 0.0
-            warm = BrainState(v, warm.activation, a, warm.steps)
+            kernel = self.learner.brain._torch
+            handle = warm.device
+            if kernel is not None and handle is not None and handle.get("holder") is kernel:
+                # the finished rows return to rest on the device; nothing comes to the host
+                warm = BrainState(
+                    None,  # type: ignore[arg-type]
+                    None,  # type: ignore[arg-type]
+                    None,  # type: ignore[arg-type]
+                    warm.steps,
+                    device=kernel.keep_rows(handle, ~done),
+                )
+            else:
+                v, a = warm.v.copy(), warm.adaptation.copy()
+                v[done], a[done] = 0.0, 0.0
+                warm = BrainState(v, warm.activation, a, warm.steps)
         return self.learner.free(drive, warm=warm)
 
     def _learn_device(
@@ -692,6 +717,7 @@ class ActorCritic:
         self.updates += 1
         d = torch.as_tensor(np.asarray(delta, dtype=float), dtype=trace.dtype, device=trace.device)
         d = d[:, None]
+        next_brain = self.learner.brain
         report = self.learner._apply_device(
             kernel, cfg.eta * (d * trace).mean(dim=0), cfg.eta_bias * (d * trace_bias).mean(dim=0)
         )
@@ -715,6 +741,7 @@ class ActorCritic:
             self.trace_critic[done] = 0.0
         self._trace_device = (trace, trace_bias)
         self._free = next_state
+        self._free_brain = next_brain
         self._drive = next_drive.copy()
         self._pending = None
         report["delta"] = float(np.abs(delta).mean())
@@ -731,6 +758,7 @@ class ActorCritic:
     def reset(self) -> None:
         """Clear stream state and eligibility; keep learned parameters and optimizer history."""
         self._free = None
+        self._free_brain = None
         self._drive = None
         self._pending = None
         self.trace = self.trace_bias = self.trace_critic = None

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "cadence-net"
 version = "0.9.0"
-description = "Brains of neurons and synapses that settle into equilibrium and learn locally."
+description = "Stateful neural systems that learn through ongoing experience and local synaptic updates."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }

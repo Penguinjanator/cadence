@@ -156,11 +156,11 @@ class Trace:
         self.trace, self.last, self.cold = self.trace[rows], self.last[rows], self.cold[rows]
 
     def stimulate(self, drive: np.ndarray) -> np.ndarray:
-        """Write the trace into the target columns of ``drive`` (a copy is returned)."""
+        """Read the trace into a drive copy; another batch size reads zero context."""
         out = np.array(drive, dtype=float)
-        if len(self.trace) != len(out):
-            self.reset(len(out))
-        out[:, self._glow_columns] = self.amplitude * self.trace
+        out[:, self._glow_columns] = (
+            self.amplitude * self.trace if len(self.trace) == len(out) else 0.0
+        )
         return out
 
     def update(self, state: BrainState) -> None:
@@ -289,7 +289,7 @@ class PatternSeparator:
         x = np.asarray(keys, dtype=float)
         if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all() or not len(x):
             raise ValueError(f"keys must be a finite nonempty (batch, {self.inputs}) array")
-        self.mean = x.mean(axis=0)
+        self.mean = (x / len(x)).sum(axis=0)
 
     def code(self, key: np.ndarray, learn: bool = False) -> np.ndarray:
         """The sparse code of ``(batch, inputs)`` keys: ``(batch, expansion)``, ``winners``
@@ -297,11 +297,18 @@ class PatternSeparator:
         x = np.asarray(key, dtype=float)
         if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all():
             raise ValueError(f"key must be a finite (batch, {self.inputs}) array")
+        mean = self.mean
         if self.center > 0.0:
             if learn and len(x):
-                self.mean = self.center * self.mean + (1.0 - self.center) * x.mean(axis=0)
-            x = x - self.mean
-        drive = np.maximum(x @ self.projection, 0.0)
+                mean = self.center * mean + (1.0 - self.center) * (x / len(x)).sum(axis=0)
+            with np.errstate(over="ignore", invalid="ignore"):
+                x = x - mean
+        with np.errstate(over="ignore", invalid="ignore"):
+            drive = np.maximum(x @ self.projection, 0.0)
+        if not np.isfinite(mean).all() or not np.isfinite(drive).all():
+            raise ValueError("pattern separation overflowed; scale the input keys")
+        if learn:
+            self.mean = mean
         if self.winners >= self.expansion:
             return np.asarray(drive)
         keep = np.argpartition(-drive, self.winners - 1, axis=1)[:, : self.winners]
@@ -426,23 +433,28 @@ class FastSynapses:
     def recall(self, key: np.ndarray) -> np.ndarray:
         """Read ``(batch, pre)`` keys as ``(batch, post)`` values without changing memory.
 
-        A different batch size starts fresh streams, as in ``read``. Delta uses
+        A different batch size reads the baseline without erasing live streams. Delta uses
         unit keys and does not divide by the number of writes. ``amplitude``
         scales the returned drive, not the residual used when learning a value.
         """
         cue = self._port(key, len(self.pre), "key")
-        if len(self.strength) != len(cue):
-            self.reset(len(cue))
+        same_batch = len(self.strength) == len(cue)
+        strength = self.strength if same_batch else self._baseline()[None, :, :]
         if self.separator is not None:
             cue = self.separator.code(cue)
         if self.rule == "delta":
             cue = self._delta_unit(cue)
         elif self.normalize:
             cue = self._unit(cue)
-        out = (cue[:, None, :] @ self.strength)[:, 0, :]
+        out = (cue[:, None, :] @ strength)[:, 0, :]
         if self.normalize:
-            out = out / np.maximum(self.mass, 1e-12)[:, None]
+            mass = self.mass if same_batch else np.zeros(len(cue))
+            out = out / np.maximum(mass, 1e-12)[:, None]
         return np.asarray(self.amplitude * out)
+
+    def _baseline(self) -> np.ndarray:
+        """The unobserved stream's readback, without changing any stored stream."""
+        return np.zeros((self.key_width, len(self.post)))
 
     def observe(self, key: np.ndarray, value: np.ndarray, write: np.ndarray | None = None) -> None:
         """Decay once, then write selected rows from the key and observed-value ports.
@@ -460,29 +472,39 @@ class FastSynapses:
         gate = np.ones(batch, dtype=bool) if write is None else np.asarray(write)
         if gate.shape != (batch,) or gate.dtype != np.bool_:
             raise ValueError("write must be a boolean vector with one entry per stream")
-        if len(self.strength) != batch:
-            self.reset(batch)
-        if self.decay < 1.0:
-            self.strength *= self.decay
-            self.mass *= self.decay
+        same_batch = len(self.strength) == batch
+        strength = (
+            self.strength * self.decay
+            if same_batch
+            else np.zeros((batch, self.key_width, len(self.post)))
+        )
+        mass = self.mass * self.decay if same_batch else np.zeros(batch)
         if self.rule == "delta":
             gate = gate & np.any(key != 0.0, axis=1)
         rows = np.flatnonzero(gate)
         if not len(rows):
+            self.strength, self.mass = strength, mass
             return
         a, b = key[rows], value[rows]
+        previous_mean = None if self.separator is None else self.separator.mean
         if self.separator is not None:
             a = self.separator.code(a, learn=True)
         if self.rule == "delta":
             a = self._delta_unit(a)
         elif self.normalize:
             a = self._unit(a)
-        if self.rule == "delta":
-            b = b - (a[:, None, :] @ self.strength[rows])[:, 0, :]
-        elif self.replace:
-            self.strength[rows] *= (a <= 0.0)[:, :, None]
-        self.strength[rows] += self.rate * a[:, :, None] * b[:, None, :]
-        self.mass[rows] += self.rate
+        with np.errstate(over="ignore", invalid="ignore"):
+            if self.rule == "delta":
+                b = b - (a[:, None, :] @ strength[rows])[:, 0, :]
+            elif self.replace:
+                strength[rows] *= (a <= 0.0)[:, :, None]
+            strength[rows] += self.rate * a[:, :, None] * b[:, None, :]
+            mass[rows] += self.rate
+        if not np.isfinite(strength).all() or not np.isfinite(mass).all():
+            if self.separator is not None and previous_mean is not None:
+                self.separator.mean = previous_mean
+            raise ValueError("synaptic update overflowed; scale the observed keys and values")
+        self.strength, self.mass = strength, mass
         self.writes += len(rows)
 
     def read(self, drive: np.ndarray) -> np.ndarray:

@@ -25,7 +25,9 @@ def test_activation_tolerance_can_stop_far_from_equilibrium() -> None:
 
 
 def test_residual_includes_slow_adaptation_equation() -> None:
-    neuron_model = cd.learning_neuron_model().replace(adaptation=cd.Adaptation(tau_steps=1e6, strength=0.5))
+    neuron_model = cd.learning_neuron_model().replace(
+        adaptation=cd.Adaptation(tau_steps=1e6, strength=0.5)
+    )
     brain = isolated(neuron_model)
     state = cd.BrainState(np.ones(1), neuron_model.activation(np.ones(1)), np.zeros(1), 0)
     # The potential equation already holds, but the adaptation is far from its limit.
@@ -123,7 +125,9 @@ def test_residual_does_not_claim_a_unique_equilibrium() -> None:
     brain = cd.Brain(connectome, neuron_model)
     drive = np.zeros(2)
     cold = brain.settle(drive, steps=200)
-    initial = cd.BrainState(np.full(2, 6.0), neuron_model.activation(np.full(2, 6.0)), np.zeros(2), 0)
+    initial = cd.BrainState(
+        np.full(2, 6.0), neuron_model.activation(np.full(2, 6.0)), np.zeros(2), 0
+    )
     warm = brain.settle(drive, steps=200, state=initial)
     assert brain.residual(drive, cold)[0] < 1e-12
     assert brain.residual(drive, warm)[0] < 1e-12
@@ -176,9 +180,7 @@ def test_raw_contrast_needs_parameter_and_loss_units_for_exact_gradient(nudge: s
     contrast, _ = learner.contrast(free, plus, minus)
     assert brain.residual(drive, free).max() < 1e-11
     assert brain.residual(drive, plus, nudge=learner.nudge_for(target, config.beta)).max() < 1e-11
-    assert (
-        brain.residual(drive, minus, nudge=learner.nudge_for(target, -config.beta)).max() < 1e-11
-    )
+    assert brain.residual(drive, minus, nudge=learner.nudge_for(target, -config.beta)).max() < 1e-11
 
     def loss(candidate: cd.Brain) -> float:
         s = candidate.settle_batch(drive, steps=500, tolerance=1e-13).activation[:, [1, 2]]
@@ -190,20 +192,21 @@ def test_raw_contrast_needs_parameter_and_loss_units_for_exact_gradient(nudge: s
         return float(-(log_prob * target[:, [1, 2]]).sum(axis=1).mean())
 
     for i, j in ((0, 1), (0, 2), (1, 2)):
-        pair = ((connectome.pre == i) & (connectome.post == j)) | ((connectome.pre == j) & (connectome.post == i))
+        pair = ((connectome.pre == i) & (connectome.post == j)) | (
+            (connectome.pre == j) & (connectome.post == i)
+        )
         edge = np.flatnonzero(pair)[0]
         up, down = brain.efficacy.copy(), brain.efficacy.copy()
         up[pair] += 1e-5
         down[pair] -= 1e-5
         negative_gradient = (
-            -(
-                loss(brain.with_parameters(efficacy=up))
-                - loss(brain.with_parameters(efficacy=down))
-            )
+            -(loss(brain.with_parameters(efficacy=up)) - loss(brain.with_parameters(efficacy=down)))
             / 2e-5
         )
         parameter_units = (
-            brain.neuron_model.gain * connectome.count[edge] * np.exp(brain.log_gain[connectome.pre[edge]])
+            brain.neuron_model.gain
+            * connectome.count[edge]
+            * np.exp(brain.log_gain[connectome.pre[edge]])
         )
         loss_units = config.temperature if nudge == "cross_entropy" else 1.0
         np.testing.assert_allclose(

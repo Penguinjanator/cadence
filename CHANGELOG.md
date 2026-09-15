@@ -4,6 +4,12 @@
 
 Biological names throughout, brain regions, and a generic brain.
 
+- The README centers ongoing experience and omits examples. Two small introductions
+  remain in the core; the experience guide replaces the old architecture catalog.
+- Action caches refresh after parameter changes, including reward updates and checkpoint
+  resume. Memory and trace queries preserve live streams when the query batch differs.
+- Complete-brain loading validates continuation arrays, counters and pending actions.
+  Overflowing fast-memory writes preserve previous records and separator state.
 - `ContentMemory` provides competitive prototype recall; `ReservoirReplay`
   retains a bounded uniform sample of real observations for rehearsal. Both
   expose their memory budgets and keep observation separate from pure reads.
@@ -37,8 +43,17 @@ Biological names throughout, brain regions, and a generic brain.
   expansion and a k-winners-take-all before the record sees them, with an optional running
   mean removed first. Expansion can reduce overlap between correlated keys;
   exact noninterference requires disjoint supports and is not guaranteed by expansion.
-  Documented in `docs/memory.md`; `examples/certified_memory.py` shows both.
+  Documented in `docs/memory.md`.
 
+- `cadence.atlas_of(brain)` / `build_atlas(connectome)`: the brain atlas, one integrated
+  layout of the whole connectome. Regions (the populations) are placed by a force layout of
+  the region graph, neurons inside a region by a whitened spectral embedding of their
+  synapses, sheets by declared shapes, or by supplied coordinates. `atlas.frames` quantises
+  recorded settlings, `atlas.page` writes a self-contained page, and `brain_scan_script()`
+  returns the shipped WebGL2 renderer (`brain_scan.js`): tissue in region colours whose
+  brightness is the activation, a hot scan-coloured glow where neurons change, synapses that
+  light up as their presynaptic neuron changes, messages travelling along synapses, and an
+  EEG-style montage of every region. Documented in `docs/pages.md`.
 - `GenericBrain.step` coordinates ongoing perception, previous-action feedback, optional
   current demonstrations and the next action, without a training/inference mode switch.
 - `SynapticMemory` adds shared persistent synapses and fading per-stream residuals.

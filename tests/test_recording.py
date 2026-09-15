@@ -22,8 +22,9 @@ def test_recording_captures_every_state_and_preserves_the_result(backend):
     expected = brain.settle_batch(drive, state=warm, steps=7, mask=mask, nudge=nudge)
     records = []
     with cd.record_settlements(records.append, label="imagining"):
-        actual = brain.settle_batch(drive, state=warm, steps=7, mask=mask, nudge=nudge,
-                                    trajectory=True)
+        actual = brain.settle_batch(
+            drive, state=warm, steps=7, mask=mask, nudge=nudge, trajectory=True
+        )
     (record,) = records
     assert record.label == "imagining"
     assert record.steps == actual.steps == 7
@@ -64,8 +65,10 @@ def test_zero_steps_nested_scopes_and_callback_diagnostics():
 
 def test_callback_failure_restores_the_context():
     brain = cd.Brain(cd.layered(1, 2, 1), cd.learning_neuron_model())
+
     def fail(_record):
         raise RuntimeError("disk full")
+
     with pytest.raises(RuntimeError, match="disk full"), cd.record_settlements(fail):
         brain.settle(steps=1)
     brain.settle(steps=1)
@@ -73,9 +76,11 @@ def test_callback_failure_restores_the_context():
 
 def test_learning_records_free_and_nudged_phases():
     graph = cd.layered(2, 3, 2)
-    learner = cd.Learner(cd.Brain(graph, cd.learning_neuron_model()),
-                         graph.populations["output"],
-                         config=cd.LearnerConfig(free_steps=4, nudged_steps=3))
+    learner = cd.Learner(
+        cd.Brain(graph, cd.learning_neuron_model()),
+        graph.populations["output"],
+        config=cd.LearnerConfig(free_steps=4, nudged_steps=3),
+    )
     records = []
     drive = np.zeros((1, learner.brain.connectome.n))
     drive[0, :2] = [1, 0.5]
@@ -92,14 +97,19 @@ def test_dopamine_report_preserves_the_sign(backend, reward):
     if backend == "torch":
         pytest.importorskip("torch")
     graph = cd.layered(1, 2, 1)
-    learner = cd.Learner(cd.Brain(graph, cd.learning_neuron_model(), backend=backend, device="cpu"),
-                         graph.populations["output"])
-    actor = cd.ActorCritic(learner, graph.populations["hidden"],
-                          cd.ActorCriticConfig(eta=0, eta_bias=0, eta_critic=0, dopamine_center=0))
+    learner = cd.Learner(
+        cd.Brain(graph, cd.learning_neuron_model(), backend=backend, device="cpu"),
+        graph.populations["output"],
+    )
+    actor = cd.ActorCritic(
+        learner,
+        graph.populations["hidden"],
+        cd.ActorCriticConfig(eta=0, eta_bias=0, eta_critic=0, dopamine_center=0),
+    )
     actor.w_critic[:] = 0
     actor.b_critic = 0
     drive = np.zeros((1, graph.n))
     actor.act(drive)
     report = actor.learn(np.array([reward]), np.array([True]), drive)
-    assert report['dopamine'] == np.sign(reward)
-    assert report['delta'] == 1.0
+    assert report["dopamine"] == np.sign(reward)
+    assert report["delta"] == 1.0

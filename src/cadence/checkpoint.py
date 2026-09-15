@@ -74,6 +74,7 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
         plastic_synapses=learner.plastic_synapses,
         plastic_neurons=learner.plastic_neurons,
         tie_groups=learner.tie_groups if learner.tie_groups is not None else np.zeros(0, np.int64),
+        synapse_rate=learner.synapse_rate if learner.synapse_rate is not None else np.zeros(0),
         velocity=learner.velocity,
         velocity_bias=learner.velocity_bias,
         second_moment=learner.second_moment,
@@ -81,8 +82,11 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
     )
 
 
-def _write(data: dict[str, Any], path: str | Path) -> Path:
-    """Replace only after a complete archive has been written, keeping the previous checkpoint."""
+def _write(data: dict[str, Any], path: str | Path, *, compressed: bool = True) -> Path:
+    """Replace only after a complete archive has been written, keeping the previous checkpoint.
+
+    ``compressed=False`` writes a plain archive: float parameters compress little, and a
+    brain of tens of millions of synapses takes minutes to deflate but seconds to write."""
     path = Path(path)
     if path.suffix != ".npz":
         path = path.with_suffix(path.suffix + ".npz")
@@ -91,7 +95,7 @@ def _write(data: dict[str, Any], path: str | Path) -> Path:
     try:
         with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".npz", delete=False) as handle:
             temporary = Path(handle.name)
-            np.savez_compressed(handle, **data)
+            (np.savez_compressed if compressed else np.savez)(handle, **data)
             handle.flush()
             os.fsync(handle.fileno())
         temporary.replace(path)
@@ -101,9 +105,9 @@ def _write(data: dict[str, Any], path: str | Path) -> Path:
     return path
 
 
-def save(learner: Learner, path: str | Path) -> Path:
+def save(learner: Learner, path: str | Path, *, compressed: bool = True) -> Path:
     """Atomically write ``learner`` to ``path`` (``.npz``); returns the path written."""
-    return _write(_learner_data(learner), path)
+    return _write(_learner_data(learner), path, compressed=compressed)
 
 
 def _known_config(saved: dict[str, Any]) -> dict[str, Any]:
@@ -165,6 +169,7 @@ def load(
             precision=precision if precision is not None else meta.get("precision"),
         )
         tie = data["tie_groups"]
+        rate = data["synapse_rate"] if "synapse_rate" in data.files else np.zeros(0)
         learner = Learner(
             brain,
             data["outputs"].tolist(),
@@ -173,6 +178,7 @@ def load(
             plastic_neurons=array("plastic_neurons"),
             reciprocal=bool(entry("reciprocal")),
             tie_groups=tie if len(tie) else None,
+            synapse_rate=rate.astype(float) if len(rate) else None,
             slots=meta.get("slots", 1),
             updates=int(meta["updates"]),
             contrast_updates=int(meta.get("contrast_updates", meta["updates"])),

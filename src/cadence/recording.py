@@ -90,16 +90,29 @@ class _Capture:
         self.states.append((_copy(v), _copy(activation), _copy(adaptation)))
 
     def finish(
-        self, brain: Brain, drive: np.ndarray, mask: np.ndarray,
-        nudge: Nudge | None, state: BrainState,
+        self,
+        brain: Brain,
+        drive: np.ndarray,
+        mask: np.ndarray,
+        nudge: Nudge | None,
+        state: BrainState,
     ) -> None:
         potential, activation, adaptation = (
             _copy(np.stack([row[i] for row in self.states])) for i in range(3)
         )
         record = SettlementRecord(
-            self.label, brain.connectome, brain.neuron_model, _copy(drive), _copy(mask),
-            _copy(brain.weights), _copy(brain.bias), copy.deepcopy(nudge),
-            potential, activation, adaptation, state.steps,
+            self.label,
+            brain.connectome,
+            brain.neuron_model,
+            _copy(drive),
+            _copy(mask),
+            _copy(brain.weights),
+            _copy(brain.bias),
+            copy.deepcopy(nudge),
+            potential,
+            activation,
+            adaptation,
+            state.steps,
         )
         token = _observer.set(None)
         try:

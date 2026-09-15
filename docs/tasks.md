@@ -2,26 +2,26 @@
 
 Start with the operation your task requires. These recipes describe interfaces;
 the linked public examples carry their own controls, settings, and source-bound
-results. Dataset encoding and the evaluation split belong to your application.
+results. Observation encoding and held-out lifetimes belong to your application.
 
 | Task | Input | Operation and output | Example or guide |
 |---|---|---|---|
-| Known interacting constraints | A drive and a declared connectome | Settle; read output activations and residual | [Circuit quickstart](quickstart.md), [C. elegans circuit](https://github.com/muellerberndt/cadence-examples/tree/main/worm) |
+| Known interacting constraints | A drive and a declared connectome | Settle; read output activations and residual | [Circuit quickstart](quickstart.md) |
 | Revise an addressed record | Key and observed value | `FastSynapses.observe`, then `recall` | [Memory](memory.md) |
-| Classification | Feature values on input neurons | `Learner.step(drive, labels)`; `predict` returns class indices | [Label-fitting quickstart](quickstart.md#learn-a-response) |
-| Imitation | An observation and a teacher's action | Classification over actions, with legal-action masking at deployment | [Learning recipes](learning.md), [learning life](patterns.md#a-learning-life) |
+| Learn consequences | Current observation and proposed action | Predict first; repair from the observed outcome | [Prediction repair](quickstart.md#learn-from-an-observed-consequence) |
+| Imitation | An observation and a teacher's action | Nudge toward the current demonstrated action; retain legal-action constraints | [Learning recipes](learning.md), [learning life](experience.md) |
 | Regression or reconstruction | Features and an output pattern | Quadratic nudge; read continuous output activations | [Pattern targets below](#pattern-targets) |
-| A continuing stream | Each observation before its label arrives | Predict, score, then update; retain history explicitly when needed | [Memory](memory.md), [body loop](patterns.md#sensor-opposing-motors-body) |
-| Reward-driven action | Observation, chosen action, reward | Weight action-target nudges by advantage, or use eligibility traces | [Signed feedback](patterns.md#signed-feedback), [reward](reward.md) |
+| A continuing stream | Each observation before its label arrives | Predict, score, then update; retain history explicitly when needed | [Memory](memory.md), [ongoing loop](continuous.md) |
+| Reward-driven action | Observation, chosen action, reward | Weight action-target nudges by advantage, or use eligibility traces | [Feedback](continuous.md), [reward](reward.md) |
 | A measured synapse list | Supplied topology and declared stimuli | Settle and score held-out predicates with controls | [Protocols](protocols.md) |
 
 ## Put features on input neurons
 
 A batched drive has one column per neuron, including hidden and output neurons.
-Continue with a learner created in the [quickstart](quickstart.md#learn-a-response):
+Continue with a learner created in the [quickstart](quickstart.md#learn-from-an-observed-consequence):
 
 ```python
-x = np.array([[1.0, 0.0], [0.0, 1.0]])
+x = np.array([[1.0, 0.0, 0.0, 1.0]])  # current room and proposed action
 levels = np.zeros((len(x), learner.brain.connectome.n))
 levels[:, list(learner.brain.connectome.populations["input"])] = x
 drive = learner.brain.stimulus_levels(levels)
@@ -64,7 +64,7 @@ print(prediction.shape)  # (2, 2)
 This performs one update; it does not establish fit quality. Choose target scaling
 within the activation's useful range using training data. Select thresholds for
 multi-label outputs or calibrate continuous readouts on validation data, then
-hold those choices fixed on test data. `predict` is an argmax classifier; read
+hold those choices fixed on test data. `predict` returns the most active outcome index; read
 activations directly for these pattern tasks.
 
 ## Streams and independent episodes
@@ -78,8 +78,9 @@ guarantee recall of earlier inputs.
 Rows of a batch represent independent streams. If a stream ends, clear its
 episodic state. For `FastSynapses` and `Trace`, `reset(batch, rows=...)` resets
 selected rows and `keep(rows)` retains a subset without changing identities.
-Changing the batch size through an ordinary read or update can initialize fresh
-fast state; use the explicit stream operations when records must survive.
+Updating a different batch size initializes fresh fast state. Reads of a different
+batch size use the empty-stream baseline without changing live records. Use the
+explicit stream operations when changing which stream identities are present.
 
 ## Several learners in one net
 

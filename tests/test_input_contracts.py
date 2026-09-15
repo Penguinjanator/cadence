@@ -13,7 +13,9 @@ import cadence as cd
 @pytest.mark.parametrize("slots", [2, (3, 2)])
 def test_accuracy_counts_choices_across_rows_and_slots(slots: int | tuple[int, ...]) -> None:
     w = cd.layered(2, 3, 4 if isinstance(slots, int) else sum(slots), seed=7)
-    learner = cd.Learner(cd.Brain(w, cd.learning_neuron_model()), w.populations["output"], slots=slots)
+    learner = cd.Learner(
+        cd.Brain(w, cd.learning_neuron_model()), w.populations["output"], slots=slots
+    )
     drive = np.zeros((3, w.n))
     labels = learner.predict(drive)
     assert learner.accuracy(drive, labels, batch=2) == 1.0

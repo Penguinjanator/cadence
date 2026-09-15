@@ -125,8 +125,9 @@ engineering model, not a reconstruction of those cellular processes.
 
 `brain.reset()` clears the current neural/eligibility state while retaining its memories.
 `brain.hippocampus.reset(batch)` clears transient residuals and keeps consolidated
-synapses. `brain.hippocampus.clear()` explicitly erases both. Changing memory batch size
-also clears transient residuals, while the shared consolidated matrix survives.
+synapses. `brain.hippocampus.clear()` explicitly erases both. Observing a different
+memory batch size clears transient residuals while retaining the consolidated matrix.
+Reading a different batch size uses that consolidated baseline and preserves live records.
 Unlike independent `FastSynapses` streams, these streams share long-term knowledge.
 
 `GenericBrain.save/load` saves both memory timescales, policy, critic, optimizers,
@@ -137,8 +138,9 @@ When memory uses a `PatternSeparator`, the checkpoint includes its actual projec
 running mean and expanded memory matrices. Restoring does not regenerate the projection
 from its seed. Ordinary older checkpoints without a separator remain supported; older
 separated checkpoints that omitted the projection or mean are rejected because their
-original coordinate system cannot be recovered reliably. Memory metadata, array shapes
-and finite values are checked before constructing the resumed brain.
+original coordinate system cannot be recovered reliably. Memory and continuation state
+are validated for dimensions and finite values before exposing the resumed brain.
+Invalid counters, action indices, variances or incomplete eligibility are rejected.
 `parameters()` includes the consolidated matrix; per-stream residuals and eligibility
 are additional storage. Persistent memory costs `key_width × value_width` numbers,
 plus the same amount per stream for effective fast weights. Reads do not consolidate
@@ -213,11 +215,8 @@ explicitly connect completed candidate scores to its action-selection circuit; a
 a `Deliberator` does not automatically override `GenericBrain.step`'s sampled action.
 
 The node budget bounds transitions and evaluations, not wall time inside a callback.
-Expensive world models need their own bounded evaluation or a worker. The browser
-[Connect Four example](https://github.com/muellerberndt/cadence-examples/tree/main/connect-four)
-uses cooperative worker slices, ponders human replies by default, and retains a bounded
-cache of exact compatible game states. That cache is task-specific working storage,
-not learned long-term synapses. This core planner restarts on new observations and
+Expensive world models need their own bounded evaluation or a worker.
+This core planner restarts on new observations and
 retains work between ticks of the same search; it does not cache across observations.
 
 [Deliberation tests](../tests/test_deliberator.py) compare against independent minimax,

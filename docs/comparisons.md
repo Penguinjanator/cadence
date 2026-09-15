@@ -32,5 +32,5 @@ Two distinctions matter when designing the next experiment:
   Give a conventional control the same structure and count all mutable memory,
   settling phases, validation work and additional training rows.
 
-See [brain design](design.md), [reward learning](reward.md) and
+See [experience-based learning](experience.md), [reward learning](reward.md) and
 [convergence conditions](certificate.md) for the implementation contracts.

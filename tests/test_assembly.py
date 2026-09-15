@@ -10,7 +10,9 @@ def test_regions_exchange_feedback_in_one_equilibrium():
     regions = {"vision": eye, "movement": reflex_arc(1)}
     synapses = [("vision", 0, "movement", 0, 0.5), ("movement", 1, "vision", 0, -0.2)]
     drive = np.array([0.6, 0.0, 0.0, 0.0])
-    neuron_model = cd.NeuronModel(gain=1, slope=2, threshold=0, leak=1, dt=0.25, stimulus_amplitude=1)
+    neuron_model = cd.NeuronModel(
+        gain=1, slope=2, threshold=0, leak=1, dt=0.25, stimulus_amplitude=1
+    )
     results = []
     for links in [synapses, synapses[:1], []]:
         connectome = assemble(regions, links)
@@ -31,10 +33,16 @@ def test_regions_exchange_feedback_in_one_equilibrium():
 
 
 def test_assemble_preserves_contact_counts_signs_and_named_ports():
-    region = cd.Connectome.from_synapses(2, pre=[0], post=[1], count=[3], sign=[-0.4], populations={"out": [1]})
+    region = cd.Connectome.from_synapses(
+        2, pre=[0], post=[1], count=[3], sign=[-0.4], populations={"out": [1]}
+    )
     connectome = assemble({"left": region, "right": region}, [("left", 1, "right", 0, 0.2)])
     edges = dict(
-        zip(zip(connectome.pre, connectome.post, strict=True), connectome.count * connectome.sign, strict=True)
+        zip(
+            zip(connectome.pre, connectome.post, strict=True),
+            connectome.count * connectome.sign,
+            strict=True,
+        )
     )
     assert edges == {(0, 1): -1.2000000000000002, (2, 3): -1.2000000000000002, (1, 2): 0.2}
     assert connectome.populations["right/out"] == (3,)

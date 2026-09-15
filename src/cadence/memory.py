@@ -59,6 +59,9 @@ class SynapticMemory(FastSynapses):
         self.consolidated.fill(0)
         self.reset(len(self.strength))
 
+    def _baseline(self) -> np.ndarray:
+        return self.consolidated
+
     @staticmethod
     def salience_vector(salience: np.ndarray | None, batch: int) -> np.ndarray:
         out = np.zeros(batch) if salience is None else np.asarray(salience, dtype=float)

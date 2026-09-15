@@ -17,8 +17,9 @@
 
 ``step`` runs one ongoing perceive/feedback/act loop; demonstrations and rewards are
 signals in that loop, without a train/eval mode. The lower-level ``fit``, ``act``
-and ``learn`` operations remain available for controlled experiments. Its connectome comes
-from a ``Genome``, so ``evolve`` can select the sizes and densities of its regions, and a
+and ``learn`` operations expose individual mechanisms for controlled experiments.
+This composition does not include a learned world model, hierarchical goals or language.
+Its connectome comes from a ``Genome``, so ``evolve`` can select its region sizes/densities, and a
 designed region can replace any of them.
 """
 
@@ -155,6 +156,103 @@ def _load_memory(metadata: Any, data: Mapping[str, Any], neurons: int) -> FastSy
         return memory
     except (KeyError, TypeError, OverflowError) as exc:
         raise ValueError("invalid or incomplete saved memory metadata") from exc
+
+
+def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner: Learner) -> None:
+    """Reject corrupt continuation state before exposing a resumed agent."""
+    n = learner.brain.connectome.n
+    populations = learner.brain.connectome.populations
+    association = len(populations["association"])
+    sensory = len(populations.get("sensory", populations.get("visual/input", ())))
+
+    def array(name: str, shape: tuple[int, ...] | None = None) -> np.ndarray:
+        if name not in data:
+            raise ValueError(f"missing saved state: {name}")
+        value: np.ndarray = data[name]
+        if (
+            value.dtype.kind not in "biuf"
+            or not np.isfinite(value).all()
+            or (shape is not None and value.shape != shape)
+        ):
+            raise ValueError(f"invalid saved state: {name}")
+        return value
+
+    def count(name: str) -> int:
+        value = meta.get(name)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"invalid saved count: {name}")
+        return value
+
+    count("updates")
+    bias = meta.get("b_critic")
+    if isinstance(bias, bool) or not isinstance(bias, (int, float)) or not np.isfinite(bias):
+        raise ValueError("invalid saved critic bias")
+    for name in ("pending", "free_current"):
+        if name in meta and not isinstance(meta[name], bool):
+            raise ValueError(f"invalid saved flag: {name}")
+    batch = 0
+    if meta["free_steps"] is not None:
+        count("free_steps")
+        v = array("free/v")
+        if v.ndim != 2 or v.shape[1] != n or not len(v):
+            raise ValueError("invalid saved free-state dimensions")
+        batch = len(v)
+        for name in ("activation", "adaptation"):
+            array("free/" + name, (batch, n))
+    elif meta.get("pending", False) or meta.get("free_current", False):
+        raise ValueError("saved pending action or cache needs a free state")
+    if batch:
+        array("actor/_drive", (batch, n))
+    if ("actor/trace" in data) != ("actor/trace_bias" in data):
+        raise ValueError("incomplete saved eligibility traces")
+    array("actor/w_critic", (association,))
+    for name in ("second_moment", "second_moment_bias", "velocity", "velocity_bias"):
+        size = n if name.endswith("bias") else learner.brain.connectome.synapses
+        value = array("actor/" + name, (size,))
+        if name.startswith("second_moment") and (value < 0).any():
+            raise ValueError(f"negative saved second moment: {name}")
+    for name, width in (
+        ("trace", learner.brain.connectome.synapses),
+        ("trace_bias", n),
+        ("trace_critic", association + 1),
+        ("salience", n),
+        ("_drive", n),
+    ):
+        if "actor/" + name in data:
+            array("actor/" + name, (batch, width))
+    for name in ("mean", "var"):
+        value = array("valence/" + name)
+        if value.shape not in ((), (batch,)) or (name == "var" and (value < 0).any()):
+            raise ValueError(f"invalid saved valence: {name}")
+    if "prepared" in data:
+        array("prepared", (batch, sensory))
+    if meta.get("pending", False):
+        array("pending/value", (batch,))
+        for phase in ("plus", "minus"):
+            count("pending_" + phase + "_steps")
+            for name in ("v", "activation", "adaptation"):
+                array(f"pending/{phase}/{name}", (batch, n))
+    if "moment/observations" in data or "moment/action" in data:
+        if not meta.get("pending", False):
+            raise ValueError("saved action observations need pending credit")
+        array("moment/observations", (batch, sensory))
+        action = array("moment/action", (batch,))
+        if (
+            action.dtype.kind not in "iu"
+            or (action < 0).any()
+            or (action >= len(learner.output_index)).any()
+        ):
+            raise ValueError("invalid saved action indices")
+    working = meta["working_memory"]
+    if working is not None:
+        source, target = working["source"], working["target"]
+        if source not in populations or target not in populations:
+            raise ValueError("invalid saved working-memory ports")
+        width = len(populations[source])
+        array("working/trace", (batch, width))
+        array("working/last", (batch, width))
+        if array("working/cold", (batch,)).dtype != np.bool_:
+            raise ValueError("invalid saved working-memory cold flags")
 
 
 class GenericBrain:
@@ -521,6 +619,7 @@ class GenericBrain:
             else self.working_memory.to_dict(),
             "hippocampus": None if self.hippocampus is None else self.hippocampus.to_dict(),
             "free_steps": None if agent.state is None else agent.state.steps,
+            "free_current": agent._free_brain is self.brain,
             "pending": agent._pending is not None,
             "last_learning": self.last_learning,
         }
@@ -583,11 +682,18 @@ class GenericBrain:
             if "generic" not in data:
                 raise ValueError("not a GenericBrain checkpoint; use Learner.load for a learner")
             meta = json.loads(str(data["generic"]))
-            if meta.get("format") not in ("cadence-generic/1", "cadence-generic/2"):
+            if not isinstance(meta, dict) or meta.get("format") not in (
+                "cadence-generic/1",
+                "cadence-generic/2",
+            ):
                 raise ValueError("unsupported GenericBrain checkpoint format")
             if "hippocampus" not in meta:
                 raise ValueError("missing hippocampus metadata")
             learner = Learner.load(path, backend=backend, device=device, precision=precision)
+            try:
+                _validate_life_state(meta, data, learner)
+            except (KeyError, TypeError, OverflowError) as exc:
+                raise ValueError("invalid or incomplete saved continuation state") from exc
             memory = _load_memory(meta["hippocampus"], data, learner.brain.connectome.n)
             result = cls(
                 learner.brain.connectome, episodic=False, reward=ActorCriticConfig(**meta["reward"])
@@ -613,6 +719,7 @@ class GenericBrain:
                     data["free/adaptation"].copy(),
                     int(meta["free_steps"]),
                 )
+                agent._free_brain = learner.brain if meta.get("free_current", False) else None
             result._prepared = data["prepared"].copy() if "prepared" in data else None
             result.last_learning = meta.get("last_learning", {})
             if meta.get("pending", False):

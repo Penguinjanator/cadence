@@ -24,15 +24,8 @@ jobs:
           python -m pip check
       - name: Run the introductory examples without optional backends
         run: |
-          python examples/two_blobs.py
-          python examples/worked_update.py
-          python examples/half_center.py
-          python examples/ring_protocol.py
-          python examples/brain_patterns.py
-          python examples/coupled_brain.py
           python examples/generic_brain.py
-          python examples/deliberation.py
-          python examples/certified_memory.py
+          python examples/experience.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -50,4 +43,4 @@ jobs:
       - run: ruff check src tests examples
       - run: mypy
       - run: pytest -q
-      - run: python examples/half_center.py && python examples/ring_protocol.py
+      - run: python examples/generic_brain.py && python examples/experience.py

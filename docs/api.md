@@ -331,7 +331,8 @@ give additional details. Prefer keyword arguments for optional configuration.
   a continuous action.
   - `act(drive, greedy=False) -> action`: one free phase, then a draw from the softmax
     over the output neurons (with `Bins`, one draw per dimension), or the most probable.
-    Cache reuse requires the same drive; caller buffers are copied. A greedy action clears
+    Cache reuse requires the same drive and unchanged brain parameters; caller buffers
+    are copied. After learning, the next action refreshes its warm state. A greedy action clears
     pending eligibility and cannot be followed by `learn`. Repeated `act` replaces the
     pending decision. `Bins` requires at least two levels per dimension. Without
     `Bins`, `Learner(slots=[2, 3])` returns two categorical action indices per row;
@@ -395,7 +396,7 @@ give additional details. Prefer keyword arguments for optional configuration.
 ## Optional task compositions
 
 `from cadence.circuits import assemble, reflex_arc, imagine, Deliberator, ActivityMonitor` imports small
-sensorimotor, counterfactual-search and self-reading compositions. See [patterns](patterns.md)
+sensorimotor, counterfactual-search and self-reading compositions. See [experience](experience.md)
 for ports, budgets, supplied-model boundaries and examples. These optional architectural
 helpers compose ordinary neuron dynamics with explicit host-side orchestration.
 

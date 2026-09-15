@@ -4,7 +4,6 @@ import re
 from pathlib import Path
 from urllib.parse import unquote
 
-import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -12,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.mark.parametrize(
     "page",
-    ["README.md", "docs/quickstart.md", "docs/design.md", "docs/memory.md", "docs/continuous.md"],
+    ["docs/quickstart.md", "docs/memory.md", "docs/continuous.md"],
 )
 def test_introductory_python_snippets(page, tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
@@ -21,17 +20,14 @@ def test_introductory_python_snippets(page, tmp_path, monkeypatch):
         re.findall(r"```python\n(.*?)```", (ROOT / page).read_text(), re.S)
     ):
         exec(compile(code, f"{page}:python-block-{index + 1}", "exec"), namespace)
-    if page == "README.md":
-        np.testing.assert_array_equal(namespace["learner"].predict(namespace["drive"]), [0, 1])
-        assert (tmp_path / "tiny_brain.npz").exists()
-    if page == "docs/design.md":
-        assert namespace["result"].converged.all()
-        assert (tmp_path / "agent.npz").exists()
+    if page == "docs/quickstart.md":
+        assert namespace["learner"].updates == 1
+        assert (tmp_path / "predictive_circuit.npz").exists()
 
 
 def test_local_documentation_links_resolve():
     problems = []
-    for page in [ROOT / "README.md", *sorted((ROOT / "docs").glob("*.md"))]:
+    for page in [ROOT / "README.md", ROOT / "examples/README.md", *sorted((ROOT / "docs").rglob("*.md"))]:
         for target in re.findall(r"\[[^\]\n]*\]\(([^\s)]+)\)", page.read_text()):
             if re.match(r"[a-z]+:", target):
                 continue
@@ -46,3 +42,9 @@ def test_local_documentation_links_resolve():
                 if anchor not in slugs and f'id="{anchor}"' not in content:
                     problems.append(f"{page.name}: missing anchor {target}")
     assert not problems, "\n".join(problems)
+
+
+def test_core_has_only_the_two_experience_examples():
+    assert {p.name for p in (ROOT / "examples").glob("*.py")} == {
+        "experience.py", "generic_brain.py",
+    }

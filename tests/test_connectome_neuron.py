@@ -22,10 +22,14 @@ def test_from_edges_merges_parallel_synapses_and_drops_self_loops() -> None:
 
 def test_connectome_validation_and_queries() -> None:
     with pytest.raises(ValueError):
-        cd.Connectome(3, np.array([0, 1]), np.array([1]), np.array([1.0, 1.0]), np.array([1.0, 1.0]))
+        cd.Connectome(
+            3, np.array([0, 1]), np.array([1]), np.array([1.0, 1.0]), np.array([1.0, 1.0])
+        )
     with pytest.raises(ValueError):
         cd.Connectome.from_synapses(2, pre=[0, 5], post=[1, 0])
-    w = cd.Connectome.from_synapses(4, pre=[0, 1, 2], post=[1, 2, 3], populations={"a": [0, 1]}, label="chain")
+    w = cd.Connectome.from_synapses(
+        4, pre=[0, 1, 2], post=[1, 2, 3], populations={"a": [0, 1]}, label="chain"
+    )
     w2 = w.with_populations(b=[2, 3])
     assert w2.populations == {"a": (0, 1), "b": (2, 3)} and w2.label == "chain"
     assert w2.members("b") == (2, 3)
@@ -44,7 +48,9 @@ def test_layered_and_embedded_builders() -> None:
     dense = cd.layered(4, 3, 2, density=1.0, seed=0)
     assert set(dense.populations) == {"input", "hidden", "output"} and dense.n == 9
     out_degree, in_degree = dense.out_degree(), dense.in_degree()
-    assert (out_degree[list(dense.populations["input"])] > 0).all()  # every input neuron reaches the net
+    assert (
+        out_degree[list(dense.populations["input"])] > 0
+    ).all()  # every input neuron reaches the net
     assert (in_degree[list(dense.populations["hidden"])] > 0).all()
     assert (in_degree[list(dense.populations["output"])] > 0).all()
     sparse = cd.layered(10, 6, 2, density=0.3, seed=0)
@@ -69,30 +75,46 @@ def test_shuffled_keeps_degrees_and_changes_connectome() -> None:
     assert kept.synapses == w.synapses
 
 
-@pytest.mark.parametrize("pre, post", [([3], [0]), ([-1], [2]), ([0.5], [1.5]), ([0], [3]), ([np.nan], [1])])
+@pytest.mark.parametrize(
+    "pre, post", [([3], [0]), ([-1], [2]), ([0.5], [1.5]), ([0], [3]), ([np.nan], [1])]
+)
 def test_from_edges_rejects_invalid_indices_before_merging(pre, post) -> None:  # type: ignore[no-untyped-def]
     with pytest.raises(ValueError):
         cd.Connectome.from_synapses(3, pre=pre, post=post)
 
 
-@pytest.mark.parametrize("pre, post, count, sign", [([0, 1], [2], [1, 1], [1, 1]), ([[0]], [[1]], [[1]], [[1]]), ([0], [1], [np.nan], [1]), ([0], [1], [1], [np.inf])])
+@pytest.mark.parametrize(
+    "pre, post, count, sign",
+    [
+        ([0, 1], [2], [1, 1], [1, 1]),
+        ([[0]], [[1]], [[1]], [[1]]),
+        ([0], [1], [np.nan], [1]),
+        ([0], [1], [1], [np.inf]),
+    ],
+)
 def test_connectome_rejects_malformed_edge_arrays(pre, post, count, sign) -> None:  # type: ignore[no-untyped-def]
     for construct in (
         lambda: cd.Connectome.from_synapses(3, pre=pre, post=post, count=count, sign=sign),
-        lambda: cd.Connectome(3, np.asarray(pre), np.asarray(post), np.asarray(count), np.asarray(sign)),
+        lambda: cd.Connectome(
+            3, np.asarray(pre), np.asarray(post), np.asarray(count), np.asarray(sign)
+        ),
     ):
         with pytest.raises(ValueError):
             construct()
 
 
 def test_small_contact_counts_preserve_signed_transport_when_merged() -> None:
-    connectome = cd.Connectome.from_synapses(2, pre=[0, 0], post=[1, 1], count=[1e-14, 2e-14], sign=[1, -1])
+    connectome = cd.Connectome.from_synapses(
+        2, pre=[0, 0], post=[1, 1], count=[1e-14, 2e-14], sign=[1, -1]
+    )
     np.testing.assert_allclose(connectome.count * connectome.sign, [-1e-14], rtol=1e-14, atol=0)
 
 
 @pytest.mark.parametrize("pre, post", [([], []), ([0], [0])])
 def test_empty_edge_construction_keeps_isolated_neurons(pre, post) -> None:  # type: ignore[no-untyped-def]
-    connectome = cd.Connectome.from_synapses(3, pre=pre, post=post, populations={"isolated": [1, 2]})
+    connectome = cd.Connectome.from_synapses(
+        3, pre=pre, post=post, populations={"isolated": [1, 2]}
+    )
     assert connectome.n == 3 and connectome.synapses == 0
     assert connectome.count.dtype == np.float64 and connectome.sign.dtype == np.float64
     np.testing.assert_array_equal(connectome.in_degree(), [0, 0, 0])
