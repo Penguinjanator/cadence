@@ -1,10 +1,12 @@
-# Memory: read before writing
+# Records: read before writing
 
-A brain with bounded state needs records it can read back and correct. `FastSynapses`
-stores a key-to-value matrix of fast synaptic weights per stream. Its storage is fixed by
-the key and value widths; it does not grow with the number of observations. Slow weights
-can learn representations around that store, but the store does not learn its own keys
-or decide when an observation is trustworthy.
+A brain with bounded state needs records it can read back and correct.
+[`cd.Records`](#records) is the records cortex: a fixed sparse expansion of a reading and one
+delta-rule table per predicted field, at two rates. `FastSynapses` stores a key-to-value
+matrix of fast synaptic weights per stream. Its storage is fixed by the key and value
+widths; it does not grow with the number of observations. Slow weights can learn
+representations around that store, but the store does not learn its own keys or decide
+when an observation is trustworthy.
 
 For repeated and salient experiences, [`SynapticMemory`](continuous.md) adds persistent
 shared synapses and fading per-stream residuals. New generic brains with `episodic=True`
@@ -37,7 +39,184 @@ key vector; each fast synapse then updates from its presynaptic key coordinate a
 postsynaptic neuron's error. This is normalized delta learning, closely related to
 normalized LMS and [delta-rule fast weights](https://arxiv.org/abs/2406.06484).
 A read is one linear transport from key to value; it involves no softmax attention and
-no settling.
+no settling. `cd.Records` writes by the same rule, with a unit-length sparse code in the
+place of the key.
+
+## Records
+
+A records cortex keeps records of what followed each reading it took part in. Its
+prediction for a reading is the sum of the records that reading touches, each weighted by
+the activity of its cell. Learning writes the witnessed outcome into exactly those records,
+by the error at that reading, and touches nothing else. The code decides which readings
+share records: two readings share the records of the cells active in both.
+
+`cd.Records` is that learner in four parts. A mean-free reading: each input unit's running
+mean is subtracted, so the code follows what deviates from the usual reading and a small
+cue can move it. A fixed sparse expansion: a random projection with fixed offsets maps the
+reading onto many cells, the `active` cells with the strongest drive keep their rectified
+drive, the rest are inhibited to zero, and the code is scaled to unit length; the
+expansion is never learned. Delta-rule records: one table per predicted field, one record
+per cell, read through the active cells and written by the error. Two rates: `rate` for
+the consequence fields, so a regularity is averaged over many outcomes, and `valued_rate`
+for the valued fields such as reward, so one exposure writes.
+
+The number of records a reading touches sets the learning speed. A write at one reading
+moves the read at another reading by the overlap of their codes times the correction. A
+sparse code touches few records: at rate one, a write reproduces the outcome at its reading
+exactly, and later writes change it only through shared cells. A dense code touches many:
+each outcome is averaged into all of them, and later outcomes overwrite it. A learner whose
+every parameter takes part in every prediction moves every prediction with each update,
+which [rehearsal](replay.md) counters with decorrelated real observations. Records learn
+from one stream in its own order, as the [records tests](../tests/test_records.py) do with
+a correlated walk.
+
+The settled regions keep the work that needs a fixed point: completion of a partial
+reading into a consistent state, context carried across a delay, and the policy where
+credit arrives after other decisions. Writing a record needs no settling; reading one is a
+product of the code with each table. The free/nudged rule and the eligibility trace belong
+to the settled regions; the [certificate](certificate.md) and the residual check bound
+their settling and say nothing about the records.
+
+### Codes, reads and writes
+
+`code(readings, *, adapt=False)` takes `(batch, inputs)` readings, or one `(inputs,)`
+reading, and returns `(2, batch, cells)`: the plain code, then the valued code.
+`code(...)[:, 0]` is the `(2, cells)` code of one reading, the shape `write` takes.
+`read(code)` returns each field's read, `(width,)` for one code and `(batch, width)` for a
+batch; a consequence field reads the plain code and a valued field the valued code.
+`write(code, targets, known=None)` moves each field named in `targets` toward its target
+through the code of that field, returns the number of fields written and adds it to
+`writes`. A field absent from `targets` keeps its records.
+
+```python
+import numpy as np
+import cadence as cd
+
+records = cd.Records(
+    inputs=6, fields={"next": 3, "reward": 1}, valued=["reward"], cells=4000, active=40, seed=0
+)
+reading = np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0])    # one of three places, one of three actions
+code = records.code(reading, adapt=True)[:, 0]        # a witnessed reading, shape (2, cells)
+assert np.allclose(records.read(code)["next"], 0.0)   # read before writing
+records.write(code, {"next": np.array([0.0, 1.0, 0.0]), "reward": np.array([1.0])})
+after = records.read(code)
+print(after["next"], after["reward"])                 # [0.  0.2 0. ] [1.]
+
+other = records.code(np.array([0.0, 1.0, 0.0, 0.0, 1.0, 0.0]))[:, 0]   # another place
+overlap = code[0] @ other[0]
+assert np.allclose(records.read(other)["next"], 0.2 * overlap * np.array([0.0, 1.0, 0.0]))
+```
+
+The consequence field moved by `rate` (0.2) times the error and the valued field by
+`valued_rate` (1.0). The read at `other` moved by the overlap of the two codes times the
+correction; the records of every cell the first reading left inactive stay zero.
+
+### Habituation
+
+With `habituation` above zero (0.002 by default), `code(..., adapt=True)` first moves the
+running mean `mean` toward each witnessed reading, and every code subtracts `mean` before
+the expansion. `seen` counts the witnessed readings, and the mean moves at the rate
+`max(habituation, 1 / seen)`: it is the plain average of the readings until one over their
+count falls to `habituation`, and follows at that rate after. The mean settles, and a
+settled mean keeps the code of a reading on the cells where its records were written. A
+unit that carries the same value in every reading adds nothing to the code, and a small
+deviation such as a cue moves it. `habituation=0` codes raw readings.
+
+```python
+def cue_overlap(habituation):
+    cue = cd.Records(32, {"y": 1}, cells=2000, active=20, habituation=habituation, seed=5)
+    first, second = np.full(32, 2.0), np.full(32, 2.0)    # the same background
+    first[30], second[31] = 3.0, 3.0                       # a different cue unit
+    for _ in range(500):
+        cue.code(np.stack([first, second]), adapt=True)
+    codes = cue.code(np.stack([first, second]))[0]
+    return float(codes[0] @ codes[1])
+
+
+print(round(cue_overlap(0.0), 2), round(cue_overlap(0.01), 2))   # 0.92 0.35
+```
+
+A reading component that varies between episodes without deciding the outcome, such as a
+context trace, moves the code too and spreads the records of one situation over several
+codes. Keep such components out of the reading; a store read that decides the outcome
+belongs in it.
+
+### Two codes and two rates
+
+The plain code serves the consequence fields, written at `rate` (0.2 by default). The
+fields named in `valued` read and write through the valued code at `valued_rate` (1.0 by
+default). Without `pathways` the valued code is the plain code. `pathways` lists index
+arrays into the reading, one per input pathway (the observation, the goal, the action, the
+read of a store). The valued code divides each pathway of the mean-free reading by its
+running norm, kept in `pathway_norm` and moved by witnessed readings at `pathway_rate`, so
+a goal of one active unit has a say in the valued code comparable to a dense observation.
+Consequence and value then read one reading through two codes.
+
+```python
+observation, goal = np.arange(12), np.arange(12, 14)
+valued = cd.Records(
+    14, {"next": 12, "reward": 1}, valued=["reward"], cells=4000, active=40,
+    pathways=[observation, goal], seed=0,
+)
+rng = np.random.default_rng(0)
+for _ in range(1000):                                  # witnessed readings
+    x = np.zeros(14)
+    x[observation] = rng.random(12) < 0.5
+    x[12 + rng.integers(2)] = 1.0
+    valued.code(x, adapt=True)
+scene = (rng.random(12) < 0.5).astype(float)
+codes = valued.code(np.stack([np.r_[scene, 1.0, 0.0], np.r_[scene, 0.0, 1.0]]))  # two goals
+print(valued.pathway_norm.round(2))                    # the running norms of the two pathways
+print(round(float(codes[0, 0] @ codes[0, 1]), 2))      # the plain codes of the two goals: 0.41
+print(round(float(codes[1, 0] @ codes[1, 1]), 2))      # their valued codes: 0.13
+```
+
+A consequence field at a slow rate averages a regularity over many outcomes. A valued
+field at rate 1.0 writes in one exposure: after one write, its read at that reading equals
+the target.
+
+### Known entries
+
+`known` maps a field to a boolean mask of the target entries that were observed. The error
+of every other entry is zero, so an unobserved entry keeps its records.
+
+```python
+partial = cd.Records(5, {"y": 2}, cells=500, active=10, rate=1.0, seed=6)
+code = partial.code(np.ones(5))[:, 0]
+partial.write(code, {"y": np.array([1.0, 1.0])}, known={"y": np.array([True, False])})
+print(partial.read(code)["y"])                         # [1. 0.]
+```
+
+### Imagined readings
+
+A reading the learner imagines, a candidate action or a predicted next observation, is
+coded with `adapt=False`: the running mean and the pathway norms follow witnessed readings
+only. An imagined reading carries the same missing flags as the witnessed readings it
+stands for. With habituation, a flag that witnessed readings always carry has a running
+mean of one; an imagined reading that omits it deviates from the mean by a whole unit,
+and its read goes through cells that witnessed readings never wrote.
+
+```python
+flags = cd.Records(7, {"next": 4}, cells=4000, active=40, habituation=0.01, seed=2)
+rng = np.random.default_rng(0)
+for _ in range(2000):   # four places, the flag of a field the sensor never sees, two actions
+    x = np.zeros(7)
+    x[rng.integers(4)], x[4], x[5 + rng.integers(2)] = 1.0, 1.0, 1.0
+    flags.code(x, adapt=True)
+witnessed = np.array([0.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0])
+imagined = witnessed.copy()
+imagined[4] = 0.0                                      # the missing flag left out
+codes = flags.code(np.stack([witnessed, imagined]))[0]
+print(round(float(codes[0] @ codes[1]), 2))            # 0.36: the imagined read uses other cells
+```
+
+### Cost and state
+
+A read is one product of the code with each table and a write one outer-product step per
+field, on NumPy in every backend. `parameters()` counts the record entries, `cells` times
+the width of each field; `projection` and `offset` are fixed. `to_dict()` returns the
+configuration that rebuilds the same cells from `seed`, and the learned state is `tables`,
+`mean`, `seen`, `pathway_norm` and `writes` ([checkpoints](brain.md#checkpoints)).
 
 ## Reading and writing directly
 
@@ -120,10 +299,12 @@ independent values than the key rank cannot all be represented exactly.
 A write at key `k` moves the read at key `q` by the dot product `q · k` times the correction,
 so records interfere exactly as much as their keys overlap, and keys with disjoint supports
 do not interfere at all. `PatternSeparator` turns correlated keys into sparse codes before
-the record sees them: a fixed random projection onto a wider range, then the strongest
-positive `winners` entries kept and the rest set to zero. This can reduce overlap but
-does not guarantee different codes. `center` subtracts a running mean of observed keys
-first; it does not learn which differences matter for a task.
+a `FastSynapses` or `SynapticMemory` store sees them: a fixed random projection onto a
+wider range, then the strongest positive `winners` entries kept and the rest set to zero.
+This can reduce overlap but does not guarantee different codes. With `center` above zero
+the separator subtracts a running mean of observed keys first; it does not learn which
+differences matter for a task. `cd.Records` builds its own expansion, with habituation and
+two codes, for the records cortex.
 
 ```python
 import numpy as np
@@ -135,14 +316,17 @@ sep.habituate(np.random.default_rng(0).standard_normal((256, 32)))  # the enviro
 memory = cd.FastSynapses(pre=key_neurons, post=value_neurons, rule="delta", separator=sep)
 ```
 
-`habituate` sets the running mean from a sample of the environment's keys before anything
-is stored; the slow `center` then tracks it. A fast running mean can move codes between a write and its read;
-code overlap, finite capacity and contradictory values can also impair recall.
+`sep.code(key, learn=False)` returns the `(batch, expansion)` sparse code of `(batch, inputs)`
+keys. `FastSynapses(separator=sep)` codes keys and queries with it and moves the running
+mean on writes (`learn=True`). `habituate` sets the running mean from a sample of the
+environment's keys before anything is stored; the slow `center` then tracks it. A fast
+running mean can move codes between a write and its read; code overlap, finite capacity
+and contradictory values can also impair recall.
 
 The record then has `expansion` rows per stream instead of `inputs`, which is the price:
 storage grows with the code, capacity grows with it too (exact storage is bounded by the
-code width, not the key width). Measure retention with and without separation under the same observed keys; see
-the [separation tests](../tests/test_separation.py). Biological expansion and sparse
+code width). Measure retention with and without separation under the same observed keys;
+see the [separation tests](../tests/test_separation.py). Biological expansion and sparse
 coding motivate the construction, but do not establish equivalence to hippocampal learning.
 
 `SynapticMemory` supports the same expanded write/read coordinates, but requires

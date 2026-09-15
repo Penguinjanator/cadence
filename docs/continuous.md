@@ -31,6 +31,8 @@ One ongoing system still has distinct physical quantities and numerical timescal
 Neuron potentials change during settling. Synaptic weights change as observations,
 demonstrations or reward supply a learning signal. Cadence alternates these updates:
 weights are held fixed during each free/nudged phase, then local contrasts update them.
+Records are outside this alternation: a write is one delta-rule step at the moment the
+outcome is witnessed.
 That separation preserves the numerical rule and its conditional gradient interpretation.
 It does not claim that a biological brain runs these exact phases or that perception
 and plasticity are identical processes.
@@ -45,7 +47,9 @@ Use a separate instance for frozen `predict` or greedy `act` measurements.
 ## Repetition and salience become lasting synaptic changes
 
 `GenericBrain.build(...)` includes `SynapticMemory` by default (`episodic=True`).
-Use `episodic=False` to omit this associative pathway. It has a persistent
+Use `episodic=False` to omit this associative pathway. A [records cortex](memory.md#records)
+writes reward by the same delta rule through a sparse code, at `valued_rate` (1.0 by
+default). `SynapticMemory` has a persistent
 matrix `C` shared across streams and a transient residual `F` per stream. Each entry is
 a synapse from a declared key neuron to a declared value neuron. The effective weight
 is `C + F`; there is no list of remembered examples. For one unit key `k` and an actually
@@ -61,9 +65,9 @@ F += rate * outer(k, v - k @ (C + F))
 Defaults are `decay=0.9`, `consolidation=0.05`, `rate=1`. Repetition updates the slow
 matrix even when the immediate fast response is already correct. Salience accelerates
 that slow change. In the generic reward loop it defaults to `abs(reward)`; explicit
-`salience=` is a nonnegative vector. This is a supplied importance signal, not a measured
-neurotransmitter or a detector of subjective meaning. Positive and aversive outcomes can
-both be salient, while the signed observed value determines what is remembered.
+`salience=` is a nonnegative vector. This is a supplied importance signal. Positive and
+aversive outcomes can both be salient, while the signed observed value determines what
+is remembered.
 
 For a batch, slow updates average over writing rows using the same pre-update matrix.
 Fast corrections remain per stream. `value_mask` limits learning to observed output
@@ -88,8 +92,8 @@ assert np.allclose(memory.recall(cue), [[0., 1.]])
 
 The controlled retention test leaves **0.05** of a unit target after one ordinary
 exposure, **0.8715** after 40 repetitions, and **1.0** after one exposure with salience
-19, after clearing all transient residuals. These are model responses, not human
-retention rates. [Executable tests](../tests/test_continuous.py) also cover distraction,
+19, after clearing all transient residuals. These are responses of the model above.
+[Executable tests](../tests/test_continuous.py) also cover distraction,
 correction, unseen value components, ongoing reward learning and checkpoint recovery.
 
 ## What changes in the wiring
@@ -104,7 +108,7 @@ The policy's own plastic weights continue learning from contrasts and eligibilit
 Biological experiments motivate separating transient changes from their persistence:
 repeated stimulation can establish lasting synaptic potentiation, and dopamine can
 modulate spine plasticity in a restricted time window. The equations above are an
-engineering model, not a reconstruction of those cellular processes.
+engineering model.
 [Frey and Morris (1997)](https://pubmed.ncbi.nlm.nih.gov/9020359/),
 [Yagishita et al. (2014)](https://pubmed.ncbi.nlm.nih.gov/25258080/).
 
@@ -144,7 +148,7 @@ or decay memory; only a new observation advances its update clock.
 | Deliberation between actions | Available through `Deliberator`; application calls `tick` | Internal hypotheses, using supplied actions, transition and evaluator |
 | Hidden background thread | None | The application owns scheduling, pause and shutdown |
 
-These are defaults for the composed `GenericBrain`, not arbitrary raw `Brain` graphs.
+These are defaults for the composed `GenericBrain`.
 Existing checkpoints preserve their saved memory configuration. Enabling the default
 associative pathway adds `sensory_width × action_count` persistent parameters and the
 same number of fast weights per stream; disable it explicitly when reproducing an old
@@ -154,7 +158,7 @@ A task can stay active while the world waits. Use a separate **thinking clock** 
 hypotheses and retained neural activity. Do not call `step` merely because another UI
 frame passed: that would consume a real-action transition and replace its eligibility.
 Continue raw neuronal dynamics with `Brain.settle(..., state=state)` when needed;
-repeated settling under an unchanged drive may simply reach the same fixed point.
+repeated settling under an unchanged drive may reach the same fixed point.
 Deliberation changes hypothetical input so there is something new to evaluate.
 
 `cadence.circuits.Deliberator` retains unfinished search across bounded ticks. It shares
@@ -201,7 +205,8 @@ restart the search so candidates do not mix old and new weights. The application
 explicitly connect completed candidate scores to its action-selection circuit; adding
 a `Deliberator` does not automatically override `GenericBrain.step`'s sampled action.
 
-The node budget bounds transitions and evaluations, not wall time inside a callback.
+The node budget bounds transitions and evaluations; a callback's own wall time lies
+outside it.
 Expensive world models need their own bounded evaluation or a worker.
 This core planner restarts on new observations and
 retains work between ticks of the same search; it does not cache across observations.

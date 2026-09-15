@@ -7,8 +7,9 @@ to your application.
 | Task | Input | Operation and output | Guide |
 |---|---|---|---|
 | Known interacting constraints | A drive and a declared connectome | Settle; read output activations and residual | [Neural dynamics](concepts.md) |
-| Revise an addressed record | Key and observed value | `FastSynapses.observe`, then `recall` | [Memory](memory.md) |
-| Learn consequences | Current observation and proposed action | Predict first; repair from the observed outcome | [Prediction repair](learning.md#4-one-observation-repairs-a-prediction) |
+| Learn consequences and reward | Reading and observed outcome | Code the reading, read the records, write the outcome into the active cells | [Records](memory.md#records) |
+| Complete a partial reading | Drive with missing flags | Settle the regions fed by the record reads; repair from the observed outcome | [Prediction repair](learning.md#4-one-observation-repairs-a-settled-prediction) |
+| Revise an addressed association per stream | Key and observed value | `FastSynapses.observe`, then `recall` | [Memory](memory.md#reading-and-writing-directly) |
 | Imitation | An observation and a teacher's action | Nudge toward the current demonstrated action; retain legal-action constraints | [Learning recipes](learning.md), [learning life](experience.md) |
 | Regression or reconstruction | Features and an output pattern | Quadratic nudge; read continuous output activations | [Pattern targets below](#pattern-targets) |
 | A continuing stream | Each observation before its label arrives | Predict, score, then update; retain history explicitly when needed | [Memory](memory.md), [ongoing loop](continuous.md) |
@@ -100,4 +101,5 @@ An update replaces `learner.brain` with a `Brain` carrying the updated parameter
 If two learners should operate on one evolving parameter set, assign the updated
 brain to the other learner's `brain` before its next phase, while preserving that
 learner's masks and history. Check checkpoint and reset behaviour for the complete
-composition.
+composition. [Write a cortex](cortex.md#which-synapses-a-head-owns) builds the masks from
+port pairs.

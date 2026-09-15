@@ -4,6 +4,42 @@
 
 Biological names throughout, brain regions, and a generic brain.
 
+- `Records` (`cadence.records`): the records cortex. A reading of `inputs` units loses each
+  unit's running mean (the plain average of the witnessed readings until one over their
+  count falls to `habituation`, then a running mean at that rate); a fixed random expansion
+  keeps the `active` most driven of `cells` cells at unit length; one delta-rule table per
+  predicted field is read through the active cells and written by the error, at `rate` for
+  consequence fields and at `valued_rate` for `valued` fields, which read a second code
+  whose input `pathways` are divided by their running norms. `known` masks unobserved target
+  entries and `to_dict` rebuilds the fixed cells from the seed. `tests/test_records.py`
+  covers the codes, the write identity, a correlated walk, habituation, the valued code,
+  the masks and the settling mean.
+- `Mulberry32`: the 32-bit generator of `brain_scan.js`, with `batch` and Box-Muller
+  `normals`. `Records` draws its projection and offsets from it, so a page rebuilds the same
+  cells from the seed.
+- The evidence trees `experiments/` and `benchmarks/` leave the repository together with the
+  tests bound to them, `docs/comparisons.md`, whose rows cited them, and every documentation
+  reference to them. `docs/assets/cadence-logo-prompt.md` is removed.
+- Documentation: `docs/cortex.md` (regions, the catalogue, projections, ports, the synapses
+  a head owns, when to settle and when to record), `docs/brain.md` (development, checked
+  settling, one experience step by hand with records beside a policy head, `GenericBrain`,
+  checkpoints, the browser page) and `docs/evolution.md` (mutation, selection over short
+  lives, parallel lives, equilibrium detuning). Their snippets run in the documentation
+  tests, together with those of `docs/concepts.md` and `docs/certificate.md`.
+- Documentation: the record principle in the README, the concepts, the records section of
+  `docs/memory.md`, and the learning, reward, experience, task, continuous-interaction,
+  rehearsal, content-memory and sequence pages. The README links the two examples, their
+  receipts and the gallery.
+- Documentation corrections: the certificate example uses a certified brain and states that
+  `steps_for` raises for an uncertified one. The API reference adds `Records`,
+  `Mulberry32`, `PatternSeparator`, the certificate, the atlas, `Lineage`,
+  `FastSynapses(separator=)`, `Learner(synapse_rate=)`, `Learner.apply`,
+  `Learner.contrast_rows`, `save(..., compressed=)` and the keyword-only arguments of
+  `record_settlements`, `SequenceCache` and `BoundedTrace`. The learning knob table gives
+  the defaults of `eta_bias` and `layered(density=)` and adds `synapse_rate`; the viewer
+  page gives `particleBudget` as 300,000, `subsample_edges(limit, seed=None)` and
+  `page(note=, inputs=)`. The pages drop contrastive and status wording.
+
 - The README and quickstart center one ongoing experience loop without a
   training/inference mode switch. Retired example links and the bundled demo catalog
   are removed; their behavioral checks remain in the test suite. Minimal-install CI

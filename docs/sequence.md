@@ -3,11 +3,12 @@
 `cadence.sequence` supplies two small readback patterns. Both maintain local
 state that a caller reads through an explicit input port. Their updates depend
 on observations available at that moment; neither differentiates through time.
-The resulting state, diagnostics, and experiment receipts make their behavior
-inspectable. These are observer-like software patches with local records and
-feedback, not pretrained language understanding.
+The resulting state and diagnostics make their behavior inspectable. These are
+observer-like software patches with local records and feedback. `SequenceCache` is a
+ring of records read by cosine attention; the [records cortex](memory.md#records) reads
+by a fixed sparse code.
 
-`BoundedTrace(width, decay=0.5, radius=1.0, center=True)` keeps a leaky trace of a
+`BoundedTrace(width, *, decay=0.5, radius=1.0, center=True)` keeps a leaky trace of a
 feature vector. `read()` optionally removes its common scalar component and
 caps its L2 norm at `radius`. This prevents a wide, dense positive trace from
 silently overwhelming a sparse input. It never amplifies a weak trace, changes
@@ -16,7 +17,7 @@ signal can also impair prediction: the appropriate radius and centering choice
 must be validated for the task. Use `center=False` when a common component is
 meaningful. The recurrence itself provides no temporal credit assignment.
 
-`SequenceCache(features, values, capacity=128, temperature=0.1,
+`SequenceCache(features, values, *, capacity=128, temperature=0.1,
 center_rate=0.02)` stores a finite ring of feature/value associations for each
 stream. Call `reset(batch)` explicitly before a new set of streams. `read(cue)`
 returns `SequenceRead(value, entropy, maximum_weight, entries)` without changing
@@ -50,8 +51,7 @@ cache vector directly to output currents is a different model; it is not
 probability interpolation.
 
 This cache learns its mean and records observed associations. It does not learn
-the feature encoder, discover a semantic address, or outperform conventional
-attention given the same keys. The causal benchmark in
-`experiments/sequence_readback/` includes that equality control and conventional
-window/recurrent MLPs. It tests next-character prediction on disjoint novels,
-with every result and a per-token verification artifact retained.
+the feature encoder or discover a semantic address. The
+[sequence tests](../tests/test_sequence.py) check centering, reads that leave memory
+unchanged, causal isolation of past predictions, stream isolation, ring eviction and
+finite arithmetic at extreme values.

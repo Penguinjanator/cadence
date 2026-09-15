@@ -3,8 +3,8 @@
 Every page that shows a Cadence brain shows the whole brain: every neuron a point coloured
 by its region, every synapse a line, laid out so that connected neurons sit near each other,
 with the activity and the change of every settling step animated live and the traces of
-every region below. One component draws it, shipped with the library, so every example and
-experiment looks the same and any recording can be replayed anywhere.
+every region below. One component, shipped with the library, draws it, and any recording
+replays in any page.
 
 ## The atlas
 
@@ -27,7 +27,8 @@ print(atlas.summary())          # neurons, synapses, regions with roles
 payload = atlas.to_json()       # positions, regions, every synapse, base64 arrays
 ```
 
-`atlas.subsample_edges(limit)` keeps the strongest synapses when a page cannot draw them all.
+`atlas.subsample_edges(limit, seed=None)` keeps at most `limit` synapses, drawn with
+probability proportional to their absolute weight, when a page cannot draw them all.
 
 ## The renderer
 
@@ -56,9 +57,14 @@ changed; particles travelling along synapses in proportion to the message sent, 
 settling is visible as a wave through the connectome; region labels; and a montage strip
 with one EEG-style row per region (its change as a line, its activity as a fill) and the
 whole brain on top. `mode` selects the brightness: `activity`, `potential` or `change`.
-Brains with more synapses than `particleBudget` (400,000) draw particles for a uniform
+Brains with more synapses than `particleBudget` (300,000) draw particles for a uniform
 sample of them; every synapse is still rasterised. Scroll zooms, drag pans, hover inspects.
 WebGL2 draws it; without it, a Canvas2D fallback draws the neurons.
+
+The renderer draws the connectome, the settled regions. The example pages draw the records
+cortex beside the scan with their own component, `records_view.js`: the granule raster with
+the active cells of the executed reading, imagined reads, writes scaled by the record rate,
+the habituated reading and the per-field reads.
 
 `layoutAtlas({ n, pre, post, weight, groups, shapes, positions, roles, labels, seed })` is the
 same layout in the browser, for pages that build their brains at run time: `groups` names a
@@ -68,8 +74,11 @@ loads a new brain into the same canvas.
 
 ## One call for a page
 
-`atlas.page(...)` returns a self-contained HTML page: the atlas, the renderer, and either
-recorded frames or a live brain, or both.
+`atlas.page(*, frames=None, brain=None, title="Cadence brain scan", note=..., inputs=None, limit=2000)`
+returns a self-contained HTML page: the atlas, the renderer, and either recorded frames or
+a live brain, or both. `note` is the text under the title; `inputs` names the neurons that
+the live page's `Detune` drives, by default the first population whose name reads as
+vision or sensory, or else the first eight neurons.
 
 ```python
 records = []

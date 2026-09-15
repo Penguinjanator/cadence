@@ -35,15 +35,15 @@ Then there is exactly one equilibrium, and
 For the library's activation the slope bound is `(slope / 4) max(1 / (1 - rest), leak / rest)`
 with `rest` the rest emission. Under `learning_neuron_model()` (slope 1, threshold 0, leak
 0.1) that is `1/2`, so a learning brain is certified when every neuron's absolute incoming
-effective weight sum is below 2. These statements are theorems with Lean proofs in the
-flagship paper's library.
+effective weight sum is below 2. The contraction argument is the Banach fixed-point theorem
+for the update map.
 
 ## Reading it
 
 ```python
 import cadence as cd
 
-connectome = cd.layered(8, 12, 3, density=1.0)
+connectome = cd.layered(8, 12, 3, density=1.0, init=0.25)   # row mass 1.39: certified
 brain = cd.Brain(connectome, cd.learning_neuron_model())
 cert = cd.certificate(brain)
 print(cert.row_mass, cert.lipschitz, cert.rate, cert.certified)
@@ -52,18 +52,21 @@ print(cert.error_bound(1e-4))          # remaining distance after a step that mo
 print(cert.steps_for(change=0.5, tolerance=1e-3))   # warm-start budget after a change
 ```
 
+`steps_for` raises `ValueError` for an uncertified brain; check `cert.certified` first.
 `cd.row_mass(brain)` and `cd.lipschitz_constant(model)` are the two ingredients. The
 certificate covers the free phase without adaptation; a nudge adds a drive the argument does
 not include, and adaptation adds a slow variable. For those, and for any brain whose row mass
 is above the limit, `Brain.residual` and `Brain.equilibrate` remain the checks: they certify
 the equations at the state they measure, and nothing about uniqueness or convergence.
+The certificate concerns the settled regions; records are read and written without settling.
 
 ## Using it
 
 - Report `cert.to_dict()` in every receipt next to the residual.
-- Keep learned brains under the limit where you can: cap efficacies (`SCALE_CAP`), scale the
-  gain by the fan-in, and watch `row_mass` over training. A brain that crosses the limit may
-  settle in practice; the certificate then says nothing.
+- Keep learned brains under the limit where you can: bound efficacies (the learner clips
+  each plastic efficacy at magnitude eight), scale the gain by the fan-in, and watch
+  `row_mass` over training. A brain that crosses the limit may settle in practice; the
+  certificate then says nothing.
 - Warm-start streams. The step bound is logarithmic in the change, and an unchanged input
   needs no repair step; checking that it is unchanged still has a cost.
 - Lesions keep the certificate: cutting synapses can only lower the row mass.
@@ -104,7 +107,9 @@ phases must converge on a smooth stable branch, finite beta retains estimation b
 adaptation lies outside this free-state argument. Convert the raw contrast using the
 contact/gain factor and the loss-temperature convention in [learning](learning.md).
 
-`benchmarks/ep_inputs.py` checks one-way input projection and tied recurrent derivatives
-against finite differences across five seeds and three beta values. It includes actual
-free/free asymmetry as a negative control. The receipts establish that bounded example;
-they do not retrospectively certify the trained networks in historical experiments.
+[`tests/test_equilibrium.py`](../tests/test_equilibrium.py) checks the converted contrast
+against finite differences of the loss on a brain with symmetric effective weights and
+converged phases. [`tests/test_runtime_checks.py`](../tests/test_runtime_checks.py) checks
+that `ep_structure` accepts one-way input projections from declared inputs and rejects
+them undeclared, as well as unequal presynaptic gains, a hidden neuron named as an input,
+and adaptation.

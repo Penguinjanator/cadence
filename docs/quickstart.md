@@ -11,7 +11,7 @@ needs only NumPy and Cadence.
 
 Each `GenericBrain.step` receives the current observation and the outcome of its
 **previous action**, incorporates that experience, and chooses the next action.
-The first call only chooses an action because there is no previous outcome yet.
+The first call only chooses an action, because no previous outcome exists.
 
 Here a body moves left, stays still or moves right along a line. Its observation
 contains its position and a goal. Reward is the actual reduction in distance
@@ -45,8 +45,10 @@ curriculum, measurements and controls. The body, goal and reward rule are suppli
 
 The brain retains its policy, critic, associative reward memory and working trace.
 It never needs to enter a different mode to put a learned response to use.
-`GenericBrain` is a starting composition; learned world models and language need
-additional wiring. See [experience-based architectures](experience.md).
+`GenericBrain` is a starting composition. A [records cortex](memory.md#records) learns the
+consequences of actions and their reward from the same stream, and
+[compose a brain](brain.md) writes one experience step with records beside a policy.
+Learned language needs additional wiring; see [experience-based architectures](experience.md).
 
 ## Keep feedback attached to the right action
 
@@ -84,8 +86,9 @@ holds weights fixed during its free and nudged phases, then applies an update.
 Those are numerical operations inside the ongoing loop.
 
 Calling a raw `Brain.settle` does not automatically teach its weights. Imagined
-outcomes are predictions, not observed evidence. Custom cortexes use the same
-[local learning primitives](learning.md) and own their feedback timing.
+outcomes are predictions; keep them out of the records of observed evidence. Custom
+cortexes use the same [local learning primitives](learning.md) and own their feedback
+timing; [write a cortex](cortex.md) describes their ports and heads.
 
 For a frozen measurement, use a separate saved copy. Independent-sample helpers
 such as `fit` and `predict` do not toggle the live brain's operating mode.

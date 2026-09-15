@@ -2,8 +2,9 @@
 
 `ContentMemory` is a bounded observer-like software patch: its cue and observed-value
 ports feed local state, its readback predicts from a record, and feedback corrects the
-selected association. The evidence bundle is `experiments/memory_repair/`. It receives
-features of an observation, rather than a slot number, class ID, or task ID as its address.
+selected association. It receives features of an observation, rather than a slot number,
+class ID, or task ID as its address. It is a record store with a learned address; the
+[records cortex](memory.md#records) uses a fixed one.
 
 ```python
 import numpy as np
@@ -41,17 +42,10 @@ running centering transform. A moving mean or changing encoder can invalidate st
 prototypes even when the memory itself is functioning correctly. A frozen transform
 must be fitted from training inputs and applied identically at writes and reads.
 
-The comparison script includes plain delta fast synapses, sparse separated delta
-synapses, a conventional FIFO nearest-exemplar store, and fixed prototypes. It also
-includes aliases and capacity overflow. Reproduce and verify its entire comparison
-grid with:
-
-```sh
-PYTHONPATH=src python experiments/memory_repair/content.py --out /tmp/cadence-content-new.json
-PYTHONPATH=src python experiments/memory_repair/verify.py
-```
+The [content memory tests](../tests/test_content_memory.py) cover selection by noisy
+content, learned prototypes, revision and capacity, aliasing and invalid input.
 
 The mechanism is compatible with the broad complementary-learning-systems motivation
 for rapid records plus slower learning; its cosine search and allocation threshold are
-engineering choices, not a model of hippocampal anatomy. See the original
+engineering choices. See the original
 [McClelland, McNaughton and O'Reilly paper](https://web.stanford.edu/~jlmcc/papers/McCMcNaughtonOReilly95.pdf).

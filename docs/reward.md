@@ -3,7 +3,7 @@
 Cadence combines free/nudged contrasts, eligibility traces and a reward prediction
 error without a backward computation graph. Each synapse keeps its own eligibility
 trace, and one broadcast dopamine signal gates every trace into a weight change.
-This page describes those components and the public evidence for reward-weighted learning.
+This page describes those components and the tests that check them.
 
 For application code, [`GenericBrain.step`](continuous.md) receives this moment's
 observation and the preceding action's reward, updates plasticity, and returns the next
@@ -42,9 +42,8 @@ explicit choices:
   not predict mean discounted return in reward units.
 - `critic_signal="td"` uses the raw prediction error for the critic, independently
   of actor modulation. Use this when a calibrated return prediction is required.
-  It can require retuning the critic rate and reward scale. Switching this globally
-  reduced performance in a finite-budget continuous-action bandit, so the existing
-  default is preserved.
+  It can require retuning the critic rate and reward scale. The default is
+  `"modulated"`.
 
 The critic's step can be divided by its trace's energy (`critic_normalize`). Reports
 include the absolute raw `td_error`, the absolute modulated `delta`, and signed
@@ -112,17 +111,22 @@ input does not establish reliable control or lower decision cost.
 
 ## What delayed credit requires
 
+A reward that follows the reading it belongs to is a record: written in one exposure at
+the fast rate and read back at that reading ([records](memory.md#records)). The
+eligibility trace is for the policy where the reward arrives after other decisions.
+
 An eligibility trace remembers which action could have caused a later reward; it
 does not remember an arbitrary observation or learn a memory address. At a delay of
 `d` transitions its contribution is multiplied by `(gamma * lam) ** d`. A trace
 that fades too soon cannot assign useful credit, while a long trace includes more
 unrelated actions. State representation, exploration and the critic matter too.
 
-The [delayed-credit experiment](../experiments/policy_credit/README.md) tests a first
-choice followed by blank observations and irrelevant actions. It includes a trace
-ablation, the previous quadratic-nudge actor and a conventional categorical score
-rule, with five seeds and all outcomes. Passing this small test does not establish
-Hopper, Pong, POPGym or console performance.
+The [delayed-credit test](../tests/test_child.py) pays a choice three moments later,
+after blank moments with presses of their own; the learned greedy choice reaches a hit
+rate of at least 0.8 with the trace (`lam=0.9`) and at most 0.65 without it (`lam=0`). The
+[policy credit tests](../tests/test_policy_credit.py) check that the eligibility
+differentiates the sampled policy. Passing these small tests does not establish
+performance on any larger task.
 
 For a real task, record raw held-out return, forgetting and every interaction used
 by rehearsal or planning. Choose the eligibility horizon from actual action-to-reward

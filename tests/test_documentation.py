@@ -13,10 +13,15 @@ ROOT = Path(__file__).resolve().parents[1]
     "page",
     [
         "docs/quickstart.md",
+        "docs/concepts.md",
         "docs/memory.md",
         "docs/continuous.md",
         "docs/tasks.md",
         "docs/reward.md",
+        "docs/certificate.md",
+        "docs/cortex.md",
+        "docs/brain.md",
+        "docs/evolution.md",
     ],
 )
 def test_introductory_python_snippets(page, tmp_path, monkeypatch):

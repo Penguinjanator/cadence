@@ -49,13 +49,13 @@ give exactly zero contrast.
 Input rounding, reduction order and cancellation between distinct contributions still
 limit accuracy; float32 training trajectories need not match float64 at a fixed
 absolute error. RMS normalization can amplify small contrast errors. Gradient checks
-should use float64 CPU/CUDA and declare the nudge size and phase residuals. Historical
-runtime/energy receipts bind their exact frozen kernels; use the archived source for
-reproduction.
+should use float64 CPU/CUDA and declare the nudge size and phase residuals.
 
 Large connectomes whose blocks do not fit `dense_limit` use sparse transport. The CPU backend
 uses SciPy CSR when installed, and the NumPy segmented sum otherwise. PyTorch uses its
-gather/scatter path; `"mlx"` needs the blocks.
+gather/scatter path; `"mlx"` needs the blocks. A records read is one dense product of the
+sparse code with a table; `Records` runs on the host with NumPy whatever backend the brain
+uses.
 
 ## Sparse CPU transport
 
@@ -107,18 +107,17 @@ For unread float64 Torch states, residual transport and reduction stay on the de
 only one scalar per row returns. Reading or editing the host potential/adaptation selects
 the host reference, as does `residual(..., on_device=False)`. Float32 Torch and MPS states
 also retain the float64 host reference, so faster checks do not quietly weaken its precision.
-Accelerator block products no longer read `torch.equal` flags on the host at each step;
-they recompute source products. CPU blocks retain the exact source cache. This changes
-the cost, not the equation. The activation uses one leaky-rectifier primitive for its two
+Accelerator block products recompute source products at each step without reading
+`torch.equal` flags on the host. CPU blocks retain the exact source cache. The equations
+stay the same. The activation uses one leaky-rectifier primitive for its two
 linear branches. A positive movement tolerance still requires a scalar check every step;
 fixed step counts and the inner chunks of `equilibrate` avoid that check.
 
-The reproducible comparison is `benchmarks/runtime.py`: five seeds, baseline functions
-from the declared Git revision, identical dtype, steps, tolerances and centered updates,
-warmup samples, alternating arm order, synchronized timing, host-reference residuals and
-state/parameter differences. `benchmarks/receipts/` retains the measured CPU and local MPS
-outcomes. These small fixed-topology measurements do not establish a CUDA result, a
-speedup over an MLP, training quality at scale, or energy use in joules.
+To compare two implementations, run both on the same workload with identical dtype,
+steps, tolerances and centered updates over several seeds; warm up, alternate their order,
+synchronize the device around each timed call, and compare residuals, states and
+parameters as well as time. A small fixed-topology timing says nothing about another
+device, a comparison with an MLP, training quality at scale or energy use in joules.
 
 ## Choosing a device
 

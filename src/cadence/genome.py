@@ -251,13 +251,14 @@ def evolve(
     report: Callable[[Lineage], None] | None = None,
     **mutation: Any,
 ) -> Lineage:
-    """Selection over genomes: each generation grows ``population`` offspring of the
-    ``keep`` best so far, scores each grown connectome with ``fitness(connectome, seed)``, and keeps
-    the best. The fitness is the caller's: a protocol score, a learning curve, an accuracy.
-    ``mapper`` runs a generation's lives: ``map`` one after another, a pool's ``map`` side
-    by side (``fitness`` must then be picklable, so a module-level function). ``report``
-    is called with the lineage so far after every generation, so a long run can be
-    written out as it goes."""
+    """Selection over genomes: the first generation holds the starting genome and its mutated
+    offspring; every later generation holds ``population`` mutated offspring of the ``keep``
+    best genomes of the previous generation. Each grown connectome is scored with
+    ``fitness(connectome, seed)``, and the lineage records the best genome ever scored. The
+    fitness is the caller's: a protocol score, a learning curve, an accuracy. ``mapper`` runs a
+    generation's lives: ``map`` one after another, a pool's ``map`` side by side (``fitness``
+    must then be picklable, so a module-level function). ``report`` is called with the lineage
+    so far after every generation, so a long run can be written out as it goes."""
     for name, value in (("generations", generations), ("population", population), ("keep", keep)):
         if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
             raise ValueError(f"{name} must be a positive integer")

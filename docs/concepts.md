@@ -11,12 +11,23 @@ receipts for evidence. The biological names describe computational roles.
 The [experience guide](experience.md) starts from an ongoing learning life, connecting
 world prediction, episodes, goals, action and communication. The
 [composition guide](experience.md#connect-functions-through-actual-ports) connects those functions through actual ports.
-The architecture is a hypothesis to test, not an obligatory biological inventory.
+The architecture is a hypothesis to test.
 
-## Three principles
+## Four principles
 
-Local repair and checked convergence describe the numerical substrate. Detuning is
-an optional technique for proposing alternatives within a learning application.
+Records learn what follows a reading. Local repair and checked convergence describe the
+settled regions. Detuning is an optional technique for proposing alternatives within a
+learning application.
+
+**Records.** A records cortex (`cd.Records`) subtracts each input unit's running mean from
+a reading, maps it through a fixed random expansion onto many cells, keeps the most active
+few and inhibits the rest. Each active cell holds one record per predicted field. The
+prediction is the sum of the records the reading touches, weighted by activity, and
+learning writes the witnessed outcome into exactly those records by the delta rule, at a
+slow rate for consequences and a fast rate for valued fields such as reward. The number of
+records a reading touches sets the learning speed: a sparse code confines each write to few
+records, readings on other cells keep their reads, and records learn from one stream
+without replay. Reading and writing need no settling. See [records](memory.md#records).
 
 **Local repair.** Each neuron reads its own potential, its synaptic input and its drive,
 and moves toward their sum. `brain.settle_batch(drive,
@@ -27,13 +38,12 @@ activities of its own two neurons in those phases. Output nudges can read a targ
 and an output group; reward learning broadcasts a prediction-error signal. These
 teaching signals are explicit. No backward computation graph is stored through the brain.
 
-**Checked convergence.** A step cap is a work limit, not an equilibrium. The fixed-point
+**Checked convergence.** A step cap is a work limit; the fixed-point
 equations decide. `brain.residual(drive, state)` returns the largest equation error per row.
 `brain.equilibrate(drive, budget=..., chunk=..., tolerance=...)` settles until every row's
 residual is below the tolerance or the budget is spent, and returns the state with `steps`,
 the per-row `residual` and the per-row `converged` flags. Pass the same `mask` and `nudge`
-to a settle and to its residual check. A spent budget is a result to report, not an
-equilibrium to claim.
+to a settle and to its residual check. A spent budget is a result to report.
 
 **Equilibrium detuning.** A settled brain gives one answer under one drive. To sample
 alternatives, add bounded random drive to the latent neurons and settle again. Each batch
@@ -55,10 +65,12 @@ result = brain.equilibrate(drive, budget=512, chunk=32, tolerance=1e-6)
 print(result.converged.all(), result.state.activation[:, list(connectome.populations["output"])].round(3))
 ```
 
-Each added drive lies in `[-0.1, 0.1]`. A Gaussian standard deviation would describe
-a scale, not a hard bound. Check residuals, then rank candidates with a validated
+Each added drive lies in `[-0.1, 0.1]`; a Gaussian draw has no such bound.
+Check residuals, then rank candidates with a validated
 critic or readout. Detuning does not teach a model of consequences; only a model
 with useful learned or supplied dynamics can make these predictions useful for action.
+[Evolve a brain](evolution.md#detuning-inside-a-life) ranks detuned candidates by a read of
+the records or by a critic.
 
 ## Neurons and synapses
 
@@ -137,15 +149,16 @@ equilibrium learning; its gradient interpretation needs additional assumptions.
 |---|---|---|
 | Potential, activation, adaptation | Settling steps | Pass `state=` to continue; omit it to start from rest |
 | A trace or fast-memory matrix | Explicit activity or observation updates | Reset at episode boundaries and preserve batch row identities |
-| Learned weights, biases and consolidated associations | Local learner updates, reward/eligibility or `SynapticMemory.observe` | Save each owning component; evaluate on a separate snapshot |
+| Learned weights, biases, records and consolidated associations | Local learner updates, reward/eligibility, `Records.write` or `SynapticMemory.observe` | Save each owning component; evaluate on a separate snapshot |
 
 A [trace](api.md#streams-cadencestream) retains fading activity.
 [Fast memory](memory.md) retains associations between supplied keys and values.
 [Learning](learning.md) changes a reusable response through free/nudged endpoint
-contrasts. The centered learner uses three phases: free, positive nudge, and
+contrasts. Records change by one delta-rule write per witnessed outcome, without
+settling. The centered learner uses three phases: free, positive nudge, and
 negative nudge. Under its equilibrium assumptions, the small-nudge contrast
 corresponds to a loss gradient with the stated parameter scaling. A raw `Brain`
-does not update its weights simply because time passes or it is settled again.
+does not update its weights because time passes or because it is settled again.
 `GenericBrain.step` schedules real-action learning; custom compositions own their
 update clocks. A unique fixed point alone cannot preserve all past observations.
 
@@ -153,7 +166,7 @@ update clocks. A unique fixed point alone cannot preserve all past observations.
 
 A [protocol](protocols.md) declares stimuli, readouts, interventions, and predicates.
 A shuffled connectome tests whether a response depends on the particular connections
-under the same neuron model. It is one control, not proof of a biological mechanism.
+under the same neuron model. It is one control.
 High gains can saturate an excitatory circuit, so protocols can limit the active
 fraction during gain selection.
 
@@ -168,14 +181,14 @@ the arithmetic verifier. Neither check establishes benchmark fairness.
 |---|---|---|
 | Inference | Evaluate layers | Repeated neuron updates with a bounded solve and an optional residual check |
 | State between inputs | A cache or a separate memory | A settled state, trace or record, each explicit |
-| Credit | Reverse-mode differentiation | Free and nudged endpoint contrasts |
+| Credit | Reverse-mode differentiation | Free and nudged endpoint contrasts; delta-rule writes for records |
 | Exact gradient conditions | Differentiable computation | Stable smooth equilibrium, symmetric effective weights, converged phases, vanishing nudge |
 | Work | Forward and backward passes | Every step of the free and nudged phases plus the update |
 
 Measure inference, learning and record maintenance separately on the same held-out
 data, and include the simple algorithmic solver when a task has one.
 
-This table compares update mechanisms, not the full learning lives of their users.
+This table compares update mechanisms.
 Networks trained by backpropagation can also be recurrent, online, model-based and
 memory-using. Matrix multiplication is an implementation operation. The experience
 tests ask what the system acquires and transfers, how it uses goals and memories,

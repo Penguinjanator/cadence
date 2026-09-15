@@ -13,13 +13,14 @@ ports, readback, records and feedback/repair, with checkable evidence.
 
 ## Connect functions through actual ports
 
-These six functions are a candidate architecture, not an anatomical parts list.
+These seven functions form a candidate architecture.
 
 | Function | Build with | What must be learned or supplied explicitly |
 |---|---|---|
 | Perception and grounding | Input regions, associations, local updates | Features, entities and word/referent bindings |
-| World model | Belief/action ports and predictive outputs | Action-conditioned consequences and uncertainty |
-| Episodes and consolidation | `FastSynapses`, `SynapticMemory`, bounded event records | Addressing, relevant writes, retention and correction |
+| World model | A records cortex: `cd.Records`, one table per predicted field | Action-conditioned consequences; missing flags in the reading; the rates |
+| Completion | The settled regions fed by the record reads | Which partial readings need a fixed point |
+| Episodes and consolidation | Valued `Records` fields at the fast rate, `FastSynapses`, `SynapticMemory`, declared stores | Addressing, relevant writes, retention and correction |
 | Workspace and goals | Recurrent state, `Trace`, goal/readback ports | Persistent context, useful goals and subgoals |
 | Action selection and value | `ActorCritic`, eligibility, `Valence`, optional `Deliberator` | Exploration, delayed credit and useful planning |
 | Language and readback | Intention, language input/output and feedback | Expressing an intention, understanding replies and asking questions |
@@ -32,8 +33,9 @@ A named region has no function until its connections and experience make it usef
 
 `GenericBrain` supplies a recurrent sensory/association/motor policy, a critic,
 optional working trace and associative reward memory. Its `hippocampus` remembers
-chosen-action rewards for sensory cues. World models, learned hierarchical goals
-and language require additional compositions and evidence.
+chosen-action rewards for sensory cues. A world model is a records cortex composed
+beside it ([compose a brain](brain.md)); learned hierarchical goals and language require
+additional compositions and evidence.
 
 ## Keep the causal order
 
@@ -45,9 +47,14 @@ and language require additional compositions and evidence.
    isolated branch state and read-only model parameters.
 5. Save the next prediction, execute an action or utterance, and attend to the result.
 
-A missing feature is not an observed zero. A UI tick is not another action outcome.
-Replay may teach from retained real observations, but needs its own scheduling and
-must not advance live episode state. Replaying obsolete evidence can undo a correction.
+A missing feature is not an observed zero: give the reading a missing flag for it, in
+witnessed and imagined readings alike. A UI tick is not another action outcome.
+A records cortex learns from one stream: a reading touches few records, and the outcome
+is written into those. A learner whose every parameter takes part in every prediction
+moves every prediction with each update; [rehearsal](replay.md) gives such a learner
+retained real observations, with its own scheduling and without advancing live episode
+state. Give a baseline the same replay policy as the candidate. Replaying obsolete
+evidence can undo a correction.
 See [continuous interaction](continuous.md) for exact feedback and reset semantics.
 
 Words can be learned in ambiguous situations and connected to remembered events.
@@ -93,8 +100,11 @@ Cadence does not model spikes, neurotransmitter chemistry or consciousness.
 
 ## Research basis
 
-These sources motivate experiments, not a complete biological learning algorithm:
+These sources motivate the experiments:
 
+- [Marr (1969)](https://doi.org/10.1113/jphysiol.1969.sp008820), [Albus (1971)](https://doi.org/10.1016/0025-5564%2871%2990051-4):
+  a sparse expansion with a linear readout as the cerebellar learning rule; the records
+  cortex.
 - [Smith & Yu (2008)](https://pmc.ncbi.nlm.nih.gov/articles/PMC2271000/): word/referent
   acquisition across ambiguous situations.
 - [McClelland et al. (1995)](https://web.stanford.edu/~jlmcc/papers/McCMcNaughtonOReilly95.pdf):

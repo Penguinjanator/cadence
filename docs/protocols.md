@@ -1,9 +1,9 @@
 # Protocols: held-out tests with preconditions
 
-A protocol declares the questions a settled brain will be asked, and what it may be
-shown before it is asked. It can score a supplied graph model. The learning examples
-follow the same discipline in their scripts: a validation split, a test read once,
-and a control.
+A protocol declares the questions a settled brain is asked, and what it may be
+shown before it is asked. It can score a supplied graph model. The examples follow the
+same discipline in their stage verifiers: held-out lifetimes apart from the learning lives,
+every scheduled seed, listed controls, and metrics recomputed from the event logs.
 
 ## Stimuli, rows, training facts
 
@@ -88,7 +88,10 @@ fully active. Include the complete selection table in the receipt.
 
 ## For learned brains
 
-The learning examples do not use `Protocol`; their held-out facts are a test set. The
-same habits carry over: selection on a validation split of the training data only,
-the test set read once after selection, and a control that should fail (a brain trained
-on shuffled labels scoring at chance).
+The examples do not use `Protocol`. Their run receipts (`cadence-experience-run/v1`, see
+[receipts](receipts.md)) carry every acceptance predicate with its value, threshold,
+aggregation and pass flag, and each stage's `verify.py` recomputes the metrics from the
+event logs and fails closed on an incomplete run. The same habits apply to any learned
+brain: selection on a validation split of the training data only, the test set read once
+after selection, and a control that should fail (a brain trained on shuffled labels
+scoring at chance).

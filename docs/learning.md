@@ -3,8 +3,11 @@
 Start with [one ongoing experience loop](quickstart.md).
 This page explains local prediction repair and demonstrations without adaptation: the neuron
 equations, a numerical update, the gradient assumptions, and configuration choices.
+This rule changes the synapses of the settled regions. A [records cortex](memory.md#records)
+learns consequences and reward with one read and one delta-rule write per outcome, without
+settling phases.
 
-## 1. What is being learned
+## 1. What learning changes
 
 A `Brain` carries three parameter arrays:
 
@@ -87,7 +90,7 @@ it does not retain a backward computation graph. Softmax reads its declared outp
 group, and weight tying aggregates the members of a declared tie group. These two
 operations read a group of neurons or synapses, beyond the per-synapse contrast.
 
-## 4. One observation repairs a prediction
+## 4. One observation repairs a settled prediction
 
 For a custom world model, save a free prediction under the current observation
 and proposed action with `Learner.free`. Only after the environment executes the
@@ -95,10 +98,12 @@ action does its observed consequence enter the teaching target.
 Both nudged phases start from that same free state under the original drive.
 Their endpoint contrast changes synapses for future encounters.
 
-This is the local repair inside an ongoing learning life. It does not assign
-credit across arbitrary delays: use explicit temporal state and
-[reward eligibility](reward.md) where the task needs them. Score outcomes before
-updating, and keep imagined or teacher-nudged states out of witnessed-event memory.
+The records cortex learns consequences with one read and one write. Use this settled
+repair where the prediction must complete a partial reading, or where the readout is the
+policy under late credit. The repair assigns no credit across delays: use explicit
+temporal state and [reward eligibility](reward.md) where the task needs them. Score
+outcomes before updating, and keep imagined or teacher-nudged states out of
+witnessed-event memory.
 
 ## 5. Why the contrast is a gradient
 
@@ -195,7 +200,7 @@ it, export `learner.brain.dense()` for a page, or put its `to_dict()` in a recei
 | `free_steps`, `nudged_steps` | `LearnerConfig` | the most steps a free and a nudged phase may take before the contrast is read | 100, 50 |
 | `tolerance` | `LearnerConfig` | settling stops once no neuron's activation moves more than this (None: the step cap alone) | 1e-4 |
 | `eta` | `LearnerConfig` | efficacy step; the contrast is divided by `2 beta` | default 0.2; tune on held-out experience |
-| `eta_bias` | `LearnerConfig` | bias step | `eta / 100` |
+| `eta_bias` | `LearnerConfig` | bias step | `eta / 10` (the default) |
 | `temperature` | `LearnerConfig` | softmax temperature of the cross-entropy nudge; also the policy temperature when sampling actions | 0.1 (labels), 0.2 (actions) |
 | `centered` | `LearnerConfig` | contrast `+beta` against `−beta` (two nudged phases) rather than against the free state | `True` |
 | `nudge` | `LearnerConfig` | `"cross_entropy"` or `"quadratic"` (`beta · (target − s)`) | cross-entropy for classes |
@@ -205,8 +210,9 @@ it, export `learner.brain.dense()` for a page, or put its `to_dict()` in a recei
 | `reciprocal` | `Learner` | tie each synapse and its reverse into a reciprocal pair with one efficacy | `True` |
 | `plastic_synapses` | `Learner` | bool per synapse; the others keep their efficacy | all |
 | `plastic_neurons` | `Learner` | bool per neuron; the others keep their bias | all |
+| `synapse_rate` | `Learner` | a nonnegative step multiplier per synapse, applied before tying | `None` (every synapse at `eta`) |
 | `leak`, `slope`, `dt` | `learning_neuron_model` | sub-rest response, activation slope, integration step of the neuron update | 0.1, 1.0, 0.5 to 1.0 |
-| `density`, `feedback`, `lateral`, `init`, `skip` | `layered` | input→hidden density, feedback scale, output↔output scale, initial magnitude, direct input→output synapses | 1.0, 1.0, 0, 1.0, `False` |
+| `density`, `feedback`, `lateral`, `init`, `skip` | `layered` | input→hidden density, feedback scale, output↔output scale, initial magnitude, direct input→output synapses | 0.3 (the default; 1.0 for small brains), 1.0, 0, 1.0, `False` |
 
 `Learner.parameters()` counts plastic efficacies (a reciprocal pair or tie group counts
 once) plus plastic neuron biases. A plastic synapse whose reverse is frozen still contributes
@@ -222,6 +228,6 @@ retains transients and is not necessarily an equilibrium. Reset state at indepen
 episode boundaries and compare warm and cold inference on changing inputs.
 
 Each centered update runs three settling phases. Measure all phase steps and wall time; fewer
-epochs do not by themselves mean greater sample efficiency or lower compute. If the
-task is simply storing and revising observations, [fast memory](memory.md) supplies a
-single read and residual write per record without three settling phases.
+epochs do not by themselves mean greater sample efficiency or lower compute. When the
+task is to learn what follows a reading, a [records cortex](memory.md#records) reads with
+one product and writes with one delta-rule step per outcome, without settling phases.

@@ -37,6 +37,13 @@ For an experiment, bind every consumed source and dataset, then supply checks fo
 its schedule, outcomes, and metrics. This small sum example verifies only its
 declared arithmetic; it does not reproduce a model or a training run.
 
+The examples' run receipts use a second format, `cadence-experience-run/v1`, written by
+their stage runners: `stage`, `status` (`incomplete` until the schedule completes), `seeds`,
+`sources` (the library's commit and a hash of its source files, the hashes of the stage
+files), `artifacts` (the event logs with their sha256, and the checkpoints), `acceptance`
+(each predicate with its value, threshold, aggregation and pass flag) and
+`receipt_sha256`. The stage verifier recomputes the metrics from the event logs.
+
 ## Shape
 
 ```json

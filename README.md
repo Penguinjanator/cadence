@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/assets/cadence-logo.png" alt="Cadence — an interconnected mesh of stateful neural patches, feedback loops and synaptic signals" width="100%">
+  <img src="docs/assets/cadence-logo.png" alt="Cadence: a mesh of stateful neural patches, feedback loops and synaptic signals" width="100%">
 </p>
 
 # Cadence
@@ -26,22 +26,26 @@ Start with the [single-loop quickstart](docs/quickstart.md).
 
 ## What the brain is made of
 
-- **Local neural state:** neurons exchange activity over declared synapses;
-  recurrent regions influence one another as they settle.
-- **Local learning:** observed targets and reward drive synaptic updates from
-  neuronal activity and eligibility, with no backward computation graph.
-- **Memory:** traces carry recent activity; fast synapses retain associations;
-  slow synapses consolidate repeated or salient evidence.
-- **Prediction and goals:** connect learned consequences, remembered events and
-  desired outcomes to action. Isolated imagined futures can guide a choice.
-- **Grounded communication:** learn words in context, retain an intention, express
-  it and learn from a partner's response. Planning and speaking can interleave.
+- **Local neural state:** neurons exchange activity over declared synapses; the settled
+  regions reach a joint fixed point that completes a partial reading, carries context
+  across a delay and holds the policy.
+- **Records:** a mean-free reading passes through a fixed sparse expansion with
+  winner-take-all inhibition; each active cell keeps a record of what followed; the
+  prediction is the activity-weighted sum of the records the reading touches; the
+  witnessed outcome is written into exactly those, at a slow rate for consequences and a
+  fast rate for reward. One stream, no replay ring.
+- **Local learning in the settled regions:** free and nudged phases and eligibility
+  traces change synapses from their own two neurons' activity and one broadcast error,
+  with no backward computation graph.
+- **Prediction and goals:** imagined consequences are record reads; a supplied search
+  over them and isolated imagined futures guide a choice.
 
 These are observer-like, self-reading software patches: bounded local state,
 declared ports, readback, records and feedback/repair, with checkable evidence.
 The [experience guide](docs/experience.md) connects the functions and curriculum.
-World models, learned goals and language must be built and tested; `GenericBrain`
-currently supplies a recurrent policy, critic and associative reward memory.
+`GenericBrain` is the ready composition of settled regions: a recurrent policy, a critic
+and an associative reward memory. The records cortex is `cd.Records`
+([records](docs/memory.md#records)). Learned goals and language are not supplied.
 Cadence does not claim to reproduce human learning or supply a pretrained chatbot.
 
 ## Install
@@ -57,12 +61,33 @@ python -m pip install "cadence-net @ git+https://github.com/muellerberndt/cadenc
 On Windows activate with `.venv\Scripts\Activate.ps1`.
 [Optional backends](docs/backends.md) support Numba, PyTorch and MLX.
 
+## Examples
+
+Two applications built on this loop, each with its page, its acceptance receipt and the
+verifier that recomputes the receipt from the event logs.
+
+- [Arm](https://floatingpragma.io/cadence-examples/arm/): a two-link arm learns its own
+  body from motor babbling, reaches targets through a search over the consequences it has
+  recorded, adapts to a longer link without a reset and returns to its original body.
+  [Receipt](https://github.com/muellerberndt/cadence-examples/blob/main/arm/receipt.json).
+- [World](https://floatingpragma.io/cadence-examples/world/): in a 6 by 6 world seen one
+  cell at a time, one life learns the consequences of its actions, remembers where it saw
+  an object, corrects that memory when the object moves, holds a cue across a delay and
+  grounds words in objects.
+  [Receipt](https://github.com/muellerberndt/cadence-examples/blob/main/world/receipt.json).
+
+Both learn from one stream with no replay ring: the world model is a records cortex and
+the settled regions complete partial readings, carry context and hold the policy.
+[Gallery](https://github.com/muellerberndt/cadence-examples).
+
 ## Reference
 
 [Experience](docs/experience.md) · [Quickstart](docs/quickstart.md) ·
-[Continuous interaction](docs/continuous.md) · [Memory](docs/memory.md) ·
-[Local learning](docs/learning.md) · [Reward](docs/reward.md) ·
-[API](docs/api.md) · [All docs](docs/index.md)
+[Continuous interaction](docs/continuous.md) · [Records](docs/memory.md#records) ·
+[Write a cortex](docs/cortex.md) · [Compose a brain](docs/brain.md) ·
+[Evolve a brain](docs/evolution.md) · [Local learning](docs/learning.md) ·
+[Reward](docs/reward.md) · [API](docs/api.md) · [All docs](docs/index.md) ·
+[Examples gallery](https://github.com/muellerberndt/cadence-examples)
 
 Check equation residuals before claiming equilibrium. Measure task quality and
 learning cost; local updates alone guarantee neither capability nor speed.
