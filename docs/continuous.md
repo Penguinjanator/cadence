@@ -7,23 +7,7 @@ brain responds and changes its synapses throughout its life; there is no `train(
 Neurons hold bounded local state, exchange signals through declared synapses and read
 back their current activity; records and feedback make the system self-reading.
 
-```python
-import numpy as np
-import cadence as cd
-
-brain = cd.GenericBrain.build(4, 4, hidden=32, seed=0)
-observation = np.eye(4)[[0]]
-action = brain.step(observation)
-# The environment now executes that action and reveals the next moment.
-reward = (action == 0).astype(float)
-action = brain.step(np.eye(4)[[1]], reward=reward, done=np.array([True]))
-# A teacher can supply the correct action for the current observation.
-action = brain.step(np.eye(4)[[2]], teacher=np.array([2]))
-# Saving includes the current action's eligibility, even before its reward arrives.
-path = brain.save("living_brain.npz")
-resumed = cd.GenericBrain.load(path)
-resumed.step(np.eye(4)[[3]], reward=np.array([1.0]))
-```
+Start with the [runnable single-loop quickstart](quickstart.md).
 
 Reward and `done` concern the **previous action**; a teacher labels the **current
 observation**. Each has one entry per batch row. Omitted reward means no reward event,
@@ -88,6 +72,9 @@ can interfere. Storage capacity stays fixed, and another observed value can revi
 consolidated association. The mechanism does not guarantee recall of every experience.
 
 ```python
+import numpy as np
+import cadence as cd
+
 memory = cd.SynapticMemory(np.arange(3), np.arange(3, 5))
 cue, outcome = np.array([[1., 0., 0.]]), np.array([[1., 0.]])
 for _ in range(40):

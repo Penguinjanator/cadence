@@ -1,6 +1,6 @@
 # Learning: the free/nudged rule
 
-Start with [an observed consequence](quickstart.md#learn-from-an-observed-consequence).
+Start with [one ongoing experience loop](quickstart.md).
 This page explains local prediction repair and demonstrations without adaptation: the neuron
 equations, a numerical update, the gradient assumptions, and configuration choices.
 
@@ -89,9 +89,9 @@ operations read a group of neurons or synapses, beyond the per-synapse contrast.
 
 ## 4. One observation repairs a prediction
 
-The [quickstart](quickstart.md#learn-from-an-observed-consequence) saves a free
-prediction under the current room and proposed action. Only after the environment
-executes the action does its observed destination enter the teaching target.
+For a custom world model, save a free prediction under the current observation
+and proposed action with `Learner.free`. Only after the environment executes the
+action does its observed consequence enter the teaching target.
 Both nudged phases start from that same free state under the original drive.
 Their endpoint contrast changes synapses for future encounters.
 
@@ -169,8 +169,7 @@ with controls rather than treating it as a biological consequence.
 
 ## 6. Using it
 
-The [quickstart](quickstart.md#learn-from-an-observed-consequence) repairs a prediction
-from an observed transition. Construct `(batch, connectome.n)` drives from the
+For an individual prediction head, construct `(batch, connectome.n)` drives from the
 pre-action context. `step` takes integer outcome/action indices within the output group;
 for `slots`, use one index per row and slot. `accuracy` is the fraction of correct
 choices over all rows and slots. Use [explicit target patterns](tasks.md#pattern-targets)
@@ -181,7 +180,7 @@ for regression or reconstruction.
 ```python
 from dataclasses import replace
 
-# Continue with the learner from the quickstart.
+# After a completed update on your own Learner:
 learner.config = replace(learner.config, eta=0.5)
 ```
 

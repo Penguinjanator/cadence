@@ -110,10 +110,8 @@ association. That is useful for one-hot slots, but erases unrelated records with
 dense positive keys. Both flags are rejected in delta mode to avoid mixing incompatible
 read and write semantics.
 
-The [changing-memory example](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/05_memory)
-compares all-key retention and newest-key accuracy with additive writes, exact lookup,
-and a trained transformer on identical streams. Its key/value parsing is supplied to
-all methods. Count mutable matrix storage as well as trained parameters. Fixed storage
+Measure retention and correction on the same observed streams, including supplied
+key/value parsing. Count mutable matrix storage as well as learned parameters. Fixed storage
 is a capacity tradeoff: contradictory associations, nearly parallel keys, and more
 independent values than the key rank cannot all be represented exactly.
 

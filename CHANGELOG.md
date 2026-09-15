@@ -4,8 +4,10 @@
 
 Biological names throughout, brain regions, and a generic brain.
 
-- The README centers ongoing experience and omits examples. Two small introductions
-  remain in the core; the experience guide replaces the old architecture catalog.
+- The README and quickstart center one ongoing experience loop without a
+  training/inference mode switch. Retired example links and the bundled demo catalog
+  are removed; their behavioral checks remain in the test suite. Minimal-install CI
+  runs the actual quickstart from the built wheel.
 - Action caches refresh after parameter changes, including reward updates and checkpoint
   resume. Memory and trace queries preserve live streams when the query batch differs.
 - Complete-brain loading validates continuation arrays, counters and pending actions.
@@ -98,7 +100,7 @@ Biological names throughout, brain regions, and a generic brain.
   in one connectome, with an external reward helper (`ActorCritic`), optional prefrontal working
   memory (a `Trace` of the association cortex) and an optional hippocampus (`SynapticMemory`)
   for one-trial records. It learns from labels (`fit`) and reward (`act`, `learn`), and its
-  genome can be evolved. `examples/generic_brain.py` runs it on pictures and a bandit.
+  genome can be evolved.
 - `ActorCritic.state`: the free phase of the latest moment.
 - `Brain.equilibrate` checks the whole circuit's equation residual under an exact step
   budget and returns per-row convergence information, including for zero-budget checks.
@@ -127,7 +129,10 @@ Biological names throughout, brain regions, and a generic brain.
   and links. Standard cortex builders remain optional functional analogues.
 - Timing tolerates unavailable Unix statistics. Minimal wheel CI also runs on Windows.
 
-## Unreleased before 0.9.0
+## Historical changes before 0.9.0
+
+The entries below describe earlier interfaces and documentation. Use the current
+README and quickstart for the ongoing experience API.
 
 - Class-label and output-port validation prevents negative indices, duplicate outputs
   and accidental batch broadcasting. Slotted accuracy averages over every row and slot.
@@ -139,9 +144,7 @@ Biological names throughout, brain regions, and a generic brain.
 - Gain selection breaks score ties toward the smallest admissible gain and rejects a
   grid with no admissible candidate. Checkpoints preserve explicit precision, and
   traces retain an owned snapshot when callers reuse state storage.
-- Beginner documentation covers installation, inference, memory, supervised learning
-  and checkpoints. CI exercises all bundled examples from a built wheel using only
-  required dependencies; the small classification example scores separate test inputs.
+- Beginner documentation and minimal-dependency installation checks were added.
 - Sparse CPU settlement uses optional SciPy CSR transport, avoiding the batch-by-edge
   message array. NumPy-only installations retain segmented sums; local dynamics and
   parameter semantics are unchanged.
@@ -158,9 +161,7 @@ Biological names throughout, brain regions, and a generic brain.
 - Warm starts rebuild published activity under the current mask on CPU, PyTorch and
   MLX, including after changing or removing a fractional mask.
 - Receipt verification messages distinguish checks actually performed. Documentation
-  separates records, transient dynamics and equilibrium, states gradient scaling, and
-  links the controlled changing-memory example. These changes are available from the
-  source checkout; the published package version remains 0.8.1.
+  separates records, transient dynamics and equilibrium, and states gradient scaling.
 
 ## 0.8.1 (2026-09-14)
 

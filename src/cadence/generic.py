@@ -424,7 +424,7 @@ class GenericBrain:
             drive = self.hippocampus.stimulate(drive)
         return drive
 
-    # -- learning from labels
+    # -- independent-sample convenience operations (no mode switch)
 
     def fit(
         self,
@@ -476,10 +476,12 @@ class GenericBrain:
         salience: Any = None,
         bootstrap: Any = None,
     ) -> np.ndarray:
-        """One moment: sense, incorporate real feedback, and choose the next action.
+        """One operating mode: observe, learn from the last outcome, and act again.
 
         Reward/done describe the preceding action; an omitted reward means no
-        reward event (zero). ``teacher`` labels the current observation. The first
+        reward event on a real transition (zero), not an unknown outcome. Wait for
+        the issued action to finish before the next call. ``teacher`` labels the
+        current observation. The first
         call has no previous action to reward. Later calls retain the batch's row
         identities; call ``reset`` before starting different streams. Salience is
         nonnegative, per row, and defaults to absolute reward for consolidation.

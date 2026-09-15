@@ -55,9 +55,18 @@ The adaptive local step uses `momentum` and `normalize` to keep a running mean a
 of each synapse's own steps, with corrections for its short history. Each synapse reads its
 own optimizer state; this does not guarantee stable learning for every task or setting.
 
-Continue with the learner and drive from the [quickstart](quickstart.md#learn-from-an-observed-consequence):
+For custom wiring, build an actor on a declared output population:
 
 ```python
+import numpy as np
+import cadence as cd
+
+connectome = cd.layered(2, 8, 3, density=1.0, seed=0)
+learner = cd.Learner(
+    cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"]
+)
+drive = np.zeros((1, connectome.n))
+drive[:, list(connectome.populations["input"])] = [[0.5, 0.8]]
 ac = cd.ActorCritic(learner, critic=connectome.populations["hidden"],
                     config=cd.ActorCriticConfig(gamma=0.99, lam=0.95, eta=0.001, eta_bias=0.0001,
                                                 eta_critic=0.5, normalize=0.999, momentum=0.9))
@@ -86,20 +95,7 @@ does not save a separately constructed actor-critic.
 
 ## Reward evidence
 
-The archived [Pong experiment](https://github.com/muellerberndt/cadence-examples/tree/7302f2af3dc0638bbafd1da1446ed96ffabaa9dd/04_pong)
-starts with teacher imitation, then practices with advantage-weighted local
-nudges, teacher corrections, and rehearsal. Its policy sees one current pixel
-frame plus an input `Afterglow`. The shipped run retained the imitation
-checkpoint because practice did not improve validation win rate.
-
-The reward-only backprop REINFORCE control receives no teacher demonstrations
-and uses different observations and reward/discount settings. These results do
-not isolate the learning rule or establish an efficiency advantage. They also
-do not test the complete `ActorCritic` trace/critic composition described above.
-The example's tutorial and receipts distinguish the training stages and controls.
-
-Pong uses a tracking-distance shaping term alongside game outcomes. Treat shaped
-training return as a separate metric from points won, lost, or drawn. An
+Measure actual task outcomes separately from shaped reward. An
 undiscounted potential difference does not generally preserve the original
 objective under discounting; that guarantee requires the discounted form
 `gamma * Phi(next) - Phi(now)` with appropriate terminal handling.
@@ -107,12 +103,12 @@ objective under discounting; that guarantee requires the discounted form
 The [experience guide](experience.md) connects eligibility, prediction error
 and valence to the rest of the learning life.
 
-## Deployment
+## Budget the ongoing loop
 
-Choose the settling budget using changing observations and the deployed policy's
-evaluation metric. Compare cold and warm starts, reset independent episodes, and
+Choose the settling budget using changing observations and the task's outcome
+metric. Compare cold and warm starts, reset independent episodes, and
 measure all decision work. A small step count or a cached response to one unchanged
-input does not establish reliable control or lower inference cost.
+input does not establish reliable control or lower decision cost.
 
 ## What delayed credit requires
 

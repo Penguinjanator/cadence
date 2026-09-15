@@ -7,15 +7,22 @@
 **Neural systems that learn through an ongoing stream of experience.**
 
 Build a brain together with its learning life: what it observes, remembers,
-predicts, wants and does. The same persistent system makes decisions and learns
-from their consequences. There is no separate training/inference mode in the
-`GenericBrain.step` loop.
+predicts, wants and does. Its experience shapes the decisions it makes next.
+
+## One mode: ongoing experience
+
+**The same brain acts and learns throughout its life.** Each `GenericBrain.step`
+incorporates an observation and the previous action's outcome, updates its
+memories and synapses, and chooses the next action. There is no training/inference
+switch, separate deployment model or point at which learning must stop.
 
 **Observe → remember → predict → act or communicate → learn from the outcome.**
 
 Thinking reads the current state; actual observations, rewards and corrections
 change what is learned. Imagined outcomes never become witnessed facts. The
-application controls when each event arrives, including while the world waits.
+application controls when each event arrives. Keep the issued action pending until
+its real outcome arrives; a clock tick alone is not new feedback.
+Start with the [single-loop quickstart](docs/quickstart.md).
 
 ## What the brain is made of
 

@@ -55,31 +55,6 @@ Language is an input/output channel for the persistent system. Planning and spea
 can interleave; predicting observations or words can provide useful supporting
 signals. A complete sentence need not be prepared before its first word.
 
-## Two runnable examples
-
-```bash
-python examples/generic_brain.py
-python examples/experience.py
-```
-
-**Ongoing reward:** one `GenericBrain.step` loop learns rewarded choices, encounters
-a changed reward rule and adapts. No phase switch or teacher action is needed.
-
-**Experience and planning:** three rooms, two actions and three synaptic stores.
-The learner explores and predicts destinations before seeing them; hears one word
-in two ambiguous scenes; sees a relevant object once; then acts on a request using
-its acquired associations. Action outcomes keep teaching through the same operation.
-
-The example removes event memory or word grounding and corrupts the learned model.
-The corresponding route disappears or changes. These are interventions on copies
-of the same acquired experience; they do not teach the live agent. The
-[tests](../tests/test_experience.py) check the causal dependencies and isolation.
-
-Learned quantities are transition values, word/object associations and a location.
-Categorical perception, conjunction keys, request interpretation and search are
-supplied. This small reference demonstrates integration, not learned perception,
-recurrent representations, general reasoning, fluent language or human sample efficiency.
-
 ## Grow the experience with the brain
 
 Start with consequences, occlusion and delayed goals. Add situated words,
@@ -87,7 +62,7 @@ demonstrations and corrections; then withheld combinations of objects, attribute
 and relations. Add responsive partners, useful questions, descriptions and reading.
 Measure transfer from those experiences into decisions and conversation.
 
-The training unit is a trajectory: lifetime, episode, time, observation and masks,
+The unit of experience is a trajectory: lifetime, episode, time, observation and masks,
 heard utterance, action, pre-action prediction, outcome, reward and provenance.
 A text corpus can extend experience; it does not supply goal formation or temporal
 credit by itself. Distinguish directly observed events from a speaker's reports.

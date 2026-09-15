@@ -183,12 +183,15 @@ give additional details. Prefer keyword arguments for optional configuration.
   - `step(observations, *, reward=None, done=None, teacher=None, salience=None, bootstrap=None)`:
     the ongoing interaction API, returning the next sampled actions. Reward/done concern
     the preceding action; teacher labels concern the current observation. Omitted reward
-    means zero (no reward event). The first call cannot receive past-action feedback.
+    means a real zero-reward transition. Wait for the outcome before calling again.
+    There is one operating mode; no training/inference toggle is needed.
+    The first call cannot receive past-action feedback.
     `last_learning` exposes the previous transition's report and demonstration count.
     Supplied salience controls memory consolidation; by default it is absolute reward.
   - `fit(observations, labels, *, epochs=30, batch=32) -> list[float]` (training accuracy per
     epoch), `predict(observations)`, `accuracy(observations, labels)`: independent samples,
-    without memory.
+    without memory. These operations do not switch modes. `fit` resets pending stream
+    state before its updates; use `step` for a continuing life.
   - `act(observations, *, greedy=False) -> actions`: one row per stream; updates the working
     memory. `learn(reward, done, next_observations, *, bootstrap=None, salience=None) -> report`: the hippocampus records the
     reward of the chosen action for its situation, `done` rows reset their working memory,

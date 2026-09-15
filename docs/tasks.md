@@ -1,14 +1,14 @@
 # Task recipes
 
-Start with the operation your task requires. These recipes describe interfaces;
-the linked public examples carry their own controls, settings, and source-bound
-results. Observation encoding and held-out lifetimes belong to your application.
+Start with the operation your experience stream requires. These recipes describe
+interfaces; observation encoding, feedback timing and held-out lifetimes belong
+to your application.
 
-| Task | Input | Operation and output | Example or guide |
+| Task | Input | Operation and output | Guide |
 |---|---|---|---|
-| Known interacting constraints | A drive and a declared connectome | Settle; read output activations and residual | [Circuit quickstart](quickstart.md) |
+| Known interacting constraints | A drive and a declared connectome | Settle; read output activations and residual | [Neural dynamics](concepts.md) |
 | Revise an addressed record | Key and observed value | `FastSynapses.observe`, then `recall` | [Memory](memory.md) |
-| Learn consequences | Current observation and proposed action | Predict first; repair from the observed outcome | [Prediction repair](quickstart.md#learn-from-an-observed-consequence) |
+| Learn consequences | Current observation and proposed action | Predict first; repair from the observed outcome | [Prediction repair](learning.md#4-one-observation-repairs-a-prediction) |
 | Imitation | An observation and a teacher's action | Nudge toward the current demonstrated action; retain legal-action constraints | [Learning recipes](learning.md), [learning life](experience.md) |
 | Regression or reconstruction | Features and an output pattern | Quadratic nudge; read continuous output activations | [Pattern targets below](#pattern-targets) |
 | A continuing stream | Each observation before its label arrives | Predict, score, then update; retain history explicitly when needed | [Memory](memory.md), [ongoing loop](continuous.md) |
@@ -18,9 +18,16 @@ results. Observation encoding and held-out lifetimes belong to your application.
 ## Put features on input neurons
 
 A batched drive has one column per neuron, including hidden and output neurons.
-Continue with a learner created in the [quickstart](quickstart.md#learn-from-an-observed-consequence):
+Here is a small prediction head with four input values:
 
 ```python
+import numpy as np
+import cadence as cd
+
+connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
+learner = cd.Learner(
+    cd.Brain(connectome, cd.learning_neuron_model()), connectome.populations["output"]
+)
 x = np.array([[1.0, 0.0, 0.0, 1.0]])  # current room and proposed action
 levels = np.zeros((len(x), learner.brain.connectome.n))
 levels[:, list(learner.brain.connectome.populations["input"])] = x
