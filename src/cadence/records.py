@@ -113,8 +113,11 @@ class Records:
     equalise their say in the valued code. ``tasks`` indexes the reading's task units; the
     cells are then divided into one group per task unit, and the valued code of a reading
     draws its winners from the group of the unit with the largest value (every cell when no
-    task unit is positive). ``bias`` scales the cells' fixed offsets. ``seed`` starts the
-    generator of the projection, the offsets and the division into groups.
+    task unit is positive). ``fan_in`` restricts each cell to that many of the pathways,
+    drawn from the generator; the cell reads those pathways and every input outside the
+    pathways (0 reads every input). ``bias`` scales the cells' fixed offsets. ``seed``
+    starts the generator of the projection, the offsets, the division into groups and the
+    pathways each cell reads.
     """
 
     def __init__(
@@ -132,6 +135,7 @@ class Records:
         pathways: Sequence[Sequence[int] | np.ndarray] = (),
         pathway_rate: float = 0.002,
         tasks: Sequence[int] | np.ndarray = (),
+        fan_in: int = 0,
         seed: int = 0,
     ) -> None:
         self.inputs = _positive_int("inputs", inputs)
@@ -172,6 +176,19 @@ class Records:
             order = _shuffle(self.cells, generator)
             for k, group in enumerate(np.array_split(order, len(self.tasks))):
                 self.task_of_cell[group] = k
+        self.fan_in = int(fan_in)
+        if self.fan_in < 0 or (self.fan_in and not self.pathways):
+            raise ValueError("fan_in is nonnegative and needs pathways")
+        if self.fan_in > len(self.pathways):
+            raise ValueError("fan_in must not exceed the number of pathways")
+        if self.fan_in:
+            reads = np.zeros((len(self.pathways), self.cells), dtype=bool)
+            for cell in range(self.cells):
+                reads[_shuffle(len(self.pathways), generator)[: self.fan_in], cell] = True
+            mask = np.ones((self.inputs, self.cells))
+            for k, pathway in enumerate(self.pathways):
+                mask[np.ix_(pathway, ~reads[k])] = 0.0
+            self.projection *= mask * np.sqrt(self.inputs / mask.sum(axis=0))
         self.mean = np.zeros(self.inputs)
         self.seen = 0
         self.pathway_norm = np.ones(len(self.pathways))
@@ -187,24 +204,26 @@ class Records:
         allowed[units.max(axis=1) <= 0.0] = True
         return allowed
 
-    def _winners(self, x: np.ndarray, allowed: np.ndarray | None = None) -> np.ndarray:
+    def _winners(self, x: np.ndarray, allowed: np.ndarray | None, out: np.ndarray) -> None:
+        """Writes the k-winner code of the drives ``x @ projection + offset`` into ``out``."""
         drive = x @ self.projection + self.offset
         if allowed is not None:
             drive = np.where(allowed, drive, -np.inf)
         k = self.active
-        out = np.zeros_like(drive)
-        index = np.argpartition(-drive, k - 1, axis=1)[:, :k]
+        index = np.argpartition(drive, self.cells - k, axis=1)[:, self.cells - k :]
         rows = np.arange(drive.shape[0])[:, None]
-        out[rows, index] = np.maximum(drive[rows, index], 0.0)
-        norm = np.linalg.norm(out, axis=1, keepdims=True)
-        code: np.ndarray = np.where(norm > 0, out / np.maximum(norm, 1e-12), out)
-        return code
+        values = np.maximum(drive[rows, index], 0.0)
+        norm = np.linalg.norm(values, axis=1, keepdims=True)
+        out[...] = 0.0
+        out[rows, index] = np.where(norm > 0, values / np.maximum(norm, 1e-12), values)
 
-    def code(self, readings: np.ndarray, *, adapt: bool = False) -> np.ndarray:
+    def code(self, readings: np.ndarray, *, adapt: bool = False, valued: bool = True) -> np.ndarray:
         """The codes of ``(batch, inputs)`` readings: ``(2, batch, cells)``, plain then valued.
 
         ``adapt`` first moves the running mean and the pathway norms by these readings:
-        witnessed readings adapt, imagined readings do not."""
+        witnessed readings adapt, imagined readings do not. ``valued=False`` leaves the
+        valued code unset (NaN), for imagined readings whose consequence fields alone are
+        read; a read of a valued field from such a code is NaN."""
         x = np.atleast_2d(np.asarray(readings, dtype=float))
         if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all():
             raise ValueError(f"readings must be a finite (batch, {self.inputs}) array")
@@ -215,21 +234,24 @@ class Records:
                     self.seen += 1
                     self.mean += max(self.habituation, 1.0 / self.seen) * (row - self.mean)
             x = x - self.mean
-        plain = self._winners(x)
-        if self.pathways:
+        codes = np.empty((2, x.shape[0], self.cells))
+        self._winners(x, None, codes[0])
+        if self.pathways and adapt:
+            for k, pathway in enumerate(self.pathways):
+                for value in np.linalg.norm(x[:, pathway], axis=1):
+                    self.pathway_norm[k] += self.pathway_rate * (value - self.pathway_norm[k])
+        if not valued:
+            codes[1] = np.nan
+        elif self.pathways:
             v = x.copy()
             for k, pathway in enumerate(self.pathways):
-                norms = np.linalg.norm(v[:, pathway], axis=1)
-                if adapt:
-                    for value in norms:
-                        self.pathway_norm[k] += self.pathway_rate * (value - self.pathway_norm[k])
                 v[:, pathway] /= self.pathway_norm[k] + 1e-3
-            valued = self._winners(v, allowed)
+            self._winners(v, allowed, codes[1])
         elif allowed is not None:
-            valued = self._winners(x, allowed)
+            self._winners(x, allowed, codes[1])
         else:
-            valued = plain
-        return np.stack([plain, valued])
+            codes[1] = codes[0]
+        return codes
 
     def _code_for(self, code: np.ndarray, name: str) -> np.ndarray:
         if code.shape[0] != 2 or code.shape[-1] != self.cells:
@@ -264,11 +286,12 @@ class Records:
             if target.shape != (width,) or not np.isfinite(target).all():
                 raise ValueError(f"the target of {name!r} must be a finite vector of width {width}")
             c = self._code_for(code, name)
-            error = target - c @ self.tables[name]
+            active = np.flatnonzero(c)  # the write touches the records of the active cells only
+            error = target - c[active] @ self.tables[name][active]
             if known is not None and name in known:
                 error = error * np.asarray(known[name], dtype=bool)
             rate = self.valued_rate if name in self.valued else self.rate
-            self.tables[name] += rate * np.outer(c, error)
+            self.tables[name][active] += rate * np.outer(c[active], error)
             written += 1
         self.writes += written
         return written
@@ -292,5 +315,6 @@ class Records:
             "pathways": [p.tolist() for p in self.pathways],
             "pathway_rate": self.pathway_rate,
             "tasks": self.tasks.tolist(),
+            "fan_in": self.fan_in,
             "seed": self.seed,
         }

@@ -147,3 +147,35 @@ def test_task_sets_give_each_task_its_own_value_cells_and_share_the_plain_code()
     assert np.array_equal(again.task_of_cell, gated.task_of_cell)
     with pytest.raises(ValueError):
         cd.Records(12, {"y": 1}, cells=30, active=20, tasks=[10, 11])
+
+
+def test_fan_in_restricts_each_cell_to_its_pathways_and_rebuilds_from_the_seed() -> None:
+    pathways = [list(range(0, 4)), list(range(4, 8)), list(range(8, 12))]
+    records = cd.Records(14, {"y": 2}, cells=300, active=10, pathways=pathways, fan_in=2, seed=5)
+    reads = np.stack([(records.projection[p] != 0).any(axis=0) for p in pathways])
+    assert reads.shape == (3, 300) and (reads.sum(axis=0) == 2).all()
+    assert (records.projection[12:] != 0).all()  # inputs outside the pathways reach every cell
+    columns = np.sqrt((records.projection**2).sum(axis=0))
+    assert abs(columns.mean() - 1.0) < 0.1  # ten of fourteen inputs per cell, rescaled to unit drive variance
+    again = cd.Records(**records.to_dict())
+    assert records.to_dict()["fan_in"] == 2
+    assert np.array_equal(again.projection, records.projection)
+    dense = cd.Records(14, {"y": 2}, cells=300, active=10, pathways=pathways, seed=5)
+    assert dense.fan_in == 0 and (dense.projection != 0).all()
+    with pytest.raises(ValueError):
+        cd.Records(14, {"y": 2}, cells=300, active=10, fan_in=2, seed=5)
+    with pytest.raises(ValueError):
+        cd.Records(14, {"y": 2}, cells=300, active=10, pathways=pathways, fan_in=4, seed=5)
+
+
+def test_a_consequence_only_code_leaves_the_valued_code_unset() -> None:
+    records = cd.Records(6, {"y": 1, "value": 1}, valued=["value"], cells=200, active=8, pathways=[[0, 1, 2], [3, 4, 5]], seed=1)
+    reading = np.arange(6, dtype=float) / 6
+    full = records.code(reading)
+    partial = records.code(reading, valued=False)
+    assert np.array_equal(full[0], partial[0]) and np.isnan(partial[1]).all()
+    read = records.read(partial[:, 0])
+    assert np.isfinite(read["y"]).all() and np.isnan(read["value"]).all()
+    norms = records.pathway_norm.copy()
+    records.code(reading, adapt=True, valued=False)
+    assert (records.pathway_norm != norms).all()  # witnessing adapts the norms either way

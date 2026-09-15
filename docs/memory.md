@@ -199,6 +199,26 @@ tasked.write(tasked.code(first)[:, 0], {"value": np.array([1.0])})
 print(tasked.read(tasked.code(second)[:, 0])["value"])                                          # [0.]
 ```
 
+### Fan-in
+
+`fan_in` gives each cell a random subset of that many pathways, drawn from the seed; the
+cell reads those pathways and every input outside the pathways. A cell that reads the
+action and the local scene without the place is active wherever that scene and action
+recur, so the record it writes at one place is read at every other: the rule of a
+consequence generalises across the inputs the cell does not read. Cells that happen to
+read the place keep what is particular to it. The reads sum over both kinds of cell.
+
+```python
+scene, action, place = [0, 1, 2, 3], [4, 5], list(range(6, 22))
+local = cd.Records(
+    22, {"next": 4}, cells=4000, active=40, habituation=0.0,
+    pathways=[scene, action, place], fan_in=2, seed=4,
+)
+reads = np.stack([(local.projection[p] != 0).any(axis=0) for p in (scene, action, place)])
+print(reads.sum(axis=0).min(), reads.sum(axis=0).max())   # 2 2: every cell reads two pathways
+print(int((~reads[2]).sum()))                            # the cells that never read the place
+```
+
 ### Known entries
 
 `known` maps a field to a boolean mask of the target entries that were observed. The error
@@ -218,7 +238,9 @@ coded with `adapt=False`: the running mean and the pathway norms follow witnesse
 only. An imagined reading carries the same missing flags as the witnessed readings it
 stands for. With habituation, a flag that witnessed readings always carry has a running
 mean of one; an imagined reading that omits it deviates from the mean by a whole unit,
-and its read goes through cells that witnessed readings never wrote.
+and its read goes through cells that witnessed readings never wrote. `code(readings,
+valued=False)` computes the plain code alone and leaves the valued code unset (NaN), for
+imagined readings whose consequence fields alone are read.
 
 ```python
 flags = cd.Records(7, {"next": 4}, cells=4000, active=40, habituation=0.01, seed=2)

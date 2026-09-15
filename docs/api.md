@@ -157,7 +157,7 @@ optional configuration.
 
 ## Records (`cadence.records`)
 
-- `Records(inputs, fields, *, cells=8000, active=40, rate=0.2, valued=(), valued_rate=1.0, habituation=1e-5, bias=0.3, pathways=(), pathway_rate=0.002, tasks=(), seed=0)`:
+- `Records(inputs, fields, *, cells=8000, active=40, rate=0.2, valued=(), valued_rate=1.0, habituation=1e-5, bias=0.3, pathways=(), pathway_rate=0.002, tasks=(), fan_in=0, seed=0)`:
   the records cortex over readings of `inputs` units. `fields` maps each predicted field to
   its width; of `cells` code cells, `active` stay per reading. `rate` is the write rate of
   the consequence fields; `valued` names the fields that read and write through the valued
@@ -166,16 +166,20 @@ optional configuration.
   running norms, moved at `pathway_rate`, equalise their say in the valued code; empty
   pathways are dropped. `tasks` indexes the reading's task units: the cells are divided into
   one group per task unit, and the valued code of a reading draws its winners from the group
-  of the unit with the largest value, from every cell when no unit is positive. `bias`
-  scales the cells' fixed offsets. `seed` starts the `Mulberry32` generator that draws the
-  projection, then the offsets, then the division into groups (a Fisher-Yates shuffle of the
-  cells from `cells - 1` uniform draws). Raises
+  of the unit with the largest value, from every cell when no unit is positive. `fan_in`
+  restricts each cell to that many pathways, drawn for the cell from the generator; the
+  cell reads those and every input outside the pathways, and its projection column is
+  rescaled by the square root of `inputs` over the inputs it reads (0 reads every input).
+  `bias` scales the cells' fixed offsets. `seed` starts the `Mulberry32` generator that
+  draws the projection, then the offsets, then the division into groups (a Fisher-Yates
+  shuffle of the cells from `cells - 1` uniform draws), then the pathways of each cell in
+  turn (a shuffle of the pathways from `len(pathways) - 1` draws per cell). Raises
   `ValueError` for a nonpositive `inputs`, `cells`, `active` or field width, `active` above
   `cells`, no fields, a valued name outside `fields`, `rate` or `valued_rate` outside
   `[0, 2]`, `habituation` or `pathway_rate` outside `[0, 1]`, a negative or nonfinite `bias`,
   a pathway or task index outside the reading, and fewer than `active` cells per task
   group. See [records](memory.md#records).
-  - `code(readings, *, adapt=False) -> ndarray`: the codes of `(batch, inputs)` readings, or
+  - `code(readings, *, adapt=False, valued=True) -> ndarray`: the codes of `(batch, inputs)` readings, or
     of one `(inputs,)` reading, as `(2, batch, cells)`: the plain code, then the valued code.
     With `habituation` above zero, `adapt=True` first counts each reading in `seen` and moves
     `mean` toward it at the rate `max(habituation, 1 / seen)`, and every reading is coded
@@ -198,7 +202,7 @@ optional configuration.
   - `parameters() -> int`: the record entries, `cells` times each field's width, summed.
   - `to_dict() -> dict`: the configuration (`inputs`, `fields`, `cells`, `active`, `rate`,
     `valued` as a sorted list, `valued_rate`, `habituation`, `bias`, `pathways` as lists,
-    `pathway_rate`, `tasks` as a list, `seed`); `Records(**records.to_dict())` rebuilds the
+    `pathway_rate`, `tasks` as a list, `fan_in`, `seed`); `Records(**records.to_dict())` rebuilds the
     same `projection`, `offset` and `task_of_cell`.
   - Attributes: `projection`, `(inputs, cells)` standard normal draws divided by
     `sqrt(inputs)`; `offset`, `(cells,)` standard normal draws times `bias`; `mean`, the
