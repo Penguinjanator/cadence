@@ -1,0 +1,124 @@
+"""Records: a reading touches few records, and the witnessed outcome is written into exactly those."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+import cadence as cd
+
+
+def test_batched_draws_equal_single_draws_and_normals_are_standard() -> None:
+    a, b = cd.Mulberry32(12345), cd.Mulberry32(12345)
+    single = np.array([a.random() for _ in range(1000)])
+    assert np.array_equal(single, b.batch(1000)) and a.state == b.state
+    z = cd.Mulberry32(7).normals(20001)
+    assert z.shape == (20001,) and abs(z.mean()) < 0.03 and abs(z.std() - 1.0) < 0.03
+
+
+def test_a_code_keeps_the_active_cells_at_unit_length() -> None:
+    records = cd.Records(20, {"y": 3}, cells=500, active=10, seed=1)
+    code = records.code(np.random.default_rng(0).random((4, 20)))
+    assert code.shape == (2, 4, 500)
+    assert ((code[0] > 0).sum(axis=1) <= 10).all()
+    np.testing.assert_allclose(np.linalg.norm(code[0], axis=1), 1.0)
+
+
+def test_one_write_is_read_back_and_other_readings_move_by_their_overlap() -> None:
+    rng = np.random.default_rng(0)
+    records = cd.Records(40, {"y": 4}, cells=4000, active=20, rate=1.0, habituation=0.0, seed=3)
+    a = (rng.random(40) < 0.3).astype(float)
+    b = 1.0 - a
+    code_a, code_b = records.code(a)[:, 0], records.code(b)[:, 0]
+    target = np.array([0.0, 1.0, 0.0, 0.0])
+    assert records.write(code_a, {"y": target}) == 1
+    np.testing.assert_allclose(records.read(code_a)["y"], target, atol=1e-12)
+    np.testing.assert_allclose(records.read(code_b)["y"], (code_a[0] @ code_b[0]) * target, atol=1e-12)
+
+
+def test_records_learn_a_walk_from_its_own_correlated_stream() -> None:
+    size, rng = 24, np.random.default_rng(1)
+    records = cd.Records(size + 2, {"next": size}, cells=3000, active=12, rate=0.5, seed=4)
+    here = 0
+    for _ in range(3000):
+        action = int(rng.integers(2))
+        reading = np.zeros(size + 2)
+        reading[here], reading[size + action] = 2.0, 2.0
+        nxt = (here + (1 if action else -1)) % size
+        records.write(records.code(reading, adapt=True)[:, 0], {"next": np.eye(size)[nxt]})
+        here = nxt
+    correct = 0
+    for cell in range(size):
+        for action in range(2):
+            reading = np.zeros(size + 2)
+            reading[cell], reading[size + action] = 2.0, 2.0
+            predicted = int(np.argmax(records.read(records.code(reading)[:, 0])["next"]))
+            correct += predicted == (cell + (1 if action else -1)) % size
+    assert correct == 2 * size
+
+
+def test_habituation_lets_a_small_cue_move_the_code() -> None:
+    def overlap(habituation: float) -> float:
+        records = cd.Records(32, {"y": 1}, cells=2000, active=20, habituation=habituation, seed=5)
+        first, second = np.full(32, 2.0), np.full(32, 2.0)
+        first[30], second[31] = 3.0, 3.0
+        for _ in range(3000):
+            records.code(np.stack([first, second]), adapt=True)
+        codes = records.code(np.stack([first, second]))[0]
+        return float(codes[0] @ codes[1])
+
+    assert overlap(0.01) < 0.5 < overlap(0.0)
+
+
+def test_valued_fields_read_the_normalised_code_at_their_own_rate() -> None:
+    records = cd.Records(
+        10, {"y": 2, "value": 1}, cells=300, active=10, rate=0.1, valued=["value"],
+        valued_rate=1.0, habituation=0.0, pathways=[np.arange(8), np.arange(8, 10)],
+        pathway_rate=1.0, seed=2,
+    )
+    reading = np.zeros(10)
+    reading[:8], reading[8] = 1.0, 1.0
+    code = records.code(reading, adapt=True)[:, 0]
+    assert not np.array_equal(code[0], code[1])
+    records.write(code, {"value": np.array([1.0]), "y": np.array([1.0, 0.0])})
+    read = records.read(code)
+    np.testing.assert_allclose(read["value"], [1.0], atol=1e-12)
+    np.testing.assert_allclose(read["y"], [0.1, 0.0], atol=1e-12)
+
+
+def test_known_masks_unobserved_entries_and_imagined_readings_do_not_adapt() -> None:
+    records = cd.Records(5, {"y": 2}, cells=50, active=5, rate=1.0, seed=6)
+    code = records.code(np.ones(5))[:, 0]
+    assert not records.mean.any()
+    records.write(code, {"y": np.array([1.0, 1.0])}, {"y": np.array([True, False])})
+    np.testing.assert_allclose(records.read(code)["y"], [1.0, 0.0], atol=1e-12)
+    records.code(np.ones(5), adapt=True)
+    assert records.mean.any()
+
+
+def test_the_cells_are_rebuilt_from_the_seed_and_arguments_are_checked() -> None:
+    a = cd.Records(6, {"y": 1}, cells=40, active=4, seed=9)
+    b = cd.Records(**{k: v for k, v in a.to_dict().items() if k not in ("inputs", "fields")},
+                   inputs=6, fields={"y": 1})
+    assert np.array_equal(a.projection, b.projection) and np.array_equal(a.offset, b.offset)
+    assert a.parameters() == 40
+    with pytest.raises(ValueError):
+        cd.Records(0, {"y": 1})
+    with pytest.raises(ValueError):
+        cd.Records(5, {"y": 1}, cells=10, active=11)
+    with pytest.raises(ValueError):
+        cd.Records(5, {"y": 1}, valued=["z"])
+    with pytest.raises(ValueError):
+        a.code(np.ones(5))
+    with pytest.raises(ValueError):
+        a.write(a.code(np.ones(6))[:, 0], {"y": np.ones(2)})
+
+
+
+def test_the_mean_settles_to_the_average_of_the_readings() -> None:
+    records = cd.Records(3, {"y": 1}, cells=30, active=3, habituation=1e-6, seed=7)
+    readings = np.random.default_rng(4).random((500, 3))
+    for row in readings:
+        records.code(row, adapt=True)
+    np.testing.assert_allclose(records.mean, readings.mean(axis=0), atol=1e-9)
+    assert records.seen == 500

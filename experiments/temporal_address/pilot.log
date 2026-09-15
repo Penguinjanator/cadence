@@ -1,5 +1,0 @@
-{"seed": 91, "arm": "patch_memory", "return": 0.11333333333333333, "seconds": 1.9784331250120886}
-{"seed": 91, "arm": "patch_masked", "return": -0.49791666666666673, "seconds": 0.32958837499609217}
-{"seed": 91, "arm": "patch_no_direct", "return": -0.3787499999999999, "seconds": 0.3566996249719523}
-{"seed": 91, "arm": "linear_memory", "return": 1.0000000000000004, "seconds": 0.0980641670175828}
-{"seed": 91, "arm": "linear_masked", "return": -0.4874999999999999, "seconds": 0.09733137500006706}

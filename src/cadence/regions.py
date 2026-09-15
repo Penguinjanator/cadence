@@ -21,9 +21,13 @@ The standard regions are engineering analogues named for their intended function
 * ``prefrontal_cortex``: a working-memory population with one neuron per neuron of the region
   it holds, driven by a ``Trace`` of that region's activity.
 
-The basal ganglia (``ActorCritic``: a critic reading cortex through learned corticostriatal
-weights, and a dopamine prediction error) and the hippocampus (``FastSynapses``: one-trial
-records) keep state per stream outside the connectome; ``GenericBrain`` composes all of them.
+Three cortices keep their state outside the connectome. The records cortex (``Records``) codes
+a mean-free reading sparsely and keeps one record per cell for every predicted field, read
+through the active cells and written by the delta rule, as in the cerebellum and the dentate
+gyrus. The basal ganglia (``ActorCritic``) read cortex through learned corticostriatal weights
+and broadcast a dopamine prediction error. The hippocampus (``FastSynapses``) keeps one-trial
+associations per stream. ``GenericBrain`` composes the regions, the basal ganglia and the
+hippocampus into one ready brain.
 """
 
 from __future__ import annotations

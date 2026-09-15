@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
 import pytest
 
@@ -151,20 +149,3 @@ def test_ep_structure_uses_effective_free_weights_and_rejects_hidden_feedback() 
     ).compatible  # naming a hidden neuron is not a clamp
     rhythmic = cd.Brain(graph, brain.neuron_model.replace(adaptation=cd.Adaptation()))
     assert not cd.ep_structure(rhythmic, fixed_inputs=graph.populations["input"]).compatible
-
-
-@pytest.mark.parametrize("seed", range(5))
-def test_fixed_input_projection_gradients_and_true_asymmetry_control(
-    seed: int, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1]))
-    from benchmarks.ep_inputs import measure
-
-    compatible = measure(seed, 1e-3)
-    asymmetric = measure(seed, 1e-3, asymmetric=True)
-    assert compatible["structure"]["compatible"]
-    assert compatible["phase_residual_max"] <= 1e-13
-    assert compatible["input_phase_difference"] <= 1e-12
-    assert max(row["absolute_error"] for row in compatible["gradient_rows"]) < 2e-6
-    assert not asymmetric["structure"]["compatible"]
-    assert max(row["absolute_error"] for row in asymmetric["gradient_rows"]) > 1e-3

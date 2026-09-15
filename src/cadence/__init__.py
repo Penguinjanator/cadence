@@ -50,6 +50,7 @@ from .plasticity import (
 from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
 from .receipts import Receipt, canonical_json
 from .recording import SettlementRecord, record_settlements
+from .records import Mulberry32, Records
 from .reference import conformance
 from .regions import Region
 from .replay import ReservoirReplay
@@ -69,6 +70,8 @@ __all__ = [
     "lipschitz_constant",
     "row_mass",
     "PatternSeparator",
+    "Records",
+    "Mulberry32",
     "ActorCritic",
     "ActorCriticConfig",
     "Valence",
