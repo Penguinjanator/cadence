@@ -85,19 +85,30 @@ On Windows activate with `.venv\Scripts\Activate.ps1`.
 
 ## Examples
 
-Two applications built on this loop, each with its page, its acceptance receipt and the
+Three applications built on this loop, each with its page, its acceptance receipt and the
 verifier that recomputes the receipt from the event logs, are in the
 [examples gallery](https://github.com/muellerberndt/cadence-examples).
 
-- **Arm:** a two-link arm learns its own body from motor babbling, reaches targets through
-  a search over the consequences it has recorded, adapts to a longer link without a reset
-  and returns to its original body.
-- **World:** in a 6 by 6 world seen one cell at a time, one life learns the consequences
-  of its actions, remembers where it saw an object, corrects that memory when the object
-  moves, holds a cue across a delay and grounds words in objects.
+- **Arm** ([page](https://floatingpragma.io/cadence-examples/arm/),
+  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/arm/receipt.json)):
+  a two-link arm learns its own body from motor babbling, copies what a visitor draws
+  through a search over the consequences it has recorded, adapts to a longer link without
+  a reset and returns to its original body. The whole brain runs beside the arm.
+- **World** ([page](https://floatingpragma.io/cadence-examples/world/),
+  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/world/receipt.json)):
+  in a 6 by 6 world seen one cell at a time, one life learns the consequences of its
+  actions, remembers where it saw an object, corrects that memory when the object moves,
+  holds a cue across a delay and grounds words in objects.
+- **Connect Four** ([page](https://floatingpragma.io/cadence-examples/connect_four/),
+  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/connect_four/receipt.json)):
+  one life learns what a dropped stone does and which windows are completed lines from the
+  games it plays, and searches over what it learned; a visitor plays against it while it
+  keeps learning.
 
-Both learn from one stream with no replay ring: the world model is a records cortex and
-the settled regions complete partial readings, carry context and hold the policy.
+Each learns from one stream with no replay ring: the world model is a records cortex and
+the settled regions complete partial readings, carry context and hold the policy. The
+gallery's comparison runners put an online MLP and an online transformer in the same
+lives, with and without a replay ring; the receipts hold the numbers.
 
 ## Reference
 
