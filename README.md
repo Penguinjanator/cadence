@@ -4,6 +4,8 @@
 
 # Cadence
 
+[Website](https://floatingpragma.io/) · [Cadence page](https://floatingpragma.io/cadence/) · [Live brains](https://floatingpragma.io/cadence-examples/) · [Examples repository](https://github.com/muellerberndt/cadence-examples) · [PyPI](https://pypi.org/project/cadence-net/)
+
 **Decentralized networks of neurons that learn through symmetry breaking, from an
 ongoing stream of experience.**
 
