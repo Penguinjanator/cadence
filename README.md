@@ -85,7 +85,7 @@ On Windows activate with `.venv\Scripts\Activate.ps1`.
 
 ## Examples
 
-Three applications built on this loop, each with its page, its acceptance receipt and the
+Four applications built on this loop, each with its page, its acceptance receipt and the
 verifier that recomputes the receipt from the event logs, are in the
 [examples gallery](https://github.com/muellerberndt/cadence-examples).
 
@@ -104,6 +104,11 @@ verifier that recomputes the receipt from the event logs, are in the
   one life learns what a dropped stone does and which windows are completed lines from the
   games it plays, and searches over what it learned; a visitor plays against it while it
   keeps learning.
+- **Artist** ([page](https://floatingpragma.io/cadence-examples/artist/),
+  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/artist/receipt.json)):
+  the arm holds a pen over a canvas, learns what its strokes leave and draws figures it has
+  never seen, replanning from its own canvas after every stroke; a visitor draws a figure
+  and watches it drawn.
 
 Each learns from one stream with no replay ring: the world model is a records cortex and
 the settled regions complete partial readings, carry context and hold the policy. The
