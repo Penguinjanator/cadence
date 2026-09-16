@@ -9,6 +9,11 @@
 **Decentralized networks of neurons that learn through symmetry breaking, from an
 ongoing stream of experience.**
 
+> **Status: under heavy development.** Interfaces, defaults and training methods change
+> rapidly between commits and releases as the research settles; pin an exact commit or a
+> release for anything that has to keep working, and expect the documentation to lag the code
+> in places.
+
 Human brains do not learn by gradient descent and backpropagation, and they do not
 freeze their weights after pretraining. Neither does Cadence. A Cadence brain is made of
 cortices that settle together into equilibria, where a transformer stacks feedforward
