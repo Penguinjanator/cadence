@@ -4,7 +4,7 @@
 
 # Cadence
 
-[Website](https://floatingpragma.io/) · [Cadence page](https://floatingpragma.io/cadence/) · [Examples repository](https://github.com/muellerberndt/cadence-examples) · [PyPI](https://pypi.org/project/cadence-net/)
+[Website](https://floatingpragma.io/) · [Cadence page](https://floatingpragma.io/cadence/) · [Live brains](https://floatingpragma.io/cadence-examples/) · [Examples repository](https://github.com/muellerberndt/cadence-examples) · [PyPI](https://pypi.org/project/cadence-net/)
 
 **Decentralized networks of neurons that learn through symmetry breaking, from an
 ongoing stream of experience.**
@@ -96,22 +96,22 @@ Four applications built on this loop, each with its page, its acceptance receipt
 verifier that recomputes the receipt from the event logs, are in the
 [examples gallery](https://github.com/muellerberndt/cadence-examples).
 
-- **Arm** ([page](https://github.com/muellerberndt/cadence-examples/blob/main/arm/index.html),
+- **Arm** ([page](https://floatingpragma.io/cadence-examples/arm/),
   [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/arm/receipt.json)):
   a two-link arm learns its own body from motor babbling, copies what a visitor draws
   through a search over the consequences it has recorded, adapts to a longer link without
   a reset and returns to its original body. The whole brain runs beside the arm.
-- **World** ([page](https://github.com/muellerberndt/cadence-examples/blob/main/world/index.html),
+- **World** ([page](https://floatingpragma.io/cadence-examples/world/),
   [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/world/receipt.json)):
   in a 6 by 6 world seen one cell at a time, one life learns the consequences of its
   actions, remembers where it saw an object, corrects that memory when the object moves,
   holds a cue across a delay and grounds words in objects.
-- **Connect Four** ([page](https://github.com/muellerberndt/cadence-examples/blob/main/connect_four/index.html),
+- **Connect Four** ([page](https://floatingpragma.io/cadence-examples/connect_four/),
   [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/connect_four/receipt.json)):
   one life learns what a dropped stone does and which windows are completed lines from the
   games it plays, and searches over what it learned; a visitor plays against it while it
   keeps learning.
-- **Artist** ([page](https://github.com/muellerberndt/cadence-examples/blob/main/artist/index.html),
+- **Artist** ([page](https://floatingpragma.io/cadence-examples/artist/),
   [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/artist/receipt.json)):
   the arm holds a pen over a canvas, learns what its strokes leave and draws figures it has
   never seen, replanning from its own canvas after every stroke; a visitor draws a figure
