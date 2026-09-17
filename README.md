@@ -92,35 +92,18 @@ On Windows activate with `.venv\Scripts\Activate.ps1`.
 
 ## Examples
 
-Four applications built on this loop, each with its page, its acceptance receipt and the
-verifier that recomputes the receipt from the event logs, are in the
-[examples gallery](https://github.com/muellerberndt/cadence-examples).
+The [cadence-examples](https://github.com/muellerberndt/cadence-examples) repository has
+complete brains to try out. Each one runs in the browser with the brain drawn beside it, and
+the arm, world, Connect Four and artist come with acceptance receipts and a verifier that
+recomputes them from the event logs. Clone it, play with the pages, then change the wiring or
+the world and watch what the brain learns. Comparison runners put an online MLP and an online
+transformer through the same lives.
 
-- **Arm** ([page](https://floatingpragma.io/cadence-examples/arm/),
-  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/arm/receipt.json)):
-  a two-link arm learns its own body from motor babbling, copies what a visitor draws
-  through a search over the consequences it has recorded, adapts to a longer link without
-  a reset and returns to its original body. The whole brain runs beside the arm.
-- **World** ([page](https://floatingpragma.io/cadence-examples/world/),
-  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/world/receipt.json)):
-  in a 6 by 6 world seen one cell at a time, one life learns the consequences of its
-  actions, remembers where it saw an object, corrects that memory when the object moves,
-  holds a cue across a delay and grounds words in objects.
-- **Connect Four** ([page](https://floatingpragma.io/cadence-examples/connect_four/),
-  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/connect_four/receipt.json)):
-  one life learns what a dropped stone does and which windows are completed lines from the
-  games it plays, and searches over what it learned; a visitor plays against it while it
-  keeps learning.
-- **Artist** ([page](https://floatingpragma.io/cadence-examples/artist/),
-  [receipt](https://github.com/muellerberndt/cadence-examples/blob/main/artist/receipt.json)):
-  the arm holds a pen over a canvas, learns what its strokes leave and draws figures it has
-  never seen, replanning from its own canvas after every stroke; a visitor draws a figure
-  and watches it drawn.
-
-Each learns from one stream with no replay ring: the world model is a records cortex and
-the settled regions complete partial readings, carry context and hold the policy. The
-gallery's comparison runners put an online MLP and an online transformer in the same
-lives, with and without a replay ring; the receipts hold the numbers.
+[Patch World](https://github.com/muellerberndt/cadence-world) is the best place to start
+tinkering. Creatures on a small world under a moving sun inherit their brain wiring and learn
+within one life, and energy and death decide which brains survive. The whole simulation is one
+JavaScript file and the page opens in a browser. Change the prices, add a rule and see whether
+a bigger brain becomes worth carrying. It is MIT licensed and made to be forked.
 
 ## Reference
 
