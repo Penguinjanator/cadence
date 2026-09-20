@@ -39,7 +39,7 @@ class TemporalPhase:
     @property
     def activity(self) -> np.ndarray:
         """Bounded tanh activity, detached from the phase and live network."""
-        return np.tanh(self.hidden)
+        return np.asarray(np.tanh(self.hidden))
 
     @property
     def final_state(self) -> np.ndarray:
