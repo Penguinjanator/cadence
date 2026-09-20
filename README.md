@@ -1,10 +1,10 @@
 <p align="center">
-  <img src="docs/assets/cadence-logo.png" alt="Cadence: a mesh of stateful neural patches, feedback loops and synaptic signals" width="100%">
+  <img src="https://raw.githubusercontent.com/muellerberndt/cadence/main/docs/assets/cadence-logo.png" alt="Cadence: a mesh of stateful neural patches, feedback loops and synaptic signals" width="100%">
 </p>
 
 # Cadence
 
-[Website](https://floatingpragma.io/) · [Cadence page](https://floatingpragma.io/cadence/) · [Live brains](https://floatingpragma.io/cadence-examples/) · [PyPI](https://pypi.org/project/cadence-net/)
+[Website](https://floatingpragma.io/) · [Cadence page](https://floatingpragma.io/cadence/) · [PyPI](https://pypi.org/project/cadence-net/) · [Documentation](https://github.com/muellerberndt/cadence/blob/main/docs/index.md)
 
 **An experimental neural library for learning through local overlap repair and equilibrium detuning.**
 
@@ -13,8 +13,8 @@ an observation should carry context, change its learned relationships through
 experience, and explore possible continuations. It does not claim to reproduce
 an animal or human brain.
 
-> **Under active development.** Pin an exact commit for reproducible work.
-> The revised `PatchNet` interface is in this main checkout; earlier applications
+> **Under active development.** Pin a release or exact commit for reproducible work.
+> The revised `PatchNet` interface is included in version 0.9.0; earlier applications
 > use other library compositions and their results do not validate it automatically.
 
 ## Start with PatchNet
@@ -49,7 +49,7 @@ observations, residuals and learned changes through reproducible evidence.
   Repeated IDs are suppressed within that window; IDs do not prove that two
   environmental reports are independent.
 
-Follow the [PatchNet guide](docs/patchnet.md) for the running example, memory
+Follow the [PatchNet guide](https://github.com/muellerberndt/cadence/blob/main/docs/patchnet.md) for the running example, memory
 semantics, continuous targets and rehearsal. The earlier `Brain`, `Learner`,
 `GenericBrain`, `Records` and circuit APIs remain available for existing
 applications. Their separate associative memories are optional compositions,
@@ -68,22 +68,22 @@ Python 3.11+, with NumPy as the only required dependency:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install -e .
+python -m pip install cadence-net==0.9.0
 ```
 
-Run these commands from this checkout. The revision is not yet a PyPI release.
+For development from this checkout, use `python -m pip install -e .`.
 On Windows activate with `.venv\Scripts\Activate.ps1`.
-[Optional backends](docs/backends.md) support Numba, PyTorch and MLX.
+[Optional backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md) support Numba, PyTorch and MLX.
 
 ## Reference
 
-[Experience](docs/experience.md) · [Quickstart](docs/quickstart.md) ·
-[Continuous interaction](docs/continuous.md) · [Records](docs/memory.md#records) ·
-[Write a cortex](docs/cortex.md) · [Compose a brain](docs/brain.md) ·
-[Evolve a brain](docs/evolution.md) · [Local learning](docs/learning.md) ·
-[Reward](docs/reward.md) · [API](docs/api.md) · [All docs](docs/index.md) ·
-[Lean proofs](lean/README.md)
+[Experience](https://github.com/muellerberndt/cadence/blob/main/docs/experience.md) · [Quickstart](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md) ·
+[Continuous interaction](https://github.com/muellerberndt/cadence/blob/main/docs/continuous.md) · [Records](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md#records) ·
+[Write a cortex](https://github.com/muellerberndt/cadence/blob/main/docs/cortex.md) · [Compose a brain](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md) ·
+[Evolve a brain](https://github.com/muellerberndt/cadence/blob/main/docs/evolution.md) · [Local learning](https://github.com/muellerberndt/cadence/blob/main/docs/learning.md) ·
+[Reward](https://github.com/muellerberndt/cadence/blob/main/docs/reward.md) · [API](https://github.com/muellerberndt/cadence/blob/main/docs/api.md) · [All docs](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) ·
+[Lean proofs](https://github.com/muellerberndt/cadence/blob/main/lean/README.md)
 
 Check equation residuals before claiming equilibrium. Measure task quality and
 learning cost; local updates alone guarantee neither capability nor speed.
-[Concepts and limits](docs/concepts.md). MIT licensed.
+[Concepts and limits](https://github.com/muellerberndt/cadence/blob/main/docs/concepts.md). MIT licensed.

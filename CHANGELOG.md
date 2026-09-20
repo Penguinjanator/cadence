@@ -1,6 +1,23 @@
 # Changelog
 
-## 0.9.0 (unreleased)
+## 0.9.0 (2026-09-20)
+
+`PatchNet` is the starting point for new experiments with local overlap repair
+and equilibrium detuning. It combines continuous observations, persistent
+neural activity, reciprocal connections, residual-checked free/nudged learning,
+isolated imagination branches and complete continuation checkpoints. Optional
+temporal overlap uses the preceding free activity as a fixed boundary during
+each learning event. Learned importance, reliable lifelong retention and useful
+autonomous improvisation remain open experimental questions.
+
+- Added the [PatchNet guide](docs/patchnet.md) and public API reference.
+- Bundled a pinned [Lean proof library](lean/README.md): 156 theorems with a
+  source-bound build and axiom audit, explicit assumptions and implementation
+  limits. Optional linear-record lemmas are separate from the PatchNet core.
+- Removed links to the retired example and Patch World pages from current
+  library documentation.
+
+Other changes since 0.8.1:
 
 Biological names throughout, brain regions, and a generic brain.
 
@@ -28,8 +45,7 @@ Biological names throughout, brain regions, and a generic brain.
   tests, together with those of `docs/concepts.md` and `docs/certificate.md`.
 - Documentation: the record principle in the README, the concepts, the records section of
   `docs/memory.md`, and the learning, reward, experience, task, continuous-interaction,
-  rehearsal, content-memory and sequence pages. The README links the two examples, their
-  receipts and the gallery.
+  rehearsal, content-memory and sequence pages.
 - Documentation corrections: the certificate example uses a certified brain and states that
   `steps_for` raises for an uncertified one. The API reference adds `Records`,
   `Mulberry32`, `PatternSeparator`, the certificate, the atlas, `Lineage`,

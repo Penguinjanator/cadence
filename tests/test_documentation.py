@@ -12,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 @pytest.mark.parametrize(
     "page",
     [
+        "docs/patchnet.md",
         "docs/quickstart.md",
         "docs/concepts.md",
         "docs/memory.md",

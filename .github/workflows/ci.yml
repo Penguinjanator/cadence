@@ -22,7 +22,7 @@ jobs:
           python -m pip wheel --no-deps --wheel-dir dist .
           python -m pip install dist/*.whl
           python -m pip check
-      - name: Run the documented experience loop without optional backends
+      - name: Run the documented PatchNet and experience loops without optional backends
         run: |
           python - <<'PY'
           import re
@@ -31,11 +31,15 @@ jobs:
           import tempfile
           from pathlib import Path
 
-          page = Path("docs/quickstart.md").read_text(encoding="utf-8")
-          code = "\n\n".join(re.findall(r"```python\n(.*?)```", page, re.S))
-          code += "\nassert brain.basal_ganglia.updates == 64\n"
-          with tempfile.TemporaryDirectory() as directory:
-              subprocess.run([sys.executable, "-c", code], cwd=directory, check=True)
+          for name in ("docs/patchnet.md", "docs/quickstart.md"):
+              page = Path(name).read_text(encoding="utf-8")
+              code = "\n\n".join(re.findall(r"```python\n(.*?)```", page, re.S))
+              if name.endswith("quickstart.md"):
+                  code += "\nassert brain.basal_ganglia.updates == 64\n"
+              with tempfile.TemporaryDirectory() as directory:
+                  subprocess.run([sys.executable, "-c", code], cwd=directory, check=True)
+      - name: Check the Lean audit verifier
+        run: python -m unittest discover -s lean -p test_check.py
           PY
   test:
     runs-on: ${{ matrix.os }}

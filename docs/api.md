@@ -1,10 +1,38 @@
 # API reference
 
 Top-level exports and module-qualified helpers are listed below. Begin with the
-[quickstart](quickstart.md) for complete runnable examples, and with
+[PatchNet guide](patchnet.md) for the revised core or the
+[quickstart](quickstart.md) for the earlier composed-brain API, and with
 [write a cortex](cortex.md), [compose a brain](brain.md) and [evolve a brain](evolution.md)
 for building; the source docstrings give additional details. Prefer keyword arguments for
 optional configuration.
+
+## PatchNet (`cadence.patch`)
+
+`PatchNet` composes the existing `Brain` and `Learner` for ongoing continuous
+observations. The [guide](patchnet.md) explains the equations, memory boundaries
+and a complete runnable example.
+
+- `PatchNet.create(inputs, hidden, outputs, *, seed=0, ...)` creates a reciprocal
+  graph with declared input, hidden and output ports. Configure learning with
+  `config=LearnerConfig(...)`, phase budgets with `steps` and `tolerance`, and
+  optional temporal overlap with `context_strength` and `context_mask`.
+- `stimulus(inputs, *, amplitude=1.0)` converts a batch of continuous input
+  values into full neural drives. `settle(drive)` updates live free activity;
+  `read(phase)` reads the output ports of an `Equilibrium` or `BrainState`.
+- `observe(drive, target, *, observed=None, weight=None, source_id=None)` returns
+  a `PatchObservation` with the free and nudged phases, `updated` and `reason`.
+  Targets only enter the nudged phases. A required phase that misses the
+  residual tolerance prevents the learning commit. The observation mask is
+  shared across batch rows; nonnegative teaching weights are per row.
+- `imagine(drives, *, state=None)` returns consecutive free equilibria on a
+  private branch without modifying live activity, parameters or evidence IDs.
+- `reset()` clears activity while preserving learned parameters, optimizer
+  history and the optional bounded evidence-ID window. `state` and `snapshot()`
+  expose detached state for inspection.
+- `save(path, *, compressed=True)` and `PatchNet.load(path, ...)` preserve
+  continuation parameters, optimizer history, current activity and configuration.
+  Checkpoint correctness does not establish retention during new learning.
 
 ## Connectome (`cadence.connectome`)
 
