@@ -70,6 +70,14 @@ learning. There is no automatic decay, contradiction resolution, relevance
 selection or unlimited capacity claim. Retention and remaining new-task
 acquisition must be tested together.
 
+Unused dimensions alone do not establish usable learning capacity. A new
+activity vector may lie almost entirely in the protected span. Its remaining
+component can then require a large weight change to produce even a moderate
+new response. Report conditioning and weight norms alongside basis ranks;
+preserving all earlier local responses is stronger than preserving only the
+earlier useful behavior. More training is not a demonstrated remedy for either
+restriction.
+
 ## Atomic learning and saved state
 
 `memory.observe(net, inputs, target, beta=..., rate=...)` stages ordinary centered

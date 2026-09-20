@@ -13,8 +13,10 @@ Install the current package or use the checkout for development:
 python -m pip install cadence-net==0.10.0
 ```
 
-The temporal and actor interfaces require version 0.10.0 or later. The earlier
-`PatchNet` interface remains available. Development installs use `pip install -e .`.
+The temporal and actor interfaces require version 0.10.0 or later. The new
+`TemporalPatchNet.plan` interface is currently in the development checkout;
+it is not included in the 0.10.0 wheel. Development installs use
+`pip install -e .`. The earlier `PatchNet` interface remains available.
 
 ## What carries the individual forward
 
@@ -22,19 +24,24 @@ The temporal and actor interfaces require version 0.10.0 or later. The earlier
 | --- | --- | --- |
 | Short-term context | `TemporalPatchNet.advance`, `state`, `reset` | Hidden activity persists between calls. Reset clears that activity, not weights. Whether a cue survives a particular delay is tested. |
 | Acquired relationships | `TemporalPatchNet.observe` | Centered equilibrium detuning repairs a finite observed path and changes A/B/C. Supplied per-output teaching precision defines the task metric; its default is one. No gradient propagates through calls before the supplied initial boundary. |
-| Protected long-term responses | `TemporalMemory.protect`, `memory.observe` | Caller-selected local response subspaces constrain later updates. Exact-path retention is conditional; rank exhaustion limits plasticity. |
+| Protected long-term responses | `TemporalMemory.protect`, `memory.observe` | Caller-selected local response subspaces constrain later updates. Exact-path retention is conditional; exhausted rank or poor conditioning can obstruct new learning. |
 | Recursive temporal computation | `TemporalPatchNet` recurrence | Each moment depends on the previous hidden activity. This is recurrence, not an already learned hierarchy that observes itself. |
 | Functional self-readback | `TemporalPatchNet.readback`, `EquilibriumActor.readback`, plan diagnostics | Detached state, residual/energy, revision, uncertainty and proposal information can be inspected or explicitly fed back by an application. |
-| Private imagination | `TemporalPatchNet.imagine`, `EquilibriumActor.plan` | Private predicted paths leave live state and learned parameters unchanged. Their usefulness depends on model quality. |
-| Goal-directed action | `EquilibriumActor.plan` | A supplied goal enters joint future-state/action repair under fixed two-coordinate linear body dynamics. |
+| Private imagination | `TemporalPatchNet.imagine`, both planners | Private predicted paths leave live state and learned parameters unchanged. Their usefulness depends on model quality. |
+| Goal-directed action | `TemporalPatchNet.plan`, `EquilibriumActor.plan` | The temporal learner privately repairs bounded continuous input ports and accepts only decreasing target-free prediction cost. The separate linear actor repairs joint future states/actions under its fixed body assumptions. |
 | Observation correction | `EquilibriumActor.admit` | Ordered actual readings and executed actions update a fixed-model Gaussian past boundary; future goals cannot rewrite it. |
 | Continued life | Both components' snapshots/checkpoints | Parameters, activity, supplied task settings and bound compressed state can resume; save explicit protection together with its net. |
 
-The nonlinear temporal learner and linear actor share residual repair ideas,
-but their state spaces and public interfaces are distinct. The two-dimensional
-position/displacement body is **not** a 64-dimensional audio decoder or a general
-learned nonlinear planning model. The library does not automatically wire these
-components into a composer. The Amen application supplies audio features,
+The nonlinear temporal learner can acquire an action/consequence relation and
+use that same model to plan continuous controls. Its input gradient is another
+centered equilibrium contrast, with parameters held fixed. Every candidate is
+replayed without a goal nudge before acceptance. Its measured prediction accuracy
+and the subsequent executed outcome remain separate checks.
+
+The linear actor has a distinct state space and factual-history interface;
+its two-dimensional position/displacement body is not an audio decoder. The
+library does not automatically wire these components into a composer. The Amen
+application supplies audio features,
 training observations, intention ports and rendering. Successful sampler output
 or converged equations alone do not establish intention-guided composition.
 
@@ -112,6 +119,7 @@ memory are therefore tested by what the continuing system can recall, learn,
 predict and do after disturbances and competing experience.
 
 Detailed guides: [temporal learning](temporal.md),
+[private continuous-control planning](planning.md),
 [explicit response protection](temporal-memory.md), [action and factual
 memory](actor.md), [existing graph PatchNet](patchnet.md) and
 [conditional Lean proofs](../lean/README.md).

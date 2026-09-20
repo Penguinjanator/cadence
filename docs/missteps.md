@@ -7,8 +7,11 @@ not a history of benchmark outcomes.
 | Misstep | Why it fails | Check or correction |
 | --- | --- | --- |
 | Treating a normal form as a correct answer | The declared equations can agree while modeling the task poorly. | Measure predictions and executed behavior against observations. |
+| Treating two converged detunings as an accurate learning direction | Positive local curvature does not prove that both solutions remain on the free state's smooth branch. | Check finite-beta sensitivity and actual free loss; reject harmful candidate steps rather than relying on solver convergence alone. |
 | Treating afterglow as demonstrated short-term memory | Persistent activity may lose the relevant distinction. | Remove the cue, vary the delay and context, and reset activity in controls. |
 | Treating protected responses as valuable memory | Constraints preserve an error or a poor policy as faithfully as a useful one. | Check usefulness, later correction and remaining learning capacity together. |
+| Counting free memory dimensions as easy learning capacity | A new activity may have only a tiny component outside the protected span. | Measure conditioning, required weight changes and retained behavior during new learning. |
+| Calling a goal-detuned prediction a successful plan | A relaxed future can approach the goal even when no action can cause it. | Re-evaluate the action with the goal removed, then execute it and measure the outcome. |
 | Treating a causal poset as the memory payload | Dependency order provides provenance, not the content or relevance of an experience. | Specify the retained state and how future decisions can read it. |
 | Feeding imagined outcomes back as observations | Predictions can reinforce their own mistakes without new evidence. | Keep actual readings, proposed actions, teaching and imagination distinct. |
 | Turning sensor summaries into action commands by name | A brightness measurement is not a pitch command; a detected onset count is not a request for retriggers. | Validate the instrument with known actions and measure its sound or physical readback. |

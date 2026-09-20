@@ -193,8 +193,9 @@ occupies `8*batch*hidden` bytes when present. Metadata,
 Python objects and transient solved paths cost additional space. Training paths
 are not retained by the net. There is no replay buffer, protection against
 interference, learned importance or guarantee of lifelong retention. Gaussian
-past-message compression and learned-body action experiments are separate
-research components, not features of this interface. A free rollout is a
-prediction; useful action planning requires additional declared action variables
-and preferences. Long continuations, retention and composition remain behavioral
+past-message compression belongs to the separate fixed-model actor. A free
+rollout is a prediction; the development [planning interface](planning.md)
+adds declared continuous action ports and preferences, using the same temporal
+model for private input repair. [Actual interaction](interaction.md) checks
+learned consequences against an executed body. Long continuations, retention and composition remain behavioral
 tests, not consequences of attaining a small equation residual.

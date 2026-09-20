@@ -43,6 +43,7 @@ from .learning import Learner, LearnerConfig, embedded, layered, learning_neuron
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
 from .patch import PatchNet, PatchObservation
+from .planning import TemporalPlan
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
@@ -68,6 +69,7 @@ __all__ = [
     "ObservationRecord",
     "ConstraintReport",
     "TemporalMemory",
+    "TemporalPlan",
     "TemporalPatchNet",
     "TemporalPhase",
     "TemporalObservation",

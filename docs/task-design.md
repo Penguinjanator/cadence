@@ -89,10 +89,12 @@ For an acting system, test this full sequence:
 4. Execute the selected action and measure the actual consequence.
 5. Repair the discrepancy and test earlier skills after the update.
 
-`imagine` supplies isolated temporal predictions. `EquilibriumActor` supplies
-private planning for its documented fixed linear body. These interfaces do
-not automatically form a learned nonlinear controller for a new instrument.
-Any application that connects them must validate that connection. A desired
+`imagine` supplies isolated temporal predictions. The development interface
+`TemporalPatchNet.plan` repairs bounded continuous input ports under that same
+learned model; the [interaction guide](interaction.md) demonstrates acquisition
+and execution in a small nonlinear body. `EquilibriumActor` separately supplies
+planning for its documented fixed linear body. A new instrument still needs
+validated action/consequence acquisition and measured execution. A desired
 outcome supplied during settling is not evidence that an executable action
 can cause it; replay the chosen action through the actual body.
 

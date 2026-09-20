@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- `TemporalPatchNet.plan` repairs caller-selected continuous input ports using
+  centered equilibrium contrasts, bound projection and decreasing causal replay.
+  It keeps model parameters, live context and actual records unchanged.
+- Detached `TemporalPlan` diagnostics distinguish stationarity, predicted goal
+  satisfaction, work caps and failed phases. Desired outcomes never become
+  observed training records through planning.
+- Planning documentation and executable examples cover the action/readback
+  boundary; memory documentation distinguishes remaining rank from conditioning.
+
 ## 0.10.0 (2026-09-20)
 
 - `TemporalPatchNet`: time-varying observation paths, persistent hidden context,

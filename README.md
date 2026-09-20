@@ -44,6 +44,12 @@ require behavioral tests: a path can satisfy every model equation and predict
 poorly. This interface does not add a replay store or autonomous planning policy.
 The existing 0.9.0 graph API remains compatible.
 
+The development checkout additionally exposes
+[`TemporalPatchNet.plan`](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md):
+the same detuning rule adjusts bounded continuous action ports under a learned
+model. Accepted proposals must improve target-free predictions, and actual
+execution remains a separate observation. This API is not in the 0.10.0 wheel.
+
 [`TemporalMemory`](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) adds explicit response protection to
 temporal learning: caller-selected activity directions constrain later EP
 updates without replaying raw examples. Protected-path retention and remaining

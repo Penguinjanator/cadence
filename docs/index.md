@@ -21,6 +21,14 @@ actually establishes before scaling the system.
 time-varying input paths, local overlap repair, centered detuning and isolated
 continuations with persistent hidden context.
 
+[Private input planning](planning.md) uses that same learned temporal model to
+repair bounded continuous controls through equilibrium detuning and target-free
+replay. This development API requires the checkout rather than the 0.10.0 wheel.
+
+[Learn, act and observe](interaction.md) runs a complete small nonlinear-body
+example through the public library: acquire a model from actual experience,
+plan privately, execute a bounded action and repair after a disturbance.
+
 [EquilibriumActor](actor.md) provides fixed-model past inference, minimal bound
 context and joint future-state/action repair through the public library.
 

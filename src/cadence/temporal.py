@@ -12,8 +12,12 @@ import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from .planning import TemporalPlan
 
 __all__ = ["TemporalPatchNet", "TemporalPhase", "TemporalObservation", "TemporalReadback"]
 
@@ -560,6 +564,45 @@ class TemporalPatchNet:
     def imagine(self, inputs: np.ndarray, *, state: np.ndarray | None = None) -> TemporalPhase:
         """Free private rollout; live parameters, state and readback do not change."""
         return self.settle(inputs, state=state)
+
+    def plan(
+        self,
+        inputs: np.ndarray,
+        *,
+        goal: np.ndarray,
+        controls: np.ndarray,
+        bounds: tuple[np.ndarray | float, np.ndarray | float] | None = None,
+        state: np.ndarray | None = None,
+        beta: float = 0.01,
+        rate: float = 1.0,
+        max_steps: int = 32,
+        max_backtracks: int = 16,
+        tolerance: float = 1e-6,
+        goal_tolerance: float = 1e-6,
+    ) -> TemporalPlan:
+        """Privately repair action ports using EP contrasts and causal replay.
+
+        The goal is a supplied output path. Boolean ``controls`` selects input
+        ports that may change; other inputs and the initial boundary stay fixed.
+        Returned predictions are ordinary free rollouts, never target-nudged
+        outputs. Planning neither executes the action nor trains on its goal.
+        """
+        from .planning import plan_inputs
+
+        return plan_inputs(
+            self,
+            inputs,
+            goal=goal,
+            controls=controls,
+            bounds=bounds,
+            state=state,
+            beta=beta,
+            rate=rate,
+            max_steps=max_steps,
+            max_backtracks=max_backtracks,
+            tolerance=tolerance,
+            goal_tolerance=goal_tolerance,
+        )
 
     def _carry(self, phase: TemporalPhase) -> None:
         if phase.converged:
