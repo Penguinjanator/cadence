@@ -189,7 +189,7 @@ storage, excluding arrays, Hessian blocks and numerical-library workspace.
 
 ## Checking a learning step
 
-On the development branch after 0.11.0, `observe(..., backtrack=True)` checks
+On `main` after the 0.11.0 release, `observe(..., backtrack=True)` checks
 the proposed parameter change against the actual teaching path. Converged
 positive and negative phases alone do not ensure that a finite parameter step
 improves the model. A good direction can overshoot.

@@ -37,6 +37,14 @@ solution or a musical work. A human assessment can be relevant, but a positive
 judgment about one result does not establish general creativity. Preserve both
 objective checks and the actual feedback.
 
+Evaluate the desirability of the goal itself. Matching an externally supplied
+sound, trajectory or output pattern can establish control while making the
+result less useful. Compare the proposed target, the executed result and an
+unchanged reference. Feedback that rejects both target and result identifies
+a goal-selection problem; it does not by itself identify a missing motor or
+prediction mechanism. Goal formation and preference learning need their own
+observations and transfer tests.
+
 ## Self-reflection uses the same patch contract
 
 A patch may read a bounded summary of the system's own predictions, intentions,
