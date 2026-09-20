@@ -104,6 +104,12 @@ class Nudge:
     nudge row by row; a negative weight pushes away from the target. That is
     how a reward enters: the target is the action taken and the weight its
     advantage.
+
+    Optional ``anchor`` and ``anchor_gain`` add an independent quadratic
+    boundary drive ``anchor_gain * (anchor - s)``. This term is held fixed
+    during a solve and is not scaled by beta, target mask or row weight.
+    Positive and negative target phases therefore share the same boundary,
+    including when their combined quadratic coefficients cancel.
     """
 
     target: np.ndarray  # (batch, n) or (n,)
@@ -112,6 +118,10 @@ class Nudge:
     softmax_temperature: float | None = None
     weight: np.ndarray | None = None  # (batch,)
     groups: np.ndarray | None = None  # (n,) group id per neuron, -1 for none: one softmax per group
+    # An independent quadratic boundary: anchor_gain * (anchor - s).
+    # It is not multiplied by the target nudge's beta or per-row weight.
+    anchor: np.ndarray | None = None  # (batch, n), (1, n), or (n,)
+    anchor_gain: np.ndarray | None = None  # nonnegative (n,)
 
     def __post_init__(self) -> None:
         mask, target = np.asarray(self.mask), np.asarray(self.target)
@@ -144,6 +154,18 @@ class Nudge:
             if not np.isfinite(weight).all():
                 raise ValueError("nudge weight must be finite")
             object.__setattr__(self, "weight", weight.copy())
+        if (self.anchor is None) != (self.anchor_gain is None):
+            raise ValueError("anchor and anchor_gain must be supplied together")
+        if self.anchor is not None:
+            anchor, gain = np.asarray(self.anchor, float), np.asarray(self.anchor_gain, float)
+            if anchor.ndim not in (1, 2) or anchor.shape[-1] != mask.size:
+                raise ValueError("anchor must have one entry per neuron, optionally per batch row")
+            if gain.shape != mask.shape or not np.isfinite(gain).all() or (gain < 0).any():
+                raise ValueError("anchor_gain must be a finite nonnegative vector over neurons")
+            if not np.isfinite(anchor).all():
+                raise ValueError("anchor must be finite")
+            object.__setattr__(self, "anchor", anchor.copy())
+            object.__setattr__(self, "anchor_gain", gain.copy())
 
     def drive(self, s: np.ndarray) -> np.ndarray:
         s = np.asarray(s, dtype=float)
@@ -166,6 +188,8 @@ class Nudge:
             if np.asarray(self.weight).shape != (len(s),):
                 raise ValueError("nudge weight must have one entry per batch row")
             out = out * np.asarray(self.weight, dtype=float)[:, None]
+        if self.anchor is not None:
+            out += self.anchor_gain * (np.broadcast_to(self.anchor, s.shape) - s)
         return out[0] if single else out
 
 
@@ -634,6 +658,12 @@ class Brain:
                 raise ValueError("nudge target must match the drive's neurons and batch size")
             if nudge.weight is not None and np.asarray(nudge.weight).shape != (batch,):
                 raise ValueError("nudge weight must have one entry per batch row")
+            if nudge.anchor is not None and np.asarray(nudge.anchor).shape not in (
+                (n,),
+                (1, n),
+                (batch, n),
+            ):
+                raise ValueError("nudge anchor must match the drive's neurons and batch size")
         on_kernel = (
             state is not None
             and state.device is not None
@@ -1034,11 +1064,13 @@ class _TorchKernel:
         negative_slope = neuron_model.leak * (1.0 - rest_value) / rest_value
         return torch.nn.functional.leaky_relu(r, negative_slope=negative_slope) / (1.0 - rest)
 
-    def _nudge_tensors(self, nudge: Nudge | None, batch: int) -> tuple[Any, Any, list[Any], Any]:
+    def _nudge_tensors(
+        self, nudge: Nudge | None, batch: int
+    ) -> tuple[Any, Any, list[Any], Any, Any, Any]:
         """The nudge's target, mask, softmax groups and row weights as device tensors."""
         torch = self.torch
         if nudge is None:
-            return None, None, [], None
+            return None, None, [], None, None, None
 
         def to(x: np.ndarray) -> Any:
             y = np.ascontiguousarray(x, dtype=float)
@@ -1052,10 +1084,22 @@ class _TorchKernel:
         weight = None
         if nudge.weight is not None:
             weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
-        return target, mask, groups, weight
+        anchor = gain = None
+        if nudge.anchor is not None:
+            anchor = to(np.broadcast_to(nudge.anchor, (batch, self.n)))
+            gain = to(np.asarray(nudge.anchor_gain))
+        return target, mask, groups, weight, anchor, gain
 
     def _push(
-        self, s: Any, nudge: Nudge, target: Any, mask: Any, groups: list[Any], weight: Any
+        self,
+        s: Any,
+        nudge: Nudge,
+        target: Any,
+        mask: Any,
+        groups: list[Any],
+        weight: Any,
+        anchor: Any,
+        anchor_gain: Any,
     ) -> Any:
         """The nudge drive at activation ``s``: ``Nudge.drive`` on the device."""
         torch = self.torch
@@ -1068,6 +1112,8 @@ class _TorchKernel:
                 push[:, members] = nudge.beta * (target[:, members] - p)
         if weight is not None:
             push = push * weight
+        if anchor is not None:
+            push = push + anchor_gain * (anchor - s)
         return push
 
     def residual(
@@ -1084,7 +1130,7 @@ class _TorchKernel:
         v, a = handle["v"], handle["a"]
         batch = v.shape[0]
         d, k = to(drive), to(keep)
-        target, mask, groups, weight = self._nudge_tensors(nudge, batch)
+        target, mask, groups, weight, anchor, anchor_gain = self._nudge_tensors(nudge, batch)
         with torch.no_grad():
             s = self._activation(v) * k
             if self.layout is not None:
@@ -1097,7 +1143,9 @@ class _TorchKernel:
             if adapt is not None:
                 error = error - adapt.strength * a
             if nudge is not None:
-                error = error + self._push(s, nudge, target, mask, groups, weight)
+                error = error + self._push(
+                    s, nudge, target, mask, groups, weight, anchor, anchor_gain
+                )
             error = k * error + (k - 1.0) * v / neuron_model.dt
             result = error.abs().amax(dim=1)
             if adapt is not None:
@@ -1193,7 +1241,7 @@ class _TorchKernel:
         d, k = to(drive), to(keep)
         batch = v.shape[0]
         adapt = neuron_model.adaptation
-        target, mask, groups, weight = self._nudge_tensors(nudge, batch)
+        target, mask, groups, weight, anchor, anchor_gain = self._nudge_tensors(nudge, batch)
         traj = []
         taken = 0
         activity_change = torch.zeros(batch, dtype=self.dtype, device=self.device)
@@ -1213,7 +1261,7 @@ class _TorchKernel:
                 if adapt is not None:
                     total -= adapt.strength * a
                 if nudge is not None:
-                    total += self._push(s, nudge, target, mask, groups, weight)
+                    total += self._push(s, nudge, target, mask, groups, weight, anchor, anchor_gain)
                 v = (v + neuron_model.dt * (-v + total)) * k
                 previous = s
                 s = self._activation(v) * k
@@ -1347,7 +1395,7 @@ class _MlxKernel:
         batch = v.shape[0]
         masked = bool((keep != 1.0).any())
         adapt = neuron_model.adaptation
-        target = mask = weight = None
+        target = mask = weight = anchor = anchor_gain = None
         groups: list[Any] = []
         if nudge is not None:
             target = to(np.broadcast_to(nudge.target, (batch, self.n)))
@@ -1355,6 +1403,9 @@ class _MlxKernel:
             groups = [mx.array(members) for members in _softmax_groups(nudge)]
             if nudge.weight is not None:
                 weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
+            if nudge.anchor is not None:
+                anchor = to(np.broadcast_to(nudge.anchor, (batch, self.n)))
+                anchor_gain = to(np.asarray(nudge.anchor_gain))
         traj = []
         taken = 0
         activity_change = mx.zeros((batch,), dtype=mx.float32)
@@ -1382,6 +1433,8 @@ class _MlxKernel:
                         push[:, members] = nudge.beta * (target[:, members] - p)
                 if weight is not None:
                     push = push * weight
+                if anchor is not None:
+                    push = push + anchor_gain * (anchor - s)
                 total = total + push
             v = v + neuron_model.dt * (-v + total)
             if masked:

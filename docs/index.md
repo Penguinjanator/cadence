@@ -4,8 +4,8 @@ Start with one ongoing learning life: observations, memories, predictions,
 actions and their outcomes. Cadence makes the local state, ports, readback,
 records and repair explicit.
 
-1. [README](../README.md): experience-based learning with one operating mode.
-2. [Quickstart](quickstart.md): observe, act and learn through one continuing loop.
+1. [PatchNet](patchnet.md): the revised common core, continuous observations, memory boundaries and isolated rehearsal.
+2. [Quickstart](quickstart.md): the earlier `GenericBrain` composition, retained for compatibility.
 3. [Experience](experience.md): connect a brain to its curriculum and test what it learns.
 4. [Continuous interaction](continuous.md): feedback timing, clocks, memories and checkpoints.
 5. [Records](memory.md#records): the records cortex, and what the settled regions keep.

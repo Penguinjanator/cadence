@@ -94,6 +94,8 @@ if njit is not None:
         beta,
         softmax_t,
         weight,
+        anchor,
+        anchor_gain,
         steps,
         tolerance,
         use_tolerance,
@@ -171,6 +173,8 @@ if njit is not None:
                             tot -= adapt_strength * a[b, i]
                         if has_nudge and nmask[i] > 0.0 and softmax_t <= 0.0:
                             tot += beta * weight[b] * nmask[i] * (target[b, i] - s[b, i])
+                        if anchor_gain[i] > 0.0:
+                            tot += anchor_gain[i] * (anchor[b, i] - s[b, i])
                         tot -= v[b, i]
                         vn = v[b, i] + dt * tot
                         if has_nudge and softmax_t > 0.0 and nmask[i] > 0.0:
@@ -207,7 +211,9 @@ if njit is not None:
 
 def _nudge_arrays(
     nudge: Nudge | None, batch: int, n: int
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, int, float, float, np.ndarray]:
+) -> tuple[
+    np.ndarray, np.ndarray, np.ndarray, int, float, float, np.ndarray, np.ndarray, np.ndarray
+]:
     """The nudge as the dense arrays the kernels read: target, mask, group id per neuron
     (0..ngroups-1, -1 for none), the group count, beta, the softmax temperature (0 for a
     plain nudge) and the per-row weight. A softmax nudge drives only grouped neurons."""
@@ -220,6 +226,8 @@ def _nudge_arrays(
             0.0,
             0.0,
             np.ones(batch),
+            np.zeros((1, 1)),
+            np.zeros(n),
         )
     target = np.ascontiguousarray(np.broadcast_to(nudge.target, (batch, n)).astype(float))
     nmask = np.asarray(nudge.mask, float)
@@ -238,7 +246,11 @@ def _nudge_arrays(
         ngroups = len(ids)
     if softmax_t > 0:
         nmask = np.where(gid >= 0, nmask, 0.0)
-    return target, nmask, gid, ngroups, beta, softmax_t, weight
+    anchor, anchor_gain = np.zeros((1, 1)), np.zeros(n)
+    if nudge.anchor is not None:
+        anchor = np.ascontiguousarray(np.broadcast_to(nudge.anchor, (batch, n)), dtype=float)
+        anchor_gain = np.ascontiguousarray(nudge.anchor_gain, dtype=float)
+    return target, nmask, gid, ngroups, beta, softmax_t, weight, anchor, anchor_gain
 
 
 def fused_settle(
@@ -281,7 +293,9 @@ def fused_settle(
         s *= keep
     adapt = neuron_model.adaptation
     has_adapt = adapt is not None
-    target, nmask, gid, ngroups, beta, softmax_t, weight = _nudge_arrays(nudge, batch, n)
+    target, nmask, gid, ngroups, beta, softmax_t, weight, anchor, anchor_gain = _nudge_arrays(
+        nudge, batch, n
+    )
     lay = layout
     has_synaptic_input = np.zeros(lay.ranges, dtype=np.bool_)
     has_synaptic_input[lay.pair_post] = True
@@ -289,7 +303,12 @@ def fused_settle(
     if has_adapt:
         freezable = np.zeros(lay.ranges, dtype=np.bool_)
     elif nudge is not None:
-        nudged = np.searchsorted(lay.starts, np.flatnonzero(nmask > 0), side="right") - 1
+        nudged = (
+            np.searchsorted(
+                lay.starts, np.flatnonzero((nmask > 0) | (anchor_gain > 0)), side="right"
+            )
+            - 1
+        )
         freezable[nudged] = False
     taken, activity_change = _kernel(
         v,
@@ -321,6 +340,8 @@ def fused_settle(
         beta,
         softmax_t,
         weight,
+        anchor,
+        anchor_gain,
         int(steps),
         float(tolerance) if tolerance is not None else 0.0,
         tolerance is not None,
@@ -354,6 +375,8 @@ if njit is not None:
         beta,
         softmax_t,
         weight,
+        anchor,
+        anchor_gain,
         out,
     ):
         """The fixed-point equation error of every row at the published activations ``s``:
@@ -400,6 +423,8 @@ if njit is not None:
                 tot = synaptic_input[b, i] + standing[b, i] - v[b, i]
                 if has_adapt:
                     tot -= adapt_strength * a[b, i]
+                if anchor_gain[i] > 0.0:
+                    tot += anchor_gain[i] * (anchor[b, i] - s[b, i])
                 if has_nudge and nmask[i] > 0.0:
                     if softmax_t > 0.0:
                         tot += beta * weight[b] * (target[b, i] - p[position[i]])
@@ -447,7 +472,9 @@ def fused_residual(
     if masked:
         s *= keep
     adapt = m.adaptation
-    target, nmask, gid, ngroups, beta, softmax_t, weight = _nudge_arrays(nudge, batch, n)
+    target, nmask, gid, ngroups, beta, softmax_t, weight, anchor, anchor_gain = _nudge_arrays(
+        nudge, batch, n
+    )
     out = np.empty(batch)
     _residual_kernel(
         np.ascontiguousarray(v, dtype=float),
@@ -472,6 +499,8 @@ def fused_residual(
         beta,
         softmax_t,
         weight,
+        anchor,
+        anchor_gain,
         out,
     )
     return out

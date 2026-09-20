@@ -41,6 +41,7 @@ from .genome import Genome, Projection, develop, evolve
 from .learning import Learner, LearnerConfig, embedded, layered, learning_neuron_model
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
+from .patch import PatchNet, PatchObservation
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
@@ -57,6 +58,8 @@ from .replay import ReservoirReplay
 from .stream import Afterglow, Echo, FastSynapses, PatternSeparator, Trace, stateful
 
 __all__ = [
+    "PatchNet",
+    "PatchObservation",
     "ContentMemory",
     "ReservoirReplay",
     "Atlas",

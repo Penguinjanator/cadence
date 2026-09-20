@@ -6,76 +6,60 @@
 
 [Website](https://floatingpragma.io/) · [Cadence page](https://floatingpragma.io/cadence/) · [Live brains](https://floatingpragma.io/cadence-examples/) · [Examples repository](https://github.com/muellerberndt/cadence-examples) · [PyPI](https://pypi.org/project/cadence-net/)
 
-**Decentralized networks of neurons that learn through symmetry breaking, from an
-ongoing stream of experience.**
+**An experimental neural library for learning through local overlap repair and equilibrium detuning.**
 
-> **Status: under heavy development.** Interfaces, defaults and training methods change
-> rapidly between commits and releases as the research settles; pin an exact commit or a
-> release for anything that has to keep working, and expect the documentation to lag the code
-> in places.
+Cadence explores an animal-inspired hypothesis: the same network that interprets
+an observation should carry context, change its learned relationships through
+experience, and explore possible continuations. It does not claim to reproduce
+an animal or human brain.
 
-Human brains do not learn by gradient descent and backpropagation, and they do not
-freeze their weights after pretraining. Neither does Cadence. A Cadence brain is made of
-cortices that settle together into equilibria, where a transformer stacks feedforward
-layers with attention. Each synapse changes from the activity of its own two neurons, and
-the same brain acts and learns throughout its life. Build a brain together with its
-learning life: what it observes, remembers, predicts, wants and does.
+> **Under active development.** Pin an exact commit for reproducible work.
+> The revised `PatchNet` interface is in this main checkout; earlier applications
+> use other library compositions and their results do not validate it automatically.
 
-## Why Cadence
+## Start with PatchNet
 
-- **No backpropagation.** Each synapse learns from its own two neurons and one broadcast
-  error. No neuron reads a global gradient, and no computation graph is stored.
-- **No training and inference steps.** There is one mode. Each `GenericBrain.step`
-  takes in an observation and the previous action's outcome, updates memories and
-  synapses, and chooses the next action. There is no switch between learning and use, no
-  separate deployment model and no point at which learning must stop.
-- **No frozen weights.** Learning happens during use. A brain keeps adapting to new
-  observations, rewards and corrections for as long as it runs.
-- **Short-term memory arises naturally.** Settled regions carry context across a delay
-  and complete a partial reading, so thoughts linger in the brain.
-- **Long-term memory arises naturally.** Salient and repeated facts are written into the
-  records the current reading touches, and plasticity keeps them in persistent synapses.
-  One stream, no replay ring.
-- **A continuous stream of thought.** A Cadence brain does not run in shots or discrete
-  invocations. It is one ongoing loop, and each observation and reward arrives while the
-  brain is still thinking.
-- **Imagined futures.** Small random drive breaks the symmetry of a settled state and
-  pushes the brain toward nearby alternatives. The brain settles each imagined future in
-  isolation, compares the recorded consequences and acts on the best one. Imagined
-  outcomes never become witnessed facts.
-- **Built like biology.** Neurons, synapses, cortices, a critic and an associative
-  reward memory are the building blocks, and real connectomes load as plain data.
+`PatchNet` is the common starting point for new experiments. It uses the existing
+nonlinear neural dynamics and local free/nudged learning rule, with a fully
+reciprocal graph by default. Its observer-like patches have bounded activity,
+declared ports, local readback and feedback/repair; experiments expose their
+observations, residuals and learned changes through reproducible evidence.
 
-## How the brain works
+- **Current context lives in neural activity.** Activity continues between
+  observations. Optional temporal overlap holds each solve against the previous
+  free activity. Whether a particular graph retains a cue through a delay must
+  be measured; a converged network can also forget its previous input.
+- **Acquired relationships live in continuous synapses and biases.** Resetting
+  activity leaves learned parameters intact. No external fact store or replay
+  buffer is required by this interface. Interference during further learning
+  remains a separate test.
+- **Real observations detune the network.** Continuous targets nudge only
+  declared observed ports. Each synapse changes from its endpoints' free/nudged
+  activity contrast. The implementation does not construct a backward graph.
+- **Convergence is checked.** Every required phase must satisfy the neural
+  equations within the declared residual tolerance before learning commits.
+  A capped solve is reported as unfinished. A small residual does not establish
+  a unique, stable or correct answer.
+- **Imagined continuations are isolated.** Branches use the same learned net
+  without changing live activity, parameters or evidence bookkeeping. Branch
+  isolation is implemented; useful planning and musical improvisation need
+  empirical validation.
+- **A complete checkpoint resumes the learner.** It includes parameters,
+  optimizer state, current activity and the optional bounded source-ID window.
+  Repeated IDs are suppressed within that window; IDs do not prove that two
+  environmental reports are independent.
 
-**Observe → remember → predict → act or communicate → learn from the outcome.**
+Follow the [PatchNet guide](docs/patchnet.md) for the running example, memory
+semantics, continuous targets and rehearsal. The earlier `Brain`, `Learner`,
+`GenericBrain`, `Records` and circuit APIs remain available for existing
+applications. Their separate associative memories are optional compositions,
+not required components of `PatchNet`.
 
-Thinking reads the current state; actual observations, rewards and corrections change
-what is learned. The application controls when each event arrives. Keep the issued action
-pending until its real outcome arrives; a clock tick alone is not new feedback. Start with
-the [single-loop quickstart](docs/quickstart.md).
-
-- **Local neural state:** neurons exchange activity over declared synapses; the settled
-  regions reach a joint fixed point that completes a partial reading, carries context
-  across a delay and holds the policy.
-- **Records:** a mean-free reading passes through a fixed sparse expansion with
-  winner-take-all inhibition; each active cell keeps a record of what followed; the
-  prediction is the activity-weighted sum of the records the reading touches; the
-  witnessed outcome is written into exactly those, at a slow rate for consequences and a
-  fast rate for reward.
-- **Local learning in the settled regions:** free and nudged phases and eligibility
-  traces change synapses from their own two neurons' activity and one broadcast error,
-  with no backward computation graph.
-- **Prediction and goals:** imagined consequences are record reads; a supplied search
-  over them and isolated imagined futures guide a choice.
-
-These are observer-like, self-reading software patches: bounded local state, declared
-ports, readback, records and feedback/repair, with checkable evidence. The
-[experience guide](docs/experience.md) connects the functions and curriculum.
-`GenericBrain` is the ready composition of settled regions: a recurrent policy, a critic
-and an associative reward memory. The records cortex is `cd.Records`
-([records](docs/memory.md#records)). Learned goals and language are not supplied.
-Cadence does not claim to reproduce human learning or supply a pretrained chatbot.
+The research target is fewer local mechanisms supporting acquisition, selective
+forgetting, retention and correction together. Learned importance, robust
+lifelong memory, autonomous specialization and animal-level capability remain
+open. In particular, the revised core does not freeze each weight into a binary
+state: that candidate prevented compatible learning through shared connections.
 
 ## Install
 
@@ -84,15 +68,16 @@ Python 3.11+, with NumPy as the only required dependency:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install "cadence-net @ git+https://github.com/muellerberndt/cadence.git@main"
+python -m pip install -e .
 ```
 
+Run these commands from this checkout. The revision is not yet a PyPI release.
 On Windows activate with `.venv\Scripts\Activate.ps1`.
 [Optional backends](docs/backends.md) support Numba, PyTorch and MLX.
 
 ## Examples
 
-Four applications built on this loop, each with its page, its acceptance receipt and the
+Four earlier applications built with other Cadence compositions, each with its page, its acceptance receipt and the
 verifier that recomputes the receipt from the event logs, are in the
 [examples gallery](https://github.com/muellerberndt/cadence-examples).
 
