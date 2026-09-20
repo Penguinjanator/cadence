@@ -38,9 +38,9 @@ jobs:
                   code += "\nassert brain.basal_ganglia.updates == 64\n"
               with tempfile.TemporaryDirectory() as directory:
                   subprocess.run([sys.executable, "-c", code], cwd=directory, check=True)
+          PY
       - name: Check the Lean audit verifier
         run: python -m unittest discover -s lean -p test_check.py
-          PY
   test:
     runs-on: ${{ matrix.os }}
     strategy:
