@@ -80,6 +80,12 @@ and action ports. NES play, Connect Four, Maestro and music generation are
 application tests, not definitions of the architecture. A result in one does
 not establish transfer to the others.
 
+The scaling goal is better learned behavior from more experience and training,
+with as little manual design as possible. Measure unique experience, repeated
+training and model capacity separately while keeping port meanings and task
+evaluation fixed. The [scaling guide](https://github.com/muellerberndt/cadence/blob/main/docs/scaling.md)
+defines these comparisons and the current computational limits.
+
 Application demonstrations are published only when they establish their
 claimed behavior. Recall and interpolation are useful development tests;
 original creation requires stronger evidence. Research receipts remain

@@ -7,7 +7,11 @@ not a history of benchmark outcomes.
 | Misstep | Why it fails | Check or correction |
 | --- | --- | --- |
 | Treating a normal form as a correct answer | The declared equations can agree while modeling the task poorly. | Measure predictions and executed behavior against observations. |
+| Reading free-state energy as surprise | The temporal causal recurrence has zero defect even for a wrong prediction. | Compare a prediction with actual sensor readback; retain the parameter revision that made it. |
 | Treating two converged detunings as an accurate learning direction | Positive local curvature does not prove that both solutions remain on the free state's smooth branch. | Check finite-beta sensitivity and actual free loss; reject harmful candidate steps rather than relying on solver convergence alone. |
+| Accepting any step along a useful direction | A finite parameter step can overshoot despite a correct local derivative. | Replay candidates from the original boundary, reduce the step if needed and count the extra computation. |
+| Calling more replay more data | Reusing the same episodes changes training exposure, not distinct experience. | Vary unique examples, update count and model capacity separately with fixed ports and held-out tasks. |
+| Calling action carry sensor feedback | Advancing predicted hidden state after an action does not assimilate its measured consequence. | Declare which actual readings enter the next inference or teaching call; test changed environmental conditions. |
 | Treating afterglow as demonstrated short-term memory | Persistent activity may lose the relevant distinction. | Remove the cue, vary the delay and context, and reset activity in controls. |
 | Treating protected responses as valuable memory | Constraints preserve an error or a poor policy as faithfully as a useful one. | Check usefulness, later correction and remaining learning capacity together. |
 | Counting free memory dimensions as easy learning capacity | A new activity may have only a tiny component outside the protected span. | Measure conditioning, required weight changes and retained behavior during new learning. |

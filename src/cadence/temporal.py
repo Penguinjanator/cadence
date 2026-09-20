@@ -64,6 +64,11 @@ class TemporalObservation:
     plus: TemporalPhase | None = None
     minus: TemporalPhase | None = None
     delta: dict[str, np.ndarray] | None = None
+    initial_loss: float | None = None
+    final_loss: float | None = None
+    accepted_rate: float | None = None
+    replay_losses: tuple[float | None, ...] = ()
+    replay_calls: int = 0
 
 
 @dataclass(frozen=True)
@@ -639,6 +644,7 @@ class TemporalPatchNet:
         *,
         beta: float = 0.01,
         rate: float = 0.1,
+        backtrack: bool = False,
     ) -> TemporalObservation:
         """Learn one finite external path; all phases share one fixed initial state.
 
@@ -647,7 +653,15 @@ class TemporalPatchNet:
         batch rows. The detuning loss averages time and output ports as well.
         Invalid data cause no state change. Failed detuning retains only valid
         free activity and never changes weights or the update count.
+
+        With ``backtrack=True``, test up to sixteen successively halved rates
+        against target-free predictions from the original initial state. A
+        finite decrease in the observed precision-weighted half-MSE is required
+        before committing. This guards the current observation, not old skills
+        or unseen data. The default preserves the fixed-rate update.
         """
+        if not isinstance(backtrack, (bool, np.bool_)):
+            raise ValueError("backtrack must be a boolean")
         path = self._path(inputs, self.inputs, "inputs")
         teaching = self._path(target, self.outputs, "target")
         if teaching.shape[:2] != path.shape[:2]:
@@ -674,6 +688,10 @@ class TemporalPatchNet:
         gp = self._parameter_gradient(path, boundary, plus)
         gm = self._parameter_gradient(path, boundary, minus)
         delta = {k: (gp[k] - gm[k]) / (2.0 * beta) for k in gp}
+        if backtrack:
+            return self._backtracked_observation(
+                path, teaching, boundary, free, plus, minus, delta, rate
+            )
         proposed = {k: getattr(self, "_" + k) - rate * delta[k] for k in delta}
         if not all(np.isfinite(p).all() for p in proposed.values()):
             return TemporalObservation(False, "nonfinite_update", free, plus, minus, delta)
@@ -681,6 +699,84 @@ class TemporalPatchNet:
         self.updates += 1
         self._revision += 1
         return TemporalObservation(True, "updated", free, plus, minus, delta)
+
+    def _backtracked_observation(
+        self,
+        path: np.ndarray,
+        target: np.ndarray,
+        boundary: np.ndarray,
+        free: TemporalPhase,
+        plus: TemporalPhase,
+        minus: TemporalPhase,
+        delta: dict[str, np.ndarray],
+        rate: float,
+    ) -> TemporalObservation:
+        """Replay candidate parameters privately; never carry a trial's activity."""
+
+        def loss(output: np.ndarray) -> float | None:
+            with np.errstate(over="ignore", invalid="ignore"):
+                value = float(0.5 * np.mean(self._output_precision * (output - target) ** 2))
+            return value if np.isfinite(value) else None
+
+        initial = loss(free.output)
+        with np.errstate(over="ignore", invalid="ignore"):
+            norm_squared = sum(float(np.sum(value * value)) for value in delta.values())
+        losses: list[float | None] = []
+        replays = 0
+        if initial is not None and np.isfinite(norm_squared) and norm_squared > 0 and rate > 0:
+            snapshot = self.snapshot()
+            for index in range(16):
+                step = rate * 0.5**index
+                with np.errstate(over="ignore", invalid="ignore"):
+                    proposed = {k: snapshot[k] - step * delta[k] for k in delta}
+                if not all(np.isfinite(value).all() for value in proposed.values()):
+                    losses.append(None)
+                    continue
+                candidate = TemporalPatchNet.restore(snapshot)
+                candidate.set_parameters(proposed)
+                prediction = candidate.imagine(path, state=boundary)
+                replays += 1
+                current = loss(prediction.output) if prediction.converged else None
+                losses.append(current)
+                floor = (
+                    64
+                    * np.finfo(float).eps
+                    * max(abs(initial), abs(current or 0.0), np.finfo(float).tiny)
+                )
+                if (
+                    current is not None
+                    and current < initial - floor
+                    and current <= initial - 1e-4 * step * norm_squared
+                ):
+                    self._A, self._B, self._C = proposed["A"], proposed["B"], proposed["C"]
+                    self.updates += 1
+                    self._revision += 1
+                    return TemporalObservation(
+                        True,
+                        "updated",
+                        free,
+                        plus,
+                        minus,
+                        delta,
+                        initial,
+                        current,
+                        step,
+                        tuple(losses),
+                        replays,
+                    )
+        return TemporalObservation(
+            False,
+            "no_decreasing_parameter_step",
+            free,
+            plus,
+            minus,
+            delta,
+            initial,
+            initial,
+            0.0,
+            tuple(losses),
+            replays,
+        )
 
     def reset(self) -> None:
         """Clear active state/readback; retain learned parameters and update count."""

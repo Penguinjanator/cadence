@@ -11,9 +11,12 @@ APIs follow the current temporal interfaces below.
 - `TemporalPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None, ...)`
   creates the residual temporal model with shared A/B/C maps. Paths have shape
   `(batch, time, ports)`; omitted positive output precision means all ones.
-- `observe(inputs, target, *, beta=0.01, rate=0.1)` repairs observed teaching
+- `observe(inputs, target, *, beta=0.01, rate=0.1, backtrack=False)` repairs observed teaching
   paths and returns `TemporalObservation`. Only valid free activity becomes live;
   detuned activity does not become an observed record.
+  The optional `backtrack` argument is a development addition after 0.11.0:
+  accept parameters only after a decreasing causal replay from the original
+  boundary. See [temporal learning](temporal.md#checking-a-learning-step).
 - `advance(inputs)` carries a free path into live context. `imagine(inputs, *,
   state=None)` predicts privately. `settle(inputs, *, target=None, beta=0.0,
   state=None)` exposes a private phase directly.
@@ -27,7 +30,9 @@ APIs follow the current temporal interfaces below.
   and `restore(snapshot)` preserve continuation state and configuration.
 - `TemporalPhase` exposes solved hidden/output paths, residuals, curvature and
   work. `TemporalObservation` exposes `updated`, `reason`, the phases and raw
-  `delta`. `TemporalReadback` binds current activity to its parameter revision.
+  `delta`. With backtracking it also reports initial/final loss, accepted rate,
+  trial losses and replay count. `TemporalReadback` binds current activity to
+  its parameter revision.
 
 ## TemporalPlan (`cadence.planning`)
 

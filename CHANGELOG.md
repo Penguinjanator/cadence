@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+- Optional `TemporalPatchNet.observe(..., backtrack=True)` accepts a parameter
+  step only after target-free replay of the observed path improves its loss
+  from the original hidden boundary. It reports trial costs and accepted rate;
+  rejection preserves learned parameters and update counts. Fixed-rate behavior
+  remains the default. This is a current-observation check, not a retention or
+  generalization guarantee.
+- Scaling and task-design guidance separates unique experience, repeated
+  training, model width and temporal scope, and distinguishes actual sensory
+  feedback from carrying a model's predicted state.
+
 ## 0.11.0 (2026-09-20)
 
 - `TemporalPatchNet.plan` repairs caller-selected continuous input ports using

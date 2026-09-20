@@ -158,7 +158,7 @@ cannot alone establish useful autonomous continuation.
 
 | Operation | Effect |
 | --- | --- |
-| `observe(inputs, target, beta=0.01, rate=0.1)` | Repair free/positive/negative paths; commit one centered update only when all pass; carry only free state. |
+| `observe(inputs, target, beta=0.01, rate=0.1, backtrack=False)` | Repair free/positive/negative paths; carry only free state. Optional parameter backtracking requires improvement in causal replay before committing. |
 | `advance(inputs)` | Free inference, carrying a converged final state; no learning. |
 | `imagine(inputs, state=None)` | Read-only free path from live state or the explicit supplied boundary. |
 | `settle(inputs, target=None, beta=0, state=None)` | Read-only diagnostic detuning; target is wholly ignored at beta zero. |
@@ -186,6 +186,41 @@ hidden-width block per time step and batch row; it is not one scalar operation.
 `message_bytes` is the largest successful chain's explicit precision/vector
 storage, excluding arrays, Hessian blocks and numerical-library workspace.
 `energy_evaluations` counts path-energy evaluations, including line searches.
+
+## Checking a learning step
+
+On the development branch after 0.11.0, `observe(..., backtrack=True)` checks
+the proposed parameter change against the actual teaching path. Converged
+positive and negative phases alone do not ensure that a finite parameter step
+improves the model. A good direction can overshoot.
+
+The optional check tries the supplied rate and up to fifteen halvings. Each
+candidate makes a target-free prediction from the **original hidden boundary**.
+Its precision-weighted half-MSE must decrease beyond a floating-point floor
+and satisfy `new_loss <= old_loss - 1e-4 * rate * ||delta||²`. This is a
+measured acceptance condition; a finite-beta EP estimate need not be an exact
+gradient. There is no extra persistent optimizer state or retained episode.
+
+`TemporalObservation` reports `initial_loss`, `final_loss`, `accepted_rate`,
+`replay_losses` and `replay_calls`. A `None` trial loss denotes a nonfinite or
+unsolved candidate. Nonfinite parameter proposals need no replay, so the
+number of trials can exceed the replay count. Rejection returns
+`no_decreasing_parameter_step`, preserves parameters, revisions and update
+count, and carries only the original valid free activity. Failed phases keep
+their distinct failure reason. With backtracking, rate zero cannot commit.
+The default fixed-rate behavior remains compatible with 0.11.0.
+
+This check improves the current observed objective only. It does not establish
+generalization, protect earlier skills, choose important experiences or supply
+new observations. Use the separate `TemporalMemory.observe` transaction when
+response constraints are bound to the model; bypassing it with a direct
+parameter update can invalidate those constraints. The new option is not
+automatically applied by the memory transaction.
+
+Free-phase residual and energy measure agreement within the model. The causal
+recurrence has zero residual by construction even when its predictions are
+wrong. Use actual observation-minus-prediction error to assess surprise or
+model accuracy; do not read zero free energy as confidence about the world.
 
 Persistent numeric parameters occupy `8*(hidden² + hidden*inputs + outputs*hidden)`
 bytes; supplied teaching precision adds `8*outputs` bytes, and active state

@@ -18,7 +18,9 @@ broader research goal.
 [Task design](task-design.md) and [common missteps](missteps.md) explain how to
 validate observations, actions, learning and retained behavior before scaling.
 The [API reference](api.md) lists current interfaces and supported compatibility
-components. These guides target version 0.11.0.
+components. [Scaling experiments](scaling.md) separate experience, training
+exposure and capacity. These guides target version 0.11.0; the optional
+parameter-backtracking addition is explicitly marked as development work.
 
 [EquilibriumActor](actor.md) provides a separate fixed linear-model example of
 factual inference, compressed past context and joint future-state/action repair.
