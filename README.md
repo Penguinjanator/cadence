@@ -14,12 +14,50 @@ experience, and explore possible continuations. It does not claim to reproduce
 an animal or human brain.
 
 > **Under active development.** Pin a release or exact commit for reproducible work.
-> The revised `PatchNet` interface is included in version 0.9.0; earlier applications
-> use other library compositions and their results do not validate it automatically.
+> Version 0.10.0 includes temporal learning, explicit response protection and a
+> small equilibrium actor. Earlier applications use other library compositions;
+> their results do not validate the revised architecture automatically.
+
+[Architecture and integration](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) maps context, learning,
+explicit memory protection, self-readback, imagination and action planning to
+the implemented base-library APIs.
+
+[Design a task](https://github.com/muellerberndt/cadence/blob/main/docs/task-design.md) explains how observations, action ports,
+teaching and readback connect. [Common missteps](https://github.com/muellerberndt/cadence/blob/main/docs/missteps.md) covers
+information loss, misleading proxy scores, memory interference and premature
+claims about coordination or scaling.
+
+## Temporal paths and persistent context
+
+Version 0.10.0 adds experimental [`TemporalPatchNet`](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md). Each
+moment is an observer-like patch with input/output ports, bounded activity and
+a residual against its preceding state. During learning, adjacent patches repair
+a complete observed path; centered equilibrium detuning changes their shared
+relationships. Free inference carries hidden context, and private continuation
+uses the same learned relationships without changing live state. Targets never
+become the live hidden state.
+
+The NumPy implementation exposes measured residuals, curvature checks, phase
+work and complete checkpoints. It extends the verified scalar-cue solver to
+time-varying observations. Sequence acquisition and long-term retention still
+require behavioral tests: a path can satisfy every model equation and predict
+poorly. This interface does not add a replay store or autonomous planning policy.
+The existing 0.9.0 graph API remains compatible.
+
+[`TemporalMemory`](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) adds explicit response protection to
+temporal learning: caller-selected activity directions constrain later EP
+updates without replaying raw examples. Protected-path retention and remaining
+plasticity must be tested together; the available subspace is finite.
+
+The base package also exposes [`EquilibriumActor`](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md): a minimal
+fixed-model observer plus joint future-state/action repair. It admits actual
+readings, retains a supplied goal, proposes an action privately and replans after
+real readback. Its linear Gaussian body assumptions and model-bound compressed
+history are explicit; it is not yet a general nonlinear composer.
 
 ## Start with PatchNet
 
-`PatchNet` is the common starting point for new experiments. It uses the existing
+`PatchNet` is the existing general graph interface. It uses the existing
 nonlinear neural dynamics and local free/nudged learning rule, with a fully
 reciprocal graph by default. Its observer-like patches have bounded activity,
 declared ports, local readback and feedback/repair; experiments expose their
@@ -68,7 +106,7 @@ Python 3.11+, with NumPy as the only required dependency:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-python -m pip install cadence-net==0.9.0
+python -m pip install cadence-net==0.10.0
 ```
 
 For development from this checkout, use `python -m pip install -e .`.

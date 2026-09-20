@@ -94,6 +94,27 @@
       "sha256": "47fc4890a5a988cf542cd17165c864f6c97b7384b22c0db979b46e93398ecec1",
       "scope": "core",
       "adaptation": "Replaced historical campaign narration with conditional fixed-point-distance scope. Repaired two obsolete hf.one_lt_one field references to the existing contraction hypothesis hf.1 and replaced deprecated push_neg with push Not for Lean4.29.1. All theorem statements and hypotheses unchanged."
+    },
+    {
+      "path": "CadenceMission/CausalTemporalUniqueness.lean",
+      "origin": "cadence-mission/lean/CausalTemporalUniqueness.lean",
+      "origin_sha256": "08ff0ac7d5fbc2870e731912e4160c8dc7b04e88b1c1729e0454e29b87d36240",
+      "sha256": "08ff0ac7d5fbc2870e731912e4160c8dc7b04e88b1c1729e0454e29b87d36240",
+      "scope": "temporal_boundary"
+    },
+    {
+      "path": "CadenceMission/QuadraticBoundary.lean",
+      "origin": "cadence-mission/lean/QuadraticBoundary.lean",
+      "origin_sha256": "1305b91ccc0aed14aa96c3af993ae003e7cd96a9d4470793a65c2c92b566a361",
+      "sha256": "1305b91ccc0aed14aa96c3af993ae003e7cd96a9d4470793a65c2c92b566a361",
+      "scope": "temporal_boundary"
+    },
+    {
+      "path": "CadenceMission/ProtectedTemporalPath.lean",
+      "origin": "cadence-mission/lean/ProtectedTemporalPath.lean",
+      "origin_sha256": "fc6730609ee01a811f6a6d7651c2b008f3681c0ed43186d211729f9fd4feb973",
+      "sha256": "fc6730609ee01a811f6a6d7651c2b008f3681c0ed43186d211729f9fd4feb973",
+      "scope": "temporal_boundary"
     }
   ]
 }

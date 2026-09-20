@@ -1,0 +1,117 @@
+# Architecture and integration
+
+Cadence's base library exposes local overlap repair, equilibrium detuning,
+persistent activity, explicit response protection, private continuation and a
+small state/action planner. These are simplified biological abstractions with
+measurable behavior, not a claim that a complete animal or human brain has been
+implemented. All APIs below ship in this checkout and need no experiment-repo
+imports.
+
+Install the current package or use the checkout for development:
+
+```bash
+python -m pip install cadence-net==0.10.0
+```
+
+The temporal and actor interfaces require version 0.10.0 or later. The earlier
+`PatchNet` interface remains available. Development installs use `pip install -e .`.
+
+## What carries the individual forward
+
+| Requirement | Base API | Exact current meaning |
+| --- | --- | --- |
+| Short-term context | `TemporalPatchNet.advance`, `state`, `reset` | Hidden activity persists between calls. Reset clears that activity, not weights. Whether a cue survives a particular delay is tested. |
+| Acquired relationships | `TemporalPatchNet.observe` | Centered equilibrium detuning repairs a finite observed path and changes A/B/C. Supplied per-output teaching precision defines the task metric; its default is one. No gradient propagates through calls before the supplied initial boundary. |
+| Protected long-term responses | `TemporalMemory.protect`, `memory.observe` | Caller-selected local response subspaces constrain later updates. Exact-path retention is conditional; rank exhaustion limits plasticity. |
+| Recursive temporal computation | `TemporalPatchNet` recurrence | Each moment depends on the previous hidden activity. This is recurrence, not an already learned hierarchy that observes itself. |
+| Functional self-readback | `TemporalPatchNet.readback`, `EquilibriumActor.readback`, plan diagnostics | Detached state, residual/energy, revision, uncertainty and proposal information can be inspected or explicitly fed back by an application. |
+| Private imagination | `TemporalPatchNet.imagine`, `EquilibriumActor.plan` | Private predicted paths leave live state and learned parameters unchanged. Their usefulness depends on model quality. |
+| Goal-directed action | `EquilibriumActor.plan` | A supplied goal enters joint future-state/action repair under fixed two-coordinate linear body dynamics. |
+| Observation correction | `EquilibriumActor.admit` | Ordered actual readings and executed actions update a fixed-model Gaussian past boundary; future goals cannot rewrite it. |
+| Continued life | Both components' snapshots/checkpoints | Parameters, activity, supplied task settings and bound compressed state can resume; save explicit protection together with its net. |
+
+The nonlinear temporal learner and linear actor share residual repair ideas,
+but their state spaces and public interfaces are distinct. The two-dimensional
+position/displacement body is **not** a 64-dimensional audio decoder or a general
+learned nonlinear planning model. The library does not automatically wire these
+components into a composer. The Amen application supplies audio features,
+training observations, intention ports and rendering. Successful sampler output
+or converged equations alone do not establish intention-guided composition.
+
+The application must also preserve the distinctions needed for its task. For
+example, a bar's average onset density and unsigned timing spread cannot specify
+which individual drum hit occurs early or late. A hand-written conversion from
+such summaries to sampler commands is part of the instrument, not a learned
+skill. Validate supplied actions and their observed consequences before treating
+prediction error as a score for performed behavior. `TemporalPatchNet` accepts
+explicit event or action coordinates without a different learning rule; their
+meaning and acquisition must be documented by the application.
+
+## One temporal learning life
+
+```python
+import numpy as np
+from cadence import TemporalPatchNet, TemporalMemory
+
+net = TemporalPatchNet(2, 8, 1, seed=151)
+memory = TemporalMemory()
+heard = np.array([[[1.0, 0.0]]])
+net.reset()
+learned = net.observe(heard, np.array([[[0.2]]]))
+assert learned.updated
+
+# Supplied importance choice: preserve this current response from cold context.
+cold = np.zeros((1, 8))
+memory.protect(net, heard, state=cold)
+net.reset()
+changed = memory.observe(net, np.array([[[0.0, 1.0]]]), np.array([[[0.3]]]))
+assert changed.updated
+net.reset()
+assert net.advance(heard).converged
+private = net.imagine(np.zeros((1, 4, 2)))
+assert private.converged
+```
+
+Only free activity becomes live after learning; target-detuned states stay
+private. Protection is explicit and protects the current response, not an
+unobserved truth. Long delay, competing learning, cue changes and novelty need
+separate behavioral checks. There is no inferred importance, automatic fading,
+learned specialization or unlimited long-term memory guarantee.
+
+## One acting life
+
+```python
+from cadence import BodyModel, EquilibriumActor
+
+model = BodyModel(np.array([[1.0, 1.0], [0.0, 1.0]]), np.ones(2))
+actor = EquilibriumActor(model, goal=0.6, horizon=3)
+actor.admit(0.0, identifier=0)
+actor.admit(0.0, identifier=1, executed_action=0.0)
+proposal = actor.plan()
+# Here the application executes proposal.action and reads its real sensor.
+```
+
+The body matrices may be supplied from earlier acquisition. During this actor's
+life they are fixed and bound to its compressed Gaussian prefix. A changed model
+is refused because the discarded old observations generally cannot be
+reinterpreted exactly under new coefficients. Planning copies the factual
+estimate before considering a future goal; admission accepts the action that
+actually happened, including any clipping by the external body.
+
+This actor retains a supplied preference and horizon. It does not learn its own
+goals, decrement a hidden deadline or impose action bounds. Follow the
+[actor guide](actor.md) for execution, covariance assumptions, work and checkpoints.
+
+## Choosing evidence over architectural labels
+
+A causal record order helps distinguish actual observations from imagined
+branches and binds compressed state to its model. It does not itself decide
+which experiences matter. A normal form means the declared equations or
+constraints agree; it can still describe a poor predictor. Equilibrium and
+memory are therefore tested by what the continuing system can recall, learn,
+predict and do after disturbances and competing experience.
+
+Detailed guides: [temporal learning](temporal.md),
+[explicit response protection](temporal-memory.md), [action and factual
+memory](actor.md), [existing graph PatchNet](patchnet.md) and
+[conditional Lean proofs](../lean/README.md).

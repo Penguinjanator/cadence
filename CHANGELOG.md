@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.0 (2026-09-20)
+
+- `TemporalPatchNet`: time-varying observation paths, persistent hidden context,
+  centered local equilibrium detuning, curvature/convergence-gated updates,
+  isolated imagined paths, detached readback and exact continuation checkpoints.
+- `TemporalMemory`: explicitly selected local response constraints, compressed
+  into bounded presynaptic subspaces; atomic constrained learning and binding
+  checks. Protection is conditional and finite; importance is supplied.
+- `EquilibriumActor`: ordered actual observations, fixed-model Gaussian past
+  repair, joint future-state/action repair, supplied goals and private plans.
+  This two-coordinate linear body is a controlled capacity component.
+- A unified architecture guide and executable examples document the feature
+  boundaries. Existing graph APIs remain compatible.
+- Task-design and common-missteps guides cover observation/action semantics,
+  information loss, behavioral checks, and the unproven boundary of scaling.
+- The pinned Lean package audits 169 conditional theorems, including causal path
+  uniqueness, quadratic boundary elimination and protected-path induction.
+
+Automatic relevance, forgetting, hierarchical self-modeling and general
+long-form composition remain experimental requirements. The new APIs do not
+silently turn predicted outcomes into observations or claim biological equivalence.
+
 ## 0.9.0 (2026-09-20)
 
 `PatchNet` is the starting point for new experiments with local overlap repair

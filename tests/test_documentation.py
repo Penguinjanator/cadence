@@ -13,6 +13,10 @@ ROOT = Path(__file__).resolve().parents[1]
     "page",
     [
         "docs/patchnet.md",
+        "docs/temporal.md",
+        "docs/actor.md",
+        "docs/architecture.md",
+        "docs/temporal-memory.md",
         "docs/quickstart.md",
         "docs/concepts.md",
         "docs/memory.md",

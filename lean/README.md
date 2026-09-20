@@ -89,6 +89,27 @@ Fresh/reset streams use zero activity. A boundary value is not an external
 teaching target. The scalar theorem does not certify its discrete solver or
 provide credit assignment through prior observations.
 
+## Temporal paths and compressed boundaries
+
+`CadenceMission/CausalTemporalUniqueness.lean` proves that a finite causal
+path with a fixed initial boundary and deterministic transition maps has
+exactly one defect-free realization: its forward recurrence. This applies
+to the target-free construction in [temporal.py](../src/cadence/temporal.py).
+It does not assert uniqueness of a nonlinear detuned stationary point or of
+an arbitrary cyclic network. Its four theorems need no axioms.
+
+`CadenceMission/QuadraticBoundary.lean` proves six scalar identities and bounds
+for eliminating an old state from a quadratic temporal energy. For positive
+prior precision and nonnegative transition precision, the reduced boundary
+energy is attained and bounds the full energy from below. Information and
+precision preserve later minimization; a constant is needed for absolute
+energy. All model coefficients are fixed, and later objectives may read only
+the retained boundary. The result does not establish nonlinear compression,
+learned importance, or exact reinterpretation after changing the model.
+
+These sources are copied byte-for-byte from the reviewed research modules.
+They are included in the default import and the complete axiom audit.
+
 ## Optional linear-record algebra
 
 `CadenceRecords` imports `CadenceFlagship/Memory.lean` and `Sparse.lean`.
@@ -117,3 +138,15 @@ quadratic/star experiments, historical asymptotic cost claims, rollback and
 aversion mechanisms, Bayesian filter candidates, and binary structural-weight
 wells. None is required to
 state the implemented common core's current guarantees.
+
+### Conditional protected-path retention
+
+`CadenceMission/ProtectedTemporalPath.lean` proves three conditional statements:
+if a new transition agrees with the old transition along one protected finite
+path, that path remains defect-free and equals the new forward recurrence.
+Agreement of the readback maps on that path preserves its published values.
+The proof reuses causal-path uniqueness and requires no axioms. It assumes
+exact map agreement; it does not verify floating-point SVD/projection, select
+importance, protect neighboring cues or establish unlimited plastic capacity.
+[TemporalMemory](../docs/temporal-memory.md) exposes the corresponding explicit
+response constraints and their finite numerical scope.

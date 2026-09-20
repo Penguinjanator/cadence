@@ -22,6 +22,7 @@ human-like capability.
 from __future__ import annotations
 
 from . import regions
+from .actor import ActorPlan, ActorReadback, BodyModel, EquilibriumActor, ObservationRecord
 from .atlas import Atlas, atlas_of, brain_scan_script, build_atlas
 from .brain import Brain, BrainState, Equilibrium, Nudge, available_backends
 from .certificate import (
@@ -56,8 +57,21 @@ from .reference import conformance
 from .regions import Region
 from .replay import ReservoirReplay
 from .stream import Afterglow, Echo, FastSynapses, PatternSeparator, Trace, stateful
+from .temporal import TemporalObservation, TemporalPatchNet, TemporalPhase, TemporalReadback
+from .temporal_memory import ConstraintReport, TemporalMemory
 
 __all__ = [
+    "ActorPlan",
+    "ActorReadback",
+    "BodyModel",
+    "EquilibriumActor",
+    "ObservationRecord",
+    "ConstraintReport",
+    "TemporalMemory",
+    "TemporalPatchNet",
+    "TemporalPhase",
+    "TemporalObservation",
+    "TemporalReadback",
     "PatchNet",
     "PatchObservation",
     "ContentMemory",
@@ -122,7 +136,7 @@ __all__ = [
     "stateful",
 ]
 
-__version__ = "0.9.0"
+__version__ = "0.10.0"
 
 from . import legacy as _legacy  # noqa: E402  (the 0.8 names, deprecated)
 
