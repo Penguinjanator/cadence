@@ -1,7 +1,8 @@
 # PatchNet: continuous observations and isolated rehearsal
 
-`PatchNet` is the revised interface for new Cadence experiments. It composes
-the existing nonlinear `Brain` and local contrastive `Learner` without
+`PatchNet` is the supported graph interface. For the current temporal learner,
+protected memory and action planning, start with the [architecture guide](architecture.md).
+The graph interface composes the nonlinear `Brain` and local contrastive `Learner` without
 requiring an external associative store. Its default factory creates a fully
 reciprocal graph; the older `layered` factory alone does not add every reverse
 input contact.
@@ -135,7 +136,7 @@ including when a later branch input raises an error. No branch automatically
 becomes a witnessed fact or a training target. The application remains
 responsible for the truth of a later explicit `observe` call.
 
-This implements a substrate for internal rehearsal. Competent improvisation
+This implements a substrate for internal rehearsal. Creative problem solving
 requires a learned consequence model, useful candidate generation, measured
 selection and successful autonomous output. An isolated branch alone proves
 none of those capabilities.
