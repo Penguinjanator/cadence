@@ -31,4 +31,4 @@ records and repair explicit.
 [Convergence certificates](certificate.md) · [Protocols](protocols.md) ·
 [Receipts](receipts.md) · [Brain viewer](pages.md) · [Backends](backends.md)
 
-Examples: the arm and the world in the [gallery](https://github.com/muellerberndt/cadence-examples).
+Formal results: [the bundled Lean library](../lean/README.md), with explicit hypotheses and implementation boundaries.

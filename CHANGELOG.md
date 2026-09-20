@@ -411,7 +411,7 @@ after all" and measured on its gates.
 
 ## 0.4.1 (2026-09-09)
 
-- Docs only. The grey parrot rung was withdrawn from cadence-examples (its imitations did not
+- Docs only. The grey parrot rung was withdrawn from the application demonstrations (its imitations did not
   reach the bar); `embodied.md` now works through cart-pole and the sign writer, `tasks.md`
   keeps the several-learners-in-one-net recipe without the parrot, and the examples table
   lists the nine rungs.
