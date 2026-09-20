@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- `cadence.experimental.PartitionedTemporalPatchNet` adds explicit fixed
+  connectivity masks over the existing temporal solver, with masked detuning,
+  complete checkpoints and private planning. Supplied routing is an experimental
+  control, not learned specialization. `TemporalMemory.observe` rejects this
+  subclass before mutation; the default temporal model is unchanged.
 - Optional `TemporalPatchNet.observe(..., backtrack=True)` accepts a parameter
   step only after target-free replay of the observed path improves its loss
   from the original hidden boundary. It reports trial costs and accepted rate;

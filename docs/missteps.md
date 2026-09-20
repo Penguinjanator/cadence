@@ -30,6 +30,7 @@ not a history of benchmark outcomes.
 | Interpreting different comments about identical audio as progress | Playback context and expectations can affect listening reports. | Hash clips, disclose duplicates and preserve verbatim feedback separately from metrics. |
 | Learning a few phrases and claiming original composition | Recall, interpolation, held-out transfer and intentional invention are different tasks. | State the target, retain source provenance and test each claimed behavior separately. |
 | Adding named modules before locating a failure | More mechanisms can hide an encoding, objective or optimization problem. | First compare oracle actions, each task separately, joint learning and simple controls. |
+| Calling supplied routing learned specialization | Manually assigned coordinate groups and ports already impose roles. | Use [fixed connectivity](partitioned.md) as an explicit experimental control; compare dense and disconnected models and count changes to capacity and initialization. |
 | Launching a longer run because a short run converges | Settling may optimize an inadequate objective, and more steps can worsen interference. | Require acquisition, retention and actual task quality before scaling. |
 
 For music, preserve stable clip IDs, the model and instrument versions, and

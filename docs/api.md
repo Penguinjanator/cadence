@@ -57,6 +57,22 @@ fields are described in the [planning guide](planning.md).
   its memory together. Lower-level `project(before, proposed)` requires the
   caller's explicit transaction and is documented in the source.
 
+## Experimental fixed connectivity (`cadence.experimental`)
+
+This namespace is a development addition after 0.11.0 and is not exported at
+the top level. `PartitionedTemporalPatchNet(inputs, hidden, outputs, *,
+masks=None, **options)` accepts the temporal constructor options and boolean
+`A`/`B`/`C` masks; omitted masks allow all entries. It preserves the existing
+solver and masks parameter gradients before candidate admission.
+
+`two_group_masks(context_hidden, motor_hidden, inputs, outputs, *,
+context_inputs, motor_inputs, cross_coupling=True)` builds one supplied routing
+pattern. The model's `masks` property returns copies and
+`trainable_parameter_count` counts permitted entries, not allocated storage.
+Restore with the subclass's `restore`/`load` to preserve mask enforcement.
+**`TemporalMemory.observe` rejects this subclass before mutation.** See the
+[experimental guide](partitioned.md) for checkpoint, planning and evidence scope.
+
 ## EquilibriumActor (`cadence.actor`)
 
 `BodyModel` and `EquilibriumActor` provide fixed linear-body planning with a

@@ -19,8 +19,10 @@ broader research goal.
 validate observations, actions, learning and retained behavior before scaling.
 The [API reference](api.md) lists current interfaces and supported compatibility
 components. [Scaling experiments](scaling.md) separate experience, training
-exposure and capacity. These guides target version 0.11.0; the optional
-parameter-backtracking addition is explicitly marked as development work.
+exposure and capacity. These guides target version 0.11.0; optional parameter
+backtracking and [experimental fixed connectivity](partitioned.md) are
+explicitly marked as development additions. Fixed connectivity supplies routing
+constraints for comparisons; it does not establish learned specialization.
 
 [EquilibriumActor](actor.md) provides a separate fixed linear-model example of
 factual inference, compressed past context and joint future-state/action repair.

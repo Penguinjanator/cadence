@@ -44,6 +44,12 @@ workspace cost more. Free causal prediction avoids this factorization but has
 a sequential dependency across time. A GPU backend for a different graph API
 does not accelerate this temporal kernel automatically.
 
+[Experimental connection masks](partitioned.md) do not make that solver sparse.
+Count permitted parameters separately from allocated parameters and mask bytes;
+equal hidden width still uses the same dense message dimensions. Zeroing
+connections also changes the initial recurrence spectrum, and supplied input
+routing changes information access. Neither is evidence of learned specialization.
+
 Longer and wider runs therefore need measured numerical conditioning and a
 verified implementation path before hardware scaling. Treat speed and task
 quality as separate measurements. No general Cadence scaling law has been

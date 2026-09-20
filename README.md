@@ -55,6 +55,10 @@ python -m pip install cadence-net==0.11.0
 | [TemporalMemory](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) | Explicit protection of selected local responses; an optional local readout metric improves conditioning without retaining a replay corpus. |
 | [EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md) | A separate fixed linear-body component with exact Gaussian history compression and factual readback. |
 
+Development checkouts also expose [experimental fixed connectivity](https://github.com/muellerberndt/cadence/blob/main/docs/partitioned.md)
+under `cadence.experimental`. It supplies routing constraints for controlled
+comparisons, not learned specialization, and is not part of the 0.11.0 release.
+
 Start with the executable [learn, act and observe guide](https://github.com/muellerberndt/cadence/blob/main/docs/interaction.md).
 It acquires an action/consequence relation, plans privately, executes bounded
 actions and uses actual readback to repair its next proposal. The
