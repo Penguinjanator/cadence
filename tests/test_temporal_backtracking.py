@@ -94,6 +94,24 @@ def test_failed_phases_are_not_relabelled_as_parameter_rejection():
     assert_array_equal(net.state, result.free.final_state)
 
 
+def test_exhausted_search_cannot_commit_an_unusable_finite_rate():
+    net = TemporalPatchNet(1, 2, 1, seed=1087)
+    before = net.parameters()
+    result = net.observe(
+        np.full((1, 3, 1), 0.2),
+        np.full((1, 3, 1), 0.1),
+        rate=1e100,
+        backtrack=True,
+    )
+    assert not result.updated and result.reason == "no_decreasing_parameter_step"
+    assert len(result.replay_losses) == result.replay_calls == 16
+    assert result.accepted_rate == 0 and result.final_loss == result.initial_loss
+    assert net.updates == net.readback().parameter_revision == 0
+    for key in before:
+        assert_array_equal(before[key], net.parameters()[key])
+    assert_array_equal(net.state, result.free.final_state)
+
+
 @pytest.mark.parametrize("invalid", [1, None, "yes"])
 def test_invalid_option_leaves_complete_state_unchanged(invalid):
     net = TemporalPatchNet(1, 2, 1, seed=1069)
