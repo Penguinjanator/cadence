@@ -68,7 +68,11 @@ def test_frozen_scalar_kernel_parity():
     for case in fixture["cases"]:
         net = TemporalPatchNet(1, case["width"], 1, seed=case["seed"], tolerance=case["tolerance"])
         for key, value in net.parameters().items():
-            assert_array_equal(value, case["initial"][key])
+            # QR initialization can differ by a few ulps across BLAS builds.
+            # Check that initialization agrees numerically, then replay the
+            # kernel from the exact archived arrays rather than a seed proxy.
+            assert_allclose(value, case["initial"][key], atol=1e-15, rtol=1e-15)
+        net.set_parameters({key: np.array(value) for key, value in case["initial"].items()})
         inputs = np.zeros((2, case["horizon"], 1))
         inputs[:, 0, 0] = case["cue"]
         result = net.observe(inputs, np.array(case["target"]), beta=case["beta"], rate=case["rate"])
