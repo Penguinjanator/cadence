@@ -1,10 +1,14 @@
-# Quickstart: one ongoing learning life
+# Quickstart: the existing GenericBrain composition
 
-Cadence has **one operating mode: ongoing experience**. The same brain observes,
-acts, remembers and learns throughout its life. There is no training/inference
-switch and no separate model to deploy after learning.
+This guide retains the `GenericBrain` interface for existing applications.
+Start with [TemporalPatchNet](temporal.md) and
+[learn, act and observe](interaction.md) for the current temporal core.
 
-Install from the [README](../README.md#install). The complete walkthrough below
+`GenericBrain` supports **ongoing experience**: the same composed brain
+observes, acts, remembers and learns throughout its life. This interface has
+no training/inference switch or separate model to deploy after learning.
+
+Install from the [README](../README.md#current-library). The complete walkthrough below
 needs only NumPy and Cadence.
 
 ## One mode, one loop

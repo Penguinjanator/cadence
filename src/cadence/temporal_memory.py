@@ -166,6 +166,7 @@ class TemporalMemory:
         *,
         beta: float = 0.01,
         rate: float = 0.1,
+        readout_damping: float | None = None,
     ) -> TemporalObservation:
         """Stage EP and protected projection, then commit both objects together.
 
@@ -175,20 +176,120 @@ class TemporalMemory:
         derivative before projection; committed weights obey the constraints.
         This single-threaded transaction does not promise concurrent mutation
         safety. Subclasses require their own complete state transaction.
+
+        Positive readout_damping opts into a local C update metric. With free
+        activities X, protected basis Q, P=I-QQ.T and S=X.T@X/(batch*time), use
+        -rate*delta_C*P*(P*S*P+readout_damping*I)^-1*P; A/B stay ordinary EP.
+        S omits the loss's output-count divisor and teaching precisions: it
+        is an explicitly selected geometry, not the full loss Hessian. No
+        optimizer state or old examples are retained. Default None preserves
+        the original update path.
+
+        The metric candidate must pass a protected-map residual check and one
+        actual free replay from the ORIGINAL boundary. Weighted half-MSE must
+        decrease by more than 64*eps*max(abs(old_loss),abs(new_loss),tiny).
+        Ties and increases return metric_step_rejected, carry only the valid
+        original free activity, and keep weights, counters and memory intact.
+        This is not a phase failure or evidence of stationarity. Returned phase
+        counters exclude this one additional replay and the hidden-width
+        metric solve. There is no beta adaptation or parameter line search.
         """
         if type(net) is not TemporalPatchNet:
             raise TypeError("atomic protected learning requires TemporalPatchNet")
+        if readout_damping is not None and (
+            not np.isfinite(readout_damping) or readout_damping <= 0
+        ):
+            raise ValueError("readout_damping must be finite and positive")
         before = net.parameters()
         self._check(before)
         candidate = TemporalPatchNet.restore(net.snapshot())
         pending = TemporalMemory.restore(self.snapshot())
         result = candidate.observe(inputs, target, beta=beta, rate=rate)
         if result.updated:
-            candidate.set_parameters(pending.project(before, candidate.parameters()))
+            if readout_damping is None:
+                candidate.set_parameters(pending.project(before, candidate.parameters()))
+            elif not self._metric_candidate(
+                net, candidate, pending, before, result, inputs, target, rate, readout_damping
+            ):
+                # No staged weight/counter/binding mutation crosses rejection.
+                candidate = TemporalPatchNet.restore(net.snapshot())
+                candidate._carry(result.free)
+                pending = TemporalMemory.restore(self.snapshot())
+                result = TemporalObservation(
+                    False,
+                    "metric_step_rejected",
+                    result.free,
+                    result.plus,
+                    result.minus,
+                    result.delta,
+                )
         # Every fallible calculation/validation precedes these assignments.
         net.__dict__.update(candidate.__dict__)
         self._basis, self._binding = pending._basis, pending._binding
         return result
+
+    def _metric_candidate(
+        self,
+        original: TemporalPatchNet,
+        candidate: TemporalPatchNet,
+        pending: TemporalMemory,
+        before: dict[str, np.ndarray],
+        observation: TemporalObservation,
+        inputs: np.ndarray,
+        target: np.ndarray,
+        rate: float,
+        damping: float,
+    ) -> bool:
+        """Private staged metric and causal acceptance; never writes live objects."""
+        assert observation.delta is not None
+        q = self._basis.get("C", np.empty((original.hidden, 0)))
+        activity = np.tanh(observation.free.hidden).reshape(-1, original.hidden)
+
+        def project(rows: np.ndarray) -> np.ndarray:
+            result = rows.copy()
+            for _ in range(2):
+                result -= (result @ q) @ q.T
+            return result
+
+        gradient = project(observation.delta["C"])
+        innovation = project(activity)
+        metric = innovation.T @ innovation / len(activity) + damping * np.eye(original.hidden)
+        try:
+            step = project(-rate * np.linalg.solve(metric, gradient.T).T)
+        except np.linalg.LinAlgError:
+            return False
+        proposed = candidate.parameters()
+        proposed["C"] = before["C"] + step
+        if not all(np.isfinite(value).all() for value in proposed.values()):
+            return False
+        projected = pending.project(before, proposed)
+        # Scale by the original local responses, never by a huge new step.
+        for key, previous in before.items():
+            basis = self._basis.get(key, np.empty((previous.shape[1], 0)))
+            error = float(np.max(np.abs((projected[key] - previous) @ basis), initial=0.0))
+            scale = max(1.0, float(np.max(np.abs(previous @ basis), initial=0.0)))
+            if not np.isfinite(error) or not np.isfinite(scale) or error > 1e-12 * scale:
+                return False
+        candidate.set_parameters(projected)
+        boundary = original.state
+        if boundary is None:
+            boundary = np.zeros((len(observation.free.hidden), original.hidden))
+        replay = candidate.imagine(inputs, state=boundary)
+        if not replay.converged:
+            return False
+        precision = original.output_precision
+        teaching = np.asarray(target, dtype=float)
+        with np.errstate(over="ignore", invalid="ignore"):
+            old_loss = float(
+                0.5 * np.mean(precision * np.square(observation.free.output - teaching))
+            )
+            new_loss = float(0.5 * np.mean(precision * np.square(replay.output - teaching)))
+        if not np.isfinite(old_loss) or not np.isfinite(new_loss):
+            return False
+        allowance = 64 * np.finfo(float).eps * max(
+            abs(old_loss), abs(new_loss), np.finfo(float).tiny
+        )
+        return bool(new_loss < old_loss - allowance)
 
     def report(self, maximum_residual: float = 0.0) -> ConstraintReport:
         return ConstraintReport(

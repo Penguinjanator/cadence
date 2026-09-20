@@ -6,7 +6,7 @@ initial boundary fixed. Each accepted proposal must improve an ordinary free
 prediction of the supplied goal. The method executes no action and admits no
 new observation.
 
-This is an experimental API in the development checkout. It is a local optimizer for
+Available in version 0.11.0, this experimental API is a local optimizer for
 continuous controls under an existing model. A useful application still needs a
 model that predicts actual consequences and an external action/readback loop.
 The [interaction guide](interaction.md) provides an executable learned-model loop.

@@ -1,4 +1,9 @@
-# Concepts
+# Existing graph and Records concepts
+
+This guide describes the existing `Brain`, `Learner` and `Records`
+compositions, retained for applications that use them. For the current
+temporal core, start with [architecture](architecture.md),
+[TemporalPatchNet](temporal.md) and [learn, act and observe](interaction.md).
 
 A Cadence brain is software state organised into neurons, synapses and regions,
 with readouts, records and a learning update. It is a design for computation. It
@@ -15,9 +20,11 @@ The architecture is a hypothesis to test.
 
 ## Four principles
 
-Records learn what follows a reading. Local repair and checked convergence describe the
-settled regions. Detuning is an optional technique for proposing alternatives within a
-learning application.
+In this composition, Records learn what follows a reading, while local repair
+and checked convergence describe the settled graph regions. Random drive
+perturbations can propose alternative states. These are distinct from the
+centered free/nudged contrast used for learning and
+[temporal input planning](planning.md).
 
 **Records.** A records cortex (`cd.Records`) subtracts each input unit's running mean from
 a reading, maps it through a fixed random expansion onto many cells, keeps the most active
@@ -45,7 +52,7 @@ residual is below the tolerance or the budget is spent, and returns the state wi
 the per-row `residual` and the per-row `converged` flags. Pass the same `mask` and `nudge`
 to a settle and to its residual check. A spent budget is a result to report.
 
-**Equilibrium detuning.** A settled brain gives one answer under one drive. To sample
+**Random drive perturbations.** A settled brain gives one answer under one drive. To sample
 alternatives, add bounded random drive to the latent neurons and settle again. Each batch
 row supplies a separate candidate; check whether it reaches an equilibrium:
 

@@ -1,11 +1,64 @@
 # API reference
 
-Top-level exports and module-qualified helpers are listed below. Begin with the
-[PatchNet guide](patchnet.md) for the revised core or the
-[quickstart](quickstart.md) for the earlier composed-brain API, and with
-[write a cortex](cortex.md), [compose a brain](brain.md) and [evolve a brain](evolution.md)
-for building; the source docstrings give additional details. Prefer keyword arguments for
-optional configuration.
+Start with [architecture](architecture.md), [temporal learning](temporal.md),
+[response protection](temporal-memory.md) and [private planning](planning.md).
+The [interaction guide](interaction.md) combines the current public interfaces.
+Optional arguments should be passed by keyword. Existing graph and composition
+APIs follow the current temporal interfaces below.
+
+## TemporalPatchNet (`cadence.temporal`)
+
+- `TemporalPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None, ...)`
+  creates the residual temporal model with shared A/B/C maps. Paths have shape
+  `(batch, time, ports)`; omitted positive output precision means all ones.
+- `observe(inputs, target, *, beta=0.01, rate=0.1)` repairs observed teaching
+  paths and returns `TemporalObservation`. Only valid free activity becomes live;
+  detuned activity does not become an observed record.
+- `advance(inputs)` carries a free path into live context. `imagine(inputs, *,
+  state=None)` predicts privately. `settle(inputs, *, target=None, beta=0.0,
+  state=None)` exposes a private phase directly.
+- `plan(inputs, *, goal, controls, bounds=None, state=None, beta=0.01,
+  rate=1.0, max_steps=32, max_backtracks=16, tolerance=1e-6,
+  goal_tolerance=1e-6)` repairs selected continuous input ports. Boolean controls
+  and bounds broadcast to the input shape. It executes no action and changes
+  no live state. See [planning](planning.md) for precise cost and failure semantics.
+- `readback()`, `state`, `parameters()` and `snapshot()` expose detached values.
+  `reset()` clears activity, not learned parameters. `save(path)`, `load(path)`
+  and `restore(snapshot)` preserve continuation state and configuration.
+- `TemporalPhase` exposes solved hidden/output paths, residuals, curvature and
+  work. `TemporalObservation` exposes `updated`, `reason`, the phases and raw
+  `delta`. `TemporalReadback` binds current activity to its parameter revision.
+
+## TemporalPlan (`cadence.planning`)
+
+The detached result contains proposed `inputs`, a target-free `prediction`,
+`initial_prediction`, fixed `boundary`, `losses`, `step_sizes` and model revision.
+`cost`, `initial_cost`, `improved` and `iterations` summarize accepted work.
+`converged` concerns the finite-beta projected residual; `predicted_goal_met`
+checks modeled cost. Neither certifies an actual outcome. Work and failure
+fields are described in the [planning guide](planning.md).
+
+## TemporalMemory (`cadence.temporal_memory`)
+
+- `TemporalMemory(*, relative_tolerance=1e-12)` creates explicit local response
+  constraints. `protect(net, inputs, *, state=None)` admits the current free
+  response of a caller-selected query, without targets or network mutation.
+- `observe(net, inputs, target, *, beta=0.01, rate=0.1,
+  readout_damping=None)` stages protected learning atomically. Positive finite
+  readout damping selects the local metric and causal acceptance check described
+  in the [memory guide](temporal-memory.md); `None` retains ordinary projection.
+- `report()` describes basis ranks and counted storage. `snapshot()` and
+  `restore(snapshot)` preserve bases and parameter binding. Save the net and
+  its memory together. Lower-level `project(before, proposed)` requires the
+  caller's explicit transaction and is documented in the source.
+
+## EquilibriumActor (`cadence.actor`)
+
+`BodyModel` and `EquilibriumActor` provide fixed linear-body planning with a
+Gaussian compressed past. `admit` records actual readings/executed actions;
+`plan` privately proposes an action toward a supplied goal. Their state,
+covariance, checkpoint and fixed-model restrictions are distinct from
+`TemporalPatchNet`: see the complete [actor guide](actor.md).
 
 ## PatchNet (`cadence.patch`)
 

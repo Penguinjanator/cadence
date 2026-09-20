@@ -1,22 +1,20 @@
-"""Cadence: stateful neural systems that learn through ongoing experience.
+"""Cadence: research toward general intelligence through local repair.
 
-Neural patches carry local state, exchange activity over declared synapses and
-read back their responses. Memories retain observed associations; local updates
-and reward eligibility repair future predictions and decisions. ``GenericBrain.step``
-coordinates observation, feedback and action in one ongoing loop, without separate
-training/inference modes. The application supplies its environment and update clocks;
-settling or imagination alone does not teach synapses.
+Bounded observer-like patches carry state, expose ports and readback, and repair
+shared relationships. ``TemporalPatchNet`` learns observed paths by centered
+equilibrium detuning, carries context, imagines privately and repairs continuous
+action proposals under the same learned model. ``TemporalMemory`` adds explicit
+conditional response protection. Actual outcomes remain distinct from desired
+or imagined outcomes.
 
-Raw ``Brain`` dynamics seek a fixed point or follow a transient; convergence must
-be checked. Normalization and output softmax read declared groups. Protocols,
-conformance and source-bound receipts check the stated numerical claims, not
-human-like capability.
+The research goal is reusable learning, retention, creativity and evolving
+functional self-reflection across applications. Current APIs expose tested
+operations; they do not establish general intelligence or an automatically
+learned recursive hierarchy. See the architecture and interaction guides.
 
-    >>> import cadence as cd
-    >>> ring = dict(pre=[0, 1, 2, 3], post=[1, 2, 3, 0], count=[120] * 4)
-    >>> brain = cd.Brain(cd.Connectome.from_synapses(4, **ring), cd.NeuronModel(gain=0.03))
-    >>> brain.settle(stimulus={0: 3.0}, steps=60).activation.round(2)
-    array([1., 1., 1., 1.])
+``PatchNet``, ``Brain``, ``Learner``, ``GenericBrain``, ``Records`` and graph
+construction/evolution helpers remain supported as distinct compatibility
+compositions. Their optional mechanisms are not required by the temporal core.
 """
 
 from __future__ import annotations
@@ -138,7 +136,7 @@ __all__ = [
     "stateful",
 ]
 
-__version__ = "0.10.0"
+__version__ = "0.11.0"
 
 from . import legacy as _legacy  # noqa: E402  (the 0.8 names, deprecated)
 

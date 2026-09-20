@@ -1,4 +1,10 @@
-# Learning through experience
+# Experience in existing graph compositions
+
+The examples and component table below describe the existing graph, Records
+and `GenericBrain` APIs. They remain available for those applications; they
+are not required parts of the current temporal core. Start with
+[architecture](architecture.md) and [learn, act and observe](interaction.md)
+for `TemporalPatchNet`, explicit response protection and private planning.
 
 Design the brain and its learning life together. What can it observe and change?
 What persists, what counts as evidence, and what makes a decision useful?
@@ -13,7 +19,9 @@ ports, readback, records and feedback/repair, with checkable evidence.
 
 ## Connect functions through actual ports
 
-These seven functions form a candidate architecture.
+These seven functions form a candidate composition using the existing APIs.
+Named regions and language ports do not establish learned specialization or
+language competence.
 
 | Function | Build with | What must be learned or supplied explicitly |
 |---|---|---|

@@ -89,8 +89,8 @@ For an acting system, test this full sequence:
 4. Execute the selected action and measure the actual consequence.
 5. Repair the discrepancy and test earlier skills after the update.
 
-`imagine` supplies isolated temporal predictions. The development interface
-`TemporalPatchNet.plan` repairs bounded continuous input ports under that same
+`imagine` supplies isolated temporal predictions. The
+`TemporalPatchNet.plan` interface repairs bounded continuous input ports under that same
 learned model; the [interaction guide](interaction.md) demonstrates acquisition
 and execution in a small nonlinear body. `EquilibriumActor` separately supplies
 planning for its documented fixed linear body. A new instrument still needs
@@ -110,7 +110,8 @@ Before treating such a workspace as necessary, compare the same task with
 and without useful summary feedback. Count its state, ports and work. Include
 a matched recurrent model, disconnected feedback and shuffled feedback.
 Require an improvement in a named behavior, such as maintaining a motif while
-changing accompaniment, rather than merely showing activity in the new patch.
+changing accompaniment, or revising a strategy under new constraints. Activity
+in the new patch alone does not establish useful coordination.
 For specialization, selectively perturb a region and measure both its distinct
 contribution and the continued coordination of the whole system.
 
@@ -129,3 +130,7 @@ implementation; neither substitutes for that behavioral evidence.
 
 See [common missteps](missteps.md) for failures this protocol is designed to
 expose, and [temporal learning](temporal.md) for the concrete API.
+
+For the general research goal and application-independent creativity criteria,
+see [creativity and evolving self-reflection](creativity.md). Musical examples
+illustrate these requirements; they do not define the learning architecture.

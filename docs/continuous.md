@@ -1,6 +1,10 @@
-# One ongoing brain
+# Continuous interaction with GenericBrain
 
-Use `GenericBrain.step` for an interacting agent. Each moment brings an observation,
+This page documents the existing `GenericBrain` composition and its feedback
+timing. For the current temporal learner and private continuous-input planner,
+see [learn, act and observe](interaction.md).
+
+`GenericBrain.step` connects this composition to an environment. Each moment brings an observation,
 feedback from the preceding action, and optionally a demonstration. The same recurrent
 brain responds and changes its synapses throughout its life; there is no `train()` or
 `eval()` switch. No replay buffer or separate training network is required.

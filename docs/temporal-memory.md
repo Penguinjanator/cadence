@@ -78,6 +78,64 @@ preserving all earlier local responses is stronger than preserving only the
 earlier useful behavior. More training is not a demonstrated remedy for either
 restriction.
 
+## A local metric for poorly conditioned readout updates
+
+Version 0.11.0 adds the optional `readout_damping` argument to `memory.observe`.
+The default `None` retains the original update path. With a positive finite
+value `mu`, the method scales the readout update by the covariance of current
+free activity in the remaining unprotected directions:
+
+```text
+X = flattened free tanh activity
+P = I - Q_C @ Q_C.T
+S = X.T @ X / (batch * time)
+Delta_C = -rate * gradient_C @ P @ inverse(P @ S @ P + mu * I) @ P
+```
+
+The implementation solves a linear system and applies the existing numerical
+projection. It uses the same centered EP gradient; the metric reads no teaching
+target and adds no persistent optimizer state. A and B keep ordinary projected
+updates. `S + mu I` is the chosen local geometry, not the full task Hessian:
+output-count normalization and teaching precision remain in the gradient.
+The damping is supplied, not learned confidence or an importance score.
+
+```python
+# The net and memory from the earlier example remain a bound pair.
+net.reset()
+attempt = memory.observe(
+    net, new_input, np.full((1, 1, 1), 0.35),
+    beta=0.001, rate=1.0, readout_damping=1e-4,
+)
+assert attempt.updated or attempt.reason == "metric_step_rejected"
+np.testing.assert_allclose(
+    net.imagine(old_input, state=cold).output, old_output, atol=1e-12
+)
+```
+
+A metric candidate must preserve local protected responses within the stated
+numerical check and reduce the weighted half-MSE of a **target-free replay from
+the original boundary**. The required decrease exceeds
+`64 * machine_epsilon * max(abs(old_loss), abs(new_loss), smallest_normal_float)`.
+The response check bounds `max(abs(Delta_W @ Q))` by
+`1e-12 * max(1, max(abs(W_before @ Q)))`; a huge proposed step cannot relax that
+bound by making itself the scale.
+
+Rejected metric candidates return `updated=False` and
+`reason="metric_step_rejected"`. They preserve weights, update/revision counters
+and memory binding, carrying only the valid original free activity. Ties near
+the numerical floor can be rejected; rejection is neither failed phase
+convergence nor a proof of stationarity. Invalid arguments raise before mutation.
+The usual raw EP `delta` remains available in the result.
+
+This path adds one hidden-width linear solve and, for a valid projected
+candidate, one causal replay. Those operations are extra to the returned
+free/positive/negative phase counters. There is no parameter backtracking or
+automatic beta selection. Two converged, positive-curvature detunings can still
+lie on different branches; sufficiently small detuning and checked outcomes
+matter. Strong coefficient growth may amplify unprotected inputs. This option
+improves a numerical conditioning problem; it does not remove finite memory
+capacity or discover which experience deserves protection.
+
 ## Atomic learning and saved state
 
 `memory.observe(net, inputs, target, beta=..., rate=...)` stages ordinary centered

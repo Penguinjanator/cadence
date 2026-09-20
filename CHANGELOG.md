@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 (2026-09-20)
 
 - `TemporalPatchNet.plan` repairs caller-selected continuous input ports using
   centered equilibrium contrasts, bound projection and decreasing causal replay.
@@ -8,6 +8,12 @@
 - Detached `TemporalPlan` diagnostics distinguish stationarity, predicted goal
   satisfaction, work caps and failed phases. Desired outcomes never become
   observed training records through planning.
+- Optional `TemporalMemory.observe(readout_damping=...)` applies a damped local
+  readout metric inside the protected subspace. A causal replay rejects harmful
+  metric candidates; no replay corpus or persistent optimizer state is added.
+- General-intelligence and creativity goals now organize the README, API index
+  and documentation. Task-specific examples illustrate measured components.
+  Evolving recursive self-reflection remains a research requirement.
 - Planning documentation and executable examples cover the action/readback
   boundary; memory documentation distinguishes remaining rank from conditioning.
 

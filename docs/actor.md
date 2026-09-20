@@ -6,9 +6,11 @@ learned two-coordinate dynamics. Its past and future use the same family of
 squared local residuals, with a causal boundary between factual inference and
 private preference-driven planning.
 
-This is a transparent linear Gaussian/quadratic component. It does not turn
-`TemporalPatchNet` into a general nonlinear action planner, train its body model
-online or provide a musical composition policy.
+This actor keeps a fixed linear Gaussian/quadratic body model during its life.
+For learned nonlinear continuous-input planning, see
+[`TemporalPatchNet.plan`](planning.md) and the
+[interaction guide](interaction.md). This actor does not train its body model
+online or supply an application-specific action policy.
 
 ## Observe, plan, execute and observe again
 
@@ -145,8 +147,9 @@ are component accounting, not a hardware benchmark.
 | Planning and correction | Joint quadratic state/action solve, actual executed-action/readback admission | Supplied goal, coordinates, model and deadline; unconstrained actions. |
 | Self-readback | Detached state, uncertainty, residuals and proposal diagnostics | No learned hierarchy or consciousness claim. |
 
-The base package now exposes these components directly. Their APIs make the
-boundary between real observation and private imagination explicit. Coupling a
-nonlinear learned temporal model to free action ports, autonomous intention,
-reliable specialization, continued model revision and Amen composition remain
-separate experimental requirements.
+The base package exposes these components directly. Their APIs make the
+boundary between real observation and private imagination explicit. The
+[temporal planner](planning.md) also couples a learned nonlinear model to
+bounded action ports. Autonomous intention, reliable specialization,
+continued model revision and creative problem solving remain separate
+experimental requirements.

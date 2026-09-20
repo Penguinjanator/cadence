@@ -1,133 +1,104 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/muellerberndt/cadence/main/docs/assets/cadence-logo.png" alt="Cadence: a mesh of stateful neural patches, feedback loops and synaptic signals" width="100%">
+  <img src="https://raw.githubusercontent.com/muellerberndt/cadence/main/docs/assets/cadence-logo.png" alt="Cadence: connected patches with local state, readback and repair" width="100%">
 </p>
 
 # Cadence
 
-[Website](https://floatingpragma.io/) · [Cadence page](https://floatingpragma.io/cadence/) · [PyPI](https://pypi.org/project/cadence-net/) · [Documentation](https://github.com/muellerberndt/cadence/blob/main/docs/index.md)
+[Website](https://floatingpragma.io/cadence/) · [Paper](https://floatingpragma.io/cadence/paper.pdf) · [PyPI](https://pypi.org/project/cadence-net/) · [Documentation](https://github.com/muellerberndt/cadence/blob/main/docs/index.md)
 
-**An experimental neural library for learning through local overlap repair and equilibrium detuning.**
+**Research toward general intelligence through overlap consensus, equilibrium detuning and self-reflection.**
 
-Cadence explores an animal-inspired hypothesis: the same network that interprets
-an observation should carry context, change its learned relationships through
-experience, and explore possible continuations. It does not claim to reproduce
-an animal or human brain.
+Cadence's goal is a continuing learning system with the flexibility of animal
+and human problem solving: acquiring skills from experience, retaining useful
+knowledge, imagining alternatives and creating solutions across domains.
+The mission is to find the smallest persistent state and local update rule
+that can support these abilities. General intelligence is the research goal;
+the current library establishes bounded learning, memory and control results.
 
-> **Under active development.** Pin a release or exact commit for reproducible work.
-> Version 0.10.0 includes temporal learning, explicit response protection and a
-> small equilibrium actor. Earlier applications use other library compositions;
-> their results do not validate the revised architecture automatically.
+The organizing idea comes from Observer Patch Holography: bounded,
+observer-like patches with local state, ports, records, readback and repair.
+A disturbance exposes disagreement. The network can explore a possible
+response, test it against actual consequences and settle into a revised
+organization. We seek fewer mechanisms that solve more problems.
 
-[Architecture and integration](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) maps context, learning,
-explicit memory protection, self-readback, imagination and action planning to
-the implemented base-library APIs.
+## Three shared principles
 
-[Design a task](https://github.com/muellerberndt/cadence/blob/main/docs/task-design.md) explains how observations, action ports,
-teaching and readback connect. [Common missteps](https://github.com/muellerberndt/cadence/blob/main/docs/missteps.md) covers
-information loss, misleading proxy scores, memory interference and premature
-claims about coordination or scaling.
+- **Overlap consensus:** patches repair disagreement across their shared
+  boundaries. The resulting equilibrium is an internally consistent model;
+  its predictions still have to agree with experience.
+- **Equilibrium detuning:** observed outcomes perturb that equilibrium.
+  Local positive/negative contrasts change learned relationships; the same
+  operation can adjust proposed actions while holding the model fixed.
+- **Functional self-reflection:** patches can read internal state,
+  predictions, proposed actions and unresolved mismatches through ordinary ports. Learning which
+  internal summaries to read, how to feed them back and how to grow useful
+  recursive organization is a central research direction.
 
-## Temporal paths and persistent context
+The current implementation provides detached self-readback and private proposal
+revision. Automatically learned recursive hierarchies, curiosity and reliable
+creativity remain to be demonstrated. [Creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md)
+defines these goals and their behavioral tests.
 
-Version 0.10.0 adds experimental [`TemporalPatchNet`](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md). Each
-moment is an observer-like patch with input/output ports, bounded activity and
-a residual against its preceding state. During learning, adjacent patches repair
-a complete observed path; centered equilibrium detuning changes their shared
-relationships. Free inference carries hidden context, and private continuation
-uses the same learned relationships without changing live state. Targets never
-become the live hidden state.
+## Current library
 
-The NumPy implementation exposes measured residuals, curvature checks, phase
-work and complete checkpoints. It extends the verified scalar-cue solver to
-time-varying observations. Sequence acquisition and long-term retention still
-require behavioral tests: a path can satisfy every model equation and predict
-poorly. This interface does not add a replay store or autonomous planning policy.
-The existing 0.9.0 graph API remains compatible.
-
-The development checkout additionally exposes
-[`TemporalPatchNet.plan`](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md):
-the same detuning rule adjusts bounded continuous action ports under a learned
-model. Accepted proposals must improve target-free predictions, and actual
-execution remains a separate observation. This API is not in the 0.10.0 wheel.
-
-[`TemporalMemory`](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) adds explicit response protection to
-temporal learning: caller-selected activity directions constrain later EP
-updates without replaying raw examples. Protected-path retention and remaining
-plasticity must be tested together; the available subspace is finite.
-
-The base package also exposes [`EquilibriumActor`](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md): a minimal
-fixed-model observer plus joint future-state/action repair. It admits actual
-readings, retains a supplied goal, proposes an action privately and replans after
-real readback. Its linear Gaussian body assumptions and model-bound compressed
-history are explicit; it is not yet a general nonlinear composer.
-
-## Start with PatchNet
-
-`PatchNet` is the existing general graph interface. It uses the existing
-nonlinear neural dynamics and local free/nudged learning rule, with a fully
-reciprocal graph by default. Its observer-like patches have bounded activity,
-declared ports, local readback and feedback/repair; experiments expose their
-observations, residuals and learned changes through reproducible evidence.
-
-- **Current context lives in neural activity.** Activity continues between
-  observations. Optional temporal overlap holds each solve against the previous
-  free activity. Whether a particular graph retains a cue through a delay must
-  be measured; a converged network can also forget its previous input.
-- **Acquired relationships live in continuous synapses and biases.** Resetting
-  activity leaves learned parameters intact. No external fact store or replay
-  buffer is required by this interface. Interference during further learning
-  remains a separate test.
-- **Real observations detune the network.** Continuous targets nudge only
-  declared observed ports. Each synapse changes from its endpoints' free/nudged
-  activity contrast. The implementation does not construct a backward graph.
-- **Convergence is checked.** Every required phase must satisfy the neural
-  equations within the declared residual tolerance before learning commits.
-  A capped solve is reported as unfinished. A small residual does not establish
-  a unique, stable or correct answer.
-- **Imagined continuations are isolated.** Branches use the same learned net
-  without changing live activity, parameters or evidence bookkeeping. Branch
-  isolation is implemented; useful planning and musical improvisation need
-  empirical validation.
-- **A complete checkpoint resumes the learner.** It includes parameters,
-  optimizer state, current activity and the optional bounded source-ID window.
-  Repeated IDs are suppressed within that window; IDs do not prove that two
-  environmental reports are independent.
-
-Follow the [PatchNet guide](https://github.com/muellerberndt/cadence/blob/main/docs/patchnet.md) for the running example, memory
-semantics, continuous targets and rehearsal. The earlier `Brain`, `Learner`,
-`GenericBrain`, `Records` and circuit APIs remain available for existing
-applications. Their separate associative memories are optional compositions,
-not required components of `PatchNet`.
-
-The research target is fewer local mechanisms supporting acquisition, selective
-forgetting, retention and correction together. Learned importance, robust
-lifelong memory, autonomous specialization and animal-level capability remain
-open. In particular, the revised core does not freeze each weight into a binary
-state: that candidate prevented compatible learning through shared connections.
-
-## Install
-
-Python 3.11+, with NumPy as the only required dependency:
+Version **0.11.0** brings learning and continuous action planning into the same
+temporal model. It requires Python 3.11+ and NumPy:
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate
-python -m pip install cadence-net==0.10.0
+python -m pip install cadence-net==0.11.0
 ```
 
-For development from this checkout, use `python -m pip install -e .`.
-On Windows activate with `.venv\Scripts\Activate.ps1`.
-[Optional backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md) support Numba, PyTorch and MLX.
+| Component | What it supplies |
+| --- | --- |
+| [TemporalPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md) | Local repair of observed paths, centered detuning, persistent context, private imagination and complete checkpoints. |
+| [Private planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md) | Bounded continuous action proposals under the learned model; accepted steps must improve predictions replayed without goal nudging. |
+| [TemporalMemory](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) | Explicit protection of selected local responses; an optional local readout metric improves conditioning without retaining a replay corpus. |
+| [EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md) | A separate fixed linear-body component with exact Gaussian history compression and factual readback. |
 
-## Reference
+Start with the executable [learn, act and observe guide](https://github.com/muellerberndt/cadence/blob/main/docs/interaction.md).
+It acquires an action/consequence relation, plans privately, executes bounded
+actions and uses actual readback to repair its next proposal. The
+[architecture guide](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) maps each capability to its API and current scope.
 
-[Experience](https://github.com/muellerberndt/cadence/blob/main/docs/experience.md) · [Quickstart](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md) ·
-[Continuous interaction](https://github.com/muellerberndt/cadence/blob/main/docs/continuous.md) · [Records](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md#records) ·
-[Write a cortex](https://github.com/muellerberndt/cadence/blob/main/docs/cortex.md) · [Compose a brain](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md) ·
-[Evolve a brain](https://github.com/muellerberndt/cadence/blob/main/docs/evolution.md) · [Local learning](https://github.com/muellerberndt/cadence/blob/main/docs/learning.md) ·
-[Reward](https://github.com/muellerberndt/cadence/blob/main/docs/reward.md) · [API](https://github.com/muellerberndt/cadence/blob/main/docs/api.md) · [All docs](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) ·
-[Lean proofs](https://github.com/muellerberndt/cadence/blob/main/lean/README.md)
+**Imagined continuations are isolated.** Branches use the learned network
+without changing live activity, parameters or factual bookkeeping. Controlled
+experiments demonstrate useful planning. Creativity requires additional
+evidence that novel proposals satisfy meaningful constraints and survive
+actual evaluation; musical improvisation is one possible example.
 
-Check equation residuals before claiming equilibrium. Measure task quality and
-learning cost; local updates alone guarantee neither capability nor speed.
-[Concepts and limits](https://github.com/muellerberndt/cadence/blob/main/docs/concepts.md). MIT licensed.
+**Retained experience and new learning are tested together.** Protected-path
+memory is conditional and finite. Importance is currently supplied; automatic
+relevance, selective forgetting, specialization and broad skill transfer remain
+research requirements. The [task-design guide](https://github.com/muellerberndt/cadence/blob/main/docs/task-design.md)
+and [common missteps](https://github.com/muellerberndt/cadence/blob/main/docs/missteps.md) explain how to measure them.
+
+## General mechanisms, different applications
+
+Games, language, multimodal perception, embodied control and creative work
+should use the same learning and memory mechanisms with declared observation
+and action ports. NES play, Connect Four, Maestro and music generation are
+application tests, not definitions of the architecture. A result in one does
+not establish transfer to the others.
+
+Application demonstrations are published only when they establish their
+claimed behavior. Recall and interpolation are useful development tests;
+original creation requires stronger evidence. Research receipts remain
+available with the paper without presenting those tests as finished products.
+
+## Proofs and compatibility
+
+The [bundled Lean library](https://github.com/muellerberndt/cadence/blob/main/lean/README.md)
+contains 169 checked conditional theorems about the mathematical components
+and their limits. It does not certify the complete Python implementation or
+prove intelligence. The paper identifies assumptions and reproducible evidence.
+
+The existing [PatchNet graph interface](https://github.com/muellerberndt/cadence/blob/main/docs/patchnet.md),
+`Brain`, `Learner`, `GenericBrain`, `Records` and circuit APIs remain supported
+for existing applications. Their optional memories and construction helpers
+are distinct compositions, not required parts of the temporal core.
+[API reference](https://github.com/muellerberndt/cadence/blob/main/docs/api.md).
+
+Development installs use `python -m pip install -e .`.
+[Optional backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md)
+apply to their documented graph APIs; the temporal implementation is NumPy.
+Pin a release or exact commit for reproducible work. MIT licensed.

@@ -1,6 +1,10 @@
 # Backends, devices, precision
 
-Begin with the NumPy-only [installation](../README.md#install). Optional extras
+`TemporalPatchNet`, its planner and `TemporalMemory` currently use NumPy.
+The optional backends below apply to the existing `Brain`/`PatchNet` graph
+interfaces; installing an accelerator does not move temporal repair onto it.
+
+Begin with the NumPy-only [installation](../README.md#current-library). Optional extras
 add compiled CPU transport or accelerator libraries:
 
 ```bash

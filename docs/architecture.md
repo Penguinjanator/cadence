@@ -1,22 +1,22 @@
 # Architecture and integration
 
-Cadence's base library exposes local overlap repair, equilibrium detuning,
-persistent activity, explicit response protection, private continuation and a
-small state/action planner. These are simplified biological abstractions with
-measurable behavior, not a claim that a complete animal or human brain has been
-implemented. All APIs below ship in this checkout and need no experiment-repo
-imports.
+Cadence aims at generalized intelligence through overlap consensus, equilibrium
+detuning and evolving functional self-reflection. Its base library exposes
+local repair, persistent activity, explicit response protection, private
+imagination and continuous action planning. These are reusable operations
+across applications. Their bounded tests do not establish the full flexibility
+of an animal or human brain. All APIs below ship in version 0.11.0 and need no
+experiment-repository imports.
 
 Install the current package or use the checkout for development:
 
 ```bash
-python -m pip install cadence-net==0.10.0
+python -m pip install cadence-net==0.11.0
 ```
 
-The temporal and actor interfaces require version 0.10.0 or later. The new
-`TemporalPatchNet.plan` interface is currently in the development checkout;
-it is not included in the 0.10.0 wheel. Development installs use
-`pip install -e .`. The earlier `PatchNet` interface remains available.
+Continuous-input planning and optional metric-conditioned response protection
+require version 0.11.0 or later. Development installs use `pip install -e .`.
+The earlier graph interfaces remain available for existing applications.
 
 ## What carries the individual forward
 
@@ -24,7 +24,7 @@ it is not included in the 0.10.0 wheel. Development installs use
 | --- | --- | --- |
 | Short-term context | `TemporalPatchNet.advance`, `state`, `reset` | Hidden activity persists between calls. Reset clears that activity, not weights. Whether a cue survives a particular delay is tested. |
 | Acquired relationships | `TemporalPatchNet.observe` | Centered equilibrium detuning repairs a finite observed path and changes A/B/C. Supplied per-output teaching precision defines the task metric; its default is one. No gradient propagates through calls before the supplied initial boundary. |
-| Protected long-term responses | `TemporalMemory.protect`, `memory.observe` | Caller-selected local response subspaces constrain later updates. Exact-path retention is conditional; exhausted rank or poor conditioning can obstruct new learning. |
+| Protected long-term responses | `TemporalMemory.protect`, `memory.observe` | Caller-selected local response subspaces constrain later updates. An optional local readout metric improves conditioning, with checked causal replay. Exact-path retention is conditional and available capacity is finite. |
 | Recursive temporal computation | `TemporalPatchNet` recurrence | Each moment depends on the previous hidden activity. This is recurrence, not an already learned hierarchy that observes itself. |
 | Functional self-readback | `TemporalPatchNet.readback`, `EquilibriumActor.readback`, plan diagnostics | Detached state, residual/energy, revision, uncertainty and proposal information can be inspected or explicitly fed back by an application. |
 | Private imagination | `TemporalPatchNet.imagine`, both planners | Private predicted paths leave live state and learned parameters unchanged. Their usefulness depends on model quality. |
@@ -39,20 +39,21 @@ replayed without a goal nudge before acceptance. Its measured prediction accurac
 and the subsequent executed outcome remain separate checks.
 
 The linear actor has a distinct state space and factual-history interface;
-its two-dimensional position/displacement body is not an audio decoder. The
-library does not automatically wire these components into a composer. The Amen
-application supplies audio features,
-training observations, intention ports and rendering. Successful sampler output
-or converged equations alone do not establish intention-guided composition.
+its position/displacement model illustrates exact Gaussian compression.
+Application adapters define sensory meanings, executable actions and teaching
+access. The base library contains no musical structure, game policy, language
+task or physical objective that silently supplies the missing skill.
 
-The application must also preserve the distinctions needed for its task. For
-example, a bar's average onset density and unsigned timing spread cannot specify
-which individual drum hit occurs early or late. A hand-written conversion from
-such summaries to sampler commands is part of the instrument, not a learned
-skill. Validate supplied actions and their observed consequences before treating
-prediction error as a score for performed behavior. `TemporalPatchNet` accepts
-explicit event or action coordinates without a different learning rule; their
-meaning and acquisition must be documented by the application.
+The application must preserve distinctions needed for its task. A sensory
+summary need not specify an action: an average event count, for example, loses
+the timing of individual events. Validate known actions and their observed
+consequences before treating forecast accuracy as performed competence. This
+applies equally to physical control, games, language and creative work.
+
+[Creativity and evolving self-reflection](creativity.md) describes the intended
+progression from private proposals to useful novel solutions, learned internal
+readback and transfer. Current readback is implemented; automatically growing
+recursive coordination remains a behavioral research requirement.
 
 ## One temporal learning life
 
@@ -119,7 +120,7 @@ memory are therefore tested by what the continuing system can recall, learn,
 predict and do after disturbances and competing experience.
 
 Detailed guides: [temporal learning](temporal.md),
-[private continuous-control planning](planning.md),
+[private continuous-control planning](planning.md), [general creativity and self-reflection](creativity.md),
 [explicit response protection](temporal-memory.md), [action and factual
 memory](actor.md), [existing graph PatchNet](patchnet.md) and
 [conditional Lean proofs](../lean/README.md).

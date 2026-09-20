@@ -1,10 +1,18 @@
-# Evolve a brain
+# Evolve an existing graph composition
+
+This guide covers `Genome`, `develop` and `evolve` for the existing graph
+APIs. The application supplies the component grammar, mutation choices and
+fitness. This search is not automatic specialization or growth of
+`TemporalPatchNet`; the [current architecture](architecture.md) treats those
+as research goals requiring separate evidence.
 
 A genome decides which regions a brain has, how large they are and how they project.
 Evolution changes the genome between lives: `mutate` draws an offspring, and `evolve`
 keeps the genomes whose developed brains score best under a fitness that runs a short
-life. Inside a life, learning changes synapses and records, and equilibrium detuning
-samples candidate states for one decision.
+life. Inside a life, learning changes synapses and records, and bounded drive
+perturbations sample candidate states for one decision. That state search is
+distinct from the centered equilibrium contrast used by
+[temporal learning](temporal.md) and [input planning](planning.md).
 
 ## Mutation
 

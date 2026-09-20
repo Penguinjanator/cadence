@@ -91,7 +91,7 @@ L = 0.5 mean_batch,time,outputs(output_precision * (y - target)²)
 
 Free inference is the causal recurrence and has zero defects up to roundoff.
 That says the path agrees with the model; it says nothing about its accuracy,
-usefulness or musical quality. Tanh bounds activity, not the stored hidden
+usefulness or creative quality. Tanh bounds activity, not the stored hidden
 preactivation or output. Nonfinite paths are rejected.
 
 The two teaching phases repair `E + beta L` and `E - beta L`, starting at the
@@ -194,8 +194,9 @@ Python objects and transient solved paths cost additional space. Training paths
 are not retained by the net. There is no replay buffer, protection against
 interference, learned importance or guarantee of lifelong retention. Gaussian
 past-message compression belongs to the separate fixed-model actor. A free
-rollout is a prediction; the development [planning interface](planning.md)
+rollout is a prediction; the [planning interface](planning.md)
 adds declared continuous action ports and preferences, using the same temporal
 model for private input repair. [Actual interaction](interaction.md) checks
-learned consequences against an executed body. Long continuations, retention and composition remain behavioral
-tests, not consequences of attaining a small equation residual.
+learned consequences against an executed body. Long-range context, retention,
+transfer and creativity remain behavioral tests, not consequences of attaining
+a small equation residual.
