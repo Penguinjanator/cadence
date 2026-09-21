@@ -59,6 +59,16 @@ A development addition after 0.11.0. See the [record patch guide](record-patch.m
   `[u * sqrt(n) / s, r * h]`, both blocks of unit variance per unit (`s` is the
   running rms norm of witnessed inputs). `record_averaging` and
   `record_homeostasis` pass to `Records` as `averaging` and `homeostasis`. Paths have shape `(batch, time, ports)`.
+  `groups=(n1, n2, ...)` makes the ports categorical: one softmax per group,
+  cross-entropy for the slow readout, records of `onehot - softmax`.
+  `record_writes="batch"` writes a call's moments at once through
+  `Records.write_batch(codes, targets)`, each cell moving by the mean of its
+  writers' moves.
+- `RecordPatchStack(inputs, hidden, outputs, *, lower=None, seed=0,
+  slowest=128.0, groups=None, **upper)` puts a context patch of width `lower`
+  below a `RecordPatchNet` that reads `[u, r1 * h1]`; `observe`, `imagine`
+  (`state` is the pair of contexts), `advance`, `reset`, `parameters`,
+  `snapshot` and `restore` as for one patch.
 - `observe(inputs, target, *, rate=1.0, backtrack=False, write=True)`
   predicts with the records at the start of the call, moves the slow
   parameters against the adjoint gradient of the precision-weighted half

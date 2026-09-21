@@ -226,10 +226,116 @@ about 1.7 million multiply-adds. A JavaScript port built the projection in
 reproduced an archived Python rollout in every played event, with outputs
 equal to 2e-8. Keep such an archived rollout as the port's parity test.
 
+## Categorical ports
+
+Symbols (words, moves, note names) are taught as distributions, not as levels.
+With `groups` the slow readout ends in one softmax per group of ports and
+learns by cross-entropy, whose output error is `softmax - target`:
+
+```python
+import numpy as np
+from cadence import RecordPatchNet
+
+net = RecordPatchNet(inputs=17, hidden=8, outputs=6, seed=2, cells=4096, active=32,
+                     record_rate=1.0, groups=(6,))
+inputs = np.zeros((1, 16, 17))
+inputs[0, 0, 0] = 1.0
+inputs[0, np.arange(16), 1 + np.arange(16)] = 1.0
+identities = np.random.default_rng(7).integers(6, size=16)
+first = net.observe(inputs, np.eye(6)[identities][None], rate=0.0)
+assert np.allclose(first.prediction.slow_output.sum(axis=-1), 1.0)
+recalled = net.imagine(inputs, state=np.zeros((1, 8)))
+assert np.array_equal(recalled.output[0].argmax(axis=1), identities)
+```
+
+A record then holds `onehot - softmax(C h + c)`, a residual bounded by one in
+every port, so the record algebra is the one above: a reading the slow weights
+have learned leaves a record near zero. The prediction `softmax + read` is not
+a distribution; decide by its largest port. One moment whose read pushes the
+true port below zero costs the clipped cross-entropy 27 nats, so judge a
+categorical prediction by accuracy or by the median loss, not the mean. Each
+group's teaching weight is the mean `output_precision` of its ports. `detune`
+refuses categorical ports: the energy is quadratic only with the linear
+readout. Default nets keep checkpoint format 2; a net with `groups` or batch
+writes saves format 3.
+
+## Writing a batch
+
+`record_writes="batch"` writes all moments of a call at once through
+`Records.write_batch`: every error is taken against the tables as they stood,
+and each cell moves by the mean of the moves its writers would have made alone.
+One writer reproduces `Records.write` to rounding; writers that agree move a
+shared cell as far as one of them would, so a batch does not overshoot. On a
+path of four streams of ten symbols presented twelve times, batch writes left
+34, 12, 7, 4, 1 wrong moments after the first five presentations and sequential
+writes 34, 22, 18, 10, 6; both end at the one moment that is undecidable (two
+streams open with the same symbol and different outcomes). Sequential writes
+within a call let a later moment overwrite an earlier one that shares its
+cells; the batch average does not.
+
+## Do not record a choice
+
+When a reading has several right outcomes (a message that can be said in four
+ways), the slow readout learns their distribution and its error at that moment
+is the choice that happened to be taught. A record of it pulls later
+predictions toward one arbitrary choice and spends cells. Write records for
+what was observed once and must be reproduced (a sentence read, a phrase
+heard), and leave choice points to the slow weights.
+
+## Sizing a store for recitation
+
+A store recites a sequence exactly only when it has more cells than
+associations to hold, and it needs several presentations, because keys of
+neighbouring moments overlap. Closed-loop recitation of random sentences of 8
+to 22 words from a 1,500-word vocabulary, keyed by a message and the word just
+said, records only (untrained slow weights), 32 active cells, eight passes:
+
+| sentences | associations | cells | words right, teacher-forced | sentences exact, closed loop |
+| --- | --- | --- | --- | --- |
+| 300 | 4,400 | 8,192 | 0.93 | 0.36 |
+| 1,000 | 14,700 | 8,192 | 0.78 | 0.04 |
+| 1,000 | 14,700 | 32,768 | 0.97 | 0.66 |
+
+A closed loop multiplies the per-word rate over the sentence, so exact
+recitation needs the per-word rate near one: more cells, more passes, and slow
+weights that learn most of the material first.
+
+## Two patches in depth
+
+The gate of a record patch sees only the present input. That is enough for a
+conjunction of the last two symbols: an arbitrary function of the ordered pair
+is learned by the slow weights alone (0.9999 on a 16-symbol probe), because
+the gate multiplies the carried context. It is not enough to tell a subject
+from a later noun. On subject-verb agreement across prepositional phrases with
+nouns of the opposite number, one patch chose the right verb number in 1.00,
+1.00 and 0.03 of sentences with zero, one and two distracting nouns (0.51 with
+records); a GRU and a two-layer transformer scored 1.00 throughout. A second
+patch that reads the first patch's context has a gate that sees what came
+before, and scored 1.00, 1.00, 1.00:
+
+```python
+import numpy as np
+from cadence import RecordPatchStack
+
+stack = RecordPatchStack(inputs=5, hidden=8, outputs=4, seed=5, cells=2048, active=16,
+                         groups=(4,), record_rate=1.0)
+symbols = np.random.default_rng(4).integers(5, size=(3, 8))
+target = np.eye(4)[(symbols + np.roll(symbols, 1, axis=1)) % 4]
+seen = stack.observe(np.eye(5)[symbols], target, rate=2.0, backtrack=True)
+assert seen.updated and seen.writes == 24
+```
+
+`RecordPatchStack` is a context patch below a complete `RecordPatchNet` that
+reads `[u, r1 * h1]`; the upper patch owns the readout and the records. The
+upper adjoint scan hands its input gradient to the lower scan, and the
+gradient matches finite differences in both patches. Work per moment stays
+linear in the two widths.
+
 ## What this class does not do
 
 Planning through action ports, protected responses through `TemporalMemory`
-and coupled components are not yet available for this class. The record
+and coupled components beyond the two-patch stack are not yet available for
+this class. The stack has no `detune`. The record
 rate, the number of active cells and the reading scale are supplied. There
 is no automatic importance, forgetting, or learned relevance: a record is
 written for every observed moment and moves only when its cells are read
