@@ -296,9 +296,65 @@ class Records:
         self.writes += written
         return written
 
+    def witness(self, readings: np.ndarray) -> None:
+        """Move the running mean and pathway norms by witnessed readings, without coding them.
+
+        Exactly the side effect of ``code(readings, adapt=True)``, for a caller that codes
+        the readings after the outcome is known and writes into those codes."""
+        x = np.atleast_2d(np.asarray(readings, dtype=float))
+        if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all():
+            raise ValueError(f"readings must be a finite (batch, {self.inputs}) array")
+        if self.habituation > 0:
+            for row in x:
+                self.seen += 1
+                self.mean += max(self.habituation, 1.0 / self.seen) * (row - self.mean)
+            x = x - self.mean
+        if self.pathways:
+            for k, pathway in enumerate(self.pathways):
+                for value in np.linalg.norm(x[:, pathway], axis=1):
+                    self.pathway_norm[k] += self.pathway_rate * (value - self.pathway_norm[k])
+
     def parameters(self) -> int:
         """Record entries, the learned state; the projection and the offsets are fixed."""
         return int(sum(table.size for table in self.tables.values()))
+
+    def state(self) -> dict[str, np.ndarray]:
+        """The learned state as arrays: every table, the running mean, the readings seen,
+        the pathway norms and the write count. ``to_dict`` holds the fixed configuration."""
+        result = {
+            "mean": self.mean.copy(),
+            "seen": np.array(self.seen, dtype=np.int64),
+            "pathway_norm": self.pathway_norm.copy(),
+            "writes": np.array(self.writes, dtype=np.int64),
+        }
+        for name, table in self.tables.items():
+            result["table_" + name] = table.copy()
+        return result
+
+    def load_state(self, state: Mapping[str, np.ndarray]) -> None:
+        """Replace the learned state by arrays of the shapes ``state`` produces, atomically."""
+        expected = {"mean", "seen", "pathway_norm", "writes"} | {
+            "table_" + name for name in self.fields
+        }
+        if set(state) != expected:
+            raise ValueError("record state must contain exactly the arrays of state()")
+        mean = np.asarray(state["mean"], dtype=float)
+        norm = np.asarray(state["pathway_norm"], dtype=float)
+        seen, writes = np.asarray(state["seen"]), np.asarray(state["writes"])
+        if mean.shape != (self.inputs,) or norm.shape != (len(self.pathways),):
+            raise ValueError("record state arrays have the wrong shapes")
+        if not (np.isfinite(mean).all() and np.isfinite(norm).all() and (norm > 0).all()):
+            raise ValueError("record state must be finite with positive pathway norms")
+        if seen.shape != () or writes.shape != () or seen < 0 or writes < 0:
+            raise ValueError("record counts must be nonnegative scalars")
+        tables = {}
+        for name, width in self.fields.items():
+            table = np.asarray(state["table_" + name], dtype=float)
+            if table.shape != (self.cells, width) or not np.isfinite(table).all():
+                raise ValueError(f"the table of {name!r} must be a finite ({self.cells}, {width})")
+            tables[name] = table.copy()
+        self.mean, self.pathway_norm, self.tables = mean.copy(), norm.copy(), tables
+        self.seen, self.writes = int(seen), int(writes)
 
     def to_dict(self) -> dict[str, Any]:
         """The configuration that rebuilds the fixed cells (the tables are the learned state)."""

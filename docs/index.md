@@ -10,17 +10,19 @@ broader research goal.
 
 1. [Architecture and integration](architecture.md): state, ports, repair and the scope of each component.
 2. [Temporal learning](temporal.md): observed paths, persistent context, local detuning and isolated imagination.
-3. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
-4. [Private planning](planning.md): repair continuous controls under the same learned model.
-5. [Learn, act and observe](interaction.md): an executable end-to-end interaction example.
-6. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
+3. [The record patch](record-patch.md): a gated linear context with one-shot records inside the patch; the detuning contrast equals its adjoint gradient at linear cost.
+4. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
+5. [Private planning](planning.md): repair continuous controls under the same learned model.
+6. [Learn, act and observe](interaction.md): an executable end-to-end interaction example.
+7. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
 
 [Task design](task-design.md) and [common missteps](missteps.md) explain how to
 validate observations, actions, learning and retained behavior before scaling.
 The [API reference](api.md) lists current interfaces and supported compatibility
 components. [Scaling experiments](scaling.md) separate experience, training
 exposure and capacity. These guides target version 0.11.0; optional parameter
-backtracking and [experimental fixed connectivity](partitioned.md) are
+backtracking, [the record patch](record-patch.md) and
+[experimental fixed connectivity](partitioned.md) are
 explicitly marked as development additions. Fixed connectivity supplies routing
 constraints for comparisons; it does not establish learned specialization.
 

@@ -48,6 +48,34 @@ The detached result contains proposed `inputs`, a target-free `prediction`,
 checks modeled cost. Neither certifies an actual outcome. Work and failure
 fields are described in the [planning guide](planning.md).
 
+## RecordPatchNet (`cadence.record_patch`)
+
+A development addition after 0.11.0. See the [record patch guide](record-patch.md).
+
+- `RecordPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None,
+  cells=4096, active=32, record_rate=0.5, habituation=1e-5, record_bias=0.3,
+  slowest=128.0)` creates a gated linear context with a `Records` store over
+  the reading `[u, r * h]`. Paths have shape `(batch, time, ports)`.
+- `observe(inputs, target, *, rate=1.0, backtrack=False, write=True)`
+  predicts with the records at the start of the call, moves the slow
+  parameters against the adjoint gradient of the precision-weighted half
+  mean squared error (admitted by causal replay when `backtrack=True`) and
+  writes the residual `target - C h - c` into each reading's records.
+  Returns `RecordObservation`: `updated`, `reason`, the `prediction`
+  (`RecordPath` with `hidden`, `output`, `gate`, `read`, `loss`), `delta`,
+  the admission losses and rates, replay count and write count.
+- `imagine(inputs, *, state=None)` is private; `advance(inputs)` carries
+  context; `reset()` clears context and keeps parameters and records.
+- `detune(inputs, target, *, beta=1e-3, state=None, tolerance=1e-14,
+  max_iterations=10000)` solves both detuned equilibria of the quadratic
+  energy by conjugate gradients and returns `RecordContrast`: the centered
+  `contrast`, both hidden paths, energies, iterations, residuals and
+  `converged`. It changes nothing.
+- `parameters()` and `set_parameters(mapping)` cover `G`, `g`, `B`, `b`, `C`
+  and `c`; `records` is the `Records` store. `readback()`, `snapshot()`,
+  `restore(snapshot)`, `save(path)` and `load(path)` carry parameters,
+  records, counts and live context.
+
 ## TemporalMemory (`cadence.temporal_memory`)
 
 - `TemporalMemory(*, relative_tolerance=1e-12)` creates explicit local response

@@ -50,6 +50,13 @@ from .plasticity import (
 )
 from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
 from .receipts import Receipt, canonical_json
+from .record_patch import (
+    RecordContrast,
+    RecordObservation,
+    RecordPatchNet,
+    RecordPath,
+    RecordReadback,
+)
 from .recording import SettlementRecord, record_settlements
 from .records import Mulberry32, Records
 from .reference import conformance
@@ -68,6 +75,11 @@ __all__ = [
     "ConstraintReport",
     "TemporalMemory",
     "TemporalPlan",
+    "RecordPatchNet",
+    "RecordPath",
+    "RecordObservation",
+    "RecordContrast",
+    "RecordReadback",
     "TemporalPatchNet",
     "TemporalPhase",
     "TemporalObservation",

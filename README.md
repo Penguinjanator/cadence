@@ -52,6 +52,7 @@ python -m pip install cadence-net==0.11.0
 | --- | --- |
 | [TemporalPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md) | Local repair of observed paths, centered detuning, persistent context, private imagination and complete checkpoints. |
 | [Private planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md) | Bounded continuous action proposals under the learned model; accepted steps must improve predictions replayed without goal nudging. |
+| [RecordPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) | Development addition on `main`: a gated linear context with one-shot records inside the patch. Its detuning contrast equals its adjoint gradient, at linear cost per moment. |
 | [TemporalMemory](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) | Explicit protection of selected local responses; an optional local readout metric improves conditioning without retaining a replay corpus. |
 | [EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md) | A separate fixed linear-body component with exact Gaussian history compression and factual readback. |
 

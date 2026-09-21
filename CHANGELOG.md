@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- `RecordPatchNet` is a temporal patch with a gated linear context and a
+  `Records` store inside it. Its energy is quadratic, so the centered
+  detuning contrast equals the adjoint gradient of the same loss; `observe`
+  computes it by one backward scan and `detune` solves the two detuned
+  equilibria as the acceptance check. Records store what the slow readout got
+  wrong at each reading. Complete checkpoints, private branches and causal
+  parameter admission are available; planning and protected responses are
+  not yet.
+- `Records.witness`, `Records.state` and `Records.load_state` expose the
+  running mean and the learned tables for checkpoints.
 - `cadence.experimental.PartitionedTemporalPatchNet` adds explicit fixed
   connectivity masks over the existing temporal solver, with masked detuning,
   complete checkpoints and private planning. Supplied routing is an experimental
