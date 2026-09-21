@@ -138,6 +138,25 @@ with `record_rate` as the floor; retention and calibration at unfamiliar
 readings improve, adaptation to a new stream slows in proportion. One table
 cannot do both at full strength; choose by which the task reads.
 
+## Recall is by content, not by position
+
+A record is keyed by the reading: what was heard and the context. Where the
+stream recurs, the key recurs. On a composer playing its loop from silence,
+the code at one place and the code at the same place one loop later share
+0.91 of their cells, against 0.04 for two unrelated moments. When the
+playing drifts in phase, so that the same place in the bar hears another
+event, the overlap at the same place is 0.16 and nothing written there is
+read back. This decided an experiment: a composer that wrote its own first
+four bars into its records, as it does for a heard track, did not bring
+its opening back four bars later (the opening's departures returned at 0.09
+to 0.20 of their places, against 0.18 without the writes), because by then
+its playing had shifted in phase and it heard other events at those places.
+A patch recalls a
+moment when it meets the same event in a similar context. If a task needs
+recall by position (the same bar of a phrase, the same step of an episode),
+position has to be in the reading as an input of its own, with enough ports
+to move the code; a clock of eight ports among eighty inputs does not.
+
 ## Boundary readings
 
 A reading met once per stream, such as the wake moment with nothing heard,

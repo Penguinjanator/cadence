@@ -6,7 +6,9 @@
   (cells in use, top-cell share, code overlap per block, frozen against
   online scores), what a write rate stores, boundary readings, running a
   trained record patch outside Python with a parity test, the scale of a
-  `Records` reading, and seven new rows in the missteps guide.
+  `Records` reading, seven new rows in the missteps guide, and a section on
+  recall being by content and not by position (code overlap 0.91 where the
+  stream recurs, 0.16 at the same place after a phase shift).
 - The record patch's reading gives its two blocks unit variance per unit:
   the input block is scaled by `sqrt(n) / s` with `s` the running rms norm of
   witnessed inputs. On the composer stream this spreads the code from 2,225

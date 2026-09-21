@@ -39,6 +39,7 @@ not a history of benchmark outcomes.
 | Sampling content from scores at positions the model cannot predict | Where held-out accuracy is at chance the scores carry no information: a draw is noise, and consecutive draws are chaos. | Measure accuracy at those positions separately; let the model decide when something happens there and declare what may happen. |
 | Tuning a measurement's prior until the data show the expected structure | The model's score rises because the prior wrote the labels, while the labelled events lose their relation to the source. | Audit the fixture before training on it: faithfulness to the source against plain labelling, and whether the events of interest sit above chance where they should. |
 | Launching a longer run because a short run converges | Settling may optimize an inadequate objective, and more steps can worsen interference. | Require acquisition, retention and actual task quality before scaling. |
+| Expecting records to recall by position | A record is keyed by the event heard and the context. After a phase shift the same place in a bar hears another event, and the code overlap there falls from 0.91 to 0.16. | Put position in the reading as an input of its own, with enough ports to move the code, or measure the code overlap at the moments that should recall each other. |
 
 For music, preserve stable clip IDs, the model and instrument versions, and
 which observations or target records were available during generation. An
