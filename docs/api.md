@@ -28,6 +28,11 @@ APIs follow the current temporal interfaces below.
 - `readback()`, `state`, `parameters()` and `snapshot()` expose detached values.
   `reset()` clears activity, not learned parameters. `save(path)`, `load(path)`
   and `restore(snapshot)` preserve continuation state and configuration.
+- `set_output_precision(precision)` replaces the supplied loss geometry
+  atomically. Free energy and recurrence do not use teaching precision, so
+  parameter revisions, free diagnostics and protected constraints stay bound to
+  the unchanged maps. `set_parameters(mapping)` validates and replaces all
+  learned arrays in one transaction.
 - `TemporalPhase` exposes solved hidden/output paths, residuals, curvature and
   work. `TemporalObservation` exposes `updated`, `reason`, the phases and raw
   `delta`. With backtracking it also reports initial/final loss, accepted rate,
@@ -77,9 +82,12 @@ Restore with the subclass's `restore`/`load` to preserve mask enforcement.
 
 `BodyModel` and `EquilibriumActor` provide fixed linear-body planning with a
 Gaussian compressed past. `admit` records actual readings/executed actions;
-`plan` privately proposes an action toward a supplied goal. Their state,
-covariance, checkpoint and fixed-model restrictions are distinct from
-`TemporalPatchNet`: see the complete [actor guide](actor.md).
+`plan` privately proposes an action toward a supplied goal.
+`numeric_persistent_bytes()` counts the retained array, scalar, identifier and
+hash payload, excluding Python objects and serialized archives; the guide states
+that accounting and its scope. Their state, covariance, checkpoint and
+fixed-model restrictions are distinct from `TemporalPatchNet`: see the complete
+[actor guide](actor.md).
 
 ## PatchNet (`cadence.patch`)
 
