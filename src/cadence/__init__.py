@@ -57,6 +57,7 @@ from .record_patch import (
     RecordPath,
     RecordReadback,
 )
+from .record_stack import RecordPatchStack, StackObservation
 from .recording import SettlementRecord, record_settlements
 from .records import Mulberry32, Records
 from .reference import conformance
@@ -76,6 +77,8 @@ __all__ = [
     "TemporalMemory",
     "TemporalPlan",
     "RecordPatchNet",
+    "RecordPatchStack",
+    "StackObservation",
     "RecordPath",
     "RecordObservation",
     "RecordContrast",

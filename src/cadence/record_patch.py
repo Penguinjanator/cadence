@@ -392,8 +392,11 @@ class RecordPatchNet:
     ) -> dict[str, np.ndarray]:
         """The adjoint scan: dL/dtheta for L = 1/2 mean(w (C h + c - target)^2), or for the
         mean cross-entropy of categorical ports, whose output error is ``softmax - target``."""
-        batch, horizon, _ = inputs.shape
-        hidden, gate = path.hidden, path.gate
+        d = self._output_error(path, target)
+        return self._adjoint(inputs, boundary, path, port, d)[0]
+
+    def _output_error(self, path: RecordPath, target: np.ndarray) -> np.ndarray:
+        batch, horizon, _ = target.shape
         if self.groups is None:
             d = self._output_precision * (path.slow_output - target)
             d = d / (batch * horizon * self.outputs)
@@ -402,6 +405,21 @@ class RecordPatchNet:
             for weight, (start, end) in zip(self._group_precision(), self._bounds(), strict=True):
                 d[..., start:end] *= weight
             d = d / (batch * horizon * len(self.groups))
+        return np.asarray(d)
+
+    def _adjoint(
+        self,
+        inputs: np.ndarray,
+        boundary: np.ndarray,
+        path: RecordPath,
+        port: np.ndarray,
+        d: np.ndarray,
+    ) -> tuple[dict[str, np.ndarray], np.ndarray]:
+        """One backward scan from the output error ``d``: the parameter gradient, and the
+        gradient with respect to the inputs (what a patch below this one would receive)."""
+        batch = len(inputs)
+        hidden, gate = path.hidden, path.gate
+        horizon = hidden.shape[1]
         previous = np.concatenate((boundary[:, None], hidden[:, :-1]), axis=1)
         gh = d @ self._C
         carried = np.zeros((batch, self.hidden))
@@ -410,7 +428,7 @@ class RecordPatchNet:
             carried = gate[:, t] * gh[:, t]
         gp = (1.0 - gate) * gh * (1.0 - port**2)
         gs = gh * (previous - port) * gate * (1.0 - gate)
-        return {
+        delta = {
             "G": np.einsum("bti,btj->ij", gs, inputs),
             "g": gs.sum(axis=(0, 1)),
             "B": np.einsum("bti,btj->ij", gp, inputs),
@@ -418,6 +436,7 @@ class RecordPatchNet:
             "C": np.einsum("bti,btj->ij", d, hidden),
             "c": d.sum(axis=(0, 1)),
         }
+        return delta, gp @ self._B + gs @ self._G
 
     # ------------------------------------------------------------ interface
 
