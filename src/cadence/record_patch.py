@@ -15,7 +15,7 @@ describes the slow patch; neither learning route sees the record.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -28,6 +28,7 @@ __all__ = ["RecordPatchNet", "RecordPath", "RecordObservation", "RecordContrast"
 
 _PARAMETERS = ("G", "g", "B", "b", "C", "c")
 FORMAT = "cadence-record-patch/2"
+FORMAT_PORTS = "cadence-record-patch/3"  # categorical ports or batched writes
 
 
 @dataclass(frozen=True)
@@ -158,10 +159,21 @@ class RecordPatchNet:
         slowest: float = 128.0,
         record_averaging: bool = False,
         record_homeostasis: float = 0.0,
+        groups: Sequence[int] | None = None,
+        record_writes: str = "sequential",
     ) -> None:
         self.inputs = _integer("inputs", inputs, 1)
         self.hidden = _integer("hidden", hidden, 1)
         self.outputs = _integer("outputs", outputs, 1)
+        if groups is None:
+            self.groups: tuple[int, ...] | None = None
+        else:
+            self.groups = tuple(_integer("groups entry", g, 2) for g in groups)
+            if sum(self.groups) != self.outputs:
+                raise ValueError("groups must partition the outputs")
+        if record_writes not in ("sequential", "batch"):
+            raise ValueError("record_writes is 'sequential' or 'batch'")
+        self.record_writes = record_writes
         self.set_output_precision(
             np.ones(self.outputs) if output_precision is None else output_precision
         )
@@ -288,6 +300,11 @@ class RecordPatchNet:
         teaching = self._path(target, self.outputs, "target")
         if teaching.shape[:2] != path.shape[:2]:
             raise ValueError("target batch/time dimensions must match inputs")
+        if self.groups is not None:
+            for start, end in self._bounds():
+                block = teaching[..., start:end]
+                if np.any(block < 0) or not np.allclose(block.sum(axis=-1), 1.0, atol=1e-9):
+                    raise ValueError("a categorical target is a distribution over each group")
         return path, teaching
 
     # --------------------------------------------------------------- forward
@@ -317,12 +334,44 @@ class RecordPatchNet:
         readings = self._readings(inputs, hidden).reshape(batch * horizon, -1)
         codes = self.records.code(readings, valued=False)[0].reshape(batch, horizon, -1)
         read = codes @ self.records.tables["y"]
-        output = hidden @ self._C.T + self._c + read
+        output = self._slow(hidden) + read
         return hidden, gate, port, codes, read, output
 
+    def _bounds(self) -> list[tuple[int, int]]:
+        assert self.groups is not None
+        ends = np.cumsum(self.groups)
+        return [(int(end - size), int(end)) for size, end in zip(self.groups, ends, strict=True)]
+
+    def _slow(self, hidden: np.ndarray) -> np.ndarray:
+        """The slow readout: linear, or one softmax per group of categorical ports."""
+        drive = hidden @ self._C.T + self._c
+        if self.groups is None:
+            return np.asarray(drive)
+        for start, end in self._bounds():
+            block = drive[..., start:end]
+            block = np.exp(block - block.max(axis=-1, keepdims=True))
+            drive[..., start:end] = block / block.sum(axis=-1, keepdims=True)
+        return np.asarray(drive)
+
+    def _group_precision(self) -> np.ndarray:
+        """One teaching weight per categorical group: the mean precision of its ports."""
+        return np.array([self._output_precision[a:b].mean() for a, b in self._bounds()])
+
     def _loss(self, output: np.ndarray, target: np.ndarray) -> float | None:
-        with np.errstate(over="ignore", invalid="ignore"):
-            value = float(0.5 * np.mean(self._output_precision * (output - target) ** 2))
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            if self.groups is None:
+                value = float(0.5 * np.mean(self._output_precision * (output - target) ** 2))
+            else:
+                # Cross-entropy per group; a prediction with a record read is clipped and
+                # renormalised first, because a read can carry a port outside [0, 1].
+                total = 0.0
+                weights = self._group_precision()
+                for weight, (start, end) in zip(weights, self._bounds(), strict=True):
+                    p = np.clip(output[..., start:end], 1e-12, None)
+                    p = p / p.sum(axis=-1, keepdims=True)
+                    surprise = -np.sum(target[..., start:end] * np.log(p), axis=-1)
+                    total += weight * float(np.mean(surprise))
+                value = total / len(self.groups)
         return value if np.isfinite(value) else None
 
     def _free(
@@ -341,10 +390,18 @@ class RecordPatchNet:
         path: RecordPath,
         port: np.ndarray,
     ) -> dict[str, np.ndarray]:
-        """The adjoint scan: dL/dtheta for L = 1/2 mean(w (C h + c - target)^2)."""
+        """The adjoint scan: dL/dtheta for L = 1/2 mean(w (C h + c - target)^2), or for the
+        mean cross-entropy of categorical ports, whose output error is ``softmax - target``."""
         batch, horizon, _ = inputs.shape
         hidden, gate = path.hidden, path.gate
-        d = self._output_precision * (path.slow_output - target) / (batch * horizon * self.outputs)
+        if self.groups is None:
+            d = self._output_precision * (path.slow_output - target)
+            d = d / (batch * horizon * self.outputs)
+        else:
+            d = path.slow_output - target
+            for weight, (start, end) in zip(self._group_precision(), self._bounds(), strict=True):
+                d[..., start:end] *= weight
+            d = d / (batch * horizon * len(self.groups))
         previous = np.concatenate((boundary[:, None], hidden[:, :-1]), axis=1)
         gh = d @ self._C
         carried = np.zeros((batch, self.hidden))
@@ -515,7 +572,12 @@ class RecordPatchNet:
         readings = self._readings(inputs, hidden).reshape(batch * horizon, -1)
         self.records.witness(readings)
         codes = self.records.code(readings, valued=False)[0].reshape(batch, horizon, -1)
-        residual = target - (hidden @ self._C.T + self._c)
+        residual = target - self._slow(hidden)
+        if self.record_writes == "batch":
+            flat = codes.reshape(batch * horizon, -1)
+            return self.records.write_batch(
+                np.stack((flat, flat)), {"y": residual.reshape(batch * horizon, -1)}
+            )
         written = 0
         for t in range(horizon):
             for row in range(batch):
@@ -546,6 +608,8 @@ class RecordPatchNet:
         Nothing here changes the network; this is the acceptance check of
         that identity.
         """
+        if self.groups is not None:
+            raise ValueError("detune needs the linear readout: categorical ports are not quadratic")
         path, teaching = self._teaching(inputs, target)
         if not np.isfinite(beta) or beta <= 0:
             raise ValueError("beta must be finite and positive")
@@ -659,8 +723,9 @@ class RecordPatchNet:
 
     def snapshot(self) -> dict[str, np.ndarray]:
         """Detached complete continuation state, without any retained training path."""
-        meta = {
-            "format": FORMAT,
+        ports = self.groups is not None or self.record_writes != "sequential"
+        meta: dict[str, Any] = {
+            "format": FORMAT_PORTS if ports else FORMAT,
             "inputs": self.inputs,
             "hidden": self.hidden,
             "outputs": self.outputs,
@@ -670,6 +735,9 @@ class RecordPatchNet:
             "parameter_revision": self._revision,
             "state_parameter_revision": self._state_revision,
         }
+        if ports:
+            meta["groups"] = None if self.groups is None else list(self.groups)
+            meta["record_writes"] = self.record_writes
         result = {
             **self.parameters(),
             "output_precision": self.output_precision,
@@ -686,7 +754,7 @@ class RecordPatchNet:
         """Construct a fresh net from validated complete state; never load pickle."""
         try:
             meta = json.loads(str(snapshot["meta"]))
-            if not isinstance(meta, dict) or meta.get("format") != FORMAT:
+            if not isinstance(meta, dict) or meta.get("format") not in (FORMAT, FORMAT_PORTS):
                 raise ValueError("unsupported record-patch checkpoint")
             config: dict[str, Any] = dict(meta["records"])
             result = cls(
@@ -703,6 +771,8 @@ class RecordPatchNet:
                 slowest=meta["slowest"],
                 record_averaging=config["averaging"],
                 record_homeostasis=config["homeostasis"],
+                groups=meta.get("groups"),
+                record_writes=meta.get("record_writes", "sequential"),
             )
             if result.records.to_dict() != config:
                 raise ValueError("record configuration is not one this class constructs")

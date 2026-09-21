@@ -32,7 +32,9 @@ def independent_path(parameters, inputs, boundary, net=None, read=None):
             hidden[row, t] = h
             m = np.zeros(parameters["c"].shape)
             if net is not None:
-                code = net.records.code(np.concatenate((u * (np.sqrt(net.inputs) / net._input_norm), h * net._scale)))[0, 0]
+                code = net.records.code(
+                    np.concatenate((u * (np.sqrt(net.inputs) / net._input_norm), h * net._scale))
+                )[0, 0]
                 m = code @ net.records.tables["y"]
             elif read is not None:
                 m = read[row, t]
@@ -288,7 +290,17 @@ def test_records_state_round_trip_and_witness_moves_the_mean():
 
 def test_snapshot_round_trip_carries_the_input_norm_and_record_state():
     rng = np.random.default_rng(12)
-    net = RecordPatchNet(3, 5, 2, seed=8, cells=120, active=6, record_rate=0.05, record_averaging=True, record_homeostasis=0.05)
+    net = RecordPatchNet(
+        3,
+        5,
+        2,
+        seed=8,
+        cells=120,
+        active=6,
+        record_rate=0.05,
+        record_averaging=True,
+        record_homeostasis=0.05,
+    )
     inputs, target = rng.normal(size=(2, 9, 3)) * 2.0, rng.normal(size=(2, 9, 2))
     net.observe(inputs, target, rate=0.0)
     assert net._input_norm != 1.0
@@ -297,4 +309,130 @@ def test_snapshot_round_trip_carries_the_input_norm_and_record_state():
     assert twin._input_norm == net._input_norm
     assert np.array_equal(twin.records.count, net.records.count)
     probe = rng.normal(size=(1, 4, 3))
-    assert_allclose(twin.imagine(probe, state=np.zeros((1, 5))).output, net.imagine(probe, state=np.zeros((1, 5))).output, atol=1e-12)
+    assert_allclose(
+        twin.imagine(probe, state=np.zeros((1, 5))).output,
+        net.imagine(probe, state=np.zeros((1, 5))).output,
+        atol=1e-12,
+    )
+
+
+# ------------------------------------------------------------------ categorical ports, batch writes
+
+
+def _symbols(rng, batch, horizon, inputs, groups):
+    x = np.eye(inputs)[rng.integers(inputs, size=(batch, horizon))]
+    target = np.concatenate(
+        [np.eye(g)[rng.integers(g, size=(batch, horizon))] for g in groups], axis=-1
+    )
+    return x, target
+
+
+def test_categorical_gradient_matches_finite_differences():
+    rng = np.random.default_rng(3)
+    net = RecordPatchNet(5, 6, 7, seed=4, cells=128, active=6, groups=(3, 4))
+    x, target = _symbols(rng, 2, 5, 5, (3, 4))
+    delta = net.observe(x, target, rate=0.0, write=False).delta
+    base = net.parameters()
+    for name in ("G", "g", "B", "b", "C", "c"):
+        index = tuple(rng.integers(n) for n in base[name].shape)
+        losses = []
+        for sign in (1.0, -1.0):
+            moved = {k: v.copy() for k, v in base.items()}
+            moved[name][index] += sign * 1e-6
+            net.set_parameters(moved)
+            net.reset()
+            losses.append(net.observe(x, target, rate=0.0, write=False).prediction.slow_loss)
+        numeric = (losses[0] - losses[1]) / 2e-6
+        assert abs(numeric - delta[name][index]) < 1e-7 * max(1.0, abs(numeric))
+    net.set_parameters(base)
+
+
+def test_categorical_ports_are_distributions_and_recall_in_one_shot():
+    rng = np.random.default_rng(7)
+    net = RecordPatchNet(17, 8, 6, seed=2, cells=4096, active=32, record_rate=1.0, groups=(6,))
+    inputs = np.zeros((1, 16, 17))
+    inputs[0, 0, 0] = 1.0
+    inputs[0, np.arange(16), 1 + np.arange(16)] = 1.0
+    identities = rng.integers(6, size=16)
+    target = np.eye(6)[identities][None]
+    first = net.observe(inputs, target, rate=0.0)
+    assert_allclose(first.prediction.slow_output.sum(axis=-1), 1.0)
+    assert first.writes == 16
+    recalled = net.imagine(inputs, state=np.zeros((1, 8)))
+    assert np.array_equal(recalled.output[0].argmax(axis=1), identities)
+
+
+def test_categorical_ports_validate_targets_and_refuse_detune():
+    net = RecordPatchNet(3, 4, 4, seed=1, cells=64, active=4, groups=(2, 2))
+    x = np.ones((1, 2, 3))
+    with pytest.raises(ValueError, match="distribution"):
+        net.observe(x, np.ones((1, 2, 4)))
+    with pytest.raises(ValueError, match="partition"):
+        RecordPatchNet(3, 4, 4, groups=(2, 3))
+    good = np.tile(np.array([1.0, 0.0, 0.0, 1.0]), (1, 2, 1))
+    with pytest.raises(ValueError, match="quadratic"):
+        net.detune(x, good)
+
+
+def test_default_checkpoints_keep_their_format_and_port_checkpoints_round_trip():
+    plain = RecordPatchNet(3, 4, 2, seed=1, cells=64, active=4)
+    assert '"cadence-record-patch/2"' in str(plain.snapshot()["meta"])
+    net = RecordPatchNet(3, 4, 4, seed=1, cells=64, active=4, groups=(2, 2), record_writes="batch")
+    x = np.eye(3)[None, [0, 1, 2]]
+    target = np.tile(np.array([1.0, 0.0, 0.0, 1.0]), (1, 3, 1))
+    net.observe(x, target)
+    again = RecordPatchNet.restore(net.snapshot())
+    assert again.groups == (2, 2) and again.record_writes == "batch"
+    assert_array_equal(
+        again.imagine(x, state=np.zeros((1, 4))).output,
+        net.imagine(x, state=np.zeros((1, 4))).output,
+    )
+
+
+def test_one_writer_in_a_batch_is_the_sequential_write():
+    from cadence import Records
+
+    rng = np.random.default_rng(5)
+    a = Records(6, {"y": 3}, cells=256, active=8, rate=0.5, seed=3)
+    b = Records(6, {"y": 3}, cells=256, active=8, rate=0.5, seed=3)
+    reading, outcome = rng.normal(size=(1, 6)), rng.normal(size=3)
+    code = a.code(reading)
+    a.write(code[:, 0], {"y": outcome})
+    b.write_batch(code, {"y": outcome[None]})
+    assert_allclose(a.tables["y"], b.tables["y"], atol=1e-15)
+
+
+def test_agreeing_writers_in_a_batch_do_not_overshoot():
+    from cadence import Records
+
+    store = Records(6, {"y": 2}, cells=256, active=8, rate=1.0, seed=3)
+    reading = np.tile(np.random.default_rng(1).normal(size=(1, 6)), (12, 1))
+    codes = store.code(reading)
+    store.write_batch(codes, {"y": np.tile([1.0, -2.0], (12, 1))})
+    assert_allclose(store.read(codes[:, 0])["y"], [1.0, -2.0], atol=1e-12)
+
+
+def test_batch_writes_converge_no_slower_than_sequential_writes():
+    wrong = {}
+    for writes in ("sequential", "batch"):
+        net = RecordPatchNet(
+            12,
+            16,
+            5,
+            seed=6,
+            cells=4096,
+            active=24,
+            record_rate=1.0,
+            groups=(5,),
+            record_writes=writes,
+        )
+        x, target = _symbols(np.random.default_rng(11), 4, 10, 12, (5,))
+        wrong[writes] = []
+        for _ in range(12):
+            net.reset()
+            seen = net.observe(x, target, rate=0.0).prediction.output
+            wrong[writes].append(int(np.sum(seen.argmax(-1) != target.argmax(-1))))
+    # Two rows open with the same symbol and different outcomes: one moment is undecidable.
+    assert wrong["batch"][-1] <= 1 and wrong["sequential"][-1] <= 1
+    assert wrong["batch"][0] == wrong["sequential"][0] > 20
+    assert sum(wrong["batch"]) <= sum(wrong["sequential"])

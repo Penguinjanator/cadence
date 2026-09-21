@@ -315,6 +315,51 @@ class Records:
         self.writes += written
         return written
 
+    def write_batch(self, codes: np.ndarray, targets: Mapping[str, np.ndarray]) -> int:
+        """Write the witnessed outcomes of many readings at once.
+
+        Every reading's error is taken against the tables as they stand when the call
+        begins, and each cell moves by the mean of the moves its writers would have made
+        alone. One writer alone reproduces ``write``; writers that agree move a shared
+        cell as far as one of them would, so a batch does not overshoot. Writers that
+        disagree leave the cell at their average, which later presentations refine.
+        ``codes`` has shape ``(2, batch, cells)``; each target ``(batch, width)``.
+        Returns the number of (reading, field) writes."""
+        codes = np.asarray(codes, dtype=float)
+        if codes.ndim != 3 or codes.shape[0] != 2 or codes.shape[2] != self.cells:
+            raise ValueError(f"write_batch takes codes of shape (2, batch, {self.cells})")
+        batch = codes.shape[1]
+        written = 0
+        for name, width in self.fields.items():
+            if name not in targets:
+                continue
+            target = np.asarray(targets[name], dtype=float)
+            if target.shape != (batch, width) or not np.isfinite(target).all():
+                raise ValueError(
+                    f"the targets of {name!r} must be a finite ({batch}, {width}) array"
+                )
+            c = self._code_for(codes, name)
+            rows, cells = np.nonzero(c)
+            values = c[rows, cells]
+            table = self.tables[name]
+            read = np.zeros((batch, width))
+            np.add.at(read, rows, values[:, None] * table[cells])
+            error = target - read
+            touched, local = np.unique(cells, return_inverse=True)
+            moves = np.zeros((len(touched), width))
+            np.add.at(moves, local, values[:, None] * error[rows])
+            writers = np.bincount(local, minlength=len(touched)).astype(float)
+            rate = self.valued_rate if name in self.valued else self.rate
+            if self.averaging and name not in self.valued:
+                np.add.at(self.count, cells, values)
+                steps = np.clip(1.0 / self.count[touched], rate, 1.0)
+            else:
+                steps = np.full(len(touched), rate)
+            table[touched] += (steps / writers)[:, None] * moves
+            written += batch
+        self.writes += written
+        return written
+
     def witness(self, readings: np.ndarray) -> None:
         """Move the running mean and pathway norms by witnessed readings, without coding them.
 
