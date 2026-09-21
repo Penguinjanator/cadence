@@ -86,12 +86,10 @@ def test_adjoint_gradient_matches_central_differences(precision):
     parameters = net.parameters()
     result = net.observe(inputs, target, rate=0.0, write=False)
     assert result.updated and result.delta is not None
-    read = result.prediction.read  # the read is a port value: no gradient through the code
+    assert np.abs(result.prediction.read).max() > 0.0  # the read is live, and outside the loss
 
     def loss(name, value):
-        _, output = independent_path(
-            {**parameters, name: value}, inputs, np.zeros((2, 3)), read=read
-        )
+        _, output = independent_path({**parameters, name: value}, inputs, np.zeros((2, 3)))
         return 0.5 * np.mean(precision * (output - target) ** 2)
 
     for name, value in parameters.items():
@@ -144,9 +142,11 @@ def test_one_observation_is_recalled_from_the_records():
     second = net.observe(inputs, target, rate=0.0)
     third = net.observe(inputs, target, rate=0.0)
     fourth = net.observe(inputs, target, rate=0.0)
-    assert second.initial_loss < 0.3 * first.initial_loss
-    assert third.initial_loss < second.initial_loss
-    assert fourth.initial_loss < 0.05 * first.initial_loss
+    assert second.prediction.loss < 0.3 * first.prediction.loss
+    assert third.prediction.loss < second.prediction.loss
+    assert fourth.prediction.loss < 0.05 * first.prediction.loss
+    for name, value in net.parameters().items():  # the slow readout did not move at rate 0
+        assert_array_equal(value, RecordPatchNet(17, 8, 6, seed=2).parameters()[name])
 
 
 def test_readings_that_differ_only_by_context_are_separated_only_partly():
@@ -164,6 +164,25 @@ def test_readings_that_differ_only_by_context_are_separated_only_partly():
     recalled = net.imagine(inputs, state=np.zeros((1, 8)))
     correct = int((recalled.output[0].argmax(axis=1) == identities).sum())
     assert 5 <= correct <= 14
+
+
+def test_the_slow_readout_learns_what_the_records_already_patch():
+    """A second observation of the same path finds the record patching the error,
+    yet the slow parameters keep learning it: their loss falls while the
+    prediction's loss is already small."""
+    rng = np.random.default_rng(12)
+    net = RecordPatchNet(3, 6, 2, seed=3, cells=512, active=8, record_rate=1.0)
+    inputs, target = rng.normal(size=(2, 8, 3)), rng.normal(size=(2, 8, 2))
+    first = net.observe(inputs, target, rate=2.0, backtrack=True)
+    net.reset()
+    second = net.observe(inputs, target, rate=2.0, backtrack=True)
+    net.reset()
+    third = net.observe(inputs, target, rate=2.0, backtrack=True)
+    assert second.prediction.loss < 0.7 * first.prediction.loss  # the record patched it
+    assert third.prediction.loss < 0.5 * first.prediction.loss
+    assert second.initial_loss < first.initial_loss  # and the slow readout still learned
+    assert third.initial_loss < second.initial_loss
+    assert second.updated and second.final_loss < second.initial_loss
 
 
 def test_writes_can_be_withheld_and_learning_without_writes_still_updates():

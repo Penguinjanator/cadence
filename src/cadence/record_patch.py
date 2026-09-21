@@ -5,9 +5,11 @@ nonlinearity sits at the ports. The energy is quadratic in the context path,
 so its detuned equilibria are unique and the centered detuning contrast equals
 the adjoint (reverse-mode) gradient of the same loss. ``observe`` computes that
 gradient by one backward scan; ``detune`` solves the two detuned equilibria and
-returns the contrast, as the acceptance check of the identity. Records are read
-at every moment through ordinary ports and written one-shot by the delta rule
-after the observed path. Neither route differentiates through the record code.
+returns the contrast, as the acceptance check of the identity. The slow
+parameters learn the observation itself; the record, read at every moment
+through an ordinary port, patches the slow readout's current error and is
+written one-shot by the delta rule after the observed path. The energy
+describes the slow patch; neither learning route sees the record.
 """
 
 from __future__ import annotations
@@ -30,13 +32,22 @@ FORMAT = "cadence-record-patch/1"
 
 @dataclass(frozen=True)
 class RecordPath:
-    """A detached free path; ``hidden`` is the bounded context (batch, time, hidden)."""
+    """A detached free path; ``hidden`` is the bounded context (batch, time, hidden).
+
+    ``output`` is the prediction, the slow readout plus the record read;
+    ``loss`` scores it. ``slow_loss`` scores the slow readout alone, which is
+    what the slow parameters learn and what admission checks."""
 
     hidden: np.ndarray
     output: np.ndarray
     gate: np.ndarray
     read: np.ndarray
     loss: float | None
+    slow_loss: float | None
+
+    @property
+    def slow_output(self) -> np.ndarray:
+        return np.asarray(self.output - self.read)
 
     @property
     def final_state(self) -> np.ndarray:
@@ -45,7 +56,10 @@ class RecordPath:
 
 @dataclass(frozen=True)
 class RecordObservation:
-    """One teaching attempt: the prediction made before any write, and what changed."""
+    """One teaching attempt: the prediction made before any write, and what changed.
+
+    The losses and rates concern the slow readout, whose step was admitted;
+    ``prediction.loss`` scores the prediction with the record read."""
 
     updated: bool
     reason: str
@@ -115,13 +129,17 @@ class RecordPatchNet:
     context path: the energy is quadratic and the free path is its unique
     zero-defect normal form.
 
-    A record holds what the slow readout got wrong at its reading: the write
-    target is ``y_obs[t] - C h[t] - c``. A reading the slow parameters have
-    learned leaves a record near zero, so the store holds only what the slow
-    model does not yet know. Records are read with the tables as they stood
-    when the call began and written after the path, so a prediction is a
-    function of the parameters, the records and the boundary alone. To let a
-    record written at one moment inform the next, observe in shorter paths.
+    The slow parameters learn the observation itself: their gradient is
+    that of the slow readout ``C h[t] + c`` against the target, and the
+    record read never enters it. A record holds what the slow readout got
+    wrong at its reading: the write target is ``y_obs[t] - C h[t] - c``. A
+    reading the slow parameters have learned leaves a record near zero, so
+    the store holds only what the slow model does not yet know, and the
+    prediction ``y[t]`` is right as soon as either knows it. Records are read
+    with the tables as they stood when the call began and written after the
+    path, so a prediction is a function of the parameters, the records and
+    the boundary alone. To let a record written at one moment inform the
+    next, observe in shorter paths.
     """
 
     def __init__(
@@ -300,7 +318,8 @@ class RecordPatchNet:
     ) -> tuple[RecordPath, np.ndarray, np.ndarray]:
         hidden, gate, port, codes, read, output = self._forward(inputs, boundary)
         loss = None if target is None else self._loss(output, target)
-        return RecordPath(hidden, output, gate, read, loss), port, codes
+        slow = None if target is None else self._loss(output - read, target)
+        return RecordPath(hidden, output, gate, read, loss, slow), port, codes
 
     def _gradient(
         self,
@@ -310,10 +329,10 @@ class RecordPatchNet:
         path: RecordPath,
         port: np.ndarray,
     ) -> dict[str, np.ndarray]:
-        """The adjoint scan: dL/dtheta for L = 1/2 mean(w (y - target)^2)."""
+        """The adjoint scan: dL/dtheta for L = 1/2 mean(w (C h + c - target)^2)."""
         batch, horizon, _ = inputs.shape
         hidden, gate = path.hidden, path.gate
-        d = self._output_precision * (path.output - target) / (batch * horizon * self.outputs)
+        d = self._output_precision * (path.slow_output - target) / (batch * horizon * self.outputs)
         previous = np.concatenate((boundary[:, None], hidden[:, :-1]), axis=1)
         gh = d @ self._C
         carried = np.zeros((batch, self.hidden))
@@ -377,7 +396,7 @@ class RecordPatchNet:
         boundary = self._boundary(len(path), None)
         prediction, port, _ = self._free(path, boundary, teaching)
         self._carry(prediction)
-        if prediction.loss is None:
+        if prediction.loss is None or prediction.slow_loss is None:
             return RecordObservation(False, "nonfinite_prediction", prediction)
         delta = self._gradient(path, boundary, teaching, prediction, port)
         writes = self._write(path, teaching, prediction.hidden) if write else 0
@@ -405,7 +424,7 @@ class RecordPatchNet:
         rate: float,
         backtrack: bool,
     ) -> RecordObservation:
-        initial = prediction.loss
+        initial = prediction.slow_loss
         if not backtrack:
             with np.errstate(over="ignore", invalid="ignore"):
                 proposed = {k: getattr(self, "_" + k) - rate * delta[k] for k in delta}
@@ -428,7 +447,7 @@ class RecordPatchNet:
                     losses.append(None)
                     continue
                 trial.set_parameters(proposed)
-                loss = trial._free(path, boundary, target)[0].loss
+                loss = trial._free(path, boundary, target)[0].slow_loss
                 replays += 1
                 losses.append(loss)
                 floor = (
@@ -501,10 +520,12 @@ class RecordPatchNet:
     ) -> RecordContrast:
         """Solve both detuned equilibria of the quadratic energy and return their contrast.
 
-        With ``y`` eliminated, each detuned path minimizes a quadratic that is
-        strictly convex for the tested detuning; conjugate gradients from the
-        free path solve its normal equations to ``tolerance``. The contrast of
-        the energy's parameter derivatives at the two equilibria, divided by
+        The energy describes the slow patch: its readout residual is
+        ``y - C h - c`` and the record read is outside it. With ``y``
+        eliminated, each detuned path minimizes a quadratic that is strictly
+        convex for the tested detuning; conjugate gradients from the free
+        path solve its normal equations to ``tolerance``. The contrast of the
+        energy's parameter derivatives at the two equilibria, divided by
         ``2 beta``, is the learning signal of equilibrium detuning. It equals
         the adjoint gradient of ``observe`` up to terms of order ``beta^2``.
         Nothing here changes the network; this is the acceptance check of
@@ -514,12 +535,12 @@ class RecordPatchNet:
         if not np.isfinite(beta) or beta <= 0:
             raise ValueError("beta must be finite and positive")
         boundary = self._boundary(len(path), state)
-        hidden, gate, port, _, read, _ = self._forward(path, boundary)
+        hidden, gate, port, _, _, _ = self._forward(path, boundary)
         batch, horizon, _ = path.shape
         b = beta * self._output_precision / (horizon * self.outputs)
         if np.any(b >= 1.0):
             raise ValueError("beta*output_precision/(time*outputs) must be below one")
-        q = read + self._c - teaching
+        q = self._c - teaching
         converged = True
 
         def seam(v: np.ndarray) -> np.ndarray:
@@ -569,7 +590,7 @@ class RecordPatchNet:
             bw = sign * b
             prev = np.concatenate((boundary[:, None], h[:, :-1]), axis=1)
             e = h - gate * prev - (1.0 - gate) * port
-            estimate = h @ self._C.T + self._c + read
+            estimate = h @ self._C.T + self._c
             y = (estimate + bw * teaching) / (1.0 + bw)
             r = y - estimate
             energy = float(

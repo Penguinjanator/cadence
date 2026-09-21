@@ -44,14 +44,16 @@ assert np.array_equal(recalled.output[0].argmax(axis=1), identities)
 
 `observe` predicts the path with the records as they stood when the call
 began, moves the slow parameters against the adjoint gradient of the
-precision-weighted half mean squared error, and then writes what the slow
-readout got wrong at each reading into that reading's records. With
-`backtrack=True` a parameter step is admitted only after a target-free
-replay from the original boundary lowers the loss, trying up to sixteen
-halved rates. `write=False` learns without writing. The final free context
-becomes the live state; `advance` carries context without learning or
-writing, `imagine` is private, and `reset` clears context while keeping
-parameters and records.
+precision-weighted half mean squared error of the slow readout `C h + c`,
+and then writes what that readout got wrong at each reading into the
+reading's records. The record read never enters the slow gradient: the slow
+parameters learn the observation itself, and the record patches their
+current error until they have. With `backtrack=True` a parameter step is
+admitted only after a target-free replay from the original boundary lowers
+the slow readout's loss, trying up to sixteen halved rates. `write=False`
+learns without writing. The final free context becomes the live state;
+`advance` carries context without learning or writing, `imagine` is
+private, and `reset` clears context while keeping parameters and records.
 
 ## Records hold what the slow model does not know
 
@@ -86,10 +88,12 @@ for name, value in adjoint.items():
 
 `detune` solves the two detuned equilibria of the quadratic energy by
 conjugate gradients from the free path and returns the centered contrast of
-the energy's parameter derivatives. For this patch that contrast equals the
-adjoint gradient up to terms of order `beta^2`; `observe` computes the same
-learning signal by one backward scan. Neither route differentiates through
-the record code: the read is a port value.
+the energy's parameter derivatives. The energy describes the slow patch: its
+readout residual is `y - C h - c`, and the record read lies outside it. For
+this patch the contrast equals the adjoint gradient up to terms of order
+`beta^2`; `observe` computes the same learning signal by one backward scan.
+Neither route sees the record: the read is a port value added to the
+readout.
 
 ## Cost and state
 

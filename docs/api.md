@@ -59,11 +59,13 @@ A development addition after 0.11.0. See the [record patch guide](record-patch.m
 - `observe(inputs, target, *, rate=1.0, backtrack=False, write=True)`
   predicts with the records at the start of the call, moves the slow
   parameters against the adjoint gradient of the precision-weighted half
-  mean squared error (admitted by causal replay when `backtrack=True`) and
-  writes the residual `target - C h - c` into each reading's records.
-  Returns `RecordObservation`: `updated`, `reason`, the `prediction`
-  (`RecordPath` with `hidden`, `output`, `gate`, `read`, `loss`), `delta`,
-  the admission losses and rates, replay count and write count.
+  mean squared error of the slow readout `C h + c` (admitted by causal
+  replay when `backtrack=True`) and writes the residual `target - C h - c`
+  into each reading's records. Returns `RecordObservation`: `updated`,
+  `reason`, the `prediction` (`RecordPath` with `hidden`, `output`, `gate`,
+  `read`, `loss` of the prediction and `slow_loss` of the slow readout),
+  `delta`, the slow readout's admission losses and rates, replay count and
+  write count.
 - `imagine(inputs, *, state=None)` is private; `advance(inputs)` carries
   context; `reset()` clears context and keeps parameters and records.
 - `detune(inputs, target, *, beta=1e-3, state=None, tolerance=1e-14,
