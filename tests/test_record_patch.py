@@ -436,3 +436,29 @@ def test_batch_writes_converge_no_slower_than_sequential_writes():
     assert wrong["batch"][-1] <= 1 and wrong["sequential"][-1] <= 1
     assert wrong["batch"][0] == wrong["sequential"][0] > 20
     assert sum(wrong["batch"]) <= sum(wrong["sequential"])
+
+
+def test_a_coded_store_holds_the_coded_residual_and_recalls_a_wide_port():
+    rng = np.random.default_rng(13)
+    net = RecordPatchNet(
+        24, 8, 60, seed=3, cells=4096, active=32, record_rate=1.0, groups=(60,), record_width=24
+    )
+    assert net.records.tables["y"].shape == (4096, 24)
+    inputs = np.eye(24)[None, :20]
+    identities = rng.integers(60, size=20)
+    target = np.eye(60)[identities][None]
+    first = net.observe(inputs, target, rate=0.0)
+    # One write at rate one: the cells of the first reading hold the code of its residual.
+    residual = target[0, 0] - first.prediction.slow_output[0, 0]
+    reading = net._readings(inputs, first.prediction.hidden)[0, :1]
+    held = net.records.read(net.records.code(reading, valued=False)[:, 0])["y"]
+    overlap = 1.0  # the first reading's own write; later writes add their overlap with it
+    assert np.linalg.norm(held - overlap * residual @ net._output_code) < 0.5 * np.linalg.norm(held)
+    for _ in range(5):
+        net.reset()
+        net.observe(inputs, target, rate=0.0)
+    recalled = net.imagine(inputs, state=np.zeros((1, 8)))
+    assert np.array_equal(recalled.output[0].argmax(axis=1), identities)
+    again = RecordPatchNet.restore(net.snapshot())
+    assert again.record_width == 24
+    assert_array_equal(again.imagine(inputs, state=np.zeros((1, 8))).output, recalled.output)

@@ -63,7 +63,8 @@ A development addition after 0.11.0. See the [record patch guide](record-patch.m
   cross-entropy for the slow readout, records of `onehot - softmax`.
   `record_writes="batch"` writes a call's moments at once through
   `Records.write_batch(codes, targets)`, each cell moving by the mean of its
-  writers' moves.
+  writers' moves. `record_width=w` makes the store hold a fixed random
+  `w`-column sign code of the residual instead of one column per output.
 - `RecordPatchStack(inputs, hidden, outputs, *, lower=None, seed=0,
   slowest=128.0, groups=None, **upper)` puts a context patch of width `lower`
   below a `RecordPatchNet` that reads `[u, r1 * h1]`; `observe`, `imagine`

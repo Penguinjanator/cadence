@@ -300,6 +300,26 @@ A closed loop multiplies the per-word rate over the sentence, so exact
 recitation needs the per-word rate near one: more cells, more passes, and slow
 weights that learn most of the material first.
 
+## A store narrower than its port
+
+A port of thousands of categories need not give the store one column per
+category. With `record_width=w` the cells hold a fixed random sign code of the
+residual, `residual @ R` with `R` of shape `(outputs, w)` and entries
+`+-1/sqrt(w)`, and the read is decoded by the transpose, `held @ R.T`. A stored
+residual comes back with crosstalk of standard deviation `|residual| /
+sqrt(w)` per port, which the largest port survives. The delta rule has to
+compare like with like: the coded residual with what the cells hold. Taking
+the error after decoding and projecting it again multiplies the step by
+`outputs / w` (10.7 at 5,481 words and 512 columns), and the store diverges:
+in the language work this recited nothing until it was found. Closed-loop
+recitation of 300 random sentences (4,353 associations, records only, a
+1,500-word port): one column per word 0.44 exact after eight passes, a
+256-column code 0.41, at a sixth of the memory. At write rate one a
+16,384-cell store recited 0.39, 0.74, 0.93, 0.987 of the sentences exactly
+after 4, 8, 16, 32 passes, and a 32,768-cell store 0.77, 0.957, 0.98, 0.997:
+about seven cells per association and thirty passes for exact recitation
+when the slow weights know nothing.
+
 ## Two patches in depth
 
 The gate of a record patch sees only the present input. That is enough for a

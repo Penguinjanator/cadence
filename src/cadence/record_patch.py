@@ -161,6 +161,7 @@ class RecordPatchNet:
         record_homeostasis: float = 0.0,
         groups: Sequence[int] | None = None,
         record_writes: str = "sequential",
+        record_width: int | None = None,
     ) -> None:
         self.inputs = _integer("inputs", inputs, 1)
         self.hidden = _integer("hidden", hidden, 1)
@@ -174,6 +175,18 @@ class RecordPatchNet:
         if record_writes not in ("sequential", "batch"):
             raise ValueError("record_writes is 'sequential' or 'batch'")
         self.record_writes = record_writes
+        # A wide port need not give the store one column per output: the cells can hold a
+        # fixed random code of the residual, decoded by the transpose of the same code.
+        self.record_width = (
+            None if record_width is None else _integer("record_width", record_width, 1)
+        )
+        if self.record_width is None:
+            self._output_code: np.ndarray | None = None
+        else:
+            signs = np.random.default_rng([seed, 0x5EED]).integers(
+                0, 2, (self.outputs, self.record_width)
+            )
+            self._output_code = (2.0 * signs - 1.0) / np.sqrt(self.record_width)
         self.set_output_precision(
             np.ones(self.outputs) if output_precision is None else output_precision
         )
@@ -196,7 +209,7 @@ class RecordPatchNet:
         self._c = np.zeros(self.outputs)
         self.records = Records(
             self.inputs + self.hidden,
-            {"y": self.outputs},
+            {"y": self.outputs if self.record_width is None else self.record_width},
             cells=cells,
             active=active,
             rate=record_rate,
@@ -334,6 +347,8 @@ class RecordPatchNet:
         readings = self._readings(inputs, hidden).reshape(batch * horizon, -1)
         codes = self.records.code(readings, valued=False)[0].reshape(batch, horizon, -1)
         read = codes @ self.records.tables["y"]
+        if self._output_code is not None:
+            read = read @ self._output_code.T
         output = self._slow(hidden) + read
         return hidden, gate, port, codes, read, output
 
@@ -592,6 +607,10 @@ class RecordPatchNet:
         self.records.witness(readings)
         codes = self.records.code(readings, valued=False)[0].reshape(batch, horizon, -1)
         residual = target - self._slow(hidden)
+        if self._output_code is not None:
+            # The delta rule compares the coded residual with what the cells hold. Comparing
+            # the decoded read instead would multiply the step by outputs / record_width.
+            residual = residual @ self._output_code
         if self.record_writes == "batch":
             flat = codes.reshape(batch * horizon, -1)
             return self.records.write_batch(
@@ -742,7 +761,11 @@ class RecordPatchNet:
 
     def snapshot(self) -> dict[str, np.ndarray]:
         """Detached complete continuation state, without any retained training path."""
-        ports = self.groups is not None or self.record_writes != "sequential"
+        ports = (
+            self.groups is not None
+            or self.record_writes != "sequential"
+            or self.record_width is not None
+        )
         meta: dict[str, Any] = {
             "format": FORMAT_PORTS if ports else FORMAT,
             "inputs": self.inputs,
@@ -757,6 +780,7 @@ class RecordPatchNet:
         if ports:
             meta["groups"] = None if self.groups is None else list(self.groups)
             meta["record_writes"] = self.record_writes
+            meta["record_width"] = self.record_width
         result = {
             **self.parameters(),
             "output_precision": self.output_precision,
@@ -792,6 +816,7 @@ class RecordPatchNet:
                 record_homeostasis=config["homeostasis"],
                 groups=meta.get("groups"),
                 record_writes=meta.get("record_writes", "sequential"),
+                record_width=meta.get("record_width"),
             )
             if result.records.to_dict() != config:
                 raise ValueError("record configuration is not one this class constructs")
