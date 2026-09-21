@@ -111,6 +111,17 @@ The consequence field moved by `rate` (0.2) times the error and the valued field
 `valued_rate` (1.0). The read at `other` moved by the overlap of the two codes times the
 correction; the records of every cell the first reading left inactive stay zero.
 
+### The scale of a reading
+
+The projection is scaled so that a reading with unit variance per unit gives
+drives of unit scale, and the cells' fixed offsets (`bias`) are in those
+drive units. A reading much smaller than that lets the offsets choose the
+winners, and the same cells fire for every reading; a reading whose blocks
+differ in scale lets the larger block own the address. When a reading
+concatenates several sources, give each unit unit variance, then count the
+cells in use and the share of the most active cells on real readings
+([diagnosing a record store](record-patch.md#diagnosing-a-record-store)).
+
 ### Habituation
 
 With `habituation` above zero (`1e-5` by default), `code(..., adapt=True)` first moves the

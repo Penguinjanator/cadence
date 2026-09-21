@@ -98,6 +98,57 @@ the path, so a prediction is a function of the parameters, the records and
 the boundary alone, and a private branch reproduces it exactly. To let a
 record written at one moment inform the next, observe in shorter paths.
 
+## Diagnosing a record store
+
+A record store can fail silently: prediction with records still beats
+prediction without them, because the store always holds something. Four
+numbers show whether it holds the right thing. Replay the readings of a
+training stream through `records.code(..., valued=False)` and count, per
+cell, how often it is active.
+
+- **Cells in use** and **the share of activations taken by the most active
+  cells.** With `active` of `cells` winners the ideal share of any 200 cells
+  is `200 / cells`. On the composer stream the defective reading used 2,225
+  of 8,192 cells with 0.74 of all activations in the top 200; the repaired
+  one 5,812 cells with 0.27.
+- **Code overlap when only one block of the reading changes.** Hold the
+  context, change the input (and the reverse), and compare the two codes.
+  An address that does not move with a block cannot store anything about
+  it. There the overlap was 0.62 to 0.71 when only the event heard changed
+  and 0.92 when the context moved four bars; after the repair 0.15 and 0.88.
+- **Held-out scores with records frozen, zeroed, writing online, and writing
+  online from empty.** Frozen far below online means the store forgets its
+  training stream; online equal to online-from-empty means the trained
+  records contribute nothing to a new stream.
+- **The read at readings no stream has written,** for instance a rollout
+  from silence. A read far from zero there is interference from unrelated
+  writers, not memory.
+
+## What a write rate stores
+
+The delta rule at a rate near one half makes a cell hold its last few
+writers. That is the right memory for a new stream: its first moments
+overwrite the cells they touch, and the read then calibrates the prediction
+to that stream (on the composer, four observed bars of an unheard track
+moved the change port's read from +0.13 to -0.22 and its rate of predicted
+changes from 0.24 to 0.07 per moment). It is the wrong memory for a corpus:
+with records frozen the same store recalled 0.03 to 0.11 of the training
+basslines. `record_averaging` makes each cell average its writers instead,
+with `record_rate` as the floor; retention and calibration at unfamiliar
+readings improve, adaptation to a new stream slows in proportion. One table
+cannot do both at full strength; choose by which the task reads.
+
+## Boundary readings
+
+A reading met once per stream, such as the wake moment with nothing heard,
+receives a handful of updates per epoch. The slow parameters barely learn
+it and its record cells are shared with common readings, so the first
+prediction of a rollout from silence is poorly determined (on the composer
+it started the loop out of phase with the clock). Make the boundary a
+common reading by convention instead of hoping it is learned: there the
+wake hears a count-in, the last event of the loop, and the rule the patch
+knows best produces the first event.
+
 ## Detuning as the acceptance check
 
 ```python
@@ -135,6 +186,26 @@ the dense kernel at the shapes of the scalable brain plan.
 tables, the running mean and counts, the output precision and the live
 context. `readback` exposes the detached state, update and write counts, the
 parameter revision the state was computed under and the record entry count.
+
+## Running a trained patch outside Python
+
+The forward pass needs no library. Export the six parameter arrays, the
+record table, the running mean of the reading, the input norm and the
+record configuration; everything else is regenerated. The record projection
+and offsets come from the seed: the `Mulberry32` generator, then
+`normals(n)` by Box-Muller over `2 * ceil(n / 2)` draws with the radii from
+the first half of the draws and the angles from the second half, cosines
+before sines; the projection takes `reading * cells` normals divided by
+`sqrt(reading)`, row by row over the reading, and the offsets take the next
+`cells` normals times `bias`. A moment is then the gate and the context
+update, the reading `[u * sqrt(n) / s, r * h]` minus the mean, the drives,
+the `active` largest of them (a heap of that size is enough), their
+positive parts normalised to unit length, the table rows weighted by that
+code, and the readout. At 208 reading units and 8,192 cells a moment is
+about 1.7 million multiply-adds. A JavaScript port built the projection in
+0.1 s and ran 128 moments in 0.5 s; with the table shipped as float32 it
+reproduced an archived Python rollout in every played event, with outputs
+equal to 2e-8. Keep such an archived rollout as the port's parity test.
 
 ## What this class does not do
 

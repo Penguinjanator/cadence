@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Documentation from the composer work: how to diagnose a record store
+  (cells in use, top-cell share, code overlap per block, frozen against
+  online scores), what a write rate stores, boundary readings, running a
+  trained record patch outside Python with a parity test, the scale of a
+  `Records` reading, and seven new rows in the missteps guide.
 - The record patch's reading gives its two blocks unit variance per unit:
   the input block is scaled by `sqrt(n) / s` with `s` the running rms norm of
   witnessed inputs. On the composer stream this spreads the code from 2,225
