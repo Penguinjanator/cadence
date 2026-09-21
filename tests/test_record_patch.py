@@ -32,7 +32,7 @@ def independent_path(parameters, inputs, boundary, net=None, read=None):
             hidden[row, t] = h
             m = np.zeros(parameters["c"].shape)
             if net is not None:
-                code = net.records.code(np.concatenate((u, h * net._scale)))[0, 0]
+                code = net.records.code(np.concatenate((u * (np.sqrt(net.inputs) / net._input_norm), h * net._scale)))[0, 0]
                 m = code @ net.records.tables["y"]
             elif read is not None:
                 m = read[row, t]
@@ -284,3 +284,17 @@ def test_records_state_round_trip_and_witness_moves_the_mean():
     assert_array_equal(other.tables["y"], records.tables["y"])
     with pytest.raises(ValueError):
         other.load_state({k: v for k, v in records.state().items() if k != "mean"})
+
+
+def test_snapshot_round_trip_carries_the_input_norm_and_record_state():
+    rng = np.random.default_rng(12)
+    net = RecordPatchNet(3, 5, 2, seed=8, cells=120, active=6, record_rate=0.05, record_averaging=True, record_homeostasis=0.05)
+    inputs, target = rng.normal(size=(2, 9, 3)) * 2.0, rng.normal(size=(2, 9, 2))
+    net.observe(inputs, target, rate=0.0)
+    assert net._input_norm != 1.0
+    assert net.records.count.sum() > 0 and np.abs(net.records.boost).max() > 0
+    twin = RecordPatchNet.restore(net.snapshot())
+    assert twin._input_norm == net._input_norm
+    assert np.array_equal(twin.records.count, net.records.count)
+    probe = rng.normal(size=(1, 4, 3))
+    assert_allclose(twin.imagine(probe, state=np.zeros((1, 5))).output, net.imagine(probe, state=np.zeros((1, 5))).output, atol=1e-12)

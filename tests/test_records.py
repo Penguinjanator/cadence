@@ -179,3 +179,54 @@ def test_a_consequence_only_code_leaves_the_valued_code_unset() -> None:
     norms = records.pathway_norm.copy()
     records.code(reading, adapt=True, valued=False)
     assert (records.pathway_norm != norms).all()  # witnessing adapts the norms either way
+
+
+def test_homeostasis_spreads_the_code_over_the_cells():
+    rng = np.random.default_rng(9)
+    # Readings whose variance lies in a few directions, which hub cells would otherwise own.
+    basis = rng.normal(size=(3, 20))
+    readings = rng.normal(size=(600, 3)) @ basis * 4.0 + rng.normal(size=(600, 20)) * 0.1
+    def usage(records):
+        used = np.zeros(records.cells)
+        for row in readings:
+            used += records.code(row[None], valued=False)[0][0] > 0
+        return used
+    fixed = cd.Records(20, {"y": 2}, cells=400, active=8, seed=5)
+    balanced = cd.Records(20, {"y": 2}, cells=400, active=8, seed=5, homeostasis=0.05)
+    for _ in range(3):
+        balanced.witness(readings)
+    top_fixed = np.sort(usage(fixed))[::-1][:20].sum() / (8 * 600)
+    top_balanced = np.sort(usage(balanced))[::-1][:20].sum() / (8 * 600)
+    assert top_balanced < 0.75 * top_fixed
+    assert (usage(balanced) > 0).sum() > 1.5 * (usage(fixed) > 0).sum()
+    assert np.all(np.abs(balanced.boost) <= 3.0 * balanced.drive_scale + 1e-12)
+
+
+def test_averaging_takes_the_first_outcome_whole_and_then_averages():
+    records = cd.Records(6, {"y": 1}, cells=50, active=4, rate=0.05, averaging=True, seed=2)
+    reading = np.array([1.0, -0.5, 0.25, 0.0, 0.7, -0.1])
+    code = records.code(reading[None], valued=False)
+    code = np.stack((code[0][0], code[0][0]))
+    records.write(code, {"y": np.array([2.0])})
+    assert abs(float(records.read(code)["y"][0]) - 2.0) < 1e-9  # the first write is exact
+    for value in (4.0, 6.0, 8.0):
+        records.write(code, {"y": np.array([value])})
+    read = float(records.read(code)["y"][0])
+    assert 2.0 < read < 8.0  # later outcomes are averaged in, not taken whole
+    plain = cd.Records(6, {"y": 1}, cells=50, active=4, rate=0.05, seed=2)
+    plain.write(code, {"y": np.array([2.0])})
+    assert abs(float(plain.read(code)["y"][0]) - 0.1) < 1e-9  # a fixed rate takes a twentieth
+
+
+def test_state_round_trip_carries_the_counts_usage_and_boost():
+    rng = np.random.default_rng(1)
+    records = cd.Records(5, {"y": 2}, cells=60, active=3, averaging=True, homeostasis=0.1, seed=3)
+    readings = rng.normal(size=(30, 5))
+    records.witness(readings)
+    code = records.code(readings[:1], valued=False)[0][0]
+    records.write(np.stack((code, code)), {"y": np.array([1.0, -1.0])})
+    twin = cd.Records(5, {"y": 2}, cells=60, active=3, averaging=True, homeostasis=0.1, seed=3)
+    twin.load_state(records.state())
+    assert np.array_equal(twin.count, records.count) and np.array_equal(twin.boost, records.boost)
+    assert np.array_equal(twin.usage, records.usage) and twin.drive_scale == records.drive_scale
+    assert twin.to_dict() == records.to_dict()

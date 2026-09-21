@@ -27,7 +27,7 @@ from .records import Records
 __all__ = ["RecordPatchNet", "RecordPath", "RecordObservation", "RecordContrast", "RecordReadback"]
 
 _PARAMETERS = ("G", "g", "B", "b", "C", "c")
-FORMAT = "cadence-record-patch/1"
+FORMAT = "cadence-record-patch/2"
 
 
 @dataclass(frozen=True)
@@ -156,6 +156,8 @@ class RecordPatchNet:
         habituation: float = 1e-5,
         record_bias: float = 0.3,
         slowest: float = 128.0,
+        record_averaging: bool = False,
+        record_homeostasis: float = 0.0,
     ) -> None:
         self.inputs = _integer("inputs", inputs, 1)
         self.hidden = _integer("hidden", hidden, 1)
@@ -189,7 +191,14 @@ class RecordPatchNet:
             habituation=habituation,
             bias=record_bias,
             seed=seed,
+            averaging=record_averaging,
+            homeostasis=record_homeostasis,
         )
+        # The reading gives the input block and the context block comparable say: the
+        # context is read in units of each channel's fluctuation, and the input block is
+        # scaled by its witnessed rms norm to unit variance per unit, so the drive of a
+        # cell has unit scale and its fixed offset stays a small preference.
+        self._input_norm = 1.0
         self._state: np.ndarray | None = None
         self.updates = 0
         self._revision = 0
@@ -284,8 +293,11 @@ class RecordPatchNet:
     # --------------------------------------------------------------- forward
 
     def _readings(self, inputs: np.ndarray, hidden: np.ndarray) -> np.ndarray:
-        """What the record reads at each moment: the input and the scaled context."""
-        return np.concatenate((inputs, hidden * self._scale), axis=-1)
+        """What the record reads at each moment: the input and the scaled context, both
+        with unit variance per unit."""
+        return np.concatenate(
+            (inputs * (np.sqrt(self.inputs) / self._input_norm), hidden * self._scale), axis=-1
+        )
 
     def _forward(
         self, inputs: np.ndarray, boundary: np.ndarray
@@ -497,6 +509,9 @@ class RecordPatchNet:
         do); the writes then land at the codes later readings will use. The
         residual is taken against the parameters that made the prediction."""
         batch, horizon, _ = inputs.shape
+        norms = np.linalg.norm(inputs.reshape(batch * horizon, -1), axis=1)
+        for value in norms:
+            self._input_norm += 0.01 * (max(float(value), 1e-6) - self._input_norm)
         readings = self._readings(inputs, hidden).reshape(batch * horizon, -1)
         self.records.witness(readings)
         codes = self.records.code(readings, valued=False)[0].reshape(batch, horizon, -1)
@@ -658,6 +673,7 @@ class RecordPatchNet:
         result = {
             **self.parameters(),
             "output_precision": self.output_precision,
+            "input_norm": np.array(self._input_norm, dtype=float),
             "state": np.empty((0, self.hidden)) if self._state is None else self._state.copy(),
             "meta": np.array(json.dumps(meta, sort_keys=True, allow_nan=False)),
         }
@@ -685,10 +701,16 @@ class RecordPatchNet:
                 habituation=config["habituation"],
                 record_bias=config["bias"],
                 slowest=meta["slowest"],
+                record_averaging=config["averaging"],
+                record_homeostasis=config["homeostasis"],
             )
             if result.records.to_dict() != config:
                 raise ValueError("record configuration is not one this class constructs")
             result.set_parameters({k: snapshot[k] for k in _PARAMETERS})
+            input_norm = float(np.asarray(snapshot["input_norm"]))
+            if not np.isfinite(input_norm) or input_norm <= 0:
+                raise ValueError("invalid saved input norm")
+            result._input_norm = input_norm
             result.records.load_state(
                 {
                     key[len("records_") :]: np.asarray(value)

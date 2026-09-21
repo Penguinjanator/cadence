@@ -11,7 +11,7 @@ For inputs `u[t]`, context `h[t]` and outputs `y[t]`:
 l[t] = sigmoid(g + G u[t])               per-channel retention in (0, 1)
 z[t] = tanh(B u[t] + b)                  the input port
 h[t] = l[t] * h[t-1] + (1 - l[t]) * z[t]
-m[t] = read(code([u[t], r * h[t]]))      the record read, a port value
+m[t] = read(code([u[t] * sqrt(n) / s, r * h[t]]))   the record read, a port value
 y[t] = C h[t] + c + m[t]
 ```
 
@@ -54,6 +54,30 @@ the slow readout's loss, trying up to sixteen halved rates. `write=False`
 learns without writing. The final free context becomes the live state;
 `advance` carries context without learning or writing, `imagine` is
 private, and `reset` clears context while keeping parameters and records.
+
+## The reading: two blocks of unit variance per unit
+
+The record's key is the input block and the context block side by side. The
+context is read in units of each channel's fluctuation (`r`), which gives its
+units unit variance. The input block is scaled by `sqrt(n) / s`, where `n` is
+the number of input ports and `s` the running rms norm of witnessed inputs,
+so its units have unit variance too and a cell's drive has unit scale, with
+the fixed offset a small preference. Before this scaling the context block
+outweighed the input block about five to one on the composer stream: the
+address hardly moved with the event heard (48-cell code overlap 0.66 when
+only the crop changed), a few hundred hub cells took three quarters of all
+activations, and the store forgot the training corpus behind its last
+writers. With the scaling the same stream uses 5,812 of 8,192 cells instead
+of 2,225, the address follows the crop heard (overlap 0.15), and held-out
+next-crop and bass-note accuracy both rise. Two further options exist and
+are off by default: `record_averaging` makes a cell's write rate one over its
+written mass with `record_rate` as the floor (a fresh cell takes its first
+outcome whole, a familiar one averages), which on the composer stream
+calibrated reads at unfamiliar readings and improved retention but slowed
+adaptation to a new track; `record_homeostasis` moves each cell's offset
+toward an equal activation share, which spread the code further but cost
+adaptation as well. Both are measured in
+`cadence-mission/results/record_addressing_v8.json`.
 
 ## Records hold what the slow model does not know
 

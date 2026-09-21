@@ -117,7 +117,12 @@ class Records:
     drawn from the generator; the cell reads those pathways and every input outside the
     pathways (0 reads every input). ``bias`` scales the cells' fixed offsets. ``seed``
     starts the generator of the projection, the offsets, the division into groups and the
-    pathways each cell reads.
+    pathways each cell reads. ``averaging`` makes each cell's write rate the larger of
+    ``rate`` and one over the code mass written into it so far, so a fresh cell takes its
+    first outcome whole and a well-used cell averages; ``homeostasis`` is the rate at which
+    each cell's activation share is tracked and its offset moved toward the share
+    ``active / cells``, so that no cell becomes a hub written by unrelated readings (0
+    leaves the offsets fixed).
     """
 
     def __init__(
@@ -137,6 +142,8 @@ class Records:
         tasks: Sequence[int] | np.ndarray = (),
         fan_in: int = 0,
         seed: int = 0,
+        averaging: bool = False,
+        homeostasis: float = 0.0,
     ) -> None:
         self.inputs = _positive_int("inputs", inputs)
         self.cells = _positive_int("cells", cells)
@@ -157,6 +164,8 @@ class Records:
         self.bias = float(bias)
         if not np.isfinite(self.bias) or self.bias < 0:
             raise ValueError("bias must be finite and nonnegative")
+        self.averaging = bool(averaging)
+        self.homeostasis = _rate("homeostasis", homeostasis, upper=1.0)
         self.seed = int(seed) & M32
         generator = Mulberry32(self.seed)
         draws = generator.normals(self.inputs * self.cells)
@@ -194,6 +203,10 @@ class Records:
         self.pathway_norm = np.ones(len(self.pathways))
         self.tables = {name: np.zeros((self.cells, width)) for name, width in self.fields.items()}
         self.writes = 0
+        self.count = np.zeros(self.cells)  # code mass written into each cell
+        self.usage = np.full(self.cells, self.active / self.cells)  # each cell's tracked activation share
+        self.boost = np.zeros(self.cells)  # the homeostatic offset, bounded by the drive scale
+        self.drive_scale = 1.0  # running mean absolute drive of witnessed readings
 
     def _allowed(self, readings: np.ndarray) -> np.ndarray | None:
         """The cells each reading's active task allows for the valued code, or None."""
@@ -206,7 +219,7 @@ class Records:
 
     def _winners(self, x: np.ndarray, allowed: np.ndarray | None, out: np.ndarray) -> None:
         """Writes the k-winner code of the drives ``x @ projection + offset`` into ``out``."""
-        drive = x @ self.projection + self.offset
+        drive = x @ self.projection + self.offset + self.boost
         if allowed is not None:
             drive = np.where(allowed, drive, -np.inf)
         k = self.active
@@ -291,7 +304,12 @@ class Records:
             if known is not None and name in known:
                 error = error * np.asarray(known[name], dtype=bool)
             rate = self.valued_rate if name in self.valued else self.rate
-            self.tables[name][active] += rate * np.outer(c[active], error)
+            if self.averaging and name not in self.valued:
+                self.count[active] += c[active]
+                step = np.clip(1.0 / self.count[active], rate, 1.0)[:, None]
+            else:
+                step = rate
+            self.tables[name][active] += step * np.outer(c[active], error)
             written += 1
         self.writes += written
         return written
@@ -313,6 +331,21 @@ class Records:
             for k, pathway in enumerate(self.pathways):
                 for value in np.linalg.norm(x[:, pathway], axis=1):
                     self.pathway_norm[k] += self.pathway_rate * (value - self.pathway_norm[k])
+        if self.homeostasis > 0:
+            # Each witnessed reading's plain code moves the cells' tracked shares; the offsets
+            # follow, so cells that win too often withdraw and idle cells come forward.
+            target = self.active / self.cells
+            for row in x:
+                drive = row @ self.projection + self.offset
+                self.drive_scale += self.homeostasis * (float(np.mean(np.abs(drive))) - self.drive_scale)
+                winners = np.argpartition(drive + self.boost, self.cells - self.active)[self.cells - self.active :]
+                fired = np.zeros(self.cells)
+                fired[winners] = 1.0
+                self.usage += self.homeostasis * (fired - self.usage)
+                # A bounded error: +1 for an idle cell, toward -1 for a hub; the offsets move by a
+                # fraction of the drive scale measured without them, and stay within it.
+                self.boost += self.homeostasis * self.drive_scale * (target - self.usage) / (target + self.usage)
+                np.clip(self.boost, -3.0 * self.drive_scale, 3.0 * self.drive_scale, out=self.boost)
 
     def parameters(self) -> int:
         """Record entries, the learned state; the projection and the offsets are fixed."""
@@ -326,6 +359,10 @@ class Records:
             "seen": np.array(self.seen, dtype=np.int64),
             "pathway_norm": self.pathway_norm.copy(),
             "writes": np.array(self.writes, dtype=np.int64),
+            "count": self.count.copy(),
+            "usage": self.usage.copy(),
+            "boost": self.boost.copy(),
+            "drive_scale": np.array(self.drive_scale, dtype=float),
         }
         for name, table in self.tables.items():
             result["table_" + name] = table.copy()
@@ -333,7 +370,7 @@ class Records:
 
     def load_state(self, state: Mapping[str, np.ndarray]) -> None:
         """Replace the learned state by arrays of the shapes ``state`` produces, atomically."""
-        expected = {"mean", "seen", "pathway_norm", "writes"} | {
+        expected = {"mean", "seen", "pathway_norm", "writes", "count", "usage", "boost", "drive_scale"} | {
             "table_" + name for name in self.fields
         }
         if set(state) != expected:
@@ -353,8 +390,16 @@ class Records:
             if table.shape != (self.cells, width) or not np.isfinite(table).all():
                 raise ValueError(f"the table of {name!r} must be a finite ({self.cells}, {width})")
             tables[name] = table.copy()
+        count, usage, boost = (np.asarray(state[k], dtype=float) for k in ("count", "usage", "boost"))
+        scale = float(np.asarray(state["drive_scale"]))
+        for name, array in (("count", count), ("usage", usage), ("boost", boost)):
+            if array.shape != (self.cells,) or not np.isfinite(array).all():
+                raise ValueError(f"record {name} must be a finite ({self.cells},) array")
+        if (count < 0).any() or (usage < 0).any() or not np.isfinite(scale) or scale <= 0:
+            raise ValueError("record counts, usage and drive scale must be nonnegative, the scale positive")
         self.mean, self.pathway_norm, self.tables = mean.copy(), norm.copy(), tables
         self.seen, self.writes = int(seen), int(writes)
+        self.count, self.usage, self.boost, self.drive_scale = count.copy(), usage.copy(), boost.copy(), scale
 
     def to_dict(self) -> dict[str, Any]:
         """The configuration that rebuilds the fixed cells (the tables are the learned state)."""
@@ -370,6 +415,8 @@ class Records:
             "bias": self.bias,
             "pathways": [p.tolist() for p in self.pathways],
             "pathway_rate": self.pathway_rate,
+            "averaging": self.averaging,
+            "homeostasis": self.homeostasis,
             "tasks": self.tasks.tolist(),
             "fan_in": self.fan_in,
             "seed": self.seed,

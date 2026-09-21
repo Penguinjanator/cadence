@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- The record patch's reading gives its two blocks unit variance per unit:
+  the input block is scaled by `sqrt(n) / s` with `s` the running rms norm of
+  witnessed inputs. On the composer stream this spreads the code from 2,225
+  to 5,812 of 8,192 cells, makes the address follow the event heard, and
+  raises held-out accuracy. Checkpoint format `cadence-record-patch/2`
+  carries the input norm and the record counts.
+- `Records(..., averaging=True)` makes each cell's write rate one over its
+  written mass with `rate` as the floor; `Records(..., homeostasis=r)`
+  moves each cell's offset toward an equal activation share. Both are off by
+  default and exposed on `RecordPatchNet` as `record_averaging` and
+  `record_homeostasis`; `Records.state` includes `count`, `usage`, `boost`
+  and `drive_scale`.
 - `RecordPatchNet` is a temporal patch with a gated linear context and a
   `Records` store inside it. Its energy is quadratic, so the centered
   detuning contrast equals the adjoint gradient of the same loss; `observe`

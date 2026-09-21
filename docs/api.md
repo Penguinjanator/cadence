@@ -54,8 +54,11 @@ A development addition after 0.11.0. See the [record patch guide](record-patch.m
 
 - `RecordPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None,
   cells=4096, active=32, record_rate=0.5, habituation=1e-5, record_bias=0.3,
-  slowest=128.0)` creates a gated linear context with a `Records` store over
-  the reading `[u, r * h]`. Paths have shape `(batch, time, ports)`.
+  slowest=128.0, record_averaging=False, record_homeostasis=0.0)` creates a
+  gated linear context with a `Records` store over the reading
+  `[u * sqrt(n) / s, r * h]`, both blocks of unit variance per unit (`s` is the
+  running rms norm of witnessed inputs). `record_averaging` and
+  `record_homeostasis` pass to `Records` as `averaging` and `homeostasis`. Paths have shape `(batch, time, ports)`.
 - `observe(inputs, target, *, rate=1.0, backtrack=False, write=True)`
   predicts with the records at the start of the call, moves the slow
   parameters against the adjoint gradient of the precision-weighted half
@@ -297,10 +300,13 @@ and a complete runnable example.
 
 ## Records (`cadence.records`)
 
-- `Records(inputs, fields, *, cells=8000, active=40, rate=0.2, valued=(), valued_rate=1.0, habituation=1e-5, bias=0.3, pathways=(), pathway_rate=0.002, tasks=(), fan_in=0, seed=0)`:
+- `Records(inputs, fields, *, cells=8000, active=40, rate=0.2, valued=(), valued_rate=1.0, habituation=1e-5, bias=0.3, pathways=(), pathway_rate=0.002, tasks=(), fan_in=0, seed=0, averaging=False, homeostasis=0.0)`:
   the records cortex over readings of `inputs` units. `fields` maps each predicted field to
   its width; of `cells` code cells, `active` stay per reading. `rate` is the write rate of
-  the consequence fields; `valued` names the fields that read and write through the valued
+  the consequence fields (with `averaging`, each cell's rate is the larger of `rate` and one
+  over the code mass written into it, so a fresh cell takes its first outcome whole);
+  `homeostasis` is the rate at which each cell's activation share is tracked and its offset
+  moved toward `active / cells` (0 leaves the offsets fixed); `valued` names the fields that read and write through the valued
   code, at `valued_rate`. `habituation` is the slowest rate of each unit's running mean (0
   subtracts nothing). `pathways` are one-dimensional index arrays into the reading whose
   running norms, moved at `pathway_rate`, equalise their say in the valued code; empty
