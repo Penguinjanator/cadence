@@ -81,9 +81,11 @@ and [common missteps](https://github.com/muellerberndt/cadence/blob/main/docs/mi
 
 Games, language, multimodal perception, embodied control and creative work
 should use the same learning and memory mechanisms with declared observation
-and action ports. NES play, Connect Four, Maestro and music generation are
-application tests, not definitions of the architecture. A result in one does
-not establish transfer to the others.
+and action ports. The [examples repository](https://github.com/muellerberndt/cadence-examples)
+holds four worked applications: a worm that learns during its life, a composer
+that starts from silence, soft bodies that evolve together with their brains,
+and Connect Four. They are application tests, not definitions of the
+architecture. A result in one does not establish transfer to the others.
 
 The scaling goal is better learned behavior from more experience and training,
 with as little manual design as possible. Measure unique experience, repeated
@@ -93,7 +95,9 @@ defines these comparisons and the current computational limits.
 
 Application demonstrations are published only when they establish their
 claimed behavior. Recall and interpolation are useful development tests;
-original creation requires stronger evidence. Research receipts remain
+original creation requires stronger evidence. Every example states what is
+supplied, what is learned, what was measured and what it does not show, and
+carries a check that recomputes its numbers. Research receipts remain
 available with the paper without presenting those tests as finished products.
 
 ## Proofs and compatibility

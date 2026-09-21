@@ -47,5 +47,6 @@ are not automatically wired into the temporal architecture.
 [Receipts](receipts.md) · [Brain viewer](pages.md) · [Backends](backends.md) ·
 [Conditional Lean proofs](../lean/README.md).
 
+Worked applications with their receipts and checks live in the [examples repository](https://github.com/muellerberndt/cadence-examples).
 Examples illustrate a general mechanism. Their scores are evidence for the
 named task, not proof that the architecture solves arbitrary problems.

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- The README and the documentation index link the public
+  [examples repository](https://github.com/muellerberndt/cadence-examples); the application
+  sentences name its four examples, and the creativity guide states where the
+  published composer stands against the standard for original creation.
 - Documentation from the composer work: how to diagnose a record store
   (cells in use, top-cell share, code overlap per block, frozen against
   online scores), what a write rate stores, boundary readings, running a
