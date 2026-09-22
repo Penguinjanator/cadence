@@ -406,7 +406,9 @@ held-out sign after one night at 4,096, 16,384 and 65,536 cells; the school reac
 0.785 from the same 263 updates on the outcomes themselves, and stayed one to three
 points ahead at every matched update count. The dawn readout followed what the store
 read at bedtime (0.733 to 0.789), and a second night on the same store added nothing:
-its dreams were what the weights said. The composer, with its corpus closed after one
+its dreams were what the weights said. On the full school of 4.4 million positions, taken as
+67 days and nights, the sleep-trained readout reached 0.838 against the school's 0.896 at the
+same 52,000 updates: the gap grows with the school. The composer, with its corpus closed after one
 day, reached in one night of 3,833 updates what three epochs with the corpus reached in
 11,499 (held-out next-event accuracy of the slow parameters alone 0.826 to 0.852
 against 0.828 to 0.850). In the soft-body world a sleep gene was selected out in every
