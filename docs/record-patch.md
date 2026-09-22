@@ -15,12 +15,23 @@ m[t] = read(code([u[t] * sqrt(n) / s, r * h[t]]))   the record read, a port valu
 y[t] = C h[t] + c + m[t]
 ```
 
-The context is a convex combination, so activity stays bounded. The seam
-residual `h[t] - l[t] h[t-1] - (1 - l[t]) z[t]` is linear in the context path,
-which makes the energy quadratic: the free path is its unique zero-defect
-normal form, and the two detuned equilibria of a teaching loss are unique.
+The context is a convex combination, so a bounded initial context stays
+bounded. With inputs and parameters fixed, the seam residual
+`h[t] - l[t] h[t-1] - (1 - l[t]) z[t]` is linear in the context path. With the
+linear readout its energy is quadratic, and the free path is its unique
+zero-defect normal form. The two teaching-detuned paths are unique when their
+quadratic systems remain positive definite; the solver's convergence result
+must be checked. Categorical ports have a different loss, described below.
 Channels start at retention timescales log-spaced from two moments to
-`slowest` moments; `r` reads each channel in the unit of its own fluctuations.
+`slowest` moments. The gate parameters are learned: `slowest` is an
+initialization scale, not a hard memory horizon. `r` reads each channel in the
+unit of its initial fluctuations.
+
+The path can change at every moment while satisfying its temporal equations.
+That is different from repeatedly revising an interpretation of one fixed
+observation. The [equilibrium and world-model guide](equilibrium-world-models.md)
+distinguishes environment time, inference iterations and learning, and states
+which parts of a shared world-model architecture remain unimplemented.
 
 ## One observed path
 
@@ -206,6 +217,14 @@ tables, the running mean and counts, the output precision and the live
 context. `readback` exposes the detached state, update and write counts, the
 parameter revision the state was computed under and the record entry count.
 
+These snapshots contain the patch's continuation state, not the application's
+observation history or a planner's external state. An application that branches
+imagination also owns its random generator, action adapter, observation
+normalization and any additional memories. Freeze those with the model during
+a decision, and verify that private reads leave the factual snapshot unchanged.
+Keep imagined targets distinguishable from observed outcomes; `sleep` consumes
+model-generated targets and does not authenticate them as observations.
+
 ## Running a trained patch outside Python
 
 The forward pass needs no library. Export the six parameter arrays, the
@@ -250,14 +269,26 @@ assert np.array_equal(recalled.output[0].argmax(axis=1), identities)
 
 A record then holds `onehot - softmax(C h + c)`, a residual bounded by one in
 every port, so the record algebra is the one above: a reading the slow weights
-have learned leaves a record near zero. The prediction `softmax + read` is not
-a distribution; decide by its largest port. One moment whose read pushes the
-true port below zero costs the clipped cross-entropy 27 nats, so judge a
-categorical prediction by accuracy or by the median loss, not the mean. Each
-group's teaching weight is the mean `output_precision` of its ports. `detune`
-refuses categorical ports: the energy is quadratic only with the linear
-readout. Default nets keep checkpoint format 2; a net with `groups` or batch
-writes saves format 3.
+have learned leaves a record near zero. The prediction `softmax + read` can
+contain negative entries and is not generally a distribution. Its largest
+port can be used for classification, but sampling, probabilistic planning and
+log-loss evaluation require a declared nonnegative, normalized distribution
+for each group.
+
+The current loss implementation clips each entry to at least `1e-12` and then
+normalizes the group. A residual that pushes the true category below zero can
+therefore incur a very large loss. That exposes a problem with the resulting
+probabilities even when the winning category is correct on many other rows.
+Report mean held-out log loss and calibration for the declared normalization,
+alongside accuracy and the slow-only scores. State the clipping floor; a median
+loss may supplement these measures but must not replace the mean or conceal
+rare confident errors. A learned probabilistic combination of records and
+slow logits would be a different implementation and needs its own tests.
+
+Each group's teaching weight is the mean `output_precision` of its ports.
+`detune` refuses categorical ports: the quadratic detuning result applies only
+to the linear readout. Default nets keep checkpoint format 2; a net with
+`groups` or batch writes saves format 3.
 
 ## Writing a batch
 
@@ -467,6 +498,18 @@ reads `[u, r1 * h1]`; the upper patch owns the readout and the records. The
 upper adjoint scan hands its input gradient to the lower scan, and the
 gradient matches finite differences in both patches. Work per moment stays
 linear in the two widths.
+
+For a single patch the previous-state Jacobian is diagonal when its input is
+fixed. Its gates still multiply carried history, so this is not a theorem that
+the patch represents only one level of conjunctions. In a stack the upper
+nonlinearity mixes the lower context. The agreement result supports that
+composition on the measured task; it does not establish a general world model.
+
+Each component's quadratic seam statement holds conditional on its inputs.
+Freeing both layers together makes the upper nonlinear port depend on the
+lower state, so a jointly coupled energy is not automatically quadratic.
+`RecordPatchStack` supplies an adjoint learning scan, not a joint `detune`
+solver or a joint equilibrium convergence guarantee.
 
 ## What this class does not do
 

@@ -27,6 +27,7 @@ Everything else composes these two through ports.
 5. [Private planning](planning.md) and [learn, act and observe](interaction.md): repair continuous controls under the learned model, end to end.
 6. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
 7. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
+8. [Equilibrium and learned world models](equilibrium-world-models.md): three clocks, changing expected trajectories, evidence and branch isolation, and the distinction between current APIs and a proposed shared architecture.
 
 [Task design](task-design.md), [common missteps](missteps.md) and
 [scaling](scaling.md) say how to validate observations, actions, learning and
