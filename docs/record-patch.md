@@ -320,6 +320,28 @@ after 4, 8, 16, 32 passes, and a 32,768-cell store 0.77, 0.957, 0.98, 0.997:
 about seven cells per association and thirty passes for exact recitation
 when the slow weights know nothing.
 
+## A grammar from records alone
+
+Records generalise by overlap, and that is enough for a small grammar. A speaker whose input is
+a message (act, kind, number and agreement features, 124 ports) and the word it has just said,
+with the slow weights left at their random initial values, was given one pass of delta-rule
+writes over 10,672 (message, sentence) pairs of a grammar of 1,276 messages and 6,173 sentences,
+then asked to say sentences for messages it had never met: a quarter of the (subgenre, era,
+form) combinations and a tenth of the other pairs were held out. With 65,536 cells, 32 active, a
+320-column output code and write rate one, the store alone produced a sentence inside the
+grammar for 0.815 of the held-out combinations and 0.885 of the other held-out messages, and
+preferred the grammatical member of every minimal pair (a/an, is/are, deal/deals, both/all); a
+second pass gave 0.85 and 0.915. The writes took about a minute. A new message shares most of
+its features with taught ones, so its reading touches their records, and the read averages
+them: the record principle doing agreement and word order without a gradient. A two-layer patch
+whose slow weights learned the same pairs by fifty epochs of cross-entropy reached 1.00 on the
+same held-out sets, and so did a GRU and a transformer of the same width; at a twelfth of the
+pairs and equal updates the patch had the lowest held-out loss of the three at every width
+(0.32 against 0.34 and 0.36 nats per word at width 64). The grammar is finite and every learner
+reaches its ceiling with enough data; what the store shows is what one pass of writes buys.
+The receipts are `results/e5_records_speaker.json`, `results/e3_scaling.json` and
+`results/baselines.json` of the language work.
+
 ## Two patches in depth
 
 The gate of a record patch sees only the present input. That is enough for a
