@@ -357,7 +357,11 @@ take a corpus in one pass, and why nothing it learns by day disturbs what its we
 hold. It also has a cost: a store generalises by overlap and no further, and it
 disturbs itself when it is shared (writing 24 new sentences into a store that also
 held a library moved the library from 1.000 to 0.973 exact; a conversation needs its
-own store).
+own store). The store is linear, so two stores read together are one store: what keeps
+a conversation apart from the library is which store a cue reads. Written into an empty
+store of their own and read alone, the same 24 sentences left the library at 1.000, and
+0.79 of them stayed exact after all 24 writes, as in the shared store: what limits them
+is their overlap with one another, and a store of their own does not change that.
 
 **By night, the slow weights take what the store holds, from dreams.** The corpus is
 gone; the store is the only copy. `sleep(cues)` dreams every cue of the day once (the
