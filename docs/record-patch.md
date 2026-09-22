@@ -380,9 +380,12 @@ redistributed into the weights, and the weights, being smooth, finished the patt
 
 **What sleep does not do.** Dreams carry the store's errors as faithfully as its
 regularities: on the held-out messages whose completions the store got wrong at
-bedtime, the night changed nothing (0.885 to 0.89). Sleep restructures what is held
-and does not correct it; correction needs a critic, a re-reading of the disputed cue,
-or another day.
+bedtime, the night changed nothing (0.885 to 0.89), where the teacher with the corpus
+for the same 1,200 updates reached 0.98. Dreams from recombined cues, which land on
+combinations never taught, gave 0.83 and 0.875: the store's guesses at unmet cues are
+taught as facts, whereas dreams from the cues the store met let the smooth weights extend
+the pattern. Sleep restructures what is held and does not correct it; correction needs a
+critic, a re-reading of the disputed cue, or another day.
 
 **Why the dreams are fixed and the store rewritten.** A record is the residual against
 the slow readout at the time it was written. Dreaming again after every update would
