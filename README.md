@@ -4,7 +4,7 @@
 
 # Cadence
 
-[Website](https://floatingpragma.io/cadence/) · [Paper](https://floatingpragma.io/cadence/paper.pdf) · [PyPI](https://pypi.org/project/cadence-net/) · [Documentation](https://github.com/muellerberndt/cadence/blob/main/docs/index.md)
+[Website](https://floatingpragma.io/cadence/) · [Paper](https://github.com/muellerberndt/cadence/blob/main/cadence-paper.pdf) · [PyPI](https://pypi.org/project/cadence-net/) · [Documentation](https://github.com/muellerberndt/cadence/blob/main/docs/index.md)
 
 **Research toward general intelligence through overlap consensus, equilibrium detuning and self-reflection.**
 
