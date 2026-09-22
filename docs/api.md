@@ -82,6 +82,12 @@ A development addition after 0.11.0. See the [record patch guide](record-patch.m
   write count.
 - `imagine(inputs, *, state=None)` is private; `advance(inputs)` carries
   context; `reset()` clears context and keeps parameters and records.
+- `dream(inputs)` is the store's completion of a cue from rest, as a target (the chosen
+  category per group for categorical ports); `sleep(cues, *, passes=1, rate=1.0,
+  backtrack=False, dawn_passes=2)` dreams every cue once, teaches the slow weights the
+  fixed dreams by `observe(write=False)`, and at dawn writes the dreams back so the store
+  holds only what the slow weights did not take. Returns admitted updates, the mean slow
+  loss on the dreams before and after, and the dawn writes.
 - `detune(inputs, target, *, beta=1e-3, state=None, tolerance=1e-14,
   max_iterations=10000)` solves both detuned equilibria of the quadratic
   energy by conjugate gradients and returns `RecordContrast`: the centered

@@ -517,6 +517,85 @@ class RecordPatchNet:
             writes,
         )
 
+    def dream(self, inputs: np.ndarray) -> np.ndarray:
+        """The store's own completion of a cue from rest: the free path with the records,
+        as the patch would answer awake, made a target (for categorical ports the chosen
+        category of each group). Nothing changes."""
+        path = self._path(inputs, self.inputs, "inputs")
+        output = self._free(path, np.zeros((len(path), self.hidden)), None)[0].output
+        if self.groups is None:
+            return np.asarray(output)
+        target = np.zeros_like(output)
+        for start, end in self._bounds():
+            chosen = output[..., start:end].argmax(axis=-1)
+            np.put_along_axis(target[..., start:end], chosen[..., None], 1.0, axis=-1)
+        return target
+
+    def sleep(
+        self,
+        cues: Sequence[np.ndarray],
+        *,
+        passes: int = 1,
+        rate: float = 1.0,
+        backtrack: bool = False,
+        dawn_passes: int = 2,
+    ) -> dict[str, float]:
+        """A night: the slow weights take what the store holds, from dreams alone.
+
+        Every cue is dreamed once, with the store as it stands at bedtime; the slow
+        weights then learn the fixed dreams for ``passes`` passes by ``observe`` with
+        ``write=False``; and at dawn each dream is written back ``dawn_passes`` times,
+        so the store holds only what the slow weights did not take. Nothing outside the patch is
+        consulted. A record is the residual against the slow readout at the time it
+        was written: dreaming again after each update would follow the patch's own
+        drift, and reading the old residuals against new slow weights would count the
+        outcome twice, which is why the dreams are fixed and the store is rewritten.
+        The read of a cue the store never met is what the records of its neighbours
+        agree on, and it is taught with the rest. Returns admitted updates, the mean
+        slow loss on the dreams before and after, and the writes of the dawn.
+        """
+        passes = _integer("passes", passes, 0)
+        dreams = [(self._path(cue, self.inputs, "inputs"), self.dream(cue)) for cue in cues]
+        if not dreams:
+            raise ValueError("sleep needs at least one cue")
+        before = float(
+            np.mean(
+                [
+                    self._free(p, np.zeros((len(p), self.hidden)), d)[0].slow_loss or np.nan
+                    for p, d in dreams
+                ]
+            )
+        )
+        admitted = 0
+        for _ in range(passes):
+            for path, dream in dreams:
+                self.reset()
+                admitted += int(
+                    self.observe(path, dream, rate=rate, backtrack=backtrack, write=False).updated
+                )
+        after = float(
+            np.mean(
+                [
+                    self._free(p, np.zeros((len(p), self.hidden)), d)[0].slow_loss or np.nan
+                    for p, d in dreams
+                ]
+            )
+        )
+        writes = 0
+        for _ in range(_integer("dawn_passes", dawn_passes, 0)):
+            for path, dream in dreams:
+                self.reset()
+                hidden = self._free(path, np.zeros((len(path), self.hidden)), None)[0].hidden
+                writes += self._write(path, dream, hidden)
+        self.reset()
+        return {
+            "cues": float(len(dreams)),
+            "updates": float(admitted),
+            "dream_loss_before": before,
+            "dream_loss_after": after,
+            "dawn_writes": float(writes),
+        }
+
     def _admit(
         self,
         path: np.ndarray,

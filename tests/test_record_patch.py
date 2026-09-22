@@ -462,3 +462,44 @@ def test_a_coded_store_holds_the_coded_residual_and_recalls_a_wide_port():
     again = RecordPatchNet.restore(net.snapshot())
     assert again.record_width == 24
     assert_array_equal(again.imagine(inputs, state=np.zeros((1, 8))).output, recalled.output)
+
+
+def test_sleep_moves_what_the_store_holds_into_the_slow_weights():
+    rng = np.random.default_rng(21)
+    net = RecordPatchNet(
+        12, 12, 5, seed=4, cells=2048, active=16, record_rate=1.0, groups=(5,), slowest=8.0
+    )
+    x = np.eye(12)[rng.integers(12, size=(3, 8))]
+    symbol = x.argmax(-1)
+    target = np.eye(5)[(symbol + np.roll(symbol, 1, axis=1)) % 5]
+    # The day: the store takes the pairs; the slow weights do not move (rate zero).
+    for _ in range(8):
+        net.reset()
+        net.observe(x, target, rate=0.0)
+    net.reset()
+    awake = net.imagine(x, state=np.zeros((3, 12)))
+    assert np.array_equal(awake.output.argmax(-1), target.argmax(-1))
+    assert not np.array_equal(awake.slow_output.argmax(-1), target.argmax(-1))
+    # The night: fixed dreams, the slow weights learn them, the store is rewritten at dawn.
+    report = net.sleep([x], passes=240, rate=8.0, backtrack=True)
+    assert report["updates"] > 200
+    assert report["dream_loss_after"] < 0.25 * report["dream_loss_before"]
+    assert report["dawn_writes"] == 48
+    alone = RecordPatchNet.restore(net.snapshot())
+    alone.records.tables["y"][:] = 0.0
+    slept = alone.imagine(x, state=np.zeros((3, 12)))
+    assert np.array_equal(slept.output.argmax(-1), target.argmax(-1))  # the slow weights alone
+    with_store = net.imagine(x, state=np.zeros((3, 12)))
+    assert np.array_equal(with_store.output.argmax(-1), target.argmax(-1))
+
+
+def test_sleep_and_dream_change_nothing_but_the_slow_weights_and_the_store_reference():
+    net = RecordPatchNet(4, 6, 3, seed=2, cells=128, active=8, groups=(3,))
+    x = np.eye(4)[None, [0, 1, 2, 3, 0]]
+    dream = net.dream(x)
+    assert dream.shape == (1, 5, 3) and np.array_equal(dream.sum(-1), np.ones((1, 5)))
+    assert net.records.writes == 0 and net.updates == 0
+    with pytest.raises(ValueError, match="at least one cue"):
+        net.sleep([])
+    report = net.sleep([x], passes=0, dawn_passes=1)
+    assert report["updates"] == 0 and report["dawn_writes"] == 5 and net.updates == 0

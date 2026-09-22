@@ -342,6 +342,59 @@ reaches its ceiling with enough data; what the store shows is what one pass of w
 The receipts are `results/e5_records_speaker.json`, `results/e3_scaling.json` and
 `results/baselines.json` of the language work.
 
+## Acquisition in two phases: records by day, weights by night
+
+A transformer acquires a world model and a language the same way: a gradient over a
+corpus moves every weight a little at every token, for as many passes as it takes. A
+record patch acquires in two phases, and the phases are the two learning rules the
+patch already has.
+
+**By day, what is observed is written, once.** A reading is the message or cue, the
+event just heard and the context; its record takes the outcome in one write and holds
+it exactly (Theorem: one-shot memory). The slow weights do not move. This is why the
+patch can be told a fact in a conversation and use it in the next sentence, why it can
+take a corpus in one pass, and why nothing it learns by day disturbs what its weights
+hold. It also has a cost: a store generalises by overlap and no further, and it
+disturbs itself when it is shared (writing 24 new sentences into a store that also
+held a library moved the library from 1.000 to 0.973 exact; a conversation needs its
+own store).
+
+**By night, the slow weights take what the store holds, from dreams.** The corpus is
+gone; the store is the only copy. `sleep(cues)` dreams every cue of the day once (the
+free path with the records: what the patch would answer awake), teaches the slow
+weights those fixed dreams by the ordinary contrast with `write=False`, and at dawn
+writes the dreams back so the store holds only what the weights did not take. Nothing
+outside the patch is consulted. Dreaming is necessary and not decorative: the slow
+weights need many presentations of a regularity, and the only place the day's
+observations survive is the store, so the presentations have to be the store's own
+completions. It is also where generalisation is made: the completion of a cue the
+store never met is what the records of its neighbours agree on, and the slow weights
+learn that agreement as a rule. Measured on the grammar of the language work: the
+store alone gave 0.815 of the never-taught (subgenre, era, form) combinations a valid
+sentence at bedtime; after one night of 8,000 dreams from the day's own cues (0.91 of
+them inside the grammar) and 1,200 slow updates, the slow weights alone gave 1.00, with
+the corpus closed. The awake control that re-read the corpus twice more with the
+teacher present reached 0.905. Nothing new entered during the night; what was held was
+redistributed into the weights, and the weights, being smooth, finished the pattern
+(`results/e7_sleep.json`).
+
+**What sleep does not do.** Dreams carry the store's errors as faithfully as its
+regularities: on the held-out messages whose completions the store got wrong at
+bedtime, the night changed nothing (0.885 to 0.89). Sleep restructures what is held
+and does not correct it; correction needs a critic, a re-reading of the disputed cue,
+or another day.
+
+**Why the dreams are fixed and the store rewritten.** A record is the residual against
+the slow readout at the time it was written. Dreaming again after every update would
+teach the weights their own drift (in a toy, six of twenty-four right after sixty such
+steps), and reading the old residuals against new weights would count each outcome
+twice. So the night fixes its dreams at bedtime, and dawn re-references the store:
+two passes of writes leave it holding only what the weights did not take, and a new
+fact written the next day lands beside them. This is the two-timescale account of
+memory that the brain suggests, written as two operations on one patch: the store is
+fast, exact and local; the weights are slow, smooth and general; the night moves
+knowledge from the first to the second.
+
 ## Two patches in depth
 
 The gate of a record patch sees only the present input. That is enough for a
