@@ -61,7 +61,42 @@ needs a rate in the thousands, or the torch backend with an ordinary optimiser.
 
 `belief_torch.TorchBelief` is the same slow half as a torch module with autograd, for
 batches of streams on a GPU; `export()` and `load()` move the parameters in the library's
-packing, so a patch trained there continues in NumPy with its records and its custody.
+packing, so a patch trained there continues in NumPy with its records.
+
+### Training the transition: the imagination loss
+
+A belief patch trained on the one-step read alone learns to lean on the next frame. The
+repair takes what it needs from the evidence, the transition carries less each epoch, and
+the imagination decays while the one-step read improves. On Seaquest from pixels the
+one-step explained variance of the frame-to-frame change rose from 0.06 to 0.35 over
+twenty epochs while the open-loop imagination four decisions ahead fell from 0.03 above
+persistence to 0.12 below it. This is teacher forcing, and the unified world-model report's
+rule names the repair: a rollout must predict every input it consumes.
+
+The imagination loss trains that. From random moments `t0` of each chunk, imagine `H`
+steps under the recorded actions from the belief at `t0 - 1` with no observation, and
+penalise the drift of the imagined output from the truth along with the one-step loss:
+
+```text
+L = L_one_step + w * mean over starts of  1/2 * mean( W * [cumsum_k(y_hat[t0+k] - y[t0+k]) ; fields]^2 )
+```
+
+where the cumulative sum runs over the retina outputs (the imagined retina against the
+true one), the fields are compared step by step, and `W` is the same output weighting as
+the one-step loss. The gradient flows through the imagined transitions into `T`, `G`, `C`
+and back through the repair into the belief the rollout started from, so the belief is
+trained to carry what the transition needs. Two starts per chunk, `H = 8` and `w = 0.3`
+were enough on Atari: on Pong after twenty epochs the imagination with no observation
+explained 0.42, 0.55, 0.62 and 0.61 of the changed cells at one, two, four and eight
+decisions and beat persistence on 99 percent of the moments; the one-step read explained
+0.76 against 0.70 for a convolutional GRU of the same size, and the imagined danger told
+which of the six plans loses the point (area under the curve 0.92 against 0.47 shuffled)
+when the emulator was restored to the same moment to try every plan. Not every run takes:
+a second seed learned a one-step read of 0.70 and no imagination at all, the transition
+having settled on persistence while the repair did the work, so the receipt of every run
+carries the open-loop curve and the imagined term's weight is the first knob to raise. The
+recipe lives in the application (`cadence-atari/tools/rung1.py`), fifteen lines around
+the ordinary loss; the library supplies the imagination with a `state` and no observation.
 
 ## What it does not do
 

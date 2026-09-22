@@ -1,9 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 (2026-09-22)
 
 Toward a learned world model: a belief that a transition carries under action, evidence
-that repairs it by iteration, and maps over grids at the port.
+that repairs it by iteration, and maps over grids at the port. The
+[belief patch guide](docs/belief.md) states the training rule the world model needs (the
+imagination loss: a rollout must predict every input it consumes) and the first Atari
+evidence: from pixels, the belief patch's imagination with no observation explains 0.61 of
+the changed cells eight decisions ahead on Pong, and planning in that imagination scores
+3.7 times random play on Demon Attack.
 
 - `StructuredPort` (`cadence.ports`): a record patch's input port as blocks. A
   `MapBlock` is a tied local kernel over a grid of the inputs (the same kernel at every
@@ -20,6 +25,11 @@ that repairs it by iteration, and maps over grids at the port.
   through every iteration and the transition; the adjoint matches finite differences.
   `belief_torch.TorchBelief` is the same slow half on torch with autograd, exporting in
   the library's packing.
+- The belief patch guide's section on the imagination loss: a belief patch trained on the
+  one-step read alone learns to lean on the next frame and its imagination decays; the
+  open-loop drift from random moments, added to the loss, trains the transition to carry
+  the belief. The recipe stays in the application; the library supplies the imagination
+  with a state and no observation.
 - Removed `cadence.custody` (unused).
 
 ## 0.12.0 (2026-09-22)

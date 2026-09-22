@@ -42,13 +42,13 @@ from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
 from .patch import PatchNet, PatchObservation
 from .planning import TemporalPlan
-from .ports import DenseBlock, MapBlock, StructuredPort
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
     Bins,
     Valence,
 )
+from .ports import DenseBlock, MapBlock, StructuredPort
 from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
 from .receipts import Receipt, canonical_json
 from .record_patch import (
@@ -155,4 +155,4 @@ __all__ = [
     "stateful",
 ]
 
-__version__ = "0.12.0"
+__version__ = "0.13.0"

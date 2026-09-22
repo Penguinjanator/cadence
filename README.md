@@ -41,7 +41,7 @@ defines these goals and their behavioral tests.
 
 ## Current library
 
-Two primitives, composed through ports. The library requires Python 3.11+ and NumPy:
+Two primitives, composed through ports, and the belief patch that composes them toward a world model. The library requires Python 3.11+ and NumPy:
 
 ```bash
 python -m pip install cadence-net
@@ -51,6 +51,7 @@ python -m pip install cadence-net
 | --- | --- |
 | The settling patch: [TemporalPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md), or a [brain of regions](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md) | Local repair of observed paths, persistent context, private imagination, [continuous planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md) and [protected responses](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md); learning by the contrast of a free and a nudged settle. |
 | The record patch: [RecordPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) | A gated linear context with a record store inside the patch: an observation is written once by day, and by night the slow weights learn from the store's own dreams (`sleep`), with nothing outside the patch consulted. Categorical ports, batched writes, a store narrower than its port and a two-patch stack. One pass of writes, with no gradient, gives a small grammar for 0.8 of its never-taught combinations; one night lifts the slow weights alone to 1.0. |
+| The belief patch: [BeliefPatch](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md) | A belief carried by a learned transition under the executed action and repaired by a few iterations of one nonlinear map with the record store read inside it; imagination that consumes no observation. The composition toward a learned world model, trained with the [imagination loss](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md#training-the-transition-the-imagination-loss) so the transition carries the belief. |
 
 Start with the [quickstarts](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md):
 a record patch that learns a stream and sleeps, a settling brain that decides, and a
