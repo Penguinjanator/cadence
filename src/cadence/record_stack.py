@@ -125,7 +125,7 @@ class RecordPatchStack:
 
     def _drive_gradient(self, v: np.ndarray, inputs: np.ndarray) -> np.ndarray:
         if self.lower_port is None:
-            return np.einsum("bti,btj->ij", v, inputs)
+            return np.asarray(np.einsum("bti,btj->ij", v, inputs))
         return self._pack(self.lower_port.gradient(v, inputs))
 
     def _context(

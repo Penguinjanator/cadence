@@ -211,7 +211,7 @@ class StructuredPort:
 
     def _conv(self, x: np.ndarray, b: MapBlock, w: np.ndarray) -> np.ndarray:
         patches = self._patches(x, b)
-        return np.einsum("...hwikl,oikl->...ohw", patches, w)
+        return np.asarray(np.einsum("...hwikl,oikl->...ohw", patches, w))
 
     @staticmethod
     def _conv_transpose(y: np.ndarray, b: MapBlock, w: np.ndarray) -> np.ndarray:

@@ -328,6 +328,11 @@ def test_failed_first_learning_phase_never_returns_its_nudged_goal_as_prediction
         {"goal": np.ones((1, 3, 1))},
         {"state": np.ones((2, 1))},
         {"state": np.array([[np.nan]])},
+        {"symmetry_tolerance": 0.0},
+        {"symmetry_tolerance": np.nan},
+        {"max_halvings": -1},
+        {"max_halvings": True},
+        {"method": "newton"},
     ],
 )
 def test_invalid_planning_arguments_are_atomic(overrides):
@@ -346,3 +351,78 @@ def test_weighted_negative_phase_beta_boundary_is_enforced():
     with pytest.raises(ValueError, match="precision"):
         net.plan(np.zeros((1, 2, 1)), goal=np.ones((1, 2, 2)), controls=True, beta=0.5)
     same_snapshot(before, net.snapshot())
+
+
+def off_center_case():
+    """A saturating four-unit net and a 24-step goal whose default-beta phases sit off center."""
+    rng = np.random.default_rng(2)
+    net = TemporalPatchNet(2, 4, 1, seed=2, initial_radius=1.5)
+    return net, rng.normal(size=(1, 24, 2)), np.sign(rng.normal(size=(1, 24, 1)))
+
+
+def test_off_center_detuned_paths_halve_beta_until_the_contrast_is_a_derivative():
+    net, inputs, goal = off_center_case()
+    boundary = np.zeros((1, 4))
+    parameters = net.parameters()
+    expected = np.abs(
+        finite_difference(lambda point: cost(parameters, point, boundary, goal, 1.0), inputs)
+    ).max()
+    common = {"goal": goal, "controls": np.array(True), "state": boundary, "max_steps": 0}
+    before = net.snapshot()
+
+    refused = net.plan(inputs, max_halvings=0, **common)
+    assert refused.reason == "contrast_asymmetric" and refused.projected_residual is None
+    assert refused.beta == 0.01 and refused.contrast_halvings == 0 and not refused.converged
+    assert_array_equal(refused.inputs, inputs)
+    unguarded = net.plan(inputs, symmetry_tolerance=np.inf, **common)
+    assert unguarded.contrast_halvings == 0 and unguarded.beta == 0.01
+    assert abs(unguarded.projected_residual - expected) > 0.05 * expected
+
+    default = net.plan(inputs, **common)
+    assert default.contrast_halvings == 1 and default.beta == 0.005
+    assert abs(default.projected_residual - expected) < 0.02 * expected
+
+    centered = net.plan(inputs, symmetry_tolerance=0.1, **common)
+    assert centered.contrast_halvings == 2 and centered.beta == 0.0025
+    assert abs(centered.projected_residual - expected) < 0.005 * expected
+    assert centered.phase_calls == 1 + 2 * 3
+    stricter = net.plan(inputs, symmetry_tolerance=0.05, **common)
+    assert stricter.contrast_halvings == 3 and stricter.beta == 0.00125
+    same_snapshot(before, net.snapshot())
+
+
+def test_quasi_newton_direction_reaches_the_same_stationary_cost_with_fewer_phases():
+    rng = np.random.default_rng(5)
+    net = TemporalPatchNet(2, 3, 1, seed=5, initial_radius=0.9)
+    inputs = rng.normal(size=(1, 12, 2)) * 0.3
+    goal = rng.normal(size=(1, 12, 1)) * 0.5
+    before = net.snapshot()
+    common = {
+        "goal": goal, "controls": np.array(True), "state": np.zeros((1, 3)), "beta": 1e-4,
+        "rate": 10.0, "max_steps": 400, "tolerance": 1e-6,
+    }
+    steepest = net.plan(inputs, method="steepest", **common)
+    default = net.plan(inputs, **common)
+    curved = net.plan(inputs, method="bfgs", **common)
+    assert steepest.method == "steepest" and curved.method == "bfgs"
+    assert_array_equal(default.inputs, steepest.inputs)
+    assert steepest.converged and curved.converged
+    assert steepest.cost < 1e-8 and curved.cost < 1e-8
+    assert curved.iterations < steepest.iterations
+    assert curved.phase_calls < 0.5 * steepest.phase_calls
+    assert curved.step_sizes[0] <= 10.0 and max(curved.step_sizes[1:]) <= 1.0
+    assert all(later < earlier for earlier, later in zip(curved.losses, curved.losses[1:], strict=False))
+    same_snapshot(before, net.snapshot())
+
+
+def test_quasi_newton_step_is_clipped_to_bounds_and_still_decreases_cost():
+    net = scalar_body()
+    inputs = np.array([[[5.0, 0.0], [-3.0, 0.0], [1.0, 0.0]]])
+    goal = np.full((1, 3, 1), 0.8)
+    plan = net.plan(
+        inputs, goal=goal, controls=np.array([False, True]), bounds=(-0.2, 0.2),
+        rate=8.0, max_steps=8, method="bfgs",
+    )
+    assert plan.improved and plan.converged and not plan.predicted_goal_met
+    np.testing.assert_allclose(plan.inputs[:, :, 1], 0.2)
+    np.testing.assert_array_equal(plan.inputs[:, :, 0], inputs[:, :, 0])

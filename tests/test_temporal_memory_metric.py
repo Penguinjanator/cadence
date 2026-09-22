@@ -43,12 +43,20 @@ def test_real_far_negative_branch_is_rejected_and_only_free_state_is_carried():
     expected = TemporalPatchNet.restore(net.snapshot())
     expected.advance(data["inputs"])
     before = memory.snapshot()
-    result = memory.observe(net, data["inputs"], data["target"], beta=.1, rate=1., readout_damping=1e-4)
+    result = memory.observe(
+        net, data["inputs"], data["target"], beta=.1, rate=1., readout_damping=1e-4,
+        symmetry_tolerance=np.inf,
+    )
     assert not result.updated and result.reason == "metric_step_rejected"
     assert result.plus.converged and result.minus.converged
     assert np.linalg.norm(result.minus.hidden - result.free.hidden) > 1.
     same(net.snapshot(), expected.snapshot())
     same(memory.snapshot(), before)
+    # The symmetry check halves beta away from the far branch before any candidate is built.
+    net, memory, data = fixture("branch.npz")
+    centered = memory.observe(net, data["inputs"], data["target"], beta=.1, rate=1., readout_damping=1e-4)
+    assert centered.updated and centered.contrast_halvings == 2 and centered.beta == .025
+    assert np.linalg.norm(centered.minus.hidden - centered.free.hidden) < 1.
 
 
 @pytest.mark.parametrize("damping", [0., -1., np.inf, -np.inf, np.nan])

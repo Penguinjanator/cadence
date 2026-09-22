@@ -39,6 +39,48 @@ revision. Automatically learned recursive hierarchies, curiosity and reliable
 creativity remain to be demonstrated. [Creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md)
 defines these goals and their behavioral tests.
 
+## Equilibrium world models
+
+Cadence is being developed toward **evolving equilibrium world models**: brains
+whose internal representation of an actor in its world grows more accurate and
+expressive through experience. The representation should carry what is happening,
+what persists out of sight, what the actor controls and what its actions could
+cause. It need not describe those relationships in words to use them.
+
+An equilibrium here need not mean motionless activity. A skilled actor can
+follow a coherent, changing trajectory of perceptions, expectations and actions.
+When events unfold as expected, the carried state should already be close to a
+useful interpretation of the next moment. Familiar danger can prompt a learned
+response immediately. Extra inference is needed when competing interpretations
+or consequential choices warrant it.
+
+The proposed mechanism is recursive composition through bounded, observer-like,
+self-reading patches. Scene, body, candidate action and retrieved experience
+meet through learned nonlinear ports. One interpretation can become input to
+another, allowing the system to revise its understanding before acting. Actual
+evidence anchors that revision; changing the interpretation and learning new
+relationships are distinct operations. A random outcome can require a new
+response while remaining consistent with a correctly learned probability
+distribution. Teaching detuning uses a specified target to compute a learning
+signal; it is not synonymous with surprise.
+
+Skilled demonstrations and the actor's own actions supply complementary
+experience. Watching reveals useful behavior and situations; acting tests what
+controls actually cause. The same learned relationships should support private
+branches that explore possible futures without altering factual memory. Plans
+must be judged by subsequent real outcomes. Grounded replay and sleep should
+then consolidate reliable relationships and successful decisions into cheaper
+habits, while unfamiliar situations can reopen deliberation.
+
+This is the architectural vision. Current APIs provide components and bounded
+demonstrations, not the complete evolving world model. Each successive release
+is intended to take a concrete step toward this goal. Progress must be shown in
+prediction, retention, useful internal planning and behavior at declared
+resource budgets; a new version alone does not establish it. The
+[equilibrium world-model guide](docs/equilibrium-world-models.md) explains the
+mechanism, the distinction between evidence repair and learning, and the current
+implementation boundaries.
+
 ## Current library
 
 Two primitives, composed through ports, and the belief patch that composes them toward a world model. The library requires Python 3.11+ and NumPy:

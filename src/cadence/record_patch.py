@@ -297,7 +297,7 @@ class RecordPatchNet:
     def _drive_gradient(self, v: np.ndarray, inputs: np.ndarray) -> np.ndarray:
         """The gradient of ``sum(v * (W inputs))`` with respect to ``W`` in its stored shape."""
         if self.port is None:
-            return np.einsum("bti,btj->ij", v, inputs)
+            return np.asarray(np.einsum("bti,btj->ij", v, inputs))
         return self._pack(self.port.gradient(v, inputs))
 
     def _shapes(self) -> dict[str, tuple[int, ...]]:

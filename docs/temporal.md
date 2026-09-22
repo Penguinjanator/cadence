@@ -187,6 +187,24 @@ hidden-width block per time step and batch row; it is not one scalar operation.
 storage, excluding arrays, Hessian blocks and numerical-library workspace.
 `energy_evaluations` counts path-energy evaluations, including line searches.
 
+## Checking that the contrast is centered
+
+The centered contrast is a derivative of the free loss only while the two
+detuned paths sit symmetrically around the free path. A detuned solve can
+converge on another branch of the energy while still reporting convergence,
+and the contrast then points somewhere else. `observe` and `plan` therefore
+check `contrast_asymmetry(free, plus, minus)`, the norm of
+`plus + minus - 2 * free` over the norm of `plus - minus` on the hidden paths,
+against `symmetry_tolerance` (default 0.15). The ratio grows in proportion to
+beta and the contrast error with its square, so an off-center pair is solved
+again at half the beta, up to `max_halvings` times (default 8). A pair that
+stays off center is refused with the reason `contrast_asymmetric`; parameters,
+revisions and the update count do not change, and the valid free activity is
+carried as for any failed phase. `TemporalObservation` reports the `beta` of
+the last pair and the number of `contrast_halvings`. An infinite tolerance
+disables the check. The measure is public as
+`cadence.temporal.contrast_asymmetry`.
+
 ## Checking a learning step
 
 From release 0.12.0, `observe(..., backtrack=True)` checks

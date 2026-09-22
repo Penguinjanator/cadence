@@ -31,6 +31,7 @@ imagination; its input port reads grids through [maps](record-patch.md#maps-a-st
 6. [Private planning](planning.md) and [learn, act and observe](interaction.md): repair continuous controls under the learned model, end to end.
 7. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
 8. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
+9. [Equilibrium and learned world models](equilibrium-world-models.md): three clocks, changing expected trajectories, evidence and branch isolation, and the distinction between current APIs and a proposed shared architecture.
 
 [Task design](task-design.md), [common missteps](missteps.md) and
 [scaling](scaling.md) say how to validate observations, actions, learning and

@@ -231,7 +231,7 @@ class BeliefPatch:
     ) -> dict[str, Any]:
         n, t = actions.shape[:2]
         z = boundary
-        record: dict[str, list] = {
+        record: dict[str, list[Any]] = {
             k: [] for k in ("expect", "e", "e_pre", "repair", "y", "read", "code")
         }
         for k in range(t):
@@ -256,7 +256,7 @@ class BeliefPatch:
                 record[key].append(value)
         return record
 
-    def _path(self, record: dict[str, list], target: np.ndarray | None) -> BeliefPath:
+    def _path(self, record: dict[str, list[Any]], target: np.ndarray | None) -> BeliefPath:
         belief = np.stack([r["z"] for r in record["repair"]], axis=1)
         expectation = np.stack([x["p"] for x in record["expect"]], axis=1)
         residual = np.stack([r["residual"] for r in record["repair"]], axis=1)
@@ -271,7 +271,9 @@ class BeliefPatch:
         return value if np.isfinite(value) else None
 
     # ------------------------------------------------------------------ interface
-    def _check(self, observations, actions, observed):
+    def _check(
+        self, observations: Any, actions: Any, observed: Any
+    ) -> tuple[np.ndarray | None, np.ndarray, np.ndarray]:
         a = np.asarray(actions, dtype=float)
         if a.ndim != 3 or a.shape[2] != self.actions or not np.isfinite(a).all():
             raise ValueError(f"actions must be a finite (batch, time, {self.actions}) array")
@@ -336,6 +338,8 @@ class BeliefPatch:
             raise ValueError("target must be a finite (batch, time, outputs) array")
         if not np.isfinite(rate) or rate < 0:
             raise ValueError("rate must be finite and nonnegative")
+        if o is None:
+            raise ValueError("observe needs observations; imagine is the private continuation")
         boundary = self._boundary(len(a), None)
         record = self._forward(o, a, boundary, mask)
         path = self._path(record, y)
@@ -363,7 +367,7 @@ class BeliefPatch:
         o: np.ndarray,
         a: np.ndarray,
         boundary: np.ndarray,
-        record: dict[str, list],
+        record: dict[str, list[Any]],
         target: np.ndarray,
     ) -> dict[str, np.ndarray]:
         n, t = a.shape[:2]
@@ -414,7 +418,7 @@ class BeliefPatch:
         delta["E"] = np.concatenate([gb.ravel() for gb in block_grads])
         return delta
 
-    def _write(self, record: dict[str, list], target: np.ndarray) -> int:
+    def _write(self, record: dict[str, list[Any]], target: np.ndarray) -> int:
         """Write the slow readout's residual, coded, at the final reading of each observed
         moment."""
         written = 0

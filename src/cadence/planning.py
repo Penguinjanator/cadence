@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .temporal import TemporalPatchNet, TemporalPhase, _integer
+from .temporal import TemporalPatchNet, TemporalPhase, _integer, contrast_asymmetry
 
 
 @dataclass(frozen=True)
@@ -21,6 +21,12 @@ class TemporalPlan:
     ``converged`` concerns the projected finite-beta gradient. A stationary plan
     may be unable to reach its goal. ``predicted_goal_met`` checks half the
     weighted mean-squared prediction error against the supplied threshold.
+    ``beta`` is the detuning of the last contrast and ``contrast_halvings`` how
+    often the supplied beta was halved to center the detuned paths. ``method``
+    names the search direction: ``"steepest"`` steps along the projected
+    contrast scaled by ``rate``; ``"bfgs"`` keeps a quasi-Newton estimate of
+    the curvature over the controlled ports from the accepted steps, and its
+    ``step_sizes`` are multiples of that direction.
     """
 
     inputs: np.ndarray
@@ -38,6 +44,9 @@ class TemporalPlan:
     energy_evaluations: int
     peak_message_bytes: int
     parameter_revision: int
+    beta: float = 0.0
+    contrast_halvings: int = 0
+    method: str = "steepest"
 
     @property
     def cost(self) -> float:
@@ -83,6 +92,9 @@ def plan_inputs(
     max_backtracks: int = 16,
     tolerance: float = 1e-6,
     goal_tolerance: float = 1e-6,
+    symmetry_tolerance: float = 0.15,
+    max_halvings: int = 8,
+    method: str = "steepest",
 ) -> TemporalPlan:
     """Repair controlled input ports; score only ordinary free predictions.
 
@@ -100,6 +112,11 @@ def plan_inputs(
             raise ValueError(f"{name} must be finite and positive")
     if not np.isfinite(goal_tolerance) or goal_tolerance < 0:
         raise ValueError("goal_tolerance must be finite and nonnegative")
+    if np.isnan(symmetry_tolerance) or symmetry_tolerance <= 0:
+        raise ValueError("symmetry_tolerance must be positive; inf disables the check")
+    max_halvings = _integer("max_halvings", max_halvings, 0)
+    if method not in ("steepest", "bfgs"):
+        raise ValueError('method must be "steepest" or "bfgs"')
     # A private checkpoint copy also freezes parameters and solver settings for
     # this entire proposal. No phase is carried into the original network.
     model = TemporalPatchNet.restore(net.snapshot())
@@ -158,24 +175,49 @@ def plan_inputs(
     costs, step_sizes = [loss(initial)], []
     converged, reason = False, "step_cap"
     residual: float | None = None
+    contrast_beta, halvings = float(beta), 0
+
+    def centered_contrast(free: TemporalPhase) -> tuple[np.ndarray | None, str]:
+        """Contrast at the current proposal; beta halves until the paths are centered."""
+        nonlocal contrast_beta, halvings
+        while True:
+            plus = record(
+                model.settle(current, target=target, beta=contrast_beta, state=boundary)
+            )
+            if not plus.converged:
+                return None, "plus_" + plus.reason
+            minus = record(
+                model.settle(current, target=target, beta=-contrast_beta, state=boundary)
+            )
+            if not minus.converged:
+                return None, "minus_" + minus.reason
+            if contrast_asymmetry(free, plus, minus) <= symmetry_tolerance:
+                ep, _ = model._errors(current, plus.hidden, plus.output, boundary)
+                em, _ = model._errors(current, minus.hidden, minus.output, boundary)
+                # Time/output normalization is already in the detuned teaching loss.
+                # This final batch factor makes the contrast match the full mean loss.
+                with np.errstate(over="ignore", invalid="ignore"):
+                    value = -((ep - em) @ projection) / (2.0 * contrast_beta * len(current))
+                return np.where(mask, value, 0.0), ""
+            if halvings == max_halvings:
+                return None, "contrast_asymmetric"
+            halvings += 1
+            contrast_beta *= 0.5
+
+    # A quasi-Newton estimate of the inverse curvature over the controlled
+    # entries, built from accepted steps; it is dropped whenever a step is
+    # clipped, fails the curvature condition or gives no decrease.
+    controlled = int(mask.sum())
+    curvature: np.ndarray | None = None
+    last_step: tuple[np.ndarray, np.ndarray] | None = None
+
     # The last pass recomputes the residual at the last accepted actions; it
     # does not silently report a gradient from before their update.
     for iteration in range(max_steps + 1):
-        plus = record(model.settle(current, target=target, beta=beta, state=boundary))
-        if not plus.converged:
-            reason, residual = "plus_" + plus.reason, None
+        gradient, failure = centered_contrast(prediction)
+        if gradient is None:
+            reason, residual = failure, None
             break
-        minus = record(model.settle(current, target=target, beta=-beta, state=boundary))
-        if not minus.converged:
-            reason, residual = "minus_" + minus.reason, None
-            break
-        ep, _ = model._errors(current, plus.hidden, plus.output, boundary)
-        em, _ = model._errors(current, minus.hidden, minus.output, boundary)
-        # Time/output normalization is already in the detuned teaching loss.
-        # This final batch factor makes the contrast match the full mean loss.
-        with np.errstate(over="ignore", invalid="ignore"):
-            gradient = -((ep - em) @ projection) / (2.0 * beta * len(current))
-            gradient = np.where(mask, gradient, 0.0)
         if not np.isfinite(gradient).all():
             reason, residual = "nonfinite_input_gradient", None
             break
@@ -185,29 +227,58 @@ def plan_inputs(
             break
         if iteration == max_steps:
             break
-        accepted, step = False, float(rate)
-        for _ in range(max_backtracks):
-            with np.errstate(over="ignore", invalid="ignore"):
-                proposal = project(current - step * gradient)
-                slope = float(np.sum(gradient * (proposal - current)))
-            if np.isfinite(proposal).all() and np.isfinite(slope) and slope < 0:
-                replay = record(model.imagine(proposal, state=boundary))
-                cost = loss(replay)
-                if (
-                    replay.converged
-                    and np.isfinite(cost)
-                    and cost < costs[-1]
-                    and cost <= costs[-1] + 1e-4 * slope
-                ):
-                    current, prediction = proposal, replay
-                    costs.append(cost)
-                    step_sizes.append(step)
-                    accepted = True
-                    break
-            step *= 0.5
+        direction = -gradient
+        if method == "bfgs":
+            if last_step is not None:
+                displacement, previous_gradient = last_step
+                change = (gradient - previous_gradient)[mask]
+                curve = float(displacement @ change)
+                scale = float(np.linalg.norm(displacement) * np.linalg.norm(change))
+                if np.isfinite(curve) and curve > 1e-12 * scale:
+                    if curvature is None:
+                        curvature = (curve / float(change @ change)) * np.eye(controlled)
+                    left = np.eye(controlled) - np.outer(displacement, change) / curve
+                    outer = np.outer(displacement, displacement) / curve
+                    curvature = left @ curvature @ left.T + outer
+            if curvature is not None:
+                direction = np.zeros_like(gradient)
+                direction[mask] = -(curvature @ gradient[mask])
+                if not np.isfinite(direction).all() or float(np.sum(gradient * direction)) >= 0.0:
+                    curvature, direction = None, -gradient
+        accepted, clipped = False, False
+        proposal = current
+        for _ in range(2):
+            step = 1.0 if curvature is not None else float(rate)
+            for _ in range(max_backtracks):
+                with np.errstate(over="ignore", invalid="ignore"):
+                    proposal = project(current + step * direction)
+                    slope = float(np.sum(gradient * (proposal - current)))
+                if np.isfinite(proposal).all() and np.isfinite(slope) and slope < 0:
+                    replay = record(model.imagine(proposal, state=boundary))
+                    cost = loss(replay)
+                    if (
+                        replay.converged
+                        and np.isfinite(cost)
+                        and cost < costs[-1]
+                        and cost <= costs[-1] + 1e-4 * slope
+                    ):
+                        clipped = bool(np.any(mask & (proposal != current + step * direction)))
+                        last_step = ((proposal - current)[mask], gradient)
+                        current, prediction = proposal, replay
+                        costs.append(cost)
+                        step_sizes.append(step)
+                        accepted = True
+                        break
+                step *= 0.5
+            if accepted or curvature is None:
+                break
+            # A curved direction that gives no decrease: restart from the contrast.
+            curvature, direction = None, -gradient
         if not accepted:
             reason = "no_decreasing_causal_step"
             break
+        if clipped:
+            curvature, last_step = None, None
     return TemporalPlan(
         inputs=current.copy(),
         prediction=prediction,
@@ -224,4 +295,7 @@ def plan_inputs(
         energy_evaluations=energy_evaluations,
         peak_message_bytes=peak_message_bytes,
         parameter_revision=model.readback().parameter_revision,
+        beta=contrast_beta,
+        contrast_halvings=halvings,
+        method=method,
     )
