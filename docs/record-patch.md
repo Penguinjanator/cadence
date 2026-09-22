@@ -437,6 +437,36 @@ the store reads at bedtime bounds the night; a store that is drowned by the day
 (`record_averaging` for a store written hundreds of times per cell) teaches a drowned
 rule.
 
+## Maps: a structured input port
+
+A record patch reads its inputs through the port `B u` (and the gate through `G u`).
+By default that is one dense row per context channel. `StructuredPort` (in
+`cadence.ports`) reads a declared layout instead: a `MapBlock` is a tied local
+kernel over a `(channels, height, width)` grid of the inputs, the same kernel at
+every position, whose output is a grid of channels laid out as retinotopic maps;
+a `DenseBlock` is a plain matrix over a slice of the inputs. The patch's
+equations do not change. The port supplies the three linear maps the adjoint
+scan needs (apply, transpose, parameter gradient), so learning is the same rule,
+and the context width is the port's output count.
+
+```python
+import numpy as np
+from cadence import RecordPatchNet
+from cadence.ports import DenseBlock, MapBlock, StructuredPort
+
+fovea = MapBlock(start=0, channels_in=3, height=24, width=24, channels_out=8, kernel=5, stride=2)
+rest = DenseBlock(start=fovea.inputs, inputs=52, outputs=64)
+port = StructuredPort(fovea.inputs + 52, [fovea, rest])
+net = RecordPatchNet(port.inputs, port.outputs, 4, port=port, cells=4096, active=32)
+```
+
+A port of dense blocks covering the inputs is the plain patch (the tests check the
+outputs and the updates agree), and a map block answers the same thing wherever it
+appears (a thing at one place and the same thing two positions on give the same
+channel response two cells on). The blocks are genes: which slice, what grid, how
+many channels, what kernel, what stride. A structured port's checkpoint carries
+the port's layout; its `B` and `G` are the blocks' kernels, packed.
+
 ## Two patches in depth
 
 The gate of a record patch sees only the present input. That is enough for a

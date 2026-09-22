@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 
+from .ports import StructuredPort
 from .records import Records
 
 __all__ = ["RecordPatchNet", "RecordPath", "RecordObservation", "RecordContrast", "RecordReadback"]
@@ -162,8 +163,17 @@ class RecordPatchNet:
         groups: Sequence[int] | None = None,
         record_writes: str = "sequential",
         record_width: int | None = None,
+        port: StructuredPort | None = None,
     ) -> None:
         self.inputs = _integer("inputs", inputs, 1)
+        # A structured port (tied local kernels over grids of the inputs, dense blocks
+        # elsewhere) fixes the context width to its outputs; ``hidden`` must agree.
+        self.port = port
+        if port is not None:
+            if port.inputs != self.inputs:
+                raise ValueError("the port reads a different number of inputs")
+            if int(hidden) != port.outputs:
+                raise ValueError(f"hidden must equal the port's outputs ({port.outputs})")
         self.hidden = _integer("hidden", hidden, 1)
         self.outputs = _integer("outputs", outputs, 1)
         if groups is None:
@@ -202,8 +212,12 @@ class RecordPatchNet:
         # deviation sqrt((1 - l) / (1 + l)); the record reads each channel in that unit,
         # so a slow channel's small deviations address records as well as a fast one's.
         self._scale = np.sqrt((1.0 + retention) / (1.0 - retention))
-        self._G = np.zeros((self.hidden, self.inputs))
-        self._B = rng.normal(size=(self.hidden, self.inputs)) / np.sqrt(self.inputs)
+        if self.port is None:
+            self._G = np.zeros((self.hidden, self.inputs))
+            self._B = rng.normal(size=(self.hidden, self.inputs)) / np.sqrt(self.inputs)
+        else:
+            self._G = self._pack(self.port.initial(rng, 0.0))
+            self._B = self._pack(self.port.initial(rng, 1.0))
         self._b = np.zeros(self.hidden)
         self._C = rng.normal(size=(self.outputs, self.hidden)) / np.sqrt(self.hidden)
         self._c = np.zeros(self.outputs)
@@ -253,11 +267,44 @@ class RecordPatchNet:
     def parameters(self) -> dict[str, np.ndarray]:
         return {k: getattr(self, "_" + k).copy() for k in _PARAMETERS}
 
+    # ------------------------------------------------------------- the input port
+    def _pack(self, blocks: list[np.ndarray]) -> np.ndarray:
+        return np.concatenate([b.ravel() for b in blocks])
+
+    def _unpack(self, flat: np.ndarray) -> list[np.ndarray]:
+        assert self.port is not None
+        out, at = [], 0
+        for b in self.port.blocks:
+            size = int(np.prod(b.weights))
+            out.append(flat[at : at + size].reshape(b.weights))
+            at += size
+        return out
+
+    def _drive(self, inputs: np.ndarray, which: str) -> np.ndarray:
+        """``inputs @ B.T`` or ``inputs @ G.T``, through the port when there is one."""
+        weights = self._B if which == "B" else self._G
+        if self.port is None:
+            return np.asarray(inputs @ weights.T)
+        return self.port.apply(inputs, self._unpack(weights))
+
+    def _drive_transpose(self, v: np.ndarray, which: str) -> np.ndarray:
+        weights = self._B if which == "B" else self._G
+        if self.port is None:
+            return np.asarray(v @ weights)
+        return self.port.transpose(v, self._unpack(weights))
+
+    def _drive_gradient(self, v: np.ndarray, inputs: np.ndarray) -> np.ndarray:
+        """The gradient of ``sum(v * (W inputs))`` with respect to ``W`` in its stored shape."""
+        if self.port is None:
+            return np.einsum("bti,btj->ij", v, inputs)
+        return self._pack(self.port.gradient(v, inputs))
+
     def _shapes(self) -> dict[str, tuple[int, ...]]:
+        port_shape = None if self.port is None else (int(sum(int(np.prod(b.weights)) for b in self.port.blocks)),)
         return {
-            "G": (self.hidden, self.inputs),
+            "G": (self.hidden, self.inputs) if port_shape is None else port_shape,
             "g": (self.hidden,),
-            "B": (self.hidden, self.inputs),
+            "B": (self.hidden, self.inputs) if port_shape is None else port_shape,
             "b": (self.hidden,),
             "C": (self.outputs, self.hidden),
             "c": (self.outputs,),
@@ -337,8 +384,8 @@ class RecordPatchNet:
         The context does not depend on the reads, so the scan runs first and
         every moment's reading is coded in one batched projection."""
         batch, horizon, _ = inputs.shape
-        gate = _sigmoid(self._g + inputs @ self._G.T)
-        port = np.tanh(inputs @ self._B.T + self._b)
+        gate = _sigmoid(self._g + self._drive(inputs, "G"))
+        port = np.tanh(self._drive(inputs, "B") + self._b)
         hidden = np.empty((batch, horizon, self.hidden))
         previous = boundary
         for t in range(horizon):
@@ -444,14 +491,14 @@ class RecordPatchNet:
         gp = (1.0 - gate) * gh * (1.0 - port**2)
         gs = gh * (previous - port) * gate * (1.0 - gate)
         delta = {
-            "G": np.einsum("bti,btj->ij", gs, inputs),
+            "G": self._drive_gradient(gs, inputs),
             "g": gs.sum(axis=(0, 1)),
-            "B": np.einsum("bti,btj->ij", gp, inputs),
+            "B": self._drive_gradient(gp, inputs),
             "b": gp.sum(axis=(0, 1)),
             "C": np.einsum("bti,btj->ij", d, hidden),
             "c": d.sum(axis=(0, 1)),
         }
-        return delta, gp @ self._B + gs @ self._G
+        return delta, self._drive_transpose(gp, "B") + self._drive_transpose(gs, "G")
 
     # ------------------------------------------------------------ interface
 
@@ -796,9 +843,9 @@ class RecordPatchNet:
             gp = -e * (1.0 - gate) * (1.0 - port**2)
             gs = -e * (prev - port) * gate * (1.0 - gate)
             grads = {
-                "G": np.einsum("bti,btj->ij", gs, path) / batch,
+                "G": self._drive_gradient(gs, path) / batch,
                 "g": gs.sum(axis=(0, 1)) / batch,
-                "B": np.einsum("bti,btj->ij", gp, path) / batch,
+                "B": self._drive_gradient(gp, path) / batch,
                 "b": gp.sum(axis=(0, 1)) / batch,
                 "C": -np.einsum("bti,btj->ij", r, h) / batch,
                 "c": -r.sum(axis=(0, 1)) / batch,
@@ -844,6 +891,7 @@ class RecordPatchNet:
             self.groups is not None
             or self.record_writes != "sequential"
             or self.record_width is not None
+            or self.port is not None
         )
         meta: dict[str, Any] = {
             "format": FORMAT_PORTS if ports else FORMAT,
@@ -860,6 +908,7 @@ class RecordPatchNet:
             meta["groups"] = None if self.groups is None else list(self.groups)
             meta["record_writes"] = self.record_writes
             meta["record_width"] = self.record_width
+            meta["port"] = None if self.port is None else self.port.to_dict()
         result = {
             **self.parameters(),
             "output_precision": self.output_precision,
@@ -896,6 +945,7 @@ class RecordPatchNet:
                 groups=meta.get("groups"),
                 record_writes=meta.get("record_writes", "sequential"),
                 record_width=meta.get("record_width"),
+                port=None if meta.get("port") is None else StructuredPort.from_dict(meta["port"]),
             )
             if result.records.to_dict() != config:
                 raise ValueError("record configuration is not one this class constructs")
