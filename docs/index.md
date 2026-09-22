@@ -23,7 +23,7 @@ imagination; its input port reads grids through [maps](record-patch.md#maps-a-st
 
 ## Start here
 
-1. [Quickstarts: three kinds of brains](quickstart.md): a record patch that learns a stream and sleeps, a settling brain that decides, a temporal patch that plans.
+1. [Quickstarts: three kinds of brains](quickstart.md): a record patch that learns a stream and sleeps, a settling brain that decides, a temporal patch that plans; each also runs [in your browser](demos.md) with the whole brain animated, `cadence-demo stream|decide|body`.
 2. [Architecture and integration](architecture.md): state, ports, repair and the scope of each component.
 3. [The record patch](record-patch.md): one-shot records, categorical ports, a store narrower than its port, maps at the port, two patches in depth, acquisition in two phases.
 4. [The belief patch](belief.md): a transition under action, evidence repair by iteration, the store inside the repair, imagination that consumes no observation.

@@ -97,7 +97,20 @@ python -m pip install cadence-net
 
 Start with the [quickstarts](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md):
 a record patch that learns a stream and sleeps, a settling brain that decides, and a
-temporal patch that learns a consequence and plans. The
+temporal patch that learns a consequence and plans. Each of them also runs in your browser,
+trained in front of you in seconds from fixed seeds, with every neuron and synapse animated,
+the distance from equilibrium as a heat on the neurons, the last change on the synapses, the
+learning plotted as it is measured, and a line of text for each phase:
+
+```bash
+python -m pip install cadence-net
+cadence-demo stream     # a record patch learns a stream, remembers in one shot, and sleeps
+cadence-demo decide     # a settling brain decides
+cadence-demo body       # a temporal patch learns a consequence and plans
+```
+
+Nothing is hosted and there is no checkpoint; [the quickstarts in your browser](https://github.com/muellerberndt/cadence/blob/main/docs/demos.md)
+says what equilibrium means in each brain and what detuning it buys. The
 [architecture guide](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) maps each capability to its API and current scope;
 [EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md) is a separate fixed linear-body component with exact Gaussian history compression.
 

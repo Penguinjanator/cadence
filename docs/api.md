@@ -64,6 +64,16 @@ was halved to center the detuned paths; `method` names the search direction.
 Work and failure
 fields are described in the [planning guide](planning.md).
 
+## The quickstart demos (`cadence.demo`)
+
+`StreamDemo(day_passes=8, night_passes=240)`, `DecideDemo(steps=80)` and
+`BodyDemo(batches=256, decisions=12)` run the three quickstart brains with their seeds and
+report as they go: `run()` returns the result; `snapshot(since)` the phase, curves, stats
+and the frames of activity and heat since a frame index; `weights_json(what)` the synapses'
+absolute weights or their last change; `connectome()` and `atlas_json()` the brain for the
+viewer. `serve(demo, port, open_browser)` puts a demo behind a local page and `main` is the
+`cadence-demo` command. See [the quickstarts in your browser](demos.md).
+
 ## RecordPatchNet (`cadence.record_patch`)
 
 See the [record patch guide](record-patch.md).

@@ -4,7 +4,10 @@ Cadence has two primitives. A **settling patch** finds the state that agrees wit
 ports hold and with its weights, and learns by the contrast of a free and a nudged settle.
 A **record patch** adds a store that takes an observation in one write and a night in
 which the slow weights learn from the store's own dreams. Every brain below is one of
-these, or a few of them joined by ports. Each snippet runs on NumPy alone.
+these, or a few of them joined by ports. Each snippet runs on NumPy alone, and each runs
+behind a local page as well, with the whole brain animated and the learning plotted as it
+happens: `cadence-demo stream`, `cadence-demo decide`, `cadence-demo body`, described in
+[the quickstarts in your browser](demos.md).
 
 ```bash
 python -m pip install cadence-net
@@ -43,9 +46,9 @@ assert np.array_equal(alone.imagine(heard, state=np.zeros((3, 12))).output.argma
 print(night)
 ```
 
-`observe` writes the residual of the slow readout into the records of each reading;
-`sleep` dreams every cue once, teaches the fixed dreams by `observe(write=False)`, and
-rewrites the store at dawn. Categorical ports (`groups`), batched writes, a store narrower
+In the browser: `cadence-demo stream`. `observe` writes the residual of the slow readout into
+the records of each reading; `sleep` dreams every cue once, teaches the fixed dreams by
+`observe(write=False)`, and rewrites the store at dawn. Categorical ports (`groups`), batched writes, a store narrower
 than its port and a two-patch stack are in [the record patch guide](record-patch.md).
 
 ## A settling brain that decides
@@ -80,7 +83,8 @@ for _ in range(80):
 assert learner.accuracy(drive, labels) == 1.0
 ```
 
-The free settle is the brain's own answer; `predict` reads the most active motor neuron.
+In the browser: `cadence-demo decide`. The free settle is the brain's own answer; `predict`
+reads the most active motor neuron.
 Regions, ports, records beside a policy head and evolution of the genome are in
 [compose a brain](brain.md), [write a cortex](cortex.md) and [evolve a brain](evolution.md).
 
@@ -103,10 +107,10 @@ private = net.imagine(np.zeros((1, 4, 2)))
 assert private.converged
 ```
 
-The complete loop, with a body that acts, a plan that is replayed without its goal before
-acceptance, and actual readback repairing the next proposal, is
-[learn, act and observe](interaction.md); protection of chosen responses is
-[response protection](temporal-memory.md).
+In the browser: `cadence-demo body` runs the complete loop, with a body that acts, a plan that
+is replayed without its goal before acceptance, and actual readback repairing the next
+proposal; the same loop as text is [learn, act and observe](interaction.md), and protection
+of chosen responses is [response protection](temporal-memory.md).
 
 ## Which one
 

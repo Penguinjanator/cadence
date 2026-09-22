@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- The three quickstart brains run in the browser: `cadence-demo stream`,
+  `cadence-demo decide`, `cadence-demo body` (`cadence.demo`). Each command
+  trains its brain in front of you from the quickstart's seeds, in seconds to a
+  minute, and serves a local page: the whole brain in the shipped viewer with
+  every neuron and synapse, the neurons switchable to their distance from
+  equilibrium (how far each still moves as the brain settles, how far the
+  teaching pull displaces it), the synapses switchable to their last change
+  from the detuning contrast, the task, a stats strip with the numbers that
+  define the equilibrium and its detuning (settle steps and last movement;
+  free residual and energy, the two detuned phases, their asymmetry, the
+  update size; the seam defect, the slow loss, the writes), the learning
+  curves, and a paragraph for each phase. Nothing is hosted and there is no
+  checkpoint. The guide is `docs/demos.md`: what equilibrium means in each
+  brain and what detuning buys.
+
 ## 0.13.0 (2026-09-22)
 
 Toward a learned world model: a belief that a transition carries under action, evidence
