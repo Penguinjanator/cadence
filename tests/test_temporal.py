@@ -352,3 +352,49 @@ def test_precision_change_keeps_protected_response_binding_valid():
     assert memory.observe(net, new, np.ones((1, 1, 2)) * 0.2).updated
     assert_allclose(net.imagine(old, state=np.zeros((1, 4))).output, expected, atol=1e-14)
     assert_array_equal(net.output_precision, [0.2, 3.0])
+
+
+def test_off_center_detuned_paths_halve_beta_before_a_parameter_update():
+    from cadence.temporal import contrast_asymmetry
+
+    rng = np.random.default_rng(2)
+    net = TemporalPatchNet(2, 4, 1, seed=2, initial_radius=1.5)
+    inputs = rng.normal(size=(1, 24, 2))
+    target = np.sign(rng.normal(size=(1, 24, 1)))
+    boundary = np.zeros((1, 4))
+    before = net.parameters()
+
+    refused = net.observe(inputs, target, rate=0.1, max_halvings=0)
+    assert not refused.updated and refused.reason == "contrast_asymmetric"
+    assert refused.beta == 0.01 and refused.contrast_halvings == 0 and net.updates == 0
+    assert refused.plus is not None and refused.minus is not None
+    assert contrast_asymmetry(refused.free, refused.plus, refused.minus) > 0.3
+    assert contrast_asymmetry(refused.free, refused.free, refused.free) == 0.0
+    for key, value in before.items():
+        assert_array_equal(net.parameters()[key], value)
+
+    net.reset()
+    checked = net.observe(inputs, target, rate=0.0, symmetry_tolerance=0.1)
+    assert checked.updated and checked.beta == 0.0025 and checked.contrast_halvings == 2
+    assert contrast_asymmetry(checked.free, checked.plus, checked.minus) <= 0.1
+
+    def free_loss(parameters):
+        state, outputs = boundary.copy(), []
+        for moment in range(inputs.shape[1]):
+            state = np.tanh(state) @ parameters["A"].T + inputs[:, moment] @ parameters["B"].T
+            outputs.append(np.tanh(state) @ parameters["C"].T)
+        return float(0.5 * np.mean((np.stack(outputs, axis=1) - target) ** 2))
+
+    for key, value in before.items():
+        expected = np.empty_like(value)
+        for index in np.ndindex(value.shape):
+            plus = {k: v.copy() for k, v in before.items()}
+            minus = {k: v.copy() for k, v in before.items()}
+            plus[key][index] += 1e-6
+            minus[key][index] -= 1e-6
+            expected[index] = (free_loss(plus) - free_loss(minus)) / 2e-6
+        assert np.abs(checked.delta[key] - expected).max() < 0.01 * np.abs(expected).max()
+
+    net.reset()
+    backtracked = net.observe(inputs, target, rate=0.1, backtrack=True, symmetry_tolerance=0.1)
+    assert backtracked.beta == 0.0025 and backtracked.contrast_halvings == 2

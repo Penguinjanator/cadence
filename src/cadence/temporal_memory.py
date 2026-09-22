@@ -167,6 +167,8 @@ class TemporalMemory:
         beta: float = 0.01,
         rate: float = 0.1,
         readout_damping: float | None = None,
+        symmetry_tolerance: float = 0.15,
+        max_halvings: int = 8,
     ) -> TemporalObservation:
         """Stage EP and protected projection, then commit both objects together.
 
@@ -192,7 +194,8 @@ class TemporalMemory:
         original free activity, and keep weights, counters and memory intact.
         This is not a phase failure or evidence of stationarity. Returned phase
         counters exclude this one additional replay and the hidden-width
-        metric solve. There is no beta adaptation or parameter line search.
+        metric solve. Beta halves under the symmetry check of
+        ``TemporalPatchNet.observe``; there is no parameter line search.
         """
         if type(net) is not TemporalPatchNet:
             raise TypeError("atomic protected learning requires TemporalPatchNet")
@@ -204,7 +207,14 @@ class TemporalMemory:
         self._check(before)
         candidate = TemporalPatchNet.restore(net.snapshot())
         pending = TemporalMemory.restore(self.snapshot())
-        result = candidate.observe(inputs, target, beta=beta, rate=rate)
+        result = candidate.observe(
+            inputs,
+            target,
+            beta=beta,
+            rate=rate,
+            symmetry_tolerance=symmetry_tolerance,
+            max_halvings=max_halvings,
+        )
         if result.updated:
             if readout_damping is None:
                 candidate.set_parameters(pending.project(before, candidate.parameters()))

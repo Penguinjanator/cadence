@@ -84,6 +84,43 @@ error. A stationary result is not a global-optimality certificate. Use
 `0 < beta * max(output_precision) < time * outputs` so both detunings are valid.
 Teaching precision is the caller's supplied metric, not learned confidence.
 
+## A centered contrast
+
+The contrast is a derivative only while the two detuned paths sit
+symmetrically around the free path. On a long path, or a path far from its
+goal, one detuned solve can converge on another branch of the energy; both
+phases then report convergence and the contrast points somewhere else. On a
+learned cart-pole model over sixteen steps, the default beta gave a contrast
+25 times too large and 58 degrees off the true derivative, and the line search
+then found no decreasing step.
+
+`cadence.temporal.contrast_asymmetry(free, plus, minus)` measures this: the
+norm of `plus + minus - 2 * free` over the norm of `plus - minus`, both over
+the hidden paths. A centered contrast has a ratio proportional to beta, and
+its error against the derivative grows with the square of the ratio. Every
+contrast in `plan` and `observe` must have a ratio at most `symmetry_tolerance`
+(default 0.15, a contrast error of a few percent). Otherwise beta is halved and
+both phases are solved again, up to `max_halvings` times (default 8). A
+contrast that stays off center ends the proposal with the reason
+`contrast_asymmetric`. The result reports the `beta` of its last contrast and
+the number of `contrast_halvings`. An infinite tolerance disables the check.
+
+## A quasi-Newton direction
+
+The cost over an action path is badly conditioned: an early action moves
+every later output, a late one almost nothing, so the steepest direction
+zigzags. `method="bfgs"` keeps an estimate of the inverse curvature over the
+controlled entries, built from the accepted steps by the BFGS update, and
+steps along `-curvature @ contrast` with the same projected line search and
+causal replay. The first step, and every step after the estimate is dropped,
+is the steepest step scaled by `rate`. The estimate is dropped when a step is
+clipped by the bounds, when the curvature condition fails, when the direction
+does not descend, or when no step along it decreases the cost; the proposal
+then restarts from the contrast. `step_sizes` are multiples of the direction,
+with 1 the full quasi-Newton step. On a twelve-step toy the same stationary
+cost takes 15 iterations and 52 phase calls instead of 25 and 121. The
+default `method="steepest"` is unchanged.
+
 ## Reading the result
 
 `TemporalPlan` contains detached input and prediction arrays, the fixed
@@ -96,12 +133,15 @@ boundary, the initial prediction and the frozen model's `parameter_revision`.
 | `projected_residual` | Maximum absolute change under a unit projected input-gradient step at the last accepted proposal; `None` when its contrast failed. |
 | `converged` | The projected finite-beta residual met `tolerance`. It does not mean the goal is attainable. |
 | `predicted_goal_met` | The returned free prediction's cost is at most `goal_tolerance`. It does not certify a real outcome. |
-| `reason` | Projected stationarity, step cap, failed phase, nonfinite gradient or absence of a decreasing replay step. |
+| `reason` | Projected stationarity, step cap, failed phase, off-center contrast, nonfinite gradient or absence of a decreasing replay step. |
+| `beta`, `contrast_halvings` | The detuning of the last contrast and how often the supplied beta was halved to center the detuned paths. |
+| `method` | `steepest` or `bfgs`, the search direction that produced the proposal. |
 | Work counters | Phase calls, attempted block-chain solves, energy evaluations and peak message storage across all attempted phases, including rejected work. |
 
 `max_steps=0` still evaluates a free prediction and both detunings to report
 stationarity. Reaching a cap does not count as convergence. If a detuned phase
-fails, the last valid free proposal is returned without claiming stationarity.
+fails, or the contrast stays off center after every halving, the last valid
+free proposal is returned without claiming stationarity.
 If every attempted replay fails or cannot decrease cost, that same valid
 proposal remains. An invalid initial free prediction raises `ArithmeticError`.
 Invalid arguments raise `ValueError` before any live mutation.

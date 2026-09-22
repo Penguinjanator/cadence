@@ -11,20 +11,32 @@ APIs follow the current temporal interfaces below.
 - `TemporalPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None, ...)`
   creates the residual temporal model with shared A/B/C maps. Paths have shape
   `(batch, time, ports)`; omitted positive output precision means all ones.
-- `observe(inputs, target, *, beta=0.01, rate=0.1, backtrack=False)` repairs observed teaching
+- `observe(inputs, target, *, beta=0.01, rate=0.1, backtrack=False,
+  symmetry_tolerance=0.15, max_halvings=8)` repairs observed teaching
   paths and returns `TemporalObservation`. Only valid free activity becomes live;
-  detuned activity does not become an observed record.
+  detuned activity does not become an observed record. Beta is halved, up to
+  `max_halvings` times, until the two detuned paths sit within
+  `symmetry_tolerance` of center around the free path; a pair that stays off
+  center is refused as `contrast_asymmetric`. See
+  [temporal learning](temporal.md#checking-that-the-contrast-is-centered).
   The optional `backtrack` argument:
   accept parameters only after a decreasing causal replay from the original
   boundary. See [temporal learning](temporal.md#checking-a-learning-step).
+- `contrast_asymmetry(free, plus, minus)` in `cadence.temporal` is the ratio the
+  check reads: `||plus + minus - 2 free|| / ||plus - minus||` over hidden paths.
 - `advance(inputs)` carries a free path into live context. `imagine(inputs, *,
   state=None)` predicts privately. `settle(inputs, *, target=None, beta=0.0,
   state=None)` exposes a private phase directly.
 - `plan(inputs, *, goal, controls, bounds=None, state=None, beta=0.01,
   rate=1.0, max_steps=32, max_backtracks=16, tolerance=1e-6,
-  goal_tolerance=1e-6)` repairs selected continuous input ports. Boolean controls
+  goal_tolerance=1e-6, symmetry_tolerance=0.15, max_halvings=8,
+  method="steepest")` repairs
+  selected continuous input ports. Boolean controls
   and bounds broadcast to the input shape. It executes no action and changes
-  no live state. See [planning](planning.md) for precise cost and failure semantics.
+  no live state. Each contrast passes the same symmetry check as `observe`.
+  `method="bfgs"` steps along a quasi-Newton direction built from the accepted
+  steps, with the same line search and replay.
+  See [planning](planning.md) for precise cost and failure semantics.
 - `readback()`, `state`, `parameters()` and `snapshot()` expose detached values.
   `reset()` clears activity, not learned parameters. `save(path)`, `load(path)`
   and `restore(snapshot)` preserve continuation state and configuration.
@@ -34,8 +46,9 @@ APIs follow the current temporal interfaces below.
   the unchanged maps. `set_parameters(mapping)` validates and replaces all
   learned arrays in one transaction.
 - `TemporalPhase` exposes solved hidden/output paths, residuals, curvature and
-  work. `TemporalObservation` exposes `updated`, `reason`, the phases and raw
-  `delta`. With backtracking it also reports initial/final loss, accepted rate,
+  work. `TemporalObservation` exposes `updated`, `reason`, the phases, raw
+  `delta`, the `beta` of the last contrast and its `contrast_halvings`. With
+  backtracking it also reports initial/final loss, accepted rate,
   trial losses and replay count. `TemporalReadback` binds current activity to
   its parameter revision.
 
@@ -45,7 +58,10 @@ The detached result contains proposed `inputs`, a target-free `prediction`,
 `initial_prediction`, fixed `boundary`, `losses`, `step_sizes` and model revision.
 `cost`, `initial_cost`, `improved` and `iterations` summarize accepted work.
 `converged` concerns the finite-beta projected residual; `predicted_goal_met`
-checks modeled cost. Neither certifies an actual outcome. Work and failure
+checks modeled cost. Neither certifies an actual outcome. `beta` and
+`contrast_halvings` report the detuning of the last contrast and how often it
+was halved to center the detuned paths; `method` names the search direction.
+Work and failure
 fields are described in the [planning guide](planning.md).
 
 ## RecordPatchNet (`cadence.record_patch`)
@@ -111,9 +127,11 @@ See the [record patch guide](record-patch.md).
   response of a caller-selected query, without targets or network mutation,
   and returns `ConstraintReport`: `ranks`, `bytes` and `maximum_residual`.
 - `observe(net, inputs, target, *, beta=0.01, rate=0.1,
-  readout_damping=None)` stages protected learning atomically. Positive finite
+  readout_damping=None, symmetry_tolerance=0.15, max_halvings=8)` stages
+  protected learning atomically. Positive finite
   readout damping selects the local metric and causal acceptance check described
   in the [memory guide](temporal-memory.md); `None` retains ordinary projection.
+  The symmetry settings pass through to `TemporalPatchNet.observe`.
 - `report()` returns the same `ConstraintReport` for the current bases. `snapshot()` and
   `restore(snapshot)` preserve bases and parameter binding. Save the net and
   its memory together. Lower-level `project(before, proposed)` requires the

@@ -1,5 +1,35 @@
 # Changelog
 
+## 0.13.0 (2026-09-22)
+
+A centered contrast is a derivative only while the two detuned paths sit
+symmetrically around the free path. On a long path, or a path far from its
+goal, one detuned solve can converge on another branch of the energy while
+still reporting convergence; the contrast then points somewhere else. On a
+learned cart-pole model over sixteen steps the default beta gave an action
+contrast 25 times too large and 58 degrees off the true derivative, and the
+planner's line search found no decreasing step.
+
+- `cadence.temporal.contrast_asymmetry(free, plus, minus)`: the norm of
+  `plus + minus - 2 free` over the norm of `plus - minus` on the hidden paths.
+  The ratio grows in proportion to beta and the contrast error with its square.
+- `TemporalPatchNet.observe`, `TemporalPatchNet.plan` and
+  `TemporalMemory.observe` take `symmetry_tolerance=0.15` and
+  `max_halvings=8`. A pair of detuned paths above the tolerance is solved again
+  at half the beta; a pair that stays off center is refused with the reason
+  `contrast_asymmetric`, changing no parameters, revisions or update counts.
+  `TemporalObservation` and `TemporalPlan` report the `beta` of the last
+  contrast and its `contrast_halvings`. An infinite tolerance disables the
+  check and reproduces the unguarded update.
+- `TemporalPatchNet.plan(method="bfgs")`: a quasi-Newton direction over the
+  controlled ports, built from the accepted steps, with the same projected
+  line search and causal replay. The cost over an action path is badly
+  conditioned and the steepest direction zigzags; on a twelve-step toy the same
+  stationary cost takes 52 phase calls instead of 121. The estimate is dropped
+  whenever a step is clipped, fails the curvature condition or gives no
+  decrease. `TemporalPlan.method` names the direction; the default
+  `"steepest"` is unchanged.
+
 ## 0.12.0 (2026-09-22)
 
 The record patch: a temporal patch with a gated linear context and a record

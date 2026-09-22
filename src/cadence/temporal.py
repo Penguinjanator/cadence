@@ -19,7 +19,13 @@ import numpy as np
 if TYPE_CHECKING:
     from .planning import TemporalPlan
 
-__all__ = ["TemporalPatchNet", "TemporalPhase", "TemporalObservation", "TemporalReadback"]
+__all__ = [
+    "TemporalPatchNet",
+    "TemporalPhase",
+    "TemporalObservation",
+    "TemporalReadback",
+    "contrast_asymmetry",
+]
 
 
 @dataclass(frozen=True)
@@ -69,6 +75,8 @@ class TemporalObservation:
     accepted_rate: float | None = None
     replay_losses: tuple[float | None, ...] = ()
     replay_calls: int = 0
+    beta: float | None = None
+    contrast_halvings: int = 0
 
 
 @dataclass(frozen=True)
@@ -95,6 +103,22 @@ def _integer(name: str, value: int, minimum: int) -> int:
     if value < minimum:
         raise ValueError(f"{name} must be an integer >= {minimum}")
     return int(value)
+
+
+def contrast_asymmetry(free: TemporalPhase, plus: TemporalPhase, minus: TemporalPhase) -> float:
+    """How far the two detuned paths sit off center around the free path.
+
+    The ratio divides the norm of ``plus + minus - 2 * free`` by the norm of
+    ``plus - minus`` over the hidden paths. A centered contrast has a ratio
+    proportional to beta, and its error against the free-loss derivative grows
+    with the square of the ratio. A ratio near one means one detuned phase
+    converged on another branch of the energy, and its contrast is not a
+    derivative of anything. Zero spread reports zero.
+    """
+    spread = float(np.linalg.norm(plus.hidden - minus.hidden))
+    if spread == 0.0:
+        return 0.0
+    return float(np.linalg.norm(plus.hidden + minus.hidden - 2.0 * free.hidden) / spread)
 
 
 class TemporalPatchNet:
@@ -584,6 +608,9 @@ class TemporalPatchNet:
         max_backtracks: int = 16,
         tolerance: float = 1e-6,
         goal_tolerance: float = 1e-6,
+        symmetry_tolerance: float = 0.15,
+        max_halvings: int = 8,
+        method: str = "steepest",
     ) -> TemporalPlan:
         """Privately repair action ports using EP contrasts and causal replay.
 
@@ -591,6 +618,11 @@ class TemporalPatchNet:
         ports that may change; other inputs and the initial boundary stay fixed.
         Returned predictions are ordinary free rollouts, never target-nudged
         outputs. Planning neither executes the action nor trains on its goal.
+        Each contrast must pass the same symmetry check as ``observe``; beta
+        halves up to ``max_halvings`` times within one proposal. ``method``
+        selects the search direction: ``"steepest"`` (the projected contrast
+        scaled by ``rate``) or ``"bfgs"`` (a quasi-Newton direction from the
+        accepted steps, with the same line search and causal replay).
         """
         from .planning import plan_inputs
 
@@ -607,6 +639,9 @@ class TemporalPatchNet:
             max_backtracks=max_backtracks,
             tolerance=tolerance,
             goal_tolerance=goal_tolerance,
+            symmetry_tolerance=symmetry_tolerance,
+            max_halvings=max_halvings,
+            method=method,
         )
 
     def _carry(self, phase: TemporalPhase) -> None:
@@ -645,6 +680,8 @@ class TemporalPatchNet:
         beta: float = 0.01,
         rate: float = 0.1,
         backtrack: bool = False,
+        symmetry_tolerance: float = 0.15,
+        max_halvings: int = 8,
     ) -> TemporalObservation:
         """Learn one finite external path; all phases share one fixed initial state.
 
@@ -653,6 +690,14 @@ class TemporalPatchNet:
         batch rows. The detuning loss averages time and output ports as well.
         Invalid data cause no state change. Failed detuning retains only valid
         free activity and never changes weights or the update count.
+
+        The two detuned paths must sit symmetrically around the free path:
+        ``contrast_asymmetry`` at most ``symmetry_tolerance``. Otherwise beta is
+        halved and both phases are solved again, up to ``max_halvings`` times.
+        A contrast that stays off center is refused with the reason
+        ``contrast_asymmetric``; the result reports the beta of its last
+        contrast and the number of halvings. An infinite tolerance disables
+        the check and reproduces the unguarded update.
 
         With ``backtrack=True``, test up to sixteen successively halved rates
         against target-free predictions from the original initial state. A
@@ -676,29 +721,52 @@ class TemporalPatchNet:
             raise ValueError(
                 "need 0 < beta*max(output_precision) < time*outputs and finite nonnegative rate"
             )
+        if np.isnan(symmetry_tolerance) or symmetry_tolerance <= 0:
+            raise ValueError("symmetry_tolerance must be positive; inf disables the check")
+        max_halvings = _integer("max_halvings", max_halvings, 0)
         boundary = self._boundary(len(path), None)
         free = self._solve(path, boundary, None, 0.0)
         self._carry(free)
         if not free.converged:
             return TemporalObservation(False, "free_phase_failed", free)
-        plus = self._solve(path, boundary, teaching, beta)
-        minus = self._solve(path, boundary, teaching, -beta)
-        if not plus.converged or not minus.converged:
-            return TemporalObservation(False, "phase_failed", free, plus, minus)
+        contrast_beta, halvings = float(beta), 0
+        while True:
+            plus = self._solve(path, boundary, teaching, contrast_beta)
+            minus = self._solve(path, boundary, teaching, -contrast_beta)
+            if not plus.converged or not minus.converged:
+                return TemporalObservation(
+                    False, "phase_failed", free, plus, minus, beta=contrast_beta,
+                    contrast_halvings=halvings,
+                )
+            if contrast_asymmetry(free, plus, minus) <= symmetry_tolerance:
+                break
+            if halvings == max_halvings:
+                return TemporalObservation(
+                    False, "contrast_asymmetric", free, plus, minus, beta=contrast_beta,
+                    contrast_halvings=halvings,
+                )
+            halvings += 1
+            contrast_beta *= 0.5
         gp = self._parameter_gradient(path, boundary, plus)
         gm = self._parameter_gradient(path, boundary, minus)
-        delta = {k: (gp[k] - gm[k]) / (2.0 * beta) for k in gp}
+        delta = {k: (gp[k] - gm[k]) / (2.0 * contrast_beta) for k in gp}
         if backtrack:
             return self._backtracked_observation(
-                path, teaching, boundary, free, plus, minus, delta, rate
+                path, teaching, boundary, free, plus, minus, delta, rate, contrast_beta, halvings
             )
         proposed = {k: getattr(self, "_" + k) - rate * delta[k] for k in delta}
         if not all(np.isfinite(p).all() for p in proposed.values()):
-            return TemporalObservation(False, "nonfinite_update", free, plus, minus, delta)
+            return TemporalObservation(
+                False, "nonfinite_update", free, plus, minus, delta, beta=contrast_beta,
+                contrast_halvings=halvings,
+            )
         self._A, self._B, self._C = proposed["A"], proposed["B"], proposed["C"]
         self.updates += 1
         self._revision += 1
-        return TemporalObservation(True, "updated", free, plus, minus, delta)
+        return TemporalObservation(
+            True, "updated", free, plus, minus, delta, beta=contrast_beta,
+            contrast_halvings=halvings,
+        )
 
     def _backtracked_observation(
         self,
@@ -710,6 +778,8 @@ class TemporalPatchNet:
         minus: TemporalPhase,
         delta: dict[str, np.ndarray],
         rate: float,
+        beta: float,
+        halvings: int,
     ) -> TemporalObservation:
         """Replay candidate parameters privately; never carry a trial's activity."""
 
@@ -763,6 +833,8 @@ class TemporalPatchNet:
                         step,
                         tuple(losses),
                         replays,
+                        beta,
+                        halvings,
                     )
         return TemporalObservation(
             False,
@@ -776,6 +848,8 @@ class TemporalPatchNet:
             0.0,
             tuple(losses),
             replays,
+            beta,
+            halvings,
         )
 
     def reset(self) -> None:
