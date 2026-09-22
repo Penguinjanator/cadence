@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+Toward a learned world model: a belief that a transition carries under action, evidence
+that repairs it by iteration, and maps over grids at the port.
+
+- `StructuredPort` (`cadence.ports`): a record patch's input port as blocks. A
+  `MapBlock` is a tied local kernel over a grid of the inputs (the same kernel at every
+  position); a `DenseBlock` a matrix over a slice. `broadcast=(start, count)` tiles a slice
+  of the inputs into every map block as constant channels, so an action meets the scene
+  before the nonlinearity. `RecordPatchNet(port=...)` and `RecordPatchStack(lower_port=...)`
+  route their input drive through the port in the forward scan, the adjoint, the detuning
+  check and the checkpoint; a port of dense blocks reproduces the plain patch exactly.
+- `BeliefPatch` (`cadence.belief`): a belief carried by a learned transition under the
+  executed action, repaired by a few damped iterations of one nonlinear map that reads the
+  belief, the encoded observation, the expectation and the record store together, and a
+  linear readout the store patches. `imagine(actions)` continues privately under declared
+  actions with no observation and changes nothing. `observe` learns by one backward scan
+  through every iteration and the transition; the adjoint matches finite differences.
+  `belief_torch.TorchBelief` is the same slow half on torch with autograd, exporting in
+  the library's packing.
+- Removed `cadence.custody` (unused).
+
 ## 0.12.0 (2026-09-22)
 
 The record patch: a temporal patch with a gated linear context and a record

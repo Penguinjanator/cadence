@@ -26,9 +26,11 @@ from typing import Any
 
 import numpy as np
 
+from .ports import StructuredPort
 from .record_patch import RecordPatchNet, RecordPath
 
 FORMAT = "cadence-record-stack/1"
+FORMAT_PORTS = "cadence-record-stack/2"  # a structured port on the lower patch
 _LOWER = ("G1", "g1", "B1", "b1")
 
 
@@ -61,9 +63,18 @@ class RecordPatchStack:
         seed: int = 0,
         slowest: float = 128.0,
         groups: Sequence[int] | None = None,
+        lower_port: StructuredPort | None = None,
         **upper: Any,
     ) -> None:
         self.inputs = int(inputs)
+        # A structured lower port (maps over grids of the inputs) fixes the lower width.
+        self.lower_port = lower_port
+        if lower_port is not None:
+            if lower_port.inputs != self.inputs:
+                raise ValueError("the lower port reads a different number of inputs")
+            if lower is not None and int(lower) != lower_port.outputs:
+                raise ValueError(f"lower must equal the lower port's outputs ({lower_port.outputs})")
+            lower = lower_port.outputs
         self.lower = int(hidden if lower is None else lower)
         if self.inputs < 1 or self.lower < 1:
             raise ValueError("inputs and lower must be positive")
@@ -72,8 +83,12 @@ class RecordPatchStack:
         retention = 1.0 - 1.0 / timescales
         self._g1 = np.log(retention / (1.0 - retention))
         self._scale = np.sqrt((1.0 + retention) / (1.0 - retention))
-        self._G1 = np.zeros((self.lower, self.inputs))
-        self._B1 = rng.normal(size=(self.lower, self.inputs)) / np.sqrt(self.inputs)
+        if lower_port is None:
+            self._G1 = np.zeros((self.lower, self.inputs))
+            self._B1 = rng.normal(size=(self.lower, self.inputs)) / np.sqrt(self.inputs)
+        else:
+            self._G1 = self._pack(lower_port.initial(rng, 0.0))
+            self._B1 = self._pack(lower_port.initial(rng, 1.0))
         self._b1 = np.zeros(self.lower)
         self.upper = RecordPatchNet(
             self.inputs + self.lower,
@@ -87,11 +102,35 @@ class RecordPatchStack:
         self._state: np.ndarray | None = None
 
     # ------------------------------------------------------------ the lower patch
+    def _pack(self, blocks: list[np.ndarray]) -> np.ndarray:
+        return np.concatenate([b.ravel() for b in blocks])
+
+    def _unpack(self, flat: np.ndarray) -> list[np.ndarray]:
+        assert self.lower_port is not None
+        out, at = [], 0
+        for b in self.lower_port.blocks:
+            shape = self.lower_port.weight_shape(b)
+            size = int(np.prod(shape))
+            out.append(flat[at : at + size].reshape(shape))
+            at += size
+        return out
+
+    def _drive(self, inputs: np.ndarray, which: str) -> np.ndarray:
+        weights = self._B1 if which == "B" else self._G1
+        if self.lower_port is None:
+            return np.asarray(inputs @ weights.T)
+        return self.lower_port.apply(inputs, self._unpack(weights))
+
+    def _drive_gradient(self, v: np.ndarray, inputs: np.ndarray) -> np.ndarray:
+        if self.lower_port is None:
+            return np.einsum("bti,btj->ij", v, inputs)
+        return self._pack(self.lower_port.gradient(v, inputs))
+
     def _context(
         self, inputs: np.ndarray, boundary: np.ndarray
     ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-        gate = _sigmoid(self._g1 + inputs @ self._G1.T)
-        port = np.tanh(inputs @ self._B1.T + self._b1)
+        gate = _sigmoid(self._g1 + self._drive(inputs, "G"))
+        port = np.tanh(self._drive(inputs, "B") + self._b1)
         hidden = np.empty((len(inputs), inputs.shape[1], self.lower))
         previous = boundary
         for t in range(inputs.shape[1]):
@@ -198,9 +237,9 @@ class RecordPatchStack:
         gp = (1.0 - gate) * gh * (1.0 - port**2)
         gs = gh * (previous - port) * gate * (1.0 - gate)
         delta.update(
-            G1=np.einsum("bti,btj->ij", gs, path),
+            G1=self._drive_gradient(gs, path),
             g1=gs.sum(axis=(0, 1)),
-            B1=np.einsum("bti,btj->ij", gp, path),
+            B1=self._drive_gradient(gp, path),
             b1=gp.sum(axis=(0, 1)),
         )
         writes = upper._write(above, teaching, prediction.hidden) if write else 0
@@ -234,7 +273,10 @@ class RecordPatchStack:
 
     # ------------------------------------------------------------ checkpoints
     def snapshot(self) -> dict[str, np.ndarray]:
-        meta = {"format": FORMAT, "inputs": self.inputs, "lower": self.lower}
+        meta: dict[str, Any] = {"format": FORMAT, "inputs": self.inputs, "lower": self.lower}
+        if self.lower_port is not None:
+            meta["format"] = FORMAT_PORTS
+            meta["lower_port"] = self.lower_port.to_dict()
         result = {"upper_" + k: v for k, v in self.upper.snapshot().items()}
         result.update({k: getattr(self, "_" + k).copy() for k in _LOWER})
         result["lower_scale"] = self._scale.copy()
@@ -248,7 +290,7 @@ class RecordPatchStack:
     def restore(cls, snapshot: Mapping[str, np.ndarray]) -> RecordPatchStack:
         try:
             meta = json.loads(str(snapshot["meta"]))
-            if meta.get("format") != FORMAT:
+            if meta.get("format") not in (FORMAT, FORMAT_PORTS):
                 raise ValueError("unsupported record-stack checkpoint")
             upper = RecordPatchNet.restore(
                 {k[len("upper_") :]: v for k, v in snapshot.items() if k.startswith("upper_")}
@@ -259,12 +301,20 @@ class RecordPatchStack:
                 int(meta["lower"]),
                 upper,
             )
+            result.lower_port = (
+                None if meta.get("lower_port") is None else StructuredPort.from_dict(meta["lower_port"])
+            )
             if upper.inputs != result.inputs + result.lower:
                 raise ValueError("the upper patch does not read this lower patch")
+            packed = (
+                None
+                if result.lower_port is None
+                else (int(sum(int(np.prod(result.lower_port.weight_shape(b))) for b in result.lower_port.blocks)),)
+            )
             shapes = {
-                "G1": (result.lower, result.inputs),
+                "G1": (result.lower, result.inputs) if packed is None else packed,
                 "g1": (result.lower,),
-                "B1": (result.lower, result.inputs),
+                "B1": (result.lower, result.inputs) if packed is None else packed,
                 "b1": (result.lower,),
             }
             for key, shape in shapes.items():

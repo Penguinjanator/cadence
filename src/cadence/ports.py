@@ -86,24 +86,50 @@ class StructuredPort:
 
     ``weights`` is a list of arrays, one per block, in the block order. The port is linear
     in ``u`` and in each block's weights; ``apply``, ``transpose`` and ``gradient`` are the
-    three operations the adjoint scan needs."""
+    three operations the adjoint scan needs. ``broadcast`` names a slice ``(start, count)``
+    of the inputs that every map block also reads as constant channels tiled over its grid,
+    so what a body did and where it is reach every position before the nonlinearity: the
+    effect of an action can then depend on what is where. A map block's kernel then has
+    ``channels_in + count`` input channels."""
 
-    def __init__(self, inputs: int, blocks: list[Block]) -> None:
+    def __init__(self, inputs: int, blocks: list[Block], broadcast: tuple[int, int] | None = None) -> None:
         self.inputs = int(inputs)
         self.blocks = list(blocks)
         for b in self.blocks:
             if b.start < 0 or b.start + b.inputs > self.inputs:
                 raise ValueError("a block reads outside the inputs")
+        self.broadcast = None if broadcast is None else (int(broadcast[0]), int(broadcast[1]))
+        if self.broadcast is not None:
+            s0, count = self.broadcast
+            if count < 1 or s0 < 0 or s0 + count > self.inputs:
+                raise ValueError("the broadcast slice must lie inside the inputs")
         self.outputs = int(sum(b.outputs for b in self.blocks))
         self._offsets = np.cumsum([0] + [b.outputs for b in self.blocks])
+
+    def weight_shape(self, b: Block) -> tuple[int, ...]:
+        """A block's kernel shape, with the broadcast channels added for a map block."""
+        if isinstance(b, DenseBlock) or self.broadcast is None:
+            return b.weights
+        return (b.channels_out, b.channels_in + self.broadcast[1], b.kernel, b.kernel)
 
     def initial(self, rng: np.random.Generator, scale: float = 1.0) -> list[np.ndarray]:
         """Fan-in scaled draws per block (zero with ``scale`` 0, for a gate port)."""
         out = []
         for b in self.blocks:
-            fan = b.inputs if isinstance(b, DenseBlock) else b.channels_in * b.kernel * b.kernel
-            out.append(rng.normal(size=b.weights) * (scale / np.sqrt(fan)) if scale else np.zeros(b.weights))
+            shape = self.weight_shape(b)
+            fan = b.inputs if isinstance(b, DenseBlock) else shape[1] * b.kernel * b.kernel
+            out.append(rng.normal(size=shape) * (scale / np.sqrt(fan)) if scale else np.zeros(shape))
         return out
+
+    def _grid(self, u: np.ndarray, b: MapBlock) -> np.ndarray:
+        """A map block's input grid ``(..., cin [+ count], H, W)`` with the broadcast tiled in."""
+        lead = u.shape[:-1]
+        grid = u[..., b.start : b.start + b.inputs].reshape(*lead, b.channels_in, b.height, b.width)
+        if self.broadcast is None:
+            return grid
+        s0, count = self.broadcast
+        tiled = np.broadcast_to(u[..., s0 : s0 + count][..., :, None, None], (*lead, count, b.height, b.width))
+        return np.concatenate([grid, tiled], axis=-3)
 
     # ------------------------------------------------------------------ the three maps
     def apply(self, u: np.ndarray, weights: list[np.ndarray]) -> np.ndarray:
@@ -111,11 +137,10 @@ class StructuredPort:
         lead = u.shape[:-1]
         parts = []
         for b, w in zip(self.blocks, weights, strict=True):
-            x = u[..., b.start : b.start + b.inputs]
             if isinstance(b, DenseBlock):
-                parts.append(x @ w.T)
+                parts.append(u[..., b.start : b.start + b.inputs] @ w.T)
             else:
-                parts.append(self._conv(x.reshape(*lead, b.channels_in, b.height, b.width), b, w).reshape(*lead, -1))
+                parts.append(self._conv(self._grid(u, b), b, w).reshape(*lead, -1))
         return np.concatenate(parts, axis=-1)
 
     def transpose(self, v: np.ndarray, weights: list[np.ndarray]) -> np.ndarray:
@@ -127,7 +152,11 @@ class StructuredPort:
             if isinstance(b, DenseBlock):
                 out[..., b.start : b.start + b.inputs] += y @ w
             else:
-                out[..., b.start : b.start + b.inputs] += self._conv_transpose(y.reshape(*lead, b.channels_out, b.out_height, b.out_width), b, w).reshape(*lead, -1)
+                back = self._conv_transpose(y.reshape(*lead, b.channels_out, b.out_height, b.out_width), b, w)
+                out[..., b.start : b.start + b.inputs] += back[..., : b.channels_in, :, :].reshape(*lead, -1)
+                if self.broadcast is not None:
+                    s0, count = self.broadcast
+                    out[..., s0 : s0 + count] += back[..., b.channels_in :, :, :].sum(axis=(-2, -1))
         return out
 
     def gradient(self, v: np.ndarray, u: np.ndarray) -> list[np.ndarray]:
@@ -138,11 +167,10 @@ class StructuredPort:
         out = []
         for k, b in enumerate(self.blocks):
             y = vf[:, self._offsets[k] : self._offsets[k + 1]]
-            x = uf[:, b.start : b.start + b.inputs]
             if isinstance(b, DenseBlock):
-                out.append(y.T @ x)
+                out.append(y.T @ uf[:, b.start : b.start + b.inputs])
             else:
-                patches = self._patches(x.reshape(n, b.channels_in, b.height, b.width), b)  # (n, oh, ow, cin, k, k)
+                patches = self._patches(self._grid(uf, b), b)  # (n, oh, ow, cin [+ count], k, k)
                 yy = y.reshape(n, b.channels_out, b.out_height, b.out_width)
                 out.append(np.einsum("nohw,nhwikl->oikl", yy, patches))
         return out
@@ -161,9 +189,10 @@ class StructuredPort:
 
     @staticmethod
     def _conv_transpose(y: np.ndarray, b: MapBlock, w: np.ndarray) -> np.ndarray:
-        """Scatter each output's kernel back onto the input grid (the correlation's adjoint)."""
+        """Scatter each output's kernel back onto the input grid (the correlation's adjoint);
+        the grid has the kernel's input channels, broadcast channels included."""
         lead = y.shape[:-3]
-        out = np.zeros((*lead, b.channels_in, b.height, b.width))
+        out = np.zeros((*lead, w.shape[1], b.height, b.width))
         contributions = np.einsum("...ohw,oikl->...hwikl", y, w)  # (..., oh, ow, cin, k, k)
         for i in range(b.kernel):
             for j in range(b.kernel):
@@ -174,11 +203,15 @@ class StructuredPort:
 
     # ------------------------------------------------------------------ custody
     def to_dict(self) -> dict[str, Any]:
-        return {"inputs": self.inputs, "blocks": [b.to_dict() for b in self.blocks]}
+        out: dict[str, Any] = {"inputs": self.inputs, "blocks": [b.to_dict() for b in self.blocks]}
+        if self.broadcast is not None:
+            out["broadcast"] = list(self.broadcast)
+        return out
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> StructuredPort:
-        return cls(int(d["inputs"]), [block_from_dict(b) for b in d["blocks"]])
+        cast = d.get("broadcast")
+        return cls(int(d["inputs"]), [block_from_dict(b) for b in d["blocks"]], None if cast is None else (int(cast[0]), int(cast[1])))
 
     def dense_matrix(self, weights: list[np.ndarray]) -> np.ndarray:
         """The equivalent ``(outputs, inputs)`` matrix, for tests and small ports."""

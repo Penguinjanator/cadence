@@ -22,6 +22,7 @@ from __future__ import annotations
 from . import regions
 from .actor import ActorPlan, ActorReadback, BodyModel, EquilibriumActor, ObservationRecord
 from .atlas import Atlas, atlas_of, brain_scan_script, build_atlas
+from .belief import BeliefObservation, BeliefPatch, BeliefPath
 from .brain import Brain, BrainState, Equilibrium, Nudge, available_backends
 from .certificate import (
     Certificate,
@@ -34,7 +35,6 @@ from .certificate import (
 from .checkpoint import load, save
 from .connectome import Connectome
 from .content_memory import ContentMemory
-from .custody import Source, fetch, manifest
 from .generic import GenericBrain
 from .genome import Genome, Projection, develop, evolve
 from .learning import Learner, LearnerConfig, embedded, layered, learning_neuron_model
@@ -42,6 +42,7 @@ from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
 from .patch import PatchNet, PatchObservation
 from .planning import TemporalPlan
+from .ports import DenseBlock, MapBlock, StructuredPort
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
@@ -68,6 +69,12 @@ from .temporal import TemporalObservation, TemporalPatchNet, TemporalPhase, Temp
 from .temporal_memory import ConstraintReport, TemporalMemory
 
 __all__ = [
+    "BeliefObservation",
+    "BeliefPatch",
+    "BeliefPath",
+    "DenseBlock",
+    "MapBlock",
+    "StructuredPort",
     "ActorPlan",
     "ActorReadback",
     "BodyModel",
@@ -131,7 +138,6 @@ __all__ = [
     "Brain",
     "BrainState",
     "Equilibrium",
-    "Source",
     "Connectome",
     "available_backends",
     "canonical_json",
@@ -140,11 +146,9 @@ __all__ = [
     "develop",
     "evolve",
     "evaluate_predicate",
-    "fetch",
     "layered",
     "learning_neuron_model",
     "load",
-    "manifest",
     "save",
     "select_gain",
     "shuffled",

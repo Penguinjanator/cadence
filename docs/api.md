@@ -104,6 +104,33 @@ See the [record patch guide](record-patch.md).
   `save(path)` and `load(path)` carry parameters, records, counts and live
   context.
 
+## Ports (`cadence.ports`)
+
+- `MapBlock(start, channels_in, height, width, channels_out, kernel, stride=1)`: a tied local
+  kernel over a grid of the inputs; `DenseBlock(start, inputs, outputs)`: a matrix over a slice.
+- `StructuredPort(inputs, blocks, broadcast=None)`: `apply(u, weights)`, `transpose(v, weights)`,
+  `gradient(v, u)`, `initial(rng, scale)`, `weight_shape(block)`, `dense_matrix(weights)`,
+  `to_dict()`, `from_dict(d)`. `broadcast=(start, count)` tiles that slice into every map
+  block as constant channels.
+- `RecordPatchNet(..., port=StructuredPort)` and `RecordPatchStack(..., lower_port=StructuredPort)`
+  read their inputs through the port; `hidden` (or `lower`) equals the port's outputs.
+
+## BeliefPatch (`cadence.belief`)
+
+- `BeliefPatch(observation: StructuredPort, actions, belief, outputs, *, iterations=2, damping=0.5,
+  cells=4096, active=32, record_rate=0.5, record_width=64, habituation=1e-5, record_bias=0.3,
+  output_precision=None, seed=0)`.
+- `assimilate(observations, actions, observed=None) -> BeliefPath`: advance the belief through
+  observed moments; nothing learned or written. `imagine(actions, *, state=None) -> BeliefPath`:
+  the transition alone under declared actions, private. `observe(observations, actions, target, *,
+  observed=None, rate=1.0, write=True) -> BeliefObservation`: one backward scan and the store's writes.
+- `BeliefPath`: `belief`, `expectation`, `residual`, `output`, `read`, `loss`, `slow_output`, `final_state`.
+- `reset()`, `state`, `parameters()`, `set_parameters()`, `set_output_precision()`, `records`,
+  `snapshot()`, `restore()`, `save()`, `load()`.
+- `cadence.belief_torch.TorchBelief(port, actions, belief, outputs, *, iterations, damping, record_width)`:
+  the slow half on torch; `forward(observations | None, actions, state=None, reads=None)`,
+  `export()`, `load(params)`.
+
 ## TemporalMemory (`cadence.temporal_memory`)
 
 - `TemporalMemory(*, relative_tolerance=1e-12)` creates explicit local response
@@ -723,13 +750,11 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   map or by its wording; `cadence.atlas.PALETTE` maps each role to its colour. See
   [the brain viewer](pages.md).
 
-## Receipts and custody (`cadence.receipts`, `cadence.custody`)
+## Receipts (`cadence.receipts`)
 
 - `Receipt.build(kind, body, sources=()) -> Receipt`; `write(path)`; `Receipt.read(path)`;
   `Receipt.verify(path, *, sources=None, check=None) -> (ok, message)`; `to_dict()`.
 - `canonical_json(value)`; `cadence.receipts.canonical_sha256(value)` and `cadence.receipts.source_manifest(files)` at module level.
-- `Source(key, file, url, sha256, citation="")`, `fetch(sources, root, *, allow_download=False)`,
-  `manifest(sources, extra=None)`, `sha256_of(path)`, `CustodyError`.
 
 ## Optional task compositions
 

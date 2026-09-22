@@ -75,3 +75,39 @@ def test_stack_state_is_carried_by_advance_and_cleared_by_reset():
     net.reset()
     zero = (np.zeros((1, 6)), np.zeros((1, 6)))
     assert_allclose(net.advance(x).output, net.imagine(x, state=zero).output)
+
+
+def test_a_structured_lower_port_learns_and_survives_custody():
+    from cadence.ports import DenseBlock, MapBlock, StructuredPort
+
+    rng = np.random.default_rng(9)
+    lower = StructuredPort(2 * 6 * 6 + 4, [MapBlock(0, 2, 6, 6, 3, 3, 1), DenseBlock(72, 4, 5)], broadcast=(72, 4))
+    stack = RecordPatchStack(lower.inputs, 6, 2, lower_port=lower, seed=2, cells=32, active=3)
+    assert stack.lower == lower.outputs
+    x = rng.normal(size=(1, 5, lower.inputs))
+    t = rng.normal(size=(1, 5, 2))
+    stack.reset()
+    r = stack.observe(x, t, rate=0.0, write=False)
+    base = stack.parameters()
+
+    def loss(params):
+        m = RecordPatchStack.restore(stack.snapshot())
+        m.set_parameters(params)
+        m.reset()
+        return m._slow_loss(x, t, np.zeros((1, m.lower)), np.zeros((1, m.upper.hidden)))
+
+    for key in ("B1", "G1", "b1", "B", "C"):
+        for _ in range(3):
+            idx = tuple(rng.integers(0, s) for s in base[key].shape)
+            up = {k: v.copy() for k, v in base.items()}
+            dn = {k: v.copy() for k, v in base.items()}
+            up[key][idx] += 1e-6
+            dn[key][idx] -= 1e-6
+            fd = (loss(up) - loss(dn)) / 2e-6
+            assert abs(fd - r.delta[key][idx]) < 1e-6 * max(1.0, abs(fd)), key
+    again = RecordPatchStack.restore(stack.snapshot())
+    stack.reset()
+    again.reset()
+    assert np.allclose(stack.imagine(x).output, again.imagine(x).output)
+    stack.reset()
+    assert stack.observe(x, t, rate=0.1).updated

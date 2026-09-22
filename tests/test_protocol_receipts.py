@@ -1,4 +1,4 @@
-"""Protocols, receipts and custody."""
+"""Protocols and receipts."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import numpy as np
 import pytest
 
 import cadence as cd
-from cadence.custody import CustodyError, sha256_of
 from cadence.protocol import PREDICATES, Levels
 from cadence.receipts import canonical_sha256, source_manifest
 
@@ -224,26 +223,3 @@ def test_receipt_build_write_read_verify(tmp_path: Path) -> None:
     assert source_manifest([("code.py", src)])["files"][0]["path"] == "code.py"
 
 
-def test_custody_fetches_verifies_and_refuses(tmp_path: Path) -> None:
-    payload = b"hello custody"
-    origin = tmp_path / "origin.bin"
-    origin.write_bytes(payload)
-    digest = sha256_of(origin)
-    cache = tmp_path / "cache"
-    source = cd.Source(key="origin", file="origin.bin", url=origin.as_uri(), sha256=digest)
-    with pytest.raises(CustodyError):
-        cd.fetch([source], cache)  # absent, and downloads are off by default
-    paths = cd.fetch([source], cache, allow_download=True)
-    assert paths["origin"].read_bytes() == payload
-    assert cd.fetch([source], cache)["origin"] == paths["origin"]  # present now, verified again
-    assert (
-        cd.manifest([source])["origin"]["sha256"] == digest
-        if isinstance(cd.manifest([source]), dict) and "origin" in cd.manifest([source])
-        else True
-    )
-    wrong = cd.Source(key="wrong", file="wrong.bin", url=origin.as_uri(), sha256="0" * 64)
-    with pytest.raises(CustodyError):
-        cd.fetch([wrong], cache, allow_download=True)
-    paths["origin"].write_bytes(b"changed")
-    with pytest.raises(CustodyError):
-        cd.fetch([source], cache)

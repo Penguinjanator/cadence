@@ -16,17 +16,21 @@ broader research goal.
   store inside the patch. By day an observation is written once; by night the
   slow weights learn from the store's own dreams (`sleep`).
 
-Everything else composes these two through ports.
+Everything else composes these two through ports. The [belief patch](belief.md)
+is the composition toward a learned world model: a transition under action, a
+repair of the belief by iteration with the store read inside it, and private
+imagination; its input port reads grids through [maps](record-patch.md#maps-a-structured-input-port).
 
 ## Start here
 
 1. [Quickstarts: three kinds of brains](quickstart.md): a record patch that learns a stream and sleeps, a settling brain that decides, a temporal patch that plans.
 2. [Architecture and integration](architecture.md): state, ports, repair and the scope of each component.
-3. [The record patch](record-patch.md): one-shot records, categorical ports, a store narrower than its port, two patches in depth, acquisition in two phases.
-4. [Temporal learning](temporal.md): observed paths, persistent context, local detuning and isolated imagination.
-5. [Private planning](planning.md) and [learn, act and observe](interaction.md): repair continuous controls under the learned model, end to end.
-6. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
-7. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
+3. [The record patch](record-patch.md): one-shot records, categorical ports, a store narrower than its port, maps at the port, two patches in depth, acquisition in two phases.
+4. [The belief patch](belief.md): a transition under action, evidence repair by iteration, the store inside the repair, imagination that consumes no observation.
+5. [Temporal learning](temporal.md): observed paths, persistent context, local detuning and isolated imagination.
+6. [Private planning](planning.md) and [learn, act and observe](interaction.md): repair continuous controls under the learned model, end to end.
+7. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
+8. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
 
 [Task design](task-design.md), [common missteps](missteps.md) and
 [scaling](scaling.md) say how to validate observations, actions, learning and

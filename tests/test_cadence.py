@@ -145,20 +145,3 @@ def test_receipt_round_trip_and_tamper_detection(tmp_path: Path) -> None:
     assert not ok and "source" in message
 
 
-def test_custody_refuses_unpinned_files(tmp_path: Path) -> None:
-    data = tmp_path / "connectome.csv"
-    data.write_text("a,b\n")
-    good = cd.Source(
-        "connectome",
-        "connectome.csv",
-        "https://example.invalid/connectome.csv",
-        cd.custody.sha256_of(data),
-    )
-    assert cd.fetch([good], tmp_path)["connectome"] == data
-    bad = cd.Source(
-        "connectome", "connectome.csv", "https://example.invalid/connectome.csv", "0" * 64
-    )
-    with pytest.raises(cd.custody.CustodyError):
-        cd.fetch([bad], tmp_path)
-    with pytest.raises(cd.custody.CustodyError):
-        cd.fetch([cd.Source("x", "missing.csv", "https://example.invalid/x", "0" * 64)], tmp_path)

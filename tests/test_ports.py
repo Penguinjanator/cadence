@@ -106,3 +106,50 @@ def test_the_adjoint_through_a_map_block_matches_finite_differences_and_survives
     net.reset()
     assert np.allclose(m.imagine(x).output, net.imagine(x).output)
     assert m.hidden == port.outputs
+
+
+def test_broadcast_channels_reach_every_position_and_keep_the_three_maps_consistent():
+    """With a broadcast slice, a map block's kernel reads the tiled units; the dense
+    equivalent, the transpose and the gradient stay consistent, and the mixed difference
+    over grid and broadcast is nonzero under a nonlinearity."""
+    rng = np.random.default_rng(3)
+    grid = MapBlock(start=0, channels_in=1, height=5, width=5, channels_out=2, kernel=3, stride=2)
+    port = StructuredPort(25 + 3, [grid, DenseBlock(25, 3, 2)], broadcast=(25, 3))
+    w = port.initial(rng)
+    assert w[0].shape == (2, 4, 3, 3)
+    u = rng.normal(size=(2, 3, port.inputs))
+    m = port.dense_matrix(w)
+    assert np.allclose(port.apply(u, w), u @ m.T)
+    v = rng.normal(size=(2, 3, port.outputs))
+    assert np.allclose(port.transpose(v, w), v @ m)
+    g = port.gradient(v, u)
+
+    def f(ws):
+        return float(np.sum(v * port.apply(u, ws)))
+
+    for k, gw in enumerate(g):
+        for _ in range(4):
+            idx = tuple(rng.integers(0, s) for s in gw.shape)
+            up = [x.copy() for x in w]
+            dn = [x.copy() for x in w]
+            up[k][idx] += 1e-6
+            dn[k][idx] -= 1e-6
+            assert abs((f(up) - f(dn)) / 2e-6 - gw[idx]) < 1e-6
+    net = RecordPatchNet(port.inputs, port.outputs, 2, seed=1, cells=32, active=3, port=port)
+    again = RecordPatchNet.restore(net.snapshot())
+    x = rng.normal(size=(1, 4, port.inputs))
+    net.reset()
+    again.reset()
+    assert np.allclose(net.imagine(x).output, again.imagine(x).output)
+
+    def y(scene, action):
+        z = np.zeros((1, 1, port.inputs))
+        z[0, 0, :25] = scene
+        z[0, 0, 25:] = action
+        net.reset()
+        return np.tanh(port.apply(z, net._unpack(net._B))[0, 0])  # the port under its nonlinearity
+
+    s1, s2 = rng.normal(size=25), rng.normal(size=25)
+    a1, a2 = rng.normal(size=3), rng.normal(size=3)
+    mixed = np.abs(y(s1, a1) - y(s1, a2) - y(s2, a1) + y(s2, a2)).max()
+    assert mixed > 1e-6
