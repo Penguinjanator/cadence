@@ -398,6 +398,27 @@ memory that the brain suggests, written as two operations on one patch: the stor
 fast, exact and local; the weights are slow, smooth and general; the night moves
 knowledge from the first to the second.
 
+**When to sleep.** The night pays when the observations are gone and the store is the
+only copy of them. Three of the published examples were run under the day and night
+regime with this class unchanged. The Connect Four value patch, with its school closed
+after one day of 67,399 writes, went from chance to 0.755, 0.768 and 0.772 on the
+held-out sign after one night at 4,096, 16,384 and 65,536 cells; the school reached
+0.785 from the same 263 updates on the outcomes themselves, and stayed one to three
+points ahead at every matched update count. The dawn readout followed what the store
+read at bedtime (0.733 to 0.789), and a second night on the same store added nothing:
+its dreams were what the weights said. The composer, with its corpus closed after one
+day, reached in one night of 3,833 updates what three epochs with the corpus reached in
+11,499 (held-out next-event accuracy of the slow parameters alone 0.826 to 0.852
+against 0.828 to 0.850). In the soft-body world a sleep gene was selected out in every
+run, from 0.37 of the founders to 0.01 to 0.03 of the living, with a higher model error
+than the beings that learn by day: an awake being has the world at every tick, and a
+sleeper trades its actions for second-hand presentations of what its store holds. So:
+a learner with the world present learns by day at a slow rate above zero; a learner
+whose day is over, or whose store holds what nothing will show it again, sleeps. What
+the store reads at bedtime bounds the night; a store that is drowned by the day
+(`record_averaging` for a store written hundreds of times per cell) teaches a drowned
+rule.
+
 ## Two patches in depth
 
 The gate of a record patch sees only the present input. That is enough for a
