@@ -342,6 +342,18 @@ reaches its ceiling with enough data; what the store shows is what one pass of w
 The receipts are `results/e5_records_speaker.json`, `results/e3_scaling.json` and
 `results/baselines.json` of the language work.
 
+One knob at a time from that base (65,536 cells, 32 active, a 320-wide output code, write
+rate 1, one pass), on 200 never-taught combinations: 64 active cells lift the valid share
+from 0.815 to 0.900 and 128 keep it there, 16 fall to 0.595; a write rate of 0.5 in a store
+written once falls to 0.675, since a record then holds half of its residual; 16,384 cells
+fall to 0.655 while 32,768 give 0.870 and 131,072 give 0.860; a second pass of writes gives
+0.850, a fourth 0.795; the output code's width (160, 320, 640) changes nothing; doubling the
+message's or the context's share of the address falls to 0.670 and 0.680, and halving the
+context's share gives 0.825. The rule these numbers give: address with enough active cells
+that neighbours overlap (64 of 65,536 here), write at rate 1 when each reading is written
+once, and keep the token, the cue and the context in balance in the address
+(`results/e8_records_config.json`).
+
 ## Acquisition in two phases: records by day, weights by night
 
 A transformer acquires a world model and a language the same way: a gradient over a
