@@ -73,7 +73,9 @@ class RecordPatchStack:
             if lower_port.inputs != self.inputs:
                 raise ValueError("the lower port reads a different number of inputs")
             if lower is not None and int(lower) != lower_port.outputs:
-                raise ValueError(f"lower must equal the lower port's outputs ({lower_port.outputs})")
+                raise ValueError(
+                    f"lower must equal the lower port's outputs ({lower_port.outputs})"
+                )
             lower = lower_port.outputs
         self.lower = int(hidden if lower is None else lower)
         if self.inputs < 1 or self.lower < 1:
@@ -302,14 +304,23 @@ class RecordPatchStack:
                 upper,
             )
             result.lower_port = (
-                None if meta.get("lower_port") is None else StructuredPort.from_dict(meta["lower_port"])
+                None
+                if meta.get("lower_port") is None
+                else StructuredPort.from_dict(meta["lower_port"])
             )
             if upper.inputs != result.inputs + result.lower:
                 raise ValueError("the upper patch does not read this lower patch")
             packed = (
                 None
                 if result.lower_port is None
-                else (int(sum(int(np.prod(result.lower_port.weight_shape(b))) for b in result.lower_port.blocks)),)
+                else (
+                    int(
+                        sum(
+                            int(np.prod(result.lower_port.weight_shape(b)))
+                            for b in result.lower_port.blocks
+                        )
+                    ),
+                )
             )
             shapes = {
                 "G1": (result.lower, result.inputs) if packed is None else packed,

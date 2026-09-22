@@ -15,7 +15,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 
-from .ports import DenseBlock, MapBlock, StructuredPort
+from .ports import DenseBlock, StructuredPort
 
 
 class TorchPort(torch.nn.Module):
@@ -24,7 +24,9 @@ class TorchPort(torch.nn.Module):
     def __init__(self, port: StructuredPort) -> None:
         super().__init__()
         self.port = port
-        self.weights = torch.nn.ParameterList([torch.nn.Parameter(torch.zeros(port.weight_shape(b))) for b in port.blocks])
+        self.weights = torch.nn.ParameterList(
+            [torch.nn.Parameter(torch.zeros(port.weight_shape(b))) for b in port.blocks]
+        )
 
     def forward(self, u: torch.Tensor) -> torch.Tensor:  # (N, inputs) -> (N, outputs)
         parts = []
@@ -53,11 +55,30 @@ class TorchPort(torch.nn.Module):
 
 
 class TorchBelief(torch.nn.Module):
-    def __init__(self, port: StructuredPort, actions: int, belief: int, outputs: int, *, iterations: int = 2, damping: float = 0.5, record_width: int = 64) -> None:
+    def __init__(
+        self,
+        port: StructuredPort,
+        actions: int,
+        belief: int,
+        outputs: int,
+        *,
+        iterations: int = 2,
+        damping: float = 0.5,
+        record_width: int = 64,
+    ) -> None:
         super().__init__()
         self.port = port
-        self.encoded, self.actions, self.belief, self.outputs = port.outputs, int(actions), int(belief), int(outputs)
-        self.iterations, self.damping, self.record_width = int(iterations), float(damping), int(record_width)
+        self.encoded, self.actions, self.belief, self.outputs = (
+            port.outputs,
+            int(actions),
+            int(belief),
+            int(outputs),
+        )
+        self.iterations, self.damping, self.record_width = (
+            int(iterations),
+            float(damping),
+            int(record_width),
+        )
         za = self.belief + self.actions
         fi = self.belief + self.encoded + self.belief + self.record_width + 1
         dt = torch.get_default_dtype()
@@ -85,13 +106,24 @@ class TorchBelief(torch.nn.Module):
             z = (1.0 - self.damping) * z + self.damping * torch.tanh(u @ self.F.T + self.f_b)
         return z
 
-    def forward(self, observations: torch.Tensor | None, actions: torch.Tensor, state: torch.Tensor | None = None, reads: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
-        """``(N, T, inputs)`` observations (None to imagine), ``(N, T, actions)`` -> beliefs, slow outputs.
+    def forward(
+        self,
+        observations: torch.Tensor | None,
+        actions: torch.Tensor,
+        state: torch.Tensor | None = None,
+        reads: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """``(N, T, inputs)`` observations (None to imagine) and ``(N, T, actions)`` give the
+        beliefs and the slow outputs.
 
         ``reads`` supplies the store's coded read per moment ``(N, T, record_width)``; absent,
         the read is zero (a store that holds nothing yet)."""
         n, t = actions.shape[:2]
-        z = torch.zeros(n, self.belief, dtype=actions.dtype, device=actions.device) if state is None else state
+        z = (
+            torch.zeros(n, self.belief, dtype=actions.dtype, device=actions.device)
+            if state is None
+            else state
+        )
         zs, ys = [], []
         for k in range(t):
             p = self.expect(z, actions[:, k])
@@ -99,14 +131,21 @@ class TorchBelief(torch.nn.Module):
                 z = p
             else:
                 e = torch.tanh(self.E(observations[:, k]) + self.e_b)
-                read = torch.zeros(n, self.record_width, dtype=z.dtype, device=z.device) if reads is None else reads[:, k]
+                read = (
+                    torch.zeros(n, self.record_width, dtype=z.dtype, device=z.device)
+                    if reads is None
+                    else reads[:, k]
+                )
                 z = self.repair(e, p, read)
             zs.append(z)
             ys.append(z @ self.C.T + self.c)
         return torch.stack(zs, dim=1), torch.stack(ys, dim=1)
 
     def export(self) -> dict[str, np.ndarray]:
-        out = {k: getattr(self, k).detach().cpu().double().numpy() for k in ("e_b", "T", "t_b", "G", "g_b", "F", "f_b", "C", "c")}
+        out = {
+            k: getattr(self, k).detach().cpu().double().numpy()
+            for k in ("e_b", "T", "t_b", "G", "g_b", "F", "f_b", "C", "c")
+        }
         out["E"] = self.E.packed()
         return out
 

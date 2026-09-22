@@ -9,10 +9,10 @@ observation, the transition's expectation and the record store together. Scene a
 meet inside that map. An imagined moment is the transition alone under a declared action,
 with the store read at the expected belief and nothing observed; imagination never writes.
 
-    p[t]        = g * z[t-1] + (1 - g) * tanh(T [z[t-1]; a[t-1]] + t_b),  g = sigmoid(G [z; a] + g_b)
-    e[t]        = tanh(port(o[t]) + e_b)                                   the encoded evidence
-    z(0)        = p[t]
-    m(k)        = read(code([e[t], z(k)]))                                 the store, a coded residual
+    p[t]    = g * z[t-1] + (1 - g) * tanh(T [z[t-1]; a[t-1]] + t_b),  g = sigmoid(G [z; a] + g_b)
+    e[t]    = tanh(port(o[t]) + e_b)                                   the encoded evidence
+    z(0)    = p[t]
+    m(k)    = read(code([e[t], z(k)]))                                 the store, a coded residual
     z(k+1)      = (1 - alpha) z(k) + alpha tanh(F [z(k); e[t]; p[t]; m(k); 1] + f_b)
     y[t]        = C z(K) + c + decode(m(K))
 
@@ -41,7 +41,11 @@ _PARAMETERS = ("E", "e_b", "T", "t_b", "G", "g_b", "F", "f_b", "C", "c")
 
 
 def _integer(name: str, value: Any, low: int) -> int:
-    if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)) or int(value) < low:
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, (int, np.integer))
+        or int(value) < low
+    ):
         raise ValueError(f"{name} must be an integer >= {low}")
     return int(value)
 
@@ -112,7 +116,9 @@ class BeliefPatch:
             raise ValueError("damping lies in (0, 1]")
         self.damping = float(damping)
         self.record_width = _integer("record_width", record_width, 1)
-        self.set_output_precision(np.ones(self.outputs) if output_precision is None else output_precision)
+        self.set_output_precision(
+            np.ones(self.outputs) if output_precision is None else output_precision
+        )
         rng = np.random.default_rng(seed)
         za = self.belief + self.actions
         self._E = np.concatenate([w.ravel() for w in observation.initial(rng, 1.0)])
@@ -128,7 +134,16 @@ class BeliefPatch:
         self._c = np.zeros(self.outputs)
         signs = rng.integers(0, 2, (self.outputs, self.record_width))
         self._output_code = (2.0 * signs - 1.0) / np.sqrt(self.record_width)
-        self.records = Records(self.encoded + self.belief, {"y": self.record_width}, cells=cells, active=active, rate=record_rate, habituation=habituation, bias=record_bias, seed=seed)
+        self.records = Records(
+            self.encoded + self.belief,
+            {"y": self.record_width},
+            cells=cells,
+            active=active,
+            rate=record_rate,
+            habituation=habituation,
+            bias=record_bias,
+            seed=seed,
+        )
         self._input_norm = 1.0
         self._state: np.ndarray | None = None
         self.updates = 0
@@ -207,10 +222,18 @@ class BeliefPatch:
         residual = np.linalg.norm(zs[-1] - zs[-2], axis=-1) if len(zs) > 1 else np.zeros(n)
         return {"z": z, "zs": zs, "hs": hs, "us": us, "read": m, "code": code, "residual": residual}
 
-    def _forward(self, observations: np.ndarray | None, actions: np.ndarray, boundary: np.ndarray, observed: np.ndarray) -> dict[str, Any]:
+    def _forward(
+        self,
+        observations: np.ndarray | None,
+        actions: np.ndarray,
+        boundary: np.ndarray,
+        observed: np.ndarray,
+    ) -> dict[str, Any]:
         n, t = actions.shape[:2]
         z = boundary
-        record: dict[str, list] = {k: [] for k in ("expect", "e", "e_pre", "repair", "y", "read", "code")}
+        record: dict[str, list] = {
+            k: [] for k in ("expect", "e", "e_pre", "repair", "y", "read", "code")
+        }
         for k in range(t):
             ex = self._expect(z, actions[:, k])
             if observations is not None and observed[k]:
@@ -221,7 +244,15 @@ class BeliefPatch:
             z = rep["z"]
             read = rep["read"] @ self._output_code.T
             y = z @ self._C.T + self._c + read
-            for key, value in (("expect", ex), ("e", e), ("e_pre", e_pre), ("repair", rep), ("y", y), ("read", read), ("code", rep["code"])):
+            for key, value in (
+                ("expect", ex),
+                ("e", e),
+                ("e_pre", e_pre),
+                ("repair", rep),
+                ("y", y),
+                ("read", read),
+                ("code", rep["code"]),
+            ):
                 record[key].append(value)
         return record
 
@@ -251,8 +282,14 @@ class BeliefPatch:
         else:
             o = np.asarray(observations, dtype=float)
             if o.shape != (n, t, self.inputs) or not np.isfinite(o).all():
-                raise ValueError(f"observations must be a finite (batch, time, {self.inputs}) array")
-            mask = np.ones(t, dtype=bool) if observed is None else np.asarray(observed, dtype=bool).reshape(t)
+                raise ValueError(
+                    f"observations must be a finite (batch, time, {self.inputs}) array"
+                )
+            mask = (
+                np.ones(t, dtype=bool)
+                if observed is None
+                else np.asarray(observed, dtype=bool).reshape(t)
+            )
         return o, a, mask
 
     def _boundary(self, n: int, state: np.ndarray | None) -> np.ndarray:
@@ -264,7 +301,9 @@ class BeliefPatch:
             raise ValueError("state must match (batch, belief); reset when streams change")
         return value.copy()
 
-    def assimilate(self, observations: np.ndarray, actions: np.ndarray, observed: np.ndarray | None = None) -> BeliefPath:
+    def assimilate(
+        self, observations: np.ndarray, actions: np.ndarray, observed: np.ndarray | None = None
+    ) -> BeliefPath:
         """Advance the belief through observed moments: the executed action, then the evidence.
         Nothing is learned or written; the final belief becomes the live state."""
         o, a, mask = self._check(observations, actions, observed)
@@ -280,7 +319,16 @@ class BeliefPatch:
         record = self._forward(None, a, self._boundary(len(a), state), mask)
         return self._path(record, None)
 
-    def observe(self, observations: np.ndarray, actions: np.ndarray, target: np.ndarray, *, observed: np.ndarray | None = None, rate: float = 1.0, write: bool = True) -> BeliefObservation:
+    def observe(
+        self,
+        observations: np.ndarray,
+        actions: np.ndarray,
+        target: np.ndarray,
+        *,
+        observed: np.ndarray | None = None,
+        rate: float = 1.0,
+        write: bool = True,
+    ) -> BeliefObservation:
         """Learn one chunk of witnessed moments and write their outcomes into the store."""
         o, a, mask = self._check(observations, actions, observed)
         y = np.asarray(target, dtype=float)
@@ -310,7 +358,14 @@ class BeliefPatch:
         self._state = None
 
     # ------------------------------------------------------------------ learning
-    def _adjoint(self, o: np.ndarray, a: np.ndarray, boundary: np.ndarray, record: dict[str, list], target: np.ndarray) -> dict[str, np.ndarray]:
+    def _adjoint(
+        self,
+        o: np.ndarray,
+        a: np.ndarray,
+        boundary: np.ndarray,
+        record: dict[str, list],
+        target: np.ndarray,
+    ) -> dict[str, np.ndarray]:
         n, t = a.shape[:2]
         alpha = self.damping
         delta = {k: np.zeros_like(getattr(self, "_" + k)) for k in _PARAMETERS}
@@ -324,7 +379,7 @@ class BeliefPatch:
             delta["C"] += dy.T @ rep["z"]
             delta["c"] += dy.sum(axis=0)
             dz = dy @ self._C + dz_next
-            e, p = record["e"][k], ex["p"]
+            e = record["e"][k]
             de = np.zeros((n, self.encoded))
             dp = np.zeros((n, self.belief))
             for j in range(len(rep["hs"]) - 1, -1, -1):
@@ -360,7 +415,8 @@ class BeliefPatch:
         return delta
 
     def _write(self, record: dict[str, list], target: np.ndarray) -> int:
-        """Write the slow readout's residual, coded, at the final reading of each observed moment."""
+        """Write the slow readout's residual, coded, at the final reading of each observed
+        moment."""
         written = 0
         t = len(record["y"])
         for k in range(t):
@@ -375,7 +431,9 @@ class BeliefPatch:
             codes = self.records.code(readings, valued=False)[0]
             residual = (target[:, k] - (record["y"][k] - record["read"][k])) @ self._output_code
             for row in range(len(codes)):
-                written += self.records.write(np.stack((codes[row], codes[row])), {"y": residual[row]})
+                written += self.records.write(
+                    np.stack((codes[row], codes[row])), {"y": residual[row]}
+                )
         return written
 
     # ------------------------------------------------------------------ custody
@@ -392,7 +450,14 @@ class BeliefPatch:
             "records": self.records.to_dict(),
             "updates": self.updates,
         }
-        out = {**self.parameters(), "output_precision": self._output_precision.copy(), "output_code": self._output_code.copy(), "input_norm": np.array(self._input_norm), "state": np.empty((0, self.belief)) if self._state is None else self._state.copy(), "meta": np.array(json.dumps(meta, sort_keys=True))}
+        out = {
+            **self.parameters(),
+            "output_precision": self._output_precision.copy(),
+            "output_code": self._output_code.copy(),
+            "input_norm": np.array(self._input_norm),
+            "state": np.empty((0, self.belief)) if self._state is None else self._state.copy(),
+            "meta": np.array(json.dumps(meta, sort_keys=True)),
+        }
         for key, value in self.records.state().items():
             out["records_" + key] = value
         return out
@@ -404,11 +469,32 @@ class BeliefPatch:
             if meta.get("format") != FORMAT:
                 raise ValueError("unsupported belief checkpoint")
             config = dict(meta["records"])
-            result = cls(StructuredPort.from_dict(meta["port"]), meta["actions"], meta["belief"], meta["outputs"], iterations=meta["iterations"], damping=meta["damping"], cells=config["cells"], active=config["active"], record_rate=config["rate"], record_width=meta["record_width"], habituation=config["habituation"], record_bias=config["bias"], output_precision=snapshot["output_precision"], seed=config["seed"])
+            result = cls(
+                StructuredPort.from_dict(meta["port"]),
+                meta["actions"],
+                meta["belief"],
+                meta["outputs"],
+                iterations=meta["iterations"],
+                damping=meta["damping"],
+                cells=config["cells"],
+                active=config["active"],
+                record_rate=config["rate"],
+                record_width=meta["record_width"],
+                habituation=config["habituation"],
+                record_bias=config["bias"],
+                output_precision=snapshot["output_precision"],
+                seed=config["seed"],
+            )
             result.set_parameters({k: snapshot[k] for k in _PARAMETERS})
             result._output_code = np.asarray(snapshot["output_code"], dtype=float).copy()
             result._input_norm = float(np.asarray(snapshot["input_norm"]))
-            result.records.load_state({k[len("records_") :]: np.asarray(v) for k, v in snapshot.items() if k.startswith("records_")})
+            result.records.load_state(
+                {
+                    k[len("records_") :]: np.asarray(v)
+                    for k, v in snapshot.items()
+                    if k.startswith("records_")
+                }
+            )
             state = np.asarray(snapshot["state"])
             result._state = None if not len(state) else state.astype(float).copy()
             result.updates = int(meta["updates"])

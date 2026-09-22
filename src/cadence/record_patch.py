@@ -301,7 +301,11 @@ class RecordPatchNet:
         return self._pack(self.port.gradient(v, inputs))
 
     def _shapes(self) -> dict[str, tuple[int, ...]]:
-        port_shape = None if self.port is None else (int(sum(int(np.prod(self.port.weight_shape(b))) for b in self.port.blocks)),)
+        port_shape = (
+            None
+            if self.port is None
+            else (int(sum(int(np.prod(self.port.weight_shape(b))) for b in self.port.blocks)),)
+        )
         return {
             "G": (self.hidden, self.inputs) if port_shape is None else port_shape,
             "g": (self.hidden,),

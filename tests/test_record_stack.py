@@ -81,7 +81,9 @@ def test_a_structured_lower_port_learns_and_survives_custody():
     from cadence.ports import DenseBlock, MapBlock, StructuredPort
 
     rng = np.random.default_rng(9)
-    lower = StructuredPort(2 * 6 * 6 + 4, [MapBlock(0, 2, 6, 6, 3, 3, 1), DenseBlock(72, 4, 5)], broadcast=(72, 4))
+    lower = StructuredPort(
+        2 * 6 * 6 + 4, [MapBlock(0, 2, 6, 6, 3, 3, 1), DenseBlock(72, 4, 5)], broadcast=(72, 4)
+    )
     stack = RecordPatchStack(lower.inputs, 6, 2, lower_port=lower, seed=2, cells=32, active=3)
     assert stack.lower == lower.outputs
     x = rng.normal(size=(1, 5, lower.inputs))

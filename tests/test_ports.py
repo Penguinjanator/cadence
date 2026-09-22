@@ -62,7 +62,15 @@ def test_a_port_of_dense_blocks_is_the_plain_record_patch():
     rng = np.random.default_rng(2)
     inputs, hidden, outputs = 9, 6, 2
     plain = RecordPatchNet(inputs, hidden, outputs, seed=3, cells=64, active=4)
-    ported = RecordPatchNet(inputs, hidden, outputs, seed=3, cells=64, active=4, port=StructuredPort(inputs, [DenseBlock(0, inputs, hidden)]))
+    ported = RecordPatchNet(
+        inputs,
+        hidden,
+        outputs,
+        seed=3,
+        cells=64,
+        active=4,
+        port=StructuredPort(inputs, [DenseBlock(0, inputs, hidden)]),
+    )
     pp = plain.parameters()
     ported.set_parameters({**pp, "B": pp["B"].ravel(), "G": pp["G"].ravel()})
     x = rng.normal(size=(2, 7, inputs))

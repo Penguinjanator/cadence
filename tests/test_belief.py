@@ -10,8 +10,21 @@ from cadence.ports import DenseBlock, MapBlock, StructuredPort
 
 
 def _patch(seed: int = 0, iterations: int = 2) -> BeliefPatch:
-    port = StructuredPort(1 * 5 * 5 + 3, [MapBlock(0, 1, 5, 5, 2, 3, 2), DenseBlock(25, 3, 4)], broadcast=(25, 3))
-    return BeliefPatch(port, actions=3, belief=6, outputs=4, iterations=iterations, damping=0.5, cells=64, active=4, record_width=8, seed=seed)
+    port = StructuredPort(
+        1 * 5 * 5 + 3, [MapBlock(0, 1, 5, 5, 2, 3, 2), DenseBlock(25, 3, 4)], broadcast=(25, 3)
+    )
+    return BeliefPatch(
+        port,
+        actions=3,
+        belief=6,
+        outputs=4,
+        iterations=iterations,
+        damping=0.5,
+        cells=64,
+        active=4,
+        record_width=8,
+        seed=seed,
+    )
 
 
 def _data(rng, n=2, t=4, patch=None):
@@ -125,7 +138,15 @@ def test_the_torch_backend_matches_the_library_forward_and_gradient():
     params = patch.parameters()
     params["C"] = rng.normal(size=params["C"].shape) * 0.3
     patch.set_parameters(params)
-    twin = TorchBelief(patch.port, patch.actions, patch.belief, patch.outputs, iterations=patch.iterations, damping=patch.damping, record_width=patch.record_width)
+    twin = TorchBelief(
+        patch.port,
+        patch.actions,
+        patch.belief,
+        patch.outputs,
+        iterations=patch.iterations,
+        damping=patch.damping,
+        record_width=patch.record_width,
+    )
     twin.load(patch.parameters())
     o, a, y = _data(rng, patch=patch)
     patch.reset()
@@ -139,12 +160,22 @@ def test_the_torch_backend_matches_the_library_forward_and_gradient():
     assert np.allclose(twin.C.grad.numpy(), result.delta["C"], atol=1e-9)
     assert np.allclose(twin.F.grad.numpy(), result.delta["F"], atol=1e-9)
     assert np.allclose(twin.T.grad.numpy(), result.delta["T"], atol=1e-9)
-    assert np.allclose(np.concatenate([w.grad.numpy().ravel() for w in twin.E.weights]), result.delta["E"], atol=1e-9)
+    assert np.allclose(
+        np.concatenate([w.grad.numpy().ravel() for w in twin.E.weights]),
+        result.delta["E"],
+        atol=1e-9,
+    )
     again = BeliefPatch.restore(patch.snapshot())
     again.set_parameters(twin.export())
     again.reset()
     assert np.allclose(again.assimilate(o, a).slow_output, result.path.slow_output)
-    imagined = twin(None, torch.as_tensor(a), state=torch.as_tensor(result.path.final_state))[1].detach().numpy()
+    imagined = (
+        twin(None, torch.as_tensor(a), state=torch.as_tensor(result.path.final_state))[1]
+        .detach()
+        .numpy()
+    )
     patch.reset()
-    assert np.allclose(imagined, patch.imagine(a, state=result.path.final_state).slow_output, atol=1e-10)
+    assert np.allclose(
+        imagined, patch.imagine(a, state=result.path.final_state).slow_output, atol=1e-10
+    )
     torch.set_default_dtype(torch.float32)
