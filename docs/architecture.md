@@ -5,18 +5,14 @@ detuning and evolving functional self-reflection. Its base library exposes
 local repair, persistent activity, explicit response protection, private
 imagination and continuous action planning. These are reusable operations
 across applications. Their bounded tests do not establish the full flexibility
-of an animal or human brain. All APIs below ship in version 0.11.0 and need no
-experiment-repository imports.
-
-Install the current package or use the checkout for development:
+of an animal or human brain. The APIs below need no experiment-repository imports.
 
 ```bash
-python -m pip install cadence-net==0.11.0
+python -m pip install cadence-net
 ```
 
-Continuous-input planning and optional metric-conditioned response protection
-require version 0.11.0 or later. Development installs use `pip install -e .`.
-The earlier graph interfaces remain available for existing applications.
+Development installs use `pip install -e .`; pin a release or a commit for reproducible
+work. The graph interfaces of earlier applications stay available.
 
 ## What carries the individual forward
 
@@ -122,5 +118,5 @@ predict and do after disturbances and competing experience.
 Detailed guides: [temporal learning](temporal.md),
 [private continuous-control planning](planning.md), [general creativity and self-reflection](creativity.md),
 [explicit response protection](temporal-memory.md), [action and factual
-memory](actor.md), [existing graph PatchNet](patchnet.md) and
+memory](actor.md), [the graph PatchNet](patchnet.md) and
 [conditional Lean proofs](../lean/README.md).

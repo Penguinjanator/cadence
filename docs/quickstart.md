@@ -1,100 +1,121 @@
-# Quickstart: the existing GenericBrain composition
+# Quickstarts: three kinds of brains
 
-This guide retains the `GenericBrain` interface for existing applications.
-Start with [TemporalPatchNet](temporal.md) and
-[learn, act and observe](interaction.md) for the current temporal core.
+Cadence has two primitives. A **settling patch** finds the state that agrees with what its
+ports hold and with its weights, and learns by the contrast of a free and a nudged settle.
+A **record patch** adds a store that takes an observation in one write and a night in
+which the slow weights learn from the store's own dreams. Every brain below is one of
+these, or a few of them joined by ports. Each snippet runs on NumPy alone.
 
-`GenericBrain` supports **ongoing experience**: the same composed brain
-observes, acts, remembers and learns throughout its life. This interface has
-no training/inference switch or separate model to deploy after learning.
+```bash
+python -m pip install cadence-net
+```
 
-Install from the [README](../README.md#current-library). The complete walkthrough below
-needs only NumPy and Cadence.
+## A patch that learns a stream, remembers in one shot, and sleeps
 
-## One mode, one loop
+The record patch hears a stream of symbols and predicts what follows. By day every
+outcome is written once into its records and the slow weights do not move; at night the
+slow weights take what the store holds, from the store's own completions, with the
+stream closed. Afterwards the weights alone know the rule.
 
-Each `GenericBrain.step` receives the current observation and the outcome of its
-**previous action**, incorporates that experience, and chooses the next action.
-The first call only chooses an action, because no previous outcome exists.
+```python
+import numpy as np
+from cadence import RecordPatchNet
 
-Here a body moves left, stays still or moves right along a line. Its observation
-contains its position and a goal. Reward is the actual reduction in distance
-after the body moves. Halfway through, the goal changes; the same brain continues.
+rng = np.random.default_rng(21)
+net = RecordPatchNet(
+    12, 12, 5, seed=4, cells=2048, active=16, record_rate=1.0, groups=(5,), slowest=8.0
+)
+symbols = rng.integers(12, size=(3, 8))
+heard = np.eye(12)[symbols]
+outcome = np.eye(5)[(symbols + np.roll(symbols, 1, axis=1)) % 5]  # the last two symbols decide
+
+for _ in range(8):  # the day: one write per moment, slow weights at rate zero
+    net.reset()
+    net.observe(heard, outcome, rate=0.0)
+net.reset()
+awake = net.imagine(heard, state=np.zeros((3, 12)))
+assert np.array_equal(awake.output.argmax(-1), outcome.argmax(-1))  # the store recalls
+
+night = net.sleep([heard], passes=240, rate=8.0, backtrack=True)  # dreams, then dawn
+alone = RecordPatchNet.restore(net.snapshot())
+alone.records.tables["y"][:] = 0.0  # the same weights with an empty store
+assert np.array_equal(alone.imagine(heard, state=np.zeros((3, 12))).output.argmax(-1), outcome.argmax(-1))
+print(night)
+```
+
+`observe` writes the residual of the slow readout into the records of each reading;
+`sleep` dreams every cue once, teaches the fixed dreams by `observe(write=False)`, and
+rewrites the store at dawn. Categorical ports (`groups`), batched writes, a store narrower
+than its port and a two-patch stack are in [the record patch guide](record-patch.md).
+
+## A settling brain that decides
+
+A genome names regions and projections; `develop` lays them out as one connectome; a
+`Brain` settles it; a `Learner` over the motor neurons nudges the chosen action and moves
+the synapses on the contrast. Here five senses map to three actions.
 
 ```python
 import numpy as np
 import cadence as cd
+from cadence.regions import cortex, motor_cortex
 
-brain = cd.GenericBrain.build(2, 3, hidden=16, working_memory=True, seed=0)
-moves = np.array([-0.1, 0.0, 0.1])
-position, goal = 0.5, 0.8
-action = brain.step([[position, goal]])
+genome = cd.Genome(
+    regions=(cd.Region("senses", 5), cortex(24), motor_cortex(3, lateral=-0.5)),
+    projections=(
+        cd.Projection("senses", "association", reciprocal=False),
+        cd.Projection("association", "motor"),
+    ),
+)
+connectome = cd.develop(genome, seed=0)
+brain = cd.Brain(connectome, cd.learning_neuron_model())
+senses = list(connectome.populations["senses"])
+learner = cd.Learner(brain, connectome.populations["motor/actions"], cd.LearnerConfig(eta=1.0))
 
-for moment in range(64):
-    previous_distance = abs(goal - position)
-    position = float(np.clip(position + moves[int(action[0])], 0.0, 1.0))
-    reward = previous_distance - abs(goal - position)  # actual consequence
-
-    if moment == 31:
-        goal = 0.2
-    action = brain.step([[position, goal]], reward=[reward])
-
-assert brain.basal_ganglia.updates == 64
-print("Observed and learned from 64 action outcomes.")
+drive = np.zeros((5, connectome.n))
+drive[np.arange(5), senses] = 1.0
+labels = np.arange(5) % 3  # sense k asks for action k mod 3
+learner.calibrate(drive)  # the gain that puts the free motor activity in its responsive range
+for _ in range(80):
+    learner.step(drive, labels)
+assert learner.accuracy(drive, labels) == 1.0
 ```
 
-The loop makes 64 real transitions and leaves one next action ready to execute.
-It demonstrates the interface; learning a reliable controller requires its own
-curriculum, measurements and controls. The body, goal and reward rule are supplied.
+The free settle is the brain's own answer; `predict` reads the most active motor neuron.
+Regions, ports, records beside a policy head and evolution of the genome are in
+[compose a brain](brain.md), [write a cortex](cortex.md) and [evolve a brain](evolution.md).
 
-The brain retains its policy, critic, associative reward memory and working trace.
-It never needs to enter a different mode to put a learned response to use.
-`GenericBrain` is a starting composition. A [records cortex](memory.md#records) learns the
-consequences of actions and their reward from the same stream, and
-[compose a brain](brain.md) writes one experience step with records beside a policy.
-Learned language needs additional wiring; see [experience-based architectures](experience.md).
+## A temporal patch that learns a consequence and plans
 
-## Keep feedback attached to the right action
-
-| Event | What to do |
-|---|---|
-| First observation | Call `brain.step(observation)`. |
-| Action has executed | Pass its reward with the resulting observation to the next `step`. |
-| Real transition with no reward event | Pass zero, or omit `reward`; learning and eligibility still advance. |
-| Outcome has not arrived | Wait for it. Another `step` would consume the pending action as a zero-reward transition. |
-| Episode ended | Pass `done=[True]` with the next episode's reset observation and the previous action's reward. |
-| Current demonstration | Pass `teacher=[action_index]` for the current observation, alongside any previous-action feedback. |
-
-Observations have shape `(batch, inputs)`: `[[position, goal]]` is one stream.
-Actions, rewards and `done` have one entry per row. Keep each row attached to the
-same stream. For truncation and custom scheduling, see [continuous interaction](continuous.md).
-
-## Continue the same life after saving
+The temporal patch learns how its inputs move its outputs by centered detuning, keeps its
+context between calls, imagines privately, and repairs a continuous action toward a goal
+under its own learned model.
 
 ```python
-path = brain.save("living_brain.npz")
-brain = cd.GenericBrain.load(path)
-assert brain.basal_ganglia.updates == 64
+import numpy as np
+from cadence import TemporalPatchNet
+
+net = TemporalPatchNet(2, 8, 1, seed=151)
+heard = np.array([[[1.0, 0.0]]])
+net.reset()
+learned = net.observe(heard, np.array([[[0.2]]]))
+assert learned.updated
+private = net.imagine(np.zeros((1, 4, 2)))
+assert private.converged
 ```
 
-This preserves learned parameters, memories, random state and the pending action's
-eligibility. Save the environment and issued action separately. After restoring,
-execute that action or receive its actual outcome, then continue the same loop.
-`reset()` clears current activity and pending credit; it is not a mode switch.
+The complete loop, with a body that acts, a plan that is replayed without its goal before
+acceptance, and actual readback repairing the next proposal, is
+[learn, act and observe](interaction.md); protection of chosen responses is
+[response protection](temporal-memory.md).
 
-## One mode, distinct operations
+## Which one
 
-Settling changes neural activity. Real observations, demonstrations and rewards
-supply the signals that change memories and synapses. The local learning rule
-holds weights fixed during its free and nudged phases, then applies an update.
-Those are numerical operations inside the ongoing loop.
+| You want | Start with |
+| --- | --- |
+| to learn from a stream of events, keep single facts, and generalise overnight | the record patch |
+| a decision or evaluation over a fixed set of inputs, an explicit graph, a policy that learns from reward | the settling brain |
+| continuous observations and actions with a learned dynamics model and private planning | the temporal patch |
 
-Calling a raw `Brain.settle` does not automatically teach its weights. Imagined
-outcomes are predictions; keep them out of the records of observed evidence. Custom
-cortexes use the same [local learning primitives](learning.md) and own their feedback
-timing; [write a cortex](cortex.md) describes their ports and heads.
-
-For a frozen measurement, use a separate saved copy. Independent-sample helpers
-such as `fit` and `predict` do not toggle the live brain's operating mode.
-Check residuals before claiming equilibrium, and observed task outcomes before
-claiming a capability. See [concepts and limits](concepts.md).
+Older compositions (`GenericBrain`, `PatchNet`, content memory, rehearsal, sequence
+readback) are kept for the experiments that used them; see the
+[index](index.md#kept-for-existing-experiments).

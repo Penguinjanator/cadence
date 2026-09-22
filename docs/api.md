@@ -14,7 +14,7 @@ APIs follow the current temporal interfaces below.
 - `observe(inputs, target, *, beta=0.01, rate=0.1, backtrack=False)` repairs observed teaching
   paths and returns `TemporalObservation`. Only valid free activity becomes live;
   detuned activity does not become an observed record.
-  The optional `backtrack` argument is a development addition after 0.11.0:
+  The optional `backtrack` argument:
   accept parameters only after a decreasing causal replay from the original
   boundary. See [temporal learning](temporal.md#checking-a-learning-step).
 - `advance(inputs)` carries a free path into live context. `imagine(inputs, *,
@@ -50,7 +50,7 @@ fields are described in the [planning guide](planning.md).
 
 ## RecordPatchNet (`cadence.record_patch`)
 
-A development addition after 0.11.0. See the [record patch guide](record-patch.md).
+See the [record patch guide](record-patch.md).
 
 - `RecordPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None,
   cells=4096, active=32, record_rate=0.5, habituation=1e-5, record_bias=0.3,
@@ -114,7 +114,7 @@ A development addition after 0.11.0. See the [record patch guide](record-patch.m
 
 ## Experimental fixed connectivity (`cadence.experimental`)
 
-This namespace is a development addition after 0.11.0 and is not exported at
+This namespace is not exported at
 the top level. `PartitionedTemporalPatchNet(inputs, hidden, outputs, *,
 masks=None, **options)` accepts the temporal constructor options and boolean
 `A`/`B`/`C` masks; omitted masks allow all entries. It preserves the existing
@@ -795,18 +795,6 @@ absolute `delta`. For a one-stream agent it is that transition's signed,
 centered and capped learning signal. It is a global modulation signal; spatial
 neurotransmitter diffusion is not part of this model.
 
-
-## Deprecated names (`cadence.legacy`)
-
-Every name of cadence 0.8 resolves for one release to its current counterpart with a
-`DeprecationWarning` naming the replacement: top-level names such as `Wiring`,
-`Settlement`, `GradedRule`, `FastSeams`, `Constitution`, `grow` and `learning_rule`; the
-module paths `cadence.wiring`, `cadence.rules`, `cadence.settle`, `cadence.constitution` and
-`cadence.brains`; keyword arguments such as `clamp=`, `sets=`, `edge_scale=`, `engine=`,
-`trainable_overlaps=` and `symmetric=`; and attributes and methods such as `.sets`,
-`.edges`, `.wiring`, `.rule`, `.repair`, `clamp_levels()` and `Trace.clamp()`. The module
-docstring lists the full map. `cadence.legacy.OLD_NAMES` maps old names to
-`(module, name)`.
 
 ## Bounded memory and rehearsal
 

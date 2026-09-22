@@ -6,40 +6,52 @@ skills, retain useful experience, imagine alternatives and repair its behavior
 across applications. The guides distinguish implemented operations from that
 broader research goal.
 
-## Start with the current architecture
+## Two primitives
 
-1. [Architecture and integration](architecture.md): state, ports, repair and the scope of each component.
-2. [Temporal learning](temporal.md): observed paths, persistent context, local detuning and isolated imagination.
-3. [The record patch](record-patch.md): a gated linear context with one-shot records inside the patch; the detuning contrast equals its adjoint gradient at linear cost.
-4. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
-5. [Private planning](planning.md): repair continuous controls under the same learned model.
-6. [Learn, act and observe](interaction.md): an executable end-to-end interaction example.
+- The **settling patch**: bounded local state, ports, an equilibrium under
+  constraints, learned by the contrast of a free and a nudged settle. Built from a
+  genome of regions (`Genome`, `develop`, `Brain`, `Learner`) or as one temporal
+  patch (`TemporalPatchNet`).
+- The **record patch** (`RecordPatchNet`): a gated linear context with a record
+  store inside the patch. By day an observation is written once; by night the
+  slow weights learn from the store's own dreams (`sleep`).
+
+Everything else composes these two through ports.
+
+## Start here
+
+1. [Quickstarts: three kinds of brains](quickstart.md): a record patch that learns a stream and sleeps, a settling brain that decides, a temporal patch that plans.
+2. [Architecture and integration](architecture.md): state, ports, repair and the scope of each component.
+3. [The record patch](record-patch.md): one-shot records, categorical ports, a store narrower than its port, two patches in depth, acquisition in two phases.
+4. [Temporal learning](temporal.md): observed paths, persistent context, local detuning and isolated imagination.
+5. [Private planning](planning.md) and [learn, act and observe](interaction.md): repair continuous controls under the learned model, end to end.
+6. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
 7. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
 
-[Task design](task-design.md) and [common missteps](missteps.md) explain how to
-validate observations, actions, learning and retained behavior before scaling.
-The [API reference](api.md) lists current interfaces and supported compatibility
-components. [Scaling experiments](scaling.md) separate experience, training
-exposure and capacity. These guides target version 0.11.0; optional parameter
-backtracking, [the record patch](record-patch.md) and
-[experimental fixed connectivity](partitioned.md) are
-explicitly marked as development additions. Fixed connectivity supplies routing
-constraints for comparisons; it does not establish learned specialization.
+[Task design](task-design.md), [common missteps](missteps.md) and
+[scaling](scaling.md) say how to validate observations, actions, learning and
+retained behavior before scaling. The [API reference](api.md) lists every
+interface. [Experimental fixed connectivity](partitioned.md) supplies routing
+constraints for comparisons, not learned specialization.
 
-[EquilibriumActor](actor.md) provides a separate fixed linear-model example of
-factual inference, compressed past context and joint future-state/action repair.
-Its exact compression assumptions do not extend to arbitrary changing models.
+## Building settling brains from regions
 
-## Existing graph and composition APIs
+[Write a cortex](cortex.md), [compose a brain](brain.md), [evolve a brain](evolution.md),
+[local learning](learning.md), [records and memory](memory.md), [reward](reward.md)
+and [concepts](concepts.md): regions, projections, the neuron model, the learner, the
+records cortex and reward-weighted learning.
 
-These supported interfaces have distinct state and learning contracts; they
-are not automatically wired into the temporal architecture.
+[EquilibriumActor](actor.md) is a separate fixed linear-model example of factual
+inference, compressed past context and joint future-state/action repair; its exact
+compression assumptions do not extend to arbitrary changing models.
 
-- [PatchNet](patchnet.md): continuous observations and isolated graph dynamics.
-- [Quickstart](quickstart.md), [experience](experience.md) and [continuous interaction](continuous.md): the earlier `GenericBrain` composition.
-- [Write a cortex](cortex.md), [compose a brain](brain.md) and [evolve a brain](evolution.md): graph construction and supplied-fitness search.
-- [Concepts](concepts.md), [local learning](learning.md), [records and memory](memory.md) and [reward](reward.md): the corresponding graph components.
-- [Task recipes](tasks.md), [rehearsal](replay.md), [content memory](content_memory.md) and [sequence readback](sequence.md): optional application compositions.
+## Kept for existing experiments
+
+These compositions have their own state and learning contracts and are kept for
+the experiments that used them: [PatchNet](patchnet.md), the `GenericBrain` loop in
+[continuous interaction](continuous.md) and [experience](experience.md),
+[task recipes](tasks.md), [rehearsal](replay.md), [content memory](content_memory.md)
+and [sequence readback](sequence.md).
 
 ## Measurement and mathematical scope
 

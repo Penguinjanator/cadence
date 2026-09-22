@@ -41,29 +41,22 @@ defines these goals and their behavioral tests.
 
 ## Current library
 
-Version **0.11.0** brings learning and continuous action planning into the same
-temporal model. It requires Python 3.11+ and NumPy:
+Two primitives, composed through ports. The library requires Python 3.11+ and NumPy:
 
 ```bash
-python -m pip install cadence-net==0.11.0
+python -m pip install cadence-net
 ```
 
-| Component | What it supplies |
+| Primitive | What it supplies |
 | --- | --- |
-| [TemporalPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md) | Local repair of observed paths, centered detuning, persistent context, private imagination and complete checkpoints. |
-| [Private planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md) | Bounded continuous action proposals under the learned model; accepted steps must improve predictions replayed without goal nudging. |
-| [RecordPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) | Development addition on `main`: a gated linear context with one-shot records inside the patch. Its detuning contrast equals its adjoint gradient, at linear cost per moment. Categorical ports, batched record writes, a two-patch stack (`RecordPatchStack`) and a store narrower than its port came from the language work; one pass of record writes, with no gradient, gives a small grammar for 0.8 of its never-taught combinations. |
-| [TemporalMemory](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) | Explicit protection of selected local responses; an optional local readout metric improves conditioning without retaining a replay corpus. |
-| [EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md) | A separate fixed linear-body component with exact Gaussian history compression and factual readback. |
+| The settling patch: [TemporalPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md), or a [brain of regions](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md) | Local repair of observed paths, persistent context, private imagination, [continuous planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md) and [protected responses](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md); learning by the contrast of a free and a nudged settle. |
+| The record patch: [RecordPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) | A gated linear context with a record store inside the patch: an observation is written once by day, and by night the slow weights learn from the store's own dreams (`sleep`), with nothing outside the patch consulted. Categorical ports, batched writes, a store narrower than its port and a two-patch stack. One pass of writes, with no gradient, gives a small grammar for 0.8 of its never-taught combinations; one night lifts the slow weights alone to 1.0. |
 
-Development checkouts also expose [experimental fixed connectivity](https://github.com/muellerberndt/cadence/blob/main/docs/partitioned.md)
-under `cadence.experimental`. It supplies routing constraints for controlled
-comparisons, not learned specialization, and is not part of the 0.11.0 release.
-
-Start with the executable [learn, act and observe guide](https://github.com/muellerberndt/cadence/blob/main/docs/interaction.md).
-It acquires an action/consequence relation, plans privately, executes bounded
-actions and uses actual readback to repair its next proposal. The
-[architecture guide](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) maps each capability to its API and current scope.
+Start with the [quickstarts](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md):
+a record patch that learns a stream and sleeps, a settling brain that decides, and a
+temporal patch that learns a consequence and plans. The
+[architecture guide](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) maps each capability to its API and current scope;
+[EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md) is a separate fixed linear-body component with exact Gaussian history compression.
 
 **Imagined continuations are isolated.** Branches use the learned network
 without changing live activity, parameters or factual bookkeeping. Controlled
@@ -107,11 +100,10 @@ contains 169 checked conditional theorems about the mathematical components
 and their limits. It does not certify the complete Python implementation or
 prove intelligence. The paper identifies assumptions and reproducible evidence.
 
-The existing [PatchNet graph interface](https://github.com/muellerberndt/cadence/blob/main/docs/patchnet.md),
-`Brain`, `Learner`, `GenericBrain`, `Records` and circuit APIs remain supported
-for existing applications. Their optional memories and construction helpers
-are distinct compositions, not required parts of the temporal core.
-[API reference](https://github.com/muellerberndt/cadence/blob/main/docs/api.md).
+The [PatchNet graph interface](https://github.com/muellerberndt/cadence/blob/main/docs/patchnet.md),
+`GenericBrain`, content memory, rehearsal and sequence readback are kept for the
+experiments that used them; they are distinct compositions, not parts of the two
+primitives. [API reference](https://github.com/muellerberndt/cadence/blob/main/docs/api.md).
 
 Development installs use `python -m pip install -e .`.
 [Optional backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md)

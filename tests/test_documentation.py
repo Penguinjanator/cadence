@@ -37,11 +37,7 @@ def test_introductory_python_snippets(page, tmp_path, monkeypatch):
     ):
         exec(compile(code, f"{page}:python-block-{index + 1}", "exec"), namespace)
     if page == "docs/quickstart.md":
-        brain = namespace["brain"]
-        assert brain.basal_ganglia.updates == 64
-        assert brain.hippocampus.writes == 64
-        assert brain.basal_ganglia._pending is not None
-        assert (tmp_path / "living_brain.npz").exists()
+        assert namespace["night"]["updates"] > 200 and namespace["learner"].updates == 80
 
 
 def test_local_documentation_links_resolve():

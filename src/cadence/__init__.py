@@ -152,11 +152,3 @@ __all__ = [
 ]
 
 __version__ = "0.11.0"
-
-from . import legacy as _legacy  # noqa: E402  (the 0.8 names, deprecated)
-
-_legacy.install()
-
-
-def __getattr__(name: str) -> object:
-    return _legacy.old_name(name)
