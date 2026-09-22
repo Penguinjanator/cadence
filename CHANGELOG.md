@@ -1,18 +1,47 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 (2026-09-22)
 
-- The README and the documentation index link the public
-  [examples repository](https://github.com/muellerberndt/cadence-examples); the application
-  sentences name its four examples, and the creativity guide states where the
-  published composer stands against the standard for original creation.
-- Documentation from the composer work: how to diagnose a record store
-  (cells in use, top-cell share, code overlap per block, frozen against
-  online scores), what a write rate stores, boundary readings, running a
-  trained record patch outside Python with a parity test, the scale of a
-  `Records` reading, seven new rows in the missteps guide, and a section on
-  recall being by content and not by position (code overlap 0.91 where the
-  stream recurs, 0.16 at the same place after a phase shift).
+The record patch: a temporal patch with a gated linear context and a record
+store inside it. An observation is written once by day; by night the slow
+weights learn from the store's own dreams.
+
+- `RecordPatchNet` is a temporal patch with a gated linear context and a
+  `Records` store inside it. Its energy is quadratic, so the centered
+  detuning contrast equals the adjoint gradient of the same loss; `observe`
+  computes it by one backward scan and `detune` solves the two detuned
+  equilibria as the acceptance check. Records store what the slow readout got
+  wrong at each reading. Complete checkpoints, private branches and causal
+  parameter admission are available; planning and protected responses are
+  not.
+- `dream(inputs)` is the store's completion of a cue from rest, as a target.
+  `sleep(cues, *, passes=1, rate=1.0, backtrack=False, dawn_passes=2)`
+  splits acquisition into two phases: by day each observation is written once
+  into the records with the slow weights at rate zero; by night the slow
+  weights learn the store's own completions of the day's cues, with the corpus
+  closed; at dawn the dreams are written back so the store holds only what
+  the slow weights did not take. On the guide's small grammar the slow weights
+  alone go from 0.815 to 1.00 of never-taught combinations after one night.
+  Sleep replays the store's errors as well as its recalls; the guide measures
+  the recombination and teacher arms and states when to sleep from three
+  examples under the day and night regime.
+- Categorical ports: `RecordPatchNet(groups=(n1, n2, ...))` ends the slow
+  readout in one softmax per group, learned by cross-entropy; a record holds
+  the bounded residual `onehot - softmax`.
+- `Records.write_batch(codes, targets)` and `RecordPatchNet(record_writes="batch")`
+  write a call's readings at once, each cell moving by the mean of the moves its
+  writers would have made alone: one writer reproduces `write`, agreeing writers
+  do not overshoot. Nets with categorical ports or batch writes save checkpoint
+  format `cadence-record-patch/3`; default nets keep format 2.
+- `RecordPatchNet(record_width=w)` makes the cells hold a fixed random `w`-column
+  sign code of the residual, decoded by the transpose, so a store can be
+  narrower than its port. The guide records the measured cost of the code and
+  of cells and passes for exact recitation.
+- `RecordPatchStack` puts a context patch below a complete `RecordPatchNet`;
+  the upper adjoint scan hands its input gradient to the lower scan, so the
+  upper gate can tell a subject from a later noun. Gradient parity with finite
+  differences holds in both patches, with a linear readout and with categorical
+  ports. `observe` returns `StackObservation`.
 - The record patch's reading gives its two blocks unit variance per unit:
   the input block is scaled by `sqrt(n) / s` with `s` the running rms norm of
   witnessed inputs. On the composer stream this spreads the code from 2,225
@@ -25,30 +54,51 @@
   default and exposed on `RecordPatchNet` as `record_averaging` and
   `record_homeostasis`; `Records.state` includes `count`, `usage`, `boost`
   and `drive_scale`.
-- `RecordPatchNet` is a temporal patch with a gated linear context and a
-  `Records` store inside it. Its energy is quadratic, so the centered
-  detuning contrast equals the adjoint gradient of the same loss; `observe`
-  computes it by one backward scan and `detune` solves the two detuned
-  equilibria as the acceptance check. Records store what the slow readout got
-  wrong at each reading. Complete checkpoints, private branches and causal
-  parameter admission are available; planning and protected responses are
-  not yet.
 - `Records.witness`, `Records.state` and `Records.load_state` expose the
   running mean and the learned tables for checkpoints.
+- Optional `TemporalPatchNet.observe(..., backtrack=True)` accepts a parameter
+  step only after target-free replay of the observed path improves its loss
+  from the original hidden boundary. It reports trial costs and accepted rate;
+  rejection preserves learned parameters and update counts. Fixed-rate behavior
+  is the default. This is a current-observation check, not a retention or
+  generalization guarantee.
 - `cadence.experimental.PartitionedTemporalPatchNet` adds explicit fixed
   connectivity masks over the existing temporal solver, with masked detuning,
   complete checkpoints and private planning. Supplied routing is an experimental
   control, not learned specialization. `TemporalMemory.observe` rejects this
   subclass before mutation; the default temporal model is unchanged.
-- Optional `TemporalPatchNet.observe(..., backtrack=True)` accepts a parameter
-  step only after target-free replay of the observed path improves its loss
-  from the original hidden boundary. It reports trial costs and accepted rate;
-  rejection preserves learned parameters and update counts. Fixed-rate behavior
-  remains the default. This is a current-observation check, not a retention or
-  generalization guarantee.
+- Removed: `cadence.legacy` and the 0.8 names it installed at import, kept as
+  deprecated aliases for one release since 0.9.0. Code that used them takes the
+  current names from the API reference.
+- The README and the documentation index present two primitives, the settling
+  patch and the record patch, and one quickstart page with three brains: a
+  record patch that learns a stream, remembers in one shot and sleeps; a
+  settling brain that decides; a temporal patch that learns a consequence and
+  plans. Version narration in the guides is replaced by plain statements; the
+  compatibility compositions are listed as kept for the experiments that used
+  them. The API reference states the return types of `EquilibriumActor`,
+  `TemporalMemory`, `RecordPatchNet.readback` and `RecordPatchStack.observe`.
+- The record patch guide covers categorical ports, batch writes, store sizing,
+  the two-patch stack and a grammar from records alone. Documentation from the
+  composer work: how to diagnose a record store (cells in use, top-cell share,
+  code overlap per block, frozen against online scores), what a write rate
+  stores, boundary readings, running a trained record patch outside Python
+  with a parity test, the scale of a `Records` reading, seven new rows in the
+  missteps guide, and a section on recall being by content and not by position
+  (code overlap 0.91 where the stream recurs, 0.16 at the same place after a
+  phase shift).
 - Scaling and task-design guidance separates unique experience, repeated
   training, model width and temporal scope, and distinguishes actual sensory
   feedback from carrying a model's predicted state.
+- The paper is a PDF at the repository root (`cadence-paper.pdf`), linked from
+  the README. The README and the documentation index link the public
+  [examples repository](https://github.com/muellerberndt/cadence-examples); the
+  application sentences name its four examples, and the creativity guide states
+  where the published composer stands against the standard for original
+  creation.
+- The wheel-only CI job runs the record patch and fixed-connectivity guides in
+  addition to the eight earlier pages; its quickstart check follows the new
+  quickstart.
 
 ## 0.11.0 (2026-09-20)
 

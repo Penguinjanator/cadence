@@ -54,7 +54,8 @@ See the [record patch guide](record-patch.md).
 
 - `RecordPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None,
   cells=4096, active=32, record_rate=0.5, habituation=1e-5, record_bias=0.3,
-  slowest=128.0, record_averaging=False, record_homeostasis=0.0)` creates a
+  slowest=128.0, record_averaging=False, record_homeostasis=0.0, groups=None,
+  record_writes="sequential", record_width=None)` creates a
   gated linear context with a `Records` store over the reading
   `[u * sqrt(n) / s, r * h]`, both blocks of unit variance per unit (`s` is the
   running rms norm of witnessed inputs). `record_averaging` and
@@ -69,7 +70,9 @@ See the [record patch guide](record-patch.md).
   slowest=128.0, groups=None, **upper)` puts a context patch of width `lower`
   below a `RecordPatchNet` that reads `[u, r1 * h1]`; `observe`, `imagine`
   (`state` is the pair of contexts), `advance`, `reset`, `parameters`,
-  `snapshot` and `restore` as for one patch.
+  `snapshot` and `restore` as for one patch. `observe` returns
+  `StackObservation`: `updated`, `reason`, the upper patch's `prediction`,
+  `delta`, `initial_loss`, `final_loss`, `accepted_rate` and `writes`.
 - `observe(inputs, target, *, rate=1.0, backtrack=False, write=True)`
   predicts with the records at the start of the call, moves the slow
   parameters against the adjoint gradient of the precision-weighted half
@@ -94,20 +97,24 @@ See the [record patch guide](record-patch.md).
   `contrast`, both hidden paths, energies, iterations, residuals and
   `converged`. It changes nothing.
 - `parameters()` and `set_parameters(mapping)` cover `G`, `g`, `B`, `b`, `C`
-  and `c`; `records` is the `Records` store. `readback()`, `snapshot()`,
-  `restore(snapshot)`, `save(path)` and `load(path)` carry parameters,
-  records, counts and live context.
+  and `c`; `records` is the `Records` store. `readback()` returns
+  `RecordReadback`: `state`, `updates`, `writes`, `parameter_revision`,
+  `state_parameter_revision` and `record_entries`, read-only and never
+  admitted as teaching data by itself. `snapshot()`, `restore(snapshot)`,
+  `save(path)` and `load(path)` carry parameters, records, counts and live
+  context.
 
 ## TemporalMemory (`cadence.temporal_memory`)
 
 - `TemporalMemory(*, relative_tolerance=1e-12)` creates explicit local response
   constraints. `protect(net, inputs, *, state=None)` admits the current free
-  response of a caller-selected query, without targets or network mutation.
+  response of a caller-selected query, without targets or network mutation,
+  and returns `ConstraintReport`: `ranks`, `bytes` and `maximum_residual`.
 - `observe(net, inputs, target, *, beta=0.01, rate=0.1,
   readout_damping=None)` stages protected learning atomically. Positive finite
   readout damping selects the local metric and causal acceptance check described
   in the [memory guide](temporal-memory.md); `None` retains ordinary projection.
-- `report()` describes basis ranks and counted storage. `snapshot()` and
+- `report()` returns the same `ConstraintReport` for the current bases. `snapshot()` and
   `restore(snapshot)` preserve bases and parameter binding. Save the net and
   its memory together. Lower-level `project(before, proposed)` requires the
   caller's explicit transaction and is documented in the source.
@@ -131,8 +138,16 @@ Restore with the subclass's `restore`/`load` to preserve mask enforcement.
 ## EquilibriumActor (`cadence.actor`)
 
 `BodyModel` and `EquilibriumActor` provide fixed linear-body planning with a
-Gaussian compressed past. `admit` records actual readings/executed actions;
-`plan` privately proposes an action toward a supplied goal.
+Gaussian compressed past. `admit(position, *, identifier, executed_action=None)`
+records an actual reading as an `ObservationRecord` (`identifier`, `position`);
+identifiers enforce ordering, not authenticity. `plan(*, horizon=None,
+goal=None)` privately proposes an action toward a supplied goal and returns
+`ActorPlan`: the boundary, covariance, states, actions, readings, seams, cost
+terms, residual, minimum pivot, message and coefficient bytes, block
+factorizations, goal, model binding and the observation it starts from.
+`readback()` returns `ActorReadback`: the last record, mean, covariance,
+residual, minimum pivot, model binding, admitted count, marginalizations and
+`numeric_persistent_bytes`.
 `numeric_persistent_bytes()` counts the retained array, scalar, identifier and
 hash payload, excluding Python objects and serialized archives; the guide states
 that accounting and its scope. Their state, covariance, checkpoint and

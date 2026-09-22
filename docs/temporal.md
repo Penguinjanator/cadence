@@ -189,7 +189,7 @@ storage, excluding arrays, Hessian blocks and numerical-library workspace.
 
 ## Checking a learning step
 
-On `main` after the 0.11.0 release, `observe(..., backtrack=True)` checks
+From release 0.12.0, `observe(..., backtrack=True)` checks
 the proposed parameter change against the actual teaching path. Converged
 positive and negative phases alone do not ensure that a finite parameter step
 improves the model. A good direction can overshoot.
@@ -208,7 +208,7 @@ number of trials can exceed the replay count. Rejection returns
 `no_decreasing_parameter_step`, preserves parameters, revisions and update
 count, and carries only the original valid free activity. Failed phases keep
 their distinct failure reason. With backtracking, rate zero cannot commit.
-The default fixed-rate behavior remains compatible with 0.11.0.
+The fixed-rate behavior of 0.11.0 is the default.
 
 This check improves the current observed objective only. It does not establish
 generalization, protect earlier skills, choose important experiences or supply

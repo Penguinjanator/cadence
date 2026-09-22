@@ -38,7 +38,7 @@ jobs:
               page = Path(name).read_text(encoding="utf-8")
               code = "\n\n".join(re.findall(r"```python\n(.*?)```", page, re.S))
               if name.endswith("quickstart.md"):
-                  code += "\nassert brain.basal_ganglia.updates == 64\n"
+                  code += "\nassert night['updates'] > 200 and learner.updates == 80\n"
               with tempfile.TemporaryDirectory() as directory:
                   subprocess.run([sys.executable, "-c", code], cwd=directory, check=True)
           PY

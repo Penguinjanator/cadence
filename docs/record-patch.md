@@ -2,8 +2,8 @@
 
 `RecordPatchNet` is a temporal patch whose context is linear and gated and
 whose memory of particular readings is a record store inside the patch. The
-nonlinearity sits at the ports. It is a development addition on `main` after
-0.11.0; pin a commit when reproducing an experiment.
+nonlinearity sits at the ports. It is part of the library from release 0.12.0;
+pin a release or a commit when reproducing an experiment.
 
 For inputs `u[t]`, context `h[t]` and outputs `y[t]`:
 
