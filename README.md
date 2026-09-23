@@ -12,7 +12,9 @@ Cadence's goal is a continuing learning system with the flexibility of animal
 and human problem solving: acquiring skills from experience, retaining useful
 knowledge, imagining alternatives and creating solutions across domains.
 The mission is to find the smallest persistent state and local update rule
-that can support these abilities. General intelligence is the research goal;
+that can support these abilities. The building block stays as simple as possible,
+like in nature; every part of a brain answers with a settled state of that one
+rule; and where a choice appears, evolution across lives is preferred to design. General intelligence is the research goal;
 the current library establishes bounded learning, memory and control results.
 
 The organizing idea comes from Observer Patch Holography: bounded,
