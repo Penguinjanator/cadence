@@ -298,6 +298,7 @@ export class BrainScan {
     this.fieldBuffer = gl.createFramebuffer();
     this.fieldTexture = gl.createTexture();
     this.fieldSize = [0, 0];
+    this.sized = false;
   }
 
   _uploadAtlas(resized) {
@@ -553,8 +554,9 @@ export class BrainScan {
     if (!this.enabled) return this._drawFallback();
     const gl = this.gl, r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
     const width = Math.max(1, Math.round(r.width * dpr)), height = Math.max(1, Math.round(r.height * dpr));
-    if (this.canvas.width !== width || this.canvas.height !== height) {
-      this.canvas.width = width; this.canvas.height = height; this.dirty = true;
+    // A viewer built on a canvas another viewer already sized must still allocate its own targets.
+    if (!this.sized || this.canvas.width !== width || this.canvas.height !== height) {
+      this.canvas.width = width; this.canvas.height = height; this.dirty = true; this.sized = true;
       if (this.fitted) this._frame();
       this._target(this.cache, this.cacheTexture, width, height, false);
       this.fieldSize = [Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2))];

@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- The brain viewer allocates its render targets on its first draw even when the
+  canvas was already sized by an earlier viewer: a page that built a second
+  `BrainScan` on the same canvas drew its tissue field into an unallocated
+  buffer and the view filled with one colour. Pages that swap brains should
+  call `setAtlas` on the viewer they have; either way now draws.
 - `evolve` selects over any genome: a `Genome` grows by `develop` and mutates as
   before; any other genome, a dict of a governor's thresholds, a port topology,
   a patch's sizes, takes its own `mutate(genome, rng)` and an optional

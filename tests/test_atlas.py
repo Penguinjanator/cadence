@@ -146,3 +146,13 @@ def test_a_shared_anatomical_frame_is_kept_as_given() -> None:
     assert np.isclose(span[0] / span[1], 11 / 20, atol=1e-3)  # the aspect is kept
     with pytest.raises(ValueError):
         build_atlas(connectome, positions={"*": given[:5]})
+
+
+def test_the_viewer_allocates_its_targets_on_its_first_draw() -> None:
+    # A page that builds a second viewer on a canvas the first one already sized, or swaps
+    # brains with setAtlas, must still get its cache and tissue-field buffers: the guard is
+    # the instance's own flag, not the canvas size.
+    script = brain_scan_script()
+    assert "this.sized = false;" in script
+    assert "if (!this.sized || this.canvas.width !== width || this.canvas.height !== height)" in script
+    assert "this.sized = true;" in script
