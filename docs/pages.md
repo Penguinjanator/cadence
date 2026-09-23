@@ -32,11 +32,15 @@ probability proportional to their absolute weight, when a page cannot draw them 
 
 ## The renderer
 
-`cd.brain_scan_script()` is the source of `brain_scan.js`, an ES module with no
-dependencies. Inline it in a page (drop the `export` keywords) or serve it as a file.
+`cd.brain_scan_script()` is the source of `brain_scan.js`, the patch-net visualizer every
+Cadence page shares: an ES module with no dependencies. Inline it in a page (drop the
+`export` keywords) or serve it as a file. It has two styles, `style: "scan"` (the default,
+the traditional view) and `style: "brain"` (the net wrapped into a transparent brain), the
+same API in both, and a page switches between them at any time.
 
 ```javascript
-const scan = new BrainScan(canvas, ATLAS, { labels: labelsDiv, strip: stripCanvas });
+const scan = new BrainScan(canvas, ATLAS, { labels: labelsDiv, strip: stripCanvas, style: "brain" });
+scan.setStyle("scan");       // switch the style; the state, the camera and the traces carry over
 scan.reset(activation);      // a new stimulus: the next step measures change from here
 scan.step(activation);       // after every settling step: activation per neuron ({draw: false} defers the frame)
 scan.set(activation);        // show a state without measuring change
@@ -49,7 +53,9 @@ scan.screen(i); scan.toScreen(x, y);     // CSS pixels, for a page's own overlay
 playFrames(scan, FRAMES, { fps: 30 });   // replay quantised recorded steps
 ```
 
-What it draws, as a scan: tissue in each region's colour whose brightness is the activation
+### The scan style
+
+`style: "scan"` draws tissue in each region's colour whose brightness is the activation
 (the field of every neuron, so a region reads as one glowing organ); a hot glow where neurons
 changed in the last steps, on a scan colour map from violet through magenta and orange to
 white, fading with `heatDecay`; synapses that light up when their presynaptic neuron just
@@ -60,6 +66,48 @@ whole brain on top. `mode` selects the brightness: `activity`, `potential` or `c
 Brains with more synapses than `particleBudget` (300,000) draw particles for a uniform
 sample of them; every synapse is still rasterised. Scroll zooms, drag pans, hover inspects.
 WebGL2 draws it; without it, a Canvas2D fallback draws the neurons.
+
+### The brain style
+
+`style: "brain"` wraps the same net into the volume of one stylised animal brain, in three
+dimensions: two smooth lobed hemispheres, a cerebellum behind and below, a short stem, one
+generic brain for every net, drawn as a translucent shell with a soft rim light, viewed from
+the side at a slight angle, turning slowly on its own. Every region is assigned a lobe by
+its role and name: sensory regions (retina, senses, evidence) at the back in the occipital
+area; memory regions (records, context) deep and low as the hippocampus; association
+regions (belief, expectation, prediction) across the parietal and frontal cortex; motor
+regions in the frontal strip; a governor, steering, monitor or readback patch at the front
+as the prefrontal area; anything else in the temporal lobe. Regions of one lobe are tiled
+inside it, and each region keeps the atlas's own arrangement (connected neurons near each
+other) on the lobe's two long axes, the third axis scattered, so `setAtlas` keeps working
+and a brain built at run time lands in the same anatomy. `lobeOf(region)` and
+`brainLayout(atlas)` are exported for a page's own overlays.
+
+Neurons are glowing somata: brightness is the activation, a halo the heat, the colour the
+region; the busiest region reads as a dense field of small cells. Every synapse is a cubic
+Bezier ribbon in three dimensions from the presynaptic soma to the postsynaptic one, bowing
+outward from the brain's centre (deterministic per synapse from the atlas seed), thin and
+tapering with a bouton at its end. At rest the ribbons are very dark (`restAlpha`, 0.025),
+a faint web. They light up in real time: on a synapse whose presynaptic neuron sends a
+message, a glow runs along the path and a bright pulse with a tail travels along it, the
+brightness by message times weight (relative to the 98th percentile of the weights) and
+fading within a couple of seconds after the last step, so a settling reads as activity
+sweeping from the sensory lobe at the back through belief and records to the motor strip at
+the front, along the true synapses. The strongest synapses come first under `lineBudget`
+(the web, the glow and the boutons) and `particleBudget` (the pulses). Everything is drawn
+additively into a floating-point scene with a bloom pass and a depth fog, so the far side
+of the brain recedes. The 3D positions, the bow of every synapse and the shell mesh are
+uploaded once per atlas or weights change; the vertex shader evaluates the curves, and a
+frame rebuilds nothing.
+
+Drag rotates the brain (shift-drag or a right-button drag pans), scroll zooms, and `fit()`
+frames the whole shell again. `snapshot().view` is the current yaw and pitch; `screen(i)`,
+`screenAll()` and `inspect` project the 3D positions. Options: `restAlpha` for the resting
+web, `bloom` (0.5) for the bloom's gain, `shell: false` hides the shell, `spin: false` stops
+the self-rotation and `spinRate` (0.12 radians per second) sets its speed. `mode`,
+`particles`, `edges` and the budgets mean the same as in the scan style; in either style
+a page feeds `setWeights` with the weights or with their last change, and the ribbons or
+lines follow.
 
 The renderer draws the connectome, the settled regions. The example pages draw the records
 cortex beside the scan with their own component, `records_view.js`: the granule raster with

@@ -121,7 +121,7 @@ def test_frames_from_a_recording_and_the_shipped_renderer() -> None:
     frames = atlas.frames_from_record(records[0])
     assert frames["steps"] == records[0].activation.shape[0]
     script = brain_scan_script()
-    assert "export class BrainScan" in script and "cadence.brain-scan/v2" in script
+    assert "export class BrainScan" in script and "cadence.brain-scan/v3" in script
     page = atlas.page(frames=frames, title="probe")
     assert "<canvas" in page and "cadence.atlas/v1" in page and "BrainScan" in page
 
@@ -156,3 +156,30 @@ def test_the_viewer_allocates_its_targets_on_its_first_draw() -> None:
     assert "this.sized = false;" in script
     assert "if (!this.sized || this.canvas.width !== width || this.canvas.height !== height)" in script
     assert "this.sized = true;" in script
+
+
+def test_the_viewer_ships_the_brain_style_with_its_static_geometry_uploaded_once() -> None:
+    script = brain_scan_script()
+    assert 'style: "scan"' in script  # the default: pages that do not ask keep the scan
+    assert '"brain"' in script and "setStyle(style)" in script
+    for name in (
+        "BRAIN_VERTEX",
+        "BRAIN_FRAGMENT",
+        "function brainLayout",
+        "function edgeBows",
+        "function brainShell",
+        "function lobeOf",
+    ):
+        assert name in script
+    # the lobes every region is assigned to by its role and name
+    for lobe in ("occipital", "hippocampus", "cortex", "motor", "prefrontal", "temporal"):
+        assert f"{lobe}:" in script
+    # the static geometry (the 3D positions, the bow of every synapse, the shell mesh) is
+    # uploaded once per atlas; a frame evaluates the curves in the vertex shader
+    assert "_uploadBrain()" in script and "STATIC_DRAW" in script
+    frame = script[script.index("_drawBrain(width, height, dpr) {") : script.index("_time(t0) {")]
+    for rebuilt in ("_uploadBrain", "brainShell", "edgeBows", "brainLayout", "bufferData"):
+        assert rebuilt not in frame
+    assert "drawArraysInstanced(gl.TRIANGLE_STRIP" in frame
+    for option in ("restAlpha", "bloom", "shell", "spin", "spinRate"):
+        assert f"{option}:" in script

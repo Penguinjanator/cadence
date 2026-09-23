@@ -127,7 +127,7 @@ is the contract of the temporal patch.
 
 ## Examples
 
-Four worked applications live in the [examples repository](https://github.com/muellerberndt/cadence-examples).
+Five worked applications live in the [examples repository](https://github.com/muellerberndt/cadence-examples).
 Each is a static page that runs its brain in the browser with the library's
 arithmetic, with the receipts behind every number it states and a check that
 recomputes them.
@@ -138,6 +138,7 @@ recomputes them.
 | [Connect Four](https://floatingpragma.io/cadence-examples/connect4/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/connect4) | planning: a search over imagined boards reads a value learned by watching a perfect player, and every move is graded by that player | one record patch |
 | [Amen](https://floatingpragma.io/cadence-examples/amen-beats/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/amen) | creation: a composer that starts from silence, hears each half-beat it plays and computes sixteen bars of drums, bass and texture | one record patch |
 | [Patch World](https://floatingpragma.io/cadence-examples/patchworld/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/patchworld) | evolution of bodies and wiring, learning in one life, planning through a learned model, computation priced in mass | two record patches per being, under selection |
+| [The dozing cat](https://floatingpragma.io/cadence-examples/dozing-cat/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/dozing-cat) | a brain that notices its own surprise: a governor patch reads the cortex's readback and decides when to doze, chase and learn; your mouse is the laser dot; the browser brain reproduces the library to 4.8e-12 | one belief patch, a habit, a settling governor patch |
 
 They are application tests, not definitions of the architecture. A result in one
 does not establish transfer to the others. Every example states what is supplied,

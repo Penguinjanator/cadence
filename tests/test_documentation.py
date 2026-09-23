@@ -28,6 +28,7 @@ ROOT = Path(__file__).resolve().parents[1]
         "docs/brain.md",
         "docs/evolution.md",
         "docs/build.md",
+        "docs/belief.md",
     ],
 )
 def test_introductory_python_snippets(page, tmp_path, monkeypatch):

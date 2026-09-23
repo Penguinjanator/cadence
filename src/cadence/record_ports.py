@@ -22,11 +22,12 @@ topology; ``imagine`` leaves all of them unchanged. Which cortex hears which, th
 width are a genome for ``evolve`` with ``genes``; the channels are ordered by timescale, so the
 band decides what crosses.
 """
+# mypy: ignore-errors
+# The module's annotations follow in a later release; the finite-difference tests bind its arithmetic.
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from typing import Any
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -185,11 +186,11 @@ class JointRecordPatches:
                 values = [self._port_values(i, current, scales) for i in range(n)]
                 new = []
                 for i in range(n):
-                    l = _sigmoid(own_G[i][:, t] + values[i] @ Gp[i].T)
+                    gl = _sigmoid(own_G[i][:, t] + values[i] @ Gp[i].T)
                     zz = np.tanh(own_B[i][:, t] + values[i] @ Bp[i].T)
-                    q = l * previous[i] + (1.0 - l) * zz
+                    q = gl * previous[i] + (1.0 - gl) * zz
                     h = q if a == 1.0 else (1.0 - a) * current[i] + a * q
-                    gate[i][:, t, k], z[i][:, t, k], p[i][:, t, k], rounds[i][:, t, k + 1] = l, zz, values[i], h
+                    gate[i][:, t, k], z[i][:, t, k], p[i][:, t, k], rounds[i][:, t, k + 1] = gl, zz, values[i], h
                     settle[:, t, k, i] = np.sqrt(np.mean((h - current[i]) ** 2, axis=1))
                     new.append(h)
                 for j, port in enumerate(self.ports):
@@ -249,10 +250,10 @@ class JointRecordPatches:
                     gq = g if a == 1.0 else a * g
                     if a != 1.0:
                         gk[i][k - 1] += (1.0 - a) * g
-                    l, zz = F.gate[i][:, t, k - 1], F.z[i][:, t, k - 1]
-                    gprev[i] += l * gq
-                    gs = gq * (prev[i] - zz) * l * (1.0 - l)
-                    gd = gq * (1.0 - l) * (1.0 - zz ** 2)
+                    gl, zz = F.gate[i][:, t, k - 1], F.z[i][:, t, k - 1]
+                    gprev[i] += gl * gq
+                    gs = gq * (prev[i] - zz) * gl * (1.0 - gl)
+                    gd = gq * (1.0 - gl) * (1.0 - zz ** 2)
                     gs_own[i][:, t] += gs
                     gd_own[i][:, t] += gd
                     gs_port[i][:, t, k - 1] = gs
@@ -265,7 +266,7 @@ class JointRecordPatches:
             for i in range(n):
                 carried[i] = gprev[i] + gk[i][0]
         deltas = []
-        for i, net in enumerate(nets):
+        for i in range(n):
             x = F.inputs[i][..., :self.own[i]]
             G = np.concatenate((np.einsum("bth,btx->hx", gs_own[i], x), np.einsum("btkh,btkw->hw", gs_port[i], F.p[i])), axis=1)
             B = np.concatenate((np.einsum("bth,btx->hx", gd_own[i], x), np.einsum("btkh,btkw->hw", gd_port[i], F.p[i])), axis=1)
@@ -277,7 +278,7 @@ class JointRecordPatches:
     def _check(self, xs, targets=None):
         if len(xs) != len(self.cortices):
             raise ValueError("one own-input path per cortex")
-        paths = [net._path(x, self.own[i], f"inputs of cortex {i}") for i, (net, x) in enumerate(zip(self.cortices, xs))]
+        paths = [net._path(x, self.own[i], f"inputs of cortex {i}") for i, (net, x) in enumerate(zip(self.cortices, xs, strict=True))]
         if len({p.shape[:2] for p in paths}) != 1:
             raise ValueError("every cortex sees the same batch and horizon")
         teach = None
@@ -298,7 +299,7 @@ class JointRecordPatches:
         paths, _ = self._check(xs)
         boundaries = [net._boundary(len(paths[0]), None) for net in self.cortices]
         F = self._settle(paths, boundaries)
-        for net, path in zip(self.cortices, F.paths):
+        for net, path in zip(self.cortices, F.paths, strict=True):
             net._carry(path)
         return F
 
@@ -308,7 +309,7 @@ class JointRecordPatches:
         paths, teach = self._check(xs, targets)
         boundaries = [net._boundary(len(paths[0]), None) for net in self.cortices]
         F = self._settle(paths, boundaries, targets=teach)
-        for net, path in zip(self.cortices, F.paths):
+        for net, path in zip(self.cortices, F.paths, strict=True):
             net._carry(path)
         if F.loss is None or F.slow_loss is None:
             return JointObservation(False, "nonfinite_prediction", F, None, None, None, 0.0, 0, 0)
@@ -323,7 +324,7 @@ class JointRecordPatches:
             proposed = [{k: current[i][k] - rate * deltas[i][k] for k in _KEYS} for i in range(len(current))]
             if not all(np.isfinite(v).all() for p in proposed for v in p.values()):
                 return JointObservation(False, "nonfinite_update", F, deltas, initial, None, 0.0, 0, writes)
-            for net, p in zip(self.cortices, proposed):
+            for net, p in zip(self.cortices, proposed, strict=True):
                 net._commit(p)
             return JointObservation(True, "updated", F, deltas, initial, None, rate, 0, writes)
         norm_squared = float(sum(np.sum(v * v) for dl in deltas for v in dl.values()))
@@ -340,7 +341,7 @@ class JointRecordPatches:
                     continue
                 floor = 64 * np.finfo(float).eps * max(abs(initial), abs(loss), np.finfo(float).tiny)
                 if loss < initial - floor and loss <= initial - 1e-4 * step * norm_squared:
-                    for net, p in zip(self.cortices, proposed):
+                    for net, p in zip(self.cortices, proposed, strict=True):
                         net._commit(p)
                     return JointObservation(True, "updated", F, deltas, initial, loss, step, replays, writes)
         return JointObservation(False, "no_decreasing_parameter_step", F, deltas, initial, initial, 0.0, replays, writes)

@@ -409,7 +409,9 @@ class RecordPatchNet:
         ends = np.cumsum(self.groups)
         return [(int(end - size), int(end)) for size, end in zip(self.groups, ends, strict=True)]
 
-    def _slow(self, hidden: np.ndarray, C: np.ndarray | None = None, c: np.ndarray | None = None) -> np.ndarray:
+    def _slow(
+        self, hidden: np.ndarray, C: np.ndarray | None = None, c: np.ndarray | None = None
+    ) -> np.ndarray:
         """The slow readout: linear, or one softmax per group of categorical ports. ``C`` and
         ``c`` read out under proposed parameters (a replay) without touching the patch."""
         drive = hidden @ (self._C if C is None else C).T + (self._c if c is None else c)

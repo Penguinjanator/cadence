@@ -169,22 +169,53 @@ See the [record patch guide](record-patch.md).
 
 ## BeliefPatch (`cadence.belief`)
 
+See the [belief patch guide](belief.md).
+
 - `BeliefPatch(observation: StructuredPort, actions, belief, outputs, *, iterations=2, damping=0.5,
   cells=4096, active=32, record_rate=0.5, record_width=64, habituation=1e-5, record_bias=0.3,
-  output_precision=None, seed=0)`.
-- `assimilate(observations, actions, observed=None, *, state=None) -> BeliefPath`: advance the
-  belief through observed moments; nothing learned or written. `imagine(actions, *, state=None)
-  -> BeliefPath`: the transition alone under declared actions, private. `observe(observations,
-  actions, target, *, observed=None, rate=1.0, write=True, state=None) -> BeliefObservation`: one
-  backward scan and the store's writes. `state` starts the moments from a given boundary instead
-  of the live belief; the final belief becomes the live state either way.
+  output_precision=None, seed=0)`. `block_count` is the number of the port's blocks.
+- `assimilate(observations, actions, observed=None, *, state=None, gains=None, probe=False)
+  -> BeliefPath`: advance the belief through observed moments; nothing learned or written.
+  `imagine(actions, *, state=None, gains=None) -> BeliefPath`: the transition alone under
+  declared actions, private. `observe(observations, actions, target=None, *, observed=None,
+  rate=1.0, write=True, state=None, gains=None, loss_weight=None, output_gradient=None,
+  backtrack=False, probe=False) -> BeliefObservation`: one backward scan and the store's
+  writes. `state` starts the moments from a given boundary instead of the live belief; the
+  final belief becomes the live state either way. `observed` masks moments `(time,)` or rows
+  `(batch, time)`; a row that observes nothing keeps its expectation. `gains` `(blocks,)`,
+  `(batch, blocks)` or `(batch, time, blocks)` multiplies each block's encoded evidence before
+  the repair map and the store read see it. `loss_weight` `(time,)` or `(batch, time)` weighs
+  each moment's error, normalized by its sum; a moment of weight zero is neither taught nor
+  written. `output_gradient` `(batch, time, outputs)` replaces `target`: the adjoint of an
+  external loss on the outputs; nothing is written and no loss is reported. `backtrack=True`
+  takes the largest halving of `rate` whose replay of the chunk from the same boundary, with
+  the store as it stands, lowers the loss by the Armijo margin (sixteen halvings at most); it
+  needs a target. `probe=True` computes the residual-alone probe per block.
+- `readback(observations, actions, *, state=None) -> BeliefReadback`: one moment
+  `(batch, inputs)`, `(batch, actions)` before its repair, from the live belief or `state`:
+  `expectation` `(batch, belief)`, `residual_alone` and `surprise` `(batch, blocks)`. Changes
+  nothing.
+- `set_implied_reading(implied, units=None)`: declares the map from the outputs
+  `(batch, outputs)` to the reading each block should give `(batch, inputs)`, channels left
+  `NaN` not compared, and the persistence error of each block's compared channels `(blocks,)`;
+  paths then carry `surprise`. `None` withdraws it. Not part of a snapshot.
 - `BeliefPath`: `belief`, `expectation`, `residual`, `step` (the last repair move per unit, whose
-  norm is `residual`), `output`, `read`, `loss`, `slow_output`, `final_state`.
+  norm is `residual`), `output`, `read`, `loss`, `slow_output`, `final_state`; `evidence`
+  `(batch, time, encoded)`, the encoded evidence after the gains; `code` `(batch, time, cells)`,
+  the store's plain code at the final reading; `gains` `(batch, time, blocks)`, the gains used;
+  `residual_alone` `(batch, time, blocks)`, the repair map's move with one block heard and the
+  store read at zero (with `probe=True`); `surprise` `(batch, time, blocks)`, each block's
+  reading against the reading the previous belief's slow readout implies, in persistence
+  units (with an implied reading declared).
+- `BeliefObservation`: `updated`, `reason`, `path`, `delta`, `initial_loss`, `writes`,
+  `final_loss` (the replayed loss under the admitted parameters), `accepted_rate` (the rate of
+  the step taken, None without a step), `replay_calls`, `gain_gradient` `(batch, time, blocks)`.
 - `reset()`, `state`, `parameters()`, `set_parameters()`, `set_output_precision()`, `records`,
   `snapshot()`, `restore()`, `save()`, `load()`.
 - `cadence.belief_torch.TorchBelief(port, actions, belief, outputs, *, iterations, damping, record_width)`:
-  the slow half on torch; `forward(observations | None, actions, state=None, reads=None)`,
-  `export()`, `load(params)`.
+  the slow half on torch; `forward(observations | None, actions, state=None, reads=None,
+  gains=None, observed=None)`, `export()`, `load(params)`. A gains tensor that requires grad
+  receives the gradient into the gains.
 
 ## TemporalMemory (`cadence.temporal_memory`)
 

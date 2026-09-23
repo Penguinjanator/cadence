@@ -2,8 +2,8 @@
 joint adjoint across the seams, a hub that learns only through its ports, custody and isolation."""
 import numpy as np
 import pytest
-from cadence import RecordPatchNet
-from cadence import JointRecordPatches, Port
+
+from cadence import JointRecordPatches, Port, RecordPatchNet
 from cadence.record_ports import build
 
 
@@ -80,7 +80,7 @@ def test_joint_adjoint_matches_finite_differences(rounds, damping, groups):
                 for sign in (1.0, -1.0):
                     trial = [{k: v.copy() for k, v in p.items()} for p in base]
                     trial[i][name][index] += sign * 1e-6
-                    for net, p in zip(brain.cortices, trial):
+                    for net, p in zip(brain.cortices, trial, strict=True):
                         net.set_parameters(p)
                     brain.reset()
                     losses.append(brain.observe(xs, ts, rate=0.0, write=False).settled.slow_loss)

@@ -10,7 +10,7 @@ meet inside that map. An imagined moment is the transition alone under a declare
 with the store read at the expected belief and nothing observed; imagination never writes.
 
     p[t]    = g * z[t-1] + (1 - g) * tanh(T [z[t-1]; a[t-1]] + t_b),  g = sigmoid(G [z; a] + g_b)
-    e[t]    = tanh(port(o[t]) + e_b)                                   the encoded evidence
+    e[t]    = gain[block] * tanh(port(o[t]) + e_b)                    the evidence, gained per block
     z(0)    = p[t]
     m(k)    = read(code([e[t], z(k)]))                                 the store, a coded residual
     z(k+1)      = (1 - alpha) z(k) + alpha tanh(F [z(k); e[t]; p[t]; m(k); 1] + f_b)
@@ -18,15 +18,18 @@ with the store read at the expected belief and nothing observed; imagination nev
 
 Learning is one backward scan over a chunk through every iteration and the transition; the
 record read is treated as given (no gradient reaches the store), as in the record patch. The
-store holds the residual of the slow readout at the code of the final reading, written once
-per observed moment. Everything private (``imagine``) leaves parameters, records, state and
-counters unchanged and consumes no observation.
+gain of each observation-port block multiplies that block's encoded evidence before the repair
+map and the store read see it, so it acts in every iteration; the scan also returns the
+gradient into each gain. The store holds the residual of the slow readout at the code of the
+final reading, written once per observed moment. Everything private (``imagine``,
+``readback``) leaves parameters, records, state and counters unchanged and consumes no
+observation.
 """
 
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -38,6 +41,20 @@ from .records import Records
 
 FORMAT = "cadence-belief/1"
 _PARAMETERS = ("E", "e_b", "T", "t_b", "G", "g_b", "F", "f_b", "C", "c")
+_HALVINGS = 16
+_RECORD_KEYS = (
+    "expect",
+    "e",
+    "e_raw",
+    "gain",
+    "observed",
+    "repair",
+    "y",
+    "read",
+    "code",
+    "probe",
+    "surprise",
+)
 
 
 def _integer(name: str, value: Any, low: int) -> int:
@@ -57,8 +74,8 @@ def _sigmoid(x: np.ndarray) -> np.ndarray:
 @dataclass(frozen=True)
 class BeliefPath:
     """A detached path: beliefs ``(batch, time, belief)``, the transition's expectations, the
-    residual of the last repair iteration at each moment, and the outputs (slow readout plus
-    the decoded store read)."""
+    residual of the last repair iteration at each moment, the outputs (slow readout plus
+    the decoded store read) and the readback of each moment."""
 
     belief: np.ndarray
     expectation: np.ndarray
@@ -69,6 +86,21 @@ class BeliefPath:
     step: np.ndarray | None = None
     """The last repair iteration's move per belief unit, ``(batch, time, belief)``; its norm
     over the units is ``residual``. Where the belief moved under the evidence."""
+    evidence: np.ndarray | None = None
+    """The encoded evidence the repair and the store read, ``(batch, time, encoded)``: the
+    port's output through ``tanh`` times the block's gain, zero where nothing was observed."""
+    code: np.ndarray | None = None
+    """The store's plain code at the final reading of each moment, ``(batch, time, cells)``:
+    the cells the moment read, and wrote, with their weights."""
+    gains: np.ndarray | None = None
+    """The gain each block's evidence carried into the repair, ``(batch, time, blocks)``."""
+    residual_alone: np.ndarray | None = None
+    """The repair map's move from the expectation with only that block heard and the store
+    read at zero, ``(batch, time, blocks)``; computed with ``probe=True``."""
+    surprise: np.ndarray | None = None
+    """Each block's reading against the reading the previous belief's slow readout implies,
+    a root mean square in the block's persistence units, ``(batch, time, blocks)``; needs
+    ``set_implied_reading``."""
 
     @property
     def slow_output(self) -> np.ndarray:
@@ -80,13 +112,35 @@ class BeliefPath:
 
 
 @dataclass(frozen=True)
+class BeliefReadback:
+    """One moment's readback before its repair: the expectation ``(batch, belief)``, the
+    residual-alone probe per block ``(batch, blocks)`` and the surprise per block
+    ``(batch, blocks)``, None without a declared implied reading. Nothing changes."""
+
+    expectation: np.ndarray
+    residual_alone: np.ndarray
+    surprise: np.ndarray | None
+
+
+@dataclass(frozen=True)
 class BeliefObservation:
+    """One teaching attempt: the path predicted before any write, the adjoint, what changed."""
+
     updated: bool
     reason: str
     path: BeliefPath
     delta: dict[str, np.ndarray]
     initial_loss: float | None
     writes: int
+    final_loss: float | None = None
+    """The chunk's loss replayed under the admitted parameters (``backtrack=True``)."""
+    accepted_rate: float | None = None
+    """The rate of the step taken; None when no step was taken."""
+    replay_calls: int = 0
+    """How many replays the admission ran."""
+    gain_gradient: np.ndarray | None = None
+    """The gradient of the loss into each block's gain per moment, ``(batch, time, blocks)``;
+    a gain shared over moments or streams takes the sum over those axes."""
 
 
 class BeliefPatch:
@@ -111,6 +165,12 @@ class BeliefPatch:
         self.port = observation
         self.inputs = observation.inputs
         self.encoded = observation.outputs
+        self.block_count = len(observation.blocks)
+        offsets = [int(v) for v in observation._offsets]
+        self._block_slices = [slice(offsets[i], offsets[i + 1]) for i in range(self.block_count)]
+        self._unit_block = np.concatenate(
+            [np.full(b.outputs, i, dtype=int) for i, b in enumerate(observation.blocks)]
+        )
         self.actions = _integer("actions", actions, 1)
         self.belief = _integer("belief", belief, 1)
         self.outputs = _integer("outputs", outputs, 1)
@@ -149,6 +209,8 @@ class BeliefPatch:
         )
         self._input_norm = 1.0
         self._state: np.ndarray | None = None
+        self._implied: Callable[[np.ndarray], np.ndarray] | None = None
+        self._units = np.ones(self.block_count)
         self.updates = 0
 
     # ------------------------------------------------------------------ parameters
@@ -161,6 +223,25 @@ class BeliefPatch:
         if value.shape != (self.outputs,) or not np.isfinite(value).all() or np.any(value <= 0):
             raise ValueError("output_precision must be finite and positive, one per output")
         self._output_precision = value.copy()
+
+    def set_implied_reading(
+        self,
+        implied: Callable[[np.ndarray], np.ndarray] | None,
+        units: np.ndarray | None = None,
+    ) -> None:
+        """Declare the map from the outputs ``(batch, outputs)`` to the reading each block
+        should give, ``(batch, inputs)``, and the persistence error of each block's compared
+        channels ``(blocks,)``: the mean squared change of those channels from one moment to
+        the next on a batch of training data. Channels the map leaves ``NaN`` are not
+        compared. Paths then carry ``surprise``; ``None`` withdraws the declaration. The
+        declaration is not part of a snapshot."""
+        if implied is not None and not callable(implied):
+            raise ValueError("implied must be callable or None")
+        value = np.ones(self.block_count) if units is None else np.asarray(units, dtype=float)
+        if value.shape != (self.block_count,) or not np.isfinite(value).all() or np.any(value <= 0):
+            raise ValueError("units must be finite and positive, one per block")
+        self._implied = implied
+        self._units = value.copy()
 
     def parameters(self) -> dict[str, np.ndarray]:
         return {k: getattr(self, "_" + k).copy() for k in _PARAMETERS}
@@ -205,26 +286,67 @@ class BeliefPatch:
         code = self.records.code(self._reading(e, z), valued=False)[0]
         return code @ self.records.tables["y"], code
 
-    def _repair(self, e: np.ndarray, p: np.ndarray, observed: bool) -> dict[str, Any]:
-        """The iterations of one moment; with nothing observed the belief is the expectation."""
-        n = len(p)
-        zs, hs, us, ms = [p], [], [], []
-        flag = np.full((n, 1), 1.0 if observed else 0.0)
+    def _repair(self, e: np.ndarray, p: np.ndarray, observed: np.ndarray) -> dict[str, Any]:
+        """The iterations of one moment; a row with nothing observed keeps the expectation."""
+        zs, hs, us = [p], [], []
         z = p
-        if observed:
+        if observed.any():
+            keep = observed[:, None]
+            flag = keep.astype(float)
             for _ in range(self.iterations):
                 m, _ = self._read(e, z)
                 u = np.concatenate([z, e, p, m, flag], axis=-1)
                 h = np.tanh(u @ self._F.T + self._f_b)
-                z = (1.0 - self.damping) * z + self.damping * h
+                z = np.where(keep, (1.0 - self.damping) * z + self.damping * h, z)
                 zs.append(z)
                 hs.append(h)
                 us.append(u)
-                ms.append(m)
         m, code = self._read(e, z)
         step = zs[-1] - zs[-2] if len(zs) > 1 else np.zeros_like(p)
         residual = np.linalg.norm(step, axis=-1)
-        return {"z": z, "zs": zs, "hs": hs, "us": us, "read": m, "code": code, "residual": residual, "step": step}
+        return {
+            "z": z,
+            "zs": zs,
+            "hs": hs,
+            "us": us,
+            "read": m,
+            "code": code,
+            "residual": residual,
+            "step": step,
+        }
+
+    def _probe(self, e_raw: np.ndarray, p: np.ndarray) -> np.ndarray:
+        """The repair map's move from the expectation with one block's raw evidence alone and
+        the store read at zero, one evaluation of the map per block: ``(batch, blocks)``."""
+        n = len(p)
+        zeros = np.zeros((n, self.record_width))
+        flag = np.ones((n, 1))
+        out = np.zeros((n, self.block_count))
+        for b, sel in enumerate(self._block_slices):
+            alone = np.zeros_like(e_raw)
+            alone[:, sel] = e_raw[:, sel]
+            h = np.tanh(np.concatenate([p, alone, p, zeros, flag], axis=-1) @ self._F.T + self._f_b)
+            out[:, b] = np.linalg.norm(h - p, axis=-1)
+        return out
+
+    def _surprise(self, o: np.ndarray, z_prev: np.ndarray, observed: np.ndarray) -> np.ndarray:
+        """Each block's reading against the reading the previous belief's slow readout implies,
+        a root mean square over the block's compared channels in its persistence units:
+        ``(batch, blocks)``, zero on a row that read nothing."""
+        assert self._implied is not None
+        n = len(o)
+        implied = np.asarray(self._implied(z_prev @ self._C.T + self._c), dtype=float)
+        if implied.shape != (n, self.inputs):
+            raise ValueError(f"the implied reading must be a (batch, {self.inputs}) array")
+        valid = np.isfinite(implied)
+        diff = np.where(valid, implied - o, 0.0)
+        out = np.zeros((n, self.block_count))
+        for b, block in enumerate(self.port.blocks):
+            sel = slice(block.start, block.start + block.inputs)
+            count = valid[:, sel].sum(axis=-1)
+            squared = (diff[:, sel] ** 2).sum(axis=-1)
+            out[:, b] = np.sqrt(squared / np.maximum(count, 1) / self._units[b])
+        return np.asarray(out * observed[:, None])
 
     def _forward(
         self,
@@ -232,47 +354,98 @@ class BeliefPatch:
         actions: np.ndarray,
         boundary: np.ndarray,
         observed: np.ndarray,
+        gains: np.ndarray,
+        *,
+        probe: bool = False,
+        surprise: bool = False,
     ) -> dict[str, Any]:
         n, t = actions.shape[:2]
         z = boundary
-        record: dict[str, list[Any]] = {
-            k: [] for k in ("expect", "e", "e_pre", "repair", "y", "read", "code")
-        }
+        record: dict[str, list[Any]] = {k: [] for k in _RECORD_KEYS}
+        implied = surprise and observations is not None and self._implied is not None
         for k in range(t):
             ex = self._expect(z, actions[:, k])
-            if observations is not None and observed[k]:
-                e, e_pre = self._encode(observations[:, k])
+            row = observed[:, k]
+            if observations is not None and row.any():
+                e_raw, _ = self._encode(observations[:, k])
+                e_raw = e_raw * row[:, None]
             else:
-                e, e_pre = np.zeros((n, self.encoded)), np.zeros((n, self.encoded))
-            rep = self._repair(e, ex["p"], bool(observed[k]))
-            z = rep["z"]
+                e_raw = np.zeros((n, self.encoded))
+            gain = gains[:, k]
+            e = e_raw * gain[:, self._unit_block]
+            rep = self._repair(e, ex["p"], row)
+            probe_k = (
+                self._probe(e_raw, ex["p"]) * row[:, None]
+                if probe and observations is not None
+                else None
+            )
+            surprise_k = (
+                self._surprise(observations[:, k], z, row)
+                if implied and observations is not None
+                else None
+            )
             read = rep["read"] @ self._output_code.T
-            y = z @ self._C.T + self._c + read
+            y = rep["z"] @ self._C.T + self._c + read
             for key, value in (
                 ("expect", ex),
                 ("e", e),
-                ("e_pre", e_pre),
+                ("e_raw", e_raw),
+                ("gain", gain),
+                ("observed", row),
                 ("repair", rep),
                 ("y", y),
                 ("read", read),
                 ("code", rep["code"]),
+                ("probe", probe_k),
+                ("surprise", surprise_k),
             ):
                 record[key].append(value)
+            z = rep["z"]
         return record
 
-    def _path(self, record: dict[str, list[Any]], target: np.ndarray | None) -> BeliefPath:
+    def _path(
+        self,
+        record: dict[str, list[Any]],
+        target: np.ndarray | None,
+        weight: np.ndarray | None = None,
+    ) -> BeliefPath:
         belief = np.stack([r["z"] for r in record["repair"]], axis=1)
         expectation = np.stack([x["p"] for x in record["expect"]], axis=1)
         residual = np.stack([r["residual"] for r in record["repair"]], axis=1)
         step = np.stack([r["step"] for r in record["repair"]], axis=1)
         output = np.stack(record["y"], axis=1)
         read = np.stack(record["read"], axis=1)
-        loss = None if target is None else self._loss(output - read, target)
-        return BeliefPath(belief, expectation, residual, output, read, loss, step)
+        loss = None if target is None else self._loss(output - read, target, weight)
+        return BeliefPath(
+            belief,
+            expectation,
+            residual,
+            output,
+            read,
+            loss,
+            step,
+            evidence=np.stack(record["e"], axis=1),
+            code=np.stack(record["code"], axis=1),
+            gains=np.stack(record["gain"], axis=1),
+            residual_alone=None
+            if record["probe"][0] is None
+            else np.stack(record["probe"], axis=1),
+            surprise=None
+            if record["surprise"][0] is None
+            else np.stack(record["surprise"], axis=1),
+        )
 
-    def _loss(self, slow: np.ndarray, target: np.ndarray) -> float | None:
+    def _loss(
+        self, slow: np.ndarray, target: np.ndarray, weight: np.ndarray | None = None
+    ) -> float | None:
         with np.errstate(over="ignore", invalid="ignore"):
-            value = float(0.5 * np.mean(self._output_precision * (slow - target) ** 2))
+            squared = self._output_precision * (slow - target) ** 2
+            if weight is None:
+                value = float(0.5 * np.mean(squared))
+            else:
+                value = float(
+                    0.5 * np.sum(weight[:, :, None] * squared) / (self.outputs * weight.sum())
+                )
         return value if np.isfinite(value) else None
 
     # ------------------------------------------------------------------ interface
@@ -283,9 +456,11 @@ class BeliefPatch:
         if a.ndim != 3 or a.shape[2] != self.actions or not np.isfinite(a).all():
             raise ValueError(f"actions must be a finite (batch, time, {self.actions}) array")
         n, t = a.shape[:2]
+        if n < 1 or t < 1:
+            raise ValueError("a chunk needs at least one stream and one moment")
         if observations is None:
             o = None
-            mask = np.zeros(t, dtype=bool)
+            mask = np.zeros((n, t), dtype=bool)
         else:
             o = np.asarray(observations, dtype=float)
             if o.shape != (n, t, self.inputs) or not np.isfinite(o).all():
@@ -293,11 +468,45 @@ class BeliefPatch:
                     f"observations must be a finite (batch, time, {self.inputs}) array"
                 )
             mask = (
-                np.ones(t, dtype=bool)
+                np.ones((n, t), dtype=bool)
                 if observed is None
-                else np.asarray(observed, dtype=bool).reshape(t)
+                else self._rows(observed, n, t, "observed", bool)
             )
         return o, a, mask
+
+    @staticmethod
+    def _rows(value: Any, n: int, t: int, name: str, dtype: type) -> np.ndarray:
+        """A per-moment array given as ``(time,)`` or ``(batch, time)``, as ``(batch, time)``."""
+        v = np.asarray(value, dtype=dtype)
+        if v.shape == (n, t):
+            return v.copy()
+        if v.size == t:
+            return np.ascontiguousarray(np.broadcast_to(v.reshape(t), (n, t)))
+        raise ValueError(f"{name} must be a (time,) or (batch, time) array")
+
+    def _gains(self, gains: Any, n: int, t: int) -> np.ndarray:
+        """The gain of each block per moment, as ``(batch, time, blocks)``; ones when none."""
+        b = self.block_count
+        if gains is None:
+            return np.ones((n, t, b))
+        g = np.asarray(gains, dtype=float)
+        if g.shape == (b,):
+            g = np.broadcast_to(g, (n, t, b))
+        elif g.shape == (n, b):
+            g = np.broadcast_to(g[:, None, :], (n, t, b))
+        elif g.shape != (n, t, b):
+            raise ValueError(f"gains must have shape ({b},), (batch, {b}) or (batch, time, {b})")
+        if not np.isfinite(g).all():
+            raise ValueError("gains must be finite")
+        return np.array(g, dtype=float)
+
+    def _weight(self, loss_weight: Any, n: int, t: int) -> np.ndarray | None:
+        if loss_weight is None:
+            return None
+        w = self._rows(loss_weight, n, t, "loss_weight", float)
+        if not np.isfinite(w).all() or np.any(w < 0) or not w.sum() > 0:
+            raise ValueError("loss_weight must be finite and nonnegative with a positive sum")
+        return w
 
     def _boundary(self, n: int, state: np.ndarray | None) -> np.ndarray:
         source = self._state if state is None else state
@@ -309,64 +518,146 @@ class BeliefPatch:
         return value.copy()
 
     def assimilate(
-        self, observations: np.ndarray, actions: np.ndarray, observed: np.ndarray | None = None, *, state: np.ndarray | None = None
+        self,
+        observations: np.ndarray,
+        actions: np.ndarray,
+        observed: np.ndarray | None = None,
+        *,
+        state: np.ndarray | None = None,
+        gains: np.ndarray | None = None,
+        probe: bool = False,
     ) -> BeliefPath:
         """Advance the belief through observed moments: the executed action, then the evidence.
         Nothing is learned or written; the final belief becomes the live state. ``state`` starts
         the moments from a given boundary instead of the live belief (a window that is replayed
-        from the belief that was live at its first moment)."""
+        from the belief that was live at its first moment). ``observed`` masks moments
+        ``(time,)`` or rows ``(batch, time)``; ``gains`` weighs each block's evidence inside the
+        repair; ``probe=True`` computes the residual-alone probe per block."""
         o, a, mask = self._check(observations, actions, observed)
-        record = self._forward(o, a, self._boundary(len(a), state), mask)
+        n, t = a.shape[:2]
+        record = self._forward(
+            o,
+            a,
+            self._boundary(n, state),
+            mask,
+            self._gains(gains, n, t),
+            probe=bool(probe),
+            surprise=True,
+        )
         path = self._path(record, None)
         self._state = path.final_state
         return path
 
-    def imagine(self, actions: np.ndarray, *, state: np.ndarray | None = None) -> BeliefPath:
+    def imagine(
+        self,
+        actions: np.ndarray,
+        *,
+        state: np.ndarray | None = None,
+        gains: np.ndarray | None = None,
+    ) -> BeliefPath:
         """A private continuation under declared actions from the live belief (or ``state``):
-        the transition alone, the store read at the expectation, no observation, no change."""
+        the transition alone, the store read at the expectation, no observation, no change.
+        ``gains`` are carried on the path; with nothing observed they act on nothing."""
         _, a, mask = self._check(None, actions, None)
-        record = self._forward(None, a, self._boundary(len(a), state), mask)
+        n, t = a.shape[:2]
+        record = self._forward(None, a, self._boundary(n, state), mask, self._gains(gains, n, t))
         return self._path(record, None)
+
+    def readback(
+        self, observations: np.ndarray, actions: np.ndarray, *, state: np.ndarray | None = None
+    ) -> BeliefReadback:
+        """One moment's readback before its repair, from the live belief or ``state``: the
+        expectation under ``actions`` ``(batch, actions)``, the residual-alone probe of each
+        block of ``observations`` ``(batch, inputs)`` and, with an implied reading declared,
+        each block's surprise. What a steering patch reads before it sets the moment's gains.
+        Nothing changes."""
+        o = np.asarray(observations, dtype=float)
+        a = np.asarray(actions, dtype=float)
+        if o.ndim != 2 or o.shape[1] != self.inputs or not np.isfinite(o).all():
+            raise ValueError(f"observations must be a finite (batch, {self.inputs}) array")
+        if a.shape != (len(o), self.actions) or not np.isfinite(a).all():
+            raise ValueError(f"actions must be a finite (batch, {self.actions}) array")
+        z = self._boundary(len(o), state)
+        ex = self._expect(z, a)
+        e_raw, _ = self._encode(o)
+        rows = np.ones(len(o), dtype=bool)
+        surprise = None if self._implied is None else self._surprise(o, z, rows)
+        return BeliefReadback(ex["p"], self._probe(e_raw, ex["p"]), surprise)
 
     def observe(
         self,
         observations: np.ndarray,
         actions: np.ndarray,
-        target: np.ndarray,
+        target: np.ndarray | None = None,
         *,
         observed: np.ndarray | None = None,
         rate: float = 1.0,
         write: bool = True,
         state: np.ndarray | None = None,
+        gains: np.ndarray | None = None,
+        loss_weight: np.ndarray | None = None,
+        output_gradient: np.ndarray | None = None,
+        backtrack: bool = False,
+        probe: bool = False,
     ) -> BeliefObservation:
         """Learn one chunk of witnessed moments and write their outcomes into the store. ``state``
         starts the chunk from a given boundary instead of the live belief; the final belief under
-        the chunk becomes the live state either way."""
-        o, a, mask = self._check(observations, actions, observed)
-        y = np.asarray(target, dtype=float)
-        if y.shape != (*a.shape[:2], self.outputs) or not np.isfinite(y).all():
-            raise ValueError("target must be a finite (batch, time, outputs) array")
+        the chunk becomes the live state either way.
+
+        ``loss_weight`` weighs each moment's error, ``(time,)`` or ``(batch, time)``, normalized
+        by its sum; a moment of weight zero is neither taught nor written. ``output_gradient``
+        ``(batch, time, outputs)`` replaces ``target``: the adjoint then carries that gradient of
+        an external loss on the outputs into the parameters and the gains, nothing is written
+        and no loss is reported. With ``backtrack=True`` a step is admitted only after a replay
+        of the chunk from the same boundary, under the proposed parameters and with the store as
+        it stands, lowers the chunk's loss by the Armijo margin, trying up to sixteen halved
+        rates. ``gains`` weighs each block's evidence inside the repair and the gradient into
+        the gains comes back as ``gain_gradient``."""
+        if not isinstance(backtrack, (bool, np.bool_)):
+            raise ValueError("backtrack must be a boolean")
         if not np.isfinite(rate) or rate < 0:
             raise ValueError("rate must be finite and nonnegative")
+        if (target is None) == (output_gradient is None):
+            raise ValueError("observe takes a target or an output_gradient, one of the two")
+        o, a, mask = self._check(observations, actions, observed)
         if o is None:
             raise ValueError("observe needs observations; imagine is the private continuation")
-        boundary = self._boundary(len(a), state)
-        record = self._forward(o, a, boundary, mask)
-        path = self._path(record, y)
+        n, t = a.shape[:2]
+        gain = self._gains(gains, n, t)
+        weight = self._weight(loss_weight, n, t)
+        y = dy = None
+        if target is not None:
+            y = np.asarray(target, dtype=float)
+            if y.shape != (n, t, self.outputs) or not np.isfinite(y).all():
+                raise ValueError("target must be a finite (batch, time, outputs) array")
+        else:
+            dy = np.asarray(output_gradient, dtype=float)
+            if dy.shape != (n, t, self.outputs) or not np.isfinite(dy).all():
+                raise ValueError("output_gradient must be a finite (batch, time, outputs) array")
+            if weight is not None:
+                raise ValueError(
+                    "loss_weight weighs a target's loss; fold it into the output_gradient"
+                )
+            if backtrack:
+                raise ValueError("backtrack needs a target: the admission replays the chunk's loss")
+        boundary = self._boundary(n, state)
+        record = self._forward(o, a, boundary, mask, gain, probe=bool(probe), surprise=True)
+        path = self._path(record, y, weight)
         self._state = path.final_state
-        if path.loss is None:
+        if (y is not None and path.loss is None) or not np.isfinite(path.output).all():
             return BeliefObservation(False, "nonfinite_prediction", path, {}, None, 0)
-        delta = self._adjoint(o, a, boundary, record, y)
-        writes = self._write(record, y) if write else 0
+        delta, dgains = self._adjoint(o, a, boundary, record, y, weight, dy)
         if rate > 0:
-            proposed = {k: getattr(self, "_" + k) - rate * delta[k] for k in _PARAMETERS}
-            if not all(np.isfinite(v).all() for v in proposed.values()):
-                return BeliefObservation(False, "nonfinite_update", path, delta, path.loss, writes)
-            for k, v in proposed.items():
-                setattr(self, "_" + k, v)
-            self.updates += 1
-            return BeliefObservation(True, "updated", path, delta, path.loss, writes)
-        return BeliefObservation(False, "no_step", path, delta, path.loss, writes)
+            admitted = self._admit(
+                o, a, mask, gain, weight, boundary, y, delta, rate, backtrack, path.loss
+            )
+        else:
+            admitted = (False, "no_step", None, None, 0)
+        writes = self._write(record, y, weight) if write and y is not None else 0
+        updated, reason, final, accepted, replays = admitted
+        return BeliefObservation(
+            updated, reason, path, delta, path.loss, writes, final, accepted, replays, dgains
+        )
 
     def reset(self) -> None:
         self._state = None
@@ -378,28 +669,46 @@ class BeliefPatch:
         a: np.ndarray,
         boundary: np.ndarray,
         record: dict[str, list[Any]],
-        target: np.ndarray,
-    ) -> dict[str, np.ndarray]:
+        target: np.ndarray | None,
+        weight: np.ndarray | None = None,
+        output_gradient: np.ndarray | None = None,
+    ) -> tuple[dict[str, np.ndarray], np.ndarray]:
+        """The parameter gradient and the gradient into the gains ``(batch, time, blocks)`` of
+        the weighted loss against ``target``, or of the external loss whose gradient on the
+        outputs is ``output_gradient``."""
         n, t = a.shape[:2]
         alpha = self.damping
         delta = {k: np.zeros_like(getattr(self, "_" + k)) for k in _PARAMETERS}
         block_grads = [np.zeros(self.port.weight_shape(b)) for b in self.port.blocks]
+        dgains = np.zeros((n, t, self.block_count))
         dz_next = np.zeros((n, self.belief))  # gradient into z[t] from moment t+1
+        total = None if weight is None else self.outputs * weight.sum()
         for k in range(t - 1, -1, -1):
             rep, ex = record["repair"][k], record["expect"][k]
             z_prev = boundary if k == 0 else record["repair"][k - 1]["z"]
-            slow = record["y"][k] - record["read"][k]
-            dy = self._output_precision * (slow - target[:, k]) / (n * t * self.outputs)
+            if output_gradient is not None:
+                dy = output_gradient[:, k]
+            else:
+                assert target is not None
+                slow = record["y"][k] - record["read"][k]
+                if weight is None:
+                    dy = self._output_precision * (slow - target[:, k]) / (n * t * self.outputs)
+                else:
+                    dy = (
+                        self._output_precision
+                        * (slow - target[:, k])
+                        * (weight[:, k, None] / total)
+                    )
             delta["C"] += dy.T @ rep["z"]
             delta["c"] += dy.sum(axis=0)
             dz = dy @ self._C + dz_next
-            e = record["e"][k]
+            keep = record["observed"][k][:, None]
             de = np.zeros((n, self.encoded))
             dp = np.zeros((n, self.belief))
             for j in range(len(rep["hs"]) - 1, -1, -1):
                 h, u = rep["hs"][j], rep["us"][j]
-                dh = alpha * dz
-                dz = (1.0 - alpha) * dz
+                dh = np.where(keep, alpha * dz, 0.0)
+                dz = np.where(keep, (1.0 - alpha) * dz, dz)
                 dpre = dh * (1.0 - h**2)
                 delta["F"] += dpre.T @ u
                 delta["f_b"] += dpre.sum(axis=0)
@@ -408,8 +717,12 @@ class BeliefPatch:
                 de += du[:, self.belief : self.belief + self.encoded]
                 dp += du[:, self.belief + self.encoded : 2 * self.belief + self.encoded]
             dp += dz  # z(0) = p
-            if record["e_pre"][k] is not None and np.any(de):
-                dpre_e = de * (1.0 - e**2)
+            if np.any(de):
+                e_raw, gain = record["e_raw"][k], record["gain"][k]
+                product = de * e_raw
+                for b, sel in enumerate(self._block_slices):
+                    dgains[:, k, b] = product[:, sel].sum(axis=-1)
+                dpre_e = de * gain[:, self._unit_block] * (1.0 - e_raw**2) * keep
                 delta["e_b"] += dpre_e.sum(axis=0)
                 for i, gb in enumerate(self.port.gradient(dpre_e, o[:, k])):
                     block_grads[i] += gb
@@ -426,24 +739,101 @@ class BeliefPatch:
             dx = dpre_c @ self._T + dpre_g @ self._G
             dz_next = dz_prev + dx[:, : self.belief]
         delta["E"] = np.concatenate([gb.ravel() for gb in block_grads])
-        return delta
+        return delta, dgains
 
-    def _write(self, record: dict[str, list[Any]], target: np.ndarray) -> int:
+    def _commit(self, proposed: Mapping[str, np.ndarray]) -> None:
+        for key, value in proposed.items():
+            setattr(self, "_" + key, value)
+        self.updates += 1
+
+    def _admit(
+        self,
+        o: np.ndarray,
+        a: np.ndarray,
+        mask: np.ndarray,
+        gains: np.ndarray,
+        weight: np.ndarray | None,
+        boundary: np.ndarray,
+        target: np.ndarray | None,
+        delta: dict[str, np.ndarray],
+        rate: float,
+        backtrack: bool,
+        initial: float | None,
+    ) -> tuple[bool, str, float | None, float | None, int]:
+        """The step: plain at ``rate``, or the largest halving of ``rate`` whose replay of the
+        chunk from the same boundary, with the store as it stands, lowers the loss by the
+        Armijo margin. Returns (updated, reason, final loss, accepted rate, replays)."""
+        current = self.parameters()
+        if not backtrack:
+            with np.errstate(over="ignore", invalid="ignore"):
+                proposed = {k: current[k] - rate * delta[k] for k in _PARAMETERS}
+            if not all(np.isfinite(v).all() for v in proposed.values()):
+                return False, "nonfinite_update", None, None, 0
+            self._commit(proposed)
+            return True, "updated", None, float(rate), 0
+        with np.errstate(over="ignore", invalid="ignore"):
+            norm_squared = sum(float(np.sum(v * v)) for v in delta.values())
+        replays = 0
+        if (
+            initial is not None
+            and target is not None
+            and np.isfinite(norm_squared)
+            and norm_squared > 0
+        ):
+            for index in range(_HALVINGS):
+                step = rate * 0.5**index
+                with np.errstate(over="ignore", invalid="ignore"):
+                    proposed = {k: current[k] - step * delta[k] for k in _PARAMETERS}
+                if not all(np.isfinite(v).all() for v in proposed.values()):
+                    continue
+                for key, value in proposed.items():
+                    setattr(self, "_" + key, value)
+                try:
+                    replay = self._forward(o, a, boundary, mask, gains)
+                    loss = self._loss(
+                        np.stack(replay["y"], axis=1) - np.stack(replay["read"], axis=1),
+                        target,
+                        weight,
+                    )
+                finally:
+                    for key, value in current.items():
+                        setattr(self, "_" + key, value)
+                replays += 1
+                floor = (
+                    64
+                    * np.finfo(float).eps
+                    * max(abs(initial), abs(loss or 0.0), np.finfo(float).tiny)
+                )
+                if (
+                    loss is not None
+                    and loss < initial - floor
+                    and loss <= initial - 1e-4 * step * norm_squared
+                ):
+                    self._commit(proposed)
+                    return True, "updated", loss, step, replays
+        return False, "no_decreasing_parameter_step", initial, None, replays
+
+    def _write(
+        self, record: dict[str, list[Any]], target: np.ndarray, weight: np.ndarray | None = None
+    ) -> int:
         """Write the slow readout's residual, coded, at the final reading of each observed
-        moment."""
+        moment; a row whose loss weight is zero is not written."""
         written = 0
         t = len(record["y"])
         for k in range(t):
-            rep = record["repair"][k]
-            e = record["e"][k]
-            if not np.any(e):
-                continue  # nothing observed: nothing to write
-            readings = self._reading(e, rep["z"])
+            rows = record["observed"][k].copy()
+            if weight is not None:
+                rows &= weight[:, k] > 0
+            if not rows.any():
+                continue  # nothing observed, or nothing to teach: nothing to write
+            rep, e = record["repair"][k], record["e"][k][rows]
+            readings = self._reading(e, rep["z"][rows])
             for value in np.linalg.norm(e, axis=1):
                 self._input_norm += 0.01 * (max(float(value), 1e-6) - self._input_norm)
             self.records.witness(readings)
             codes = self.records.code(readings, valued=False)[0]
-            residual = (target[:, k] - (record["y"][k] - record["read"][k])) @ self._output_code
+            slow = record["y"][k][rows] - record["read"][k][rows]
+            residual = (target[rows, k] - slow) @ self._output_code
             for row in range(len(codes)):
                 written += self.records.write(
                     np.stack((codes[row], codes[row])), {"y": residual[row]}

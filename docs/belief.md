@@ -43,12 +43,18 @@ step is the transition alone, with the store read at the expectation and nothing
 import numpy as np
 from cadence import BeliefPatch, DenseBlock, MapBlock, StructuredPort
 
-port = StructuredPort(3 * 24 * 24 + 52, [MapBlock(0, 3, 24, 24, 8, 5, 2), DenseBlock(1728, 52, 64)], broadcast=(1728, 52))
-brain = BeliefPatch(port, actions=9, belief=256, outputs=1728 + 5, iterations=2, cells=4096, active=32)
+# a small retina with the action broadcast into its map, and a dense block of fields
+port = StructuredPort(1 * 8 * 8 + 4, [MapBlock(0, 1, 8, 8, 4, 3, 2), DenseBlock(64, 4, 8)], broadcast=(64, 4))
+brain = BeliefPatch(port, actions=3, belief=16, outputs=6, iterations=2, cells=256, active=8, record_width=16, seed=0)
+rng = np.random.default_rng(0)
+observations = rng.random((2, 8, port.inputs))         # (N, T, inputs)
+actions = rng.random((2, 8, 3))                         # (N, T, actions)
+targets = rng.normal(size=(2, 8, 6))                    # (N, T, outputs)
 brain.reset()
-seen = brain.assimilate(observations, actions)          # (N, T, inputs), (N, T, actions): the belief follows the evidence
-ahead = brain.imagine(candidate_actions)                # (N, H, actions): private, from the live belief
+seen = brain.assimilate(observations, actions)          # the belief follows the evidence
+ahead = brain.imagine(actions[:, :4])                   # (N, H, actions): private, from the live belief
 learned = brain.observe(observations, actions, targets, rate=1.0)   # one backward scan through every iteration; the store takes the residuals
+assert learned.updated and learned.writes == 16
 ```
 
 ## Learning
@@ -62,7 +68,11 @@ needs a rate in the thousands, or the torch backend with an ordinary optimiser.
 
 `belief_torch.TorchBelief` is the same slow half as a torch module with autograd, for
 batches of streams on a GPU; `export()` and `load()` move the parameters in the library's
-packing, so a patch trained there continues in NumPy with its records.
+packing, so a patch trained there continues in NumPy with its records. Its `forward` takes
+the `gains` and the per-row `observed` mask of the sections below, since the forward is
+shared, and a gains tensor that requires grad receives the gradient into the gains; a
+weighted loss, an admitted step and an external output gradient are the caller's loss and
+optimiser there, and the readback of a moment stays on the library's path.
 
 ### Training the transition: the imagination loss
 
@@ -97,6 +107,158 @@ a second seed learned a one-step read of 0.70 and no imagination at all, the tra
 having settled on persistence while the repair did the work, so the receipt of every run
 carries the open-loop curve and the imagined term's weight is the first knob to raise. The
 recipe lives in the application, fifteen lines around the ordinary loss; the library supplies the imagination with a `state` and no observation.
+
+## A gain per block inside the repair
+
+Each block of the observation port carries a gain that multiplies its encoded evidence
+before the repair map and the store read see it, `e_b <- gain_b * tanh(E_b o_b + e_b)`, so
+the gain acts in every repair iteration and in the store's code, on the equations of the
+moment. A weighing applied after the outputs would be a reparameterization the readout
+could learn around; a gain inside the repair changes what the belief is repaired toward.
+`assimilate`, `observe` and `imagine` take `gains=`, one per block `(blocks,)`, per stream
+`(batch, blocks)` or per moment `(batch, time, blocks)`; the adjoint returns the gradient
+of the loss into each gain per moment as `gain_gradient`, and the path carries the gains
+used. With `de` the gradient into the scaled evidence, the gain's gradient is the sum over
+the block's units of `de * e_raw`, and the port's gradient uses `de * gain * (1 - e_raw^2)`.
+
+```python
+import numpy as np
+from cadence import BeliefPatch, DenseBlock, StructuredPort
+
+eye, ear = DenseBlock(0, 6, 8), DenseBlock(6, 2, 4)                # two senses, two blocks
+cortex = BeliefPatch(StructuredPort(8, [eye, ear]), actions=1, belief=8, outputs=2, cells=128, active=4, record_width=8, seed=1)
+rng = np.random.default_rng(1)
+o, a, y = rng.random((4, 6, 8)), np.zeros((4, 6, 1)), rng.normal(size=(4, 6, 2))
+cortex.reset()
+cortex.observe(o, a, y, rate=1.0, write=False)                    # a readout, so the loss reaches the evidence
+gains = np.tile([1.8, 0.2], (4, 6, 1))                            # (N, T, blocks): the eye weighs 1.8, the ear 0.2
+cortex.reset()
+taught = cortex.observe(o, a, y, rate=0.0, write=False, gains=gains)
+assert taught.gain_gradient.shape == (4, 6, 2) and np.abs(taught.gain_gradient).max() > 0
+assert np.array_equal(taught.path.gains, gains)
+```
+
+A gain that sets weights freely amplifies every sense against the belief; a weighing that
+sums to the number of blocks (`blocks * softmax` of a steering patch's outputs, for
+instance) moves weight from one sense to another. The map from a steering patch's outputs
+to the gains, and its Jacobian for the seam below, are the application's.
+
+## The readback of a moment
+
+`BeliefPath` carries, per moment, what a governor or a steering patch reads and what a
+page draws: `evidence` `(batch, time, encoded)`, the encoded evidence the repair and the
+store read, after the gains; `code` `(batch, time, cells)`, the store's plain code at the
+final reading; `gains` `(batch, time, blocks)`; `residual_alone` `(batch, time, blocks)`,
+the repair map's move from the expectation with only that block heard and the store read at
+zero, one evaluation of the map per block, computed with `probe=True`; and `surprise`
+`(batch, time, blocks)`, each block's reading against the reading the previous belief's
+slow readout implies, a root mean square over the block's compared channels in the block's
+persistence units (a surprise of one means the belief predicted the sense no better than a
+belief that expects the reading to stay as it was). The surprise needs a declaration,
+`set_implied_reading(implied, units)`: the map from the outputs to the reading each block
+should give, with the channels it does not imply left `NaN`, and the mean squared change of
+the compared channels from one moment to the next on a batch of training data. A row that
+reads nothing has a zero probe and a zero surprise. `readback(observations, actions,
+state=)` gives one moment's expectation, probe and surprise before its repair: a steering
+patch reads it, sets the moment's gains, and the moment is then assimilated under them.
+
+```python
+def implied(outputs):
+    reading = np.full((len(outputs), 8), np.nan)   # channels the map leaves NaN are not compared
+    reading[:, :2] = outputs                       # the eye's first two channels read the predicted position
+    return reading
+
+cortex.set_implied_reading(implied, units=[0.01, 0.01])   # the persistence error of each block's compared channels
+cortex.reset()
+path = cortex.assimilate(o, a, gains=gains, probe=True)
+assert path.residual_alone.shape == (4, 6, 2) and path.surprise.shape == (4, 6, 2)
+assert path.evidence.shape == (4, 6, 12) and path.code.shape == (4, 6, 128)
+assert np.all(path.surprise[:, :, 1] == 0.0)       # the ear has no implied channels
+moment = cortex.readback(o[:, 0], a[:, 0], state=np.zeros((4, 8)))   # before the first moment's repair
+assert np.allclose(moment.residual_alone, path.residual_alone[:, 0])
+assert np.allclose(moment.surprise, path.surprise[:, 0])
+```
+
+The probes cost one evaluation of the repair map per block and moment; the surprise costs
+one call of the declared map. In the ventriloquist demo the steering patch that read the
+two surprises alone reached the same held-out error as the one that also read the probes, so
+carry the surprise first and ask for the probes when the task shows they help.
+
+## An admitted step
+
+`observe(rate=r)` moves the parameters by `r` times the adjoint. On a loss that is flat
+around the mean predictor and steep once the readout binds, every fixed rate that learned
+diverged within a few dozen chunks and the rates that stayed finite learned nothing. With
+`backtrack=True` the chunk is replayed from the same boundary under the proposed
+parameters, with the store as it stands, and the largest halving of `rate` whose replay
+lowers the chunk's loss by the Armijo margin is taken, sixteen halvings at most; the store
+is written after the admission. `accepted_rate`, `final_loss` and `replay_calls` are on the
+observation. The admission is a check, not an optimizer: the patch keeps no step size and
+no moments of the gradient, and the next chunk starts again from `rate`.
+
+```python
+cortex.reset()
+admitted = cortex.observe(o, a, y, rate=100.0, write=False, backtrack=True)
+assert admitted.updated and admitted.final_loss < admitted.initial_loss
+assert 0 < admitted.accepted_rate < 100.0 and admitted.replay_calls >= 1
+```
+
+A rate of 100 on the patch above diverges within two chunks without the admission (the
+loss goes from 0.46 to 31 to 1e6) and is admitted with it at 3.1, 1.6 or 6.2, with five to
+seven replays per chunk; the loss never rises on an accepted step. A step of `rate` accepted
+at the first replay costs one forward pass more than the plain step.
+
+## A weight per moment and a mask per row
+
+`observe(loss_weight=)` weighs each moment's error, `(time,)` or `(batch, time)`, and the
+loss and the adjoint normalize by the weight's sum instead of the moment count, so a weight
+of ones is the plain loss. A moment of weight zero is neither taught nor written: a jump of
+tens of units on the predicted channels (a dot that appears or vanishes) would otherwise
+carry more gradient than the chase around it, and its residual would be written into the
+cells a quiet field activates, so that the filled store predicted appearances everywhere.
+`observed=` is accepted per row as `(batch, time)` as well as per moment as `(time,)`, in
+`assimilate`, `observe` and `imagine`; a row that observes nothing keeps its expectation
+while the other rows repair, so streams whose screens come down at different moments share
+a batch.
+
+```python
+weight = np.ones((4, 6))
+weight[:, 2] = 0.0                       # the jump moment: neither taught nor written
+observed = np.ones((4, 6), dtype=bool)
+observed[1, 3:] = False                  # one stream's screen comes down at moment 3
+cortex.reset()
+masked = cortex.observe(o, a, y, rate=0.0, write=True, loss_weight=weight, observed=observed)
+assert masked.writes == int(np.sum(observed & (weight > 0)))
+assert np.allclose(masked.path.belief[1, 3], masked.path.expectation[1, 3])   # a row that reads nothing keeps its expectation
+assert masked.path.residual[0, 3] > 0.0
+```
+
+## Teaching through a seam
+
+A steering patch has no target of its own: its outputs are the gains of another patch's
+moment, and what it should have done is what lowers that patch's loss. `observe(...,
+output_gradient=dy)` in place of `target` takes an external gradient on the outputs `(batch,
+time, outputs)` and carries it through the same backward scan into the parameters and the
+gains; nothing is written and no loss is reported. The cortex's `gain_gradient`, passed
+through the Jacobian of the caller's map from the steering patch's outputs to the gains, is
+that `dy`. With the gradient of the target form, the parameter and gain gradients equal the
+target form's exactly.
+
+```python
+steering = BeliefPatch(StructuredPort(4, [DenseBlock(0, 4, 6)]), actions=1, belief=6, outputs=2, cells=64, active=4, record_width=4, seed=2)
+readbacks = np.concatenate([path.residual_alone, path.surprise], axis=-1)   # (N, T, 4): what the steering patch read
+steering.reset()
+weighing = steering.assimilate(readbacks, a)                                # its outputs set the gains through the caller's map
+d_outputs = taught.gain_gradient                                            # the cortex's loss into the gains, times the map's Jacobian (one for the identity)
+steering.reset()
+seam = steering.observe(readbacks, a, output_gradient=d_outputs, rate=0.5)
+assert seam.updated and seam.writes == 0 and seam.path.loss is None
+```
+
+The admission of a joint step (the cortex and the steering patch moved together, one
+replay of the cortex's chunk deciding) stays with the caller: `backtrack=True` needs a
+target, since the library can replay only the loss it can see. A readback that depends on
+the previous moment's prediction is taken as given in the steering patch's adjoint.
 
 ## What it does not do
 

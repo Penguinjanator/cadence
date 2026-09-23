@@ -7,8 +7,11 @@
 // reads as a wave through the brain. The traces below the map are an EEG-style montage of
 // every region's own activity and change over the last steps. WebGL2 draws it; a Canvas2D
 // fallback draws the neurons only. No activity is invented here: every value drawn comes
-// from the activations the page feeds in.
-export const VERSION = "cadence.brain-scan/v2";
+// from the activations the page feeds in. A second style, `style: "brain"`, wraps the same
+// net into the volume of a stylised animal brain in three dimensions: glowing somata by
+// anatomy, every synapse a curved path lit by the messages that travel on it, a translucent
+// shell, bloom, fog and a slow rotation; `setStyle` switches between the two.
+export const VERSION = "cadence.brain-scan/v3";
 
 const TYPES = { f4: Float32Array, f8: Float64Array, u4: Uint32Array, i4: Int32Array, u2: Uint16Array, i2: Int16Array, u1: Uint8Array, i1: Int8Array };
 const FIT = 0.94; // world span shown at zoom 1
@@ -29,6 +32,7 @@ export function decodeAtlas(atlas) {
     synapses: atlas.synapses,
     regions: atlas.regions,
     palette: atlas.palette,
+    seed: atlas.seed ?? 0,
     region: decodeArray(atlas.region),
     positions: decodeArray(atlas.positions),
     pre: decodeArray(atlas.pre),
@@ -149,10 +153,301 @@ function compile(gl, kind, source) {
 
 const rgba = (c, a) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
 
+// ---------------------------------------------------------------------------------------
+// The brain style: the patch net wrapped into the volume of a stylised animal brain, in
+// three dimensions. One generic brain for every net: two smooth lobed hemispheres, a
+// cerebellum behind and below, a short stem, drawn as a translucent shell with a soft rim
+// light. Every atlas region is assigned a lobe by its role and name (sensory at the back in
+// the occipital area, memory deep and low as the hippocampus, association across the
+// parietal and frontal cortex, motor in the frontal strip, a governor or steering patch at
+// the front as the prefrontal area); regions of the same lobe are tiled inside it, and each
+// region's neurons keep the atlas's own arrangement (connected neurons near each other) on
+// the lobe's two long axes with the third axis scattered. Neurons are glowing somata,
+// every synapse a cubic Bezier ribbon from the presynaptic soma to the postsynaptic one,
+// bowing outward (deterministic per edge from the atlas seed), thin and tapering with a
+// bouton at the end, very dark at rest and lit by the messages that travel on it: a glow
+// along the path and a bright pulse with a tail, brightness by message times weight,
+// strongest synapses first under the line and particle budgets. Additive blending into a
+// floating-point scene, a bloom pass, a depth fog so the far side recedes, slow
+// self-rotation with drag to rotate and scroll to zoom. The static geometry (the 3D
+// positions, the bow of every edge, the shell mesh) is uploaded once per atlas and the
+// vertex shader evaluates the curves; nothing is rebuilt per frame.
+const DIST = 4.0; // the camera's distance from the brain's centre
+const FOCAL = 2.8; // the projection's focal length: the whole shell fits at zoom 1
+const LOBES = {
+  occipital: { c: [-0.66, 0.12, 0], a: [0.26, 0.32, 0.6] },
+  hippocampus: { c: [-0.12, -0.3, 0], a: [0.46, 0.12, 0.34] },
+  cortex: { c: [0.02, 0.42, 0], a: [0.44, 0.16, 0.64] },
+  motor: { c: [0.5, 0.38, 0], a: [0.13, 0.18, 0.6] },
+  prefrontal: { c: [0.82, 0.08, 0], a: [0.18, 0.28, 0.4] },
+  temporal: { c: [0.08, -0.08, 0], a: [0.36, 0.14, 0.72] },
+};
+const LOBE_RULES = [
+  ["prefrontal", /govern|steer|monitor|prefrontal|readback|critic|reward|salience/],
+  ["occipital", /retina|sense|sensor|evidence|input|eye|ear\b|vision|visual|whisker|touch|odou?r|smell|cue|auditory/],
+  ["hippocampus", /record|context|memory|hippocamp|trace|recall|notebook|afterglow|echo/],
+  ["motor", /motor|habit|action|actuator|joint|muscle|output|gain|efferen|cord/],
+  ["cortex", /belief|expect|predict|imagin|assoc|hidden|cortex/],
+];
+const LOBE_OF_ROLE = { value: "prefrontal", motor: "motor", memory: "hippocampus", association: "cortex", sensory: "occipital", vision: "occipital" };
+export function lobeOf(region) {
+  const name = String(region.name ?? "").toLowerCase();
+  for (const [lobe, rule] of LOBE_RULES) if (rule.test(name)) return lobe;
+  return LOBE_OF_ROLE[region.role] || "temporal";
+}
+function hash01(x) {
+  x = Math.imul(x ^ (x >>> 16), 0x45d9f3b); x = Math.imul(x ^ (x >>> 16), 0x45d9f3b); x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
+/** The 3D layout: every region in a lobe by role and name, regions of one lobe tiled along
+ *  its longest axis, every neuron inside its region's sub-ellipsoid with the atlas's own
+ *  two-dimensional arrangement on the two long axes. Returns positions (3 per neuron), a
+ *  centre and half-extents per region, and the mean spacing between neighbours per neuron. */
+export function brainLayout(atlas) {
+  const n = atlas.n, regions = atlas.regions, seed = (atlas.seed || 0) >>> 0;
+  const positions = new Float32Array(3 * n), spacing = new Float32Array(n);
+  const centers = regions.map(() => [0, 0, 0]), extents = regions.map(() => [0.05, 0.05, 0.05]);
+  const members = new Map();
+  regions.forEach((region, k) => { const lobe = lobeOf(region); if (!members.has(lobe)) members.set(lobe, []); members.get(lobe).push(k); });
+  for (const [lobe, ks] of members) {
+    const L = LOBES[lobe], axis = L.a.indexOf(Math.max(...L.a));
+    ks.sort((i, j) => regions[j].count - regions[i].count || i - j);
+    const share = ks.map((k) => Math.cbrt(Math.max(2, regions[k].count)));
+    const total = share.reduce((s, v) => s + v, 0);
+    let at = -1;
+    ks.forEach((k, idx) => {
+      const width = (2 * share[idx]) / total, mid = at + width / 2;
+      at += width;
+      const c = L.c.slice(), a = L.a.slice();
+      if (ks.length > 1) { c[axis] += mid * L.a[axis]; a[axis] = (width / 2) * L.a[axis]; const shrink = Math.sqrt(Math.max(0.15, 1 - mid * mid)); for (let d = 0; d < 3; d++) if (d !== axis) a[d] *= shrink; }
+      for (let d = 0; d < 3; d++) a[d] *= 0.92;
+      centers[k] = c; extents[k] = a;
+    });
+  }
+  regions.forEach((region, k) => {
+    const c = centers[k], a = extents[k];
+    const order = [0, 1, 2].sort((i, j) => a[j] - a[i]); // the longest axis first
+    const volume = (4 / 3) * Math.PI * a[0] * a[1] * a[2];
+    // the spacing on the screen: the ellipsoid's mean cross-section shared by its neurons
+    const gap = Math.sqrt((Math.PI * Math.cbrt(volume / ((4 / 3) * Math.PI)) ** 2) / Math.max(1, region.count));
+    const rng = mulberry((seed * 7919 + k * 104729 + 3) >>> 0);
+    for (let i = 0; i < n; i++) {
+      if (atlas.region[i] !== k) continue;
+      let u = (atlas.positions[2 * i] - region.center[0]) / Math.max(1e-6, region.extent[0]);
+      let v = (atlas.positions[2 * i + 1] - region.center[1]) / Math.max(1e-6, region.extent[1]);
+      const rr = Math.hypot(u, v);
+      if (rr > 0.96) { u *= 0.96 / rr; v *= 0.96 / rr; }
+      const w = (rng() * 2 - 1) * Math.sqrt(Math.max(0, 1 - u * u - v * v)) * 0.9;
+      const local = [0, 0, 0];
+      local[order[0]] = u * a[order[0]]; local[order[1]] = v * a[order[1]]; local[order[2]] = w * a[order[2]];
+      positions[3 * i] = c[0] + local[0]; positions[3 * i + 1] = c[1] + local[1]; positions[3 * i + 2] = c[2] + local[2];
+      spacing[i] = gap;
+    }
+  });
+  return { positions, spacing, centers, extents };
+}
+
+/** The bow of every synapse: a vector perpendicular to its chord, outward from the brain's
+ *  centre and turned by a per-edge hash, scaled by the chord's length; the cubic Bezier's
+ *  control points are the chord's thirds plus this vector. */
+export function edgeBows(atlas, positions) {
+  const E = atlas.pre.length, seed = (atlas.seed || 0) >>> 0, bows = new Float32Array(3 * E);
+  for (let e = 0; e < E; e++) {
+    const a = 3 * atlas.pre[e], b = 3 * atlas.post[e];
+    const dx = positions[b] - positions[a], dy = positions[b + 1] - positions[a + 1], dz = positions[b + 2] - positions[a + 2];
+    const len = Math.hypot(dx, dy, dz);
+    if (len < 1e-6) continue;
+    const ux = dx / len, uy = dy / len, uz = dz / len;
+    const h1 = hash01((seed * 31 + e * 3 + 1) >>> 0), h2 = hash01((seed * 31 + e * 3 + 2) >>> 0), h3 = hash01((seed * 31 + e * 3 + 3) >>> 0);
+    const th = h1 * Math.PI * 2, ph = Math.acos(2 * h2 - 1);
+    let rx = Math.sin(ph) * Math.cos(th), ry = Math.sin(ph) * Math.sin(th), rz = Math.cos(ph);
+    const mx = (positions[a] + positions[b]) / 2, my = (positions[a + 1] + positions[b + 1]) / 2 - 0.05, mz = (positions[a + 2] + positions[b + 2]) / 2;
+    const ml = Math.hypot(mx, my, mz) || 1;
+    rx = 0.55 * rx + 0.45 * (mx / ml); ry = 0.55 * ry + 0.45 * (my / ml); rz = 0.55 * rz + 0.45 * (mz / ml);
+    const dot = rx * ux + ry * uy + rz * uz;
+    rx -= dot * ux; ry -= dot * uy; rz -= dot * uz;
+    const rl = Math.hypot(rx, ry, rz) || 1;
+    const bend = (0.16 + 0.26 * h3) * len;
+    bows[3 * e] = (rx / rl) * bend; bows[3 * e + 1] = (ry / rl) * bend; bows[3 * e + 2] = (rz / rl) * bend;
+  }
+  return bows;
+}
+
+/** The shell: one stylised brain for every net. Two lobed hemispheres, a cerebellum behind
+ *  and below, a short stem, as interleaved position and normal triples: triangles for the
+ *  translucent surface and line segments for the faint mesh with its hint of sulci. */
+export function brainShell() {
+  const tris = [], lines = [];
+  const push = (list, p, nrm) => list.push(p[0], p[1], p[2], nrm[0], nrm[1], nrm[2]);
+  const ellipsoid = (c, a, rings, segs, bump, medial) => {
+    const grid = [];
+    for (let i = 0; i <= rings; i++) {
+      const th = (i / rings) * Math.PI, row = [];
+      for (let j = 0; j <= segs; j++) {
+        const ph = (j / segs) * Math.PI * 2;
+        const r = 1 + bump(th, ph);
+        let x = c[0] + a[0] * r * Math.sin(th) * Math.cos(ph), y = c[1] + a[1] * r * Math.cos(th), z = c[2] + a[2] * r * Math.sin(th) * Math.sin(ph);
+        if (medial > 0 && z < 0.05) z = 0.05; else if (medial < 0 && z > -0.05) z = -0.05;
+        const nrm = [(x - c[0]) / (a[0] * a[0]), (y - c[1]) / (a[1] * a[1]), (z - c[2]) / (a[2] * a[2])];
+        const nl = Math.hypot(...nrm) || 1;
+        row.push([[x, y, z], nrm.map((v) => v / nl)]);
+      }
+      grid.push(row);
+    }
+    for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) {
+      const p00 = grid[i][j], p01 = grid[i][j + 1], p10 = grid[i + 1][j], p11 = grid[i + 1][j + 1];
+      push(tris, p00[0], p00[1]); push(tris, p10[0], p10[1]); push(tris, p11[0], p11[1]);
+      push(tris, p00[0], p00[1]); push(tris, p11[0], p11[1]); push(tris, p01[0], p01[1]);
+      if (i > 0) { push(lines, p00[0], p00[1]); push(lines, p01[0], p01[1]); }
+      if (j % 2 === 0) { push(lines, p00[0], p00[1]); push(lines, p10[0], p10[1]); }
+    }
+  };
+  const gyri = (th, ph) => 0.035 * Math.sin(7 * ph + 0.4) * Math.sin(2.6 * th) + 0.025 * Math.sin(5 * th + 1.7) * Math.cos(3 * ph) + 0.02 * Math.sin(11 * ph + 2.0 * th);
+  const folia = (th, ph) => 0.03 * Math.sin(9 * th) + 0.015 * Math.sin(13 * ph + th);
+  ellipsoid([0.02, 0.1, 0.37], [1.02, 0.6, 0.44], 18, 44, gyri, 1);
+  ellipsoid([0.02, 0.1, -0.37], [1.02, 0.6, 0.44], 18, 44, gyri, -1);
+  ellipsoid([-0.82, -0.36, 0], [0.4, 0.3, 0.52], 14, 32, folia, 0);
+  // the stem: a tapered tube from under the cerebellum down and back
+  const stem = { from: [-0.6, -0.5, 0], to: [-0.86, -1.0, 0], r0: 0.16, r1: 0.11 }, rings = 6, segs = 18;
+  const grid = [];
+  for (let i = 0; i <= rings; i++) {
+    const t = i / rings, row = [], rad = stem.r0 + (stem.r1 - stem.r0) * t;
+    const cx = stem.from[0] + (stem.to[0] - stem.from[0]) * t, cy = stem.from[1] + (stem.to[1] - stem.from[1]) * t;
+    for (let j = 0; j <= segs; j++) { const ph = (j / segs) * Math.PI * 2, nx = Math.cos(ph) * 0.9, nz = Math.sin(ph); row.push([[cx + rad * nx, cy, rad * nz], [nx, 0.3, nz]]); }
+    grid.push(row);
+  }
+  for (let i = 0; i < rings; i++) for (let j = 0; j < segs; j++) {
+    const p00 = grid[i][j], p01 = grid[i][j + 1], p10 = grid[i + 1][j], p11 = grid[i + 1][j + 1];
+    push(tris, p00[0], p00[1]); push(tris, p10[0], p10[1]); push(tris, p11[0], p11[1]);
+    push(tris, p00[0], p00[1]); push(tris, p11[0], p11[1]); push(tris, p01[0], p01[1]);
+    push(lines, p00[0], p00[1]); push(lines, p01[0], p01[1]);
+    if (j % 3 === 0) { push(lines, p00[0], p00[1]); push(lines, p10[0], p10[1]); }
+  }
+  return { tris: Float32Array.from(tris), lines: Float32Array.from(lines) };
+}
+
+// The brain program. Passes: 10 shell surface, 11 shell mesh, 12 the resting web (ribbons),
+// 13 the lit paths (glow ribbons), 14 the pulses (a short ribbon with a tail), 15 the pulse
+// heads, 16 the boutons, 17 the somata; 18 and 19 the bloom blur, 20 the composite. Per
+// instance: `edge` (pre, post, weight) and `bow`; for the shell passes the same slots carry
+// the position and the normal.
+const BRAIN_VERTEX = `#version 300 es
+precision highp float; precision highp int;
+layout(location=0) in vec3 edge; layout(location=1) in vec3 bow;
+uniform sampler2D posTex; uniform sampler2D colorTex; uniform sampler2D stateTex;
+uniform int pass; uniform int mode; uniform mat3 rot; uniform vec3 camera; uniform vec2 aspect; uniform vec2 viewport; uniform vec2 fogRange;
+uniform float dist; uniform float focal; uniform float clock; uniform float dpr; uniform float restAlpha; uniform float edgeGain; uniform float scale; uniform float fade; uniform float segments; uniform float pulseSegments; uniform float sizeScale;
+out vec4 color; out vec2 uv; out float across;
+vec4 item(sampler2D t,int id){return texelFetch(t,ivec2(id%512,id/512),0);}
+vec3 project(vec3 v){float d=max(0.2,dist-v.z);return vec3((focal*v.xy/d*camera.z+camera.xy)*aspect,d);}
+float fog(float d){return mix(1.0,0.3,smoothstep(fogRange.x,fogRange.y,d));}
+vec3 bez(vec3 p0,vec3 p1,vec3 p2,vec3 p3,float t){float u=1.0-t;return u*u*u*p0+3.0*u*u*t*p1+3.0*u*t*t*p2+t*t*t*p3;}
+float level(vec4 s){if(mode==2)return clamp(abs(s.w),0.0,1.0);if(mode==3)return clamp(s.y,0.0,1.0);return clamp(abs(s.x),0.0,1.0);}
+void main(){
+ uv=vec2(0.0);across=0.0;color=vec4(0.0);gl_PointSize=1.0;
+ if(pass>=18){uv=vec2(float((gl_VertexID<<1)&2),float(gl_VertexID&2));gl_Position=vec4(uv*2.0-1.0,0.0,1.0);return;}
+ vec3 hot=vec3(1.0,0.93,0.78),cool=vec3(0.45,0.7,1.0);
+ float zoomSize=pow(camera.z,0.8)*sizeScale;
+ if(pass==10||pass==11){
+   vec3 v=rot*edge; vec3 nrm=normalize(rot*bow); vec3 pr=project(v);
+   float rim=pow(1.0-abs(nrm.z),2.5), f=fog(pr.z);
+   vec3 tint=vec3(0.6,0.72,1.0);
+   color=pass==10?vec4(tint,(0.01+0.11*rim)*f):vec4(tint,(0.03+0.16*rim)*f);
+   gl_Position=vec4(pr.xy,0.0,1.0);return;
+ }
+ int a=int(edge.x), b=int(edge.y);
+ if(pass==17){a=gl_VertexID;b=a;}
+ vec4 pa=item(posTex,a), pb=item(posTex,b), sa=item(stateTex,a), cA=item(colorTex,a), cB=item(colorTex,b);
+ vec3 ca=cA.rgb, cb=cB.rgb;
+ float visible=pa.w*pb.w;
+ float heat=clamp(sa.y,0.0,1.0), lev=level(sa), msg=sa.z, shown=mode==2?sa.w:sa.x;
+ if(pass==17){
+   vec3 pr=project(rot*pa.xyz); float f=fog(pr.z), persp=dist/pr.z;
+   float size=dpr*(2.8+3.2*lev+2.4*heat)*persp*zoomSize;
+   vec3 tint=mix(ca*(0.35+0.65*lev),hot,heat*0.85);
+   if(shown<0.0&&mode!=3)tint=mix(tint,cool,0.5*lev);
+   float spacingPx=cA.a*focal/pr.z*camera.z*min(viewport.x,viewport.y)*0.5;
+   float density=clamp(spacingPx*spacingPx/(size*size),0.08,1.0);
+   color=vec4(tint*f*1.4,(0.3+0.5*lev+0.5*heat)*density*visible);
+   gl_PointSize=size*(1.0+1.6*heat);
+   gl_Position=vec4(pr.xy,0.0,1.0);return;
+ }
+ vec3 p0=pa.xyz, p3=pb.xyz, p1=mix(p0,p3,0.33)+bow, p2=mix(p0,p3,0.67)+bow*0.8;
+ float strength=clamp(abs(msg*edge.z)/scale,0.0,1.0), wn=clamp(abs(edge.z)/scale,0.0,1.0), lit=strength*fade;
+ bool negative=msg*edge.z<0.0;
+ float phase=fract(float(gl_InstanceID)*0.6180339887);
+ if(pass==16){
+   vec3 pr=project(rot*bez(p0,p1,p2,p3,0.96)); float f=fog(pr.z);
+   vec3 tint=mix(mix(ca,cb,0.5),negative?cool:hot,0.5*lit);
+   color=vec4(tint*f,(restAlpha*2.0*(0.3+0.7*wn)+0.3*heat*wn*fade)*edgeGain*visible);
+   gl_PointSize=dpr*(1.0+1.2*wn+1.6*heat*wn)*(dist/pr.z)*zoomSize;
+   gl_Position=vec4(pr.xy,0.0,1.0);return;
+ }
+ if(pass==15){
+   float t=fract(clock*(0.35+0.65*strength)*0.6+phase);
+   vec3 pr=project(rot*bez(p0,p1,p2,p3,t)); float f=fog(pr.z);
+   color=vec4(mix(ca,negative?cool:hot,0.6)*f*2.2,min(0.9,lit*lit*1.6)*visible);
+   if(lit<0.15)color.a=0.0;
+   gl_PointSize=dpr*(2.0+4.0*lit)*(dist/pr.z)*zoomSize;
+   gl_Position=vec4(pr.xy,0.0,1.0);return;
+ }
+ int vid=gl_VertexID; float side=float(vid&1)*2.0-1.0, j=float(vid>>1);
+ float t, along=0.0;
+ if(pass==14){
+   float head=fract(clock*(0.35+0.65*strength)*0.6+phase), tail=0.1+0.12*strength;
+   along=j/pulseSegments;
+   t=clamp(head-tail*(1.0-along),0.0,1.0);
+ }else t=j/segments;
+ float ta=max(0.0,t-0.01), tb=min(1.0,t+0.01);
+ vec3 pr=project(rot*bez(p0,p1,p2,p3,t)), prA=project(rot*bez(p0,p1,p2,p3,ta)), prB=project(rot*bez(p0,p1,p2,p3,tb));
+ vec2 tangent=(prB.xy-prA.xy)*viewport; float tl=length(tangent);
+ vec2 normal=tl>1e-6?vec2(-tangent.y,tangent.x)/tl:vec2(0.0,1.0);
+ float f=fog(pr.z), widthPx, alpha; vec3 tint;
+ if(pass==12){widthPx=dpr*(0.6+0.9*wn)*mix(1.0,0.45,t);tint=mix(mix(ca,cb,t),vec3(0.7,0.78,0.95),0.5);alpha=restAlpha*(0.35+0.65*wn)*edgeGain;}
+ else if(pass==13){float glow=heat*sqrt(wn)*fade;widthPx=dpr*(1.0+1.6*glow)*mix(1.0,0.6,t);tint=mix(mix(ca,cb,t),negative?cool:hot,0.5*glow);alpha=0.4*glow*(1.0-0.5*t)*edgeGain;if(glow<0.02)alpha=0.0;}
+ else{widthPx=dpr*(0.7+1.6*lit)*(0.35+0.65*along);tint=mix(ca,negative?cool:hot,0.65);alpha=0.9*lit*lit*along*along*edgeGain;if(lit<0.15)alpha=0.0;}
+ widthPx*=pow(camera.z,0.5)*sizeScale;
+ vec2 offset=normal*side*widthPx*2.0/viewport;
+ across=side;
+ color=vec4(tint*f,alpha*visible);
+ gl_Position=vec4(pr.xy+offset,0.0,1.0);
+}`;
+const BRAIN_FRAGMENT = `#version 300 es
+precision highp float; precision highp int;
+in vec4 color; in vec2 uv; in float across;
+uniform sampler2D sceneTex; uniform sampler2D bloomTex; uniform int pass; uniform vec3 background; uniform vec2 texel; uniform float exposure; uniform float bloomGain;
+out vec4 result;
+void main(){
+ if(pass==18||pass==19){
+   vec2 dir=pass==18?vec2(texel.x,0.0):vec2(0.0,texel.y);
+   float w[5]=float[5](0.227,0.194,0.121,0.054,0.016);
+   vec3 acc=vec3(0.0);
+   for(int i=-4;i<=4;i++){vec3 s=texture(sceneTex,uv+dir*float(i)).rgb;if(pass==18)s=max(vec3(0.0),s-0.35);acc+=s*w[i<0?-i:i];}
+   result=vec4(acc,1.0);return;
+ }
+ if(pass==20){
+   vec3 s=texture(sceneTex,uv).rgb, b=texture(bloomTex,uv).rgb;
+   vec3 rgb=background+(1.0-exp(-(s+b*bloomGain)*exposure));
+   result=vec4(rgb,1.0);return;
+ }
+ float alpha=color.a;
+ if(pass==15||pass==16||pass==17){
+   float r=length(gl_PointCoord-0.5)*2.0; if(r>1.0)discard;
+   alpha*=exp(-r*r*6.0)+0.35*exp(-r*r*1.6)*(1.0-r);
+ }else if(pass>=12&&pass<=14){float a2=across*across;alpha*=pass==12?(1.0-a2):exp(-3.0*a2);}
+ result=vec4(color.rgb*alpha,alpha);
+}`;
+
 export class BrainScan {
   constructor(canvas, atlas, options = {}) {
     this.canvas = canvas;
-    this.options = { particles: true, edges: true, field: true, glow: 2.2, heatDecay: 0.86, background: [0.03, 0.055, 0.085], mode: "activity", montageRows: 16, particleBudget: 300000, lineBudget: 400000, labelTop: 9, ...options };
+    this.options = { style: "scan", particles: true, edges: true, field: true, glow: 2.2, heatDecay: 0.86, background: [0.03, 0.055, 0.085], mode: "activity", montageRows: 16, particleBudget: 300000, lineBudget: 400000, labelTop: 9, restAlpha: 0.025, bloom: 0.5, shell: true, spin: true, spinRate: 0.12, ...options };
+    this.brain = this.options.style === "brain";
+    this.view = { yaw: 0.5, pitch: 0.25, spin: this.options.spin, rate: this.options.spinRate, lastDrag: -1e9 }; // the brain style's rotation
+    this.dt = 0;
+    this.stateClock = 0;
+    this.frameMs = 0;
     this.camera = { x: 0, y: 0, zoom: 1 };
     this.frame = { x: 0, y: 0, scale: 1 }; // the layout's centre and the scale that fills the canvas at zoom 1
     this.fitted = true;
@@ -204,7 +499,7 @@ export class BrainScan {
       this.layout.set([this.atlas.positions[2 * i], this.atlas.positions[2 * i + 1], spacing[i], 1], i * 4);
       this.colors.set([c[0] / 255, c[1] / 255, c[2] / 255, 1], i * 4);
     }
-    if (this.enabled) this._uploadAtlas(resized);
+    if (this.enabled) { this._uploadAtlas(resized); if (this.brain) this._uploadBrain(); }
     this._setupLabels();
     this.bounds = [Infinity, Infinity, -Infinity, -Infinity];
     for (let i = 0; i < this.n; i++) {
@@ -299,6 +594,8 @@ export class BrainScan {
     this.fieldTexture = gl.createTexture();
     this.fieldSize = [0, 0];
     this.sized = false;
+    this.scanSize = null;
+    if (this.brain) this._setupBrainGL();
   }
 
   _uploadAtlas(resized) {
@@ -316,7 +613,14 @@ export class BrainScan {
     // Edges go to the GPU in a shuffled order, so drawing a prefix draws a uniform sample:
     // the messages of a brain with more synapses than the particle budget stay representative.
     this.order = null;
-    if (this.edges > this.options.particleBudget) {
+    if (this.brain) {
+      // Strongest first: the line and particle budgets then take the strongest synapses.
+      const mag = new Float32Array(this.edges), order = new Uint32Array(this.edges);
+      for (let i = 0; i < this.edges; i++) { mag[i] = Math.abs(this.atlas.weight[i]); order[i] = i; }
+      order.sort((i, j) => mag[j] - mag[i]);
+      this.order = order;
+      this.weightScale = this.edges ? Math.max(1e-9, mag[order[Math.floor(this.edges * 0.02)]]) : 1; // the 98th percentile of |w|
+    } else if (this.edges > this.options.particleBudget) {
       const order = new Uint32Array(this.edges), rng = mulberry(7);
       for (let i = 0; i < this.edges; i++) order[i] = i;
       for (let i = this.edges - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = order[i]; order[i] = order[j]; order[j] = t; }
@@ -340,6 +644,7 @@ export class BrainScan {
   setWeights(weights) {
     for (let i = 0; i < this.edges; i++) this.atlas.weight[i] = weights[i];
     if (!this.enabled) return;
+    if (this.brain) { this._uploadAtlas(false); this._uploadBows(); this.dirty = true; this.pending = true; return; }
     for (let k = 0; k < this.edges; k++) this.flat[k * 3 + 2] = weights[this.order ? this.order[k] : k];
     const gl = this.gl;
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
@@ -357,7 +662,8 @@ export class BrainScan {
     if (!changed) return;
     this.visible = mask ? Array.from(mask) : null;
     if (this.enabled) this._upload(0, this.layout);
-    this.dirty = true;
+    if (this.enabled && this.brain) { for (let i = 0; i < this.n; i++) this.pos[i * 4 + 3] = this.layout[i * 4 + 3]; this._uploadPos(); }
+    this.dirty = true; this.pending = true;
   }
 
   _target(framebuffer, texture, width, height, linear) {
@@ -385,11 +691,15 @@ export class BrainScan {
     target.addEventListener("pointermove", (e) => {
       if (!this.pointers.has(e.pointerId)) { if (this.onhover) this.onhover(this.inspect(e.clientX, e.clientY)); return; }
       const old = this.pointers.get(e.pointerId), r = target.getBoundingClientRect();
-      if (this.pointers.size === 1) { this.camera.x += ((e.clientX - old[0]) * 2) / r.width / this.aspect()[0]; this.camera.y -= ((e.clientY - old[1]) * 2) / r.height / this.aspect()[1]; this.fitted = false; this.dirty = true; this.pending = true; }
+      if (this.pointers.size === 1) {
+        if (this.brain && !e.shiftKey && e.buttons !== 2) { this.view.yaw += (e.clientX - old[0]) * 0.008; this.view.pitch = Math.max(-1.3, Math.min(1.3, this.view.pitch + (e.clientY - old[1]) * 0.008)); this.view.lastDrag = performance.now(); this.pending = true; }
+        else { this.camera.x += ((e.clientX - old[0]) * 2) / r.width / this.aspect()[0]; this.camera.y -= ((e.clientY - old[1]) * 2) / r.height / this.aspect()[1]; this.fitted = false; this.dirty = true; this.pending = true; }
+      }
       this.pointers.set(e.pointerId, [e.clientX, e.clientY]);
       this.draw();
     });
     for (const type of ["pointerup", "pointercancel", "lostpointercapture"]) target.addEventListener(type, (e) => this.pointers.delete(e.pointerId));
+    target.addEventListener("contextmenu", (e) => e.preventDefault());
   }
 
   _setupLabels() {
@@ -427,10 +737,20 @@ export class BrainScan {
   }
 
   /** Screen position of neuron i in CSS pixels inside the canvas. */
-  screen(i) { return this.toScreen(this.atlas.positions[2 * i], this.atlas.positions[2 * i + 1]); }
+  screen(i) { return this.brain ? this._project3(this.positions3[3 * i], this.positions3[3 * i + 1], this.positions3[3 * i + 2]).slice(0, 2) : this.toScreen(this.atlas.positions[2 * i], this.atlas.positions[2 * i + 1]); }
 
   /** Screen positions of every neuron (CSS pixels inside the canvas) as [x0, y0, x1, y1, ...]. */
   screenAll() {
+    if (this.brain) {
+      const out = new Float32Array(2 * this.n), R = this._rotation(), a = this.aspect(), r = this.canvas.getBoundingClientRect(), p = this.positions3;
+      for (let i = 0; i < this.n; i++) {
+        const x = p[3 * i], y = p[3 * i + 1], z = p[3 * i + 2];
+        const vx = R[0] * x + R[3] * y + R[6] * z, vy = R[1] * x + R[4] * y + R[7] * z, d = Math.max(0.2, DIST - (R[2] * x + R[5] * y + R[8] * z));
+        out[2 * i] = (((((FOCAL * vx) / d) * this.camera.zoom + this.camera.x) * a[0] + 1) / 2) * r.width;
+        out[2 * i + 1] = ((1 - (((FOCAL * vy) / d) * this.camera.zoom + this.camera.y) * a[1]) / 2) * r.height;
+      }
+      return out;
+    }
     const r = this.canvas.getBoundingClientRect(), a = this.aspect(), out = new Float32Array(2 * this.n), f = this.frame, k = f.scale * this.camera.zoom * FIT;
     const zx = k * a[0], zy = k * a[1], ox = this.camera.x * a[0], oy = this.camera.y * a[1];
     for (let i = 0; i < this.n; i++) {
@@ -452,7 +772,7 @@ export class BrainScan {
     this.pending = true;
   }
 
-  fit() { this.camera = { x: 0, y: 0, zoom: 1 }; this.fitted = true; this._frame(); this.dirty = true; this.pending = true; this.draw(); }
+  fit() { this.camera = { x: 0, y: 0, zoom: 1 }; this.fitted = true; this._frame(); if (this.brain) { this.view.yaw = 0.5; this.view.pitch = 0.25; this.view.lastDrag = -1e9; } this.dirty = true; this.pending = true; this.draw(); }
 
   /** Start a new settling from a new stimulus: the next step measures change against this state. */
   reset(activation = null) {
@@ -540,6 +860,7 @@ export class BrainScan {
       this.state.set([this.activation[i], this.heat[i], msg, this.potential ? this.potential[i] / span : 0], i * 4);
     }
     this.hot = hot;
+    this.stateClock = this.clock;
     if (this.enabled) this._upload(2, this.state);
   }
 
@@ -547,17 +868,23 @@ export class BrainScan {
     // A software renderer draws a new frame at most every 200 ms; a state change always draws.
     if (this.software && !this.pending && time - this.lastTime < 200) return;
     this.pending = false;
-    this.clock += Math.min(0.1, (time - this.lastTime) / 1000);
+    const t0 = performance.now();
+    this.dt = Math.min(0.1, (time - this.lastTime) / 1000);
+    this.clock += this.dt;
     this.lastTime = time;
     this._drawLabels();
     this._drawStrip();
     if (!this.enabled) return this._drawFallback();
     const gl = this.gl, r = this.canvas.getBoundingClientRect(), dpr = Math.min(devicePixelRatio || 1, 2);
     const width = Math.max(1, Math.round(r.width * dpr)), height = Math.max(1, Math.round(r.height * dpr));
-    // A viewer built on a canvas another viewer already sized must still allocate its own targets.
     if (!this.sized || this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width; this.canvas.height = height; this.dirty = true; this.sized = true;
       if (this.fitted) this._frame();
+    }
+    if (this.brain) { this._drawBrain(width, height, dpr); this._time(t0); return; }
+    // A viewer built on a canvas another viewer already sized must still allocate its own targets.
+    if (!this.scanSize || this.scanSize[0] !== width || this.scanSize[1] !== height) {
+      this.scanSize = [width, height]; this.dirty = true;
       this._target(this.cache, this.cacheTexture, width, height, false);
       this.fieldSize = [Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2))];
       this._target(this.fieldBuffer, this.fieldTexture, this.fieldSize[0], this.fieldSize[1], true);
@@ -626,6 +953,213 @@ export class BrainScan {
     }
     gl.uniform1i(this.uniform.pass, 1);
     gl.drawArrays(gl.POINTS, 0, this.n);
+    this._time(t0);
+  }
+
+  // ---- The brain style: the program, the static uploads, the view, the frame ----
+
+  _setupBrainGL() {
+    if (this.brainProgram) return;
+    const gl = this.gl, program = gl.createProgram();
+    gl.attachShader(program, compile(gl, gl.VERTEX_SHADER, BRAIN_VERTEX));
+    gl.attachShader(program, compile(gl, gl.FRAGMENT_SHADER, BRAIN_FRAGMENT));
+    gl.linkProgram(program);
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
+    this.brainProgram = program;
+    gl.useProgram(program);
+    const names = ["posTex", "colorTex", "stateTex", "sceneTex", "bloomTex", "pass", "mode", "rot", "camera", "aspect", "viewport", "fogRange", "dist", "focal", "clock", "dpr", "restAlpha", "edgeGain", "scale", "fade", "segments", "pulseSegments", "sizeScale", "background", "texel", "exposure", "bloomGain"];
+    this.brainUniform = Object.fromEntries(names.map((k) => [k, gl.getUniformLocation(program, k)]));
+    gl.uniform1i(this.brainUniform.posTex, 5);
+    gl.uniform1i(this.brainUniform.colorTex, 1);
+    gl.uniform1i(this.brainUniform.stateTex, 2);
+    gl.uniform1i(this.brainUniform.sceneTex, 6);
+    gl.uniform1i(this.brainUniform.bloomTex, 7);
+    this.posTexture = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, this.posTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    this.posRows = 0;
+    // the bow of every synapse: a second instanced attribute beside the edges
+    gl.bindVertexArray(this.vao);
+    this.bowBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bowBuffer);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 12, 0);
+    gl.vertexAttribDivisor(1, 1);
+    // the shell, one static upload: the surface as triangles, the mesh as lines
+    const shell = brainShell();
+    const upload = (data) => {
+      const vao = gl.createVertexArray(), buffer = gl.createBuffer();
+      gl.bindVertexArray(vao);
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+      gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 24, 0);
+      gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 24, 12);
+      return { vao, count: data.length / 6 };
+    };
+    this.shellSurface = upload(shell.tris);
+    this.shellMesh = upload(shell.lines);
+    gl.bindVertexArray(this.vao);
+    this.sceneBuffer = gl.createFramebuffer(); this.sceneTexture = gl.createTexture();
+    this.bloomBuffers = [gl.createFramebuffer(), gl.createFramebuffer()];
+    this.bloomTextures = [gl.createTexture(), gl.createTexture()];
+    this.bloomSize = [1, 1];
+    this.brainSize = null;
+  }
+
+  /** The 3D layout of the loaded atlas and the bow of every synapse, uploaded once. */
+  _uploadBrain() {
+    const gl = this.gl, layout = brainLayout(this.atlas);
+    this.positions3 = layout.positions; this.centers3 = layout.centers; this.extents3 = layout.extents;
+    this.pos = new Float32Array(512 * this.rows * 4);
+    for (let i = 0; i < this.n; i++) {
+      this.pos.set([layout.positions[3 * i], layout.positions[3 * i + 1], layout.positions[3 * i + 2], this.layout[i * 4 + 3]], i * 4);
+      this.colors[i * 4 + 3] = layout.spacing[i];
+    }
+    this._uploadPos(true);
+    this._upload(1, this.colors);
+    this.bows = edgeBows(this.atlas, layout.positions);
+    this._uploadBows();
+  }
+
+  _uploadPos(resize = false) {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE5);
+    gl.bindTexture(gl.TEXTURE_2D, this.posTexture);
+    if (resize || this.posRows !== this.rows) { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 512, this.rows, 0, gl.RGBA, gl.FLOAT, null); this.posRows = this.rows; }
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 512, this.rows, gl.RGBA, gl.FLOAT, this.pos);
+  }
+
+  /** The bows in the edge buffer's order (strongest synapses first in the brain style). */
+  _uploadBows() {
+    const gl = this.gl, flat = new Float32Array(Math.max(1, this.edges) * 3);
+    for (let k = 0; k < this.edges; k++) { const i = this.order ? this.order[k] : k; flat[k * 3] = this.bows[3 * i]; flat[k * 3 + 1] = this.bows[3 * i + 1]; flat[k * 3 + 2] = this.bows[3 * i + 2]; }
+    gl.bindVertexArray(this.vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bowBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, flat, gl.DYNAMIC_DRAW);
+  }
+
+  /** Switch the view between `"scan"` (every neuron a point, every synapse a line, the
+   *  tissue field) and `"brain"` (the net wrapped into a transparent brain, in 3D). The same
+   *  context, state, camera and history carry over. */
+  setStyle(style) {
+    const brain = style === "brain";
+    if (brain === !!this.brain) return;
+    this.brain = brain;
+    this.options.style = brain ? "brain" : "scan";
+    if (this.enabled) {
+      if (brain) this._setupBrainGL();
+      this._uploadAtlas(false);
+      if (brain) this._uploadBrain();
+    }
+    this.dirty = true; this.pending = true;
+    this.draw();
+  }
+
+  /** The view rotation, column-major: pitch about x after yaw about y. */
+  _rotation() {
+    const cy = Math.cos(this.view.yaw), sy = Math.sin(this.view.yaw), cp = Math.cos(this.view.pitch), sp = Math.sin(this.view.pitch);
+    return [cy, sp * sy, -cp * sy, 0, cp, sp, sy, -sp * cy, cp * cy];
+  }
+
+  /** A point of the brain volume to CSS pixels inside the canvas, with its view depth. */
+  _project3(x, y, z) {
+    const R = this._rotation(), a = this.aspect(), r = this.canvas.getBoundingClientRect();
+    const vx = R[0] * x + R[3] * y + R[6] * z, vy = R[1] * x + R[4] * y + R[7] * z, vz = R[2] * x + R[5] * y + R[8] * z;
+    const d = Math.max(0.2, DIST - vz);
+    const nx = (((FOCAL * vx) / d) * this.camera.zoom + this.camera.x) * a[0], ny = (((FOCAL * vy) / d) * this.camera.zoom + this.camera.y) * a[1];
+    return [((nx + 1) / 2) * r.width, ((1 - ny) / 2) * r.height, d];
+  }
+
+  _drawBrain(width, height, dpr) {
+    const gl = this.gl, u = this.brainUniform, a = this.aspect();
+    if (!this.brainSize || this.brainSize[0] !== width || this.brainSize[1] !== height) {
+      this._target(this.sceneBuffer, this.sceneTexture, width, height, true);
+      this.bloomSize = [Math.max(1, Math.round(width / 4)), Math.max(1, Math.round(height / 4))];
+      for (let i = 0; i < 2; i++) this._target(this.bloomBuffers[i], this.bloomTextures[i], this.bloomSize[0], this.bloomSize[1], true);
+      this.brainSize = [width, height];
+    }
+    const view = this.view;
+    if (view.spin && this.lastTime - view.lastDrag > 4000) view.yaw += this.dt * view.rate;
+    gl.useProgram(this.brainProgram);
+    gl.uniformMatrix3fv(u.rot, false, this._rotation());
+    gl.uniform3f(u.camera, this.camera.x, this.camera.y, this.camera.zoom);
+    gl.uniform2f(u.aspect, a[0], a[1]);
+    gl.uniform2f(u.viewport, width, height);
+    gl.uniform2f(u.fogRange, DIST - 1.3, DIST + 1.3);
+    gl.uniform1f(u.dist, DIST);
+    gl.uniform1f(u.focal, FOCAL);
+    gl.uniform1f(u.clock, this.clock);
+    gl.uniform1f(u.dpr, dpr);
+    gl.uniform1f(u.restAlpha, this.options.restAlpha);
+    gl.uniform1f(u.scale, this.weightScale || 1);
+    gl.uniform1f(u.fade, Math.exp(-Math.max(0, this.clock - this.stateClock) * 1.2));
+    // the curve's segments: fewer on a software renderer and on a brain with very many synapses, the curves kept
+    const S = this.software ? 4 : this.edges > 60000 ? 6 : 10, PS = this.software ? 4 : 6;
+    gl.uniform1f(u.segments, S);
+    gl.uniform1f(u.pulseSegments, PS);
+    gl.uniform1f(u.sizeScale, Math.max(0.7, Math.min(1.6, Math.min(width, height) / (600 * dpr))));
+    gl.uniform1i(u.mode, this.options.mode === "potential" ? 2 : this.options.mode === "change" ? 3 : 0);
+    gl.uniform3f(u.background, ...this.options.background);
+    gl.uniform1f(u.exposure, 0.6);
+    gl.uniform1f(u.bloomGain, this.options.bloom);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
+    gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.textures[2]);
+    gl.activeTexture(gl.TEXTURE5); gl.bindTexture(gl.TEXTURE_2D, this.posTexture);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, null);
+    // the scene, additive into the floating-point target: shell, web, lit paths, pulses, somata
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneBuffer);
+    gl.viewport(0, 0, width, height);
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE);
+    if (this.options.shell) {
+      gl.bindVertexArray(this.shellSurface.vao); gl.uniform1i(u.pass, 10); gl.drawArrays(gl.TRIANGLES, 0, this.shellSurface.count);
+      gl.bindVertexArray(this.shellMesh.vao); gl.uniform1i(u.pass, 11); gl.drawArrays(gl.LINES, 0, this.shellMesh.count);
+    }
+    gl.bindVertexArray(this.vao);
+    const lines = Math.min(this.edges, this.options.lineBudget), pulses = Math.min(this.edges, this.options.particleBudget);
+    gl.uniform1f(u.edgeGain, Math.min(1, Math.sqrt(3000 / Math.max(1, lines)))); // the light budget: a brain with more synapses draws each one fainter
+    const strip = (count, segs) => gl.drawArraysInstanced(gl.TRIANGLE_STRIP, 0, 2 * (segs + 1), count);
+    if (lines && this.options.edges) {
+      gl.uniform1i(u.pass, 12); strip(lines, S);
+      if (!this.software) { gl.uniform1i(u.pass, 13); strip(lines, S); } // a software renderer keeps the web and the pulses, not the glow
+      gl.uniform1i(u.pass, 16); gl.drawArraysInstanced(gl.POINTS, 0, 1, lines);
+    }
+    if (pulses && this.options.particles) {
+      gl.uniform1i(u.pass, 14); strip(pulses, PS);
+      gl.uniform1i(u.pass, 15); gl.drawArraysInstanced(gl.POINTS, 0, 1, pulses);
+    }
+    gl.uniform1i(u.pass, 17); gl.drawArrays(gl.POINTS, 0, this.n);
+    // the bloom: a separable blur of the scene at a quarter of the size
+    gl.disable(gl.BLEND);
+    gl.viewport(0, 0, this.bloomSize[0], this.bloomSize[1]);
+    gl.uniform2f(u.texel, 1 / this.bloomSize[0], 1 / this.bloomSize[1]);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.bloomBuffers[0]);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
+    gl.uniform1i(u.pass, 18); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.bloomBuffers[1]);
+    gl.bindTexture(gl.TEXTURE_2D, this.bloomTextures[0]);
+    gl.uniform1i(u.pass, 19); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    // the composite: scene plus bloom, tone-mapped over the background
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, width, height);
+    gl.activeTexture(gl.TEXTURE6); gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
+    gl.activeTexture(gl.TEXTURE7); gl.bindTexture(gl.TEXTURE_2D, this.bloomTextures[1]);
+    gl.uniform1i(u.pass, 20); gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.enable(gl.BLEND);
+    if (view.spin) this.pending = true; // the brain turns on its own: every frame is new
+  }
+
+  _time(t0) {
+    const ms = performance.now() - t0;
+    this.frameMs = this.frameMs ? this.frameMs * 0.9 + ms * 0.1 : ms;
+    return ms;
   }
 
   _drawFallback() {
@@ -649,14 +1183,20 @@ export class BrainScan {
     if (!this.labels) return;
     const r = this.canvas.getBoundingClientRect();
     const placed = [];
-    const order = this.atlas.regions.map((region, k) => ({ k, region, at: this.toScreen(region.center[0], region.center[1] + region.extent[1] * 1.08) }))
+    const anchor = (region, k) => {
+      if (!this.brain) return { at: this.toScreen(region.center[0], region.center[1] + region.extent[1] * 1.08), centre: this.toScreen(region.center[0], region.center[1]), depth: 0 };
+      const c = this.centers3[k], e = this.extents3[k], centre = this._project3(c[0], c[1], c[2]);
+      return { at: this._project3(c[0], c[1] + e[1] * 1.15, c[2]), centre, depth: Math.max(0, Math.min(1, (centre[2] - (DIST - 1.3)) / 2.6)) };
+    };
+    const order = this.atlas.regions.map((region, k) => ({ k, region, ...anchor(region, k) }))
       .sort((a, b) => b.region.count - a.region.count);
-    for (const { k, region, at } of order) {
+    for (const { k, region, at, centre, depth } of order) {
       const el = this.labelElements[k];
       let [x, y] = at;
       const w = el.offsetWidth || 8 * (region.label ?? region.name).length, h = 14;
       // a label stays on the canvas: clamped to the edges, and only hidden when its region is off screen
-      const [cx, cy] = this.toScreen(region.center[0], region.center[1]);
+      const [cx, cy] = centre;
+      el.style.opacity = this.brain ? String(0.92 - 0.55 * depth) : "0.85";
       const inside = cx > -40 && cx < r.width + 40 && cy > -40 && cy < r.height + 40;
       x = Math.max(w / 2 + 4, Math.min(r.width - w / 2 - 4, x));
       y = Math.max(this.options.labelTop, Math.min(r.height - 9, y));
@@ -730,6 +1270,14 @@ export class BrainScan {
   }
 
   inspect(clientX, clientY) {
+    if (this.brain) {
+      const r = this.canvas.getBoundingClientRect(), px = clientX - r.left, py = clientY - r.top, all = this.screenAll();
+      let best = -1, dist = 144;
+      for (let i = 0; i < this.n; i++) { if (this.layout[i * 4 + 3] === 0) continue; const d = (all[2 * i] - px) ** 2 + (all[2 * i + 1] - py) ** 2; if (d < dist) { dist = d; best = i; } }
+      if (best < 0) return null;
+      const region = this.atlas.regions[this.atlas.region[best]];
+      return { neuron: best, region: region.name, role: region.role, activation: this.activation[best], change: this.change[best], heat: this.heat[best], potential: this.potential ? this.potential[best] : null };
+    }
     const r = this.canvas.getBoundingClientRect(), a = this.aspect();
     const cx = (((clientX - r.left) / r.width) * 2 - 1) / a[0], cy = (1 - ((clientY - r.top) / r.height) * 2) / a[1];
     const k = this.frame.scale * this.camera.zoom * FIT;
@@ -745,7 +1293,7 @@ export class BrainScan {
   }
 
   snapshot() {
-    return { renderer: this.enabled ? "WebGL2" : "canvas fallback", software: !!this.software, version: VERSION, neurons: this.n, synapses: this.edges, regions: this.atlas.regions.length, steps: this.stepCount, zoom: this.camera.zoom, scale: this.scale, allEdgesSubmitted: this.enabled };
+    return { renderer: this.enabled ? "WebGL2" : "canvas fallback", software: !!this.software, version: VERSION, style: this.brain ? "brain" : "scan", neurons: this.n, synapses: this.edges, regions: this.atlas.regions.length, steps: this.stepCount, zoom: this.camera.zoom, scale: this.scale, frameMs: this.frameMs, view: this.brain ? { yaw: this.view.yaw, pitch: this.view.pitch } : null, allEdgesSubmitted: this.enabled && (!this.brain || this.edges <= this.options.lineBudget) };
   }
 }
 
@@ -852,7 +1400,7 @@ export function layoutAtlas({ n, pre, post, weight = null, groups, shapes = {}, 
   const K = regions.length, E = pre.length;
   const strength = new Float64Array(E);
   for (let e = 0; e < E; e++) strength[e] = Math.abs(weight ? weight[e] : 1);
-  const finish = (pos) => ({ n, synapses: E, regions: regions.map(({ indices, ...rest }) => rest), region: regionIndex, positions: pos, pre: pre instanceof Uint32Array ? pre : Uint32Array.from(pre), post: post instanceof Uint32Array ? post : Uint32Array.from(post), weight: weight ? Float32Array.from(weight) : new Float32Array(E).fill(1), palette: PALETTE, memberIndices: regions.map((r) => r.indices) });
+  const finish = (pos) => ({ n, synapses: E, seed, regions: regions.map(({ indices, ...rest }) => rest), region: regionIndex, positions: pos, pre: pre instanceof Uint32Array ? pre : Uint32Array.from(pre), post: post instanceof Uint32Array ? post : Uint32Array.from(post), weight: weight ? Float32Array.from(weight) : new Float32Array(E).fill(1), palette: PALETTE, memberIndices: regions.map((r) => r.indices) });
   if (positions['*']) {
     // One shared frame for every neuron (an anatomy): kept as given, scaled into the square;
     // regions are then wherever their neurons are.

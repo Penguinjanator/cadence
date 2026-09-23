@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 (2026-09-23)
 
 - The brain viewer has a second style, `style: "brain"`, and is the patch-net
   visualizer every page shares: the same net wrapped into the volume of one
@@ -15,8 +15,15 @@
   glow along the path and a pulse with a tail, brightness by message times
   weight, strongest first under the budgets; additive blending, bloom and a
   depth fog. `setStyle` switches between `"scan"` (unchanged, still the
-  default) and `"brain"` on the same canvas; `lobeOf` and `brainLayout` are
-  exported. The guide `docs/pages.md` frames the viewer and its options.
+  default) and `"brain"` on the same canvas, with the same API in both. The
+  brain style's options: `restAlpha` (0.025) for the resting web, `bloom`
+  (0.5) for the bloom's gain, `shell: false` hides the shell, `spin: false`
+  stops the self-rotation, `spinRate` (0.12 radians per second) sets its
+  speed; `mode`, `particles`, `edges`, `lineBudget` and `particleBudget` mean
+  the same as in the scan style, and `snapshot()` reports the style, the
+  view's yaw and pitch and the frame time. `lobeOf` and `brainLayout` are
+  exported. The guide `docs/pages.md` frames the viewer as the patch-net
+  visualizer every page shares, with both styles and their options.
 - Documentation for builders. The README opens with the roadmap (an
   effortlessly evolved human-like brain, taught by imitation and then by its
   own life, whose experience is that of a human in our world; human-level
@@ -81,6 +88,51 @@
   curves, and a paragraph for each phase. Nothing is hosted and there is no
   checkpoint. The guide is `docs/demos.md`: what equilibrium means in each
   brain and what detuning buys.
+- `BeliefPatch`: a gain per observation-port block inside the repair. `assimilate`, `observe`
+  and `imagine` take `gains=` (`(blocks,)`, `(batch, blocks)` or `(batch, time, blocks)`),
+  which multiplies each block's encoded evidence before the repair map and the store read
+  see it, so the gain acts in every iteration and in the store's code; the adjoint returns
+  the gradient into the gains as `BeliefObservation.gain_gradient` and the path carries the
+  gains used. The tests check the gain gradient against finite differences (worst relative
+  error 1.3e-10 at the test's sizes).
+- `BeliefPath` carries the readback of every moment: `evidence` (the encoded evidence the
+  repair read, after the gains), `code` (the store's plain code at the final reading),
+  `gains`, `residual_alone` (the repair map's move with one block heard and the store read
+  at zero, with `probe=True`) and `surprise` (each block's reading against the reading the
+  previous belief's slow readout implies, in the block's persistence units, once
+  `set_implied_reading(implied, units)` declares the map; channels the map leaves `NaN` are
+  not compared). `readback(observations, actions, state=)` gives one moment's expectation,
+  probe and surprise before its repair, what a steering patch reads before it sets the
+  moment's gains; it changes nothing.
+- `BeliefPatch.observe(backtrack=True)`: an admitted step, as the record patch has. The chunk
+  is replayed from the same boundary under the proposed parameters with the store as it
+  stands, and the largest halving of `rate` that lowers the loss by the Armijo margin is
+  taken (sixteen halvings at most); `accepted_rate`, `final_loss` and `replay_calls` are on
+  the observation, and the store is written after the admission. In the tests a rate of 100
+  that diverges within three chunks without it is admitted with it, and the loss never rises
+  on an accepted step. The admission adds no state to the patch.
+- `BeliefPatch.observe(loss_weight=)`, a weight per moment `(time,)` or `(batch, time)`,
+  normalized by its sum instead of the moment count in the loss and the adjoint; a moment
+  of weight zero is neither taught nor written. `observed=` is accepted per row as
+  `(batch, time)` as well as `(time,)` in `assimilate`, `observe` and `imagine`'s mask
+  handling; a row that observes nothing keeps its expectation while the other rows repair.
+  The adjoint under a weight and a per-row mask matches finite differences (worst relative
+  error 2.2e-10 on the parameters).
+- `BeliefPatch.observe(output_gradient=)` in place of `target`: the adjoint under an external
+  gradient on the outputs, so a patch is taught through a seam (a steering patch, from the
+  cortex's gain gradient through the caller's map). Nothing is written and no loss is
+  reported. With the gradient of the target form the parameter and gain gradients equal the
+  target form's exactly, and they match finite differences of the linear functional (worst
+  relative error 2.8e-11).
+- `TorchBelief.forward` takes `gains=` and `observed=` in the library's shapes, since the
+  forward is shared; a gains tensor that requires grad receives the gradient into the gains,
+  and the parity test covers the beliefs, the outputs, the parameter gradients and the gain
+  gradient under a weighted loss and a per-row mask. The loss weight, the admission and the
+  external output gradient are the caller's loss and optimiser on torch; the readback of a
+  moment stays on the library's path.
+- `cadence.record_ports` ships with its arithmetic bound by finite-difference tests
+  and its line length allowed; the module's type annotations follow in a later
+  release (a file-level mypy opt-out marks it).
 
 ## 0.13.0 (2026-09-22)
 
