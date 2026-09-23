@@ -65,7 +65,13 @@ pinned toolchain; see [lean/README.md](lean/README.md)).
 Worked applications live in [cadence-examples](https://github.com/muellerberndt/cadence-examples),
 one directory each with a README, a static page that runs the brain in the browser, the
 receipts behind every stated number and a `verify.py` that recomputes them. An example
-pins the library release its checks were run against. A new example follows that layout.
+pins the library release its checks were run against. A new example follows that layout
+and opens its README with the card that repository's
+[contributing section](https://github.com/muellerberndt/cadence-examples#contributing)
+defines: name, author, description, Cadence version, hardware used for the initial
+training, the library features it showcases, the problems met while building it, the
+hosted URL, its receipts and checks, its data and rights, and what is work in progress.
+Half-working examples with a filled card are welcome; every one is data.
 
 ## Releases
 
