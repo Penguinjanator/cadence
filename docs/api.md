@@ -99,6 +99,17 @@ See the [record patch guide](record-patch.md).
   `snapshot` and `restore` as for one patch. `observe` returns
   `StackObservation`: `updated`, `reason`, the upper patch's `prediction`,
   `delta`, `initial_loss`, `final_loss`, `accepted_rate` and `writes`.
+- `JointRecordPatches(cortices, own_inputs, ports, *, rounds=1, damping=1.0,
+  cross_adjoint=True)` settles several `RecordPatchNet`s as one equilibrium;
+  each `Port(source, target, start, width)` carries a band of the source's scaled
+  context into the target's inputs in the same moment, over `rounds` Jacobi
+  rounds. `observe(xs, ys, rate=, backtrack=, write=)` returns a
+  `JointObservation` (`updated`, `reason`, the `settled` path with `seam` and
+  `settle` per moment and round, `delta` per cortex, the losses, `writes`);
+  `imagine(xs, states=)`, `advance(xs)`, `reset`, `parameters`, `snapshot`,
+  `restore`, `clone`, `save`, `load`; `cut = True` zeroes every port.
+  `cadence.record_ports.build(hidden, own_inputs, outputs, ports, *, seed, ...)`
+  grows the patches at the widths the ports need.
 - `observe(inputs, target, *, rate=1.0, backtrack=False, write=True)`
   predicts with the records at the start of the call, moves the slow
   parameters against the adjoint gradient of the precision-weighted half

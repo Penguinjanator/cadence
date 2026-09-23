@@ -541,6 +541,53 @@ lower state, so a jointly coupled energy is not automatically quadratic.
 `RecordPatchStack` supplies an adjoint learning scan, not a joint `detune`
 solver or a joint equilibrium convergence guarantee.
 
+## Several patches joined by ports
+
+`JointRecordPatches` settles several record patches as one equilibrium. A
+`Port(source, target, start, width)` declares a seam: the band
+`[start, start + width)` of the source patch's scaled context `r * h` (the unit
+its records read it in, and the unit the stack hands upward) is an input of the
+target patch in the same moment. The target's gate and input port read it
+through their ordinary weights, and its records key on what crosses; nothing
+else crosses. The joint energy adds `1/2 |p[t] - S r h_source[t]|^2` per port to
+the patches' seam energies, and at every moment `rounds` Jacobi rounds from the
+previous moment's contexts solve the coupled equations: round one is the delayed
+port, each further round re-reads the other patch's context of this moment. For
+a one-way port two rounds reach the exact fixed point; for two-way ports the
+contraction is measured, not proved. The seam residual per moment and round is
+the fourth instrument beside the residual, the surprise and the update.
+
+```python
+import numpy as np
+from cadence import JointRecordPatches, Port, RecordPatchNet
+
+eye = RecordPatchNet(inputs=5 + 3, hidden=8, outputs=4, seed=1, cells=256, active=8, groups=(4,))
+ear = RecordPatchNet(inputs=5 + 2, hidden=6, outputs=4, seed=2, cells=256, active=8, groups=(4,))
+brain = JointRecordPatches([eye, ear], own_inputs=[5, 5],
+                           ports=[Port(1, 0, 0, 3), Port(0, 1, 2, 2)], rounds=2)
+rng = np.random.default_rng(0)
+xs = [np.eye(5)[rng.integers(5, size=(3, 8))] for _ in range(2)]
+ys = [np.eye(4)[rng.integers(4, size=(3, 8))] for _ in range(2)]
+seen = brain.observe(xs, ys, rate=2.0, backtrack=True)
+assert seen.settled.seam.shape == (3, 8, 2, 2)      # batch, time, rounds, ports
+```
+
+Learning is one backward scan through the moments and the rounds; with
+`cross_adjoint=True` the gradient of a target's loss reaches the source's context
+through the port, with `False` the port is a plain input. The step is admitted by
+the library's backtracking on the joint slow loss. Records are read at the
+settled readings after the scan and written after the path, as in one patch.
+Snapshots are the patches' snapshots plus the topology; `imagine` changes
+nothing; `cut = True` makes every port carry zeros, the ablation. Which patch
+hears which, the band and the width are a genome for `evolve` with `genes`;
+the channels are ordered by timescale, so the band decides what crosses: the
+fastest channels carry the source's current input, the slowest its carried
+state. On two coupled symbol streams with one hidden cause, the joint port
+lifted the dependent stream from 0.39 (two independent patches) to 0.54 at
+matched parameters, the same-moment settling round carried the gain, and
+cutting the port after learning dropped that stream to 0.27. There is no joint
+`detune`: the joint energy is not quadratic in the joint path.
+
 ## What this class does not do
 
 Planning through action ports, protected responses through `TemporalMemory`

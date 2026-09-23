@@ -58,6 +58,7 @@ from .record_patch import (
     RecordPath,
     RecordReadback,
 )
+from .record_ports import JointObservation, JointRecordPatches, Port
 from .record_stack import RecordPatchStack, StackObservation
 from .recording import SettlementRecord, record_settlements
 from .records import Mulberry32, Records
@@ -134,6 +135,9 @@ __all__ = [
     "Receipt",
     "SettlementRecord",
     "record_settlements",
+    "JointRecordPatches",
+    "JointObservation",
+    "Port",
     "Row",
     "Brain",
     "BrainState",

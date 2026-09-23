@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- `JointRecordPatches` and `Port` (`cadence.record_ports`): several record
+  patches settled as one equilibrium, moment by moment. A port is a declared
+  band of one patch's scaled context read as an input of another in the same
+  moment; the joint energy adds a seam term per port, `rounds` Jacobi rounds
+  settle the coupled patches, the seam residual per moment and round is the
+  fourth instrument, and one backward scan carries the adjoint across every
+  seam (`cross_adjoint`), with the library's backtracking on the joint slow
+  loss. Records are read at the settled readings and written after the path as
+  before; snapshots are per patch plus the topology; `imagine` changes nothing.
+  Which patch hears which, the band and the width are a genome for `evolve`.
+  On two coupled symbol streams the joint port lifted the dependent stream from
+  0.39 to 0.54 at matched parameters against two independent patches, and the
+  same-moment settling round carried it; the guide is in `docs/record-patch.md`.
+  `RecordPatchNet._slow` takes optional readout parameters for a replay.
 - The brain viewer allocates its render targets on its first draw even when the
   canvas was already sized by an earlier viewer: a page that built a second
   `BrainScan` on the same canvas drew its tissue field into an unallocated
