@@ -135,3 +135,71 @@ def test_genome_round_trips_through_its_dict() -> None:
     again = Genome.from_dict(c.to_dict())
     assert again == c
     assert develop(again, seed=4).synapses == develop(c, seed=4).synapses
+
+
+def test_evolve_selects_any_genome_with_its_own_mutation() -> None:
+    from cadence.genome import genes
+
+    # a dict genome: a threshold on a log scale, an integer budget, a categorical choice
+    space = {"k": ("log", 0.3, 0.5, 50.0), "n": ("int", 1, 20), "mode": ("choice", "a", "b")}
+    genome = {"k": 1.0, "n": 3, "mode": "a", "fixed": "kept"}
+
+    def fitness(g: dict, seed: int) -> float:
+        return (
+            -(np.log(g["k"] / 8.0) ** 2)
+            - abs(g["n"] - 12) / 10
+            + (0.5 if g["mode"] == "b" else 0.0)
+        )
+
+    lineage = evolve(
+        fitness, genome, mutate=genes(space), generations=12, population=10, keep=3, seed=3
+    )
+    best = lineage.best
+    assert isinstance(best, dict) and best["fixed"] == "kept"
+    assert 8.0 / 1.6 <= best["k"] <= 8.0 * 1.6 and best["n"] > 3 and best["mode"] == "b"
+    assert lineage.best_fitness > fitness(genome, 0)  # the hand-set start is the control
+    assert lineage.generations[-1]["best_fitness"] >= lineage.generations[0]["best_fitness"]
+    assert isinstance(lineage.generations[0]["best"], dict)
+
+
+def test_evolve_grows_a_foreign_genome_when_told_how() -> None:
+    from cadence.genome import genes
+
+    def grow(g: dict, seed: int) -> float:
+        return float(g["x"]) * 2.0
+
+    def fitness(grown: float, seed: int) -> float:
+        return -abs(grown - 6.0)
+
+    lineage = evolve(
+        fitness,
+        {"x": 1.0},
+        mutate=genes({"x": ("linear", 0.5, 0.0, 10.0)}),
+        grow=grow,
+        generations=10,
+        population=8,
+        keep=2,
+        seed=5,
+    )
+    assert abs(lineage.best["x"] - 3.0) < 0.5
+
+
+def test_evolve_refuses_a_foreign_genome_without_mutate_and_mixed_mutation_arguments() -> None:
+    import pytest
+
+    from cadence.genome import genes
+
+    with pytest.raises(ValueError):
+        evolve(lambda g, s: 0.0, {"x": 1.0}, generations=1, population=1, keep=1)
+    with pytest.raises(ValueError):
+        evolve(
+            _hidden_size,
+            two_region(),
+            mutate=genes({"x": ("int", 0, 1)}),
+            fixed=("input",),
+            generations=1,
+            population=1,
+            keep=1,
+        )
+    with pytest.raises(ValueError):
+        genes({"x": ("log", -1.0, 0.0, 1.0)})

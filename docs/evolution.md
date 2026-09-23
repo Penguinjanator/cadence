@@ -14,6 +14,37 @@ perturbations sample candidate states for one decision. That state search is
 distinct from the centered equilibrium contrast used by
 [temporal learning](temporal.md) and [input planning](planning.md).
 
+## Any genome
+
+`evolve` selects over any genome that has its own mutation. A `Genome` grows into a
+connectome by `develop` and mutates by `mutate` below; any other genome, a dict of a
+governor's thresholds, a port topology, a patch's sizes, a habit's motor coding, is passed
+to the fitness as it is (or grown by `grow(genome, seed)` when supplied) and mutates by the
+`mutate(genome, rng)` you pass. `cadence.genes(space)` supplies one over a declared space:
+
+```python
+import numpy as np
+from cadence import evolve, genes
+
+space = {"threshold": ("log", 0.3, 0.5, 50.0), "budget": ("int", 1, 20), "law": ("choice", "a", "b")}
+start = {"threshold": 4.0, "budget": 3, "law": "a"}
+
+
+def fitness(genome, seed):  # the caller's: here a threshold near 8, a budget near 12, law b
+    return -np.log(genome["threshold"] / 8.0) ** 2 - abs(genome["budget"] - 12) / 10 + (genome["law"] == "b")
+
+
+lineage = evolve(fitness, start, mutate=genes(space), generations=12, population=10, keep=3, seed=5)
+assert lineage.best["law"] == "b" and lineage.best["budget"] > 3  # moved by one each step
+assert lineage.best_fitness > fitness(start, 0)  # the hand-set start is the control
+```
+
+`log` genes multiply by `exp(normal(0, step))` and clip, for scales and thresholds; `linear`
+genes add `normal(0, step)` and clip; `int` genes move by one within bounds; `choice` genes
+redraw among their options. Each gene mutates independently with probability `rate`. Where a
+rule looks designed, this is how it becomes a gene: the hand-set value starts the lineage and
+stays as the control.
+
 ## Mutation
 
 `cadence.genome.mutate(genome, rng, *, size_step=0.25, fixed=(), tied=())` returns one

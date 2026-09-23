@@ -552,7 +552,9 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
 - `cadence.genome.mutate(genome, rng, *, size_step=0.25, fixed=(), tied=())`: one offspring
   (module level; `evolve` uses it). Designed regions and regions in `fixed` keep their size;
   each `(leader, follower)` pair in `tied` keeps the follower the size of the leader.
-- `evolve(fitness, genome, *, generations=10, population=8, keep=2, seed=0, mapper=map, report=None, **mutation) -> Lineage`:
+- `genes(space, *, rate=1.0)` returns a mutation over a dict genome for a declared space of
+  `log`, `linear`, `int` and `choice` genes; see [any genome](evolution.md#any-genome).
+- `evolve(fitness, genome, *, generations=10, population=8, keep=2, seed=0, mapper=map, report=None, mutate=None, grow=None, **mutation) -> Lineage`:
   selection under `fitness(connectome, seed) -> float`. Generation 0 scores the genome and
   `population - 1` offspring; each later generation scores `population` offspring of the
   `keep` best genomes of the generation before. Each life develops its genome at the seed

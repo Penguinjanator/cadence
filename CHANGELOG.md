@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `evolve` selects over any genome: a `Genome` grows by `develop` and mutates as
+  before; any other genome, a dict of a governor's thresholds, a port topology,
+  a patch's sizes, takes its own `mutate(genome, rng)` and an optional
+  `grow(genome, seed)`, and the lineage records it as it is. `cadence.genes(space)`
+  supplies a mutation over a declared space of `log`, `linear`, `int` and
+  `choice` genes. Where a rule looks designed it becomes a gene, with the
+  hand-set value as the control.
 - The three quickstart brains run in the browser: `cadence-demo stream`,
   `cadence-demo decide`, `cadence-demo body` (`cadence.demo`). Each command
   trains its brain in front of you from the quickstart's seeds, in seconds to a

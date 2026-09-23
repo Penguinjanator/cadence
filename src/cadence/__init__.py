@@ -36,7 +36,7 @@ from .checkpoint import load, save
 from .connectome import Connectome
 from .content_memory import ContentMemory
 from .generic import GenericBrain
-from .genome import Genome, Projection, develop, evolve
+from .genome import Genome, Projection, develop, evolve, genes
 from .learning import Learner, LearnerConfig, embedded, layered, learning_neuron_model
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
@@ -145,6 +145,7 @@ __all__ = [
     "embedded",
     "develop",
     "evolve",
+    "genes",
     "evaluate_predicate",
     "layered",
     "learning_neuron_model",

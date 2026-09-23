@@ -15,6 +15,7 @@ settling under the same neuron model.
 
 from __future__ import annotations
 
+import functools
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field, replace
 from typing import Any
@@ -219,15 +220,83 @@ def mutate(
     return replace(genome, regions=regions, projections=projections)
 
 
+_mutate_genome = mutate
+
+
 class _Life:
-    """One life as a picklable callable: grow the genome at its seed, score the connectome."""
+    """One life as a picklable callable: grow the genome at its seed, score what grew."""
 
-    def __init__(self, fitness: Callable[[Connectome, int], float]) -> None:
+    def __init__(
+        self, fitness: Callable[[Any, int], float], grow: Callable[[Any, int], Any]
+    ) -> None:
         self.fitness = fitness
+        self.grow = grow
 
-    def __call__(self, job: tuple[Genome, int]) -> float:
+    def __call__(self, job: tuple[Any, int]) -> float:
         genome, seed = job
-        return float(self.fitness(develop(genome, seed=seed), seed))
+        return float(self.fitness(self.grow(genome, seed), seed))
+
+
+def _develop_at(genome: Genome, seed: int) -> Connectome:
+    return develop(genome, seed=seed)
+
+
+def _as_is(genome: Any, seed: int) -> Any:
+    return genome
+
+
+def _record(genome: Any) -> Any:
+    return genome.to_dict() if hasattr(genome, "to_dict") else genome
+
+
+def genes(
+    space: Mapping[str, tuple[Any, ...]], *, rate: float = 1.0
+) -> Callable[[Mapping[str, Any], np.random.Generator], dict[str, Any]]:
+    """A mutation for dict genomes over a declared space, for ``evolve(..., mutate=genes(space))``.
+
+    Every key of ``space`` names a gene and its kind: ``("log", step, low, high)`` multiplies by
+    ``exp(normal(0, step))`` and clips to the bounds, for scales and thresholds;
+    ``("linear", step, low, high)`` adds ``normal(0, step)`` and clips; ``("int", low, high)``
+    moves by one, up or down, within the bounds; ``("choice", option, ...)`` redraws among the
+    options. Each gene mutates independently with probability ``rate``; genes of the genome that
+    ``space`` does not name are copied. A governor's threshold, an imagination budget, a port's
+    width or a cortex size can all be genes this way, with the hand-set value as the control.
+    """
+    kinds = {}
+    for name, spec in space.items():
+        if not spec or spec[0] not in ("log", "linear", "int", "choice"):
+            raise ValueError(f"gene {name!r} needs a kind: log, linear, int or choice")
+        if spec[0] in ("log", "linear") and (len(spec) != 4 or spec[1] <= 0 or spec[2] > spec[3]):
+            raise ValueError(
+                f"gene {name!r} needs (kind, step, low, high) with step > 0 and low <= high"
+            )
+        if spec[0] == "int" and (len(spec) != 3 or spec[1] > spec[2]):
+            raise ValueError(f"gene {name!r} needs (int, low, high) with low <= high")
+        if spec[0] == "choice" and len(spec) < 2:
+            raise ValueError(f"gene {name!r} needs at least one option")
+        kinds[str(name)] = tuple(spec)
+    if not 0.0 < float(rate) <= 1.0:
+        raise ValueError("rate must lie in (0, 1]")
+
+    def mutate_genes(genome: Mapping[str, Any], rng: np.random.Generator) -> dict[str, Any]:
+        child = dict(genome)
+        for name, spec in kinds.items():
+            if name not in child or rng.random() > rate:
+                continue
+            kind, value = spec[0], child[name]
+            if kind == "log":
+                child[name] = float(
+                    np.clip(value * np.exp(rng.normal(0.0, spec[1])), spec[2], spec[3])
+                )
+            elif kind == "linear":
+                child[name] = float(np.clip(value + rng.normal(0.0, spec[1]), spec[2], spec[3]))
+            elif kind == "int":
+                child[name] = int(np.clip(int(value) + int(rng.choice([-1, 1])), spec[1], spec[2]))
+            else:
+                child[name] = spec[1 + int(rng.integers(len(spec) - 1))]
+        return child
+
+    return mutate_genes
 
 
 @dataclass
@@ -235,13 +304,13 @@ class Lineage:
     """What selection did: the best genome of every generation and its fitness."""
 
     generations: list[dict[str, Any]] = field(default_factory=list)
-    best: Genome | None = None
+    best: Any = None
     best_fitness: float = -np.inf
 
 
 def evolve(
-    fitness: Callable[[Connectome, int], float],
-    genome: Genome,
+    fitness: Callable[[Any, int], float],
+    genome: Any,
     *,
     generations: int = 10,
     population: int = 8,
@@ -249,30 +318,52 @@ def evolve(
     seed: int = 0,
     mapper: Callable[..., Iterable[float]] = map,
     report: Callable[[Lineage], None] | None = None,
+    mutate: Callable[[Any, np.random.Generator], Any] | None = None,
+    grow: Callable[[Any, int], Any] | None = None,
     **mutation: Any,
 ) -> Lineage:
     """Selection over genomes: the first generation holds the starting genome and its mutated
     offspring; every later generation holds ``population`` mutated offspring of the ``keep``
-    best genomes of the previous generation. Each grown connectome is scored with
-    ``fitness(connectome, seed)``, and the lineage records the best genome ever scored. The
-    fitness is the caller's: a protocol score, a learning curve, an accuracy. ``mapper`` runs a
-    generation's lives: ``map`` one after another, a pool's ``map`` side by side (``fitness``
-    must then be picklable, so a module-level function). ``report`` is called with the lineage
-    so far after every generation, so a long run can be written out as it goes."""
+    best genomes of the previous generation. Each genome is grown at its seed and scored with
+    ``fitness(grown, seed)``, and the lineage records the best genome ever scored. The fitness
+    is the caller's: a protocol score, a learning curve, an accuracy, a return per unit of
+    compute.
+
+    A ``Genome`` grows into a connectome by ``develop`` and mutates by ``mutate`` of this module,
+    whose keyword arguments arrive through ``mutation``. Any other genome, a dict of a governor's
+    thresholds, a port topology, a patch's sizes, needs its own ``mutate(genome, rng)`` (``genes``
+    supplies one over a declared space) and is passed to the fitness as it is unless ``grow``
+    says how to build from it. ``mapper`` runs a generation's lives: ``map`` one after another, a
+    pool's ``map`` side by side (``fitness`` must then be picklable, so a module-level function).
+    ``report`` is called with the lineage so far after every generation, so a long run can be
+    written out as it goes."""
     for name, value in (("generations", generations), ("population", population), ("keep", keep)):
         if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
             raise ValueError(f"{name} must be a positive integer")
     if keep > population:
         raise ValueError("keep cannot exceed population")
+    if mutate is None:
+        if not isinstance(genome, Genome):
+            raise ValueError("a genome that is not a Genome needs its own mutate")
+        step: Callable[[Any, np.random.Generator], Any] = functools.partial(
+            _mutate_genome, **mutation
+        )
+    elif mutation:
+        raise ValueError(
+            "mutation keywords belong to the module's mutate; a custom mutate takes none"
+        )
+    else:
+        step = mutate
+    build = grow if grow is not None else (_develop_at if isinstance(genome, Genome) else _as_is)
     rng = np.random.default_rng(seed)
     lineage = Lineage()
     parents = [genome]
     for g in range(generations):
         offspring = list(parents) if g == 0 else []
         while len(offspring) < population:
-            offspring.append(mutate(parents[rng.integers(len(parents))], rng, **mutation))
+            offspring.append(step(parents[rng.integers(len(parents))], rng))
         seeds = [seed + 1000 * g + k for k in range(len(offspring))]
-        scores = mapper(_Life(fitness), zip(offspring, seeds, strict=True))
+        scores = mapper(_Life(fitness, build), zip(offspring, seeds, strict=True))
         scored = [
             (float(f), k, child) for k, (f, child) in enumerate(zip(scores, offspring, strict=True))
         ]
@@ -285,7 +376,7 @@ def evolve(
             {
                 "generation": g,
                 "best_fitness": top[0],
-                "best": top[2].to_dict(),
+                "best": _record(top[2]),
                 "mean_fitness": float(np.mean([s[0] for s in scored])),
             }
         )
