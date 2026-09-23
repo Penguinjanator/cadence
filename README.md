@@ -28,6 +28,17 @@ network can explore a possible response, test it against actual consequences
 and settle into a revised organization. We seek fewer mechanisms that solve
 more problems.
 
+## The roadmap
+
+We want to reach a point where we can effortlessly evolve a human-like brain,
+teach it first by imitation and then through its own life, and give it an
+experience identical to that of a human living in our world. Brains with
+capabilities far beyond ours are thinkable on the same path; human-level
+competence comes first, as a sensible milestone. The
+[metacognition ladder](docs/METACOGNITION_LADDER.md) orders the steps from the
+brains in this library to that milestone, rung by rung, each with its task, its
+control, its falsifier and its issue.
+
 ## In familiar terms
 
 Cadence is a NumPy library of brains that compute by settling into an equilibrium
@@ -132,6 +143,14 @@ They are application tests, not definitions of the architecture. A result in one
 does not establish transfer to the others. Every example states what is supplied,
 what is learned, what was measured and what it does not show, and pins the release
 its checks were run against.
+
+Build your own. Fork an example, break it, give the same brain a different body or a
+different sense, and put a task in front of it that nobody has tried. Every example,
+finished or half-working, is data for us: it says what the architecture does where we
+have not looked, and that is what scales this work toward the full humanoid simulation.
+Hack things. Be crazy. Chaos is how we learn. The examples repository's
+[contributing section](https://github.com/muellerberndt/cadence-examples#contributing)
+says what an example needs to live there, including the card every example README carries.
 
 ## Documentation
 

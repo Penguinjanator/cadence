@@ -2,8 +2,25 @@
 
 ## Unreleased
 
-- Documentation for builders. The README opens with what Cadence is in
-  machine-learning terms, the install, the three browser demos and one runnable
+- The brain viewer has a second style, `style: "brain"`, and is the patch-net
+  visualizer every page shares: the same net wrapped into the volume of one
+  stylised animal brain in three dimensions. A translucent shell with a rim
+  light (two lobed hemispheres, a cerebellum, a stem) turns slowly on its own,
+  drag rotates it, scroll zooms; every region is assigned a lobe by its role
+  and name (sensory at the back, memory deep as the hippocampus, association
+  across the cortex, motor in the frontal strip, a governor at the front as the
+  prefrontal area) and keeps the atlas's arrangement inside it; neurons are
+  glowing somata; every synapse is a curved ribbon in three dimensions, very
+  dark at rest and lit in real time by the messages that travel on it, with a
+  glow along the path and a pulse with a tail, brightness by message times
+  weight, strongest first under the budgets; additive blending, bloom and a
+  depth fog. `setStyle` switches between `"scan"` (unchanged, still the
+  default) and `"brain"` on the same canvas; `lobeOf` and `brainLayout` are
+  exported. The guide `docs/pages.md` frames the viewer and its options.
+- Documentation for builders. The README opens with the roadmap (an
+  effortlessly evolved human-like brain, taught by imitation and then by its
+  own life, whose experience is that of a human in our world; human-level
+  competence as the first milestone), what Cadence is in machine-learning terms, the install, the three browser demos and one runnable
   brain, a table of which brain to start from, the four examples with what each
   shows and what it is built from, and a map of the guides; the vision sections
   follow. New guides: `docs/orientation.md` (the four brains against familiar
