@@ -477,7 +477,7 @@ class BeliefPatch:
     @staticmethod
     def _rows(value: Any, n: int, t: int, name: str, dtype: type) -> np.ndarray:
         """A per-moment array given as ``(time,)`` or ``(batch, time)``, as ``(batch, time)``."""
-        v = np.asarray(value, dtype=dtype)
+        v: np.ndarray = np.asarray(value, dtype=dtype)
         if v.shape == (n, t):
             return v.copy()
         if v.size == t:
