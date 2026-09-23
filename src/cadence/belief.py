@@ -66,6 +66,9 @@ class BeliefPath:
     output: np.ndarray
     read: np.ndarray
     loss: float | None
+    step: np.ndarray | None = None
+    """The last repair iteration's move per belief unit, ``(batch, time, belief)``; its norm
+    over the units is ``residual``. Where the belief moved under the evidence."""
 
     @property
     def slow_output(self) -> np.ndarray:
@@ -219,8 +222,9 @@ class BeliefPatch:
                 us.append(u)
                 ms.append(m)
         m, code = self._read(e, z)
-        residual = np.linalg.norm(zs[-1] - zs[-2], axis=-1) if len(zs) > 1 else np.zeros(n)
-        return {"z": z, "zs": zs, "hs": hs, "us": us, "read": m, "code": code, "residual": residual}
+        step = zs[-1] - zs[-2] if len(zs) > 1 else np.zeros_like(p)
+        residual = np.linalg.norm(step, axis=-1)
+        return {"z": z, "zs": zs, "hs": hs, "us": us, "read": m, "code": code, "residual": residual, "step": step}
 
     def _forward(
         self,
@@ -260,10 +264,11 @@ class BeliefPatch:
         belief = np.stack([r["z"] for r in record["repair"]], axis=1)
         expectation = np.stack([x["p"] for x in record["expect"]], axis=1)
         residual = np.stack([r["residual"] for r in record["repair"]], axis=1)
+        step = np.stack([r["step"] for r in record["repair"]], axis=1)
         output = np.stack(record["y"], axis=1)
         read = np.stack(record["read"], axis=1)
         loss = None if target is None else self._loss(output - read, target)
-        return BeliefPath(belief, expectation, residual, output, read, loss)
+        return BeliefPath(belief, expectation, residual, output, read, loss, step)
 
     def _loss(self, slow: np.ndarray, target: np.ndarray) -> float | None:
         with np.errstate(over="ignore", invalid="ignore"):
@@ -304,12 +309,14 @@ class BeliefPatch:
         return value.copy()
 
     def assimilate(
-        self, observations: np.ndarray, actions: np.ndarray, observed: np.ndarray | None = None
+        self, observations: np.ndarray, actions: np.ndarray, observed: np.ndarray | None = None, *, state: np.ndarray | None = None
     ) -> BeliefPath:
         """Advance the belief through observed moments: the executed action, then the evidence.
-        Nothing is learned or written; the final belief becomes the live state."""
+        Nothing is learned or written; the final belief becomes the live state. ``state`` starts
+        the moments from a given boundary instead of the live belief (a window that is replayed
+        from the belief that was live at its first moment)."""
         o, a, mask = self._check(observations, actions, observed)
-        record = self._forward(o, a, self._boundary(len(a), None), mask)
+        record = self._forward(o, a, self._boundary(len(a), state), mask)
         path = self._path(record, None)
         self._state = path.final_state
         return path
@@ -330,8 +337,11 @@ class BeliefPatch:
         observed: np.ndarray | None = None,
         rate: float = 1.0,
         write: bool = True,
+        state: np.ndarray | None = None,
     ) -> BeliefObservation:
-        """Learn one chunk of witnessed moments and write their outcomes into the store."""
+        """Learn one chunk of witnessed moments and write their outcomes into the store. ``state``
+        starts the chunk from a given boundary instead of the live belief; the final belief under
+        the chunk becomes the live state either way."""
         o, a, mask = self._check(observations, actions, observed)
         y = np.asarray(target, dtype=float)
         if y.shape != (*a.shape[:2], self.outputs) or not np.isfinite(y).all():
@@ -340,7 +350,7 @@ class BeliefPatch:
             raise ValueError("rate must be finite and nonnegative")
         if o is None:
             raise ValueError("observe needs observations; imagine is the private continuation")
-        boundary = self._boundary(len(a), None)
+        boundary = self._boundary(len(a), state)
         record = self._forward(o, a, boundary, mask)
         path = self._path(record, y)
         self._state = path.final_state

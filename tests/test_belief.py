@@ -179,3 +179,34 @@ def test_the_torch_backend_matches_the_library_forward_and_gradient():
         imagined, patch.imagine(a, state=result.path.final_state).slow_output, atol=1e-10
     )
     torch.set_default_dtype(torch.float32)
+
+
+def test_a_boundary_state_starts_the_moments_and_the_final_belief_goes_live():
+    rng = np.random.default_rng(21)
+    patch = _patch(seed=21)
+    o, a, y = _data(rng, patch=patch)
+    patch.reset()
+    patch.assimilate(o[:, :2], a[:, :2])
+    live = patch.state.copy()
+    other = rng.normal(size=live.shape)
+    from_live = patch.assimilate(o[:, 2:], a[:, 2:])
+    patch._state = live.copy()
+    from_other = patch.assimilate(o[:, 2:], a[:, 2:], state=other)
+    assert not np.allclose(from_live.belief, from_other.belief)
+    np.testing.assert_allclose(patch.state, from_other.final_state)
+    patch._state = live.copy()
+    seen = patch.observe(o[:, 2:], a[:, 2:], y[:, 2:], rate=0.0, write=False, state=other)
+    np.testing.assert_allclose(seen.path.belief, from_other.belief, atol=1e-12)
+    np.testing.assert_allclose(patch.state, from_other.final_state)
+
+
+def test_the_step_is_the_last_repair_move_per_unit_and_its_norm_is_the_residual():
+    rng = np.random.default_rng(22)
+    patch = _patch(seed=22)
+    o, a, _ = _data(rng, patch=patch)
+    patch.reset()
+    path = patch.assimilate(o, a)
+    assert path.step.shape == path.belief.shape
+    np.testing.assert_allclose(np.linalg.norm(path.step, axis=-1), path.residual, atol=1e-12)
+    imagined = patch.imagine(a)
+    assert np.all(imagined.step == 0.0) and np.all(imagined.residual == 0.0)

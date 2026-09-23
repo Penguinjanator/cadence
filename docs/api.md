@@ -157,11 +157,14 @@ See the [record patch guide](record-patch.md).
 - `BeliefPatch(observation: StructuredPort, actions, belief, outputs, *, iterations=2, damping=0.5,
   cells=4096, active=32, record_rate=0.5, record_width=64, habituation=1e-5, record_bias=0.3,
   output_precision=None, seed=0)`.
-- `assimilate(observations, actions, observed=None) -> BeliefPath`: advance the belief through
-  observed moments; nothing learned or written. `imagine(actions, *, state=None) -> BeliefPath`:
-  the transition alone under declared actions, private. `observe(observations, actions, target, *,
-  observed=None, rate=1.0, write=True) -> BeliefObservation`: one backward scan and the store's writes.
-- `BeliefPath`: `belief`, `expectation`, `residual`, `output`, `read`, `loss`, `slow_output`, `final_state`.
+- `assimilate(observations, actions, observed=None, *, state=None) -> BeliefPath`: advance the
+  belief through observed moments; nothing learned or written. `imagine(actions, *, state=None)
+  -> BeliefPath`: the transition alone under declared actions, private. `observe(observations,
+  actions, target, *, observed=None, rate=1.0, write=True, state=None) -> BeliefObservation`: one
+  backward scan and the store's writes. `state` starts the moments from a given boundary instead
+  of the live belief; the final belief becomes the live state either way.
+- `BeliefPath`: `belief`, `expectation`, `residual`, `step` (the last repair move per unit, whose
+  norm is `residual`), `output`, `read`, `loss`, `slow_output`, `final_state`.
 - `reset()`, `state`, `parameters()`, `set_parameters()`, `set_output_precision()`, `records`,
   `snapshot()`, `restore()`, `save()`, `load()`.
 - `cadence.belief_torch.TorchBelief(port, actions, belief, outputs, *, iterations, damping, record_width)`:

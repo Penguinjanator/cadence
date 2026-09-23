@@ -29,7 +29,8 @@ step is the transition alone, with the store read at the expectation and nothing
   for a port whose blocks never meet and nonzero here.
 - **The repair** assimilates evidence: the map reads the belief, the encoded observation,
   the expectation and the store's read together, and moves the belief by a damped step.
-  `BeliefPath.residual` is the size of the last step; a familiar moment ends near zero.
+  `BeliefPath.step` is the last move per belief unit and `residual` its size; a familiar
+  moment ends near zero.
 - **The store** holds the residual of the slow readout at the code of the final reading,
   coded to `record_width` signs, written once per observed moment. Its read enters the
   repair and patches the readout. No gradient reaches the store; that is the record

@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `BeliefPatch.assimilate` and `observe` take `state=`, a boundary to start the
+  moments from instead of the live belief, as `imagine` already did: a life
+  that learns from its executed window replays it from the belief that was
+  live at the window's first moment. `BeliefPath.step` is the last repair
+  iteration's move per belief unit, whose norm is `residual`: where the
+  belief moved under the evidence, for a governor and for a page.
 - `JointRecordPatches` and `Port` (`cadence.record_ports`): several record
   patches settled as one equilibrium, moment by moment. A port is a declared
   band of one patch's scaled context read as an input of another in the same
