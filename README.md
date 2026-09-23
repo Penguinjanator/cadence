@@ -17,11 +17,16 @@ like in nature; every part of a brain answers with a settled state of that one
 rule; and where a choice appears, evolution across lives is preferred to design. General intelligence is the research goal;
 the current library establishes bounded learning, memory and control results.
 
-The organizing idea comes from Observer Patch Holography: bounded,
-observer-like patches with local state, ports, records, readback and repair.
-A disturbance exposes disagreement. The network can explore a possible
-response, test it against actual consequences and settle into a revised
-organization. We seek fewer mechanisms that solve more problems.
+Cadence started as an offshoot of a physics theory,
+[Observer Patch Holography](https://github.com/FloatingPragma/observer-patch-holography),
+which models reality itself as a metaphorical brain: a distributed network of
+observers that finds global equilibria by repairing local conflict. Cadence
+builds learning systems from the same parts, bounded observer-like patches
+with local state, ports, records, readback and repair. A disturbance exposes
+disagreement. The network can explore a possible response, test it against
+actual consequences and settle into a revised organization. The two projects
+complement each other and share many of their theorems. We seek fewer
+mechanisms that solve more problems.
 
 ## Four shared principles
 
