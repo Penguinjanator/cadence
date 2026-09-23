@@ -32,6 +32,7 @@ imagination; its input port reads grids through [maps](record-patch.md#maps-a-st
 7. [Response protection](temporal-memory.md): conditional retention and well-conditioned learning in remaining directions.
 8. [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive readback and transfer as research requirements.
 9. [Equilibrium and learned world models](equilibrium-world-models.md): three clocks, changing expected trajectories, evidence and branch isolation, and the distinction between current APIs and a proposed shared architecture.
+10. [The metacognition ladder](METACOGNITION_LADDER.md): the order of the program's experiments, rung by rung, each with what the steering patch reads and returns, the task, the control, the falsifier and the issue.
 
 [Task design](task-design.md), [common missteps](missteps.md) and
 [scaling](scaling.md) say how to validate observations, actions, learning and

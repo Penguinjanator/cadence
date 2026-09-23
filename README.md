@@ -43,7 +43,7 @@ organization. We seek fewer mechanisms that solve more problems.
   turn, and the levels form a ladder from reflex to a robot that acts and speaks
   among people. The genome decides which readbacks exist, and a rung is earned
   only by a task the brain below it fails at matched information and compute.
-  The [metacognition ladder](METACOGNITION_LADDER.md) states the rungs, their
+  The [metacognition ladder](docs/METACOGNITION_LADDER.md) states the rungs, their
   experiments and their issues.
 
 The current implementation provides detached self-readback and private proposal
