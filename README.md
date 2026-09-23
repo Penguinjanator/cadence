@@ -23,7 +23,7 @@ A disturbance exposes disagreement. The network can explore a possible
 response, test it against actual consequences and settle into a revised
 organization. We seek fewer mechanisms that solve more problems.
 
-## Three shared principles
+## Four shared principles
 
 - **Overlap consensus:** patches repair disagreement across their shared
   boundaries. The resulting equilibrium is an internally consistent model;
@@ -35,6 +35,14 @@ organization. We seek fewer mechanisms that solve more problems.
   predictions, proposed actions and unresolved mismatches through ordinary ports. Learning which
   internal summaries to read, how to feed them back and how to grow useful
   recursive organization is a central research direction.
+- **Attention as recursive self-observation:** where to look, what to weigh and
+  what to think about is decided above the patch that reads the world. A patch of
+  the same kind reads the beliefs, residuals and surprises of the others through
+  ordinary ports, and its settled state sets their gains, their sensing and their
+  goals. It wants the surprise below it to be consequential and falling; that is
+  its curiosity. It is recursive because it is a patch, read like any other, and
+  the genome decides which readbacks exist. The roadmap carries it as
+  [issue 16](https://github.com/muellerberndt/cadence/issues/16).
 
 The current implementation provides detached self-readback and private proposal
 revision. Automatically learned recursive hierarchies, curiosity and reliable
