@@ -1,7 +1,7 @@
 # PatchNet: continuous observations and isolated rehearsal
 
-`PatchNet` is the supported graph interface. For the current temporal learner,
-protected memory and action planning, start with the [architecture guide](architecture.md).
+`PatchNet` composes the settling brain for continuous observations and is kept for
+the experiments that used it; new work starts from the [quickstarts](quickstart.md).
 The graph interface composes the nonlinear `Brain` and local contrastive `Learner` without
 requiring an external associative store. Its default factory creates a fully
 reciprocal graph; the older `layered` factory alone does not add every reverse
@@ -152,12 +152,10 @@ they do not include Python objects, numerical scratch or external run logs.
 
 ## Research reproduction
 
-The sibling workspace's `cadence-mission/experiments/library_memory.py` tests
-the actual library, with frozen sources, checkpoints and an independent
-endpoint verifier. Both the activity-only and temporal-overlap outcomes are
-retained. `cadence-amen/tools/train_patchnet.py` adds bounded feature-prediction
-experiments and measured autonomous forecasts. These are development probes,
-not evidence of a competent musical controller or animal-like lifelong memory.
+The retention comparisons behind this page were run against the library with
+frozen sources, checkpoints and an independent endpoint verifier, and both the
+activity-only and the temporal-overlap outcomes were kept. They are development
+probes, not evidence of a competent controller or animal-like lifelong memory.
 
 The existing `GenericBrain` and `Records` APIs remain supported for prior
 applications. They contain additional mechanisms and should not be treated

@@ -7,7 +7,7 @@
   </defs>
   <rect x="0" y="0" width="900" height="440" rx="18" fill="url(#panel)"/>
   <text x="32" y="40" fill="#e8ecf2" font-size="20" font-weight="700">How it learns: equilibrium, tilt, equilibrium, contrast</text>
-  <text x="32" y="62" fill="#9fb3c8" font-size="13">the net rests in a minimum of its energy; a nudge on the outputs tilts the energy both ways; every seam reads where it came to rest each time</text>
+  <text x="32" y="62" fill="#9fb3c8" font-size="13">the net rests in a minimum of its energy; a nudge on the outputs tilts it both ways; every synapse reads where its two ends came to rest</text>
 
   <!-- panel 1: free settlement -->
   <g transform="translate(32,90)">
@@ -26,7 +26,7 @@
   <g transform="translate(318,90)">
     <rect x="0" y="0" width="262" height="250" rx="12" fill="#0b1421" stroke="#2c3547"/>
     <text x="16" y="28" fill="#e8ecf2" font-size="14" font-weight="700">2 · Tilt, and settle again</text>
-    <text x="16" y="46" fill="#9fb3c8" font-size="11.5">add β·(target − p) on the output owners</text>
+    <text x="16" y="46" fill="#9fb3c8" font-size="11.5">add β·(target − p) on the output neurons</text>
     <!-- +beta tilted valley (minimum shifts right, lower) -->
     <path d="M 20 60 C 60 76, 100 150, 150 166 C 190 174, 220 130, 245 96" fill="none" stroke="#3fbf9c" stroke-width="2.2"/>
     <!-- -beta tilted valley (minimum shifts left) -->
@@ -38,14 +38,14 @@
     <text x="176" y="196" fill="#3fbf9c" font-size="12.5" font-family="JetBrains Mono, Menlo, monospace">s⁺  (+β)</text>
     <text x="30" y="196" fill="#e4572e" font-size="12.5" font-family="JetBrains Mono, Menlo, monospace">s⁻  (−β)</text>
     <text x="16" y="224" fill="#9fb3c8" font-size="11.5">the outputs move; through the feedback</text>
-    <text x="16" y="240" fill="#9fb3c8" font-size="11.5">seams the hidden owners move a little too</text>
+    <text x="16" y="240" fill="#9fb3c8" font-size="11.5">synapses the hidden neurons move a little too</text>
   </g>
 
   <!-- panel 3: contrast -->
   <g transform="translate(604,90)">
     <rect x="0" y="0" width="264" height="250" rx="12" fill="#0b1421" stroke="#2c3547"/>
-    <text x="16" y="28" fill="#e8ecf2" font-size="14" font-weight="700">3 · Every seam reads itself</text>
-    <text x="16" y="46" fill="#9fb3c8" font-size="11.5">two numbers per seam, one per owner</text>
+    <text x="16" y="28" fill="#e8ecf2" font-size="14" font-weight="700">3 · Every synapse reads its ends</text>
+    <text x="16" y="46" fill="#9fb3c8" font-size="11.5">two numbers per synapse, one per neuron</text>
     <line x1="60" y1="110" x2="204" y2="110" stroke="#3fbf9c" stroke-width="3" marker-start="url(#g)" marker-end="url(#g)"/>
     <circle cx="60" cy="110" r="20" fill="#2f4f8a" stroke="#e8ecf2" stroke-width="1.5"/>
     <circle cx="204" cy="110" r="20" fill="#f4b400" stroke="#1c2430" stroke-width="1.5"/>

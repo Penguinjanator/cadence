@@ -1,10 +1,25 @@
 # API reference
 
-Start with [architecture](architecture.md), [temporal learning](temporal.md),
-[response protection](temporal-memory.md) and [private planning](planning.md).
-The [interaction guide](interaction.md) combines the current public interfaces.
-Optional arguments should be passed by keyword. Existing graph and composition
-APIs follow the current temporal interfaces below.
+Every public name, by module. Start with the [quickstarts](quickstart.md) and
+[build your own brain](build.md); each section links the guide that explains its
+operations. Optional arguments should be passed by keyword.
+
+The temporal patch: [TemporalPatchNet](#temporalpatchnet-cadencetemporal),
+[TemporalPlan](#temporalplan-cadenceplanning), [TemporalMemory](#temporalmemory-cadencetemporal_memory),
+[fixed connectivity](#experimental-fixed-connectivity-cadenceexperimental).
+The record and belief patches: [RecordPatchNet](#recordpatchnet-cadencerecord_patch),
+[Ports](#ports-cadenceports), [BeliefPatch](#beliefpatch-cadencebelief).
+The settling brain: [Connectome](#connectome-cadenceconnectome), [Neuron model](#neuron-model-cadenceneuron),
+[Brain](#brain-cadencebrain), [Blocks](#blocks-cadenceblocks), [Streams](#streams-cadencestream),
+[Records](#records-cadencerecords), [Regions](#regions-cadenceregions), [Generic brain](#generic-brain-cadencegeneric),
+[Genome](#genome-cadencegenome), [Learning](#learning-cadencelearning), [The agent and the valence](#the-agent-and-the-valence-cadenceplasticity),
+[Certificate](#certificate-cadencecertificate).
+Instruments: [the quickstart demos](#the-quickstart-demos-cadencedemo), [Timing](#timing-cadencetiming),
+[the reference](#neuron-by-neuron-reference-cadencereference), [Protocols](#protocols-cadenceprotocol),
+[Checkpoints](#checkpoints-cadencecheckpoint), [Atlas](#atlas-cadenceatlas), [Receipts](#receipts-cadencereceipts),
+[recording](#record-every-settling-step). Kept compositions: [EquilibriumActor](#equilibriumactor-cadenceactor),
+[PatchNet](#patchnet-cadencepatch), [task compositions](#optional-task-compositions),
+[bounded memory and rehearsal](#bounded-memory-and-rehearsal).
 
 ## TemporalPatchNet (`cadence.temporal`)
 

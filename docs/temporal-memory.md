@@ -80,8 +80,8 @@ restriction.
 
 ## A local metric for poorly conditioned readout updates
 
-Version 0.11.0 adds the optional `readout_damping` argument to `memory.observe`.
-The default `None` retains the original update path. With a positive finite
+`memory.observe` takes an optional `readout_damping` argument.
+The default `None` keeps the plain projected update. With a positive finite
 value `mu`, the method scales the readout update by the covariance of current
 free activity in the remaining unprotected directions:
 

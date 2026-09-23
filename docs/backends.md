@@ -4,7 +4,7 @@
 The optional backends below apply to the existing `Brain`/`PatchNet` graph
 interfaces; installing an accelerator does not move temporal repair onto it.
 
-Begin with the NumPy-only [installation](../README.md#current-library). Optional extras
+Begin with the NumPy-only [installation](../README.md#get-started). Optional extras
 add compiled CPU transport or accelerator libraries:
 
 ```bash

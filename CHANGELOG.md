@@ -2,6 +2,22 @@
 
 ## Unreleased
 
+- Documentation for builders. The README opens with what Cadence is in
+  machine-learning terms, the install, the three browser demos and one runnable
+  brain, a table of which brain to start from, the four examples with what each
+  shows and what it is built from, and a map of the guides; the vision sections
+  follow. New guides: `docs/orientation.md` (the four brains against familiar
+  models, where each learning signal comes from, a comparison with backprop, the
+  shapes, a glossary), `docs/build.md` (your own data to a trained, evaluated and
+  saved record patch and settling brain, with every block run by the tests and
+  the minimal-install job), `docs/troubleshooting.md` and `CONTRIBUTING.md`.
+  `docs/index.md` is the map in the order a builder needs. Guides that pointed at
+  a quickstart loop that no longer exists point at the settling brain quickstart;
+  the settling-brain guides no longer describe themselves as kept for earlier
+  experiments; release-number narration and file paths of unpublished
+  experiments are gone from the guides; the API reference opens with a contents
+  list by brain. The two figures in `docs/assets/` use the neuron and synapse
+  vocabulary of the guides.
 - `BeliefPatch.assimilate` and `observe` take `state=`, a boundary to start the
   moments from instead of the live belief, as `imagine` already did: a life
   that learns from its executed window replays it from the belief that was

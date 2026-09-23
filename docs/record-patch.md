@@ -2,8 +2,8 @@
 
 `RecordPatchNet` is a temporal patch whose context is linear and gated and
 whose memory of particular readings is a record store inside the patch. The
-nonlinearity sits at the ports. It is part of the library from release 0.12.0;
-pin a release or a commit when reproducing an experiment.
+nonlinearity sits at the ports. Pin a release or a commit when reproducing an
+experiment.
 
 For inputs `u[t]`, context `h[t]` and outputs `y[t]`:
 
@@ -87,8 +87,7 @@ outcome whole, a familiar one averages), which on the composer stream
 calibrated reads at unfamiliar readings and improved retention but slowed
 adaptation to a new track; `record_homeostasis` moves each cell's offset
 toward an equal activation share, which spread the code further but cost
-adaptation as well. Both are measured in
-`cadence-mission/results/record_addressing_v8.json`.
+adaptation as well.
 
 ## Records hold what the slow model does not know
 
@@ -206,9 +205,7 @@ One update is one forward scan, one backward scan, one record read per
 moment and one write per observed moment. Work per moment is linear in the
 context width plus the record projection; state is the context, the
 parameters and the record tables, constant in stream length. The dense
-hidden-width block messages of `TemporalPatchNet` do not appear. The receipt
-`cadence-mission/results/record_patch_g1.json` measures one update against
-the dense kernel at the shapes of the scalable brain plan.
+hidden-width block messages of `TemporalPatchNet` do not appear.
 
 ## Checkpoints
 
@@ -370,8 +367,6 @@ same held-out sets, and so did a GRU and a transformer of the same width; at a t
 pairs and equal updates the patch had the lowest held-out loss of the three at every width
 (0.32 against 0.34 and 0.36 nats per word at width 64). The grammar is finite and every learner
 reaches its ceiling with enough data; what the store shows is what one pass of writes buys.
-The receipts are `results/e5_records_speaker.json`, `results/e3_scaling.json` and
-`results/baselines.json` of the language work.
 
 One knob at a time from that base (65,536 cells, 32 active, a 320-wide output code, write
 rate 1, one pass), on 200 never-taught combinations: 64 active cells lift the valid share
@@ -382,8 +377,7 @@ fall to 0.655 while 32,768 give 0.870 and 131,072 give 0.860; a second pass of w
 message's or the context's share of the address falls to 0.670 and 0.680, and halving the
 context's share gives 0.825. The rule these numbers give: address with enough active cells
 that neighbours overlap (64 of 65,536 here), write at rate 1 when each reading is written
-once, and keep the token, the cue and the context in balance in the address
-(`results/e8_records_config.json`).
+once, and keep the token, the cue and the context in balance in the address.
 
 ## Acquisition in two phases: records by day, weights by night
 
@@ -422,8 +416,7 @@ sentence at bedtime; after one night of 8,000 dreams from the day's own cues (0.
 them inside the grammar) and 1,200 slow updates, the slow weights alone gave 1.00, with
 the corpus closed. The awake control that re-read the corpus twice more with the
 teacher present reached 0.905. Nothing new entered during the night; what was held was
-redistributed into the weights, and the weights, being smooth, finished the pattern
-(`results/e7_sleep.json`).
+redistributed into the weights, and the weights, being smooth, finished the pattern.
 
 **What sleep does not do.** Dreams carry the store's errors as faithfully as its
 regularities: on the held-out messages whose completions the store got wrong at

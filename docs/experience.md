@@ -1,10 +1,9 @@
 # Experience in existing graph compositions
 
-The examples and component table below describe the existing graph, Records
-and `GenericBrain` APIs. They remain available for those applications; they
-are not required parts of the current temporal core. Start with
-[architecture](architecture.md) and [learn, act and observe](interaction.md)
-for `TemporalPatchNet`, explicit response protection and private planning.
+The examples and component table below describe the graph, Records and
+`GenericBrain` APIs of the settling brain, kept for the applications that used
+them. New work starts from the [quickstarts](quickstart.md) and
+[build your own brain](build.md).
 
 Design the brain and its learning life together. What can it observe and change?
 What persists, what counts as evidence, and what makes a decision useful?

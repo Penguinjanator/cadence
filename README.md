@@ -6,6 +6,11 @@
 
 [Website](https://floatingpragma.io/cadence/) · [Examples](https://github.com/muellerberndt/cadence-examples) · [Paper](https://github.com/muellerberndt/cadence/blob/main/cadence-paper.pdf) · [PyPI](https://pypi.org/project/cadence-net/) · [Documentation](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) · [Changelog](https://github.com/muellerberndt/cadence/blob/main/CHANGELOG.md)
 
+[![PyPI](https://img.shields.io/pypi/v/cadence-net)](https://pypi.org/project/cadence-net/)
+[![CI](https://github.com/muellerberndt/cadence/actions/workflows/ci.yml/badge.svg)](https://github.com/muellerberndt/cadence/actions/workflows/ci.yml)
+[![Python](https://img.shields.io/pypi/pyversions/cadence-net)](https://pypi.org/project/cadence-net/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/muellerberndt/cadence/blob/main/LICENSE)
+
 **Research toward general intelligence through overlap consensus, equilibrium detuning and self-reflection.**
 
 Cadence's goal is a continuing learning system with the flexibility of animal
@@ -23,11 +28,126 @@ network can explore a possible response, test it against actual consequences
 and settle into a revised organization. We seek fewer mechanisms that solve
 more problems.
 
+## In familiar terms
+
+Cadence is a NumPy library of brains that compute by settling into an equilibrium
+and learn by detuning it. A brain is a set of patches joined by ports: groups of
+neurons with their synapses, or one context vector with a record store beside it.
+The answer is the state the brain settles into under its inputs. Learning settles
+once more with the outputs nudged toward the outcome and moves every synapse on the
+product of its own two ends in the two settled states, so nothing is propagated
+backward. The record store is a fixed sparse code of the reading addressing a table
+that takes an outcome in one write and reads it back at the same reading, and a
+night of sleep moves what the store holds into the slow weights.
+[Cadence for machine-learning people](https://github.com/muellerberndt/cadence/blob/main/docs/orientation.md)
+maps each brain to the model you know, says where each learning signal comes from,
+and lists the shapes and the words.
+
+## Get started
+
+```bash
+python -m pip install cadence-net     # Python 3.11+ and NumPy; torch, MLX and Numba are optional
+```
+
+Three brains, each trained in front of you in seconds from fixed seeds, with every
+neuron and synapse animated, the distance from equilibrium as a heat on the neurons,
+the last change on the synapses, the learning plotted as it is measured, and a line
+of text for each phase:
+
+```bash
+cadence-demo stream     # a record patch learns a stream, remembers in one shot, and sleeps
+cadence-demo decide     # a settling brain decides
+cadence-demo body       # a temporal patch learns a consequence and plans
+```
+
+Nothing is hosted and there is no checkpoint; [the quickstarts in your browser](https://github.com/muellerberndt/cadence/blob/main/docs/demos.md)
+says what equilibrium means in each brain and what detuning buys. The same three
+brains in Python are the [quickstarts](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md).
+This is the record patch: it hears a stream, recalls every outcome after one pass by
+day, and after a night with the stream closed says every outcome from its weights alone:
+
+```python
+import numpy as np
+from cadence import RecordPatchNet
+
+rng = np.random.default_rng(21)
+net = RecordPatchNet(
+    12, 12, 5, seed=4, cells=2048, active=16, record_rate=1.0, groups=(5,), slowest=8.0
+)
+symbols = rng.integers(12, size=(3, 8))
+heard = np.eye(12)[symbols]
+outcome = np.eye(5)[(symbols + np.roll(symbols, 1, axis=1)) % 5]  # the last two symbols decide
+
+for _ in range(8):  # the day: one write per moment, slow weights at rate zero
+    net.reset()
+    net.observe(heard, outcome, rate=0.0)
+net.reset()
+awake = net.imagine(heard, state=np.zeros((3, 12)))
+assert np.array_equal(awake.output.argmax(-1), outcome.argmax(-1))  # the store recalls
+
+night = net.sleep([heard], passes=240, rate=8.0, backtrack=True)  # dreams, then dawn
+alone = RecordPatchNet.restore(net.snapshot())
+alone.records.tables["y"][:] = 0.0  # the same weights with an empty store
+assert np.array_equal(alone.imagine(heard, state=np.zeros((3, 12))).output.argmax(-1), outcome.argmax(-1))
+print(night)
+```
+
+[Build your own brain](https://github.com/muellerberndt/cadence/blob/main/docs/build.md)
+takes your own data to a trained, evaluated and saved brain of each kind, and
+[troubleshooting](https://github.com/muellerberndt/cadence/blob/main/docs/troubleshooting.md)
+answers the first questions.
+
+## Which brain
+
+Two primitives, composed through ports, and the belief patch that composes them toward a world model:
+
+| You want | Start with | What it supplies |
+| --- | --- | --- |
+| to learn from a stream of events, keep single facts after one exposure, and generalise overnight | the record patch, [RecordPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) | A gated linear context with a record store inside the patch: an observation is written once by day, and by night the slow weights learn from the store's own dreams (`sleep`), with nothing outside the patch consulted. Categorical ports, batched writes, a store narrower than its port and a two-patch stack. One pass of writes, with no gradient, gives a small grammar for 0.8 of its never-taught combinations; one night lifts the slow weights alone to 1.0. |
+| a decision or evaluation over a fixed set of inputs, an explicit wiring, a policy that learns from reward | the settling brain: a [brain of regions](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md) (`Genome`, `develop`, `Brain`, `Learner`) | Local repair of a settled state under any wiring, including a measured connectome; learning by the contrast of a free and a nudged settle; [cortices](https://github.com/muellerberndt/cadence/blob/main/docs/cortex.md), a records cortex, [reward](https://github.com/muellerberndt/cadence/blob/main/docs/reward.md) through eligibility traces, [evolution](https://github.com/muellerberndt/cadence/blob/main/docs/evolution.md) of the genome, and a [certificate](https://github.com/muellerberndt/cadence/blob/main/docs/certificate.md) on the settling. |
+| continuous observations and actions, a learned dynamics model, private planning | the temporal patch, [TemporalPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md) | Local repair of observed paths, persistent context, private imagination, [continuous planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md) and [protected responses](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md); learning by the contrast of a free and a nudged settle of the whole path. |
+| a belief carried under action, repaired by evidence, that imagines with no observation | the belief patch, [BeliefPatch](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md) | A belief carried by a learned transition under the executed action and repaired by a few iterations of one nonlinear map with the record store read inside it. The composition toward a learned world model, trained with the [imagination loss](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md#training-the-transition-the-imagination-loss) so the transition carries the belief. |
+
+Everything composes through ports: two record patches in depth (`RecordPatchStack`),
+several settled as one equilibrium (`JointRecordPatches`), a grid read through a tied
+kernel at the port (`StructuredPort`), and a genome that `evolve` mutates and selects
+across lives. The [architecture guide](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md)
+is the contract of the temporal patch.
+
+## Examples
+
+Four worked applications live in the [examples repository](https://github.com/muellerberndt/cadence-examples).
+Each is a static page that runs its brain in the browser with the library's
+arithmetic, with the receipts behind every number it states and a check that
+recomputes them.
+
+| Example | What it shows | Built from |
+| --- | --- | --- |
+| [The worm](https://floatingpragma.io/cadence-examples/celegans/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/worm) | learning from experience in one life on the measured *C. elegans* connectome; food and pain as the only outcomes; the body reads the command neurons directly | one temporal patch masked by the connectome |
+| [Connect Four](https://floatingpragma.io/cadence-examples/connect4/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/connect4) | planning: a search over imagined boards reads a value learned by watching a perfect player, and every move is graded by that player | one record patch |
+| [Amen](https://floatingpragma.io/cadence-examples/amen-beats/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/amen) | creation: a composer that starts from silence, hears each half-beat it plays and computes sixteen bars of drums, bass and texture | one record patch |
+| [Patch World](https://floatingpragma.io/cadence-examples/patchworld/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/patchworld) | evolution of bodies and wiring, learning in one life, planning through a learned model, computation priced in mass | two record patches per being, under selection |
+
+They are application tests, not definitions of the architecture. A result in one
+does not establish transfer to the others. Every example states what is supplied,
+what is learned, what was measured and what it does not show, and pins the release
+its checks were run against.
+
+## Documentation
+
+- **Start:** [for machine-learning people](https://github.com/muellerberndt/cadence/blob/main/docs/orientation.md) · [quickstarts](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md) · [in your browser](https://github.com/muellerberndt/cadence/blob/main/docs/demos.md) · [build your own brain](https://github.com/muellerberndt/cadence/blob/main/docs/build.md) · [troubleshooting](https://github.com/muellerberndt/cadence/blob/main/docs/troubleshooting.md)
+- **Build:** [record patch](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) · [belief patch](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md) · [temporal learning](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md), [planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md), [learn, act and observe](https://github.com/muellerberndt/cadence/blob/main/docs/interaction.md), [response protection](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) · [compose a brain](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md), [write a cortex](https://github.com/muellerberndt/cadence/blob/main/docs/cortex.md), [local learning](https://github.com/muellerberndt/cadence/blob/main/docs/learning.md), [records and memory](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md), [reward](https://github.com/muellerberndt/cadence/blob/main/docs/reward.md), [evolve a brain](https://github.com/muellerberndt/cadence/blob/main/docs/evolution.md)
+- **Measure:** [task design](https://github.com/muellerberndt/cadence/blob/main/docs/task-design.md) · [common missteps](https://github.com/muellerberndt/cadence/blob/main/docs/missteps.md) · [scaling](https://github.com/muellerberndt/cadence/blob/main/docs/scaling.md) · [certificate](https://github.com/muellerberndt/cadence/blob/main/docs/certificate.md) · [protocols](https://github.com/muellerberndt/cadence/blob/main/docs/protocols.md) · [receipts](https://github.com/muellerberndt/cadence/blob/main/docs/receipts.md) · [the brain viewer](https://github.com/muellerberndt/cadence/blob/main/docs/pages.md) · [backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md)
+- **Reference:** [API](https://github.com/muellerberndt/cadence/blob/main/docs/api.md) · [changelog](https://github.com/muellerberndt/cadence/blob/main/CHANGELOG.md) · [Lean proofs](https://github.com/muellerberndt/cadence/blob/main/lean/README.md) · [contributing](https://github.com/muellerberndt/cadence/blob/main/CONTRIBUTING.md)
+- **The ideas:** [architecture](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) · [equilibrium world models](https://github.com/muellerberndt/cadence/blob/main/docs/equilibrium-world-models.md) · [creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md) · [the metacognition ladder](https://github.com/muellerberndt/cadence/blob/main/docs/METACOGNITION_LADDER.md) · [the paper](https://github.com/muellerberndt/cadence/blob/main/cadence-paper.pdf)
+
+The [index](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) is the full map.
+
 ## Four shared principles
 
 - **Overlap consensus:** patches repair disagreement across their shared
   boundaries. The resulting equilibrium is an internally consistent model;
-  its predictions still have to agree with experience.
+  its predictions have to agree with experience.
 - **Equilibrium detuning:** observed outcomes perturb that equilibrium.
   Local positive/negative contrasts change learned relationships; the same
   operation can adjust proposed actions while holding the model fixed.
@@ -61,7 +181,7 @@ cause. It need not describe those relationships in words to use them.
 
 An equilibrium here need not mean motionless activity. A skilled actor can
 follow a coherent, changing trajectory of perceptions, expectations and actions.
-When events unfold as expected, the carried state should already be close to a
+When events unfold as expected, the carried state should be close to a
 useful interpretation of the next moment. Familiar danger can prompt a learned
 response immediately. Extra inference is needed when competing interpretations
 or consequential choices warrant it.
@@ -72,7 +192,7 @@ meet through learned nonlinear ports. One interpretation can become input to
 another, allowing the system to revise its understanding before acting. Actual
 evidence anchors that revision; changing the interpretation and learning new
 relationships are distinct operations. A random outcome can require a new
-response while remaining consistent with a correctly learned probability
+response and be consistent with a correctly learned probability
 distribution. Teaching detuning uses a specified target to compute a learning
 signal; it is not synonymous with surprise.
 
@@ -93,38 +213,7 @@ resource budgets; a new version alone does not establish it. The
 mechanism, the distinction between evidence repair and learning, and the current
 implementation boundaries.
 
-## Current library
-
-Two primitives, composed through ports, and the belief patch that composes them toward a world model. The library requires Python 3.11+ and NumPy:
-
-```bash
-python -m pip install cadence-net
-```
-
-| Primitive | What it supplies |
-| --- | --- |
-| The settling patch: [TemporalPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md), or a [brain of regions](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md) | Local repair of observed paths, persistent context, private imagination, [continuous planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md) and [protected responses](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md); learning by the contrast of a free and a nudged settle. |
-| The record patch: [RecordPatchNet](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) | A gated linear context with a record store inside the patch: an observation is written once by day, and by night the slow weights learn from the store's own dreams (`sleep`), with nothing outside the patch consulted. Categorical ports, batched writes, a store narrower than its port and a two-patch stack. One pass of writes, with no gradient, gives a small grammar for 0.8 of its never-taught combinations; one night lifts the slow weights alone to 1.0. |
-| The belief patch: [BeliefPatch](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md) | A belief carried by a learned transition under the executed action and repaired by a few iterations of one nonlinear map with the record store read inside it; imagination that consumes no observation. The composition toward a learned world model, trained with the [imagination loss](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md#training-the-transition-the-imagination-loss) so the transition carries the belief. |
-
-Start with the [quickstarts](https://github.com/muellerberndt/cadence/blob/main/docs/quickstart.md):
-a record patch that learns a stream and sleeps, a settling brain that decides, and a
-temporal patch that learns a consequence and plans. Each of them also runs in your browser,
-trained in front of you in seconds from fixed seeds, with every neuron and synapse animated,
-the distance from equilibrium as a heat on the neurons, the last change on the synapses, the
-learning plotted as it is measured, and a line of text for each phase:
-
-```bash
-python -m pip install cadence-net
-cadence-demo stream     # a record patch learns a stream, remembers in one shot, and sleeps
-cadence-demo decide     # a settling brain decides
-cadence-demo body       # a temporal patch learns a consequence and plans
-```
-
-Nothing is hosted and there is no checkpoint; [the quickstarts in your browser](https://github.com/muellerberndt/cadence/blob/main/docs/demos.md)
-says what equilibrium means in each brain and what detuning it buys. The
-[architecture guide](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) maps each capability to its API and current scope;
-[EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md) is a separate fixed linear-body component with exact Gaussian history compression.
+## What the library establishes
 
 **Imagined continuations are isolated.** Branches use the learned network
 without changing live activity, parameters or factual bookkeeping. Controlled
@@ -133,32 +222,25 @@ evidence that novel proposals satisfy meaningful constraints and survive
 actual evaluation; musical improvisation is one possible example.
 
 **Retained experience and new learning are tested together.** Protected-path
-memory is conditional and finite. Importance is currently supplied; automatic
-relevance, selective forgetting, specialization and broad skill transfer remain
+memory is conditional and finite. Importance is supplied; automatic
+relevance, selective forgetting, specialization and broad skill transfer are
 research requirements. The [task-design guide](https://github.com/muellerberndt/cadence/blob/main/docs/task-design.md)
 and [common missteps](https://github.com/muellerberndt/cadence/blob/main/docs/missteps.md) explain how to measure them.
 
-## General mechanisms, different applications
-
-Games, language, multimodal perception, embodied control and creative work
-should use the same learning and memory mechanisms with declared observation
-and action ports. The [examples repository](https://github.com/muellerberndt/cadence-examples)
-holds four worked applications: a worm that learns during its life, a composer
-that starts from silence, soft bodies that evolve together with their brains,
-and Connect Four. They are application tests, not definitions of the
-architecture. A result in one does not establish transfer to the others.
-
-The scaling goal is better learned behavior from more experience and training,
-with as little manual design as possible. Measure unique experience, repeated
-training and model capacity separately while keeping port meanings and task
-evaluation fixed. The [scaling guide](https://github.com/muellerberndt/cadence/blob/main/docs/scaling.md)
+**General mechanisms, different applications.** Games, language, multimodal
+perception, embodied control and creative work should use the same learning and
+memory mechanisms with declared observation and action ports. The scaling goal is
+better learned behavior from more experience and training, with as little manual
+design as possible. Measure unique experience, repeated training and model
+capacity separately while keeping port meanings and task evaluation fixed. The
+[scaling guide](https://github.com/muellerberndt/cadence/blob/main/docs/scaling.md)
 defines these comparisons and the current computational limits.
 
 Application demonstrations are published only when they establish their
 claimed behavior. Recall and interpolation are useful development tests;
 original creation requires stronger evidence. Every example states what is
 supplied, what is learned, what was measured and what it does not show, and
-carries a check that recomputes its numbers. Research receipts remain
+carries a check that recomputes its numbers. Research receipts are
 available with the paper without presenting those tests as finished products.
 
 ## Proofs and compatibility
@@ -169,12 +251,13 @@ and their limits. It does not certify the complete Python implementation or
 prove intelligence. The paper identifies assumptions and reproducible evidence.
 
 The [PatchNet graph interface](https://github.com/muellerberndt/cadence/blob/main/docs/patchnet.md),
-`GenericBrain`, content memory, rehearsal and sequence readback are kept for the
-experiments that used them; they are distinct compositions, not parts of the two
+`GenericBrain`, [EquilibriumActor](https://github.com/muellerberndt/cadence/blob/main/docs/actor.md),
+content memory, rehearsal and sequence readback are kept for
+the experiments that used them; they are distinct compositions, not parts of the two
 primitives. [API reference](https://github.com/muellerberndt/cadence/blob/main/docs/api.md).
 
-Development installs use `python -m pip install -e .`.
-[Optional backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md)
+Development installs use `python -m pip install -e ".[dev]"`; [contributing](https://github.com/muellerberndt/cadence/blob/main/CONTRIBUTING.md)
+lists the checks. [Optional backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md)
 apply to their documented graph APIs; the temporal implementation is NumPy.
 Pin a release or exact commit for reproducible work. MIT licensed.
 

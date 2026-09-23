@@ -34,7 +34,7 @@ jobs:
           for name in ("docs/patchnet.md", "docs/quickstart.md", "docs/temporal.md",
                        "docs/temporal-memory.md", "docs/actor.md", "docs/architecture.md",
                        "docs/planning.md", "docs/interaction.md", "docs/partitioned.md",
-                       "docs/record-patch.md"):
+                       "docs/record-patch.md", "docs/build.md"):
               page = Path(name).read_text(encoding="utf-8")
               code = "\n\n".join(re.findall(r"```python\n(.*?)```", page, re.S))
               if name.endswith("quickstart.md"):

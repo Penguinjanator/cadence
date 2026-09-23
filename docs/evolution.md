@@ -1,10 +1,10 @@
-# Evolve an existing graph composition
+# Evolve a brain
 
-This guide covers `Genome`, `develop` and `evolve` for the existing graph
-APIs. The application supplies the component grammar, mutation choices and
-fitness. This search is not automatic specialization or growth of
-`TemporalPatchNet`; the [current architecture](architecture.md) treats those
-as research goals requiring separate evidence.
+This guide covers `Genome`, `develop`, `mutate`, `genes` and `evolve`: selection
+over a settling brain's genome, or over any declared genome, across lives. The
+application supplies the mutation choices and the fitness. Growth or
+specialization of a temporal patch under selection is a research goal that needs
+its own evidence.
 
 A genome decides which regions a brain has, how large they are and how they project.
 Evolution changes the genome between lives: `mutate` draws an offspring, and `evolve`

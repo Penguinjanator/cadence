@@ -1,9 +1,9 @@
-# Existing graph and Records concepts
+# Concepts of the settling brain
 
-This guide describes the existing `Brain`, `Learner` and `Records`
-compositions, retained for applications that use them. For the current
-temporal core, start with [architecture](architecture.md),
-[TemporalPatchNet](temporal.md) and [learn, act and observe](interaction.md).
+This guide describes the neuron model, settling and the graph compositions of
+the settling brain: `Brain`, `Learner` and `Records`. [Compose a brain](brain.md)
+and [write a cortex](cortex.md) build one; [temporal learning](temporal.md) and
+[the record patch](record-patch.md) are the path-based patches.
 
 A Cadence brain is software state organised into neurons, synapses and regions,
 with readouts, records and a learning update. It is a design for computation. It

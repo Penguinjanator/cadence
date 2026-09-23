@@ -154,7 +154,7 @@ working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, see
 - with `episodic=True`, `hippocampus`: a `SynapticMemory` from sensory to motor neurons
   that records the reward of each chosen action.
 
-`GenericBrain.step` runs the ongoing loop of the [quickstart](quickstart.md).
+`GenericBrain.step` runs the ongoing loop described in [continuous interaction](continuous.md).
 `GenericBrain(connectome, ...)` wraps any connectome with `sensory` (or `visual/input`),
 `association` and `motor` populations, and a `prefrontal` population for working memory, so
 a genome from `GenericBrain.genome` can be edited or [evolved](evolution.md) first. The

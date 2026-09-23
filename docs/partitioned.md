@@ -1,7 +1,7 @@
 # Experimental fixed connectivity
 
-`cadence.experimental.partitioned` is part of the library from release 0.12.0.
-Pin a release or a commit when reproducing an experiment.
+Pin a release or a commit when reproducing an experiment with
+`cadence.experimental.partitioned`.
 
 `PartitionedTemporalPatchNet` applies fixed boolean connection masks to one
 `TemporalPatchNet`. Coordinate groups remain parts of a single jointly repaired

@@ -1,6 +1,6 @@
 # Learning: the free/nudged rule
 
-Start with [one ongoing experience loop](quickstart.md).
+Start with [a settling brain that decides](quickstart.md#a-settling-brain-that-decides).
 This page explains local prediction repair and demonstrations without adaptation: the neuron
 equations, a numerical update, the gradient assumptions, and configuration choices.
 This rule changes the synapses of the settled regions. A [records cortex](memory.md#records)

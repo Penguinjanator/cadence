@@ -11,7 +11,8 @@ brain responds and changes its synapses throughout its life; there is no `train(
 Neurons hold bounded local state, exchange signals through declared synapses and read
 back their current activity; records and feedback make the system self-reading.
 
-Start with the [runnable single-loop quickstart](quickstart.md).
+Start with [a settling brain that decides](quickstart.md#a-settling-brain-that-decides);
+[compose a brain](brain.md#genericbrain) builds this composition.
 
 Reward and `done` concern the **previous action**; a teacher labels the **current
 observation**. Each has one entry per batch row. Omitted reward means no reward event,

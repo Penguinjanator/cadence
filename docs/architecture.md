@@ -1,11 +1,15 @@
 # Architecture and integration
 
 Cadence aims at generalized intelligence through overlap consensus, equilibrium
-detuning and evolving functional self-reflection. Its base library exposes
-local repair, persistent activity, explicit response protection, private
-imagination and continuous action planning. These are reusable operations
-across applications. Their bounded tests do not establish the full flexibility
-of an animal or human brain. The APIs below need no experiment-repository imports.
+detuning and evolving functional self-reflection. This page is the integration
+contract of the temporal patch (`TemporalPatchNet`, its planner and
+`TemporalMemory`) and of the fixed-model actor: local repair, persistent
+activity, explicit response protection, private imagination and continuous action
+planning, what each operation changes, and what its bounded tests establish. The
+[record patch](record-patch.md) and the [belief patch](belief.md) state their
+contracts in their own guides, and [Cadence for machine-learning people](orientation.md)
+compares the four brains. Bounded tests do not establish the full flexibility of
+an animal or human brain. The APIs below need no experiment-repository imports.
 
 ```bash
 python -m pip install cadence-net

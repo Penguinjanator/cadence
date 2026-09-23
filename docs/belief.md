@@ -96,8 +96,7 @@ when the emulator was restored to the same moment to try every plan. Not every r
 a second seed learned a one-step read of 0.70 and no imagination at all, the transition
 having settled on persistence while the repair did the work, so the receipt of every run
 carries the open-loop curve and the imagined term's weight is the first knob to raise. The
-recipe lives in the application (`cadence-atari/tools/rung1.py`), fifteen lines around
-the ordinary loss; the library supplies the imagination with a `state` and no observation.
+recipe lives in the application, fifteen lines around the ordinary loss; the library supplies the imagination with a `state` and no observation.
 
 ## What it does not do
 
