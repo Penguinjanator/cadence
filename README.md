@@ -31,22 +31,24 @@ organization. We seek fewer mechanisms that solve more problems.
 - **Equilibrium detuning:** observed outcomes perturb that equilibrium.
   Local positive/negative contrasts change learned relationships; the same
   operation can adjust proposed actions while holding the model fixed.
-- **Functional self-reflection:** patches can read internal state,
-  predictions, proposed actions and unresolved mismatches through ordinary ports. Learning which
-  internal summaries to read, how to feed them back and how to grow useful
-  recursive organization is a central research direction.
-- **Attention as recursive self-observation:** where to look, what to weigh and
-  what to think about is decided above the patch that reads the world. A patch of
-  the same kind reads the beliefs, residuals and surprises of the others through
-  ordinary ports, and its settled state sets their gains, their sensing and their
-  goals. It wants the surprise below it to be consequential and falling; that is
-  its curiosity. It is recursive because it is a patch, read like any other, and
-  the genome decides which readbacks exist. The roadmap carries it as
-  [issue 16](https://github.com/muellerberndt/cadence/issues/16).
+- **Self-readback:** a patch's proposed actions and predicted consequences are
+  available to the same brain and tested by its next observation. Physical
+  readback is evidence; an imagined outcome never is.
+- **Metacognition as recursive self-observation:** a patch of the same kind reads
+  the beliefs, residuals and surprises of the rest of the brain through ordinary
+  ports, and its settled state steers them: which evidence counts, where a sense
+  samples, what a habit holds, how long a repair runs. Because it is bounded it
+  cannot steer everything at once, so it must select what matters for what it is
+  computing; that selection is attention. Because it is a patch it can be read in
+  turn, and the levels form a ladder from reflex to a robot that acts and speaks
+  among people. The genome decides which readbacks exist, and a rung is earned
+  only by a task the brain below it fails at matched information and compute.
+  The [metacognition ladder](METACOGNITION_LADDER.md) states the rungs, their
+  experiments and their issues.
 
 The current implementation provides detached self-readback and private proposal
-revision. Automatically learned recursive hierarchies, curiosity and reliable
-creativity remain to be demonstrated. [Creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md)
+revision. Learned steering patches, curiosity and reliable
+creativity are hypotheses with their tests on the ladder. [Creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md)
 defines these goals and their behavioral tests.
 
 ## Equilibrium world models
