@@ -61,7 +61,7 @@ __all__ = [
 ]
 
 
-SCALE_CAP = 8.0  # the magnitude a synapse may not exceed
+SCALE_CAP = 8.0  # the default of LearnerConfig.scale_cap: the magnitude a synapse may not exceed
 _MOMENTS = ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
 
 
@@ -82,10 +82,15 @@ class LearnerConfig:
     normalize_floor: float = 1e-3  # added to the RMS so a quiet synapse does not blow up
     momentum: float = 0.0  # >0: each synapse steps on a running average of its own contrast
     decay: float = 0.0  # >0: every update shrinks each trainable synapse and bias by this fraction
+    # the magnitude a plastic synapse's efficacy may not exceed; a smaller cap keeps a readout
+    # neuron out of saturation, where a nudge has no slope and nothing can move again
+    scale_cap: float = SCALE_CAP
 
     def __post_init__(self) -> None:
         if self.nudge not in ("quadratic", "cross_entropy"):
             raise ValueError("nudge must be 'quadratic' or 'cross_entropy'")
+        if not np.isfinite(self.scale_cap) or self.scale_cap <= 0:
+            raise ValueError("scale_cap must be finite and positive")
         if (
             not np.isfinite([self.beta, self.eta, self.eta_bias]).all()
             or self.beta <= 0
@@ -434,7 +439,8 @@ class Learner:
         if cfg.decay > 0:  # a leak on the synapses: what is not relearned fades away
             scale = np.where(self.plastic_synapses, scale * (1.0 - cfg.decay), scale)
             bias = np.where(self.plastic_neurons, bias * (1.0 - cfg.decay), bias)
-        scale = np.where(self.plastic_synapses, np.clip(scale, -SCALE_CAP, SCALE_CAP), scale)
+        cap = cfg.scale_cap
+        scale = np.where(self.plastic_synapses, np.clip(scale, -cap, cap), scale)
         kernel = self.brain._torch
         if kernel is None:
             self.brain = self.brain.with_parameters(efficacy=scale, bias=bias)
@@ -592,7 +598,7 @@ class Learner:
             keep_bias = 1.0 - cfg.decay if plastic is None else 1.0 - cfg.decay * plastic
             scale = scale * keep_scale
             bias = bias * keep_bias
-        bounded = torch.clamp(scale, -SCALE_CAP, SCALE_CAP)
+        bounded = torch.clamp(scale, -cfg.scale_cap, cfg.scale_cap)
         scale = (
             bounded
             if ix["synapses"] is None

@@ -157,6 +157,12 @@ engine. Write the returned `html` with `Path("brain.html").write_text(html, enco
 
 ## A page with its own engine
 
+A sparse engine for large brains, with the nudged phase and a one-stream actor-critic, and a
+parity harness that holds it to the library, lives in
+[cadence-examples/engine](https://github.com/muellerberndt/cadence-examples/tree/main/engine)
+with a guide for building a browser example; the fruit fly and the worm run on it. The dense
+recipe below is the small-brain version.
+
 For settling without adaptation, a page can store the effective weight matrix, the bias
 vector and the neuron model's activation, and settle the brain locally, then feed every
 step to the scan. `Brain.dense()` returns the synapse matrix with every effective drive

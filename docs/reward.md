@@ -132,3 +132,46 @@ For a real task, record raw held-out return, forgetting and every interaction us
 by rehearsal or planning. Choose the eligibility horizon from actual action-to-reward
 delays, and test imitation, reward practice and rehearsal separately. A biological
 analogy supplies a hypothesis; the behavioral test determines whether it works.
+
+## Traps, with their measurements
+
+Each of these cost a day on a real brain (the fruit fly of
+[cadence-examples](https://github.com/muellerberndt/cadence-examples), 150,802 neurons, an
+actor-critic on the Kenyon-cell-to-MBON synapses; the worm met the second one first). They are
+properties of the rule and the readout, and each has a reading in the `learn` report.
+
+- **The temperature is relative to the activation range.** The action is a softmax over the
+  output neurons' activations divided by `temperature`. Activations lie in [0, 1], so at the
+  worm's 0.05 two outputs that differ by 0.3 make a choice with probability 0.998, the nudge's
+  push `beta * (target - p)` is nothing, and no synapse moves: the fly sat at 1.00/1.00 for 600
+  decisions. Outputs that live near rest (the worm's command neurons) take 0.05; outputs that
+  sit at 0.7 to 1.0 under their drive take 0.3. Set it from the naive activations, not from
+  another example.
+- **The saturation latch.** Once one output saturates and the other is silenced, the activation
+  has no slope, the contrast `a_pre * (b_plus - b_minus)` is zero and the rule cannot leave the
+  state whatever the reward says. `report["saturation"]` is the fraction of output activations
+  within 0.02 of 0 or 1 and `report["trace"]` the mean absolute eligibility of the plastic
+  synapses: saturation near 1 with the trace near 0 is the latch, visible at decision 100
+  where the reward curve shows it at 800. The remedies are a gain at which the outputs sit in
+  the sensitive band, `LearnerConfig(scale_cap=...)` below the default 8 so learning cannot
+  drive them out of it, and a readout whose cells are neither silent nor saturated under the
+  task's drive before any lesson.
+- **The value on a code that cannot see progress.** With a terminal reward and a linear critic
+  on a state code that is the same all along the approach, the value stays near the discounted
+  mean everywhere: the fly's was 0.25, so sugar surprised by +0.75 and an empty arm by -0.25,
+  and the synapses every odour shares drifted toward approach until the latch. Make the
+  outcomes symmetric where the assay allows it (the animal's differential conditioning pairs
+  sugar with quinine), or give the code the progress (a level that rises with distance).
+- **The assay decides whether avoidance can be rewarded.** In an open field one avoidance turn
+  leads nowhere, so a fly that avoids a third of the time reaches no source and no reward
+  arrives; the rule then learns "approach everything" whatever the wiring. In a T-maze
+  avoiding one arm's odour means taking the other, every search ends at an arm, the
+  approach-everything policy scores one half and the association scores one. Build the arena
+  so that every action the readout can take has an outcome.
+- **Centring and the critic.** `dopamine_center > 0` makes the actor's dopamine the surprise
+  over its running level; a critic fed the same signal chases a moving target and its value ran
+  to -15 within 300 decisions. `critic_signal="auto"` (the default) gives the critic the raw
+  error whenever the dopamine is centred.
+- **A cap applied by rebuilding the brain.** Clipping efficacies by `brain.with_parameters` after
+  every decision re-uploads every weight on the torch backend and cost a factor of ten per
+  decision. The cap is a config field, `LearnerConfig(scale_cap=...)`, applied inside the update.

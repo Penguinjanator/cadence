@@ -152,6 +152,9 @@ class Valence:
         self.mean, self.var = 0.0, 1.0
 
 
+SATURATION_BAND = 0.02  # an output within this of 0 or 1 has no slope left for a nudge
+
+
 @dataclass(frozen=True, slots=True)
 class ActorCriticConfig:
     gamma: float = 0.99  # discount
@@ -178,11 +181,20 @@ class ActorCriticConfig:
     )
 
     # Legacy modulation can stabilize control, but does not generally fit mean return.
-    critic_signal: Literal["modulated", "td"] = "modulated"
+    # "auto": the raw error ("td") whenever the dopamine is centred, the modulated one otherwise;
+    # a critic fed the centred signal chases a moving target and its value runs away.
+    critic_signal: Literal["modulated", "td", "auto"] = "auto"
+
+    @property
+    def critic_target(self) -> str:
+        """The signal the critic learns from: ``"td"`` or ``"modulated"``, ``"auto"`` resolved."""
+        if self.critic_signal == "auto":
+            return "td" if self.dopamine_center > 0 else "modulated"
+        return self.critic_signal
 
     def __post_init__(self) -> None:
-        if self.critic_signal not in ("modulated", "td"):
-            raise ValueError("critic_signal must be modulated or td")
+        if self.critic_signal not in ("modulated", "td", "auto"):
+            raise ValueError("critic_signal must be modulated, td or auto")
         for name in ("gamma", "lam"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
@@ -582,7 +594,7 @@ class ActorCritic:
         # signal as the actor. Modulation can change the critic's fixed point.
         critic_delta = (
             np.where(observed, td_error / observed.mean(), 0.0)
-            if cfg.critic_signal == "td"
+            if cfg.critic_target == "td"
             else delta
         )
         critic_step = cfg.eta_critic * (critic_delta[:, None] * critic_trace).mean(axis=0)
@@ -602,7 +614,19 @@ class ActorCritic:
         report["td_error"] = float(np.abs(td_error[observed]).mean())
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
+        report["saturation"] = self._saturation(free)
+        plastic = self.learner.plastic_synapses
+        assert plastic is not None
+        traces = self.trace if plastic.all() else self.trace[:, plastic]
+        report["trace"] = float(np.abs(traces).mean())
         return report
+
+    def _saturation(self, free: BrainState) -> float:
+        """The fraction of output activations within ``SATURATION_BAND`` of 0 or 1, where the
+        activation has no slope and a nudge cannot move it: a latch shows here before it shows
+        in the reward."""
+        s = np.asarray(free.activation)[:, self.learner.output_index]
+        return float(((s < SATURATION_BAND) | (s > 1.0 - SATURATION_BAND)).mean())
 
     def _validated_transition(
         self,
@@ -728,7 +752,7 @@ class ActorCritic:
         # signal as the actor. Modulation can change the critic's fixed point.
         critic_delta = (
             np.where(observed, td_error / observed.mean(), 0.0)
-            if cfg.critic_signal == "td"
+            if cfg.critic_target == "td"
             else delta
         )
         critic_step = cfg.eta_critic * (critic_delta[:, None] * critic_trace).mean(axis=0)
@@ -749,6 +773,14 @@ class ActorCritic:
         report["td_error"] = float(np.abs(td_error[observed]).mean())
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
+        report["saturation"] = self._saturation(free)
+        plastic = self.learner.plastic_synapses
+        assert plastic is not None
+        if plastic.all():
+            report["trace"] = float(trace.abs().mean())
+        else:
+            index = torch.as_tensor(np.flatnonzero(plastic), device=trace.device)
+            report["trace"] = float(trace[:, index].abs().mean())
         return report
 
     def value_of(self, drive: np.ndarray) -> np.ndarray:

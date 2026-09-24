@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+- `LearnerConfig.scale_cap` is the magnitude a plastic synapse's efficacy may not exceed
+  (default 8, the former module constant); it is applied inside the update on both backends,
+  so a cap no longer needs a rebuilt brain per decision.
+- `ActorCriticConfig.critic_signal` defaults to `"auto"`: the raw prediction error for the
+  critic whenever the dopamine is centred (`dopamine_center > 0`), the modulated one otherwise;
+  `critic_target` is the resolved choice. A critic fed the centred signal ran away.
+- The `learn` report carries `saturation` (the fraction of output activations within 0.02 of 0
+  or 1, where a nudge has no slope) and `trace` (the mean absolute eligibility of the plastic
+  synapses), the readings of the latch.
+- `brain_scan.js` v4.2: the glow colours (`hot`, `cool`), `labelCount` and a `dpr` cap are
+  options.
+- Docs: [brains from a connectome](docs/connectomes.md) (custody, the gain by protocol, the
+  sub-net a page settles, what a rate model cannot carry, one gain and many circuits), the
+  traps of learning from reward with their measurements, the troubleshooting entries for both.
+
 ## 0.14.0 (2026-09-23)
 
 - The brain viewer has a second style, `style: "brain"`, and is the patch-net

@@ -77,6 +77,9 @@ update, the centered-contrast check, backtracking), [private planning](planning.
 retained behavior before scaling. [Convergence certificates](certificate.md),
 [protocols](protocols.md), [receipts](receipts.md), [the brain viewer](pages.md) and
 [backends, devices, precision](backends.md) are the instruments.
+[Brains from a connectome](connectomes.md) is the recipe for a measured wiring as one brain:
+custody, the gain by protocol, the sub-net a page settles, what a rate model cannot carry,
+and the traps of learning on it.
 
 ## Reference
 

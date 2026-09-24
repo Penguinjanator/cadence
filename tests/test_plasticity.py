@@ -441,3 +441,60 @@ def test_unobserved_rewards_do_not_enter_shared_or_per_stream_valence() -> None:
         before = np.array(padded.mean, copy=True)
         assert not padded(np.array([1.0, 2.0]), observed=np.zeros(2, bool)).any()
         assert np.array_equal(before, padded.mean)
+
+
+def test_scale_cap_bounds_the_plastic_efficacy_and_is_validated() -> None:
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
+    brain = cd.Brain(connectome, cd.learning_neuron_model(dt=1.0))
+    learner = cd.Learner(brain, connectome.populations["output"], cd.LearnerConfig(scale_cap=0.5))
+    learner.apply(np.full(connectome.synapses, 10.0), np.zeros(connectome.n))
+    assert float(np.abs(learner.brain.efficacy).max()) <= 0.5
+    wide = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)), connectome.populations["output"]
+    )
+    wide.apply(np.full(connectome.synapses, 10.0), np.zeros(connectome.n))
+    assert float(np.abs(wide.brain.efficacy).max()) == SCALE_CAP
+    assert cd.LearnerConfig().to_dict()["scale_cap"] == SCALE_CAP
+    for bad in (0.0, -1.0, float("nan")):
+        try:
+            cd.LearnerConfig(scale_cap=bad)
+        except ValueError:
+            continue
+        raise AssertionError(f"scale_cap={bad} was accepted")
+
+
+def test_the_critic_learns_from_the_raw_error_whenever_the_dopamine_is_centred() -> None:
+    assert cd.ActorCriticConfig().critic_target == "modulated"
+    assert cd.ActorCriticConfig(dopamine_center=0.5).critic_target == "td"
+    assert (
+        cd.ActorCriticConfig(dopamine_center=0.5, critic_signal="modulated").critic_target
+        == "modulated"
+    )
+    assert cd.ActorCriticConfig(critic_signal="td").critic_target == "td"
+    assert cd.ActorCriticConfig().to_dict()["critic_signal"] == "auto"
+
+
+def test_the_report_reads_the_outputs_saturation_and_the_traces_size() -> None:
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
+    plastic = np.zeros(connectome.synapses, dtype=bool)
+    plastic[: connectome.synapses // 2] = True
+    learner = cd.Learner(
+        cd.Brain(connectome, cd.learning_neuron_model(dt=1.0)),
+        connectome.populations["output"],
+        cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
+        plastic_synapses=plastic,
+    )
+    ac = cd.ActorCritic(
+        learner,
+        connectome.populations["hidden"],
+        cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0),
+        seed=0,
+    )
+    rng = np.random.default_rng(1)
+    x, context = _contextual_bandit(rng, 8)
+    drive = learner.brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 4))))
+    action = ac.act(drive)
+    report = ac.learn((action == context).astype(float), np.ones(8, dtype=bool), drive)
+    assert 0.0 <= report["saturation"] <= 1.0
+    assert report["trace"] >= 0.0
+    assert report["trace"] == float(np.abs(ac.trace[:, plastic]).mean())

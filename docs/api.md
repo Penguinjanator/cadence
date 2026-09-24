@@ -675,7 +675,10 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
 
 ## Learning (`cadence.learning`)
 
-- `LearnerConfig(beta=0.1, eta=0.2, eta_bias=0.02, centered=True, free_steps=100, nudged_steps=50, tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0, normalize_floor=1e-3, momentum=0.0, decay=0.0)`:
+- `LearnerConfig(beta=0.1, eta=0.2, eta_bias=0.02, centered=True, free_steps=100, nudged_steps=50, tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0, normalize_floor=1e-3, momentum=0.0, decay=0.0, scale_cap=8.0)`:
+  `scale_cap` is the magnitude a plastic synapse's efficacy may not exceed (every update clips
+  to it); a smaller cap keeps a readout neuron out of saturation, where a nudge has no slope
+  ([the latch](reward.md#traps-with-their-measurements)).
   `momentum` steps each synapse on a running average of its own contrast; `decay` shrinks every
   plastic synapse's efficacy and every plastic neuron's bias by that fraction on each update
   (a leak on the synapses, for streams).
@@ -741,9 +744,14 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
     `reward + gamma * V(next) - V(now)` made into the dopamine by the valence and written
     through every synapse's eligibility, the trace of the last act's contrast decaying by
     `gamma * lam` a moment. The critic uses its own trace and `critic_signal`: raw
-    prediction error (`"td"`) or modulated error (`"modulated"`, the default).
-    Reports include absolute raw `td_error`, absolute modulated `delta`, and signed
-    `dopamine`.
+    prediction error (`"td"`) or modulated error (`"modulated"`); the default `"auto"`
+    is `"td"` whenever the dopamine is centred and `"modulated"` otherwise
+    (`ActorCriticConfig.critic_target` is the resolved choice).
+    Reports include absolute raw `td_error`, absolute modulated `delta`, signed
+    `dopamine`, `saturation` (the fraction of output activations within 0.02 of 0 or 1,
+    where a nudge has no slope) and `trace` (the mean absolute eligibility over the plastic
+    synapses); a `saturation` near 1 with a `trace` near 0 is the latch of
+    [learning from reward](reward.md#traps-with-their-measurements).
     `done` rows start their next life from rest; a truncated row passes `value_of` its last
     observation as `bootstrap`;
     `observed` is a boolean batch vector for real transitions. Padding rows do not
@@ -755,7 +763,7 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
     `(batch, dims, size)` with `Bins`), `settle(drive)`,
     `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
     `salience`, `delta_mean`, `delta_var`.
-- `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=0.05, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="modulated")`:
+- `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=0.05, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="auto")`:
   `gamma` the discount and `lam` the trace's decay; `eta` and `eta_bias` the actor's rates,
   `eta_critic` the critic's; `normalize` and `momentum` the adaptive local step, as the
   learner's; `dopamine_center` the rate at which the reward's running level and scale follow
@@ -764,7 +772,10 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   measured in scales of the usual (`True`) or in the reward's own units; `critic_normalize`
   divides the critic's step by its trace's energy. `critic_signal="td"` keeps the
   critic target in reward units; `"modulated"` may change its fixed point through
-  clipping or centring. See [the choice and its measured tradeoff](reward.md).
+  clipping or centring; `"auto"` (the default) is `"td"` when `dopamine_center > 0` and
+  `"modulated"` otherwise, because a critic fed the centred signal chases a moving target
+  (measured: a value running to -15 within 300 decisions on the fruit fly's T-maze). See
+  [the choice and its measured tradeoff](reward.md).
 - `Bins(dims, size=9)`: the population code for `dims` continuous dimensions, each a softmax
   over `size` bins (`centres`, `groups`, `read`, `size`).
 - `Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True, mean=0.0, var=1.0)`: the

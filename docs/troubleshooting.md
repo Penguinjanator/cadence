@@ -126,6 +126,31 @@ search alone). For categorical ports, mean log loss and calibration beside accur
 and bind the numbers to their sources with a [receipt](receipts.md). The examples
 repository's `verify.py` scripts are the pattern.
 
+## Learning from reward
+
+- The reward curve is flat and `report["saturation"]` is near 1 with `report["trace"]` near 0:
+  the readout latched; see [the traps](reward.md#traps-with-their-measurements) for the
+  temperature, the cap and the readout choice.
+- The value in the report runs away while `dopamine_center` is set: leave `critic_signal` at
+  `"auto"`, which gives the critic the raw error under centring.
+- A decision costs ten times what a settle costs on the torch backend: something rebuilds the
+  brain per decision (`with_parameters`); use `LearnerConfig(scale_cap=...)` for the cap and
+  keep parameters on the kernel.
+- The policy learns "always the same action": check the assay (every action needs an
+  outcome) and the symmetry of the outcomes before touching the rule.
+
+## Connectomes
+
+- A predicate over a large population fails although the pathway is there: `active` asks for a
+  mean over every member, which a set of 1,312 descending neurons cannot reach; use `sparse`
+  for a subset and `lateralized` for a left-right pair ([protocols](protocols.md)).
+- A gate passes on the whole brain and fails on the sub-net a page settles: recruit more
+  hops or a lower synapse floor and keep the closure receipt; the fruit fly needed 60,000 of
+  150,802 neurons for every readout below 1e-3 ([connectomes](connectomes.md)).
+- The whole brain ignites or is silent at every gain you try: one global gain cannot serve every
+  circuit's excitation-inhibition balance ([connectomes](connectomes.md) says what was measured
+  on the fly's antennal lobe and what to declare).
+
 ## Where to ask
 
 Open an issue at [github.com/muellerberndt/cadence/issues](https://github.com/muellerberndt/cadence/issues)
