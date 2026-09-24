@@ -30,7 +30,7 @@ rebuilt by one command and is not.
 ```python
 from cadence import Brain, Connectome, NeuronModel
 
-connectome = Connectome.from_synapses(pre, post, count=count, sign=sign, n=n, populations=sets)
+connectome = Connectome.from_synapses(n, pre=pre, post=post, count=count, sign=sign, populations=sets)
 brain = Brain(connectome, NeuronModel(gain=0.02), backend="cpu")
 ```
 
