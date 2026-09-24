@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The paper is published as a preprint on PhilPapers (https://philpapers.org/rec/MUECAP-2); the README and the guides link
+  it there, and the PDF copy at the repository root is removed.
+
 ## 0.15.0 (2026-09-24)
 
 The release of the fruit fly: what building a whole nervous system as one brain, and learning

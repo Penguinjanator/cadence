@@ -100,7 +100,7 @@ distinction between current APIs and a proposed shared architecture.
 readback and transfer as research requirements. [The metacognition ladder](METACOGNITION_LADDER.md):
 the order of the program's experiments, rung by rung, each with what the steering patch
 reads and returns, the task, the control, the falsifier and the issue. The
-[paper](https://github.com/muellerberndt/cadence/blob/main/cadence-paper.pdf) states the
+[paper](https://philpapers.org/rec/MUECAP-2) states the
 hypotheses, the theorems and the evidence.
 
 ## Kept for existing experiments

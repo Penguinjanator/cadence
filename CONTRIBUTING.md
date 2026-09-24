@@ -58,7 +58,6 @@ pinned toolchain; see [lean/README.md](lean/README.md)).
 | `tests/` | pytest, 800-odd tests |
 | `docs/` | the guides; `docs/index.md` is the map |
 | `lean/` | the Lean proofs and their audit |
-| `cadence-paper.pdf` | the paper |
 
 ## Examples
 

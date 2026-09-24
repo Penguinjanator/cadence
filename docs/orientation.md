@@ -179,6 +179,6 @@ model of [Marr](https://doi.org/10.1113/jphysiol.1969.sp008820) and
 [complementary learning systems](https://web.stanford.edu/~jlmcc/papers/McCMcNaughtonOReilly95.pdf),
 [orthogonal weight modification](https://www.nature.com/articles/s42256-019-0080-x),
 [reward prediction errors](https://www.gatsby.ucl.ac.uk/~dayan/papers/sdm97.html).
-The [paper](https://github.com/muellerberndt/cadence/blob/main/cadence-paper.pdf) states
+The [paper](https://philpapers.org/rec/MUECAP-2) states
 the hypotheses, the theorems and the evidence; the
 [Lean library](../lean/README.md) checks the theorems.
