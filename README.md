@@ -127,18 +127,18 @@ is the contract of the temporal patch.
 
 ## Examples
 
-Five worked applications live in the [examples repository](https://github.com/muellerberndt/cadence-examples).
-Each is a static page that runs its brain in the browser with the library's
-arithmetic, with the receipts behind every number it states and a check that
-recomputes them.
+The worked applications live in the [examples repository](https://github.com/muellerberndt/cadence-examples),
+each a static page that runs its brain in the browser with the library's arithmetic, with the
+receipts behind every number it states and a check that recomputes them; the
+[examples page](https://github.com/muellerberndt/cadence-examples#readme) lists them all. Two
+of them:
 
-| Example | What it shows | Built from |
-| --- | --- | --- |
-| [The worm](https://floatingpragma.io/cadence-examples/celegans/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/worm) | learning from experience in one life on the measured *C. elegans* connectome; food and pain as the only outcomes; the body reads the command neurons directly | one temporal patch masked by the connectome |
-| [Connect Four](https://floatingpragma.io/cadence-examples/connect4/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/connect4) | planning: a search over imagined boards reads a value learned by watching a perfect player, and every move is graded by that player | one record patch |
-| [Amen](https://floatingpragma.io/cadence-examples/amen-beats/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/amen) | creation: a composer that starts from silence, hears each half-beat it plays and computes sixteen bars of drums, bass and texture | one record patch |
-| [Patch World](https://floatingpragma.io/cadence-examples/patchworld/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/patchworld) | evolution of bodies and wiring, learning in one life, planning through a learned model, computation priced in mass | two record patches per being, under selection |
-| [The dozing cat](https://floatingpragma.io/cadence-examples/dozing-cat/) · [code](https://github.com/muellerberndt/cadence-examples/tree/main/dozing-cat) | a brain that notices its own surprise: a governor patch reads the cortex's readback and decides when to doze, chase and learn; your mouse is the laser dot; the browser brain reproduces the library to 4.8e-12 | one belief patch, a habit, a settling governor patch |
+<table>
+<tr>
+<td width="50%"><a href="https://floatingpragma.io/cadence-examples/fly-matrix/"><img src="https://raw.githubusercontent.com/muellerberndt/cadence-examples/main/fly-matrix/screenshot.png" alt="A fly in the Matrix: the whole nervous system of a fruit fly flying a body through a wireframe room"></a><br><b>A fly in the Matrix</b> · <a href="https://floatingpragma.io/cadence-examples/fly-matrix/">live</a> · <a href="https://github.com/muellerberndt/cadence-examples/tree/main/fly-matrix">code</a><br>The 150,802 neurons of a fruit fly, brain and nerve cord wired as measured, as one settling brain flying a body with physics; the physiology gates against shuffled wirings; the mushroom body learning which smell means sugar.</td>
+<td width="50%"><a href="https://floatingpragma.io/cadence-examples/amen-beats/"><img src="https://raw.githubusercontent.com/muellerberndt/cadence-examples/main/amen/screenshot.png" alt="Amen: one record patch computes a jungle track from silence"></a><br><b>Amen, the jungle composer</b> · <a href="https://floatingpragma.io/cadence-examples/amen-beats/">live</a> · <a href="https://github.com/muellerberndt/cadence-examples/tree/main/amen">code</a><br>One record patch starts from silence, hears each half-beat it plays and computes sixteen bars of drums, bass and texture.</td>
+</tr>
+</table>
 
 They are application tests, not definitions of the architecture. A result in one
 does not establish transfer to the others. Every example states what is supplied,

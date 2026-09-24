@@ -1,6 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 (2026-09-24)
+
+The release of the fruit fly: what building a whole nervous system as one brain, and learning
+on it, sent back into the library. The example itself, and the browser engine every settling
+page shares, live in [cadence-examples](https://github.com/muellerberndt/cadence-examples).
 
 - `LearnerConfig.scale_cap` is the magnitude a plastic synapse's efficacy may not exceed
   (default 8, the former module constant); it is applied inside the update on both backends,
@@ -16,6 +20,7 @@
 - Docs: [brains from a connectome](docs/connectomes.md) (custody, the gain by protocol, the
   sub-net a page settles, what a rate model cannot carry, one gain and many circuits), the
   traps of learning from reward with their measurements, the troubleshooting entries for both.
+- The README no longer lists every example; it links the examples page and shows two.
 
 ## 0.14.0 (2026-09-23)
 
