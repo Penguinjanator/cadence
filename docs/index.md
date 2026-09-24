@@ -87,6 +87,8 @@ says how to run the checks and what a change needs; the
 
 ## The ideas
 
+[The plan](PLAN.md): every feature of the program, its demo and where it stands, in the ladder's order.
+
 [Architecture and integration](architecture.md): the contract of the temporal patch and
 the fixed-model actor. [Equilibrium and learned world models](equilibrium-world-models.md):
 three clocks, changing expected trajectories, evidence and branch isolation, and the

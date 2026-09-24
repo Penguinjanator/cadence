@@ -2,7 +2,7 @@
 
 > **Final goal.** A patch-net equilibrium brain that is more scalable, more capable and more efficient than a transformer, climbing this ladder to a robot that acts and speaks among people. Every Cadence result is measured against that goal at matched information, matched task and a declared resource model.
 
-This document orders the work of the Cadence program. Each rung is a function that the brain below it lacks, a task on which that lack is measured, an experiment to run, a control, a falsifier and a GitHub issue. The rungs run from brains that read the world only, where every measured Cadence result stands, to a humanoid that functions among people, and past it.
+The list of every feature with its demo and its status is [the plan](PLAN.md); this document orders the science. This document orders the work of the Cadence program. Each rung is a function that the brain below it lacks, a task on which that lack is measured, an experiment to run, a control, a falsifier and a GitHub issue. The rungs run from brains that read the world only, where every measured Cadence result stands, to a humanoid that functions among people, and past it.
 
 ## The principle
 
