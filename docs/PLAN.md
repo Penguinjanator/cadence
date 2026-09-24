@@ -46,7 +46,7 @@ Status: **✅ completed** (the demo was accepted: it works with the switch on an
 | 1 · [#7](https://github.com/muellerberndt/cadence/issues/7) | noticing itself: a governor patch reads the brain's own surprise and returns the mode | the dozing cat | ✅ completed 2026-09-23; the fifth canonical example | `demos/dozing-cat/`, [live](https://floatingpragma.io/cadence-examples/dozing-cat/) |
 | 2 · [#17](https://github.com/muellerberndt/cadence/issues/17) | weighing the senses: a steering patch sets each sense's gain inside the repair | the ventriloquist | ✅ completed 2026-09-23 | `demos/ventriloquist/` |
 | 3 · [#17](https://github.com/muellerberndt/cadence/issues/17) | looking: the steering patch moves where a sense samples, under a sensing cost | the lighthouse keeper | in progress | `demos/lighthouse-keeper/` |
-| 4 · [#18](https://github.com/muellerberndt/cadence/issues/18) | the tiger: capture within one decision, habituation on repetition without consequence | the night nursery | in progress | `demos/night-nursery/` |
+| 4 · [#18](https://github.com/muellerberndt/cadence/issues/18) | the tiger: capture within one decision, habituation on repetition without consequence | the night nursery | open (started 2026-09-24, paused; one step at a time) | `demos/night-nursery/` |
 | 5 · [#22](https://github.com/muellerberndt/cadence/issues/22) | curiosity: the steering patch's own cost prefers falling, consequential surprise | the toy box | open | |
 | 6 · [#11](https://github.com/muellerberndt/cadence/issues/11) | how long to think | the chess clock | open | |
 | 7 · [#19](https://github.com/muellerberndt/cadence/issues/19) | knowing what it does not know | phone a friend | open | |
