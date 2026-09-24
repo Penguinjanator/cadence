@@ -19,16 +19,16 @@ Every step is accepted by a demo. The page has the shared skeleton (the whole br
 
 ## The list
 
-Status: **accepted** (the demo works with the switch on and fails with it off, on the numbers in its report), **in progress**, **open**. "Where" is the demo's directory in the workspace's `demos/` folder, and the live page when it runs in the browser.
+Status: **✅ completed** (the demo was accepted: it works with the switch on and fails with it off, on the numbers in its report), **in progress**, **open**. "Where" is the demo's directory in the workspace's `demos/` folder, and the live page when it runs in the browser.
 
 ### The substrate (rung 0)
 
 | step | feature | the demo | status | where |
 | --- | --- | --- | --- | --- |
-| [#3](https://github.com/muellerberndt/cadence/issues/3) | the shared core: belief inference and private imagination | the shell game | accepted 2026-09-23 | `demos/shell-game/` |
-| [#7](https://github.com/muellerberndt/cadence/issues/7) | one cortex that lives: the three signals, the governor | the room with the heater and the window (rung 1's first page) | accepted 2026-09-23 | `demos/room/` |
-| [#8](https://github.com/muellerberndt/cadence/issues/8) | habits as patches | a reaching arm learns its muscle memory | accepted 2026-09-23 | `demos/arm/` |
-| [#9](https://github.com/muellerberndt/cadence/issues/9) | cortices joined by ports (in the library as `record_ports`) | an eye and an ear watch one ball | accepted for the eye in the dark; the ear through the port is open | `demos/eye-and-ear/` |
+| [#3](https://github.com/muellerberndt/cadence/issues/3) | the shared core: belief inference and private imagination | the shell game | ✅ completed 2026-09-23 | `demos/shell-game/` |
+| [#7](https://github.com/muellerberndt/cadence/issues/7) | one cortex that lives: the three signals, the governor | the room with the heater and the window (rung 1's first page) | ✅ completed 2026-09-23 | `demos/room/` |
+| [#8](https://github.com/muellerberndt/cadence/issues/8) | habits as patches | a reaching arm learns its muscle memory | ✅ completed 2026-09-23 | `demos/arm/` |
+| [#9](https://github.com/muellerberndt/cadence/issues/9) | cortices joined by ports (in the library as `record_ports`) | an eye and an ear watch one ball | ✅ completed for the eye in the dark; the ear through the port stays open | `demos/eye-and-ear/` |
 | [#15](https://github.com/muellerberndt/cadence/issues/15) | instruments: the brain's signals on every page | the polygraph | open (the tiles and the strip exist on every page; the shared component and receipt schema do not) | |
 | [#16](https://github.com/muellerberndt/cadence/issues/16) | the steering patch across cortices | the referee | open | |
 | [#4](https://github.com/muellerberndt/cadence/issues/4) | the player: scene-dependent consequences, internal foresight | ghost balls | open | |
@@ -43,8 +43,8 @@ Status: **accepted** (the demo works with the switch on and fails with it off, o
 
 | rung | feature | the demo | status | where |
 | --- | --- | --- | --- | --- |
-| 1 · [#7](https://github.com/muellerberndt/cadence/issues/7) | noticing itself: a governor patch reads the brain's own surprise and returns the mode | the dozing cat | accepted 2026-09-23; the fifth canonical example | `demos/dozing-cat/`, [live](https://floatingpragma.io/cadence-examples/dozing-cat/) |
-| 2 · [#17](https://github.com/muellerberndt/cadence/issues/17) | weighing the senses: a steering patch sets each sense's gain inside the repair | the ventriloquist | accepted 2026-09-23 | `demos/ventriloquist/` |
+| 1 · [#7](https://github.com/muellerberndt/cadence/issues/7) | noticing itself: a governor patch reads the brain's own surprise and returns the mode | the dozing cat | ✅ completed 2026-09-23; the fifth canonical example | `demos/dozing-cat/`, [live](https://floatingpragma.io/cadence-examples/dozing-cat/) |
+| 2 · [#17](https://github.com/muellerberndt/cadence/issues/17) | weighing the senses: a steering patch sets each sense's gain inside the repair | the ventriloquist | ✅ completed 2026-09-23 | `demos/ventriloquist/` |
 | 3 · [#17](https://github.com/muellerberndt/cadence/issues/17) | looking: the steering patch moves where a sense samples, under a sensing cost | the lighthouse keeper | in progress | `demos/lighthouse-keeper/` |
 | 4 · [#18](https://github.com/muellerberndt/cadence/issues/18) | the tiger: capture within one decision, habituation on repetition without consequence | the night nursery | in progress | `demos/night-nursery/` |
 | 5 · [#22](https://github.com/muellerberndt/cadence/issues/22) | curiosity: the steering patch's own cost prefers falling, consequential surprise | the toy box | open | |
