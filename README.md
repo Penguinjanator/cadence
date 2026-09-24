@@ -184,7 +184,9 @@ The [index](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) is
   among people. The genome decides which readbacks exist, and a rung is earned
   only by a task the brain below it fails at matched information and compute.
   The [metacognition ladder](docs/METACOGNITION_LADDER.md) states the rungs, their
-  experiments and their issues.
+  experiments and their issues. The ladder orders what a brain earns; its nursery orders
+  what the world supplies in one life, from the self by contingency to words, and its
+  breeder what pays for a brain across lives.
 
 The current implementation provides detached self-readback and private proposal
 revision. Learned steering patches, curiosity and reliable

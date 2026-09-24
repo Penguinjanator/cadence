@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Docs: the metacognition ladder carries the nursery (development in one life: the ecological self, the
+  contingent other, learned imitation, joint attention, first words, the conceptual self, grammar, and the
+  order experiment, with their sources) and the breeder (the Red Queen, the duplication mutation,
+  provisioning as a gene, the recapitulation check); the plan lists the three tracks with their
+  dependencies and what can run side by side.
 - The paper is published as a preprint on PhilPapers (https://philpapers.org/rec/MUECAP-2); the README and the guides link
   it there, and the PDF copy at the repository root is removed.
 

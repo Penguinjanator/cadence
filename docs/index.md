@@ -99,7 +99,9 @@ distinction between current APIs and a proposed shared architecture.
 [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive
 readback and transfer as research requirements. [The metacognition ladder](METACOGNITION_LADDER.md):
 the order of the program's experiments, rung by rung, each with what the steering patch
-reads and returns, the task, the control, the falsifier and the issue. The
+reads and returns, the task, the control, the falsifier and the issue; its nursery, the
+world's order in one life with a caregiver, from the self by contingency to words; and its
+breeder, what pays for a brain across lives. The
 [paper](https://philpapers.org/rec/MUECAP-2) states the
 hypotheses, the theorems and the evidence.
 
