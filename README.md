@@ -34,10 +34,9 @@ We want to reach a point where we can effortlessly evolve a human-like brain,
 teach it first by imitation and then through its own life, and give it an
 experience identical to that of a human living in our world. Brains with
 capabilities far beyond ours are thinkable on the same path; human-level
-competence comes first, as a sensible milestone. The
-[metacognition ladder](docs/METACOGNITION_LADDER.md) orders the steps from the
-brains in this library to that milestone, rung by rung, each with its task, its
-control, its falsifier and its issue.
+competence comes first, as a sensible milestone. The steps from the
+brains in this library to that milestone are tracked as issues in this repository,
+rung by rung, each with its task, its control and its falsifier.
 
 ## In familiar terms
 
@@ -159,7 +158,7 @@ says what an example needs to live there, including the card every example READM
 - **Build:** [record patch](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md) · [belief patch](https://github.com/muellerberndt/cadence/blob/main/docs/belief.md) · [temporal learning](https://github.com/muellerberndt/cadence/blob/main/docs/temporal.md), [planning](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md), [learn, act and observe](https://github.com/muellerberndt/cadence/blob/main/docs/interaction.md), [response protection](https://github.com/muellerberndt/cadence/blob/main/docs/temporal-memory.md) · [compose a brain](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md), [write a cortex](https://github.com/muellerberndt/cadence/blob/main/docs/cortex.md), [local learning](https://github.com/muellerberndt/cadence/blob/main/docs/learning.md), [records and memory](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md), [reward](https://github.com/muellerberndt/cadence/blob/main/docs/reward.md), [evolve a brain](https://github.com/muellerberndt/cadence/blob/main/docs/evolution.md)
 - **Measure:** [task design](https://github.com/muellerberndt/cadence/blob/main/docs/task-design.md) · [common missteps](https://github.com/muellerberndt/cadence/blob/main/docs/missteps.md) · [scaling](https://github.com/muellerberndt/cadence/blob/main/docs/scaling.md) · [certificate](https://github.com/muellerberndt/cadence/blob/main/docs/certificate.md) · [protocols](https://github.com/muellerberndt/cadence/blob/main/docs/protocols.md) · [receipts](https://github.com/muellerberndt/cadence/blob/main/docs/receipts.md) · [the brain viewer](https://github.com/muellerberndt/cadence/blob/main/docs/pages.md) · [backends](https://github.com/muellerberndt/cadence/blob/main/docs/backends.md)
 - **Reference:** [API](https://github.com/muellerberndt/cadence/blob/main/docs/api.md) · [changelog](https://github.com/muellerberndt/cadence/blob/main/CHANGELOG.md) · [Lean proofs](https://github.com/muellerberndt/cadence/blob/main/lean/README.md) · [contributing](https://github.com/muellerberndt/cadence/blob/main/CONTRIBUTING.md)
-- **The ideas:** [architecture](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) · [equilibrium world models](https://github.com/muellerberndt/cadence/blob/main/docs/equilibrium-world-models.md) · [creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md) · [the metacognition ladder](https://github.com/muellerberndt/cadence/blob/main/docs/METACOGNITION_LADDER.md) · [the paper](https://philpapers.org/rec/MUECAP-2)
+- **The ideas:** [architecture](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) · [equilibrium world models](https://github.com/muellerberndt/cadence/blob/main/docs/equilibrium-world-models.md) · [creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md) · [the paper](https://philpapers.org/rec/MUECAP-2)
 
 The [index](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) is the full map.
 
@@ -183,10 +182,10 @@ The [index](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) is
   turn, and the levels form a ladder from reflex to a robot that acts and speaks
   among people. The genome decides which readbacks exist, and a rung is earned
   only by a task the brain below it fails at matched information and compute.
-  The [metacognition ladder](docs/METACOGNITION_LADDER.md) states the rungs, their
-  experiments and their issues. The ladder orders what a brain earns; its nursery orders
-  what the world supplies in one life, from the self by contingency to words, and its
-  breeder what pays for a brain across lives.
+  The rungs, their experiments and their issues are tracked in this repository's
+  issues. The ladder orders what a brain earns; its nursery orders what the world
+  supplies in one life, from the self by contingency to words, and its breeder what
+  pays for a brain across lives.
 
 The current implementation provides detached self-readback and private proposal
 revision. Learned steering patches, curiosity and reliable

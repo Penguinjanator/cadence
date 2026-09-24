@@ -153,7 +153,7 @@ learning. `observe` learns and, for a record patch, writes.
   broadcast prediction error that gates them; the object that centers and caps it.
 - **Steering patch.** A patch of the same kind whose evidence is the readback of the
   rest of the brain and whose settled state sets their gains, gaze, goals or budgets.
-  The [metacognition ladder](METACOGNITION_LADDER.md) orders its experiments.
+  Its experiments are tracked in the repository's issues.
 - **Receipt.** A JSON file binding a result to the sources that produced it, with a
   digest and a verifier.
 

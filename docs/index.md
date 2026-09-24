@@ -90,18 +90,12 @@ says how to run the checks and what a change needs; the
 
 ## The ideas
 
-[The plan](PLAN.md): every feature of the program, its demo and where it stands, in the ladder's order.
-
 [Architecture and integration](architecture.md): the contract of the temporal patch and
 the fixed-model actor. [Equilibrium and learned world models](equilibrium-world-models.md):
 three clocks, changing expected trajectories, evidence and branch isolation, and the
 distinction between current APIs and a proposed shared architecture.
 [Creativity and self-reflection](creativity.md): novel proposal evaluation, recursive
-readback and transfer as research requirements. [The metacognition ladder](METACOGNITION_LADDER.md):
-the order of the program's experiments, rung by rung, each with what the steering patch
-reads and returns, the task, the control, the falsifier and the issue; its nursery, the
-world's order in one life with a caregiver, from the self by contingency to words; and its
-breeder, what pays for a brain across lives. The
+readback and transfer as research requirements. The
 [paper](https://philpapers.org/rec/MUECAP-2) states the
 hypotheses, the theorems and the evidence.
 
