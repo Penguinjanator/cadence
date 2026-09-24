@@ -109,6 +109,18 @@ the self-rotation and `spinRate` (0.12 radians per second) sets its speed. `mode
 a page feeds `setWeights` with the weights or with their last change, and the ribbons or
 lines follow.
 
+The brain style also draws a measured anatomy. An atlas that carries `positions3`, one soma
+position per neuron in three dimensions, centred and scaled so the longest extent spans the
+unit ball, is drawn at those positions instead of the generic lobes: no shell unless the page
+sets `shell: true`, the labels hung from each region's members, the point sizes from
+`spacing3` (the distance to a neuron's neighbours from the local density in three
+dimensions, computed when the payload lacks it), a frontal resting view, and `fit()` framing
+the projected bounding boxes. `layoutAtlas({positions3: {'*': array}})` builds such an atlas
+in the browser from an array of `[x, y, z]` or a flat array of 3n floats and derives the
+scan's own square from the (x, y) projection; `fitPositions3`, `spacing3Of` and
+`anatomyLayout` are exported for a page's own overlays. Payloads without the keys draw as
+before.
+
 The renderer draws the connectome, the settled regions. The example pages draw the records
 cortex beside the scan with their own component, `records_view.js`: the granule raster with
 the active cells of the executed reading, imagined reads, writes scaled by the record rate,

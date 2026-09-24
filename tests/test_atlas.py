@@ -121,7 +121,7 @@ def test_frames_from_a_recording_and_the_shipped_renderer() -> None:
     frames = atlas.frames_from_record(records[0])
     assert frames["steps"] == records[0].activation.shape[0]
     script = brain_scan_script()
-    assert "export class BrainScan" in script and "cadence.brain-scan/v3" in script
+    assert "export class BrainScan" in script and "cadence.brain-scan/v4" in script
     page = atlas.page(frames=frames, title="probe")
     assert "<canvas" in page and "cadence.atlas/v1" in page and "BrainScan" in page
 
@@ -183,3 +183,19 @@ def test_the_viewer_ships_the_brain_style_with_its_static_geometry_uploaded_once
     assert "drawArraysInstanced(gl.TRIANGLE_STRIP" in frame
     for option in ("restAlpha", "bloom", "shell", "spin", "spinRate"):
         assert f"{option}:" in script
+
+
+def test_the_viewer_draws_a_measured_anatomy_when_the_atlas_carries_one() -> None:
+    # An atlas with `positions3` (a measured soma position per neuron) is drawn at those
+    # positions in the brain style instead of the generic lobes; the payload keys are
+    # optional, so every earlier payload still draws as before.
+    script = brain_scan_script()
+    for name in ("function fitPositions3", "function spacing3Of", "function anatomyLayout", "ANATOMY_VIEW"):
+        assert name in script
+    assert "positions3: atlas.positions3 ? decodeArray(atlas.positions3) : null" in script
+    assert "spacing3: atlas.spacing3 ? decodeArray(atlas.spacing3) : null" in script
+    assert "this.anatomical ? anatomyLayout(this.atlas) : brainLayout(this.atlas)" in script
+    assert "positions3 = {}" in script and "positions3['*']" in script
+    assert 'if (!("shell" in this.given)) this.options.shell = !this.anatomical;' in script
+    frame = script[script.index("_drawBrain(width, height, dpr) {") : script.index("_time(t0) {")]
+    assert "anatomyLayout" not in frame and "spacing3Of" not in frame

@@ -11,7 +11,15 @@
 // net into the volume of a stylised animal brain in three dimensions: glowing somata by
 // anatomy, every synapse a curved path lit by the messages that travel on it, a translucent
 // shell, bloom, fog and a slow rotation; `setStyle` switches between the two.
-export const VERSION = "cadence.brain-scan/v3";
+// The brain style also draws a real anatomy: an atlas that carries `positions3` (a measured
+// soma position per neuron, three floats each, centred and scaled so the longest extent
+// spans the unit ball) is drawn at those positions instead of the generic lobes, with no
+// shell unless asked for, the region centres and extents for the labels taken from the
+// members, the point sizes from `spacing3` (the distance to a neuron's neighbours, from the
+// local density in three dimensions). `layoutAtlas({positions3: {'*': array}})` builds such
+// an atlas in the browser and the atlas exporter writes one; `decodeAtlas` reads both keys
+// when present, so every earlier payload still draws as before.
+export const VERSION = "cadence.brain-scan/v4";
 
 const TYPES = { f4: Float32Array, f8: Float64Array, u4: Uint32Array, i4: Int32Array, u2: Uint16Array, i2: Int16Array, u1: Uint8Array, i1: Int8Array };
 const FIT = 0.94; // world span shown at zoom 1
@@ -38,6 +46,10 @@ export function decodeAtlas(atlas) {
     pre: decodeArray(atlas.pre),
     post: decodeArray(atlas.post),
     weight: decodeArray(atlas.weight),
+    // a measured anatomy, optional: three floats per neuron in the brain style's frame and the neighbour spacing
+    positions3: atlas.positions3 ? decodeArray(atlas.positions3) : null,
+    spacing3: atlas.spacing3 ? decodeArray(atlas.spacing3) : null,
+    note: atlas.note ?? null,
   };
 }
 
@@ -248,6 +260,81 @@ export function brainLayout(atlas) {
   return { positions, spacing, centers, extents };
 }
 
+// The anatomical mode: measured positions instead of the generic lobes.
+const ANATOMY_VIEW = { yaw: 0.35, pitch: 0.2 }; // a frontal view, turned a little so the depth reads
+const ANATOMY_RADIUS = 1.0; // the longest half-extent of a measured anatomy in the brain's frame
+
+/** Measured 3D positions (an array of [x, y, z] or a flat array of 3n floats) centred and
+ *  scaled uniformly so their longest extent spans `ANATOMY_RADIUS` each way: the frame the
+ *  brain style's projection assumes. Returns a Float32Array of 3n. */
+export function fitPositions3(raw, n) {
+  const out = new Float32Array(3 * n), flat = typeof raw[0] === "number";
+  if ((flat ? raw.length : raw.length * 3) !== 3 * n) throw Error(`positions3['*'] must hold ${n} points`);
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+  for (let i = 0; i < n; i++) for (let d = 0; d < 3; d++) {
+    const v = flat ? raw[3 * i + d] : raw[i][d];
+    out[3 * i + d] = v; lo[d] = Math.min(lo[d], v); hi[d] = Math.max(hi[d], v);
+  }
+  const scale = (2 * ANATOMY_RADIUS) / Math.max(1e-9, hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2]);
+  for (let i = 0; i < n; i++) for (let d = 0; d < 3; d++) out[3 * i + d] = (out[3 * i + d] - (lo[d] + hi[d]) / 2) * scale;
+  return out;
+}
+
+/** The distance to a neuron's neighbours as seen from the front, from the local density of
+ *  the (x, y) projection on a grid over the anatomy (the counterpart of the scan's
+ *  `_spacing`, in the brain's frame). What the additive somata sum to on the screen is the
+ *  column density along the view, so the projected spacing is the one the point sizes and
+ *  alphas need, and a thin anatomy turned to its side reads a little brighter, as a scan
+ *  does edge-on. */
+export function spacing3Of(positions, n) {
+  const out = new Float32Array(n);
+  if (!n) return out;
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < n; i++) { const x = positions[3 * i], y = positions[3 * i + 1]; x0 = Math.min(x0, x); x1 = Math.max(x1, x); y0 = Math.min(y0, y); y1 = Math.max(y1, y); }
+  const G = 64, w = Math.max(1e-6, x1 - x0), h = Math.max(1e-6, y1 - y0), cell = Math.max(w, h) / G;
+  const cols = Math.max(1, Math.ceil(w / cell)), rows = Math.max(1, Math.ceil(h / cell));
+  const counts = new Float32Array(cols * rows), cx = new Int32Array(n), cy = new Int32Array(n);
+  for (let i = 0; i < n; i++) {
+    cx[i] = Math.min(cols - 1, Math.floor((positions[3 * i] - x0) / cell)); cy[i] = Math.min(rows - 1, Math.floor((positions[3 * i + 1] - y0) / cell));
+    counts[cy[i] * cols + cx[i]]++;
+  }
+  for (let i = 0; i < n; i++) {
+    let sum = 0, cells = 0;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const X = cx[i] + dx, Y = cy[i] + dy;
+      if (X < 0 || Y < 0 || X >= cols || Y >= rows) continue;
+      sum += counts[Y * cols + X]; cells++;
+    }
+    out[i] = Math.sqrt((cells * cell * cell) / Math.max(1, sum));
+  }
+  return out;
+}
+
+/** The brain style's layout of an atlas that carries measured positions: the positions as
+ *  given, the spacing from the atlas or from the local density, every region's centre and
+ *  half-extents from the bulk of its members (the 5th to 95th percentile on each axis, so a
+ *  label hangs over the tissue and a few strays or jittered placements do not carry it
+ *  away), and the bounds of the whole anatomy for the frame. */
+export function anatomyLayout(atlas) {
+  const n = atlas.n, positions = atlas.positions3, regions = atlas.regions;
+  const spacing = atlas.spacing3 && atlas.spacing3.length === n ? atlas.spacing3 : spacing3Of(positions, n);
+  const lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity], members = regions.map(() => []);
+  for (let i = 0; i < n; i++) { members[atlas.region[i]].push(i); for (let d = 0; d < 3; d++) { const v = positions[3 * i + d]; if (v < lo[d]) lo[d] = v; if (v > hi[d]) hi[d] = v; } }
+  const centers = [], extents = [];
+  for (const ids of members) {
+    const m = ids.length, c = [0, 0, 0], e = [0.05, 0.05, 0.05];
+    for (let d = 0; d < 3 && m; d++) {
+      const v = new Float32Array(m);
+      for (let j = 0; j < m; j++) v[j] = positions[3 * ids[j] + d];
+      v.sort();
+      const a = v[Math.floor(0.05 * (m - 1))], b = v[Math.ceil(0.95 * (m - 1))];
+      c[d] = (a + b) / 2; e[d] = Math.max(0.02, (b - a) / 2);
+    }
+    centers.push(c); extents.push(e);
+  }
+  return { positions, spacing, centers, extents, bounds: n ? [lo, hi] : null };
+}
+
 /** The bow of every synapse: a vector perpendicular to its chord, outward from the brain's
  *  centre and turned by a per-edge hash, scaled by the chord's length; the cubic Bezier's
  *  control points are the chord's thirds plus this vector. */
@@ -337,7 +424,7 @@ precision highp float; precision highp int;
 layout(location=0) in vec3 edge; layout(location=1) in vec3 bow;
 uniform sampler2D posTex; uniform sampler2D colorTex; uniform sampler2D stateTex;
 uniform int pass; uniform int mode; uniform mat3 rot; uniform vec3 camera; uniform vec2 aspect; uniform vec2 viewport; uniform vec2 fogRange;
-uniform float dist; uniform float focal; uniform float clock; uniform float dpr; uniform float restAlpha; uniform float edgeGain; uniform float scale; uniform float fade; uniform float segments; uniform float pulseSegments; uniform float sizeScale;
+uniform float dist; uniform float focal; uniform float clock; uniform float dpr; uniform float restAlpha; uniform float edgeGain; uniform float scale; uniform float fade; uniform float segments; uniform float pulseSegments; uniform float sizeScale; uniform float densityLaw;
 out vec4 color; out vec2 uv; out float across;
 vec4 item(sampler2D t,int id){return texelFetch(t,ivec2(id%512,id/512),0);}
 vec3 project(vec3 v){float d=max(0.2,dist-v.z);return vec3((focal*v.xy/d*camera.z+camera.xy)*aspect,d);}
@@ -368,7 +455,7 @@ void main(){
    vec3 tint=mix(ca*(0.35+0.65*lev),hot,heat*0.85);
    if(shown<0.0&&mode!=3)tint=mix(tint,cool,0.5*lev);
    float spacingPx=cA.a*focal/pr.z*camera.z*min(viewport.x,viewport.y)*0.5;
-   float density=clamp(spacingPx*spacingPx/(size*size),0.08,1.0);
+   float density=clamp(pow(spacingPx*spacingPx/(size*size),densityLaw),0.02,1.0); // somata packed tighter than their size share their light; a measured anatomy (law 0.5) keeps its dense tissue brighter than its sparse tissue without saturating
    color=vec4(tint*f*1.4,(0.3+0.5*lev+0.5*heat)*density*visible);
    gl_PointSize=size*(1.0+1.6*heat);
    gl_Position=vec4(pr.xy,0.0,1.0);return;
@@ -442,8 +529,10 @@ void main(){
 export class BrainScan {
   constructor(canvas, atlas, options = {}) {
     this.canvas = canvas;
-    this.options = { style: "scan", particles: true, edges: true, field: true, glow: 2.2, heatDecay: 0.86, background: [0.03, 0.055, 0.085], mode: "activity", montageRows: 16, particleBudget: 300000, lineBudget: 400000, labelTop: 9, restAlpha: 0.025, bloom: 0.5, shell: true, spin: true, spinRate: 0.12, ...options };
+    this.options = { style: "scan", particles: true, edges: true, field: true, glow: 2.2, heatDecay: 0.86, background: [0.03, 0.055, 0.085], mode: "activity", montageRows: 16, particleBudget: 300000, lineBudget: 400000, labelTop: 9, restAlpha: 0.025, bloom: 0.5, shell: true, spin: true, spinRate: 0.12, exposure: null, ...options };
+    this.given = options; // the options the page set itself: a measured anatomy drops the shell unless the page asked for it
     this.brain = this.options.style === "brain";
+    this.anatomical = false; // set by setAtlas: the atlas carries measured positions
     this.view = { yaw: 0.5, pitch: 0.25, spin: this.options.spin, rate: this.options.spinRate, lastDrag: -1e9 }; // the brain style's rotation
     this.dt = 0;
     this.stateClock = 0;
@@ -472,6 +561,8 @@ export class BrainScan {
     this.atlas = atlas.format ? decodeAtlas(atlas) : atlas;
     this.n = this.atlas.n;
     this.edges = this.atlas.pre.length;
+    this.anatomical = !!(this.atlas.positions3 && this.atlas.positions3.length === 3 * this.n);
+    if (!("shell" in this.given)) this.options.shell = !this.anatomical;
     const rows = Math.max(1, Math.ceil(this.n / 512));
     const resized = rows !== this.rows;
     this.rows = rows;
@@ -535,6 +626,9 @@ export class BrainScan {
       cx[i] = Math.min(cols - 1, Math.floor((pos[2 * i] - x0) / cell)); cy[i] = Math.min(rows - 1, Math.floor((pos[2 * i + 1] - y0) / cell));
       counts[cy[i] * cols + cx[i]]++;
     }
+    let occupied = 0;
+    for (const c of counts) if (c > 0) occupied++;
+    this.occupied = Math.max(1e-6, occupied * cell * cell); // the area of the square the tissue covers, for the synapse light budget
     for (let i = 0; i < n; i++) {
       let sum = 0, cells = 0;
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
@@ -627,7 +721,16 @@ export class BrainScan {
       this.order = order;
     }
     this.flat = new Float32Array(Math.max(1, this.edges) * 3);
-    for (let k = 0; k < this.edges; k++) { const i = this.order ? this.order[k] : k; this.flat.set([this.atlas.pre[i], this.atlas.post[i], this.atlas.weight[i]], k * 3); }
+    let length = 0, magnitude = 0;
+    for (let k = 0; k < this.edges; k++) {
+      const i = this.order ? this.order[k] : k, a = this.atlas.pre[i], b = this.atlas.post[i];
+      this.flat.set([a, b, this.atlas.weight[i]], k * 3);
+      length += Math.hypot(this.atlas.positions[2 * a] - this.atlas.positions[2 * b], this.atlas.positions[2 * a + 1] - this.atlas.positions[2 * b + 1]);
+      magnitude += Math.abs(this.atlas.weight[i]);
+    }
+    // the scan's synapse light budget: line length per unit of covered area, and the mean weight factor of a line
+    this.lineLoad = this.edges ? length / (this.occupied || 1) : 0;
+    this.lineWeight = this.edges ? 0.5 + Math.min(2.5, magnitude / this.edges) : 1;
     gl.bindVertexArray(this.vao);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
     gl.bufferData(gl.ARRAY_BUFFER, this.flat, gl.DYNAMIC_DRAW);
@@ -772,7 +875,33 @@ export class BrainScan {
     this.pending = true;
   }
 
-  fit() { this.camera = { x: 0, y: 0, zoom: 1 }; this.fitted = true; this._frame(); if (this.brain) { this.view.yaw = 0.5; this.view.pitch = 0.25; this.view.lastDrag = -1e9; } this.dirty = true; this.pending = true; this.draw(); }
+  fit() { this.camera = { x: 0, y: 0, zoom: 1 }; this.fitted = true; this._frame(); if (this.brain) { Object.assign(this.view, this._defaultView()); this.view.lastDrag = -1e9; this._frameBrain(); } this.dirty = true; this.pending = true; this.draw(); }
+
+  /** The brain style's resting view: the generic brain from the side at a slight angle, a measured anatomy from the front. */
+  _defaultView() { return this.anatomical ? { ...ANATOMY_VIEW } : { yaw: 0.5, pitch: 0.25 }; }
+
+  /** Frame a measured anatomy: the zoom and pan that put the projected bounds of the whole
+   *  anatomy (or, without them, every region's box) inside the canvas with room for the
+   *  labels, at the current rotation. The generic brain fits at zoom 1 by construction. */
+  _frameBrain() {
+    if (!this.anatomical || !this.centers3) return;
+    const R = this._rotation(), a = this.aspect();
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    const boxes = this.bounds3 ? [[[0, 1, 2].map((d) => (this.bounds3[0][d] + this.bounds3[1][d]) / 2), [0, 1, 2].map((d) => (this.bounds3[1][d] - this.bounds3[0][d]) / 2)]] : this.centers3.map((c, k) => [c, this.extents3[k]]);
+    boxes.forEach(([c, e]) => {
+      for (let corner = 0; corner < 8; corner++) {
+        const x = c[0] + (corner & 1 ? e[0] : -e[0]), y = c[1] + (corner & 2 ? e[1] : -e[1]), z = c[2] + (corner & 4 ? e[2] : -e[2]);
+        const d = Math.max(0.2, DIST - (R[2] * x + R[5] * y + R[8] * z));
+        const px = (FOCAL * (R[0] * x + R[3] * y + R[6] * z)) / d, py = (FOCAL * (R[1] * x + R[4] * y + R[7] * z)) / d;
+        x0 = Math.min(x0, px); x1 = Math.max(x1, px); y0 = Math.min(y0, py); y1 = Math.max(y1, py);
+      }
+    });
+    if (x0 === Infinity) return;
+    // 0.9: room for the labels above the topmost regions
+    const zoom = Math.max(0.5, Math.min(60, 0.9 * Math.min(2 / Math.max(1e-6, (x1 - x0) * a[0]), 2 / Math.max(1e-6, (y1 - y0) * a[1]))));
+    this.camera = { x: (-(x0 + x1) / 2) * zoom, y: (-(y0 + y1) / 2) * zoom, zoom };
+    this.dirty = true; this.pending = true;
+  }
 
   /** Start a new settling from a new stimulus: the next step measures change against this state. */
   reset(activation = null) {
@@ -879,7 +1008,7 @@ export class BrainScan {
     const width = Math.max(1, Math.round(r.width * dpr)), height = Math.max(1, Math.round(r.height * dpr));
     if (!this.sized || this.canvas.width !== width || this.canvas.height !== height) {
       this.canvas.width = width; this.canvas.height = height; this.dirty = true; this.sized = true;
-      if (this.fitted) this._frame();
+      if (this.fitted) { this._frame(); if (this.brain) this._frameBrain(); }
     }
     if (this.brain) { this._drawBrain(width, height, dpr); this._time(t0); return; }
     // A viewer built on a canvas another viewer already sized must still allocate its own targets.
@@ -889,7 +1018,7 @@ export class BrainScan {
       this.fieldSize = [Math.max(1, Math.round(width / 2)), Math.max(1, Math.round(height / 2))];
       this._target(this.fieldBuffer, this.fieldTexture, this.fieldSize[0], this.fieldSize[1], true);
     }
-    const a = this.aspect();
+    const a = this.aspect(), screenPPU = (this.frame.scale * this.camera.zoom * FIT * Math.min(width, height)) / 2;
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);
     gl.uniform3f(this.uniform.camera, this.camera.x, this.camera.y, this.camera.zoom);
@@ -898,10 +1027,12 @@ export class BrainScan {
     gl.uniform1f(this.uniform.dpr, dpr);
     gl.uniform1f(this.uniform.fit, FIT);
     gl.uniform3f(this.uniform.frame, this.frame.x, this.frame.y, this.frame.scale);
-    gl.uniform1f(this.uniform.screenPPU, (this.frame.scale * this.camera.zoom * FIT * Math.min(width, height)) / 2);
+    gl.uniform1f(this.uniform.screenPPU, screenPPU);
     gl.uniform1i(this.uniform.mode, this.options.mode === "potential" ? 2 : this.options.mode === "change" ? 3 : 0);
     gl.uniform3f(this.uniform.background, ...this.options.background);
-    gl.uniform1f(this.uniform.baseAlpha, Math.max(this.floatCache ? 0.00005 : 0.008, 0.09 / Math.pow(Math.max(1, this.edges / 2000), 0.6)));
+    // the resting web: fainter on a brain with more synapses, and capped where the lines crowd into a small tissue area (a measured anatomy)
+    const crossings = (this.lineLoad || 0) / Math.max(1e-6, screenPPU) * this.lineWeight; // line pixels per pixel of tissue at this zoom
+    gl.uniform1f(this.uniform.baseAlpha, Math.max(this.floatCache ? 0.00005 : 0.008, Math.min(0.09 / Math.pow(Math.max(1, this.edges / 2000), 0.6), crossings > 0 ? 0.35 / crossings : 1)));
     gl.uniform1f(this.uniform.maxPoint, this.maxPoint);
     gl.uniform1f(this.uniform.glow, this.options.glow);
     gl.uniform1f(this.uniform.edgeGain, 1.1);
@@ -967,7 +1098,7 @@ export class BrainScan {
     if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw Error(gl.getProgramInfoLog(program));
     this.brainProgram = program;
     gl.useProgram(program);
-    const names = ["posTex", "colorTex", "stateTex", "sceneTex", "bloomTex", "pass", "mode", "rot", "camera", "aspect", "viewport", "fogRange", "dist", "focal", "clock", "dpr", "restAlpha", "edgeGain", "scale", "fade", "segments", "pulseSegments", "sizeScale", "background", "texel", "exposure", "bloomGain"];
+    const names = ["posTex", "colorTex", "stateTex", "sceneTex", "bloomTex", "pass", "mode", "rot", "camera", "aspect", "viewport", "fogRange", "dist", "focal", "clock", "dpr", "restAlpha", "edgeGain", "scale", "fade", "segments", "pulseSegments", "sizeScale", "densityLaw", "background", "texel", "exposure", "bloomGain"];
     this.brainUniform = Object.fromEntries(names.map((k) => [k, gl.getUniformLocation(program, k)]));
     gl.uniform1i(this.brainUniform.posTex, 5);
     gl.uniform1i(this.brainUniform.colorTex, 1);
@@ -1010,10 +1141,13 @@ export class BrainScan {
     this.brainSize = null;
   }
 
-  /** The 3D layout of the loaded atlas and the bow of every synapse, uploaded once. */
+  /** The 3D layout of the loaded atlas and the bow of every synapse, uploaded once: the
+   *  measured anatomy when the atlas carries one, the generic lobes otherwise. */
   _uploadBrain() {
-    const gl = this.gl, layout = brainLayout(this.atlas);
-    this.positions3 = layout.positions; this.centers3 = layout.centers; this.extents3 = layout.extents;
+    const gl = this.gl, layout = this.anatomical ? anatomyLayout(this.atlas) : brainLayout(this.atlas);
+    this.positions3 = layout.positions; this.centers3 = layout.centers; this.extents3 = layout.extents; this.bounds3 = layout.bounds || null;
+    if (this.view.lastDrag < 0) Object.assign(this.view, this._defaultView()); // a view never turned by hand takes the mode's own
+    if (this.fitted) this._frameBrain();
     this.pos = new Float32Array(512 * this.rows * 4);
     for (let i = 0; i < this.n; i++) {
       this.pos.set([layout.positions[3 * i], layout.positions[3 * i + 1], layout.positions[3 * i + 2], this.layout[i * 4 + 3]], i * 4);
@@ -1050,6 +1184,7 @@ export class BrainScan {
     if (brain === !!this.brain) return;
     this.brain = brain;
     this.options.style = brain ? "brain" : "scan";
+    if (this.fitted) this.camera = { x: 0, y: 0, zoom: 1 }; // each style frames itself: the scan by its square, a measured anatomy in _uploadBrain
     if (this.enabled) {
       if (brain) this._setupBrainGL();
       this._uploadAtlas(false);
@@ -1104,7 +1239,8 @@ export class BrainScan {
     gl.uniform1f(u.sizeScale, Math.max(0.7, Math.min(1.6, Math.min(width, height) / (600 * dpr))));
     gl.uniform1i(u.mode, this.options.mode === "potential" ? 2 : this.options.mode === "change" ? 3 : 0);
     gl.uniform3f(u.background, ...this.options.background);
-    gl.uniform1f(u.exposure, 0.6);
+    gl.uniform1f(u.densityLaw, this.anatomical ? 0.5 : 1.0);
+    gl.uniform1f(u.exposure, this.options.exposure ?? (this.anatomical ? 1.0 : 0.6)); // a measured anatomy has no shell to carry its shape: more light on the tissue
     gl.uniform1f(u.bloomGain, this.options.bloom);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.textures[2]);
@@ -1388,7 +1524,7 @@ function fitInto(points, ids, region, rng, spread = false) {
   }
 }
 
-export function layoutAtlas({ n, pre, post, weight = null, groups, shapes = {}, roles = {}, positions = {}, labels = {}, seed = 0, iterations = 24 }) {
+export function layoutAtlas({ n, pre, post, weight = null, groups, shapes = {}, roles = {}, positions = {}, positions3 = {}, labels = {}, seed = 0, iterations = 24 }) {
   const rng = mulberry(seed);
   const names = [];
   const members = new Map();
@@ -1400,7 +1536,28 @@ export function layoutAtlas({ n, pre, post, weight = null, groups, shapes = {}, 
   const K = regions.length, E = pre.length;
   const strength = new Float64Array(E);
   for (let e = 0; e < E; e++) strength[e] = Math.abs(weight ? weight[e] : 1);
-  const finish = (pos) => ({ n, synapses: E, seed, regions: regions.map(({ indices, ...rest }) => rest), region: regionIndex, positions: pos, pre: pre instanceof Uint32Array ? pre : Uint32Array.from(pre), post: post instanceof Uint32Array ? post : Uint32Array.from(post), weight: weight ? Float32Array.from(weight) : new Float32Array(E).fill(1), palette: PALETTE, memberIndices: regions.map((r) => r.indices) });
+  const finish = (pos, pos3 = null, spacing3 = null) => ({ n, synapses: E, seed, regions: regions.map(({ indices, ...rest }) => rest), region: regionIndex, positions: pos, positions3: pos3, spacing3, pre: pre instanceof Uint32Array ? pre : Uint32Array.from(pre), post: post instanceof Uint32Array ? post : Uint32Array.from(post), weight: weight ? Float32Array.from(weight) : new Float32Array(E).fill(1), palette: PALETTE, memberIndices: regions.map((r) => r.indices) });
+  // regions of a shared frame are wherever their neurons are: centre, half-extents and radius from the members' bounding box
+  const boxRegions = (pos) => {
+    for (const r of regions) {
+      let mn = [Infinity, Infinity], mx = [-Infinity, -Infinity];
+      for (const i of r.indices) { mn[0] = Math.min(mn[0], pos[2 * i]); mn[1] = Math.min(mn[1], pos[2 * i + 1]); mx[0] = Math.max(mx[0], pos[2 * i]); mx[1] = Math.max(mx[1], pos[2 * i + 1]); }
+      r.center = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2];
+      r.extent = [Math.max(0.02, (mx[0] - mn[0]) / 2), Math.max(0.02, (mx[1] - mn[1]) / 2)];
+      r.radius = Math.hypot(...r.extent);
+    }
+  };
+  if (positions3['*']) {
+    // A measured anatomy in three dimensions: centred and scaled into the brain style's
+    // frame; the scan draws its (x, y) projection scaled into the square.
+    const pos3 = fitPositions3(positions3['*'], n), pos = new Float32Array(2 * n);
+    let lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
+    for (let i = 0; i < n; i++) { lo[0] = Math.min(lo[0], pos3[3 * i]); hi[0] = Math.max(hi[0], pos3[3 * i]); lo[1] = Math.min(lo[1], pos3[3 * i + 1]); hi[1] = Math.max(hi[1], pos3[3 * i + 1]); }
+    const scale = 1.84 / Math.max(1e-9, hi[0] - lo[0], hi[1] - lo[1]);
+    for (let i = 0; i < n; i++) { pos[2 * i] = (pos3[3 * i] - (lo[0] + hi[0]) / 2) * scale; pos[2 * i + 1] = (pos3[3 * i + 1] - (lo[1] + hi[1]) / 2) * scale; }
+    boxRegions(pos);
+    return finish(pos, pos3, spacing3Of(pos3, n));
+  }
   if (positions['*']) {
     // One shared frame for every neuron (an anatomy): kept as given, scaled into the square;
     // regions are then wherever their neurons are.
@@ -1411,13 +1568,7 @@ export function layoutAtlas({ n, pre, post, weight = null, groups, shapes = {}, 
     const scale = 1.84 / Math.max(1e-9, hi[0] - lo[0], hi[1] - lo[1]);
     const pos = new Float32Array(2 * n);
     for (let i = 0; i < n; i++) { pos[2 * i] = (all[i][0] - (lo[0] + hi[0]) / 2) * scale; pos[2 * i + 1] = (all[i][1] - (lo[1] + hi[1]) / 2) * scale; }
-    for (const r of regions) {
-      let mn = [Infinity, Infinity], mx = [-Infinity, -Infinity];
-      for (const i of r.indices) { mn[0] = Math.min(mn[0], pos[2 * i]); mn[1] = Math.min(mn[1], pos[2 * i + 1]); mx[0] = Math.max(mx[0], pos[2 * i]); mx[1] = Math.max(mx[1], pos[2 * i + 1]); }
-      r.center = [(mn[0] + mx[0]) / 2, (mn[1] + mx[1]) / 2];
-      r.extent = [Math.max(0.02, (mx[0] - mn[0]) / 2), Math.max(0.02, (mx[1] - mn[1]) / 2)];
-      r.radius = Math.hypot(...r.extent);
-    }
+    boxRegions(pos);
     return finish(pos);
   }
   // region graph
