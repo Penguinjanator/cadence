@@ -56,7 +56,7 @@ endpoints permuted) each selecting their own gain ([protocols](protocols.md)):
 
 - a fact is a row: a stimulus on a named population at a level, a readout population, a
   predicate; the fly's steering circuit passed 7 of 13 held-out facts at the selected gain
-  against 4, 3 and 0 on three shuffled wirings, its instincts 7 of 14 against 2 each;
+  against 3, 1 and 1 on three shuffled wirings, its instincts 8 of 14 against 2 each;
 - readouts over large populations need the `sparse` predicate (a mean over 1,312 descending
   neurons cannot reach 0.5) and left-right sets the `lateralized` one (a steering set holds
   motor neurons with no haltere input, so `active` on the set's mean fails).
