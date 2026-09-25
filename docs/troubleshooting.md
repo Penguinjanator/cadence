@@ -138,6 +138,9 @@ repository's `verify.py` scripts are the pattern.
   keep parameters on the kernel.
 - The policy learns "always the same action": check the assay (every action needs an
   outcome) and the symmetry of the outcomes before touching the rule.
+- Before any of the below: `preflight(brain, outputs, plastic, drives)` reads the readouts'
+  slope, the plastic senders' shared code and the seam's eligibility under the task's drives and
+  names the remedy for each finding.
 - Every stimulus learns the same lesson: the state code is shared. Score a `specific` row
   between two stimuli at the population the plastic synapses leave; a cosine near one there
   means a population upstream ignites at the global gain, and its gain is selected by protocol

@@ -727,6 +727,12 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   synapse class the same weight (sign times mean count over the class's count); the other
   synapses keep their sign. For a lesson that should start naive at a memory site whose counts
   are a specimen's memories.
+- `preflight(brain, outputs, plastic, drives, *, level=0.5, saturation=0.02, shared_max=0.25, eligibility_min=10, steps=100, tolerance=1e-4) -> dict`:
+  the checks a lesson needs before its first decision, under the drives the brain will decide
+  in: a readout with no slope (within `saturation` of 0 or 1 under every drive), the plastic
+  senders' code shared between two drives beyond `shared_max`, fewer than `eligibility_min`
+  plastic synapses from active senders onto a readout. Returns the readings and `warnings`, one
+  sentence per finding naming the block that repairs it; an empty list is what a receipt shows.
 - `seam_report(connectome, pre, post) -> dict`: `classes`, `synapses`, `coverage_pre` (the
   fraction of pre neurons with a class onto the post population), `classes_per_post`,
   `median_count`; what custody left of a plastic seam.

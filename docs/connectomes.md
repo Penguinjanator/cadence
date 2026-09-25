@@ -126,7 +126,18 @@ engine can be held to the library by a parity test
 ## 7. Learning on it
 
 The rule is the same actor-critic as on any brain ([learning from reward](reward.md)); the
-traps it met on a real wiring are listed there with their readings. Two decisions come first:
+traps it met on a real wiring are listed there with their readings. Before the first decision,
+run the check that reads them all at once:
+
+```python
+report = preflight(brain, outputs, plastic, drives)   # drives: the situations it will decide in
+assert report["warnings"] == []                       # each warning names the block that repairs it
+```
+
+It settles the brain under the drives and reports a readout with no slope (`calibrate_bias`),
+a plastic senders' code shared between two situations (a gain per cell class on the `specific`
+fact), and a seam too thin for eligibility (custody, `seam_report`); the fly's setup writes
+the report into its receipt. Two decisions come first:
 which neurons read the action (the fly reads approach and avoidance from two mushroom body
 output neurons of known valence, one cell each) and which synapses are plastic (the seam the
 animal is known to change, `plastic_synapses` on the learner). Then two operating points the

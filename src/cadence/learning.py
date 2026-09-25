@@ -61,6 +61,7 @@ __all__ = [
     "calibrate_bias",
     "naive_efficacy",
     "seam_report",
+    "preflight",
 ]
 
 
@@ -1179,3 +1180,85 @@ def seam_report(
         "classes_per_post": {int(i): int(per_post[i]) for i in b},
         "median_count": float(np.median(connectome.count[seam])) if seam.any() else 0.0,
     }
+
+
+def preflight(
+    brain: Brain,
+    outputs: Sequence[int],
+    plastic: np.ndarray,
+    drives: np.ndarray,
+    *,
+    level: float = 0.5,
+    saturation: float = 0.02,
+    shared_max: float = 0.25,
+    eligibility_min: int = 10,
+    steps: int = 100,
+    tolerance: float | None = 1e-4,
+) -> dict[str, Any]:
+    """The checks a lesson needs before its first decision, each with the block that repairs it.
+
+    The brain settles under ``drives`` (rows of stimulus drive, the situations it will decide
+    in) and three conditions are read, the ones that stopped the fruit fly from learning a
+    discrimination on its measured wiring:
+
+    - a readout in ``outputs`` within ``saturation`` of 0 or 1 under every drive has no slope
+      for a nudge, so no lesson moves it: ``calibrate_bias``;
+    - the code of the plastic synapses' senders (the members at or above ``level``) shared
+      between two drives beyond ``shared_max`` of the union carries nothing a lesson can attach
+      to one situation and not the other: a population upstream ignites at the global gain,
+      and its gain is selected by protocol on the ``specific`` fact (``Brain(log_gain=...)``);
+    - fewer than ``eligibility_min`` plastic synapses from active senders onto a readout under a
+      drive leaves the lesson almost no eligibility there: the seam is thin, most often cut by
+      a synapse floor in custody (``seam_report``).
+
+    Returns ``{"outputs", "shared", "eligibility", "warnings"}``: the readings and one warning
+    per finding, in words, naming the remedy. An empty ``warnings`` list is what a receipt should
+    show before the lessons start.
+    """
+    C = brain.connectome
+    plastic = np.asarray(plastic, dtype=bool)
+    if plastic.shape != (C.synapses,):
+        raise ValueError("plastic must have one entry per synapse")
+    drives = np.atleast_2d(np.asarray(drives, dtype=float))
+    outputs = [int(i) for i in outputs]
+    act = brain.settle_batch(drives, steps=steps, tolerance=tolerance).activation
+    warnings: list[str] = []
+    readouts: dict[int, dict[str, Any]] = {}
+    for i in outputs:
+        lo, hi = float(act[:, i].min()), float(act[:, i].max())
+        rail = bool(np.all((act[:, i] <= saturation) | (act[:, i] >= 1.0 - saturation)))
+        readouts[i] = {"min": lo, "max": hi, "saturated": rail}
+        if rail:
+            warnings.append(
+                f"output {i} sits within {saturation} of 0 or 1 under every drive (from {lo:.2f} "
+                f"to {hi:.2f}): no slope for a nudge; calibrate_bias"
+            )
+    senders = np.unique(C.pre[plastic])
+    codes = act[:, senders] >= level
+    shared: dict[tuple[int, int], float] = {}
+    for a in range(len(drives)):
+        for b in range(a + 1, len(drives)):
+            union = int((codes[a] | codes[b]).sum())
+            share = float((codes[a] & codes[b]).sum() / union) if union else 0.0
+            shared[(a, b)] = share
+            if union and share > shared_max:
+                warnings.append(
+                    f"the plastic senders' code is {share:.2f} shared between drives {a} and {b}"
+                    f" (at most {shared_max}): a population upstream ignites at the global gain;"
+                    " select its gain by protocol on the specific fact (Brain(log_gain=...))"
+                )
+    eligibility: dict[int, list[int]] = {}
+    for i in outputs:
+        onto = plastic & (C.post == i)
+        pre = C.pre[onto]
+        counts = [int((act[r, pre] >= level).sum()) for r in range(len(drives))]
+        eligibility[i] = counts
+        thin = [r for r, n in enumerate(counts) if n < eligibility_min]
+        if thin:
+            warnings.append(
+                f"output {i} has {int(onto.sum())} plastic classes and under drive"
+                f"{'s' if len(thin) > 1 else ''} {', '.join(map(str, thin))} fewer than"
+                f" {eligibility_min} come from active senders: the seam is thin; seam_report,"
+                " and keep it whole in custody"
+            )
+    return {"outputs": readouts, "shared": shared, "eligibility": eligibility, "warnings": warnings}

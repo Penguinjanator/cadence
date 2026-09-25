@@ -25,6 +25,10 @@ numbers are the fly's.
 - `naive_efficacy(connectome, plastic)`: every plastic class the same weight, for a lesson that
   should start naive at a memory site whose synapse counts are a specimen's memories (the
   fly's measured counts made one odour aversive and the other attractive before any lesson).
+- `preflight(brain, outputs, plastic, drives)`: the three checks a lesson needs before its
+  first decision, under the drives the brain will decide in, each warning naming the block that
+  repairs it (a readout with no slope, a shared code at the plastic seam's senders, a seam too
+  thin for eligibility). Run it first; a receipt should show an empty list.
 - `seam_report(connectome, pre, post)`: classes, synapses and coverage of a plastic seam. A
   synapse floor that removes noise elsewhere removes a distributed memory: the fly's floor of
   five kept 231 of 1,079 Kenyon cell classes onto one output neuron and 14 of 336 onto the

@@ -138,7 +138,9 @@ analogy supplies a hypothesis; the behavioral test determines whether it works.
 Each of these cost a day on a real brain (the fruit fly of
 [cadence-examples](https://github.com/muellerberndt/cadence-examples), 150,802 neurons, an
 actor-critic on the Kenyon-cell-to-MBON synapses; the worm met the second one first). They are
-properties of the rule and the readout, and each has a reading in the `learn` report.
+properties of the rule and the readout, and each has a reading in the `learn` report. The last
+three are read before any lesson by `preflight(brain, outputs, plastic, drives)`, which names
+the remedy for each; run it first.
 
 - **The temperature is relative to the activation range.** The action is a softmax over the
   output neurons' activations divided by `temperature`. Activations lie in [0, 1], so at the

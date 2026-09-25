@@ -45,6 +45,7 @@ from .learning import (
     layered,
     learning_neuron_model,
     naive_efficacy,
+    preflight,
     seam_report,
 )
 from .memory import SynapticMemory
@@ -165,6 +166,7 @@ __all__ = [
     "learning_neuron_model",
     "calibrate_bias",
     "naive_efficacy",
+    "preflight",
     "seam_report",
     "load",
     "save",

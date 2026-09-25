@@ -130,3 +130,44 @@ def test_seam_report_counts_classes_and_coverage() -> None:
     assert report["classes"] == 3 and report["synapses"] == 12.0
     assert report["coverage_pre"] == pytest.approx(2 / 3)
     assert report["classes_per_post"] == {4: 2, 5: 1}
+
+
+def test_preflight_names_each_finding_and_its_remedy() -> None:
+    # inputs A (0, 1) and B (2, 3); hidden 4, 5 answer A, 6, 7 answer B, 8 both; outputs 9, 10 from every hidden cell
+    pre = [0, 1, 0, 1, 2, 3, 2, 3, 0, 2] + [h for h in range(4, 9) for _ in (9, 10)]
+    post = [4, 4, 5, 5, 6, 6, 7, 7, 8, 8] + [o for _ in range(4, 9) for o in (9, 10)]
+    count = [100] * 10 + [20] * 10
+    connectome = cd.Connectome.from_synapses(
+        11,
+        pre=pre,
+        post=post,
+        count=count,
+        populations={"a": [0, 1], "b": [2, 3], "hidden": [4, 5, 6, 7, 8], "output": [9, 10]},
+    )
+    outputs = [9, 10]
+    hidden = np.zeros(connectome.n, dtype=bool)
+    hidden[[4, 5, 6, 7, 8]] = True
+    plastic = hidden[connectome.pre]
+    brain = cd.Brain(connectome, cd.NeuronModel(gain=0.05))
+    amp = brain.neuron_model.stimulus_amplitude
+    drives = np.zeros((2, connectome.n))
+    drives[0, [0, 1]] = amp
+    drives[1, [2, 3]] = amp
+    calibrated = brain.with_parameters(
+        bias=cd.calibrate_bias(brain, drives, {"output": 0.5}, per_neuron=True, steps=60)
+    )
+    clean = cd.preflight(calibrated, outputs, plastic, drives, eligibility_min=1, steps=60)
+    assert clean["warnings"] == []
+    assert clean["shared"][(0, 1)] == pytest.approx(0.2) and clean["eligibility"] == {
+        9: [3, 3],
+        10: [3, 3],
+    }
+    # a readout on its rail, the same code under both drives, a seam with too little active input
+    on_rail = cd.preflight(brain, outputs, plastic, drives, eligibility_min=1, steps=60)
+    assert any("calibrate_bias" in w and "output 9" in w for w in on_rail["warnings"])
+    same = cd.preflight(calibrated, outputs, plastic, np.vstack([drives[0], drives[0]]), steps=60)
+    assert any("specific fact" in w for w in same["warnings"])
+    thin = cd.preflight(calibrated, outputs, plastic, drives, eligibility_min=100, steps=60)
+    assert any("seam is thin" in w for w in thin["warnings"])
+    with pytest.raises(ValueError):
+        cd.preflight(brain, outputs, np.array([True]), drives)
