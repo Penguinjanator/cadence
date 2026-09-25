@@ -36,8 +36,10 @@ from rest, the reading a decision or a school batch gives a patch.
 
 The tests hold the twin to the NumPy patch on the cpu in float64: the prediction, the slow
 step against the NumPy adjoint (linear and categorical) and a write with its read, all to
-1e-9. On an Apple M-series GPU, brains of three patches at 32 channels and 256 cells playing
-rock, paper, scissors ran 2,048 games at 7,400 game-rounds per second and 32,768 games at
-27,000, against about 40 per core on the NumPy path (`cadence-games/receipts/throughput.json`).
-The tables cost `instances * streams * cells * outputs` values; keep stores small and brains
-many.
+1e-9. `benchmarks/population/throughput.py` measures the kernel on one moment's work per
+brain and stream (an imagined reading and an observation with its write) and writes a
+receipt beside itself. On an Apple M4 laptop's graphics processor a patch of 32 channels
+with a store of 256 cells ran 8,192 streams at 498,000 moments per second and 16,384 at
+423,000, against 1,276 for the same patch on one processor core (390 times); the two paths
+agree on the reading to 2e-16. The tables cost `instances * streams * cells * outputs`
+values; keep stores small and brains many.

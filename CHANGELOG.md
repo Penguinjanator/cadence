@@ -8,6 +8,9 @@
   records the delta rule at the code, nothing crossing an instance, a stream or a moment;
   `from_patch` broadcasts a NumPy patch and the tests hold the twin to it at 1e-9;
   `inherit` copies parents for selection. Guide: `docs/population.md`.
+- `benchmarks/population/throughput.py`: the population kernel against the NumPy patch on
+  one core, one moment's work per brain and stream, with a receipt (390 times one core on an
+  Apple M4 laptop's graphics processor at 8,192 streams; parity of the reading 2e-16).
 
 What learning a discrimination on the fruit fly's measured wiring sent back: the operating
 points a connectome does not carry, and the custody of a plastic seam. Each is generic; the
