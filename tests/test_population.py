@@ -140,3 +140,53 @@ def test_masked_streams_neither_learn_nor_write() -> None:
     assert full.seen[0, 1] == 0
     np.testing.assert_allclose(full.tables[:, [0, 2]].numpy(), part.tables.numpy(), atol=1e-12)
     np.testing.assert_allclose(full.input_norm[:, [0, 2]].numpy(), part.input_norm.numpy(), atol=1e-12)
+
+
+def test_moments_folded_into_the_batch_by_stream() -> None:
+    """Several moments per stream in one call: the imagined readings equal the per-stream
+    imaginations, and an observe over moments on distinct streams equals the plain one."""
+    twin = PopulationPatch(
+        12, 8, 3, instances=2, streams=3, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64
+    )
+    rng = np.random.default_rng(6)
+    x = torch.as_tensor(rng.normal(size=(2, 3, 12)))
+    t = torch.as_tensor(rng.normal(size=(2, 3, 3)))
+    twin.observe(x, t, rate=0.2, write=True)  # stores with content
+    y = torch.as_tensor(rng.normal(size=(2, 6, 12)))
+    stream_of = torch.tensor([0, 0, 1, 1, 2, 2])
+    folded = twin.imagine(y, stream_of=stream_of)["output"]
+    for k in range(6):
+        one = twin.imagine(y[:, k : k + 1].expand(-1, 3, -1))["output"][:, stream_of[k]]
+        np.testing.assert_allclose(folded[:, k].numpy(), one.numpy(), atol=1e-12)
+    other = PopulationPatch(
+        12, 8, 3, instances=2, streams=3, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64
+    )
+    other.observe(x, t, rate=0.2, write=True)
+    perm = torch.tensor([2, 0, 1])
+    twin.observe(x[:, perm], t[:, perm], rate=0.3, write=True, stream_of=perm)
+    other.observe(x, t, rate=0.3, write=True)
+    for name in ("G", "g", "B", "b", "C", "c"):
+        np.testing.assert_allclose(twin.parameters()[name].numpy(), other.parameters()[name].numpy(), atol=1e-12, err_msg=name)
+    np.testing.assert_allclose(twin.tables.numpy(), other.tables.numpy(), atol=1e-12)
+    np.testing.assert_allclose(twin.mean.numpy(), other.mean.numpy(), atol=1e-12)
+    np.testing.assert_allclose(twin.seen.numpy(), other.seen.numpy(), atol=1e-12)
+    np.testing.assert_allclose(twin.input_norm.numpy(), other.input_norm.numpy(), atol=1e-12)
+
+
+def test_output_weights_reweight_the_squared_errors() -> None:
+    """A weight of the outputs' count on one output and zero elsewhere trains that output
+    alone; all ones is the plain mean."""
+    a = PopulationPatch(12, 8, 3, instances=1, streams=2, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64)
+    b = PopulationPatch(12, 8, 3, instances=1, streams=2, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64)
+    rng = np.random.default_rng(7)
+    x = torch.as_tensor(rng.normal(size=(1, 2, 12)))
+    t = torch.as_tensor(rng.normal(size=(1, 2, 3)))
+    a.observe(x, t, rate=0.3, write=False)
+    b.observe(x, t, rate=0.3, write=False, weight=torch.ones(3, dtype=torch.float64))
+    np.testing.assert_allclose(a.parameters()["C"].numpy(), b.parameters()["C"].numpy(), atol=1e-12)
+    c = PopulationPatch(12, 8, 3, instances=1, streams=2, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64)
+    before = c.parameters()["C"].clone()
+    c.observe(x, t, rate=0.3, write=False, weight=torch.tensor([3.0, 0.0, 0.0], dtype=torch.float64))
+    after = c.parameters()["C"]
+    assert torch.allclose(before[0, 1:], after[0, 1:])  # the unweighted outputs' readout rows did not move
+    assert not torch.allclose(before[0, 0], after[0, 0])

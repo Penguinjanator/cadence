@@ -169,21 +169,20 @@ class PopulationPatch:
             return drive
         return torch.softmax(drive, dim=-1)
 
-    def _readings(self, u: torch.Tensor, h: torch.Tensor) -> torch.Tensor:
+    def _readings(self, u: torch.Tensor, h: torch.Tensor, stream_of: torch.Tensor | None = None) -> torch.Tensor:
         """What the records read: the input and the scaled context, unit variance per unit."""
-        scaled = u * (np.sqrt(self.inputs) / self.input_norm)[..., None]
+        scaled = u * (np.sqrt(self.inputs) / self._per_stream(self.input_norm, stream_of))[..., None]
         return torch.cat([scaled, h * self.scale], dim=-1)
 
     def code(self, readings: torch.Tensor) -> torch.Tensor:
         """The k-winner code (P, B, cells) of readings (P, B, inputs + hidden)."""
-        x = readings - self.mean if self.habituation > 0 else readings
         indices, values = self._sparse_code(readings)
         return self._dense(indices, values)
 
-    def _sparse_code(self, readings: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        """The k-winner code as its active cells: indices and values, each (P, B, active),
+    def _sparse_code(self, readings: torch.Tensor, stream_of: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
+        """The k-winner code as its active cells: indices and values, each (P, N, active),
         the values as ``code`` scatters them."""
-        x = readings - self.mean if self.habituation > 0 else readings
+        x = readings - self._per_stream(self.mean, stream_of) if self.habituation > 0 else readings
         drive = torch.matmul(x, self.projection) + self.offset
         top = torch.topk(drive, self.active, dim=-1)
         values = torch.clamp(top.values, min=0.0)
@@ -192,50 +191,82 @@ class PopulationPatch:
         return top.indices, values
 
     def _dense(self, indices: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
-        out = torch.zeros(self.P, self.B, self.cells, dtype=values.dtype, device=values.device)
+        out = torch.zeros(self.P, indices.shape[1], self.cells, dtype=values.dtype, device=values.device)
         out.scatter_(-1, indices, values)
         return out
 
     def read(self, code: torch.Tensor) -> torch.Tensor:
         return torch.einsum("pbc,pbco->pbo", code, self.tables)
 
-    def _rows(self, indices: torch.Tensor) -> torch.Tensor:
+    def _rows(self, indices: torch.Tensor, stream_of: torch.Tensor | None = None) -> torch.Tensor:
         """The active cells as rows of the table flattened to (instances * streams * cells,
-        outputs)."""
-        base = torch.arange(self.P * self.B, device=self.dev).reshape(self.P, self.B, 1) * self.cells
+        outputs). ``indices`` is (P, N, active); moment ``n`` reads stream ``n`` unless
+        ``stream_of`` (N,) names its stream."""
+        N = indices.shape[1]
+        streams = torch.arange(N, device=self.dev)[None, :] if stream_of is None else stream_of
+        if streams.dim() == 1:
+            streams = streams[None, :]
+        base = (torch.arange(self.P, device=self.dev)[:, None] * self.B + streams)[..., None] * self.cells
         return (base + indices).reshape(-1)
 
-    def _read_sparse(self, indices: torch.Tensor, values: torch.Tensor) -> torch.Tensor:
+    def _read_sparse(self, indices: torch.Tensor, values: torch.Tensor, stream_of: torch.Tensor | None = None) -> torch.Tensor:
         """The read through the active cells alone: their rows, weighted by the code."""
-        rows = self.tables.view(-1, self.outputs).index_select(0, self._rows(indices))
-        return (rows.view(self.P, self.B, self.active, self.outputs) * values[..., None]).sum(dim=2)
+        N = indices.shape[1]
+        rows = self.tables.view(-1, self.outputs).index_select(0, self._rows(indices, stream_of))
+        return (rows.view(self.P, N, self.active, self.outputs) * values[..., None]).sum(dim=2)
 
-    def imagine(self, inputs: torch.Tensor) -> dict[str, torch.Tensor]:
-        """Predictions for readings (P, B, inputs): the slow readout, the record read, their
-        sum, the context and the code; private, from rest, no learning."""
-        u = self._as(inputs)
+    def _per_stream(self, x: torch.Tensor, stream_of: torch.Tensor | None) -> torch.Tensor:
+        """A per-stream tensor (P, B, ...) gathered to the moments (P, N, ...); ``stream_of``
+        is (N,), the same streams for every instance, or (P, N)."""
+        if stream_of is None:
+            return x
+        if stream_of.dim() == 1:
+            return x[:, stream_of]
+        idx = stream_of.reshape(self.P, -1, *([1] * (x.dim() - 2))).expand(-1, -1, *x.shape[2:])
+        return torch.gather(x, 1, idx)
+
+    def _add_per_stream(self, x: torch.Tensor, stream_of: torch.Tensor, d: torch.Tensor) -> None:
+        """``x[p, stream_of[p, n]] += d[p, n]`` in place, moments of one stream summed."""
+        if stream_of.dim() == 1:
+            x.index_add_(1, stream_of, d)
+            return
+        flat = x.view(self.P * self.B, *x.shape[2:])
+        rows = (torch.arange(self.P, device=self.dev)[:, None] * self.B + stream_of).reshape(-1)
+        flat.index_add_(0, rows, d.reshape(rows.shape[0], *x.shape[2:]))
+
+    def imagine(self, inputs: torch.Tensor, *, stream_of: torch.Tensor | None = None) -> dict[str, torch.Tensor]:
+        """Predictions for readings (P, N, inputs): the slow readout, the record read, their
+        sum, the context and the code; private, from rest, no learning. ``N`` is the
+        streams unless ``stream_of`` (N,) assigns each moment to a stream's store, which
+        folds several imagined readings per stream into one settle."""
+        u = self._as(inputs, stream_of)
         with torch.no_grad():
             h = self._context(u)
             slow = self._slow(h)
-            indices, values = self._sparse_code(self._readings(u, h))
-            read = self._read_sparse(indices, values)
+            indices, values = self._sparse_code(self._readings(u, h, stream_of), stream_of)
+            read = self._read_sparse(indices, values, stream_of)
         self.settles += 1
         return {"output": slow + read, "slow": slow, "read": read, "hidden": h, "code": self._dense(indices, values)}
 
-    def _as(self, x: torch.Tensor | np.ndarray) -> torch.Tensor:
+    def _as(self, x: torch.Tensor | np.ndarray, stream_of: torch.Tensor | None = None) -> torch.Tensor:
         t = torch.as_tensor(x, dtype=self.dtype, device=self.dev)
-        if t.shape != (self.P, self.B, self.inputs) and t.shape[-1] != self.inputs:
-            raise ValueError(f"inputs must be (instances, streams, {self.inputs})")
-        return t.reshape(self.P, self.B, -1)
+        if t.shape[-1] != self.inputs:
+            raise ValueError(f"inputs must be (instances, moments, {self.inputs})")
+        n = self.B if stream_of is None else int(stream_of.shape[-1])
+        return t.reshape(self.P, n, -1)
 
     # --- learning -------------------------------------------------------------------------------
 
-    def stream_loss(self, slow: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    def stream_loss(self, slow: torch.Tensor, target: torch.Tensor, weight: torch.Tensor | None = None) -> torch.Tensor:
         """The slow loss per stream (P, B): half the mean squared error over the outputs for
         a linear readout (the NumPy patch's convention), the cross-entropy for a
-        categorical port."""
+        categorical port. ``weight`` (outputs,) or (P, outputs), summing to the outputs,
+        reweights the squared errors (all ones is the plain mean)."""
         if self.groups is None:
-            return 0.5 * ((slow - target) ** 2).mean(dim=-1)
+            err = (slow - target) ** 2
+            if weight is not None:
+                err = err * (weight[:, None, :] if weight.dim() == 2 else weight)
+            return 0.5 * err.mean(dim=-1)
         return -(target * torch.log(torch.clamp(slow, min=1e-12))).sum(dim=-1)
 
     def loss(self, slow: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -250,6 +281,8 @@ class PopulationPatch:
         rate: float | torch.Tensor = 1.0,
         write: bool = True,
         mask: torch.Tensor | None = None,
+        stream_of: torch.Tensor | None = None,
+        weight: torch.Tensor | None = None,
     ) -> dict[str, torch.Tensor]:
         """One moment observed in every stream: the slow parameters of every instance move
         against the adjoint of their own slow loss by ``rate`` (a float or a tensor of
@@ -257,28 +290,40 @@ class PopulationPatch:
         against the parameters that made the prediction. ``mask`` (instances, streams)
         names the streams that have a moment to learn from: the slow loss of an instance is
         the mean over its masked streams, and only those streams write and move their
-        statistics; an instance with no masked stream does not move."""
-        u = self._as(inputs)
-        t = torch.as_tensor(target, dtype=self.dtype, device=self.dev).reshape(
-            self.P, self.B, self.outputs
-        )
+        statistics; an instance with no masked stream does not move. ``stream_of`` (N,)
+        assigns each of ``N`` moments to a stream's store, so several queued moments of one
+        stream are taught in one call: the slow step averages them all and the writes of
+        one stream land by the delta rule against the store as it stood before the call (a
+        batched write, the NumPy patch's ``write_batch``). ``weight`` (outputs,) or
+        (instances, outputs), summing to the outputs, reweights the squared errors of a
+        linear readout: a patch that predicts a wide reading of which a few ports matter
+        counts them by their weight rather than one in eight hundred."""
+        u = self._as(inputs, stream_of)
+        n = u.shape[1]
+        t = torch.as_tensor(target, dtype=self.dtype, device=self.dev).reshape(self.P, n, self.outputs)
         m = None
         if mask is not None:
-            m = torch.as_tensor(mask, dtype=self.dtype, device=self.dev).reshape(self.P, self.B)
+            m = torch.as_tensor(mask, dtype=self.dtype, device=self.dev).reshape(self.P, n)
+        w = None
+        if weight is not None:
+            w = torch.as_tensor(weight, dtype=self.dtype, device=self.dev)
+            w = w[:, None, :] if w.dim() == 2 else w
         step = torch.as_tensor(rate, dtype=self.dtype, device=self.dev).reshape(-1)
         if step.numel() == 1:
             step = step.expand(self.P)
         with torch.no_grad():
             h, z, gate = self._forward(u)
             slow = self._slow(h)
-            per_stream = self.stream_loss(slow, t)
-            gate_b = torch.ones(self.P, self.B, dtype=self.dtype, device=self.dev) if m is None else m
+            per_stream = self.stream_loss(slow, t, weight)
+            gate_b = torch.ones(self.P, n, dtype=self.dtype, device=self.dev) if m is None else m
             count = gate_b.sum(dim=-1).clamp(min=1.0)
             per_instance = (per_stream * gate_b).sum(dim=-1) / count
             # the adjoint of the one-moment loss, written out: the numbers autograd gives
-            weight = (gate_b / count[:, None])[..., None]
+            weight = (gate_b / count[:, None])[..., None]  # the mask's share per moment
             if self.groups is None:
                 d = (slow - t) / self.outputs * weight
+                if w is not None:
+                    d = d * w
             else:
                 d = (slow * t.sum(dim=-1, keepdim=True) - t) * weight
             gC = torch.matmul(d.transpose(1, 2), h)
@@ -293,7 +338,7 @@ class PopulationPatch:
             residual = t - slow
             code = None
             if write:
-                code = self._write(u, h, residual, m)
+                code = self._write(u, h, residual, m, stream_of)
             for name, grad in (("G", gG), ("g", gg), ("Bm", gB), ("b", gb), ("C", gC), ("c", gc)):
                 leaf = getattr(self, name)
                 shape = (self.P,) + (1,) * (leaf.dim() - 1)
@@ -308,24 +353,42 @@ class PopulationPatch:
         }
 
     def _write(
-        self, u: torch.Tensor, h: torch.Tensor, residual: torch.Tensor, mask: torch.Tensor | None = None
+        self,
+        u: torch.Tensor,
+        h: torch.Tensor,
+        residual: torch.Tensor,
+        mask: torch.Tensor | None = None,
+        stream_of: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """The witnessed reading moves the running statistics; the code then takes the residual
         by the delta rule through its active cells, a scatter into their rows alone. A
-        masked-out stream neither moves its statistics nor writes."""
-        gate = torch.ones(self.P, self.B, dtype=self.dtype, device=self.dev) if mask is None else mask
+        masked-out moment neither moves its stream's statistics nor writes. With
+        ``stream_of`` the moments' statistics moves are summed into their streams."""
+        n = u.shape[1]
+        gate = torch.ones(self.P, n, dtype=self.dtype, device=self.dev) if mask is None else mask
         norms = u.norm(dim=-1)
-        self.input_norm = self.input_norm + 0.01 * gate * (torch.clamp(norms, min=1e-6) - self.input_norm)
-        readings = self._readings(u, h)
+        d_norm = 0.01 * gate * (torch.clamp(norms, min=1e-6) - self._per_stream(self.input_norm, stream_of))
+        if stream_of is None:
+            self.input_norm = self.input_norm + d_norm
+        else:
+            self._add_per_stream(self.input_norm, stream_of, d_norm)
+        readings = self._readings(u, h, stream_of)  # with the moved norm, as the NumPy patch
         if self.habituation > 0:
-            self.seen = self.seen + gate
-            step = (torch.clamp(1.0 / self.seen.clamp(min=1.0), min=self.habituation) * gate)[..., None]
-            self.mean = self.mean + step * (readings - self.mean)
-        indices, values = self._sparse_code(readings)
-        held = self._read_sparse(indices, values)
+            if stream_of is None:
+                self.seen = self.seen + gate
+            else:
+                self._add_per_stream(self.seen, stream_of, gate)
+            step = (torch.clamp(1.0 / self._per_stream(self.seen, stream_of).clamp(min=1.0), min=self.habituation) * gate)[..., None]
+            d_mean = step * (readings - self._per_stream(self.mean, stream_of))
+            if stream_of is None:
+                self.mean = self.mean + d_mean
+            else:
+                self._add_per_stream(self.mean, stream_of, d_mean)
+        indices, values = self._sparse_code(readings, stream_of)  # with the moved mean
+        held = self._read_sparse(indices, values, stream_of)
         move = (residual - held) * gate[..., None]
         update = self.record_rate * values[..., None] * move[..., None, :]
-        self.tables.view(-1, self.outputs).index_add_(0, self._rows(indices), update.reshape(-1, self.outputs))
+        self.tables.view(-1, self.outputs).index_add_(0, self._rows(indices, stream_of), update.reshape(-1, self.outputs))
         self.writes += 1
         return self._dense(indices, values)
 

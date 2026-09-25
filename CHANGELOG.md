@@ -16,6 +16,13 @@ The population kernel at the width of a game: what the poker neuroevolution lane
   streams, only those streams write and move their statistics, and an instance with no masked
   stream does not move. A population whose streams live through episodes of unequal length
   (hands of poker) learns in hindsight through it. `stream_loss` gives the loss per stream.
+- `imagine` and `observe` take `stream_of`, (moments,) or (instances, moments), assigning each
+  moment of the batch to a stream's store: the five actions a drive imagines per stream settle
+  in one launch, and every queued lesson of every stream is taught in one observe (the writes
+  of one stream land against the store as it stood, the NumPy patch's `write_batch`).
+- `observe` takes `weight` over the outputs of a linear readout: a patch that predicts a wide
+  reading of which a few ports matter (two reward ports among 830) counts them by their
+  weight; the batched poker body normalizes per block, every block a slot reads counting once.
 
 ## 0.16.0 (2026-09-25)
 
