@@ -138,8 +138,10 @@ connectome does not carry, both declared and both generic:
   moves it. `calibrate_bias(brain, drives, {outputs: 0.5}, per_neuron=True)` finds the bias of
   each readout cell that puts its mean activation over the situations it will decide in at
   one half, jointly, so a cell that inhibits the other (the fly's avoidance cell onto its
-  approach cell) is accounted for. The array goes into `Brain(bias=...)` and, in a page, into
-  the payload's `bias`.
+  approach cell) is accounted for. A target per cell declares a naive bias where the animal
+  has one: the fly's approach cell sits at 0.6 and its avoidance cell at 0.4, its attraction to
+  food smells, because at one half each it made eleven fruitless searches before its first
+  sugar. The array goes into `Brain(bias=...)` and, in a page, into the payload's `bias`.
 - **The seam starts naive.** A specimen's synapse counts at a memory site are that specimen's
   memories: on the fly's measured counts the naive readout avoided the fruit odour and
   approached the yeast (0.17 against 0.83) before any lesson, and a smell that is never
