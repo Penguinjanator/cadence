@@ -92,6 +92,9 @@ class PopulationPatch:
         self.settles = 0
         self.writes = 0
         self.record_weight: torch.Tensor | None = None  # (instances, outputs): how much of each output's residual the records take
+        self.optimizer = "sgd"  # or "adam": the slow step scaled per parameter by the adjoint's running moments (the school's method)
+        self._adam: dict[str, tuple[torch.Tensor, torch.Tensor]] = {}
+        self._adam_t = torch.zeros(self.P, dtype=self.dtype, device=self.dev)
 
     # --- construction ------------------------------------------------------------------------
 
@@ -148,6 +151,9 @@ class PopulationPatch:
         twin.settles = 0
         twin.writes = 0
         twin.record_weight = None
+        twin.optimizer = "sgd"
+        twin._adam = {}
+        twin._adam_t = torch.zeros(twin.P, dtype=twin.dtype, device=twin.dev)
         return twin
 
     def parameters(self) -> dict[str, torch.Tensor]:
@@ -350,9 +356,13 @@ class PopulationPatch:
             code = None
             if write:
                 code = self._write(u, h, residual, m, stream_of)
+            if self.optimizer == "adam":
+                self._adam_t = self._adam_t + (step > 0).to(self.dtype)
             for name, grad in (("G", gG), ("g", gg), ("Bm", gB), ("b", gb), ("C", gC), ("c", gc)):
                 leaf = getattr(self, name)
                 shape = (self.P,) + (1,) * (leaf.dim() - 1)
+                if self.optimizer == "adam":
+                    grad = self._adam_step(name, grad, shape)
                 setattr(self, name, leaf - step.reshape(shape) * grad)
         self.settles += 1
         return {
@@ -362,6 +372,20 @@ class PopulationPatch:
             "residual": residual,
             "code": code if code is not None else torch.zeros(0),
         }
+
+    def _adam_step(self, name: str, grad: torch.Tensor, shape: tuple[int, ...], b1: float = 0.9, b2: float = 0.999, eps: float = 1e-8) -> torch.Tensor:
+        """The adjoint scaled by its running moments per instance and parameter (Adam); the
+        rate is then the learning rate."""
+        if name not in self._adam:
+            self._adam[name] = (torch.zeros_like(grad), torch.zeros_like(grad))
+        m, v = self._adam[name]
+        m = b1 * m + (1 - b1) * grad
+        v = b2 * v + (1 - b2) * grad * grad
+        self._adam[name] = (m, v)
+        t = self._adam_t.clamp(min=1.0).reshape(shape)
+        m_hat = m / (1 - b1**t)
+        v_hat = v / (1 - b2**t)
+        return m_hat / (v_hat.sqrt() + eps)
 
     def _write(
         self,
@@ -426,6 +450,10 @@ class PopulationPatch:
                 noise = torch.randn(v.shape, generator=generator, dtype=v.dtype).to(self.dev)
                 v = v + noise * sigma * torch.clamp(v.std(), min=1e-3)
             setattr(self, name, v)
+            if name in self._adam:
+                m, vv = self._adam[name]
+                self._adam[name] = (m[idx].clone(), vv[idx].clone())
+        self._adam_t = self._adam_t[idx].clone()
         self.tables.zero_()
         self.written.zero_()
         self.mean.zero_()

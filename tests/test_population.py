@@ -214,3 +214,20 @@ def test_familiarity_rises_where_the_store_has_written() -> None:
     assert float(fam[0, 0]) > 0.99 and float(fam[0, 1]) == 0.0  # the written stream knows the reading, the other does not
     y = torch.as_tensor(rng.normal(size=(1, 2, 12)))
     assert float(twin.imagine(y)["familiarity"][0, 0]) < 1.0
+
+
+def test_adam_moves_the_weights_and_respects_a_zero_rate() -> None:
+    sgd = PopulationPatch(12, 8, 3, instances=2, streams=4, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64)
+    adam = PopulationPatch(12, 8, 3, instances=2, streams=4, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64)
+    adam.optimizer = "adam"
+    rng = np.random.default_rng(10)
+    x = torch.as_tensor(rng.normal(size=(2, 4, 12)) * 0.05)  # small readings: a tiny context, the regime where the plain step stalls
+    t = torch.as_tensor(rng.normal(size=(2, 4, 3)))
+    c0 = adam.parameters()["C"].clone()
+    for _ in range(20):
+        sgd.observe(x, t, rate=torch.tensor([0.3, 0.0], dtype=torch.float64), write=False)
+        adam.observe(x, t, rate=torch.tensor([0.01, 0.0], dtype=torch.float64), write=False)
+    moved_sgd = float((sgd.parameters()["C"][0] - c0[0]).abs().mean())
+    moved_adam = float((adam.parameters()["C"][0] - c0[0]).abs().mean())
+    assert moved_adam > 3 * moved_sgd  # the moments lift a tiny gradient to the rate's scale (here 8x at a thirtieth of the rate)
+    assert torch.equal(adam.parameters()["C"][1], c0[1])  # the instance at rate zero did not move
