@@ -190,3 +190,14 @@ def test_output_weights_reweight_the_squared_errors() -> None:
     after = c.parameters()["C"]
     assert torch.allclose(before[0, 1:], after[0, 1:])  # the unweighted outputs' readout rows did not move
     assert not torch.allclose(before[0, 0], after[0, 0])
+
+
+def test_record_weight_damps_an_outputs_records() -> None:
+    twin = PopulationPatch(12, 8, 3, instances=1, streams=1, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64)
+    twin.record_weight = torch.tensor([[1.0, 0.0, 1.0]], dtype=torch.float64)
+    rng = np.random.default_rng(8)
+    x = torch.as_tensor(rng.normal(size=(1, 1, 12)))
+    t = torch.as_tensor(rng.normal(size=(1, 1, 3)))
+    twin.observe(x, t, rate=0.0, write=True)
+    read = twin.imagine(x)["read"][0, 0]
+    assert read[1] == 0.0 and read[0] != 0.0 and read[2] != 0.0

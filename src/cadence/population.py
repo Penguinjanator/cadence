@@ -91,6 +91,7 @@ class PopulationPatch:
         self._load(seed_net)
         self.settles = 0
         self.writes = 0
+        self.record_weight: torch.Tensor | None = None  # (instances, outputs): how much of each output's residual the records take
 
     # --- construction ------------------------------------------------------------------------
 
@@ -145,6 +146,7 @@ class PopulationPatch:
         twin._load(net)
         twin.settles = 0
         twin.writes = 0
+        twin.record_weight = None
         return twin
 
     def parameters(self) -> dict[str, torch.Tensor]:
@@ -387,6 +389,8 @@ class PopulationPatch:
         indices, values = self._sparse_code(readings, stream_of)  # with the moved mean
         held = self._read_sparse(indices, values, stream_of)
         move = (residual - held) * gate[..., None]
+        if self.record_weight is not None:  # an output whose target is a sample rather than a fact keeps its records damped
+            move = move * self.record_weight[:, None, :]
         update = self.record_rate * values[..., None] * move[..., None, :]
         self.tables.view(-1, self.outputs).index_add_(0, self._rows(indices, stream_of), update.reshape(-1, self.outputs))
         self.writes += 1
