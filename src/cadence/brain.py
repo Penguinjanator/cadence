@@ -900,13 +900,13 @@ class Brain:
         return v, a, s, traj, taken, activity_change
 
     def readings(
-        self, state: BrainState, names: Sequence[str], i: int = 0
+        self, state: BrainState, names: Sequence[str], i: int = 0, level: float = 0.5
     ) -> dict[str, dict[str, float]]:
-        """Mean and fraction-active of named sets, for batch row ``i``."""
+        """Mean and fraction-active (at ``level``) of named sets, for batch row ``i``."""
         return {
             name: {
                 "mean": state.mean(self.connectome.populations[name], i),
-                "fraction": state.fraction_active(self.connectome.populations[name], i=i),
+                "fraction": state.fraction_active(self.connectome.populations[name], level, i),
             }
             for name in names
         }
