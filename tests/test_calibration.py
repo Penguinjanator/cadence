@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import cadence as cd
-from cadence.protocol import Levels, code_reading
+from cadence.protocol import Levels, shared_code
 
 
 def two_codes() -> cd.Connectome:
@@ -22,37 +22,26 @@ def two_codes() -> cd.Connectome:
     )
 
 
-def test_code_reading_shares_the_union() -> None:
+def test_shared_code_is_the_intersection_over_the_union() -> None:
     a = np.array([0, 0, 0, 0, 1, 1, 0, 0, 1], dtype=float)
     b = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1], dtype=float)
-    r = code_reading(a, b, [4, 5, 6, 7, 8], 0.5)
-    assert r["code"] == pytest.approx(0.6)
-    assert r["shared"] == pytest.approx(0.2)
-    assert code_reading(a, a, [4, 5, 6, 7, 8], 0.5)["shared"] == pytest.approx(1.0)
-    assert code_reading(0 * a, 0 * b, [4, 5], 0.5) == {"code": 0.0, "shared": 0.0}
+    assert shared_code(a, b, [4, 5, 6, 7, 8], 0.5) == pytest.approx(0.2)
+    assert shared_code(a, a, [4, 5, 6, 7, 8], 0.5) == pytest.approx(1.0)
+    assert shared_code(0 * a, 0 * b, [4, 5], 0.5) == 0.0
 
 
 def test_specific_needs_two_codes_that_barely_overlap() -> None:
+    code = {"mean": 0.5, "fraction": 0.6}
+    assert cd.evaluate_predicate("specific", {**code, "shared": 0.2}, code)
+    assert not cd.evaluate_predicate("specific", {**code, "shared": 0.4}, code)
+    # a silent or near-empty code cannot be specific (a dead control has none), and a reading
+    # without a comparison cannot pass
+    dead = {"mean": 0.0, "fraction": 0.001}
+    assert not cd.evaluate_predicate("specific", {**dead, "shared": 0.0}, code)
+    assert not cd.evaluate_predicate("specific", {**code, "shared": 0.0}, dead)
+    assert not cd.evaluate_predicate("specific", code, code)
     assert cd.evaluate_predicate(
-        "specific", {"mean": 0.5, "fraction": 0.6, "code": 0.6, "shared": 0.2}, {"code": 0.6}
-    )
-    assert not cd.evaluate_predicate(
-        "specific", {"mean": 0.5, "fraction": 0.6, "code": 0.6, "shared": 0.4}, {"code": 0.6}
-    )
-    # a silent or near-empty code cannot be specific (a dead control has no code), and a
-    # reading without a comparison cannot pass
-    assert not cd.evaluate_predicate(
-        "specific", {"mean": 0.0, "fraction": 0.0, "code": 0.0, "shared": 0.0}, {"code": 0.6}
-    )
-    assert not cd.evaluate_predicate(
-        "specific", {"mean": 0.0, "fraction": 0.001, "code": 0.001, "shared": 0.0}, {"code": 0.6}
-    )
-    assert not cd.evaluate_predicate("specific", {"mean": 0.5, "fraction": 0.6}, {"code": 0.6})
-    assert cd.evaluate_predicate(
-        "specific",
-        {"mean": 0.5, "fraction": 0.6, "code": 0.6, "shared": 0.4},
-        {"code": 0.6},
-        Levels(specific_max=0.5),
+        "specific", {**code, "shared": 0.4}, code, Levels(specific_max=0.5)
     )
 
 

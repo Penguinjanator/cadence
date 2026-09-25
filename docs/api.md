@@ -357,7 +357,7 @@ and a complete runnable example.
   residuals, unchanged unnudged inputs, smoothness, stability, finite-beta bias, and
   parameter/loss units separately. See [the certificate guide](certificate.md#equilibrium-propagation-scope).
 - `stimulus_vector(stimulus)`, `stimulus_levels(levels)` (finite levels times the stimulus
-  amplitude, with signed values allowed), `readings(state, names, i=0)`, `with_parameters(*, efficacy=None, log_gain=None, bias=None)`,
+  amplitude, with signed values allowed), `readings(state, names, i=0, level=0.5)`, `with_parameters(*, efficacy=None, log_gain=None, bias=None)`,
   `weights` (effective drive per synapse), `dense()` (the `W[pre, post]` matrix), `to_dict()`.
 - `Brain.contrast_on_device(plus, minus)`: the learning rule's per-synapse and per-neuron
   contrast computed on the device when both states carry its handle; `None` otherwise.
@@ -652,7 +652,7 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   populations it drives at full amplitude.
 - `cadence.protocol.Levels(active=0.5, inactive=0.2, margin=0.15, sparse_min=0.005, sparse_max=0.2, densify_margin=0.05, specific_max=0.25, code_level=0.5)` (module level).
 - `Row(id, stimulus, readout, predicate, reference="", ablate=(), relative_to="", tier="experiment", versus="")`: `versus` names the second stimulus a `specific` row holds the readout's code apart from; a training fact with a fourth element does the same.
-- `cadence.protocol.code_reading(activation, other, members, level) -> {code, shared}`: the fraction of `members` at or above `level`, and what the two codes share as a share of their union.
+- `cadence.protocol.shared_code(activation, other, members, level) -> float`: what the two codes (the `members` at or above `level` under each activation) share, as a share of their union.
 - `evaluate_predicate(predicate, value, reference, levels=None) -> bool`; `PREDICATES`
   maps each name to its definition.
 - `shuffled(connectome, seed, *, keep=None) -> Connectome`: the control.

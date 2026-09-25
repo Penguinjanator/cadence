@@ -35,7 +35,7 @@ PREDICATES: dict[str, str] = {
     "sparse": "fraction >= sparse_min; fraction(readout) <= sparse_max",
     "densified": "reference sparse; fraction(readout) >= fraction(reference) + densify_margin",
     "specific": (
-        "both codes non-empty at code_level; the readout's codes under stimulus and versus"
+        "both fractions >= sparse_min; the readout's codes under stimulus and versus"
         " share at most specific_max of their union"
     ),
 }
@@ -86,32 +86,27 @@ def evaluate_predicate(
         return (L.sparse_min <= reference["fraction"] <= L.sparse_max) and value[
             "fraction"
         ] >= reference["fraction"] + L.densify_margin
-    if (
-        predicate == "specific"
-    ):  # both codes at least sparse_min of the readout: a dead net has no code
+    if predicate == "specific":  # both codes at least sparse_min: a dead net has none
         shared = value.get("shared")
         return (
             shared is not None
-            and value.get("code", 0.0) >= L.sparse_min
-            and reference.get("code", 0.0) >= L.sparse_min
+            and value["fraction"] >= L.sparse_min
+            and reference["fraction"] >= L.sparse_min
             and shared <= L.specific_max
         )
     raise KeyError(predicate)
 
 
-def code_reading(
+def shared_code(
     activation: np.ndarray, other: np.ndarray, members: Sequence[int], level: float
-) -> dict[str, float]:
-    """``code``: the fraction of ``members`` at or above ``level``; ``shared``: what the two
-    codes have in common as a share of their union (0 when neither has a member)."""
+) -> float:
+    """What two codes (the ``members`` at or above ``level`` under each activation) have in
+    common, as a share of their union; 0 when neither has a member."""
     idx = list(members)
     a = np.asarray(activation)[idx] >= level
     b = np.asarray(other)[idx] >= level
     union = int((a | b).sum())
-    return {
-        "code": float(a.mean()) if idx else 0.0,
-        "shared": float((a & b).sum() / union) if union else 0.0,
-    }
+    return float((a & b).sum() / union) if union else 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,13 +162,7 @@ class Protocol:
                     mask=mask,
                 )
                 level = self.levels.code_level
-                out = {
-                    name: {
-                        "mean": state.mean(connectome.populations[name]),
-                        "fraction": state.fraction_active(connectome.populations[name], level),
-                    }
-                    for name in readouts
-                }
+                out = brain.readings(state, readouts, level=level)
                 out["_all"] = {
                     "mean": float(state.activation.mean()),
                     "fraction": state.fraction_active(level=level),
@@ -185,15 +174,14 @@ class Protocol:
         def code_pair(
             stimulus: str, versus: str, readout: str, ablate: tuple[str, ...] = ()
         ) -> tuple[dict[str, float], dict[str, float]]:
-            """The row's reading and its reference, each with its code, the reading with what
-            the two codes share."""
+            """The row's reading, with what its code shares with the code under ``versus``,
+            and the reading under ``versus`` as the reference."""
             value = dict(readings(stimulus, ablate)[readout])
-            reference = dict(readings(versus, ablate)[readout])
-            members = connectome.populations[readout]
-            level = self.levels.code_level
+            reference = readings(versus, ablate)[readout]
             a, b = activations[(stimulus, ablate)], activations[(versus, ablate)]
-            value.update(code_reading(a, b, members, level))
-            reference["code"] = code_reading(b, a, members, level)["code"]
+            value["shared"] = shared_code(
+                a, b, connectome.populations[readout], self.levels.code_level
+            )
             return value, reference
 
         training = []
@@ -366,14 +354,10 @@ def select_gain(
             reference = value
             if versus:
                 other = _settled(states, brain, protocol, versus)
-                pair = code_reading(state.activation, other.activation, members, level)
-                value = {**value, **pair}
+                value["shared"] = shared_code(state.activation, other.activation, members, level)
                 reference = {
                     "mean": other.mean(members),
                     "fraction": other.fraction_active(members, level),
-                    "code": code_reading(other.activation, state.activation, members, level)[
-                        "code"
-                    ],
                 }
                 fraction = max(fraction, other.fraction_active())
             passed += int(evaluate_predicate(predicate, value, reference, protocol.levels))

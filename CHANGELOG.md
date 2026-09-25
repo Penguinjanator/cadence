@@ -9,7 +9,8 @@ numbers are the fly's.
 - `specific`, a protocol predicate over two stimuli: the readout's codes under the row's
   stimulus and under `versus` share at most `specific_max` of their union, both codes non-empty
   at `code_level` (`Row(..., versus=...)`, a training fact with a fourth element,
-  `code_reading`). It is the fact a population's gain is selected on before learning at that
+  `shared_code`); `code_level` is also the level `fraction` counts at, so `sparse` and
+  `specific` read the same code, and `Brain.readings` takes a `level`. It is the fact a population's gain is selected on before learning at that
   population: a code that is the same for every stimulus carries nothing a lesson can attach
   to. `select_gain` takes it, and its docstring says the candidate can be any number a
   dictionary declares, such as one population's gain through `Brain(log_gain=...)`; the fly's
