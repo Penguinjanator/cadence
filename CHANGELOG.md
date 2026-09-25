@@ -1,27 +1,18 @@
 # Changelog
 
-## Unreleased
-
-- `cadence.population.PopulationPatch`: record patches in lockstep on a torch device, a
-  population of instances each with many streams, every settle one batched product; the
-  slow step of each instance is the adjoint of its own one-moment loss (autograd), the
-  records the delta rule at the code, nothing crossing an instance, a stream or a moment;
-  `from_patch` broadcasts a NumPy patch and the tests hold the twin to it at 1e-9;
-  `inherit` copies parents for selection. Guide: `docs/population.md`.
-- `benchmarks/population/throughput.py`: the population kernel against the NumPy patch on
-  one core, one moment's work per brain and stream, with a receipt (390 times one core on an
-  Apple M4 laptop's graphics processor at 8,192 streams; parity of the reading 2e-16).
+## 0.16.0 (2026-09-25)
 
 What learning a discrimination on the fruit fly's measured wiring sent back: the operating
 points a connectome does not carry, and the custody of a plastic seam. Each is generic; the
-numbers are the fly's.
+numbers are the fly's. The release also brings a population of record patches that learn in
+lockstep on a device.
 
 - `specific`, a protocol predicate over two stimuli: the readout's codes under the row's
   stimulus and under `versus` share at most `specific_max` of their union, both codes non-empty
   at `code_level` (`Row(..., versus=...)`, a training fact with a fourth element,
   `shared_code`); `code_level` is also the level `fraction` counts at, so `sparse` and
-  `specific` read the same code, and `Brain.readings` takes a `level`. It is the fact a population's gain is selected on before learning at that
-  population: a code that is the same for every stimulus carries nothing a lesson can attach
+  `specific` read the same code, and `Brain.readings` takes a `level`. It is the fact a
+  population's gain is selected on before learning at that population: a code that is the same for every stimulus carries nothing a lesson can attach
   to. `select_gain` takes it, and its docstring says the candidate can be any number a
   dictionary declares, such as one population's gain through `Brain(log_gain=...)`; the fly's
   antennal lobe ignites at the global gain through the mutual excitation of its cholinergic
@@ -35,8 +26,8 @@ numbers are the fly's.
 - `naive_efficacy(connectome, plastic)`: every plastic class the same weight, for a lesson that
   should start naive at a memory site whose synapse counts are a specimen's memories (the
   fly's measured counts made one odour aversive and the other attractive before any lesson).
-- `preflight(brain, outputs, plastic, drives)`: the three checks a lesson needs before its
-  first decision, under the drives the brain will decide in, each warning naming the block that
+- `preflight(brain, outputs, plastic, drives)`: the checks a lesson needs before its first
+  decision, under the drives the brain will decide in, each warning naming the block that
   repairs it (a readout with no slope, a shared code at the plastic seam's senders, a seam too
   thin for eligibility, two drives that are the same situation). Run it first; a receipt should
   show an empty list.
@@ -47,8 +38,17 @@ numbers are the fly's.
 - Docs: [brains from a connectome](docs/connectomes.md) (the seam in custody, the gain per cell
   class with the selection code, the two operating points), [protocols](docs/protocols.md)
   (`specific`), the traps of [learning from reward](docs/reward.md), troubleshooting, the API.
-- The paper is published as a preprint on PhilPapers (https://philpapers.org/rec/MUECAP-2); the README and the guides link
-  it there, and the PDF copy at the repository root is removed.
+- `cadence.population.PopulationPatch`: record patches in lockstep on a torch device, a
+  population of instances each with many streams, every settle one batched product; the
+  slow step of each instance is the adjoint of its own one-moment loss (autograd), the
+  records the delta rule at the code, nothing crossing an instance, a stream or a moment;
+  `from_patch` broadcasts a NumPy patch and the tests hold the twin to it at 1e-9;
+  `inherit` copies parents for selection. Guide: `docs/population.md`.
+- `benchmarks/population/throughput.py`: the population kernel against the NumPy patch on
+  one core, one moment's work per brain and stream, with a receipt (390 times one core on an
+  Apple M4 laptop's graphics processor at 8,192 streams; parity of the reading 2e-16).
+- The paper is published as a preprint on PhilPapers (https://philpapers.org/rec/MUECAP-2);
+  the README and the guides link it there, and the PDF copy at the repository root is removed.
 
 ## 0.15.0 (2026-09-24)
 
