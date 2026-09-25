@@ -118,3 +118,25 @@ def test_inherit_copies_parents() -> None:
     twin.inherit(torch.tensor([0, 0, 0, 0]))
     out = twin.imagine(x[:1].expand(4, -1, -1))["output"]
     assert torch.allclose(out[0], out[3])
+
+
+def test_masked_streams_neither_learn_nor_write() -> None:
+    """A masked observe equals an observe over the masked streams alone: the slow step is
+    their mean, the other streams' stores and statistics stay put."""
+    full = PopulationPatch(
+        12, 8, 3, instances=1, streams=3, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64
+    )
+    part = PopulationPatch(
+        12, 8, 3, instances=1, streams=2, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64
+    )
+    rng = np.random.default_rng(5)
+    x = torch.as_tensor(rng.normal(size=(1, 3, 12)))
+    t = torch.as_tensor(rng.normal(size=(1, 3, 3)))
+    full.observe(x, t, rate=0.3, write=True, mask=torch.tensor([[1.0, 0.0, 1.0]]))
+    part.observe(x[:, [0, 2]], t[:, [0, 2]], rate=0.3, write=True)
+    for name in ("G", "g", "B", "b", "C", "c"):
+        np.testing.assert_allclose(full.parameters()[name].numpy(), part.parameters()[name].numpy(), atol=1e-12, err_msg=name)
+    assert full.tables[:, 1].abs().sum() == 0
+    assert full.seen[0, 1] == 0
+    np.testing.assert_allclose(full.tables[:, [0, 2]].numpy(), part.tables.numpy(), atol=1e-12)
+    np.testing.assert_allclose(full.input_norm[:, [0, 2]].numpy(), part.input_norm.numpy(), atol=1e-12)

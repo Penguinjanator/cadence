@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+The population kernel at the width of a game: what the poker neuroevolution lane sent back.
+
+- `PopulationPatch` reads and writes its record tables through the active cells alone (a
+  flat row index into the table viewed as rows, `index_select` for the read, `index_add_`
+  for the write), so a settle no longer touches every cell of every stream; at an 830-port
+  reading over 4,096 streams on an M4 an imagined reading fell from 74 ms to 15 and an
+  observation with its write from 213 ms to 41. The adjoint of the one-moment loss is written
+  out instead of taken by autograd (six matmuls; the same numbers, held by the parity tests to
+  1e-9), and the dense path uses `matmul` where `einsum` fell back to slow kernels on MPS.
+- `PopulationPatch.observe` takes `mask`, an (instances, streams) gate over the streams that
+  have a moment to learn from: the slow loss of an instance is the mean over its masked
+  streams, only those streams write and move their statistics, and an instance with no masked
+  stream does not move. A population whose streams live through episodes of unequal length
+  (hands of poker) learns in hindsight through it. `stream_loss` gives the loss per stream.
+
 ## 0.16.0 (2026-09-25)
 
 What learning a discrimination on the fruit fly's measured wiring sent back: the operating
