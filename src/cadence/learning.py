@@ -39,7 +39,7 @@ the alignment of the rule against finite differences.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -58,6 +58,9 @@ __all__ = [
     "embedded",
     "learning_neuron_model",
     "LearnedState",
+    "calibrate_bias",
+    "naive_efficacy",
+    "seam_report",
 ]
 
 
@@ -1050,3 +1053,129 @@ def learning_neuron_model(
         stimulus_amplitude=stimulus_amplitude,
         leak=leak,
     )
+
+
+def calibrate_bias(
+    brain: Brain,
+    drives: np.ndarray,
+    targets: Mapping[str | Sequence[int], float],
+    *,
+    per_neuron: bool = False,
+    rounds: int = 3,
+    span: tuple[float, float] = (-6.0, 6.0),
+    iterations: int = 16,
+    steps: int = 100,
+    tolerance: float | None = 1e-4,
+) -> np.ndarray:
+    """Biases that bring populations to declared activity targets under a set of drives.
+
+    ``targets`` maps a population (a name in the connectome, or neuron indices) to the mean
+    activation it should have, averaged over its members and over ``drives`` (rows of
+    stimulus drive as ``settle_batch`` takes them: the situations the brain will meet).
+    One shared bias per population, the population's threshold, or one per member with
+    ``per_neuron`` (a readout's cells are read one by one, so each is centred). Each bias is
+    found by bisection within ``span``, every population in turn, ``rounds`` times, so that
+    populations that feed each other settle jointly; a target no bias in the span reaches
+    leaves the bias at the span's end, and the caller reads the returned means. Returns the
+    bias array, the brain's own plus the calibration; the brain itself is unchanged.
+
+    This is the operating point a connectome does not carry: the wiring says who talks to
+    whom, not how excitable each cell is. A threshold cannot tame a runaway loop (the fly's
+    antennal lobe stayed ignited at a bias of -6: that needs a gain, ``Brain(log_gain=...)``
+    selected by protocol), but it puts a readout in the range where a nudge has a slope.
+    """
+    if rounds < 1 or iterations < 1:
+        raise ValueError("rounds and iterations must be positive")
+    drives = np.atleast_2d(np.asarray(drives, dtype=float))
+    n = brain.connectome.n
+    groups: list[tuple[np.ndarray, float]] = []
+    for who, target in targets.items():
+        idx = (
+            np.asarray(brain.connectome.populations[who], dtype=np.int64)
+            if isinstance(who, str)
+            else np.asarray(list(who), dtype=np.int64)
+        )
+        if idx.size == 0:
+            raise ValueError(f"empty population {who!r}")
+        if (idx < 0).any() or (idx >= n).any():
+            raise ValueError(f"population {who!r} lies outside the connectome")
+        if not 0.0 <= target <= 1.0:
+            raise ValueError("targets are activations in [0, 1]")
+        if per_neuron:
+            groups.extend((np.array([i]), float(target)) for i in idx)
+        else:
+            groups.append((idx, float(target)))
+    bias = np.array(brain.bias, dtype=float)
+
+    def mean_of(b: np.ndarray, idx: np.ndarray) -> float:
+        state = brain.with_parameters(bias=b).settle_batch(drives, steps=steps, tolerance=tolerance)
+        return float(state.activation[:, idx].mean())
+
+    for _ in range(rounds):
+        for idx, target in groups:
+            lo, hi = span
+            for _ in range(iterations):
+                mid = 0.5 * (lo + hi)
+                trial = bias.copy()
+                trial[idx] = mid
+                if mean_of(trial, idx) < target:
+                    lo = mid
+                else:
+                    hi = mid
+            bias[idx] = 0.5 * (lo + hi)
+    return bias
+
+
+def naive_efficacy(connectome: Connectome, plastic: np.ndarray) -> np.ndarray:
+    """Efficacies that give every plastic synapse class the same weight.
+
+    On the plastic set the efficacy is the class's sign times the set's mean count over the
+    class's own count, so ``gain * count * efficacy`` is one number for every class; the
+    other synapses keep their sign. A specimen's synapse counts at a memory site are that
+    specimen's memories (the fly's Kenyon-cell-to-MBON counts made one odour aversive and the
+    other attractive before any lesson); a lesson that should start naive starts here.
+    """
+    plastic = np.asarray(plastic, dtype=bool)
+    if plastic.shape != (connectome.synapses,):
+        raise ValueError("plastic must have one entry per synapse")
+    efficacy = np.array(connectome.sign, dtype=float)
+    if plastic.any():
+        counts = connectome.count[plastic]
+        efficacy[plastic] = connectome.sign[plastic] * counts.mean() / counts
+    return efficacy
+
+
+def seam_report(
+    connectome: Connectome, pre: str | Sequence[int], post: str | Sequence[int]
+) -> dict[str, Any]:
+    """The plastic seam from ``pre`` to ``post``: its classes and synapses, and its coverage.
+
+    ``coverage_pre`` is the fraction of pre neurons with a class onto some post neuron,
+    ``classes_per_post`` the number of classes into each post neuron (by index). A seam
+    thinned by custody shows here: a synapse floor that removes noise elsewhere removes a
+    distributed memory, whose synapses are many and weak (the fly's floor of five kept 231
+    of 1,079 Kenyon cell classes onto one output neuron and 14 of 336 onto the other).
+    """
+
+    def members(who: str | Sequence[int]) -> np.ndarray:
+        return (
+            np.asarray(connectome.populations[who], dtype=np.int64)
+            if isinstance(who, str)
+            else np.asarray(list(who), dtype=np.int64)
+        )
+
+    a, b = members(pre), members(post)
+    in_pre = np.zeros(connectome.n, dtype=bool)
+    in_pre[a] = True
+    in_post = np.zeros(connectome.n, dtype=bool)
+    in_post[b] = True
+    seam = in_pre[connectome.pre] & in_post[connectome.post]
+    per_post = np.bincount(connectome.post[seam], minlength=connectome.n)
+    senders = np.unique(connectome.pre[seam])
+    return {
+        "classes": int(seam.sum()),
+        "synapses": float(connectome.count[seam].sum()),
+        "coverage_pre": float(len(senders) / len(a)) if len(a) else 0.0,
+        "classes_per_post": {int(i): int(per_post[i]) for i in b},
+        "median_count": float(np.median(connectome.count[seam])) if seam.any() else 0.0,
+    }

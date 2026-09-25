@@ -14,8 +14,13 @@ rebuild from the same bytes. Record every decision of the dictionary in one plac
 
 - which objects are neurons (the fly: proofread objects of every super class except glia,
   trachea and non-neuronal, 150,802 of 188,508);
-- the synapse floor (classes at five or more synapses: 1,861,418 classes carrying 23,104,740
-  synapses; the floor decides the sub-net a page can settle later);
+- the synapse floor (classes at five or more synapses: 1,877,099 classes carrying 23,131,051
+  synapses; the floor decides the sub-net a page can settle later), and the seams the floor
+  must not touch: a distributed memory is many weak synapses, and the fly's floor of five kept
+  231 of the 1,079 Kenyon cell classes onto one output neuron of the lessons and 14 of the 336
+  onto the other, so that what plasticity there could express was measured to be nothing. The
+  seam a lesson will move is kept at every count (16,795 Kenyon-cell-to-MBON classes), and
+  `seam_report` says what custody left of it before a lesson is designed on it;
 - the sign of every class from the presynaptic transmitter (acetylcholine +1; GABA, glutamate
   and histamine -1; modulators 0), which is a declaration, since the predictions are
   per neuron and imperfect;
@@ -68,18 +73,43 @@ the way the worm's undulation is the body's. Timing-coded pathways, electrical s
 neuromodulation are outside the model, and a page that lets the brain override a hand-written
 layer keeps the boundary visible.
 
-## 5. One gain, many circuits
+## 5. One gain, many circuits: a gain per cell class, selected by protocol
 
-At one global gain the fly's antennal lobe is bistable: below a receptor level near 0.15 nothing
-reaches the Kenyon cells, above it the lobe ignites through its cholinergic local neurons (1.2
-input units per projection neuron from local neurons against 0.5 from the receptors) and 22 to
-57 percent of the Kenyon cells answer, almost all of them to every odour: the codes of the fruit
-and yeast odours have a cosine of 0.98 at every gain from 0.005 to 0.03, where the animal's code
-is sparse and specific. Neuron adaptation did not sparsen it. Measure the code of the site you
-want to learn at (`tools/odour_code.py` in the example scans gain and level and writes the
-receipt) before designing a lesson on it; what survives (a graded difference on about 180 cells,
-a naive preference of one output neuron) bounds what plasticity there can express. A gain per
-cell class, selected by the same protocol, is the open experiment.
+At one global gain the fly's antennal lobe ignites. 104 of its 425 local neurons are predicted
+cholinergic; they are the broad ones (a median of 88 projection neuron targets each against 16
+for the GABAergic ones) and they excite each other through 194,044 synapses, a loop that is
+supercritical at the gain the steering circuit selected. Any input lights the lobe into one
+state, 38 to 40 percent of the Kenyon cells answer, almost all of them to every odour, and the
+codes of the fruit and yeast odours have a cosine of 0.98 at every gain, where the animal's code
+is sparse (about 5 percent) and specific. Neuron adaptation did not sparsen it, and neither did a
+threshold: with the local neurons' bias at -6 they stayed a third active and the cosine stayed
+0.98. A runaway loop is multiplicative and needs a gain.
+
+The remedy is a gain per cell class, selected the way the global gain was:
+
+```python
+def make(attenuation):                       # the candidate: -log gain of the local neurons
+    log_gain = np.zeros(C.n); log_gain[C.populations["ln"]] = -attenuation
+    return Brain(C, NeuronModel(gain=GAIN), log_gain=log_gain)
+
+protocol = Protocol(stimuli={"fruit": (...), "yeast": (...)}, rows=[...],
+                    training=[("fruit", "kc", "sparse"), ("yeast", "kc", "sparse"),
+                              ("fruit", "kc", "specific", "yeast")],
+                    levels=Levels(sparse_min=0.02, sparse_max=0.15, specific_max=0.25, code_level=0.05))
+attenuation, table = select_gain(make, protocol, [0, 0.7, 1.4, 2.1, 3.0, 4.6], sparsity_cap=0.05)
+```
+
+The facts are the animal's (about 5 percent of Kenyon cells answer an odour; the codes of two
+odours are specific), the `specific` predicate holds one code apart from another
+([protocols](protocols.md)), the candidate is the smallest attenuation that passes them, and
+shuffled wirings select their own. On the fly the local neurons' gain lands at a twentieth of
+the measured wiring's: the Kenyon cell codes go to 4 and 11 percent with a cosine of 0.32, 81
+cells answer the fruit alone, 372 the yeast alone, 67 both. The number is declared in the
+example's dictionary (`CLASS_LOG_GAIN`) next to the global gain, with its receipt.
+
+Measure the code of the site you want to learn at before designing a lesson on it: a code that
+is the same for every stimulus carries nothing a lesson can attach to, and no learning rule
+repairs that downstream.
 
 ## 6. The sub-net a page settles
 
@@ -99,5 +129,27 @@ The rule is the same actor-critic as on any brain ([learning from reward](reward
 traps it met on a real wiring are listed there with their readings. Two decisions come first:
 which neurons read the action (the fly reads approach and avoidance from two mushroom body
 output neurons of known valence, one cell each) and which synapses are plastic (the seam the
-animal is known to change, `plastic_synapses` on the learner). Then the assay: every action the
-readout can take must have an outcome, and the outcomes the value can balance.
+animal is known to change, `plastic_synapses` on the learner). Then two operating points the
+connectome does not carry, both declared and both generic:
+
+- **The readout's threshold.** A connectome says who talks to whom, not how excitable a cell
+  is; at one global threshold a readout cell sits on a rail (the fly's approach cell at 1.00
+  under every odour, its avoidance cell at 0.01), where a nudge has no slope and no lesson
+  moves it. `calibrate_bias(brain, drives, {outputs: 0.5}, per_neuron=True)` finds the bias of
+  each readout cell that puts its mean activation over the situations it will decide in at
+  one half, jointly, so a cell that inhibits the other (the fly's avoidance cell onto its
+  approach cell) is accounted for. The array goes into `Brain(bias=...)` and, in a page, into
+  the payload's `bias`.
+- **The seam starts naive.** A specimen's synapse counts at a memory site are that specimen's
+  memories: on the fly's measured counts the naive readout avoided the fruit odour and
+  approached the yeast (0.17 against 0.83) before any lesson, and a smell that is never
+  approached is never rewarded. `naive_efficacy(connectome, plastic)` gives every plastic
+  class the same weight; the learner starts from it (`Brain(efficacy=...)`) and the measured
+  counts stay in the receipt.
+
+Then the assay: every action the readout can take must have an outcome, and the outcomes the
+value can balance; one decision per episode, credited to that decision (the fly's page took a
+decision every 0.3 s along an approach and sugar rewarded whichever nudge had been larger).
+With the three in place the fly's T-maze reverses in both directions on the library's
+actor-critic (sugar at one odour, blows there while the sugar moves, the other found: the
+example's `tools/tmaze.py` and its receipt), where before it could not learn one.

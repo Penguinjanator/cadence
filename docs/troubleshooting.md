@@ -138,6 +138,16 @@ repository's `verify.py` scripts are the pattern.
   keep parameters on the kernel.
 - The policy learns "always the same action": check the assay (every action needs an
   outcome) and the symmetry of the outcomes before touching the rule.
+- Every stimulus learns the same lesson: the state code is shared. Score a `specific` row
+  between two stimuli at the population the plastic synapses leave; a cosine near one there
+  means a population upstream ignites at the global gain, and its gain is selected by protocol
+  ([brains from a connectome](connectomes.md)).
+- A readout never moves although the dopamine is large: its cells sit at 0 or 1 under the
+  task's drive (`report["saturation"]`); `calibrate_bias` centres them. If the naive readout
+  already prefers one stimulus, the plastic seam's measured counts are doing it; start it
+  with `naive_efficacy`.
+- The plastic set is a few hundred synapses on a population of thousands: `seam_report` shows a
+  seam thinned by the synapse floor; rebuild the fixture keeping that seam at every count.
 
 ## Connectomes
 
@@ -147,9 +157,10 @@ repository's `verify.py` scripts are the pattern.
 - A gate passes on the whole brain and fails on the sub-net a page settles: recruit more
   hops or a lower synapse floor and keep the closure receipt; the fruit fly needed 60,000 of
   150,802 neurons for every readout below 1e-3 ([connectomes](connectomes.md)).
-- The whole brain ignites or is silent at every gain you try: one global gain cannot serve every
-  circuit's excitation-inhibition balance ([connectomes](connectomes.md) says what was measured
-  on the fly's antennal lobe and what to declare).
+- The whole brain ignites or is silent at every gain you try, or one region does: one global gain
+  cannot serve every circuit's excitation-inhibition balance. A threshold does not tame a
+  runaway loop (the fly's local neurons stayed a third active at a bias of -6); a gain per cell
+  class does, selected by protocol on the facts downstream ([connectomes](connectomes.md)).
 
 ## Where to ask
 

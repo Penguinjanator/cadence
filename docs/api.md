@@ -650,14 +650,18 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
 - `Protocol(stimuli, rows, training=(), levels=Levels(), steps=60)`: `score(brain)`,
   `neurons_for(connectome, stimulus)`, `to_dict()`. `stimuli` maps each stimulus name to the
   populations it drives at full amplitude.
-- `cadence.protocol.Levels(active=0.5, inactive=0.2, margin=0.15, sparse_min=0.005, sparse_max=0.2, densify_margin=0.05)` (module level).
+- `cadence.protocol.Levels(active=0.5, inactive=0.2, margin=0.15, sparse_min=0.005, sparse_max=0.2, densify_margin=0.05, specific_max=0.25, code_level=0.5)` (module level).
+- `Row(id, stimulus, readout, predicate, reference="", ablate=(), relative_to="", tier="experiment", versus="")`: `versus` names the second stimulus a `specific` row holds the readout's code apart from; a training fact with a fourth element does the same.
+- `cadence.protocol.code_reading(activation, other, members, level) -> {code, shared}`: the fraction of `members` at or above `level`, and what the two codes share as a share of their union.
 - `evaluate_predicate(predicate, value, reference, levels=None) -> bool`; `PREDICATES`
   maps each name to its definition.
 - `shuffled(connectome, seed, *, keep=None) -> Connectome`: the control.
 - `select_gain(make_brain, protocol, grid, *, sparsity_cap=0.05) -> (gain, table)`:
-  among admissible gains, maximize training facts passed and break ties by smallest
-  gain. `sparsity_cap=None` admits every gain. An empty grid or no admissible gain raises
-  `ValueError`.
+  among admissible candidates, maximize training facts passed and break ties by smallest
+  value. `make_brain` builds the brain for a candidate, so the candidate can be the global gain
+  or any number a dictionary declares, such as one population's gain through
+  `Brain(log_gain=...)`. `sparsity_cap=None` admits every candidate. An empty grid or no
+  admissible candidate raises `ValueError`.
 
 ## Checkpoints (`cadence.checkpoint`)
 
@@ -713,6 +717,19 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   - `calibrate(drive, *, level=0.5, grid=None)`, `predict(drive)`, `accuracy(drive, labels, batch=256)`,
     `parameters()`, `to_dict()`; attributes `brain`, `reverse` (index of each synapse's
     reverse, or −1), `second_moment` (when normalising).
+- `calibrate_bias(brain, drives, targets, *, per_neuron=False, rounds=3, span=(-6.0, 6.0), iterations=16, steps=100, tolerance=1e-4) -> np.ndarray`:
+  biases that bring populations to declared activity targets under a set of drives (rows as
+  `settle_batch` takes them). `targets` maps a population name or neuron indices to the mean
+  activation it should have over its members and the drives; one shared bias per population,
+  or one per member with `per_neuron=True` (a readout's cells). Bisection, every population in
+  turn, `rounds` times; the brain is unchanged and the array is passed to `Brain(bias=...)`.
+- `naive_efficacy(connectome, plastic) -> np.ndarray`: efficacies that give every plastic
+  synapse class the same weight (sign times mean count over the class's count); the other
+  synapses keep their sign. For a lesson that should start naive at a memory site whose counts
+  are a specimen's memories.
+- `seam_report(connectome, pre, post) -> dict`: `classes`, `synapses`, `coverage_pre` (the
+  fraction of pre neurons with a class onto the post population), `classes_per_post`,
+  `median_count`; what custody left of a plastic seam.
 - `layered(inputs, hidden, outputs, *, density=0.3, feedback=1.0, lateral=0.0, seed=0, count=1.0, init=1.0, skip=False, skip_init=None, excitatory_forward=False) -> Connectome`
   with populations `input`, `hidden`, `output`. `skip_init=None` uses `init` for
   direct input-to-output projections. A finite nonnegative value overrides that

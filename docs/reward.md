@@ -175,3 +175,32 @@ properties of the rule and the readout, and each has a reading in the `learn` re
 - **A cap applied by rebuilding the brain.** Clipping efficacies by `brain.with_parameters` after
   every decision re-uploads every weight on the torch backend and cost a factor of ten per
   decision. The cap is a config field, `LearnerConfig(scale_cap=...)`, applied inside the update.
+- **A code the lesson cannot attach to.** The actor moves the synapses from the active cells of
+  the state code; if that code is the same for every stimulus, every lesson moves every
+  stimulus. The fly's Kenyon cell codes for two odours had a cosine of 0.98 (the antennal lobe
+  ignited through its cholinergic local neurons at the global gain), and twelve blows at one
+  odour drove both approach probabilities from 0.9 to 0.09 together. Measure the code with the
+  `specific` fact before the lesson and select the offending population's gain on it
+  ([brains from a connectome](connectomes.md)); no rule downstream repairs it.
+- **A readout on a rail, and a readout with a past.** A connectome carries no operating point:
+  at the global threshold the fly's approach cell sat at 1.00 under every odour and its avoidance
+  cell at 0.01, and the nudge had no slope on either. `calibrate_bias` puts each readout cell
+  at one half over the situations it will decide in, jointly. And on the measured counts of the
+  memory seam the naive readout already avoided one odour (0.17) and approached the other
+  (0.83): a specimen's synapse counts at its memory site are its memories, and a smell that is
+  never approached is never rewarded. `naive_efficacy` starts the seam with every plastic class
+  at the same weight.
+- **A seam thinned by custody.** A synapse floor removes a distributed memory along with the
+  noise: the fly's floor of five kept 231 of 1,079 Kenyon cell classes onto one output neuron
+  and 14 of 336 onto the other, and nine blows moved the approach probability by 0.03. Keep the
+  seam a lesson will move at every count and read `seam_report` before designing on it.
+- **The critic that learns faster than the actor.** With `eta_critic` at 0.5 the value reached
+  the outcome in four trials and the dopamine went to zero while the actor, whose contrast is
+  small near a rail, had barely moved; with `eta` at 10 one lesson put an output on its rail.
+  The fly runs `eta` 0.25 and `eta_critic` 0.05; read `report["delta"]` across repeated
+  outcomes and `report["saturation"]` before raising either.
+- **Eligibility mixed along one approach.** A decision every 0.3 s along an approach gave the
+  trace approach and avoid nudges from one flight, and the approach nudge had less room because
+  its cell sat near saturation; sugar then rewarded whichever nudge had been larger, and three
+  rewards taught avoidance. One decision per episode, credited to that decision, as the T-maze
+  has it.

@@ -53,6 +53,13 @@ stimulus. An unknown nonempty name raises `KeyError`. `tier` groups results.
 | `lateralized` | absolute mean difference ≥ `margin` | at least one mean ≥ `inactive` |
 | `sparse` | `sparse_min` ≤ fraction active ≤ `sparse_max` | |
 | `densified` | fraction(readout) ≥ fraction(reference) + `densify_margin` | the reference was sparse |
+| `specific` | the readout's codes under the row's stimulus and under `versus` share at most `specific_max` of their union (a code: the members at or above `code_level`) | both codes have a member |
+
+A `specific` row names its second stimulus: `Row("fruit and yeast are told apart", "fruit", "kc",
+"specific", versus="yeast")`, and a training fact does the same with a fourth element,
+`("fruit", "kc", "specific", "yeast")`. It is the fact to select a population's gain on before
+learning at that population (the fly's local neurons; [brains from a connectome](connectomes.md)):
+a code that is the same for every stimulus carries nothing a lesson can attach to.
 
 A precondition that fails makes the row fail. That is what stops a silent brain from
 passing `reduced` or a saturated one from passing `released`. `evaluate_predicate(predicate,

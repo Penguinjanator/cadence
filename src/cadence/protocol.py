@@ -34,6 +34,10 @@ PREDICATES: dict[str, str] = {
     ),
     "sparse": "fraction >= sparse_min; fraction(readout) <= sparse_max",
     "densified": "reference sparse; fraction(readout) >= fraction(reference) + densify_margin",
+    "specific": (
+        "both codes non-empty at code_level; the readout's codes under stimulus and versus"
+        " share at most specific_max of their union"
+    ),
 }
 
 
@@ -45,6 +49,10 @@ class Levels:
     sparse_min: float = 0.005
     sparse_max: float = 0.2
     densify_margin: float = 0.05
+    specific_max: float = 0.25  # the share of the union two codes may have in common
+    # a neuron at or above this belongs to a code: it counts in fraction (sparse, densified) and
+    # in a specific row's code; 0.5 is the settled brain's convention, a graded code declares less
+    code_level: float = 0.5
 
 
 def evaluate_predicate(
@@ -78,7 +86,32 @@ def evaluate_predicate(
         return (L.sparse_min <= reference["fraction"] <= L.sparse_max) and value[
             "fraction"
         ] >= reference["fraction"] + L.densify_margin
+    if (
+        predicate == "specific"
+    ):  # both codes at least sparse_min of the readout: a dead net has no code
+        shared = value.get("shared")
+        return (
+            shared is not None
+            and value.get("code", 0.0) >= L.sparse_min
+            and reference.get("code", 0.0) >= L.sparse_min
+            and shared <= L.specific_max
+        )
     raise KeyError(predicate)
+
+
+def code_reading(
+    activation: np.ndarray, other: np.ndarray, members: Sequence[int], level: float
+) -> dict[str, float]:
+    """``code``: the fraction of ``members`` at or above ``level``; ``shared``: what the two
+    codes have in common as a share of their union (0 when neither has a member)."""
+    idx = list(members)
+    a = np.asarray(activation)[idx] >= level
+    b = np.asarray(other)[idx] >= level
+    union = int((a | b).sum())
+    return {
+        "code": float(a.mean()) if idx else 0.0,
+        "shared": float((a & b).sum() / union) if union else 0.0,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,6 +128,7 @@ class Row:
         ""  # a stimulus (for reduced/released) or a readout (for exceeds/lateralized)
     )
     tier: str = "experiment"
+    versus: str = ""  # a second stimulus: the code the readout's code is held apart from (specific)
 
 
 @dataclass
@@ -102,8 +136,8 @@ class Protocol:
     stimuli: dict[str, tuple[str, ...]]  # stimulus name -> set names stimulated together
     rows: Sequence[Row]
     training: Sequence[
-        tuple[str, str, str]
-    ] = ()  # (stimulus, readout, predicate) the model may see
+        tuple[str, str, str] | tuple[str, str, str, str]
+    ] = ()  # (stimulus, readout, predicate[, versus]) the model may see
     levels: Levels = field(default_factory=Levels)
     steps: int = 60
 
@@ -114,6 +148,7 @@ class Protocol:
         """Settle every needed (stimulus, ablation) pair once and score training facts and rows."""
         connectome = brain.connectome
         cache: dict[tuple[str, tuple[str, ...]], dict[str, dict[str, float]]] = {}
+        activations: dict[tuple[str, tuple[str, ...]], np.ndarray] = {}
         readouts = sorted(
             {r.readout for r in self.rows}
             | {t[1] for t in self.training}
@@ -131,31 +166,61 @@ class Protocol:
                     steps=self.steps,
                     mask=mask,
                 )
-                out = brain.readings(state, readouts)
+                level = self.levels.code_level
+                out = {
+                    name: {
+                        "mean": state.mean(connectome.populations[name]),
+                        "fraction": state.fraction_active(connectome.populations[name], level),
+                    }
+                    for name in readouts
+                }
                 out["_all"] = {
                     "mean": float(state.activation.mean()),
-                    "fraction": state.fraction_active(),
+                    "fraction": state.fraction_active(level=level),
                 }
                 cache[key] = out
+                activations[key] = np.array(state.activation, dtype=float)
             return cache[key]
 
+        def code_pair(
+            stimulus: str, versus: str, readout: str, ablate: tuple[str, ...] = ()
+        ) -> tuple[dict[str, float], dict[str, float]]:
+            """The row's reading and its reference, each with its code, the reading with what
+            the two codes share."""
+            value = dict(readings(stimulus, ablate)[readout])
+            reference = dict(readings(versus, ablate)[readout])
+            members = connectome.populations[readout]
+            level = self.levels.code_level
+            a, b = activations[(stimulus, ablate)], activations[(versus, ablate)]
+            value.update(code_reading(a, b, members, level))
+            reference["code"] = code_reading(b, a, members, level)["code"]
+            return value, reference
+
         training = []
-        for stimulus, readout, predicate in self.training:
-            value = readings(stimulus)[readout]
+        for fact in self.training:
+            stimulus, readout, predicate = fact[0], fact[1], fact[2]
+            versus = fact[3] if len(fact) > 3 else ""
+            if versus:
+                value, reference = code_pair(stimulus, versus, readout)
+            else:
+                value = reference = readings(stimulus)[readout]
             training.append(
                 {
                     "stimulus": stimulus,
                     "readout": readout,
                     "predicate": predicate,
+                    "versus": versus,
                     "reading": value,
-                    "passed": evaluate_predicate(predicate, value, value, self.levels),
+                    "passed": evaluate_predicate(predicate, value, reference, self.levels),
                 }
             )
         rows: list[dict[str, Any]] = []
         for row in self.rows:
             value = readings(row.stimulus, row.ablate)[row.readout]
             relative = row.relative_to in connectome.populations
-            if row.predicate in ("exceeds", "lateralized") and relative:
+            if row.versus:
+                value, reference = code_pair(row.stimulus, row.versus, row.readout, row.ablate)
+            elif row.predicate in ("exceeds", "lateralized") and relative:
                 reference = readings(row.stimulus, row.ablate)[row.relative_to]
             elif row.relative_to in self.stimuli:
                 reference = readings(row.relative_to)[row.readout]
@@ -172,6 +237,7 @@ class Protocol:
                     "ablate": list(row.ablate),
                     "readout": row.readout,
                     "predicate": row.predicate,
+                    "versus": row.versus,
                     "tier": row.tier,
                     "reading": value,
                     "reference": reference,
@@ -204,6 +270,7 @@ class Protocol:
                     "ablate": list(r.ablate),
                     "relative_to": r.relative_to,
                     "tier": r.tier,
+                    "versus": r.versus,
                 }
                 for r in self.rows
             ],
@@ -250,6 +317,14 @@ def shuffled(connectome: Connectome, seed: int, *, keep: np.ndarray | None = Non
     )
 
 
+def _settled(states: dict[str, Any], brain: Brain, protocol: Protocol, stimulus: str) -> Any:
+    """The brain settled under a protocol stimulus, once per stimulus."""
+    if stimulus not in states:
+        neurons = list(protocol.neurons_for(brain.connectome, stimulus))
+        states[stimulus] = brain.settle({i: 1.0 for i in neurons}, steps=protocol.steps)
+    return states[stimulus]
+
+
 def select_gain(
     make_brain: Callable[[float], Brain],
     protocol: Protocol,
@@ -257,12 +332,15 @@ def select_gain(
     *,
     sparsity_cap: float | None = 0.05,
 ) -> tuple[float, list[dict[str, Any]]]:
-    """One global gain from the training facts alone: most facts passed, smallest gain on ties.
+    """One parameter from the training facts alone: most facts passed, smallest value on ties.
 
-    A gain is admissible only while the net stays sparse under every
-    training stimulus (at most ``sparsity_cap`` of neurons active). Runaway
-    activity lights every readout and is not a fact about the connectome.
-    Raises ``ValueError`` for an empty grid or when no gain is admissible.
+    ``make_brain`` builds the brain for a candidate; the candidate is the global gain, or
+    any other number a dictionary declares, such as one population's gain
+    (``Brain(log_gain=...)``). A candidate is admissible only while the net stays sparse
+    under every training stimulus (at most ``sparsity_cap`` of neurons active). Runaway
+    activity lights every readout and is not a fact about the connectome. A fact with a
+    fourth element names the stimulus a ``specific`` code is held apart from.
+    Raises ``ValueError`` for an empty grid or when no candidate is admissible.
     """
     if len(grid) == 0:
         raise ValueError("gain grid must not be empty")
@@ -274,16 +352,34 @@ def select_gain(
         passed = 0
         fraction = 0.0
         detail = {}
-        for stimulus, readout, predicate in protocol.training:
-            neurons = list(protocol.neurons_for(connectome, stimulus))
-            state = brain.settle({i: 1.0 for i in neurons}, steps=protocol.steps)
+        states: dict[str, Any] = {}
+        for fact in protocol.training:
+            stimulus, readout, predicate = fact[0], fact[1], fact[2]
+            versus = fact[3] if len(fact) > 3 else ""
+            state = _settled(states, brain, protocol, stimulus)
+            members = connectome.populations[readout]
+            level = protocol.levels.code_level
             value = {
-                "mean": state.mean(connectome.populations[readout]),
-                "fraction": state.fraction_active(connectome.populations[readout]),
+                "mean": state.mean(members),
+                "fraction": state.fraction_active(members, level),
             }
-            passed += int(evaluate_predicate(predicate, value, value, protocol.levels))
+            reference = value
+            if versus:
+                other = _settled(states, brain, protocol, versus)
+                pair = code_reading(state.activation, other.activation, members, level)
+                value = {**value, **pair}
+                reference = {
+                    "mean": other.mean(members),
+                    "fraction": other.fraction_active(members, level),
+                    "code": code_reading(other.activation, state.activation, members, level)[
+                        "code"
+                    ],
+                }
+                fraction = max(fraction, other.fraction_active())
+            passed += int(evaluate_predicate(predicate, value, reference, protocol.levels))
             fraction = max(fraction, state.fraction_active())
-            detail[f"{stimulus}->{readout}"] = round(value["mean"], 4)
+            key = f"{stimulus}->{readout}" + (f" vs {versus}" if versus else "")
+            detail[key] = round(value["shared"] if versus else value["mean"], 4)
         admissible = sparsity_cap is None or fraction <= sparsity_cap
         table.append(
             {

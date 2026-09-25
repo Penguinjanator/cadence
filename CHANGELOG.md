@@ -2,6 +2,35 @@
 
 ## Unreleased
 
+What learning a discrimination on the fruit fly's measured wiring sent back: the operating
+points a connectome does not carry, and the custody of a plastic seam. Each is generic; the
+numbers are the fly's.
+
+- `specific`, a protocol predicate over two stimuli: the readout's codes under the row's
+  stimulus and under `versus` share at most `specific_max` of their union, both codes non-empty
+  at `code_level` (`Row(..., versus=...)`, a training fact with a fourth element,
+  `code_reading`). It is the fact a population's gain is selected on before learning at that
+  population: a code that is the same for every stimulus carries nothing a lesson can attach
+  to. `select_gain` takes it, and its docstring says the candidate can be any number a
+  dictionary declares, such as one population's gain through `Brain(log_gain=...)`; the fly's
+  antennal lobe ignites at the global gain through the mutual excitation of its cholinergic
+  local neurons (cosine 0.98 between two odours' Kenyon cell codes at every gain, a third of
+  the local neurons still active at a bias of -6) and settles to specific codes (cosine 0.32)
+  at a twentieth of their gain.
+- `calibrate_bias(brain, drives, targets, per_neuron=...)`: biases that bring populations to
+  declared activity targets under the drives they will meet, one per population or one per
+  member, found jointly. A readout cell on a rail (the fly's approach cell at 1.00 under every
+  odour) has no slope for a nudge; calibrated to one half it learns.
+- `naive_efficacy(connectome, plastic)`: every plastic class the same weight, for a lesson that
+  should start naive at a memory site whose synapse counts are a specimen's memories (the
+  fly's measured counts made one odour aversive and the other attractive before any lesson).
+- `seam_report(connectome, pre, post)`: classes, synapses and coverage of a plastic seam. A
+  synapse floor that removes noise elsewhere removes a distributed memory: the fly's floor of
+  five kept 231 of 1,079 Kenyon cell classes onto one output neuron and 14 of 336 onto the
+  other; the example's fixture now keeps the seam at every count.
+- Docs: [brains from a connectome](docs/connectomes.md) (the seam in custody, the gain per cell
+  class with the selection code, the two operating points), [protocols](docs/protocols.md)
+  (`specific`), the traps of [learning from reward](docs/reward.md), troubleshooting, the API.
 - The paper is published as a preprint on PhilPapers (https://philpapers.org/rec/MUECAP-2); the README and the guides link
   it there, and the PDF copy at the repository root is removed.
 

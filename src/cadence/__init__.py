@@ -37,7 +37,16 @@ from .connectome import Connectome
 from .content_memory import ContentMemory
 from .generic import GenericBrain
 from .genome import Genome, Projection, develop, evolve, genes
-from .learning import Learner, LearnerConfig, embedded, layered, learning_neuron_model
+from .learning import (
+    Learner,
+    LearnerConfig,
+    calibrate_bias,
+    embedded,
+    layered,
+    learning_neuron_model,
+    naive_efficacy,
+    seam_report,
+)
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
 from .patch import PatchNet, PatchObservation
@@ -154,6 +163,9 @@ __all__ = [
     "evaluate_predicate",
     "layered",
     "learning_neuron_model",
+    "calibrate_bias",
+    "naive_efficacy",
+    "seam_report",
     "load",
     "save",
     "select_gain",
