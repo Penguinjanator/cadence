@@ -117,6 +117,7 @@ class PopulationPatch:
         norm = float(net._input_norm)
         self.input_norm = torch.full((P, B), norm, dtype=self.dtype, device=self.dev)
         self.tables = self._t(net.records.tables["y"]).expand(P, B, -1, -1).clone()
+        self.written = torch.zeros(P, B, self.cells, dtype=self.dtype, device=self.dev)  # writes per cell and stream
         assert self.mean.shape[-1] == width
 
     @classmethod
@@ -217,6 +218,13 @@ class PopulationPatch:
         rows = self.tables.view(-1, self.outputs).index_select(0, self._rows(indices, stream_of))
         return (rows.view(self.P, N, self.active, self.outputs) * values[..., None]).sum(dim=2)
 
+    def familiarity(self, indices: torch.Tensor, values: torch.Tensor, stream_of: torch.Tensor | None = None) -> torch.Tensor:
+        """How much of a code's mass falls on cells the stream's store has written before,
+        (P, N) in [0, 1]: whether this brain has been near this reading in this world."""
+        N = indices.shape[1]
+        seen = self.written.view(-1).index_select(0, self._rows(indices, stream_of)).view(self.P, N, self.active)
+        return ((seen > 0).to(values.dtype) * values).sum(dim=-1) / values.sum(dim=-1).clamp(min=1e-12)
+
     def _per_stream(self, x: torch.Tensor, stream_of: torch.Tensor | None) -> torch.Tensor:
         """A per-stream tensor (P, B, ...) gathered to the moments (P, N, ...); ``stream_of``
         is (N,), the same streams for every instance, or (P, N)."""
@@ -247,8 +255,9 @@ class PopulationPatch:
             slow = self._slow(h)
             indices, values = self._sparse_code(self._readings(u, h, stream_of), stream_of)
             read = self._read_sparse(indices, values, stream_of)
+            familiar = self.familiarity(indices, values, stream_of)
         self.settles += 1
-        return {"output": slow + read, "slow": slow, "read": read, "hidden": h, "code": self._dense(indices, values)}
+        return {"output": slow + read, "slow": slow, "read": read, "hidden": h, "code": self._dense(indices, values), "familiarity": familiar}
 
     def _as(self, x: torch.Tensor | np.ndarray, stream_of: torch.Tensor | None = None) -> torch.Tensor:
         t = torch.as_tensor(x, dtype=self.dtype, device=self.dev)
@@ -392,12 +401,15 @@ class PopulationPatch:
         if self.record_weight is not None:  # an output whose target is a sample rather than a fact keeps its records damped
             move = move * self.record_weight[:, None, :]
         update = self.record_rate * values[..., None] * move[..., None, :]
-        self.tables.view(-1, self.outputs).index_add_(0, self._rows(indices, stream_of), update.reshape(-1, self.outputs))
+        rows = self._rows(indices, stream_of)
+        self.tables.view(-1, self.outputs).index_add_(0, rows, update.reshape(-1, self.outputs))
+        self.written.view(-1).index_add_(0, rows, (values * gate[..., None] > 0).to(self.dtype).reshape(-1))
         self.writes += 1
         return self._dense(indices, values)
 
     def clear_records(self) -> None:
         self.tables.zero_()
+        self.written.zero_()
 
     # --- population operations -------------------------------------------------------------------
 
@@ -415,6 +427,7 @@ class PopulationPatch:
                 v = v + noise * sigma * torch.clamp(v.std(), min=1e-3)
             setattr(self, name, v)
         self.tables.zero_()
+        self.written.zero_()
         self.mean.zero_()
         self.seen.zero_()
         self.input_norm.fill_(1.0)

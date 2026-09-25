@@ -201,3 +201,16 @@ def test_record_weight_damps_an_outputs_records() -> None:
     twin.observe(x, t, rate=0.0, write=True)
     read = twin.imagine(x)["read"][0, 0]
     assert read[1] == 0.0 and read[0] != 0.0 and read[2] != 0.0
+
+
+def test_familiarity_rises_where_the_store_has_written() -> None:
+    twin = PopulationPatch(12, 8, 3, instances=1, streams=2, seed=0, cells=64, active=4, device="cpu", dtype=torch.float64)
+    rng = np.random.default_rng(9)
+    x = torch.as_tensor(rng.normal(size=(1, 2, 12)))
+    t = torch.as_tensor(rng.normal(size=(1, 2, 3)))
+    assert float(twin.imagine(x)["familiarity"].max()) == 0.0
+    twin.observe(x, t, rate=0.0, write=True, mask=torch.tensor([[1.0, 0.0]]))
+    fam = twin.imagine(x)["familiarity"]
+    assert float(fam[0, 0]) > 0.99 and float(fam[0, 1]) == 0.0  # the written stream knows the reading, the other does not
+    y = torch.as_tensor(rng.normal(size=(1, 2, 12)))
+    assert float(twin.imagine(y)["familiarity"][0, 0]) < 1.0
