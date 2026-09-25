@@ -137,7 +137,11 @@ assert report["warnings"] == []                       # each warning names the b
 It settles the brain under the drives and reports a readout with no slope (`calibrate_bias`),
 a plastic senders' code shared between two situations (a gain per cell class on the `specific`
 fact), and a seam too thin for eligibility (custody, `seam_report`); the fly's setup writes
-the report into its receipt. Two decisions come first:
+the report into its receipt. On the fly's measured wiring, set up as below, it warns nothing
+(the readouts between 0.38 and 0.81, the senders' code 0.23 shared, 75 and 13 active plastic
+inputs); on a shuffled wiring the same call warns three times (both readouts pinned at 1.00,
+the code 0.82 shared, a thin seam), which is what a control should do. Two decisions come
+first:
 which neurons read the action (the fly reads approach and avoidance from two mushroom body
 output neurons of known valence, one cell each) and which synapses are plastic (the seam the
 animal is known to change, `plastic_synapses` on the learner). Then two operating points the
