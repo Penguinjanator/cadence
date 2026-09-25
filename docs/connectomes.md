@@ -102,7 +102,8 @@ attenuation, table = select_gain(make, protocol, [0, 0.7, 1.4, 2.1, 3.0, 4.6], s
 The facts are the animal's (about 5 percent of Kenyon cells answer an odour; the codes of two
 odours are specific), the `specific` predicate holds one code apart from another
 ([protocols](protocols.md)), the candidate is the smallest attenuation that passes them, and
-shuffled wirings select their own. On the fly the local neurons' gain lands at a twentieth of
+shuffled wirings select their own. Select on the whole brain, as the global gain was: a
+sub-net's own stimulated receptors already exceed the sparsity cap. On the fly the local neurons' gain lands at a twentieth of
 the measured wiring's: the Kenyon cell codes go to 4 and 11 percent with a cosine of 0.32, 81
 cells answer the fruit alone, 372 the yeast alone, 67 both. The number is declared in the
 example's dictionary (`CLASS_LOG_GAIN`) next to the global gain, with its receipt.

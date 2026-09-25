@@ -167,6 +167,8 @@ def test_preflight_names_each_finding_and_its_remedy() -> None:
     assert any("calibrate_bias" in w and "output 9" in w for w in on_rail["warnings"])
     same = cd.preflight(calibrated, outputs, plastic, np.vstack([drives[0], drives[0]]), steps=60)
     assert any("specific fact" in w for w in same["warnings"])
+    assert any("same situation" in w for w in same["warnings"]) and same["inputs"][(0, 1)] == 1.0
+    assert clean["inputs"][(0, 1)] == 0.0
     thin = cd.preflight(calibrated, outputs, plastic, drives, eligibility_min=100, steps=60)
     assert any("seam is thin" in w for w in thin["warnings"])
     with pytest.raises(ValueError):

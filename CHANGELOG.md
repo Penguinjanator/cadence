@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- `cadence.population.PopulationPatch`: record patches in lockstep on a torch device, a
+  population of instances each with many streams, every settle one batched product; the
+  slow step of each instance is the adjoint of its own one-moment loss (autograd), the
+  records the delta rule at the code, nothing crossing an instance, a stream or a moment;
+  `from_patch` broadcasts a NumPy patch and the tests hold the twin to it at 1e-9;
+  `inherit` copies parents for selection. Guide: `docs/population.md`.
+
 What learning a discrimination on the fruit fly's measured wiring sent back: the operating
 points a connectome does not carry, and the custody of a plastic seam. Each is generic; the
 numbers are the fly's.
@@ -28,7 +35,8 @@ numbers are the fly's.
 - `preflight(brain, outputs, plastic, drives)`: the three checks a lesson needs before its
   first decision, under the drives the brain will decide in, each warning naming the block that
   repairs it (a readout with no slope, a shared code at the plastic seam's senders, a seam too
-  thin for eligibility). Run it first; a receipt should show an empty list.
+  thin for eligibility, two drives that are the same situation). Run it first; a receipt should
+  show an empty list.
 - `seam_report(connectome, pre, post)`: classes, synapses and coverage of a plastic seam. A
   synapse floor that removes noise elsewhere removes a distributed memory: the fly's floor of
   five kept 231 of 1,079 Kenyon cell classes onto one output neuron and 14 of 336 onto the

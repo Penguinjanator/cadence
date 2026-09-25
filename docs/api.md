@@ -731,7 +731,8 @@ See [write a cortex](cortex.md) for regions, projections, ports and learning hea
   the checks a lesson needs before its first decision, under the drives the brain will decide
   in: a readout with no slope (within `saturation` of 0 or 1 under every drive), the plastic
   senders' code shared between two drives beyond `shared_max`, fewer than `eligibility_min`
-  plastic synapses from active senders onto a readout. Returns the readings and `warnings`, one
+  plastic synapses from active senders onto a readout, two drives that drive the same neurons
+  beyond `shared_max` (the senses, not the wiring, are to be told apart). Returns the readings and `warnings`, one
   sentence per finding naming the block that repairs it; an empty list is what a receipt shows.
 - `seam_report(connectome, pre, post) -> dict`: `classes`, `synapses`, `coverage_pre` (the
   fraction of pre neurons with a class onto the post population), `classes_per_post`,
@@ -978,3 +979,9 @@ neurotransmitter diffusion is not part of this model.
   `reset(batch)`, `observe(value)` and non-mutating `read()`. Readback has at most
   the declared L2 radius; this is no guarantee of better sequence prediction.
   See [sequence readback](sequence.md).
+
+
+## `cadence.population`
+
+- `PopulationPatch(inputs, hidden, outputs, *, instances, streams, seed=0, cells=4096, active=32, record_rate=0.5, habituation=1e-5, record_bias=0.3, slowest=2.0, groups=None, device=None, dtype=torch.float32)`: record patches in lockstep on a device; `from_patch(net, *, instances, streams, device=None, dtype=torch.float32)`; `imagine(inputs) -> {output, slow, read, hidden, code}`; `observe(inputs, target, *, rate=1.0, write=True) -> {loss, slow, hidden, residual, code}`; `code(readings)`, `read(code)`, `clear_records()`, `inherit(parents, *, sigma=0.0, generator=None)`, `parameters()`, `state()`, `memory_bytes()`.
+- `device_of(name=None)`: cuda, then mps, then cpu.

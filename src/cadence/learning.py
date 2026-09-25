@@ -1209,11 +1209,15 @@ def preflight(
       and its gain is selected by protocol on the ``specific`` fact (``Brain(log_gain=...)``);
     - fewer than ``eligibility_min`` plastic synapses from active senders onto a readout under a
       drive leaves the lesson almost no eligibility there: the seam is thin, most often cut by
-      a synapse floor in custody (``seam_report``).
+      a synapse floor in custody (``seam_report``);
+    - two drives whose driven neurons overlap beyond ``shared_max`` of their union are the
+      same situation to the brain before it settles anything: the senses, not the wiring, are
+      to be told apart (the fly's two odours reached both receptor classes near saturation at
+      either fruit, from one wide odour field).
 
-    Returns ``{"outputs", "shared", "eligibility", "warnings"}``: the readings and one warning
-    per finding, in words, naming the remedy. An empty ``warnings`` list is what a receipt should
-    show before the lessons start.
+    Returns ``{"outputs", "shared", "inputs", "eligibility", "warnings"}``: the readings and one
+    warning per finding, in words, naming the remedy. An empty ``warnings`` list is what a
+    receipt should show before the lessons start.
     """
     C = brain.connectome
     plastic = np.asarray(plastic, dtype=bool)
@@ -1235,9 +1239,20 @@ def preflight(
             )
     senders = np.unique(C.pre[plastic])
     codes = act[:, senders] >= level
+    driven = drives > 0.0
     shared: dict[tuple[int, int], float] = {}
+    inputs: dict[tuple[int, int], float] = {}
     for a in range(len(drives)):
         for b in range(a + 1, len(drives)):
+            union = int((driven[a] | driven[b]).sum())
+            same = float((driven[a] & driven[b]).sum() / union) if union else 0.0
+            inputs[(a, b)] = same
+            if union and same > shared_max:
+                warnings.append(
+                    f"drives {a} and {b} drive {same:.2f} of the same neurons (at most"
+                    f" {shared_max}): the same situation before the brain settles anything;"
+                    " make the senses tell them apart"
+                )
             union = int((codes[a] | codes[b]).sum())
             share = float((codes[a] & codes[b]).sum() / union) if union else 0.0
             shared[(a, b)] = share
@@ -1261,4 +1276,10 @@ def preflight(
                 f" {eligibility_min} come from active senders: the seam is thin; seam_report,"
                 " and keep it whole in custody"
             )
-    return {"outputs": readouts, "shared": shared, "eligibility": eligibility, "warnings": warnings}
+    return {
+        "outputs": readouts,
+        "shared": shared,
+        "inputs": inputs,
+        "eligibility": eligibility,
+        "warnings": warnings,
+    }
