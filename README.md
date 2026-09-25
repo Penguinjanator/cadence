@@ -160,6 +160,8 @@ says what an example needs to live there, including the card every example READM
 - **Reference:** [API](https://github.com/muellerberndt/cadence/blob/main/docs/api.md) · [changelog](https://github.com/muellerberndt/cadence/blob/main/CHANGELOG.md) · [Lean proofs](https://github.com/muellerberndt/cadence/blob/main/lean/README.md) · [contributing](https://github.com/muellerberndt/cadence/blob/main/CONTRIBUTING.md)
 - **The ideas:** [architecture](https://github.com/muellerberndt/cadence/blob/main/docs/architecture.md) · [equilibrium world models](https://github.com/muellerberndt/cadence/blob/main/docs/equilibrium-world-models.md) · [creativity and self-reflection](https://github.com/muellerberndt/cadence/blob/main/docs/creativity.md) · [the paper](https://philpapers.org/rec/MUECAP-2)
 
+Many brains at once on a graphics processor: `cadence.population.PopulationPatch` runs a population of record patches, each in many worlds, in lockstep; the [guide](https://github.com/muellerberndt/cadence/blob/main/docs/population.md) has the two-line use and what batches.
+
 The [index](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) is the full map.
 
 ## Four shared principles
