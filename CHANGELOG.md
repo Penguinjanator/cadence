@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Report `capped`, the share of observed rows whose dopamine exceeded `dopamine_cap`
+  before the clip, in every `learn` report and through `Brain.last_learning`
+  ([issue 139](https://github.com/muellerberndt/cadence/issues/139)). Add the
+  night-replay chamber (`benchmarks/replay/`): a day of decisions through `step`,
+  a night in which a saved copy re-experiences that day, an equal-experience awake
+  control, and frozen policy readings as the adoption gate. Document that a replay
+  through `step` is more experience at the same rates, not consolidation, with
+  the measured causes of a policy that ignores its observation (sign-only
+  dopamine at the composed actor rate on one stream, the default working trace)
+  and a setting under which the night helped as much as fresh experience, the
+  equal-experience comparison of
+  [issue 112](https://github.com/muellerberndt/cadence/issues/112). Defaults,
+  equations and saved-state semantics are unchanged.
+
 - Accumulate CUDA block transport directly into its destination to avoid a
   temporary product and a separate addition kernel per block. Add actual-device
   System 1 equation, gradient, refusal, memory and continuation checks, plus a
