@@ -498,3 +498,31 @@ def test_the_report_reads_the_outputs_saturation_and_the_traces_size() -> None:
     assert 0.0 <= report["saturation"] <= 1.0
     assert report["trace"] >= 0.0
     assert report["trace"] == float(np.abs(ac.trace[:, plastic]).mean())
+
+
+def test_the_report_counts_the_outcomes_the_dopamine_cap_clipped() -> None:
+    """``capped`` is the share of observed rows whose signal exceeded ``dopamine_cap``."""
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
+    rng = np.random.default_rng(2)
+    x, context = _contextual_bandit(rng, 4)
+
+    def learner() -> cd.Learner:
+        return cd.Learner(
+            cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0)),
+            connectome.populations["output"],
+            cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
+        )
+
+    def report(config: cd.ActorCriticConfig, reward: np.ndarray) -> dict[str, float]:
+        ac = cd.ActorCritic(learner(), connectome.populations["hidden"], config, seed=0)
+        drive = ac.learner.brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 4))))
+        ac.act(drive)
+        return ac.learn(reward, np.ones(4, dtype=bool), drive)
+
+    small = cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0)
+    assert report(small, np.array([0.5, -0.5, 0.0, 0.25]))["capped"] == 0.0
+    # Rewards in units far beyond the cap of 1.0: every row is clipped to its sign.
+    assert report(small, np.array([5.0, -5.0, 3.0, -7.0]))["capped"] == 1.0
+    assert report(small, np.array([5.0, 0.5, 0.0, -7.0]))["capped"] == 0.5
+    uncapped = cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0, dopamine_cap=0.0)
+    assert report(uncapped, np.array([5.0, -5.0, 3.0, -7.0]))["capped"] == 0.0

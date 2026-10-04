@@ -47,9 +47,11 @@ explicit choices:
   otherwise `"modulated"`.
 
 The critic's step can be divided by its trace's energy (`critic_normalize`). Reports
-include the absolute raw `td_error`, the absolute modulated `delta`, and signed
-`dopamine`. A time limit is not a terminal state: pass `bootstrap=` the value of
-the last observation for a truncated row.
+include the absolute raw `td_error`, the absolute modulated `delta`, signed
+`dopamine`, and `capped`, the share of observed rows whose signal exceeded
+`dopamine_cap` before the clip: near 1, every outcome moves the synapses by the
+cap times the trace, whatever its size. A time limit is not a terminal state: pass
+`bootstrap=` the value of the last observation for a truncated row.
 
 The adaptive local step uses `momentum` and `normalize` to keep a running mean and RMS
 of each synapse's own steps, with corrections for its short history. Each synapse reads its
@@ -153,6 +155,75 @@ For a real task, record raw held-out return, forgetting and every interaction us
 by rehearsal or planning. Choose the eligibility horizon from actual action-to-reward
 delays, and test imitation, reward practice and rehearsal separately. A biological
 analogy supplies a hypothesis; the behavioral test determines whether it works.
+
+## Replaying a life through `step`
+
+`step` cannot tell a replayed observation from a live one. An application that lets
+a saved copy of a brain re-experience its own day, calling `step(observation,
+reward=...)` on the recorded observations with the reward each replayed choice would
+have earned, gives that copy more experience of the same day at the same rates: every
+replayed transition writes the associative memory and moves the actor and the critic
+as a live one would, and the boundary between passes is an ordinary transition unless
+`done` marks it. That is not a consolidation operation. The sleep of the
+[record patch](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night)
+is a separate model that teaches its slow weights fixed completions from its store;
+`Brain.compose` has no night of its own, and its `SynapticMemory` consolidates on
+each outcome.
+
+Whether such a night helps depends on what the day's updates do, which the
+[night-replay chamber](../benchmarks/replay/README.md) measures: one decision per
+interval with a signed outcome in small units and a fixed cost for every non-resting
+action, the contract of the paper-trading loop in
+[issue 139](https://github.com/muellerberndt/cadence/issues/139), with a world in
+which a cue decides the paying move and one in which nothing does, and the same
+number of fresh decisions awake as the control. At the composed defaults the greedy
+choice did not depend on the observation before the night: the mean total variation
+between the per-observation policies and their mean was 0.02 without a signal and
+0.24 with one, and three replays of a 40-decision day lowered the agreement with the
+cue rule from 0.60 to 0.39 while the same number of awake decisions kept it at 0.62.
+Two readings name the causes. `report["capped"]` was 0.5 to 0.9: outcomes of several
+units against `dopamine_cap=1.0` clip to their sign, a gain of one unit and a loss of
+six move every synapse equally, and at the actor rate of 1.0 on a single stream the
+policy walks to a held action (`report["saturation"]` 0.6 to 0.9). The default working
+trace held the association cortex on its own history: on a continuing contextual
+bandit the composed default stayed at chance over 600 decisions while the same brain
+with `working_memory_amplitude=0.0` reached a hit rate of 1.0
+([memory](memory.md#three-kinds-of-memory-in-brain)). With
+`working_memory_amplitude=1.0, working_memory_decay=0.8` and the actor at `eta=0.1`
+(`eta_bias=0.01`), the day ended at 0.90 agreement and the night raised it to 1.00 in
+every seed, as the awake control did; without a signal the same night took the
+policy to the resting action, which is the correct answer there, and the memory
+alone, under a frozen actor, leaned the choice the same way, since a move that lost
+is recalled as a loss; under that frozen actor the memory gained more from the night
+than from fresh days (0.96 against 0.89), since its consolidation rewards repeated
+keys. Over a 144-decision day the same night lowered the agreement from 1.00 to
+0.88 at the actor rate of 0.1 and raised it from 0.93 to 1.00 at 0.03: the smaller
+the rate, the safer a long night. Measure the policy of a frozen copy before adopting a
+slept brain; its dependence on the observation is the gate, and a constant greedy
+choice is only correct where no observation pays.
+
+```python
+import numpy as np
+from cadence import Brain
+
+brain = Brain.compose(4, 3, modules=(16,), seed=0)
+day = np.eye(4)[[0, 1, 2, 3, 0, 1]]
+brain.step(day[:1])
+for observation in day[1:]:
+    brain.step([observation], reward=[0.5], done=[False])
+copy = Brain.load(brain.save("slept.npz"))  # the gate reads a frozen copy
+copy.reset()
+policies = []
+for observation in day:
+    copy.act([observation], greedy=True)  # no learning; the trace carried as in life
+    policies.append(copy.basal_ganglia.probabilities(copy.basal_ganglia.state)[0])
+policies = np.asarray(policies)
+dependence = float(0.5 * np.abs(policies - policies.mean(axis=0)).sum(axis=1).mean())
+assert 0.0 <= dependence <= 1.0  # near 0: the choice ignores the observation
+```
+
+Compare the greedy `act` with `predict`, which reads neither trace nor memory, to
+see which of the graph, the trace and the memory holds the choice.
 
 ## Traps, with their measurements
 

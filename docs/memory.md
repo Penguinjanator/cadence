@@ -59,6 +59,14 @@ successful bounded recall do not establish general lifelong retention.
 Working-trace amplitude and decay are task-dependent settings. A stronger trace
 can interfere with acquiring a new relation as well as retain earlier context;
 neither a smaller amplitude nor a different decay is a generally validated fix.
+On a continuing contextual bandit (one stream, no resets, 600 decisions, the task of
+`tests/test_generic.py` with `gamma=0, lam=0`) the composed default amplitude of 3.0
+held the hit rate at chance (0.22 to 0.33 over three seeds) while amplitude 0.0
+reached 1.0; at an actor rate of 0.1 the default reached 0.6 to 0.7 and amplitudes
+at or below 0.5 reached 1.0
+([night-replay chamber](../benchmarks/replay/README.md#the-working-trace-on-a-continuing-bandit)).
+Where the previous moment carries nothing the decision needs, the trace is
+interference the actor must first learn away.
 The [vanished-cue instrument](../benchmarks/recall/README.md) measures a continuing
 brain against checkpoint-matched trace interventions and an explicitly trained
 history comparator. Its software checks validate the instrument, not a measured

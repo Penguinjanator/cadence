@@ -1052,10 +1052,14 @@ that recursive benefit or automatic reflective behavior has been learned.
     is `"td"` whenever the dopamine is centred and `"modulated"` otherwise
     (`ActorCriticConfig.critic_target` is the resolved choice).
     Reports include absolute raw `td_error`, absolute modulated `delta`, signed
-    `dopamine`, `saturation` (the fraction of output activations within 0.02 of 0 or 1,
+    `dopamine`, `capped` (the share of observed rows whose signal exceeded
+    `dopamine_cap` before the clip; 0 without a cap), `saturation` (the fraction of
+    output activations within 0.02 of 0 or 1,
     where a nudge has no slope) and `trace` (the mean absolute eligibility over the plastic
     synapses); a `saturation` near 1 with a `trace` near 0 is the latch of
-    [learning from reward](reward.md#traps-with-their-measurements).
+    [learning from reward](reward.md#traps-with-their-measurements), and a `capped`
+    near 1 means the actor learns from the sign of each outcome alone
+    ([replaying a life](reward.md#replaying-a-life-through-step)).
     `done` rows start their next life from rest; a truncated row passes `value_of` its last
     observation as `bootstrap`;
     `observed` is a boolean batch vector for real transitions. Padding rows do not

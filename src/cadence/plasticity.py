@@ -597,6 +597,7 @@ class ActorCritic:
         delta = td_error
         if cfg.dopamine_center > 0:
             delta = self._centre(delta, observed)
+        capped = self._capped(delta, observed)
         if cfg.dopamine_cap > 0:
             delta = np.clip(delta, -cfg.dopamine_cap, cfg.dopamine_cap)
         delta = np.where(observed, delta / observed.mean(), 0.0)
@@ -658,6 +659,7 @@ class ActorCritic:
         report["delta"] = float(np.abs(delta).mean())
         report["dopamine"] = float(delta.mean())
         report["td_error"] = float(np.abs(td_error[observed]).mean())
+        report["capped"] = capped
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         report["saturation"] = self._saturation(free)
@@ -688,6 +690,16 @@ class ActorCritic:
         if not np.isfinite(weights).all() or not np.isfinite(bias):
             raise ValueError("critic parameters must remain finite")
         return weights, bias
+
+    def _capped(self, delta: np.ndarray, observed: np.ndarray) -> float:
+        """The share of observed rows whose dopamine exceeded ``dopamine_cap`` before the clip.
+        Near one, the actor learns from the sign of each outcome alone: a reward of ten and
+        a reward of one move every synapse by the same amount, and a trace's sign noise is
+        not averaged out by small outcomes. Zero without a cap."""
+        cap = self.config.dopamine_cap
+        if cap <= 0:
+            return 0.0
+        return float(np.mean(np.abs(np.asarray(delta)[observed]) > cap))
 
     def _saturation(self, free: BrainState) -> float:
         """The fraction of output activations within ``SATURATION_BAND`` of 0 or 1, where the
@@ -805,6 +817,7 @@ class ActorCritic:
         delta = td_error
         if cfg.dopamine_center > 0:
             delta = self._centre(delta, observed)
+        capped = self._capped(delta, observed)
         if cfg.dopamine_cap > 0:
             delta = np.clip(delta, -cfg.dopamine_cap, cfg.dopamine_cap)
         delta = np.where(observed, delta / observed.mean(), 0.0)
@@ -830,6 +843,7 @@ class ActorCritic:
         report["delta"] = float(np.abs(delta).mean())
         report["dopamine"] = float(delta.mean())
         report["td_error"] = float(np.abs(td_error[observed]).mean())
+        report["capped"] = capped
         report["value"] = float(value[observed].mean())
         report["free_steps"] = float(next_state.steps)
         report["saturation"] = self._saturation(free)

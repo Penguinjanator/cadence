@@ -152,6 +152,12 @@ repository's `verify.py` scripts are the pattern.
   keep parameters on the kernel.
 - The policy learns "always the same action": check the assay (every action needs an
   outcome) and the symmetry of the outcomes before touching the rule.
+- The greedy choice is the same whatever the observation, before and after an offline
+  replay of the brain's own day: read `report["capped"]` (outcomes beyond `dopamine_cap`
+  teach their sign alone) and `report["saturation"]`, compare `predict` with the greedy
+  `act`, and measure the per-observation policy of a frozen copy
+  ([replaying a life](reward.md#replaying-a-life-through-step)). On a single stream the
+  composed actor rate of 1.0 and the default working trace are the measured causes.
 - Before any of the below: `preflight(brain, outputs, plastic, drives)` reads the readouts'
   slope, the plastic senders' shared code and the seam's eligibility under the task's drives and
   names the remedy for each finding.
