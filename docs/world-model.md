@@ -14,6 +14,16 @@ It can already be deep. Optional **System 2** adds observing regions with return
 feedback inside the same neural settlement. Biological names describe software
 roles, not a literal biological implementation.
 
+**Simple first; animal brains are the reference.** Local agreement repair
+between patches into one coupled global equilibrium is the fixed foundation.
+Try the existing System 1 before adding structure; check state, experience,
+sensory information, memory and implementation first. Animal and human brains
+provide evolved working solutions within their environments. Cadence abstracts
+those functions, including finite capacity and possible rigidity; equilibrium
+does not promise perfect learning. Every addition must use the same local repair
+and settlement and preserve demonstrated capabilities under the
+[required mechanism review](../CONTRIBUTING.md#preserve-the-capable-foundation).
+
 | Wrong as the flagship application | Right organizing lifecycle |
 | --- | --- |
 | Rebuild a classifier for each observation, bypass memory, and count label accuracy as a world model. | Bootstrap one brain, retain its acquired relations and memory, use it, witness failures, repair and continue. |
