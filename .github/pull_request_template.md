@@ -7,7 +7,8 @@ and include:
 - The demonstrated limitation and why the simplest existing System 1 is insufficient.
 - The affected local boundaries and update law. Every addition must operate
   through local agreement repair in the same coupled global equilibrium.
-- The simpler control and the animal/human functional hypothesis being tested.
+- The simpler control, measured improvement on the declared limitation, and
+  information/work used, plus the animal/human functional hypothesis being tested.
   Biological names alone do not establish functionality.
 - Released/candidate fresh acquisition and acquired-checkpoint continuation,
   distinguishing historical settings, unchanged public arguments and opt-in genes.

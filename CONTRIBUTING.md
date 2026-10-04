@@ -17,8 +17,9 @@ environments, with finite capacity and possible rigidity.
 
 For any mechanism, learning or default change, the pull request must identify
 the demonstrated limitation, the affected local boundaries and update law,
-the simpler control, and the preservation evidence specified below. An added
-mechanism cannot be promoted if a required existing capability regresses.
+the simpler control, and the preservation evidence specified below. Promotion as a repair or new default also requires measured improvement on
+the declared limitation against that simpler control, with information and work
+disclosed. A required existing capability regression blocks promotion.
 Preserve failed comparisons and original acceptance gates; neither a biological
 name nor a qualified wrong equilibrium waives them.
 
