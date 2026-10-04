@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.73.1 — 2026-10-04
 
 - Distinguish signed activity below rest from silence (issue 106). Preserve the
   historical strict activity-fraction expected failure and add functional
@@ -16,6 +16,34 @@
   Composed defaults remain unnormalized; normalized rates stay per-application
   settings behind the 0.72.1 construction warning. Documentation only; no
   default or equation changes.
+
+- Harden the acquisition and retention instruments: admit source and input
+  identities before execution, distinguish executed outcomes from accepted
+  feedback, count memory writes only after commit, and charge final receipt
+  writes against declared time and storage limits. Preserve refused work and
+  complete case censuses, with independent verification and adversarial guards.
+- Make retention preparation work in a standalone checkout or source
+  distribution. Formal-source snapshots are explicitly requested inputs;
+  omitting them does not claim a formal verification result.
+- Add actual sampled-action association, partial-cue continuation and saved
+  feedback guards, and bounded finite-horizon input/trace checks. Broaden the
+  default test inventory to include the acquisition instrument guards.
+- Add a portable, read-only acquisition/retention results demo and document the
+  research wrap-up. The 360/360 partial-cue and 24/24 order-sensitive results are
+  bounded development screens from pinned 0.73.0 workers; fresh retention
+  confirmation, integrated replay and native transfer remain open in issues
+  [85](https://github.com/muellerberndt/cadence/issues/85) and
+  [110](https://github.com/muellerberndt/cadence/issues/110). Failed controls and
+  source/custody limits remain visible.
+- Require proposals to use local agreement repair into the same global
+  equilibrium, test the simplest existing System 1 first, and demonstrate
+  benefit while preserving acquired capabilities. Animal and human brains
+  remain the reference, including their finite capacity and possible rigidity.
+  Update contributor/agent instructions, review template and current guides.
+
+The numerical runtime, public defaults, learning and memory equations, and
+checkpoint contracts match 0.73.0. Experimental centering and a normalized
+composed default are not promoted by this release.
 
 ## 0.73.0 — 2026-10-04
 

@@ -24,6 +24,20 @@ import run as harness
 PEDAGOGY_SEED = 1100301
 
 
+def tree_bytes(root):
+    """Sample artifact sizes while completed siblings may be archived/removed."""
+    total = 0
+    for path in root.rglob("*"):
+        try:
+            if path.is_file():
+                total += path.stat().st_size
+        except FileNotFoundError:
+            # The coordinator removes loose duplicates only after verifying its
+            # archive. Disappearance between is_file and stat is expected.
+            continue
+    return total
+
+
 def curriculum(panel, count, stage):
     """Balanced shuffled family cycles; rotate the four observed variants."""
     rng = np.random.default_rng(np.random.SeedSequence([PEDAGOGY_SEED, stage]))
@@ -61,6 +75,7 @@ def recall(brain, panel):
 def stage(brain, train, dev, order, folder, deadline, *, mixed, output_admission_mib=32):
     folder.mkdir()
     brain.save(folder / "initial.npz")
+    journal = folder / "lessons.jsonl"
     report = {
         "status": "running",
         "lessons": [],
@@ -80,10 +95,7 @@ def stage(brain, train, dev, order, folder, deadline, *, mixed, output_admission
         if time.monotonic() >= deadline:
             report["status"] = "time_limit"
             break
-        if (
-            sum(p.stat().st_size for p in folder.parent.rglob("*") if p.is_file())
-            >= output_admission_mib * 1024**2
-        ):
+        if tree_bytes(folder.parent) >= output_admission_mib * 1024**2:
             report["status"] = "output_limit"
             break
         x, y = train["inputs"][[row]], train["labels"][[row]]
@@ -97,6 +109,9 @@ def stage(brain, train, dev, order, folder, deadline, *, mixed, output_admission
                 **lesson,
             }
         )
+        # Keep each attempted lesson even if the process stops between readbacks.
+        with journal.open("a") as stream:
+            stream.write(json.dumps(harness.json_value(report["lessons"][-1])) + "\n")
         report["accepted_updates"] += lesson["accepted"]
         report["refused_updates"] += not lesson["accepted"]
         if number % every == 0 or number == len(order) or lesson["failed"]:
@@ -106,6 +121,9 @@ def stage(brain, train, dev, order, folder, deadline, *, mixed, output_admission
                 "development": recall(brain, dev),
             }
             report["recall"].append(reading)
+            progress = folder / "progress.npz"
+            report["progress_sha256"] = harness.sha256(brain.save(progress))
+            report["progress_lessons"] = number
             if lesson["failed"]:
                 report["status"] = (
                     "refused_learning" if not lesson["accepted"] else "qualification_violation"
@@ -130,7 +148,9 @@ def stage(brain, train, dev, order, folder, deadline, *, mixed, output_admission
             if passed:
                 report["status"], report["passed"] = "development_passed", True
                 break
-            harness.write_json(folder / "receipt.json", report)
+            temporary = folder / "receipt.pending.json"
+            harness.write_json(temporary, report)
+            temporary.replace(folder / "receipt.json")
     else:
         report["status"] = "lesson_limit"
     count = len(report["lessons"])
@@ -155,6 +175,10 @@ def stage(brain, train, dev, order, folder, deadline, *, mixed, output_admission
         if mixed
         else 0,
         "phase_row_sweeps": sum(r["phase_row_sweeps"] for r in lessons),
+        "phase_stagnation_checks": sum(r["report"].get("total_stagnation_checks", 0)
+                                       for r in lessons),
+        "query_stagnation_checks": sum(r.get("reported_stagnation_checks", 0)
+                                       for r in queries),
         "reported_phase_row_residual_checks": sum(
             r["reported_row_residual_checks"] for r in lessons
         ),

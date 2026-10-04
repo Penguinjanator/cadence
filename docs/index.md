@@ -18,16 +18,16 @@ and [memory](memory.md) have distinct tested update rules. Internal consistency
 does not establish correct understanding or inexpensive computation.
 
 Python 3.11+ and NumPy are required.
-These guides use Cadence 0.73.0, including `last_settlement`:
+These guides use Cadence 0.73.1, including `last_settlement`:
 
 ```sh
-python -m pip install cadence-net==0.73.0
+python -m pip install cadence-net==0.73.1
 ```
 
 ## Start here
 
 For a version-pinned reading order, use the
-[release documentation](https://github.com/muellerberndt/cadence/blob/v0.73.0/docs/README.md).
+[release documentation](https://github.com/muellerberndt/cadence/blob/v0.73.1/docs/README.md).
 
 1. [The continuing world model](world-model.md): lifecycle, design intent and current boundaries.
 2. [Quickstart](quickstart.md): run one brain through observations and outcomes.
@@ -47,6 +47,7 @@ better decisions.
 | --- | --- |
 | Bootstrap, use, disruption and saved continuation in one life | [Continuing brain example](../examples/continuing_brain.py), [experience design](experience.md) |
 | Isolated graph learning or calibration controls | [Learning rule](learning.md), [task recipes](tasks.md) |
+| Historical acquisition/retention receipts and an offline viewer | [Acquisition protocol](../benchmarks/acquisition/README.md), [portable evidence viewer](../benchmarks/acquisition/demo/README.md) |
 | Trace and associative-memory rules | [Memory](memory.md), [continued learning](continuous.md) |
 | Event records, dreaming and sleep consolidation | [Record patch](record-patch.md), [day/night acquisition](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night) |
 | Learned environmental consequences and private action planning | [Interaction](interaction.md), [temporal model](temporal.md), [planning](planning.md) |

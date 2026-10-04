@@ -106,3 +106,18 @@ partial/noisy cues, finite-capacity competition, irregular event timing,
 pre-replacement continuation and an independently checked retention/separation
 bound remain outside this initial chamber. The original source-specific records
 remain historical evidence; rerunning a corrected protocol produces a new result.
+
+## Finite continuing input fixtures
+
+[The reviewed finite-horizon protocol](FINITE_HORIZON_PROTOCOL.md) is a paused
+scientific design. Its portable [pure input fixtures](finite_horizon_inputs.py)
+cover delay, distractors, replacement, partial/noisy cues, finite load, ordered
+histories and irregular event timing. Paired histories have opposite expected
+responses with identical current queries; the explicit history control reads
+only witnessed payloads. A separate literal recurrence checks trace updates,
+including refusal of skipped or extra events.
+
+These fixtures and their deterministic tests construct no brain and perform no
+learning or solve. They provide protocol and preservation checks, not a measured
+recall horizon. A finite-horizon worker/launcher is not shipped, and #84 remains
+open. The existing `vanished_cue.py` instrument above retains its separate scope.

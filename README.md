@@ -40,8 +40,13 @@ already supplies continuing action, local learning and memory. Integrated learne
 world prediction and automatic failure-triggered repair with cheap stable
 operation remain development goals. Cadence is alpha research software.
 
-The examples and guides use Cadence 0.73.0, including action diagnostics through
-`Brain.last_settlement`.
+The examples and guides use Cadence 0.73.1, including action diagnostics through
+`Brain.last_settlement`. This maintenance release strengthens preservation checks
+and research instruments while keeping the 0.73.0 numerical runtime and defaults.
+Start with the simplest existing System 1: proposed additions must remain local
+repair within the same equilibrium and demonstrate benefit without losing
+working capabilities. Animal and human brains guide the abstraction, including
+finite capacity and possible rigidity.
 
 ## How a Cadence brain differs from a feed-forward network
 
@@ -86,10 +91,10 @@ Python 3.11+ and NumPy are required.
 Install the published release for this basic example:
 
 ```sh
-python -m pip install cadence-net==0.73.0
+python -m pip install cadence-net==0.73.1
 ```
 
-Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.73.0/docs/README.md)
+Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.73.1/docs/README.md)
 describes the APIs included in that package.
 
 ```python
@@ -188,6 +193,13 @@ provides exact state-and-error readback under its own numerical contract.
 [cadence-demos](https://github.com/muellerberndt/cadence-demos) contains the active
 application demos. [cadence-examples](https://github.com/muellerberndt/cadence-examples)
 preserves research examples and viewer tools with their own declared library pins.
+
+The [research results demo](benchmarks/acquisition/demo/README.md) is a small,
+read-only viewer supplied in the source checkout and source distribution. It
+shows qualified successes, failed controls and the remaining #85/#110 boundaries;
+its bundled summaries do not replace verification of the external raw receipts.
+See the [acquisition report](benchmarks/acquisition/README.md) and
+[retention instruments](benchmarks/retention/README.md) for the measured scope.
 
 ## Related physics project
 

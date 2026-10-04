@@ -204,3 +204,46 @@ confirmation retains every founder and opens held-out data only for a matching
 recipe that passed development. A memory-control pass does not discharge the
 separate local-contrast gate; neither pass proves lifelong retention or an
 efficiency advantage.
+
+## 2026-10-04 receipt snapshot and portable viewer
+
+The [small offline viewer](demo/README.md) is included in source checkouts and
+source distributions. It presents compact historical summaries measured with
+recorded `0.73.0` source. Release packaging does not rerun those experiments;
+raw phases, checkpoints, logs and the private parent movie corpus stay external.
+The bundle retains all twenty founders: half rate 1/5, quarter rate 3/5,
+zero lateral 4/5 and local RMS 5/5. Source/protocol digests, every recorded
+readback, failures, work and continuation outcomes remain inspectable. Optional
+receipt upload checks byte identity only, not scientific replay.
+
+The controlled local RMS pass does not replace the native gate. The simpler
+existing `modules=(32,)` control passes selected native 2/2 and fresh 4/4; its
+24-row extension passes 18/24, but independent TRAIN 6/18 and development 0/19
+fail the unchanged 14/18 and 15/19 floors. Adding previously queried TRAIN
+examples in a matched coverage diagnostic reaches 3/19 reused development while
+selected recall falls 23/24 to 13/24. Selected repetitions are halved for eighteen
+actions, so that comparison does not separate dilution from actual forgetting.
+All 94 separate reference fits and 22 outcomes fail the original transfer gates.
+No external reference becomes the brain's learned answer head. A later raw text
+preview may have exposed target/held-out plaintext; future confirmation cannot
+claim potentially previewed rows were analyst-unexposed.
+
+Actual own-outcome evidence is stronger on the scoped ordered-context task:
+ABNQ/BANQ reaches 12/12 unused physical instances per order after transient
+reset and saved restoration. Graph-only, C food readback and integrated trace
+controls support only #85's first non-speech acquisition box. Historical actor
+phases retained as hashes are not independently regenerated. A separate matched
+partial-cue experience continuation recalls 360/360 reserved responses versus
+347/360 for full-only, uniform 192/360 and joint reset 128/360. It reuses four
+acquired seed-0 specimens in eight complete lives; no fresh confirmation or
+integrated historical replay is claimed. Earlier capped retention failures and
+the negative amplitude-2 readout remain in the research summary.
+
+Optional resting bias zero and `0.5` both pass five fresh matched bounded
+acquisition/retention/continuation pairs. Their unequal stopping and endpoint
+scores support functional qualification, not a better default or speed claim.
+#106's regression and explicit functional diagnosis merged in PR #136, preserving
+the original `.25` assertion and strict xfail. **#85 and #110 remain open.**
+Follow-up work preserves local agreement repair into coupled equilibrium and
+first checks the simplest existing state, experience, context and wiring,
+using abstracted animal behavior as the reference with finite limitations.
