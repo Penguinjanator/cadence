@@ -121,7 +121,7 @@ def compact_phase_recording():
     harness.phase_readback, harness.phase_file = readback, phase_file
 
 
-def make_brain(name, seed, args):
+def make_brain(name, seed, args, *, lateral=-0.5):
     gene = GENES[name]
     cfg = LearnerConfig(
         beta=0.1,
@@ -137,7 +137,12 @@ def make_brain(name, seed, args):
         qualified=True,
         damping=gene["damping"],
     )
-    model = Brain.compose(650, 36, modules=(32, 16), observers=(), seed=seed, learning=cfg)
+    # This microscope predates the width-dependent compose default. Its original
+    # motor circuit is part of each frozen gene, rather than a library default.
+    # A different lateral gene must be selected explicitly by its own capsule.
+    model = Brain.compose(
+        650, 36, modules=(32, 16), observers=(), lateral=lateral, seed=seed, learning=cfg
+    )
     graph = model.brain
     bias = graph.bias.copy()
     bias[model.sensory_index] = gene["sensory_bias"]

@@ -166,11 +166,13 @@ def recipe_configuration(recipe, args):
     if recipe == "qualified":
         if not hasattr(cfg, "qualified"):
             raise RuntimeError("this source does not provide opt-in qualified learning")
+        small_rms = getattr(args, "gene", "canonical") == "lateral0-small-rms"
         cfg = replace(
             cfg,
             qualified=True,
             damping=args.damping,
-            eta=args.rate,
+            eta=0.003 if small_rms else args.rate,
+            eta_bias=0.0003 if small_rms else cfg.eta_bias,
             free_steps=args.free_steps,
             nudged_steps=args.nudged_steps,
             nudge=args.nudge,
@@ -182,11 +184,17 @@ def recipe_configuration(recipe, args):
             # Transfer the no-lateral/local-RMS choices from the keyword control;
             # this school has different inputs, architecture, rates and data.
             cfg = replace(cfg, eta=args.rate, normalize=0.99, normalize_floor=1e-4)
+        if getattr(args, "gene", "canonical") == "lateral0-small-rms":
+            # Transfer the separately confirmed cue-school teacher recipe. The
+            # native movie is a different task and still needs its own evidence.
+            cfg = replace(cfg, eta=0.003, eta_bias=0.0003, normalize=0.99, momentum=0.0)
     gene = getattr(args, "gene", "canonical") if recipe == "qualified" else "canonical"
     return {
         "gene": gene,
         "learning": cfg.to_dict(),
-        "lateral": 0.0 if gene in ("lateral0-local-rms", "lateral0-resting") else -0.5,
+        "lateral": 0.0
+        if gene in ("lateral0-local-rms", "lateral0-resting", "lateral0-small-rms")
+        else -0.5,
         "resting_bias": 0.5 if gene == "lateral0-resting" else 0.0,
         "sensory_bias": 0.6 if gene == "fixed-lateral-local-rms" else 0.0,
         "freeze_motor_lateral": gene == "fixed-lateral-local-rms",
@@ -260,6 +268,7 @@ def free_recall(brain, inputs, labels, *, folder=None, name="recall"):
                 "residual": float(residual.max()),
                 "cache_defect": float(cache.max()),
                 "residual_checks": count,
+                "stagnation_checks": getattr(phase, "stagnation_checks", None),
             }
         )
     result = {
@@ -272,6 +281,8 @@ def free_recall(brain, inputs, labels, *, folder=None, name="recall"):
             "calls": len(labels),
             "row_sweeps": int(sweeps),
             "reported_residual_checks": int(checks),
+            "reported_stagnation_checks": sum(r["stagnation_checks"] or 0 for r in records),
+            "unreported_stagnation_work": any(r["stagnation_checks"] is None for r in records),
             "independent_residual_checks": len(labels),
             "unreported_residual_work": any(r["residual_checks"] is None for r in records),
         },
@@ -536,12 +547,13 @@ def main():
     parser.add_argument("--nudge", choices=("cross_entropy", "quadratic"), default="cross_entropy")
     parser.add_argument(
         "--rate", type=float, default=0.5,
-        help="qualified synaptic rate; fixed-lateral-local-rms always uses 0.005",
+        help="qualified synaptic rate; fixed-lateral-local-rms uses .005, lateral0-small-rms .003",
     )
     parser.add_argument("--tolerance", type=float, default=0.003)
     parser.add_argument(
         "--gene",
-        choices=("canonical", "fixed-lateral-local-rms", "lateral0-local-rms", "lateral0-resting"),
+        choices=("canonical", "fixed-lateral-local-rms", "lateral0-local-rms",
+                 "lateral0-resting", "lateral0-small-rms"),
         default="canonical",
     )
     parser.add_argument("--seconds", type=float, default=60)

@@ -151,6 +151,29 @@ def test_source_version_is_not_replaced_by_unrelated_installed_metadata(monkeypa
     assert identity["cadence_module"] == str(Path(run.cadence.__file__).resolve())
 
 
+def test_small_rms_native_transfer_keeps_exact_coupled_rates_and_control():
+    args = SimpleNamespace(rate=0.5, free_steps=4096, nudged_steps=4096,
+                           nudge="cross_entropy", damping=3, gene="lateral0-small-rms")
+    brain = run.make_brain("qualified", 0, args)
+    cfg = brain.learner.config
+    assert (cfg.eta, cfg.eta_bias, cfg.normalize, cfg.momentum, cfg.normalize_floor) == (
+        0.003, 0.0003, 0.99, 0.0, 0.001,
+    )
+    np.testing.assert_array_equal(brain.brain.bias, 0.0)
+    assert brain.learner.plastic_synapses.all() and brain.learner.plastic_neurons.all()
+    motor_edges = np.isin(brain.connectome.pre, brain.motor_index) & np.isin(
+        brain.connectome.post, brain.motor_index
+    )
+    assert not motor_edges.any()
+    args.rate = 0.05
+    assert run.recipe_configuration("qualified", args)["learning"] == cfg.to_dict()
+    finite = run.make_brain("finite", 0, args)
+    assert (finite.learner.config.eta, finite.learner.config.eta_bias,
+            finite.learner.config.momentum, finite.learner.config.normalize) == (
+        0.5, 0.02, 0.9, 0.0,
+    )
+
+
 def test_corrupted_source_receipt_refuses_extraction_before_writing(tmp_path):
     witness = tmp_path / "witness.json"
     verification = tmp_path / "verification.json"

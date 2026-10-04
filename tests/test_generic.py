@@ -75,6 +75,7 @@ def test_the_generic_brain_learns_a_contextual_bandit_from_dopamine() -> None:
 
 
 def test_the_hippocampus_keeps_a_rewarded_choice_after_one_trial() -> None:
+    """Assigned-record/readout control; actual sampled-action custody is tested separately."""
     frozen = cd.LearnerConfig(eta=0.0, eta_bias=0.0, tolerance=3e-3, nudged_steps=12)
     still = cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.0, eta_bias=0.0, eta_critic=0.0)
     brain = cd.Brain.build(
@@ -85,7 +86,9 @@ def test_the_hippocampus_keeps_a_rewarded_choice_after_one_trial() -> None:
     rewarded = (first + 1) % 4
     brain.reset()
     brain.act(cue)  # explore
-    brain._moment = (cue, np.array([rewarded]))  # the action the environment rewarded
+    # Assign a different record to isolate its influence on the otherwise frozen readout.
+    # This is a component control, not an executed action or a real outcome history.
+    brain._moment = (cue, np.array([rewarded]))
     brain.learn(np.array([1.0]), np.array([True]), cue)
     brain.reset()
     assert int(brain.act(cue, greedy=True)[0]) == rewarded
