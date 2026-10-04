@@ -41,8 +41,12 @@ def test_explicit_lateral_overrides_the_width_rule():
     brain = cd.Brain.compose(inputs=8, actions=36, modules=(8,), seed=0, lateral=-0.5)
     signs = motor_synapses(brain)
     assert len(signs) == 36 * 35 and np.all(signs == -0.5)
-    assert len(motor_synapses(cd.Brain.compose(inputs=8, actions=4, modules=(8,), seed=0,
-                                               lateral=0.0))) == 0
+    assert (
+        len(
+            motor_synapses(cd.Brain.compose(inputs=8, actions=4, modules=(8,), seed=0, lateral=0.0))
+        )
+        == 0
+    )
 
 
 def test_build_and_genome_follow_the_same_lateral_rule():
@@ -78,9 +82,17 @@ def readout_learner(outputs=36, **config):
         cd.Connectome.from_synapses(outputs, pre=[], post=[]),
         cd.learning_neuron_model(dt=1),
     )
-    return cd.Learner(graph, np.arange(outputs), cd.LearnerConfig(
-        qualified=True, free_steps=512, nudged_steps=512, tolerance=3e-3, **config,
-    ))
+    return cd.Learner(
+        graph,
+        np.arange(outputs),
+        cd.LearnerConfig(
+            qualified=True,
+            free_steps=512,
+            nudged_steps=512,
+            tolerance=3e-3,
+            **config,
+        ),
+    )
 
 
 def driven_readout(**config):
@@ -91,9 +103,17 @@ def driven_readout(**config):
         ),
         cd.learning_neuron_model(dt=1),
     )
-    return cd.Learner(graph, np.arange(36, 72), cd.LearnerConfig(
-        qualified=True, free_steps=512, nudged_steps=512, tolerance=3e-3, **config,
-    ))
+    return cd.Learner(
+        graph,
+        np.arange(36, 72),
+        cd.LearnerConfig(
+            qualified=True,
+            free_steps=512,
+            nudged_steps=512,
+            tolerance=3e-3,
+            **config,
+        ),
+    )
 
 
 def test_default_calibration_targets_the_top_output_not_the_mean():
@@ -128,11 +148,12 @@ def test_single_output_calibration_is_unchanged_by_the_competitive_default():
 
     def learner():
         return cd.Learner(
-            cd.NeuralGraph(graph, cd.learning_neuron_model(dt=1)), [1],
+            cd.NeuralGraph(graph, cd.learning_neuron_model(dt=1)),
+            [1],
             cd.LearnerConfig(qualified=True, free_steps=32, tolerance=1e-9),
         )
 
-    drive = np.array([[1., 0.]])
+    drive = np.array([[1.0, 0.0]])
     assert learner().calibrate(drive) == learner().calibrate(drive, level=0.5)
 
 
@@ -148,9 +169,7 @@ def test_slotted_calibration_takes_one_winner_per_slot():
         drive, budget=cfg.free_steps, tolerance=cfg.tolerance, damping=cfg.damping
     )
     outputs = phase.state.activation[:, learner.output_index]
-    expected = np.concatenate(
-        [outputs[:, :12].max(axis=1), outputs[:, 12:].max(axis=1)]
-    ).mean()
+    expected = np.concatenate([outputs[:, :12].max(axis=1), outputs[:, 12:].max(axis=1)]).mean()
     assert candidate["top_output"] == pytest.approx(expected, abs=1e-12)
     assert candidate["mean_output"] == pytest.approx(outputs.mean(), abs=1e-12)
     assert candidate["top_output"] > candidate["mean_output"]
@@ -200,9 +219,15 @@ def exhausted_learner(tolerance=3e-3):
         cd.Connectome.from_synapses(36, pre=pre, post=post, sign=np.full(len(pre), -0.5)),
         cd.learning_neuron_model(dt=1),
     )
-    return cd.Learner(graph, np.arange(36), cd.LearnerConfig(
-        free_steps=2, nudged_steps=2, tolerance=tolerance,
-    ))
+    return cd.Learner(
+        graph,
+        np.arange(36),
+        cd.LearnerConfig(
+            free_steps=2,
+            nudged_steps=2,
+            tolerance=tolerance,
+        ),
+    )
 
 
 def test_exhausted_finite_free_phase_warns_and_is_counted():
@@ -217,9 +242,7 @@ def test_exhausted_finite_free_phase_warns_and_is_counted():
 def test_fixed_length_phases_and_settled_phases_stay_silent():
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        _, report = exhausted_learner(tolerance=None).step(
-            np.full((1, 36), 0.2), np.array([0])
-        )
+        _, report = exhausted_learner(tolerance=None).step(np.full((1, 36), 0.2), np.array([0]))
     assert report["free_budget_exhausted"] == 0.0
 
     settled = readout_learner()
@@ -234,7 +257,10 @@ def test_fixed_length_phases_and_settled_phases_stay_silent():
 def test_brain_step_reports_the_exhausted_demonstration():
     composed = cd.Brain.compose(inputs=4, actions=2, modules=(4,), seed=0)
     brain = cd.Brain.compose(
-        inputs=4, actions=2, modules=(4,), seed=0,
+        inputs=4,
+        actions=2,
+        modules=(4,),
+        seed=0,
         learning=replace(composed.learner.config, free_steps=1),
     )
     # The lesson is taught and counted before the following answer, whose
@@ -244,3 +270,39 @@ def test_brain_step_reports_the_exhausted_demonstration():
             brain.step(np.array([[0.6, 0.1, 0.2, 0.9]]), teacher=np.array([1]))
     assert brain.last_learning["demonstration_free_budget_exhausted"] == 1.0
     assert brain.last_learning["demonstration_accepted"] == 1.0
+
+
+# -- issue 143: the actor's bias rate follows its synapse rate
+
+
+def test_actor_eta_bias_defaults_to_a_tenth_of_eta():
+    assert cd.ActorCriticConfig().eta_bias == pytest.approx(0.05)  # eta 0.5: unchanged
+    assert cd.ActorCriticConfig(eta=0.002).eta_bias == pytest.approx(0.0002)
+    assert cd.ActorCriticConfig(eta=0.0).eta_bias == 0.0
+    assert cd.ActorCriticConfig(eta=0.002, eta_bias=0.0001).eta_bias == 0.0001
+
+
+def test_actor_replace_keeps_the_resolved_bias_rate_unless_rederived():
+    config = cd.ActorCriticConfig(eta=0.5)
+    lowered = replace(config, eta=0.002, eta_bias=None)
+    assert lowered.eta_bias == pytest.approx(0.0002)
+    with pytest.warns(RuntimeWarning, match="ActorCriticConfig.*bias step dominates"):
+        kept = replace(config, eta=0.002)
+    assert kept.eta_bias == pytest.approx(0.05)
+
+
+def test_actor_dominating_bias_rate_warns_and_zero_eta_stays_silent():
+    with pytest.warns(RuntimeWarning, match="ActorCriticConfig.*bias step dominates"):
+        cd.ActorCriticConfig(eta=0.002, eta_bias=0.05)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        cd.ActorCriticConfig(eta=0.0, eta_bias=0.05)  # bias-only learning is a control
+        cd.ActorCriticConfig(eta=0.2, eta_bias=0.2)
+
+
+def test_composed_actor_keeps_its_measured_bias_rate():
+    brain = cd.Brain.compose(inputs=4, actions=3, modules=(8,), seed=0)
+    config = brain.basal_ganglia.config
+    assert config.eta == 1.0 and config.eta_bias == 0.05
+    saved = config.to_dict()
+    assert saved["eta_bias"] == 0.05 and cd.ActorCriticConfig(**saved) == config

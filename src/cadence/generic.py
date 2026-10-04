@@ -40,7 +40,7 @@ from .genome import Genome, Projection, develop
 from .learning import Learner, LearnerConfig, learning_neuron_model
 from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
-from .regions import Region, motor_cortex, prefrontal_cortex, visual_cortex
+from .regions import Region, motor_cortex, prefrontal_cortex, slot_sizes, visual_cortex
 from .stream import FastSynapses, PatternSeparator, Trace
 
 __all__ = ["Brain"]
@@ -86,7 +86,12 @@ def _learning() -> LearnerConfig:
 
 
 def _reward() -> ActorCriticConfig:
-    return ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_critic=0.3, eligibility_steps=12)
+    # The composed actor keeps its measured bias rate, 0.05 at eta 1.0: the release matrices
+    # and the application evidence were taken with it. A bare ActorCriticConfig derives
+    # eta / 10 (issue 143).
+    return ActorCriticConfig(
+        gamma=0.9, lam=0.8, eta=1.0, eta_bias=0.05, eta_critic=0.3, eligibility_steps=12
+    )
 
 
 def _validate_resting_bias(value: Any) -> float:
@@ -272,12 +277,10 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
         if not meta.get("pending", False):
             raise ValueError("saved action observations need pending credit")
         array("moment/observations", (batch, sensory))
-        action = array("moment/action", (batch,))
-        if (
-            action.dtype.kind not in "iu"
-            or (action < 0).any()
-            or (action >= len(learner.output_index)).any()
-        ):
+        slotted = learner.slot_count > 1
+        action = array("moment/action", (batch, learner.slot_count) if slotted else (batch,))
+        limit = learner.slot_sizes[None, :] if slotted else len(learner.output_index)
+        if action.dtype.kind not in "iu" or (action < 0).any() or (action >= limit).any():
             raise ValueError("invalid saved action indices")
     working = meta["working_memory"]
     if working is not None:
@@ -310,6 +313,7 @@ class Brain:
         learning: LearnerConfig | None = None,
         reward: ActorCriticConfig | None = None,
         resting_bias: float = 0.0,
+        slots: int | Sequence[int] = 1,
         seed: int = 0,
         backend: Backend = "cpu",
         device: str | None = None,
@@ -344,7 +348,7 @@ class Brain:
             connectome, learning_neuron_model(dt=1.0), backend=backend, device=device, bias=bias
         )
         self.resting_bias = resting_bias
-        self.learner = Learner(brain, list(self.motor_index), learning or _learning())
+        self.learner = Learner(brain, list(self.motor_index), learning or _learning(), slots=slots)
         self.basal_ganglia = ActorCritic(
             self.learner, list(self.association_index), reward or _reward(), seed=seed
         )
@@ -409,15 +413,22 @@ class Brain:
         features: int = 8,
         field: int = 3,
         seed: int = 0,
+        slots: int | Sequence[int] = 1,
     ) -> Genome:
         """The default layout: ``inputs`` is a vector length or an image shape
         ``(height, width)`` or ``(height, width, channels)``.
 
         ``lateral`` left unset keeps -0.5 motor inhibition up to 8 actions and
         removes it for wider readouts, where it stops the free solve from
-        settling; an explicit value is used as given."""
+        settling; an explicit value is used as given. ``slots`` groups the motor
+        neurons into several readouts, one softmax each, with lateral inhibition
+        within a slot and the unset ``lateral`` following the largest slot."""
         if lateral is None:
-            lateral = _default_lateral(actions) if isinstance(actions, (int, np.integer)) else 0.0
+            lateral = (
+                _default_lateral(max(slot_sizes(int(actions), slots)))
+                if isinstance(actions, (int, np.integer))
+                else 0.0
+            )
         if isinstance(inputs, (int, np.integer)):
             sensory = Region("sensory", inputs)
             forward = Projection("sensory", "association", density=density, reciprocal=False)
@@ -437,7 +448,11 @@ class Brain:
                 seed=seed,
             )
             forward = Projection("visual", "association", density=density)
-        regions = [sensory, Region("association", hidden), motor_cortex(actions, lateral=lateral)]
+        regions = [
+            sensory,
+            Region("association", hidden),
+            motor_cortex(actions, lateral=lateral, slots=slots),
+        ]
         projections = [forward, Projection("association", "motor")]
         if working_memory:
             regions.insert(1, prefrontal_cortex(hidden))
@@ -463,6 +478,7 @@ class Brain:
         features: int = 8,
         field: int = 3,
         seed: int = 0,
+        slots: int | Sequence[int] = 1,
         **options: Any,
     ) -> Brain:
         """Develop the default genome and wrap it; ``options`` go to the constructor."""
@@ -477,8 +493,9 @@ class Brain:
             features=features,
             field=field,
             seed=seed,
+            slots=slots,
         )
-        return cls(develop(genome, seed=seed), episodic=episodic, seed=seed, **options)
+        return cls(develop(genome, seed=seed), episodic=episodic, seed=seed, slots=slots, **options)
 
     @classmethod
     def compose(
@@ -490,6 +507,7 @@ class Brain:
         observers: Sequence[int] = (),
         lateral: float | None = None,
         seed: int = 0,
+        slots: int | Sequence[int] = 1,
         **options: Any,
     ) -> Brain:
         """Compose a modular brain with working memory and consolidation.
@@ -510,6 +528,12 @@ class Brain:
         development tasks; changing inhibition does not itself establish a
         responsive or useful learner.
 
+        ``slots`` groups the motor neurons into several readouts that settle
+        together, one softmax each: a count of equal groups, or one size per group
+        covering ``actions``. ``act`` and ``step`` then return one index per slot,
+        lateral inhibition stays within a slot, and the unset ``lateral`` follows
+        the largest slot. One slot is one choice over every action.
+
         This reuses the existing trace, synaptic memory and learning mechanisms.
         Observer wiring is an experiment, not evidence of learned self-reflection.
         Inputs are fixed external drives; their neural representations can vary.
@@ -528,7 +552,7 @@ class Brain:
 
         inputs, actions = size(inputs), size(actions)
         if lateral is None:
-            lateral = _default_lateral(actions)
+            lateral = _default_lateral(max(slot_sizes(actions, slots)))
         if (
             isinstance(lateral, (bool, np.bool_))
             or not isinstance(lateral, (int, float, np.integer, np.floating))
@@ -558,7 +582,9 @@ class Brain:
         names = [f"module_{index}" for index in range(len(widths) - 1)] + ["association"]
         regions = [Region("sensory", inputs)]
         regions.extend(Region(name, width) for name, width in zip(names, widths, strict=True))
-        regions.extend((prefrontal_cortex(widths[-1]), motor_cortex(actions, lateral=lateral)))
+        regions.extend(
+            (prefrontal_cortex(widths[-1]), motor_cortex(actions, lateral=lateral, slots=slots))
+        )
         projections = [Projection("sensory", names[0], reciprocal=False)]
         projections.extend(
             Projection(left, right) for left, right in zip(names, names[1:], strict=False)
@@ -576,7 +602,7 @@ class Brain:
             projections.extend(Projection(source, name) for source in observed)
             observed.append(name)
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
-        return cls(develop(genome, seed=seed), seed=seed, **options)
+        return cls(develop(genome, seed=seed), seed=seed, slots=slots, **options)
 
     # -- stimulus
 
@@ -654,7 +680,10 @@ class Brain:
         brain = self.brain
         if cfg.qualified:
             return brain.equilibrate(
-                drive, state=_copy_state(state), budget=budget, tolerance=tolerance,
+                drive,
+                state=_copy_state(state),
+                budget=budget,
+                tolerance=tolerance,
                 damping=cfg.damping,
             )
         first_budget = budget if budget < 2 else (budget + 1) // 2
@@ -685,7 +714,10 @@ class Brain:
         )
         residual = brain.residual(drive, following.state)
         return Equilibrium(
-            following.state, residual, phase.steps + following.steps, tolerance,
+            following.state,
+            residual,
+            phase.steps + following.steps,
+            tolerance,
             residual_checks=phase.residual_checks + following.residual_checks + 1,
             damping_halvings=1,
         )
@@ -700,20 +732,22 @@ class Brain:
         phase = self._equilibrate(drive, state, budget=cfg.free_steps, tolerance=cfg.tolerance)
         rows = tuple(bool(value) for value in phase.qualified)
         residual = tuple(float(value) for value in phase.residual)
-        self._last_settlement = MappingProxyType({
-            "operation": operation,
-            "scope": "free_answer",
-            "qualified": all(rows),
-            "row_qualified": rows,
-            "residual": residual,
-            "max_residual": max(residual),
-            "steps": int(phase.steps),
-            "budget": int(cfg.free_steps),
-            "tolerance": float(phase.tolerance),
-            "residual_checks": int(phase.residual_checks),
-            "damping_halvings": int(phase.damping_halvings),
-            "stagnation_checks": int(phase.stagnation_checks),
-        })
+        self._last_settlement = MappingProxyType(
+            {
+                "operation": operation,
+                "scope": "free_answer",
+                "qualified": all(rows),
+                "row_qualified": rows,
+                "residual": residual,
+                "max_residual": max(residual),
+                "steps": int(phase.steps),
+                "budget": int(cfg.free_steps),
+                "tolerance": float(phase.tolerance),
+                "residual_checks": int(phase.residual_checks),
+                "damping_halvings": int(phase.damping_halvings),
+                "stagnation_checks": int(phase.stagnation_checks),
+            }
+        )
         if not all(rows):
             raise RuntimeError(
                 f"brain did not settle within {cfg.free_steps} steps: "
@@ -935,30 +969,41 @@ class Brain:
         memory = self.hippocampus
         # Synaptic writes replace arrays, so retain their old references rather
         # than copying a potentially large persistent matrix for every outcome.
-        memory_values = {} if memory is None else {
-            name: getattr(memory, name) for name in ("strength", "mass", "writes")
-        }
+        memory_values = (
+            {}
+            if memory is None
+            else {name: getattr(memory, name) for name in ("strength", "mass", "writes")}
+        )
         if isinstance(memory, SynapticMemory):
             memory_values["consolidated"] = memory.consolidated
         separator_mean = (
             None if memory is None or memory.separator is None else memory.separator.mean
         )
         trace = self.working_memory
-        trace_values = {} if trace is None or not done.any() else {
-            name: getattr(trace, name).copy() for name in ("trace", "last", "cold")
-        }
+        trace_values = (
+            {}
+            if trace is None or not done.any()
+            else {name: getattr(trace, name).copy() for name in ("trace", "last", "cold")}
+        )
         try:
             if memory is not None and self._moment is not None:
                 keys, action = self._moment
+                # The chosen motor neurons in motor order: one per row, or one per slot.
+                rows: np.ndarray = np.arange(len(action))
+                value: np.ndarray = reward
+                chosen: np.ndarray = action
+                if action.ndim == 2:
+                    chosen = action + self.learner.slot_offsets[None, :]
+                    rows, value = rows[:, None], reward[:, None]
                 if isinstance(memory, SynapticMemory):
                     target = np.zeros((len(action), len(self.motor_index)))
-                    target[np.arange(len(action)), action] = reward
+                    target[rows, chosen] = value
                     observed = np.zeros(target.shape, bool)
-                    observed[np.arange(len(action)), action] = True
+                    observed[rows, chosen] = True
                     memory.observe(keys, target, salience=importance, value_mask=observed)
                 else:
                     target = memory.recall(keys)
-                    target[np.arange(len(action)), action] = reward
+                    target[rows, chosen] = value
                     memory.observe(keys, target)
             if trace is not None and done.any():
                 trace.reset(len(done), rows=np.flatnonzero(done))
@@ -1098,7 +1143,10 @@ class Brain:
                 raise ValueError("invalid or incomplete saved continuation state") from exc
             memory = _load_memory(meta["hippocampus"], data, learner.brain.connectome.n)
             result = cls(
-                learner.brain.connectome, episodic=False, reward=ActorCriticConfig(**meta["reward"])
+                learner.brain.connectome,
+                episodic=False,
+                reward=ActorCriticConfig(**meta["reward"]),
+                slots=[int(k) for k in learner.slot_sizes],
             )
             result.learner = learner
             # Initialization provenance is separate from the saved, possibly learned bias.

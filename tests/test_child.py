@@ -281,7 +281,13 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
             learner,
             connectome.populations["hidden"],
             cd.ActorCriticConfig(
-                gamma=1.0, lam=0.9, eta=1.0, eta_critic=0.0, dopamine_center=0.0, dopamine_cap=0.0
+                gamma=1.0,
+                lam=0.9,
+                eta=1.0,
+                eta_bias=0.05,  # the historical recipe of this measurement (issue 143)
+                eta_critic=0.0,
+                dopamine_center=0.0,
+                dopamine_cap=0.0,
             ),
             seed=0,
         )

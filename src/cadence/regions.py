@@ -32,6 +32,7 @@ hippocampus into one ready brain.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
@@ -95,14 +96,50 @@ class Region:
         return out
 
 
-def _lateral(n: int, weight: float) -> tuple[list[int], list[int], list[float]]:
+def _lateral(
+    n: int, weight: float, groups: Sequence[int] | None = None
+) -> tuple[list[int], list[int], list[float]]:
+    """Every ordered pair of distinct neurons, within each group when ``groups`` is given."""
     if weight == 0.0 or n < 2:
         return [], [], []
-    a, b = np.meshgrid(np.arange(n), np.arange(n), indexing="ij")
-    keep = a.ravel() != b.ravel()
-    pre = a.ravel()[keep].tolist()
-    post = b.ravel()[keep].tolist()
+    pre: list[int] = []
+    post: list[int] = []
+    start = 0
+    for size in groups or [n]:
+        index = np.arange(start, start + size)
+        a, b = np.meshgrid(index, index, indexing="ij")
+        keep = a.ravel() != b.ravel()
+        pre.extend(int(i) for i in a.ravel()[keep])
+        post.extend(int(i) for i in b.ravel()[keep])
+        start += size
     return pre, post, [weight] * len(pre)
+
+
+def slot_sizes(actions: int, slots: int | Sequence[int]) -> list[int]:
+    """The motor slots: ``slots`` equal groups, or one size per group, covering ``actions``.
+
+    One slot is one choice over every action. Several slots settle together and are read as
+    one softmax each: an action with several parts has one slot per part.
+    """
+    if isinstance(slots, (bool, np.bool_, str, bytes)):
+        raise ValueError("slots is a count of equal groups or a sequence of group sizes")
+    if isinstance(slots, (int, np.integer)):
+        if slots < 1 or actions % int(slots):
+            raise ValueError("slots must divide the number of actions")
+        return [actions // int(slots)] * int(slots)
+    try:
+        items = list(slots)
+    except TypeError as exc:
+        raise ValueError("slots is a count of equal groups or a sequence of group sizes") from exc
+    if not items or any(
+        isinstance(k, (bool, np.bool_)) or not isinstance(k, (int, np.integer)) or k < 1
+        for k in items
+    ):
+        raise ValueError("slot sizes must be positive integers")
+    sizes = [int(k) for k in items]
+    if sum(sizes) != actions:
+        raise ValueError("slot sizes must add up to the number of actions")
+    return sizes
 
 
 def cortex(size: int, *, lateral: float = 0.0, name: str = "association") -> Region:
@@ -124,17 +161,22 @@ def cortex(size: int, *, lateral: float = 0.0, name: str = "association") -> Reg
     return Region(name, circuit=circuit)
 
 
-def motor_cortex(actions: int, *, lateral: float = 0.0, name: str = "motor") -> Region:
+def motor_cortex(
+    actions: int, *, lateral: float = 0.0, name: str = "motor", slots: int | Sequence[int] = 1
+) -> Region:
     """One neuron per action, with optional lateral inhibition; population ``actions``.
 
     A body or an environment reads the choice from the most active neuron or from a softmax
     over them. Continuous control with opposing muscles uses ``cadence.circuits.reflex_arc``.
+    With several ``slots`` (see ``slot_sizes``) the lateral inhibition stays within each slot:
+    the slots are separate competitions that settle together.
     """
     if isinstance(actions, bool) or not isinstance(actions, (int, np.integer)) or actions < 1:
         raise ValueError("actions must be a positive integer")
     if not np.isfinite(lateral):
         raise ValueError("lateral must be finite")
-    pre, post, sign = _lateral(actions, lateral)
+    sizes = slot_sizes(int(actions), slots)
+    pre, post, sign = _lateral(actions, lateral, sizes if len(sizes) > 1 else None)
     circuit = Connectome.from_synapses(
         actions,
         pre=pre,

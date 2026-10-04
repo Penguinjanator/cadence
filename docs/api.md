@@ -5,8 +5,8 @@ and optional observers. [NeuralGraph](#neuralgraph-cadence) is the lower-level
 graph API. The [quickstart](quickstart.md) runs the main interaction loop;
 sections below describe specialist operations. Pass optional arguments by keyword.
 
-This reference describes Cadence 0.73.1, including `Brain.last_settlement`
-diagnostics. Install it with `python -m pip install cadence-net==0.73.1`.
+This reference describes Cadence 0.74.0, including `Brain.last_settlement`
+diagnostics. Install it with `python -m pip install cadence-net==0.74.0`.
 
 The temporal patch: [TemporalPatchNet](#temporalpatchnet-cadencetemporal),
 [TemporalPlan](#temporalplan-cadenceplanning), [TemporalMemory](#temporalmemory-cadencetemporal_memory),
@@ -681,8 +681,12 @@ to positive region widths to add optional System 2 state feedback within the
 same neural-graph settlement. This is an implemented interface, not a claim
 that recursive benefit or automatic reflective behavior has been learned.
 
-- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, seed=0, **options) -> Brain`:
-  the direct vector-input constructor. Positive `modules` widths form a reciprocal
+- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, seed=0, slots=1, **options) -> Brain`:
+  the direct vector-input constructor. `slots` groups the motor neurons into several
+  softmax readouts that settle together, a count of equal groups or one size per group
+  covering `actions`: `act` and `step` return one index per slot, lateral inhibition
+  stays within a slot, the unset `lateral` follows the largest slot, and `save`/`load`
+  carry the grouping (issue 142). Positive `modules` widths form a reciprocal
   processing chain; the final module is the association cortex. Optional positive
   `observers` widths add regions with reciprocal state-reading and returning connections
   to every processing and motor region and earlier observers. The sensory, prefrontal
@@ -699,7 +703,7 @@ that recursive benefit or automatic reflective behavior has been learned.
   about 12 actions (issue 124). An explicit value is used as given; compare
   observed operating points rather than assuming the same activity at every
   vocabulary size.
-- `Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, **options)`:
+- `Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, slots=1, **options)`:
   develops `Brain.genome(...)` and wraps it. `inputs` is a vector length, or an image
   shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
   to the constructor.
@@ -708,7 +712,7 @@ that recursive benefit or automatic reflective behavior has been learned.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `Brain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, resting_bias=0.0, seed=0, backend="cpu", device=None)`:
+- `Brain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, resting_bias=0.0, slots=1, seed=0, backend="cpu", device=None)`:
   `resting_bias` is a finite nonnegative real scalar; booleans and arrays are rejected.
   It initializes named populations outside the `sensory`, `visual`, `prefrontal`
   and `motor` families (the part of the name before `/`). Excluded family membership
@@ -722,7 +726,8 @@ that recursive benefit or automatic reflective behavior has been learned.
   The connectome needs populations `sensory` or `visual/input`, `association` and `motor`, and uses
   `prefrontal` for a working memory when present. `learning` defaults to
   `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, free_steps=1024, nudged_steps=12, momentum=0.9)` (whose unset `eta_bias` derives `eta / 10` = 0.05),
-  `reward` to `ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_critic=0.3, eligibility_steps=12)`.
+  `reward` to `ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_bias=0.05, eta_critic=0.3, eligibility_steps=12)`,
+  the measured composed bias rate; a bare `ActorCriticConfig` derives `eta / 10`.
   The live model and finite teaching phases retain `dt=1.0`. Qualified free
   settlement reserves roughly half its sweep budget for a numerical fallback:
   if the initial finite state does not qualify, continue with half the integration
@@ -1071,8 +1076,11 @@ that recursive benefit or automatic reflective behavior has been learned.
     `(batch, dims, size)` with `Bins`), `settle(drive)`,
     `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
     `salience`, `delta_mean`, `delta_var`.
-- `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=0.05, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="auto", eligibility_steps=None)`:
+- `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=None, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="auto", eligibility_steps=None)`:
   `gamma` the discount and `lam` the trace's decay; `eta` and `eta_bias` the actor's rates,
+  where `eta_bias` left as `None` derives `eta / 10` at construction, an explicit value
+  is used as given, and construction warns when the bias rate exceeds a positive `eta`
+  (issue 143);
   `eta_critic` the critic's; `normalize` and `momentum` the adaptive local step, as the
   learner's, with the actor's own history and a fixed RMS floor of `1e-3`.
   Construction emits `RuntimeWarning` if `normalize > 0` and either actor rate

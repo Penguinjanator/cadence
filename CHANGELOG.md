@@ -1,6 +1,21 @@
 # Changelog
 
-## Unreleased
+## 0.74.0 — 2026-10-04
+
+- `ActorCriticConfig.eta_bias` left unset derives `eta / 10` at construction, the
+  rule of issue 126 applied to the actor ([issue 143](https://github.com/muellerberndt/cadence/issues/143)).
+  An explicit value is used as given; construction warns when the bias rate exceeds a
+  positive `eta`. The bare default (`eta=0.5`) resolves to the former 0.05, and the
+  composed brain keeps its measured `eta_bias=0.05` at `eta=1.0`, so composed and
+  default brains are unchanged; an actor with a lowered `eta` and no explicit bias
+  rate learns with a bias step a tenth of its synapse step instead of 25 times it.
+- Grouped motor slots on the composed brain ([issue 142](https://github.com/muellerberndt/cadence/issues/142)):
+  `Brain.compose`, `Brain.build`, `Brain.genome` and `Brain(...)` take `slots`, a
+  count of equal groups or one size per group covering the actions. Each slot is one
+  softmax that settles with the others; `act` and `step` return one index per slot;
+  lateral inhibition stays within a slot and the unset `lateral` follows the largest
+  slot; episodic memory writes the chosen neuron of every slot; `Brain.load` rebuilds
+  the actor on the saved grouping. One slot is the unchanged default.
 
 - Report `capped`, the share of observed rows whose dopamine exceeded `dopamine_cap`
   before the clip, in every `learn` report and through `Brain.last_learning`
