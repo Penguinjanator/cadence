@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.74.0 — 2026-10-04
 
 - `ActorCriticConfig.eta_bias` left unset derives `eta / 10` at construction, the
   rule of issue 126 applied to the actor ([issue 143](https://github.com/muellerberndt/cadence/issues/143)).
