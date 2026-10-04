@@ -49,8 +49,9 @@ The native and actual-outcome panel preserves the research sequence:
   while selected recall falls 23/24 to 13/24. Selected repeats are halved for
   eighteen actions, so dilution and forgetting are not separated.
 - All 94 non-Cadence reference fits and 22 scoring outcomes remain negative at
-  the original transfer gates. Eighteen of nineteen development stage codes
-  were absent from teaching metadata; that does not prove new physical levels
+  the original transfer gates. Eighteen of nineteen development rows have stage-channel codes
+  absent from teaching metadata (the distinct codes are 13, 14 and 18); that does
+  not prove new physical levels
   or impossibility. A later corpus text preview may have exposed target or
   held-out plaintext. Future confirmation must not call those rows
   analyst-unexposed; the historical failures remain unchanged.
