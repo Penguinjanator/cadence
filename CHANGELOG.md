@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- Add the bounded steady-rhythm chamber (`benchmarks/rhythm`) for
+  [issue 116](https://github.com/muellerberndt/cadence/issues/116): one
+  continuing `Brain.compose` life taught to alternate two actions under constant
+  drive, with frozen inputs, a frozen protocol, a declared physical event
+  cadence, checkpoint-forked erased/shuffled/reset/static controls, a matched
+  flip-flop control, a uniform-random baseline, pause/distractor disturbances,
+  paced runs under solver-budget and host-load variation, and checkpoint
+  continuation checks between actions and during a pause. Results are measured
+  limits of the current System 1 on five fresh seeds; no core source, default,
+  mechanism or gene changes.
+
 ## 0.74.0 — 2026-10-04
 
 - `ActorCriticConfig.eta_bias` left unset derives `eta / 10` at construction, the
@@ -17,16 +30,6 @@
   slot; episodic memory writes the chosen neuron of every slot; `Brain.load` rebuilds
   the actor on the saved grouping. One slot is the unchanged default.
 
-- Add the bounded steady-rhythm chamber (`benchmarks/rhythm`) for
-  [issue 116](https://github.com/muellerberndt/cadence/issues/116): one
-  continuing `Brain.compose` life taught to alternate two actions under constant
-  drive, with frozen inputs, a frozen protocol, a declared physical event
-  cadence, checkpoint-forked erased/shuffled/reset/static controls, a matched
-  flip-flop control, a uniform-random baseline, pause/distractor disturbances,
-  paced runs under solver-budget and host-load variation, and checkpoint
-  continuation checks between actions and during a pause. Results are measured
-  limits of the current System 1 on five fresh seeds; no core source, default,
-  mechanism or gene changes.
 - Report `capped`, the share of observed rows whose dopamine exceeded `dopamine_cap`
   before the clip, in every `learn` report and through `Brain.last_learning`
   ([issue 139](https://github.com/muellerberndt/cadence/issues/139)). Add the
