@@ -59,6 +59,14 @@ damped answers take about nine times the sweeps (issue 124). Inspect free
 activity and its full residual on the actual task before selecting a
 different value.
 
+`Brain.compose(..., slots=...)` groups the motor neurons into several readouts that
+settle together, one softmax each: a count of equal groups, or one size per group
+covering `actions`. An action with several parts, such as kind, pitch class and
+octave for a row of music, is one slot per part instead of one softmax over every
+combination. `act` and `step` return one index per slot, lateral inhibition stays
+within a slot, the unset `lateral` follows the largest slot, and `save`/`load` carry
+the grouping (issue 142).
+
 `Brain.compose(..., resting_bias=0.5)` initializes the modules, association region
 and any observers with that bias. Sensory, working-memory and motor biases start
 at zero. The value must be a finite nonnegative real scalar; booleans and arrays

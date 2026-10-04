@@ -131,14 +131,10 @@ class Valence:
                 if not isinstance(mean, np.ndarray) or len(mean) != len(delta):
                     mean, var = np.zeros(len(delta)), np.zeros(len(delta))
                 mean = np.where(known, rho * mean + (1 - rho) * delta, mean)
-                var = np.where(
-                    known, rho * var + (1 - rho) * (delta - mean) ** 2, var
-                )
+                var = np.where(known, rho * var + (1 - rho) * (delta - mean) ** 2, var)
             else:
                 mean = rho * mean + (1 - rho) * float(delta[known].mean())
-                var = rho * var + (1 - rho) * float(
-                    ((delta[known] - mean) ** 2).mean()
-                )
+                var = rho * var + (1 - rho) * float(((delta[known] - mean) ** 2).mean())
             if not np.isfinite(mean).all() or not np.isfinite(var).all():
                 raise ValueError("valence moments must remain finite")
             self.mean, self.var = mean, var
@@ -165,7 +161,7 @@ class ActorCriticConfig:
     gamma: float = 0.99  # discount
     lam: float = 0.9  # trace decay of the actor's eligibility
     eta: float = 0.5  # actor step per unit dopamine per unit trace
-    eta_bias: float = 0.05
+    eta_bias: float | None = None  # bias step; None derives eta / 10 at construction (issue 143)
     eta_critic: float = 0.05
     normalize: float = 0.0  # >0: forgetting factor of the per-synapse RMS that divides its step
     # >0: each synapse steps on a running average of its own steps, so sign noise cancels before
@@ -209,6 +205,14 @@ class ActorCriticConfig:
             or self.eligibility_steps < 0
         ):
             raise ValueError("eligibility_steps must be a nonnegative integer, or None")
+        if self.eta_bias is None:
+            # The bias rate follows the synapse rate unless chosen: issue 143, the rule of
+            # issue 126 for the actor. Under RMS normalization both are absolute steps.
+            if not np.isfinite(self.eta) or self.eta < 0:
+                raise ValueError("eta must be finite and nonnegative")
+            object.__setattr__(self, "eta_bias", self.eta / 10.0)
+        eta_bias = self.eta_bias
+        assert eta_bias is not None
         for name in ("gamma", "lam"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
@@ -219,12 +223,22 @@ class ActorCriticConfig:
             value = getattr(self, name)
             if not np.isfinite(value) or value < 0:
                 raise ValueError(f"{name} must be finite and nonnegative")
-        if self.normalize > 0 and max(self.eta, self.eta_bias) > 0.05:
+        if self.normalize > 0 and max(self.eta, eta_bias) > 0.05:
             warnings.warn(
                 "ActorCriticConfig with normalize > 0 and eta or eta_bias above 0.05: "
                 "RMS normalization can make parameter steps much larger than raw contrasts "
                 "suggest and may saturate the policy. Consider smaller actor rates; "
                 "see docs/reward.md#rates-under-normalization.",
+                RuntimeWarning,
+                stacklevel=3,
+            )
+        if self.eta > 0 and eta_bias > self.eta:
+            warnings.warn(
+                f"ActorCriticConfig with eta_bias ({eta_bias:g}) above eta ({self.eta:g}): "
+                "the actor's bias step dominates its synapse step and the greedy policy tends "
+                "to one action whatever the observation. The default couples eta_bias to "
+                "eta / 10; when lowering eta through dataclasses.replace, set eta_bias too, or "
+                "pass eta_bias=None to re-derive it. See docs/reward.md#rates-under-normalization.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -505,11 +519,24 @@ class ActorCritic:
         averaged over the observed rows, independent of padding.
         """
         arrays = ("trace", "trace_bias", "trace_critic")
-        saved = {name: None if getattr(self, name) is None else getattr(self, name).copy()
-                 for name in arrays}
-        saved.update({name: getattr(self, name) for name in
-                      ("_trace_device", "velocity", "velocity_bias", "second_moment",
-                       "second_moment_bias", "updates", "_valence")})
+        saved = {
+            name: None if getattr(self, name) is None else getattr(self, name).copy()
+            for name in arrays
+        }
+        saved.update(
+            {
+                name: getattr(self, name)
+                for name in (
+                    "_trace_device",
+                    "velocity",
+                    "velocity_bias",
+                    "second_moment",
+                    "second_moment_bias",
+                    "updates",
+                    "_valence",
+                )
+            }
+        )
         valence = None if self._valence is None else (self._valence.mean, self._valence.var)
         try:
             return self._learn(reward, done, next_drive, bootstrap, observed=observed)
@@ -521,8 +548,13 @@ class ActorCritic:
             raise
 
     def _learn(
-        self, reward: np.ndarray, done: np.ndarray, next_drive: np.ndarray,
-        bootstrap: np.ndarray | None = None, *, observed: np.ndarray | None = None,
+        self,
+        reward: np.ndarray,
+        done: np.ndarray,
+        next_drive: np.ndarray,
+        bootstrap: np.ndarray | None = None,
+        *,
+        observed: np.ndarray | None = None,
     ) -> dict[str, float]:
         reward, done, next_drive, bootstrap = self._validated_transition(
             reward, done, next_drive, bootstrap
@@ -640,8 +672,10 @@ class ActorCritic:
             step_bias = step_bias / (np.sqrt(self.second_moment_bias / correction) + 1e-3)
         step_scale = cfg.eta * step_scale
         step_bias = cfg.eta_bias * step_bias
-        if not all(np.isfinite(getattr(self, name)).all() for name in
-                   ("velocity", "velocity_bias", "second_moment", "second_moment_bias")):
+        if not all(
+            np.isfinite(getattr(self, name)).all()
+            for name in ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
+        ):
             raise ValueError("optimizer moments must remain finite")
         critic_weights, critic_bias = self._critic_candidate(td_error, delta, observed)
         next_brain = self.learner.brain

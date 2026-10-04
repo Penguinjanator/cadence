@@ -316,9 +316,15 @@ pilots that motivated the warning.
 
 A consistent signal above the floor gives a parameter increment near its
 rate before masks, tying, decay and clipping. The rate is not a fixed increment
-or an upper bound. Retune both actor rates when enabling normalization; small
-`eta` alone does not reduce `eta_bias`. A development sweep of `eta=0.001` to
-`0.003` is a starting experiment, with the bias rate selected independently.
+or an upper bound. `eta_bias` left unset derives `eta / 10` at construction, so
+a smaller `eta` lowers the bias step with it; an explicit `eta_bias` is used as
+given, and construction warns when it exceeds a positive `eta`. Under RMS
+normalization both rates are absolute per-parameter steps: a bias step 25 times
+the synapse step rewrites the policy into a bias policy whose greedy action does
+not depend on the observation (issue 143, measured on Patch World v2 creatures
+whose motor biases reached plus or minus 5 while their synapses stayed near
+initialization). The composed brain keeps its measured `eta_bias=0.05` at
+`eta=1.0`. A development sweep of `eta=0.001` to `0.003` is a starting experiment.
 Measure free behavior against the task's controls; no range guarantees learning
 or prevents a policy from collapsing to a held action.
 

@@ -25,9 +25,10 @@ def test_either_large_normalized_rate_warns_at_the_call_site(
     assert Path(normalized[0].filename).resolve() == Path(__file__).resolve()
     assert normalized[0].lineno == line
     assert config.eta == rates["eta"] and config.eta_bias == rates["eta_bias"]
-    # A bias rate above the synapse rate is the issue-126 pathology; it warns too.
+    # A bias rate above the synapse rate is the issue-126 pathology (issue 143 for the
+    # actor); it warns too.
     dominating = [w for w in caught if "bias step dominates" in str(w.message)]
-    assert len(dominating) == (1 if rate_name == "eta_bias" and config_type is cd.LearnerConfig else 0)
+    assert len(dominating) == (1 if rate_name == "eta_bias" else 0)
 
 
 @pytest.mark.parametrize("config_type", [cd.LearnerConfig, cd.ActorCriticConfig])
