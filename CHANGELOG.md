@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Accumulate CUDA block transport directly into its destination to avoid a
+  temporary product and a separate addition kernel per block. Add actual-device
+  System 1 equation, gradient, refusal, memory and continuation checks, plus a
+  source-bound CPU/CUDA runtime and memory comparison for issue 98.
+  Preserve POSIX source keys in credit diagnostics and LF bytes in the frozen
+  phrase fixture so the existing provenance checks also pass on Windows.
+
 ## 0.73.1 — 2026-10-04
 
 - Distinguish signed activity below rest from silence (issue 106). Preserve the
