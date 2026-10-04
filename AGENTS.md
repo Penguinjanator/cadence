@@ -36,6 +36,18 @@ teacher policy; an automatic failure-only learning gate is not implemented.
 
 ## Goal and mechanism
 
+**Fixed foundation and default hypotheses.** Every addition must remain within
+local agreement repair between patches into the same coupled global equilibrium.
+Try the simplest existing System 1 first. Check state, experience, available
+information, memory and implementation before adding a mechanism. Animal and
+human brains are the evolved functional reference; build abstracted solutions,
+with biological studies suggesting tests rather than supplying proof. Finite
+capacity, rigid learned interpretations and unfamiliar-environment failure are
+possible limits, not a promise of perfect learning. Follow the mandatory
+[mechanism and capability-preservation review](CONTRIBUTING.md#preserve-the-capable-foundation)
+before promoting a change. Preserve demonstrated recall, associations, context,
+actual-action ownership, private imagination and saved continuation.
+
 Cadence aims to build a simulated human-like brain from simplified biological
 mechanisms. **System 1 is the default:** a continuing animal-like brain with
 memory, plasticity, private imagination and action. **System 2 is optional:**

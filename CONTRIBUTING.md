@@ -6,6 +6,23 @@ how to set up, what the checks are, and what a change needs.
 
 ## Preserve the capable foundation
 
+**Required design rule.** Local agreement repair between patches into one
+coupled global equilibrium is the fixed foundation. Every added mechanism must
+participate through that same local rule and equilibrium; an external learned
+answer path is not a Cadence extension. Start with the simplest existing System 1
+composition and check its state, experience, sensory information, memory and
+implementation before adding structure. Animal and human brains are the evolved
+functional reference; we build abstractions of their solutions within their
+environments, with finite capacity and possible rigidity.
+
+For any mechanism, learning or default change, the pull request must identify
+the demonstrated limitation, the affected local boundaries and update law,
+the simpler control, and the preservation evidence specified below. Promotion as a repair or new default also requires measured improvement on
+the declared limitation against that simpler control, with information and work
+disclosed. A required existing capability regression blocks promotion.
+Preserve failed comparisons and original acceptance gates; neither a biological
+name nor a qualified wrong equilibrium waives them.
+
 The goal is a simulated human-like brain built from simplified biological
 mechanisms. Memory, plasticity, imagination and continuing interaction are
 working parts of the default System 1 foundation. Optional System 2 adds
@@ -33,6 +50,27 @@ with a new instance for each row, silently bypass memory or supply its answer
 through an external trained readout. Preserve acquired state through disruption
 and test both recovery and earlier capabilities. Numerical settlement, correct
 world prediction and measured cost are different observations.
+
+For a change to learning, memory or resolved defaults, compare the released and
+candidate sources on the same acquired brains and tasks. Keep three cases
+distinct: an explicit historical recipe, unchanged public arguments that may
+resolve to different defaults, and a proposed opt-in recipe. Compare both fresh
+acquisition and continuation from acquired checkpoints. Initial-array
+identity and constructor coverage cannot replace post-learning behavior. Retain
+the existing acquisition, trace, associative recall and reward-reversal floors;
+check actual-action custody, private imagination and pending saved continuation.
+Record absolute scores, refusals and work after acquisition, interfering traffic
+and recovery within the demonstrated tasks, capacity and budgets. Measure
+retention of useful old associations alongside revision of obsolete ones;
+retaining every old response is not the preservation target.
+
+A qualified wrong answer satisfies the tested settlement equations. That alone
+establishes neither task correctness nor the capacity to acquire a required
+relation. Local learning may change its relations or encounter rigidity and
+finite limits; measure that response under the declared task and budget.
+Before changing the local rule, independently check its actual update direction
+on the failing case. Reference derivatives are diagnostics, not a replacement
+answer path or installed learning mechanism.
 
 Document the seam between working mechanisms and the intended world model.
 The current `Brain` reward loop is not universal failure-gated plasticity, and
@@ -65,8 +103,9 @@ pytest -q
 
 The test suite includes `tests/test_documentation.py`, which executes every Python block
 of the listed guides in order and checks that every local link and anchor in `README.md`
-and `docs/` resolves. Default pytest collection also includes the acquisition
-protocol's provenance and refusal tests in `benchmarks/acquisition/test_protocol.py`.
+and `docs/` resolves. Default pytest collection also includes acquisition
+provenance, refusal, source-admission, archive and confirmation-audit tests in
+`benchmarks/acquisition/`.
 A change to a guide's code is a change to a test. The
 [minimal-install job](.github/workflows/ci.yml) builds the wheel with NumPy alone
 and runs 20 pages without optional backends: `README.md` and, under `docs/`,
@@ -104,7 +143,7 @@ Run the default foundation and preserved population solver separately to locate
 slow cases. These two commands together retain the complete test inventory:
 
 ```bash
-python -m pytest -q tests benchmarks/acquisition/test_protocol.py --ignore=tests/equilibrium --durations=10
+python -m pytest -q tests benchmarks/acquisition --ignore=tests/equilibrium --durations=10
 python -m pytest -q tests/equilibrium --durations=10
 ```
 
