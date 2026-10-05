@@ -183,3 +183,26 @@ def test_a_receipt_binds_its_sources_and_refuses_changed_rows(tmp_path, capsys):
     assert nursery.main([*run, "--jitter", "0.1"]) == 0  # an override is recorded
     assert not nursery.read_receipt(path)["frozen_protocol"]
     capsys.readouterr()
+
+
+def test_the_confirmation_receipt_is_the_frozen_protocols_and_carries_its_gates(protocol):
+    path = HERE / "results" / "confirmation-2026-10-05.json.gz"
+    assert nursery.verify(path) == (True, "canonical form, digest, arithmetic agree")
+    body = nursery.read_receipt(path)
+    assert body["frozen_protocol"] and body["protocol"] == protocol
+    assert body["seeds"] == protocol["seeds"]["confirmation"]
+    assert body["arms"] == list(nursery.ARMS) and body["exposures"] == protocol["exposures"]
+    assert len(body["rows"]) == 500 and not any("error" in row for row in body["rows"])
+    gates = body["gates"]
+    assert gates["passed"] and gates["pooled"]["lives"] == 40 and gates["pooled"]["crashed"] == 0
+    shares = {name: round(40 * gates["pooled"][name]) for name in ("reversed", "returned")}
+    assert shares == {"reversed": 39, "returned": 38}  # the three missed readings stay recorded
+    assert round(40 * gates["pooled"]["stable_kept"]) == 39
+
+
+def test_the_first_freezes_receipt_keeps_its_protocol_hash_and_its_gates(protocol):
+    first = nursery.read_receipt(HERE / "results" / "first-freeze-confirmation-2026-10-05.json.gz")
+    assert first["protocol_sha256"] in protocol["history"] and first["frozen_protocol"]
+    assert first["seeds"] == protocol["seeds"]["spent"]
+    assert nursery.gates(first["rows"], first["protocol"]) == first["gates"]
+    assert first["gates"]["passed"] and first["gates"]["pooled"]["reversed"] == 1.0

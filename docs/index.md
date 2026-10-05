@@ -46,6 +46,7 @@ better decisions.
 | Need | Guide |
 | --- | --- |
 | Bootstrap, use, disruption and saved continuation in one life | [Continuing brain example](../examples/continuing_brain.py), [experience design](experience.md) |
+| Routine and repair in one continuing stream; reversal after long experience | [Routine and repair](continuous.md#routine-and-repair-live), [odour nursery](../benchmarks/reversal/README.md) |
 | Isolated graph learning or calibration controls | [Learning rule](learning.md), [task recipes](tasks.md) |
 | Historical acquisition/retention receipts and an offline viewer | [Acquisition protocol](../benchmarks/acquisition/README.md), [portable evidence viewer](../benchmarks/acquisition/demo/README.md) |
 | Trace and associative-memory rules | [Memory](memory.md), [continued learning](continuous.md) |

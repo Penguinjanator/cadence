@@ -780,9 +780,10 @@ that recursive benefit or automatic reflective behavior has been learned.
     continuing life on one stream, for a brain constructed with `arousal`. Reward and
     done concern the preceding action, as in `step`. A calm brain answers with the
     greedy choice of one qualified settle and changes no parameter, memory record or
-    optimizer state; its forecast for the preceding action is the critic's value when
-    it acted, and the outcome is measured against that forecast with the value of the
-    present state. Surprise or want raises the arousal (see
+    optimizer state; the eligibility of earlier sampled actions fades by one step
+    (`ActorCritic.fade`), as it does between two outcomes that are learned from. Its
+    forecast for the preceding action is the critic's value when it acted, and the
+    outcome is measured against that forecast with the value of the present state. Surprise or want raises the arousal (see
     [Arousal](#arousal-cadencearousal)); only the outcome of the brain's own greedy
     choice enters its mood, and what a sampled, non-greedy action brings teaches
     without rousing. An aroused brain samples at
@@ -884,12 +885,15 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   outcomes the brain has learned from, the running RMS distance of their reward from
   `longrun`: `learned` outcomes and the outcome that wakes the brain enter it, routine
   outcomes do not, so a long calm does not shrink it. The law is unchanged when every
-  reward and error is multiplied by a positive number and every reward shifted by a
+  reward and error is multiplied by one positive number and every reward shifted by a
   constant. A stream's first own outcome is no surprise.
   `aroused` is true while `level >= threshold` and for the first `youth` moments of the
   brain's life; `mode` names it. `heat` is `1 + config.heat * want`, the factor on the
   policy temperature an aroused brain samples at. `lived(sweeps, learning_sweeps=0)`
   counts one moment: `moments` and `sweeps` per mode, `learning_sweeps` and `age`.
+  `Brain.live` counts a moment when its action is issued; the work of a refused
+  attempt is reported by `Brain.last_settlement` and `Brain.last_learning` and is
+  absent from these counts.
   `reset()` begins another stream calm and keeps the age and the counts.
   `to_dict()` and `Arousal.from_dict(values)` carry the complete state.
 
@@ -1157,6 +1161,11 @@ founder genes for a small share of moments; the
     `observed` is a boolean batch vector for real transitions. Padding rows do not
     teach the actor or critic or enter reward statistics; their eligibility resets.
     Updates average over observed rows. At least one row must be observed.
+  - `fade(done=None)`: one moment passed that added no eligibility, its action having
+    been answered greedily. Every eligibility trace decays by `gamma * lam`, the step
+    `learn` applies between two sampled actions, and `done` rows forget their traces.
+    Parameters, the critic and optimizer history are unchanged. `Brain.live` calls it
+    for each routine outcome.
   - `reset()` (cached input/state, eligibility, salience and centering cleared; learned
     parameters and optimizer history retained), `probabilities(state, temperature=None)` (shape `(batch, actions)`
     or `(batch, slots, max_size)` for categorical slots, with exact zero padding;

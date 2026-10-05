@@ -220,8 +220,9 @@ weights does not require growing new anatomical connections.
 
 `step` samples an action, keeps its eligibility and learns from its outcome at
 every moment. `live` lets the brain's arousal decide. A calm brain answers with
-the greedy choice of one qualified settle and changes nothing: no eligibility
-phases, no learning, no memory write. Two things rouse it. An outcome that
+the greedy choice of one qualified settle and learns nothing: no eligibility
+phases, no parameter change, no memory write; the eligibility of its earlier
+sampled actions fades with each moment. Two things rouse it. An outcome that
 contradicts the forecast it made before acting is a surprise. A reward that
 stays below what its life usually pays is a want, which also covers a failure it
 predicts correctly. An aroused brain samples, at a temperature the want raises,
@@ -242,7 +243,7 @@ brain = Brain.compose(
     consolidation=0.25,             # lasting memory takes half of a witnessed unit outcome
     arousal=ArousalConfig(youth=30),
 )
-actor = brain.basal_ganglia         # one stream: a tenth of the composed actor rates
+actor = brain.basal_ganglia         # one stream: a tenth of the composed actor rate
 actor.config = replace(actor.config, eta=0.1, eta_bias=0.01)
 
 cues = np.eye(4)
@@ -285,9 +286,11 @@ What this establishes is bounded. The arousal responds to change: a brain whose
 life has always paid poorly, and whose youth has ended, is not roused by it, so a
 long bootstrap belongs to `step` or to a longer `youth`. In the nursery the
 associative memory carries the adaptation; the graph's reward learning alone
-does not acquire the task in one stream. A settled routine answer satisfies the
-neural equations and can still be wrong about the world; the next outcome is
-what tells.
+does not acquire the task in one stream. The repair is not certain: 3 of the 40
+gated confirmation lives missed a reading, and one of them never searched for the
+moved reward. A routine moment still pays one full settle. A settled routine
+answer satisfies the neural equations and can still be wrong about the world; the
+next outcome is what tells.
 
 ## Reset and save
 

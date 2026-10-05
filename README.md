@@ -36,9 +36,10 @@ useful understanding need separate evidence.
 
 Start with [one continuing equilibrium brain](https://github.com/muellerberndt/cadence/blob/main/docs/world-model.md), the canonical
 guide to this lifecycle and its current implementation boundaries. `Brain.compose`
-already supplies continuing action, local learning and memory. Integrated learned
-world prediction and automatic failure-triggered repair with cheap stable
-operation remain development goals. Cadence is alpha research software.
+already supplies continuing action, local learning and memory, and `Brain.live`
+adds a first routine-and-repair loop for one stream, measured on one bounded
+chamber. Integrated learned world prediction, repair localized to what failed
+and cheap stable operation remain development goals. Cadence is alpha research software.
 
 The examples and guides use Cadence 0.74.0, including action diagnostics through
 `Brain.last_settlement`. This maintenance release strengthens preservation checks

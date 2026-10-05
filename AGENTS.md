@@ -32,7 +32,12 @@ low physical energy or efficient task performance. Build and judge the brain
 through streams, retained state, witnessed corrections, free behavior over time,
 retention and recovery, with backpropagation networks as matched baselines.
 Keep supported actual-reward updates distinct from an application's selective
-teacher policy; an automatic failure-only learning gate is not implemented.
+teacher policy. `step` learns from every outcome. `Brain.live` is the explicit
+routine-and-repair loop of one stream: a brain constructed with arousal genes
+answers greedily and learns nothing while calm, and samples, learns and writes
+memory when an outcome surprises it or reward stays below its usual level. Its
+evidence is one bounded chamber; a general failure-only learning gate is not
+implemented.
 
 ## Goal and mechanism
 
@@ -94,7 +99,8 @@ or weaken qualification to manufacture a whole-brain answer.
 4. Introduce a disturbance, detect a witnessed mismatch or failed objective,
    and apply supported learning. Keep numerical settlement separate from durable
    repair. Do not silently redefine `learn=True`, reward feedback or memory
-   writes as an automatic failure-only gate.
+   writes as an automatic failure-only gate; `live` is the supported loop in
+   which the brain's own arousal makes that decision.
 5. Measure recovery and earlier skills with answers free, alongside normal and
    repair work. Save and reload the same brain, including pending feedback, and
    verify its continuation. Charge rehearsal, imagination and refused work.
@@ -127,9 +133,11 @@ using a private trace and read-only durable memory; it does not predict the
 world's transitions or turn predictions into witnessed experience.
 
 Distinguish implemented contracts from the desired world-model lifecycle.
-`Brain.compose` does not yet integrate learned environmental transition prediction
-or automatically gate all learning on witnessed failure. Stable inputs do not
-guarantee cheap operation. Do not invent thresholds, success policies or runtime
+`Brain.compose` does not yet integrate learned environmental transition prediction.
+`step` does not gate learning on witnessed failure; `live` does for one stream
+through its [arousal law](docs/continuous.md#routine-and-repair-live), and its
+routine moment still pays one full settle. Stable inputs do not guarantee cheap
+operation. Do not invent thresholds, success policies or runtime
 changes to make documentation imply those capabilities. Missing integration and
 behavioral contracts need their own capability issues and tests.
 
