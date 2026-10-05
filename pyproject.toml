@@ -47,7 +47,7 @@ exclude = ["**/.lake/**", "*.olean", "*.ilean", "*.olean.private", "*.olean.serv
 
 [tool.pytest.ini_options]
 addopts = "-ra --import-mode=importlib"
-testpaths = ["tests", "benchmarks/acquisition", "benchmarks/rhythm"]
+testpaths = ["tests", "benchmarks/acquisition", "benchmarks/rhythm", "benchmarks/reversal"]
 
 [tool.ruff]
 line-length = 100

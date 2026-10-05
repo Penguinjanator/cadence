@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- Add `Brain.live` and arousal for one continuing stream
+  ([issue 88](https://github.com/muellerberndt/cadence/issues/88),
+  [issue 122](https://github.com/muellerberndt/cadence/issues/122)). A brain
+  constructed with `arousal=ArousalConfig()` answers a routine moment with the
+  greedy choice of one qualified settle and changes no parameter, record or
+  optimizer state. An outcome that contradicts the forecast made before it
+  (surprise) or a reward below what the stream usually pays (want) rouses it; an
+  aroused brain samples at a temperature its want raises, keeps eligibility,
+  learns from every outcome and writes memory, and the outcome that woke it is
+  written to its memory. `Arousal` and `ArousalConfig` are exported; every
+  constant of the law is a gene with hand-set founders and a declared space for
+  `genes`. `Brain.act`, `ActorCritic.act` and `ActorCritic.probabilities` take
+  an optional sampling `temperature`; `Brain.last_arousal` reports each moment;
+  a brain with arousal saves it under the format name `cadence-generic/3`.
+  `step`, the composed defaults, the settling and learning equations and the
+  checkpoints of brains without arousal are unchanged.
+- Add the odour nursery (`benchmarks/reversal`): one continuing life through
+  acquisition, reversal and return with an unrelated stable skill, at pre-switch
+  exposures from 100 to 10,000 trials, on a frozen protocol with ten fresh
+  confirmation seeds, against always-learning, released-default, memory-only,
+  graph-only, frozen, reset, tabular and uniform-random arms. It reproduces the
+  historical finding that the always-learning brain stops sampling the choice
+  that must change, separates too few contradicting witnesses from a failure to
+  revise after them, and measures the routine share and the settling work of
+  each mode. The operating point of one continuing stream it declares (working
+  trace amplitude 0.3, consolidation 0.25, a tenth of the composed actor rates)
+  is a development setting of that chamber; no default changes.
+
 - Add the bounded steady-rhythm chamber (`benchmarks/rhythm`) for
   [issue 116](https://github.com/muellerberndt/cadence/issues/116): one
   continuing `Brain.compose` life taught to alternate two actions under constant

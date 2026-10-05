@@ -335,12 +335,15 @@ class ActorCritic:
     def value(self, state: BrainState) -> np.ndarray:
         return np.asarray(state.activation[:, self.critic_index] @ self.w_critic + self.b_critic)
 
-    def probabilities(self, state: BrainState) -> np.ndarray:
+    def probabilities(self, state: BrainState, temperature: float | None = None) -> np.ndarray:
         """Action probabilities, normalized separately for each motor slot.
 
         Multiple categorical slots return ``(batch, slots, max_size)`` with
         zero padding for shorter slots. Bins keeps its uniform population shape.
+        ``temperature`` reads the same settled outputs at another softmax
+        temperature; left unset it is the learner's, the policy that learning credits.
         """
+        temperature = self._temperature(temperature)
         s = state.activation[:, self.learner.output_index]
         if self.bins is not None:
             s = s.reshape(len(s), self.bins.dims, self.bins.size)
@@ -349,14 +352,27 @@ class ActorCritic:
             for j, (start, size) in enumerate(
                 zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
             ):
-                z = s[:, start : start + size] / self.learner.config.temperature
+                z = s[:, start : start + size] / temperature
                 z = np.exp(z - z.max(axis=1, keepdims=True))
                 p[:, j, :size] = z / z.sum(axis=1, keepdims=True)
             return p
-        z = s / self.learner.config.temperature
+        z = s / temperature
         z = z - z.max(axis=-1, keepdims=True)
         p = np.exp(z)
         return np.asarray(p / p.sum(axis=-1, keepdims=True))
+
+    def _temperature(self, temperature: float | None) -> float:
+        """The softmax temperature of a reading: the learner's unless another is given."""
+        if temperature is None:
+            return float(self.learner.config.temperature)
+        if (
+            isinstance(temperature, (bool, np.bool_))
+            or not isinstance(temperature, (int, float, np.integer, np.floating))
+            or not np.isfinite(temperature)
+            or temperature <= 0
+        ):
+            raise ValueError("temperature must be finite and positive")
+        return float(temperature)
 
     def settle(self, drive: np.ndarray) -> BrainState:
         """The free phase for ``drive``, warm from the last one; cached for ``act``."""
@@ -382,13 +398,22 @@ class ActorCritic:
 
     # -- acting
 
-    def act(self, drive: np.ndarray, greedy: bool = False) -> np.ndarray:
+    def act(
+        self, drive: np.ndarray, greedy: bool = False, temperature: float | None = None
+    ) -> np.ndarray:
         """Settle (or reuse the cached free phase), sample an action per row, keep its eligibility.
 
         Discrete: an action index per row, or one index per categorical motor slot.
         With ``Bins``: one softmax draw per dimension of a population code.
+        ``temperature`` samples the same settled outputs at another softmax
+        temperature, a behaviour that explores more (above the learner's) or less.
+        The eligibility kept for the sampled action remains the score of the
+        learner's own policy, so credit for an explored action is an on-policy
+        estimate only at the learner's temperature. A greedy read ignores it.
         """
         drive = self._validated_drive(drive)
+        if temperature is not None:
+            temperature = self._temperature(temperature)  # before any state changes
         free = (
             self._free
             if self._free is not None
@@ -399,8 +424,8 @@ class ActorCritic:
         )
         self._pending = None  # eligibility always belongs to this decision, including greedy reads
         if self.bins is not None:
-            return self._act_bins(drive, free, greedy)
-        p = self.probabilities(free)
+            return self._act_bins(drive, free, greedy, temperature)
+        p = self.probabilities(free, None if greedy else temperature)
         if greedy:
             action = np.argmax(p, axis=-1)
         else:
@@ -419,14 +444,16 @@ class ActorCritic:
             self._pending = ("states", plus, minus, self.value(free))
         return np.asarray(action, dtype=np.int64)
 
-    def _act_bins(self, drive: np.ndarray, free: BrainState, greedy: bool) -> np.ndarray:
+    def _act_bins(
+        self, drive: np.ndarray, free: BrainState, greedy: bool, temperature: float | None = None
+    ) -> np.ndarray:
         """One softmax draw per dimension; the taken levels' one-hots are the nudge's target,
         per group."""
         bins = self.bins
         assert bins is not None
         cfg = self.learner.config
         batch = len(drive)
-        p = self.probabilities(free)
+        p = self.probabilities(free, None if greedy else temperature)
         if greedy:
             choice = np.argmax(p, axis=2)
         else:

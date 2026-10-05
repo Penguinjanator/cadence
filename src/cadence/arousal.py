@@ -1,0 +1,286 @@
+"""Arousal: when a continuing brain leaves routine, and how it returns.
+
+A calm brain answers from its settled state and changes nothing. Two things rouse it:
+an outcome that contradicts the forecast it made before acting (surprise), and a
+reward that stays below what its life usually pays (want, the suffering of a missed
+objective that it predicts correctly). An aroused brain samples its actions, keeps their
+eligibility, learns from every outcome and writes memory; the more it wants, the wider
+it explores. ``Brain.live`` runs this loop for a composed brain.
+
+The law, per outcome of the stream's preceding action::
+
+    surprise = log(|error| / (tolerance * usual + floor * scale))   when positive, else 0
+    want     = clip((longrun - recent) / scale, 0, 1)
+    level    = decay * level + (1 - decay) * (surprise + want)
+
+``error`` is the temporal-difference error against the forecast made before the outcome;
+``usual`` is its running size; ``recent`` and ``longrun`` are the running reward at a
+fast and a slow rate; ``scale`` is the spread of the outcomes the brain has learned from.
+Only the outcome of the brain's own best guess can surprise it and enters what it is used
+to: what an explored action brings is play. The brain is aroused while
+``level >= threshold`` and during its first ``youth`` moments, and an aroused brain
+samples at ``1 + heat * want`` times its policy's temperature. The law is unchanged when
+every reward is multiplied by a positive number and shifted by a constant.
+
+Every constant of the law is a gene of ``ArousalConfig``. The values here are hand-set
+founders and stay as the control; ``ArousalConfig.space()`` declares the space for
+``cadence.genes``. The law is a broadcast signal computed from the brain's own dopamine
+and reward, like the dopamine itself; it is not a settled patch state and holds no
+learned parameter.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+import numpy as np
+
+__all__ = ["Arousal", "ArousalConfig"]
+
+MODES = ("routine", "aroused")
+_TINY = 1e-12  # keeps the unit of surprise positive in a world that has paid nothing yet
+
+
+def _real(
+    name: str, value: Any, *, low: float, high: float = np.inf, open_low: bool = False
+) -> float:
+    if isinstance(value, (bool, np.bool_)) or not isinstance(
+        value, (int, float, np.integer, np.floating)
+    ):
+        raise ValueError(f"{name} must be a finite real number")
+    number = float(value)
+    below = number <= low if open_low else number < low
+    if not np.isfinite(number) or below or number > high:
+        raise ValueError(f"{name} is outside its range")
+    return number
+
+
+@dataclass(frozen=True, slots=True)
+class ArousalConfig:
+    """The genes of a continuing brain's arousal; the defaults are the hand-set founders."""
+
+    threshold: float = 0.2  # arousal at or above this leaves routine
+    decay: float = 0.9  # the share of arousal one moment hands to the next
+    tolerance: float = 2.0  # an error within this many usual errors is no surprise
+    floor: float = 0.1  # nor is an error within this many reward scales
+    fast: float = 0.05  # rate of the recent reward average
+    slow: float = 0.005  # rate of the long-run reward, the usual error and the reward scale
+    heat: float = 2.0  # exploration temperature gained per unit of want
+    youth: int = 100  # the first moments of a life are aroused
+
+    def __post_init__(self) -> None:
+        _real("threshold", self.threshold, low=0.0)
+        if not 0 <= _real("decay", self.decay, low=0.0) < 1:
+            raise ValueError("decay must lie in [0, 1)")
+        _real("tolerance", self.tolerance, low=0.0)
+        _real("floor", self.floor, low=0.0)
+        slow = _real("slow", self.slow, low=0.0, high=1.0, open_low=True)
+        fast = _real("fast", self.fast, low=0.0, high=1.0, open_low=True)
+        if fast < slow:
+            raise ValueError("fast must be at least slow; equal rates remove the want")
+        _real("heat", self.heat, low=0.0)
+        if (
+            isinstance(self.youth, (bool, np.bool_))
+            or not isinstance(self.youth, (int, np.integer))
+            or self.youth < 0
+        ):
+            raise ValueError("youth must be a nonnegative integer")
+
+    def to_dict(self) -> dict[str, Any]:
+        values: dict[str, Any] = {name: float(getattr(self, name)) for name in self.__slots__}
+        values["youth"] = int(self.youth)
+        return values
+
+    @staticmethod
+    def space() -> dict[str, tuple[Any, ...]]:
+        """The gene space of the law for ``cadence.genes``; mutate ``to_dict()`` over it.
+
+        ``fast`` at ``slow`` removes the want, a large ``tolerance`` removes surprise and
+        ``heat`` at zero removes the wider exploration: the controls are inside the space.
+        A mutation that leaves ``fast`` below ``slow`` is refused at construction."""
+        return {
+            "threshold": ("log", 0.3, 0.02, 2.0),
+            "decay": ("linear", 0.05, 0.0, 0.99),
+            "tolerance": ("log", 0.3, 0.5, 20.0),
+            "floor": ("log", 0.3, 0.01, 1.0),
+            "fast": ("log", 0.3, 0.005, 0.5),
+            "slow": ("log", 0.3, 0.0005, 0.05),
+            "heat": ("linear", 0.5, 0.0, 4.0),
+            "youth": ("int", 0, 1000),
+        }
+
+
+class Arousal:
+    """The arousal of one continuing stream: its level, what it is used to, and its work.
+
+    ``outcome`` applies the law to one outcome. ``moments`` and ``sweeps`` count, per
+    mode, the moments lived and the settling sweeps of their answers and forecasts;
+    eligibility and feedback sweeps of aroused moments are counted in ``learning_sweeps``.
+    ``reset`` begins another stream calm, with what the brain was used to forgotten and
+    its age and work kept.
+    """
+
+    def __init__(self, config: ArousalConfig | None = None) -> None:
+        self.config = config or ArousalConfig()
+        self.age = 0
+        self.moments = {mode: 0 for mode in MODES}
+        self.sweeps = {mode: 0 for mode in MODES}
+        self.learning_sweeps = 0
+        self.reset()
+
+    def reset(self) -> None:
+        self.level = 0.0
+        self.outcomes = 0  # outcomes that entered what the stream is used to
+        self.spreads = 0  # outcomes that entered the reward scale
+        self._square = 0.0
+        self._recent = 0.0
+        self._longrun = 0.0
+        self._usual = 0.0
+
+    # -- what the stream is used to: running averages, corrected for their short history
+
+    def _reading(self, accumulated: float, rate: float, count: int | None = None) -> float:
+        count = self.outcomes if count is None else count
+        if not count:
+            return 0.0
+        return accumulated / (1.0 - (1.0 - rate) ** count)
+
+    @property
+    def scale(self) -> float:
+        """The spread of the outcomes the brain has learned from: the running RMS distance
+        of their reward from the long-run reward. The unit of a want and of the surprise
+        floor; routine outcomes leave it alone, so a long calm does not shrink it."""
+        return float(np.sqrt(max(self._reading(self._square, self.config.slow, self.spreads), 0.0)))
+
+    @property
+    def recent(self) -> float:
+        return self._reading(self._recent, self.config.fast)
+
+    @property
+    def longrun(self) -> float:
+        return self._reading(self._longrun, self.config.slow)
+
+    @property
+    def usual(self) -> float:
+        """The running size of the temporal-difference error."""
+        return self._reading(self._usual, self.config.slow)
+
+    @property
+    def want(self) -> float:
+        """The shortfall of the recent reward below the long-run reward, in reward scales."""
+        scale = self.scale
+        if scale <= 0.0:
+            return 0.0
+        return float(np.clip((self.longrun - self.recent) / scale, 0.0, 1.0))
+
+    @property
+    def aroused(self) -> bool:
+        return self.age < self.config.youth or self.level >= self.config.threshold
+
+    @property
+    def mode(self) -> str:
+        return MODES[int(self.aroused)]
+
+    @property
+    def heat(self) -> float:
+        """The factor on the policy temperature an aroused brain samples at."""
+        return 1.0 + self.config.heat * self.want
+
+    # -- the law
+
+    def outcome(
+        self, error: float, reward: float, *, own: bool = True, learned: bool = True
+    ) -> tuple[float, float]:
+        """Take one outcome: the unsigned TD error against the forecast made before it and
+        the reward. Returns the surprise and the want that entered the level.
+
+        ``own`` says the action was the brain's own best guess. Only such an outcome can
+        surprise it and enters what it is used to; the outcome of an explored action is
+        play, and the level then only carries its present want forward. ``learned`` says
+        the brain learns from the outcome (it was sampled while aroused); learned outcomes
+        and the outcome that wakes the brain enter the reward scale. A stream's first own
+        outcome has no usual error to be measured against and is no surprise."""
+        error, reward = abs(float(error)), float(reward)
+        if not np.isfinite(error) or not np.isfinite(reward):
+            raise ValueError("error and reward must be finite")
+        c = self.config
+        surprise = 0.0
+        if own:
+            first = self.outcomes == 0
+            usual = self.usual  # what the forecast's error usually was, before this outcome
+            self.outcomes += 1
+            self._recent += c.fast * (reward - self._recent)
+            self._longrun += c.slow * (reward - self._longrun)
+            self._usual += c.slow * (error - self._usual)
+            unit = c.tolerance * usual + c.floor * self.scale + _TINY
+            if error > unit and not first:
+                surprise = float(np.log(error / unit))
+        want = self.want
+        self.level = c.decay * self.level + (1.0 - c.decay) * (surprise + want)
+        if learned or self.aroused:
+            self.spreads += 1
+            self._square += c.slow * ((reward - self.longrun) ** 2 - self._square)
+        return surprise, want
+
+    def lived(self, sweeps: int, learning_sweeps: int = 0) -> None:
+        """Count one lived moment in the mode it was answered in."""
+        mode = self.mode
+        self.moments[mode] += 1
+        self.sweeps[mode] += int(sweeps)
+        self.learning_sweeps += int(learning_sweeps)
+        self.age += 1
+
+    # -- continuation
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "config": self.config.to_dict(),
+            "level": float(self.level),
+            "age": int(self.age),
+            "outcomes": int(self.outcomes),
+            "spreads": int(self.spreads),
+            "square": float(self._square),
+            "recent": float(self._recent),
+            "longrun": float(self._longrun),
+            "usual": float(self._usual),
+            "moments": {mode: int(self.moments[mode]) for mode in MODES},
+            "sweeps": {mode: int(self.sweeps[mode]) for mode in MODES},
+            "learning_sweeps": int(self.learning_sweeps),
+        }
+
+    @classmethod
+    def from_dict(cls, values: Any) -> Arousal:
+        """Restore a saved arousal, rejecting incomplete or invalid state."""
+        if not isinstance(values, dict) or not isinstance(values.get("config"), dict):
+            raise ValueError("invalid saved arousal")
+        try:
+            arousal = cls(ArousalConfig(**values["config"]))
+            for name in ("age", "outcomes", "spreads", "learning_sweeps"):
+                value = values[name]
+                if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                    raise ValueError(f"invalid saved arousal count: {name}")
+            arousal.age, arousal.outcomes = values["age"], values["outcomes"]
+            arousal.spreads = values["spreads"]
+            arousal.learning_sweeps = values["learning_sweeps"]
+            for name in ("level", "square", "recent", "longrun", "usual"):
+                value = values[name]
+                if isinstance(value, bool) or not isinstance(value, (int, float)):
+                    raise ValueError(f"invalid saved arousal value: {name}")
+                if not np.isfinite(value) or (name in ("level", "square", "usual") and value < 0):
+                    raise ValueError(f"invalid saved arousal value: {name}")
+            arousal.level = float(values["level"])
+            arousal._square, arousal._recent = float(values["square"]), float(values["recent"])
+            arousal._longrun, arousal._usual = float(values["longrun"]), float(values["usual"])
+            for name in ("moments", "sweeps"):
+                counts = values[name]
+                if not isinstance(counts, dict) or set(counts) != set(MODES):
+                    raise ValueError(f"invalid saved arousal counts: {name}")
+                for mode in MODES:
+                    value = counts[mode]
+                    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+                        raise ValueError(f"invalid saved arousal counts: {name}")
+                setattr(arousal, name, {mode: counts[mode] for mode in MODES})
+        except (KeyError, TypeError) as exc:
+            raise ValueError("invalid or incomplete saved arousal") from exc
+        return arousal

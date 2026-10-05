@@ -1,0 +1,89 @@
+{
+  "schema": "odour-nursery/1",
+  "world": "four one-hot odours; avoid (0) or approach (1); approach the sugar odour +1, another odour -1, avoid 0; odours 0 and 1 are the reversal pair (sugar at 0 under rule A, at 1 under rule B); odour 2 is always sugar and odour 3 never",
+  "life": "one stream, no resets: rule A for the exposure, rule B for `after` trials, rule A again for `after` trials; changes are unannounced",
+  "odour_seed": 1000,
+  "reliability": 1.0,
+  "exposures": [
+    100,
+    300,
+    1000,
+    3000,
+    10000
+  ],
+  "after": 600,
+  "probe_every": 25,
+  "hold": 40,
+  "hold_floor": 0.9,
+  "stable_after": 100,
+  "operating_point": {
+    "modules": [
+      32
+    ],
+    "trace_amplitude": 0.3,
+    "consolidation": 0.25,
+    "actor_eta": 0.1
+  },
+  "arousal": {
+    "threshold": 0.2,
+    "decay": 0.9,
+    "tolerance": 2.0,
+    "floor": 0.1,
+    "fast": 0.05,
+    "slow": 0.005,
+    "heat": 2.0,
+    "youth": 100
+  },
+  "tabular": {
+    "alpha": 0.2,
+    "epsilon": 0.1
+  },
+  "seeds": {
+    "development": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ],
+    "confirmation": [
+      100,
+      101,
+      102,
+      103,
+      104,
+      105,
+      106,
+      107,
+      108,
+      109
+    ]
+  },
+  "gates": {
+    "final": 0.9,
+    "stable": 0.95,
+    "aroused_late": 0.2,
+    "share": 0.9,
+    "lag_bound": 150,
+    "statement": "over the confirmation lives of the live arm at exposures of 300 and more, at least `share` end each rule with `final` of their last 100 executed actions optimal, keep the stable pair right on `stable` of their probes, and spend no more than `aroused_late` of the second half of each rule aroused; at each of those exposures the median reversal lag is at most `lag_bound` trials, a life that never reverses counting as beyond it. Exposure 100 ends inside the youth and is reported without a gate."
+  }
+}
