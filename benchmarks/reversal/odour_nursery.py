@@ -26,23 +26,27 @@ Arms, all on the same odour sequence per seed:
   action earned under rule A, the same work on old evidence;
 - ``reset``    a newborn ``live`` brain at every rule change;
 - ``tabular``  epsilon-greedy tabular Q-learning, the matched-information conventional
-  online learner;
+  online learner, its two settings selected on the development seeds;
 - ``random``   uniform random actions.
 
 Readings per rule: the share of optimal executed actions in the last 100 trials; the lag
 (first trial from which the next 40 executed actions are at least 90% optimal); the
-greedy choice per odour of a frozen copy every 25 trials; the first executed approach
-at the newly rewarded odour and the trials from it to the greedy flip there (too few
-contradicting witnesses, or a failure to revise after them); whether the stable pair
-stayed right; the share of aroused moments and the settling sweeps per moment and mode.
+greedy choice and the policy's approach probability per odour of a saved and reloaded
+copy every 25 trials; how often each odour was met and approached; the first executed
+approach at the newly rewarded odour, the approaches executed there before the greedy
+choice turned, and the trials between (too few contradicting witnesses, or a failure to
+revise after them); whether the stable pair stayed right; the share of aroused moments
+and the settling sweeps per moment and mode.
 
-Nothing here is a claim about a body: the world is a table. Run
+A run writes a ``cadence.Receipt`` bound to this file and every module of the library;
+``--verify`` checks one. Nothing here is a claim about a body: the world is a table. Run
 ``python benchmarks/reversal/odour_nursery.py --help``.
 """
 
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 import os
@@ -59,7 +63,9 @@ from typing import Any
 import numpy as np
 
 import cadence as cd
+from cadence.receipts import Receipt, canonical_json, source_manifest
 
+SCHEMA = "odour-nursery/2"
 AVOID, APPROACH = 0, 1
 ODOURS = 4
 STABLE_SUGAR, STABLE_PLAIN = 2, 3
@@ -236,7 +242,8 @@ def make_life(arm: str, protocol: dict[str, Any], seed: int, genes: dict[str, An
             make_brain({"modules": point.get("modules", (32,))}, seed, None), use_live=False
         )
     if arm == "tabular":
-        return Tabular(seed, **protocol["tabular"])
+        table = protocol["tabular"]
+        return Tabular(seed, alpha=table["alpha"], epsilon=table["epsilon"])
     if arm == "random":
         return Random(seed)
     raise ValueError(f"unknown arm {arm!r}")
@@ -271,19 +278,25 @@ def run_life(
     phases: list[dict[str, Any]] = []
     for index, (sugar, length) in enumerate(rules):
         if index and arm == "reset":
-            life = make_life(arm, protocol, seed + 1000 * index, genes)
+            # a newborn's seed meets no other generator of this life (odours, luck, brains)
+            life = make_life(arm, protocol, 100_000 * index + seed, genes)
             action, aroused = life.act(odour, None)
         if index == 1 and arm == "frozen":
             life.frozen = True
         new_sugar = sugar if index else None
         hits, modes = [], []
         probes: list[tuple[int, list[int], list[float]]] = []
-        first_try = None
+        visits, approaches = [0] * ODOURS, [0] * ODOURS
+        tries: list[int] = []  # the trials of the executed approaches at the new sugar odour
+        turned = None  # the approach whose outcome first left the greedy choice there turned
         for trial in range(length):
             hits.append(int(action == optimal(odour, sugar)))
             modes.append(aroused)
-            if first_try is None and odour == new_sugar and action == APPROACH:
-                first_try = trial
+            visits[odour] += 1
+            approaches[odour] += int(action == APPROACH)
+            witnessed = odour == new_sugar and action == APPROACH
+            if witnessed:
+                tries.append(trial)
             if trial % every == 0:
                 probes.append((trial, *life.probe()))
             # the replay arm keeps receiving the outcomes of rule A: no new evidence
@@ -296,6 +309,11 @@ def run_life(
             # A refused answer raises and the life is recorded as crashed: this small brain
             # is expected to settle every moment within its budget.
             action, aroused = life.act(odour, reward)
+            # The outcome of an approach at the new sugar odour is taken: has the greedy
+            # choice there turned? Read on a copy, for the first approaches of the rule.
+            if witnessed and turned is None and len(tries) <= protocol["witness_probes"]:
+                if life.probe()[0][new_sugar] == APPROACH:
+                    turned = trial
         executed = np.asarray(hits)
         lag = next(
             (k for k in range(0, length - hold + 1) if executed[k : k + hold].mean() >= floor),
@@ -305,9 +323,15 @@ def run_life(
         greedy_lag = next(
             (probes[k][0] for k in range(len(probes) - 1) if right[k] and right[k + 1]), None
         )
-        flip = None
+        # the greedy choice at the new sugar odour: first seen turned at a probe (`flip`),
+        # and the approaches executed there until it turned (`witnesses`)
+        flip = witnesses = None
         if new_sugar is not None:
             flip = next((p[0] for p in probes if p[1][new_sugar] == APPROACH), None)
+            if turned is not None and (flip is None or turned < flip):
+                witnesses = sum(t <= turned for t in tries)
+            elif flip is not None:
+                witnesses = sum(t < flip for t in tries)
         stable = [
             p[1][STABLE_SUGAR] == APPROACH and p[1][STABLE_PLAIN] == AVOID
             for p in probes
@@ -321,8 +345,13 @@ def run_life(
                 "whole": float(executed.mean()),
                 "lag": lag,
                 "greedy_lag": greedy_lag,
-                "first_try": first_try,
+                "first_try": tries[0] if tries else None,
                 "flip": flip,
+                "turned": turned,
+                "witnesses": witnesses,
+                "visits": visits,
+                "approaches": approaches,
+                "start_approach": [round(v, 4) for v in probes[0][2]],
                 "stable": float(np.mean(stable)) if stable else None,
                 "aroused": float(np.mean(modes)),
                 "aroused_late": float(np.mean(modes[length // 2 :])),
@@ -470,6 +499,8 @@ def markdown(report: dict[str, Any]) -> str:
     rows = report["rows"]
     exposures = sorted({r["exposure"] for r in rows})
     arms = [a for a in ARMS if any(r["arm"] == a for r in rows)]
+    # the first freeze's receipt predates the coverage and witness readings
+    witnessed = all("witnesses" in r["phases"][1] for r in rows if "error" not in r)
 
     def lives(arm: str, exposure: int) -> list[dict[str, Any]]:
         return [
@@ -491,14 +522,25 @@ def markdown(report: dict[str, Any]) -> str:
 
         return cell
 
-    def lag(index: int) -> Any:
+    def lag(index: int, reading: str = "lag") -> Any:
         def cell(group: list[dict[str, Any]]) -> str:
-            values = [r["phases"][index]["lag"] for r in group]
+            values = [r["phases"][index][reading] for r in group]
             found = [v for v in values if v is not None]
             median = f"{int(np.median(found))}" if found else "none"
             return f"{median} ({len(found)}/{len(values)})"
 
         return cell
+
+    def start(group: list[dict[str, Any]]) -> str:
+        values = [r["phases"][1]["start_approach"][1] for r in group]
+        return f"{np.median(values):.3f} ({min(values):.3f})"
+
+    def unturned(group: list[dict[str, Any]]) -> str:
+        left = [p for p in (r["phases"][1] for r in group) if p["witnesses"] is None]
+        median = (
+            f"{int(np.median([p['approaches'][p['sugar']] for p in left]))}" if left else "none"
+        )
+        return f"{median} ({len(left)}/{len(group)})"
 
     def stable(group: list[dict[str, Any]]) -> str:
         values = [p["stable"] for r in group for p in r["phases"] if p["stable"] is not None]
@@ -510,10 +552,39 @@ def markdown(report: dict[str, Any]) -> str:
         *table("Rule A again: optimal share of the last 100 actions, mean (minimum)", final(2)),
         *table("Reversal lag in trials, median (lives that reversed / lives)", lag(1)),
         *table("Return lag in trials, median (lives that returned / lives)", lag(2)),
-        *table("Stable pair right at the probes, mean (minimum)", stable),
+        *table(
+            "Greedy choices after the reversal: first of two consecutive probes with every "
+            "odour right, median trial (lives / lives)",
+            lag(1, "greedy_lag"),
+        ),
+        *table(
+            "First executed approach at the new sugar odour after the reversal, median trial "
+            "(lives / lives)",
+            lag(1, "first_try"),
+        ),
     ]
+    if witnessed:
+        out += [
+            *table(
+                "Policy's approach probability at the new sugar odour when the rule turns, "
+                "median (minimum)",
+                start,
+            ),
+            *table(
+                "Approaches executed there until the greedy choice turned, median "
+                "(lives whose choice turned / lives)",
+                lag(1, "witnesses"),
+            ),
+            *table(
+                "Lives whose greedy choice there never turned: approaches executed there "
+                "under rule B, median (lives / lives)",
+                unturned,
+            ),
+        ]
+    out += table("Stable pair right at the probes, mean (minimum)", stable)
     head = (
-        "| Exposure | first approach at the new sugar odour | from it to the greedy flip | "
+        "| Exposure | first approach at the new sugar odour | from it to the turned greedy "
+        "choice | "
         "aroused, whole life | aroused, second half of rule A | sweeps per routine moment | "
         "sweeps per aroused moment | learning sweeps per aroused moment |"
     )
@@ -525,9 +596,9 @@ def markdown(report: dict[str, Any]) -> str:
             continue
         tries = [r["phases"][1]["first_try"] for r in group]
         flips = [
-            r["phases"][1]["flip"] - r["phases"][1]["first_try"]
-            for r in group
-            if r["phases"][1]["flip"] is not None and r["phases"][1]["first_try"] is not None
+            min(v for v in (p.get("turned"), p["flip"]) if v is not None) - p["first_try"]
+            for p in (r["phases"][1] for r in group)
+            if p["flip"] is not None and p["first_try"] is not None
         ]
         tried = [v for v in tries if v is not None]
         work = [r["work"] for r in group]
@@ -546,7 +617,74 @@ def markdown(report: dict[str, Any]) -> str:
     return "\n".join(out)
 
 
-def main(argv: list[str] | None = None) -> None:
+def sources() -> list[tuple[str, Path]]:
+    """The code a run depends on: this chamber and every module of the library."""
+    package = Path(cd.__file__).resolve().parent
+    return [
+        ("odour_nursery.py", Path(__file__).resolve()),
+        *(
+            ("cadence/" + path.relative_to(package).as_posix(), path)
+            for path in sorted(package.rglob("*.py"))
+        ),
+    ]
+
+
+def read_receipt(path: Path) -> dict[str, Any]:
+    """The body of a receipt from ``.json`` or ``.json.gz``. The receipt of the first
+    confirmation run predates the source manifest and is its own body."""
+    data = path.read_bytes()
+    if path.suffix == ".gz":
+        data = gzip.decompress(data)
+    stored: dict[str, Any] = json.loads(data)
+    body: dict[str, Any] = stored["body"] if "body" in stored else stored
+    return body
+
+
+def write_receipt(path: Path, body: dict[str, Any], manifest: dict[str, Any]) -> None:
+    """Write a ``cadence.Receipt`` bound to the sources read when the run began; a ``.gz``
+    name is compressed with a fixed header, so equal receipts give equal bytes."""
+    receipt = Receipt.build(SCHEMA, body, sources())
+    if receipt.source != manifest:
+        raise RuntimeError("a source file changed during the run; discard it and run again")
+    data = (canonical_json(receipt.to_dict()) + "\n").encode()
+    if path.suffix == ".gz":
+        data = gzip.compress(data, mtime=0)
+    path.write_bytes(data)
+
+
+def planned(body: dict[str, Any]) -> list[tuple[str, int, int]]:
+    """The lives a receipt declares, in the order they are run."""
+    return [(a, e, s) for a in body["arms"] for e in body["exposures"] for s in body["seeds"]]
+
+
+def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> tuple[bool, str]:
+    """Check a receipt: canonical form and digest, one row for every planned life, and
+    the gates recomputed from the rows. ``current`` also requires the source manifest and
+    the protocol hash to be those of the files present now."""
+
+    def check(body: dict[str, Any]) -> str | None:
+        rows = body["rows"]
+        if [(r["arm"], r["exposure"], r["seed"]) for r in rows] != planned(body):
+            return "the rows are not the planned lives, each once and in order"
+        if gates(rows, body["protocol"]) != body["gates"]:
+            return "the stored gates do not follow from the rows"
+        if current and body["protocol_sha256"] != hashlib.sha256(protocol.read_bytes()).hexdigest():
+            return "the protocol file differs from the recorded hash"
+        return None
+
+    try:
+        data = path.read_bytes()
+        if path.suffix == ".gz":
+            data = gzip.decompress(data)
+        with tempfile.TemporaryDirectory() as directory:
+            plain = Path(directory) / "receipt.json"
+            plain.write_bytes(data)
+            return Receipt.verify(plain, sources=sources() if current else None, check=check)
+    except (OSError, ValueError, KeyError, TypeError) as error:
+        return False, f"cannot verify the receipt: {error}"
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--protocol", type=Path, default=PROTOCOL)
     parser.add_argument("--arms", nargs="*", default=list(ARMS), choices=ARMS)
@@ -554,22 +692,40 @@ def main(argv: list[str] | None = None) -> None:
         "--seeds",
         nargs="*",
         default=["development"],
-        help="seed numbers, or the protocol's 'development' or 'confirmation' set",
+        help="seed numbers, or the names of the protocol's seed sets",
     )
     parser.add_argument("--exposures", nargs="*", type=int, default=None)
     parser.add_argument("--genes", default=None, help="JSON overrides of the arousal genes")
-    parser.add_argument("--point", default=None, help="JSON overrides of the operating point")
+    parser.add_argument(
+        "--point",
+        default=None,
+        help="JSON overrides of the operating point; null leaves a setting at its default",
+    )
     parser.add_argument("--reliability", type=float, default=None, help="override the world's")
     parser.add_argument("--payoff", choices=("sugar", "cost"), default=None)
     parser.add_argument("--jitter", type=float, default=None, help="reward noise, one sigma")
     parser.add_argument("--workers", type=int, default=max(1, (os.cpu_count() or 2) - 1))
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument("--report", type=Path, default=None, help="print a receipt's tables")
+    parser.add_argument("--verify", type=Path, default=None, help="check a receipt")
+    parser.add_argument(
+        "--current",
+        action="store_true",
+        help="with --verify: the receipt must also match the source files present now",
+    )
     args = parser.parse_args(argv)
     if args.report is not None:
-        print(markdown(json.loads(args.report.read_text())))
-        return
-    protocol = json.loads(args.protocol.read_text())
+        print(markdown(read_receipt(args.report)))
+        return 0
+    if args.verify is not None:
+        valid, reason = verify(args.verify, current=args.current)
+        print(json.dumps({"verified": valid, "reason": reason}))
+        return 0 if valid else 1
+    manifest = source_manifest(sources())
+    frozen = args.protocol.read_bytes()
+    protocol = json.loads(frozen)
+    if protocol.get("schema") != SCHEMA:
+        parser.error(f"the protocol's schema is not {SCHEMA}")
     if args.reliability is not None:
         protocol["reliability"] = args.reliability
     if args.payoff is not None:
@@ -577,7 +733,9 @@ def main(argv: list[str] | None = None) -> None:
     if args.jitter is not None:
         protocol["jitter"] = args.jitter
     if args.point:
-        protocol["operating_point"] = {**protocol["operating_point"], **json.loads(args.point)}
+        point = {**protocol["operating_point"], **json.loads(args.point)}
+        # a null removes a setting: that part of the brain stays at its released default
+        protocol["operating_point"] = {k: v for k, v in point.items() if v is not None}
     seeds: list[int] = []
     for value in args.seeds:
         seeds.extend(protocol["seeds"][value] if value in protocol["seeds"] else [int(value)])
@@ -592,29 +750,36 @@ def main(argv: list[str] | None = None) -> None:
         workers=args.workers,
     )
     print(summarize(rows))
-    report = {
-        "schema": "odour-nursery/1",
+    overridden = (
+        args.genes
+        or args.point
+        or args.reliability is not None
+        or args.payoff
+        or args.jitter is not None
+    )
+    body = {
         "cadence": cd.__version__,
         "numpy": np.__version__,
         "python": sys.version.split()[0],
         "platform": platform.platform(),
-        "protocol_sha256": hashlib.sha256(args.protocol.read_bytes()).hexdigest(),
-        "frozen_protocol": not (
-            args.genes
-            or args.point
-            or args.reliability is not None
-            or args.payoff
-            or args.jitter is not None
-        ),
+        "protocol_sha256": hashlib.sha256(frozen).hexdigest(),
+        # the settings are the frozen file's: no override, and the file is this chamber's
+        "frozen_protocol": not overridden and frozen == PROTOCOL.read_bytes(),
         "protocol": protocol,
         "genes_override": genes,
+        "arms": list(args.arms),
+        "exposures": list(exposures),
         "seeds": seeds,
         "gates": gates(rows, protocol),
         "rows": rows,
     }
-    print(json.dumps(report["gates"], indent=1))
+    print(json.dumps(body["gates"], indent=1))
     if args.out is not None:
-        args.out.write_text(json.dumps(report, indent=1) + "\n")
+        write_receipt(args.out, body, manifest)
+        valid, reason = verify(args.out, current=True, protocol=args.protocol)
+        print(json.dumps({"verified": valid, "reason": reason, "receipt": str(args.out)}))
+        return 0 if valid else 1
+    return 0
 
 
 if __name__ == "__main__":

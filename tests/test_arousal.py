@@ -235,6 +235,47 @@ def test_routine_answers_greedily_and_changes_nothing():
     assert brain.arousal.sweeps["routine"] > 0 and brain.arousal.learning_sweeps == 0
 
 
+def test_eligibility_fades_through_routine_moments_and_ends_with_the_episode():
+    brain = calm_brain(seed=1, youth=6)
+    eye = np.eye(4)
+    agent = brain.basal_ganglia
+    brain.live(eye[[0]])
+    for moment in range(1, 7):  # a quiet youth: six sampled actions and their outcomes
+        brain.live(eye[[moment % 4]], reward=[0.0])
+    assert brain.last_arousal["mode"] == "routine" and brain.last_arousal["learned"]
+    traces = {name: getattr(agent, name).copy() for name in ("trace", "trace_bias", "trace_critic")}
+    assert all(np.abs(value).max() > 0 for value in traces.values())
+    before = snapshot(brain)
+    decay = agent.config.gamma * agent.config.lam
+    for gap in range(1, 5):  # each routine moment fades the credit of the sampled actions once
+        brain.live(eye[[gap % 4]], reward=[0.0])
+        assert brain.last_arousal["mode"] == "routine" and not brain.last_arousal["learned"]
+        for name, value in traces.items():
+            np.testing.assert_allclose(getattr(agent, name), decay**gap * value, rtol=1e-12)
+    for name, value in snapshot(brain).items():
+        np.testing.assert_array_equal(value, before[name])  # and nothing is learned
+    brain.live(eye[[1]], reward=[0.0], done=[True])  # the episode ends in routine
+    assert not any(getattr(agent, name).any() for name in traces)
+
+
+def test_fade_checks_its_rows_and_is_nothing_without_traces():
+    brain = calm_brain(youth=3)
+    agent = brain.basal_ganglia
+    agent.fade()  # no eligibility yet
+    agent.fade(np.array([True]))
+    assert agent.trace is None and agent.trace_critic is None
+    eye = np.eye(4)
+    brain.live(eye[[0]])
+    brain.live(eye[[1]], reward=[0.0])
+    kept = agent.trace.copy()
+    for bad in (np.array([1]), np.zeros((1, 1), bool), np.zeros(2, bool)):
+        with pytest.raises(ValueError):
+            agent.fade(bad)
+    np.testing.assert_array_equal(agent.trace, kept)  # a refused call fades nothing
+    agent.fade(np.array([False]))
+    np.testing.assert_allclose(agent.trace, agent.config.gamma * agent.config.lam * kept)
+
+
 def test_a_contradicting_outcome_wakes_the_brain_and_is_recorded_once():
     brain = calm_brain()
     eye = np.eye(4)
@@ -380,6 +421,68 @@ def test_a_stepped_brain_continues_through_live_and_reset_begins_calm():
         brain.live(eye[[2]], reward=[1.0])
 
 
+def test_a_slotted_brain_lives_and_owns_only_its_best_guess_in_every_slot():
+    brain = cd.Brain.compose(
+        4,
+        4,
+        modules=(16,),
+        slots=2,
+        seed=0,
+        working_memory_amplitude=0.3,
+        arousal=cd.ArousalConfig(youth=40),
+    )
+    eye = np.eye(4)
+    action = brain.live(eye[[0]])
+    owned = []
+    for moment in range(120):
+        state = brain.basal_ganglia.state
+        motor = state.activation[0, brain.motor_index]
+        best = [int(np.argmax(motor[:2])), int(np.argmax(motor[2:]))]
+        assert brain._lived[5] == (best == action[0].tolist())
+        owned.append(brain._lived[5])
+        reward = float(action[0, 0] == moment % 2) - float(action[0, 1] != 0)
+        action = brain.live(eye[[moment % 4]], reward=[reward])
+        assert action.shape == (1, 2)
+    assert not all(owned[:40]) and any(owned[:40])  # a sampling youth explores some slot
+    assert brain.arousal.moments["routine"] > 0 and brain.hippocampus.writes > 0
+
+
+def test_live_runs_on_the_torch_backend_and_fades_device_eligibility(tmp_path):
+    pytest.importorskip("torch")
+    brain = cd.Brain.compose(
+        4,
+        2,
+        modules=(16,),
+        seed=0,
+        working_memory_amplitude=0.3,
+        backend="torch",
+        arousal=cd.ArousalConfig(youth=10),
+    )
+    eye = np.eye(4)
+    agent = brain.basal_ganglia
+    action = brain.live(eye[[0]])
+    for moment in range(12):
+        action = brain.live(eye[[moment % 4]], reward=[0.0])
+    assert brain.last_arousal["mode"] == "routine"
+    if agent._trace_device is not None:  # the eligibility rests on the device
+        kept = [tensor.clone() for tensor in agent._trace_device]
+        brain.live(eye[[1]], reward=[0.0])
+        decay = agent.config.gamma * agent.config.lam
+        for tensor, before in zip(agent._trace_device, kept, strict=True):
+            assert bool(((tensor - decay * before).abs() <= 1e-6 * before.abs().max()).all())
+        brain.live(eye[[2]], reward=[0.0], done=[True])
+        assert not any(bool(tensor.any()) for tensor in agent._trace_device)
+    twin = cd.Brain.load(brain.save(tmp_path / "life.npz"), backend="torch")
+    for moment in range(20):
+        reward = [float(moment % 3 == 0) - 1.0]
+        np.testing.assert_array_equal(
+            brain.live(eye[[moment % 4]], reward=reward),
+            twin.live(eye[[moment % 4]], reward=reward),
+        )
+    assert twin.arousal.to_dict() == brain.arousal.to_dict()
+    assert action.shape == (1,)
+
+
 def test_brains_without_arousal_keep_their_checkpoint_format(tmp_path):
     import json
 
@@ -396,4 +499,8 @@ def test_brains_without_arousal_keep_their_checkpoint_format(tmp_path):
         meta = json.loads(str(data["generic"]))
         assert meta["format"] == "cadence-generic/3" and meta["lived"]["sampled"] is False
     loaded = cd.Brain.load(path)
-    assert loaded.arousal is not None and loaded._lived is not None and loaded._lived[4] is None
+    assert loaded.arousal is not None and loaded._lived is not None
+    assert loaded._lived[4] is loaded.basal_ganglia.state
+    loaded.act(np.eye(4)[[1]], greedy=True)  # another operation takes the loaded stream too
+    with pytest.raises(RuntimeError, match="preceding action"):
+        loaded.live(np.eye(4)[[2]], reward=[1.0])

@@ -20,7 +20,8 @@ Only the outcome of the brain's own best guess can surprise it and enters what i
 to: what an explored action brings is play. The brain is aroused while
 ``level >= threshold`` and during its first ``youth`` moments, and an aroused brain
 samples at ``1 + heat * want`` times its policy's temperature. The law is unchanged when
-every reward is multiplied by a positive number and shifted by a constant.
+rewards and errors are multiplied by one positive number and rewards are shifted by a
+constant.
 
 Every constant of the law is a gene of ``ArousalConfig``. The values here are hand-set
 founders and stay as the control; ``ArousalConfig.space()`` declares the space for

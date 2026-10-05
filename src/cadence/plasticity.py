@@ -921,6 +921,40 @@ class ActorCritic:
         """The critic's value of a drive, settled cold, without touching the cached state."""
         return self.value(self.learner.free(drive))
 
+    def fade(self, done: np.ndarray | None = None) -> None:
+        """One moment passes that adds no eligibility: its action was answered greedily.
+
+        Every eligibility trace decays by ``gamma * lam``, the step ``learn`` applies
+        between two sampled actions, so the credit of earlier actions keeps fading with
+        time while nothing is learned. ``done`` rows forget their traces, as in
+        ``learn``. Parameters, the critic and optimizer history are unchanged.
+        """
+        decay = self.config.gamma * self.config.lam
+        ended = None if done is None else np.asarray(done)
+        if ended is not None and (ended.ndim != 1 or ended.dtype != np.bool_):
+            raise ValueError("done must be a boolean vector")
+        present = [
+            name
+            for name in ("trace", "trace_bias", "trace_critic")
+            if getattr(self, name) is not None
+        ]
+        rows = {len(getattr(self, name)) for name in present}
+        if self._trace_device is not None:
+            rows.add(int(self._trace_device[0].shape[0]))
+        if ended is not None and any(count != len(ended) for count in rows):
+            raise ValueError("done must match the streams of the eligibility traces")
+        if self._trace_device is not None:
+            trace, trace_bias = (decay * tensor for tensor in self._trace_device)
+            if ended is not None and ended.any():
+                keep = trace.new_tensor((~ended).astype(float))[:, None]
+                trace, trace_bias = trace * keep, trace_bias * keep
+            self._trace_device = (trace, trace_bias)
+        for name in present:
+            value = getattr(self, name)
+            value *= decay
+            if ended is not None and ended.any():
+                value[ended] = 0.0
+
     def reset(self) -> None:
         """Clear stream state and eligibility; keep learned parameters and optimizer history."""
         self._free = None

@@ -1,5 +1,6 @@
 """Guards of the odour nursery: its frozen protocol, its world, its arms and its gates."""
 
+import gzip
 import importlib.util
 import json
 import warnings
@@ -28,11 +29,14 @@ def short(protocol):
 
 
 def test_the_protocol_is_the_frozen_one(protocol):
-    assert protocol["schema"] == "odour-nursery/1"
+    assert protocol["schema"] == nursery.SCHEMA == "odour-nursery/2"
     assert protocol["exposures"] == [100, 300, 1000, 3000, 10000] and protocol["after"] == 600
     seeds = protocol["seeds"]
-    assert not set(seeds["development"]) & set(seeds["confirmation"])
-    assert seeds["confirmation"] == list(range(100, 110))
+    sets = [set(seeds[name]) for name in ("development", "spent", "confirmation")]
+    assert not sets[0] & sets[1] and not sets[0] & sets[2] and not sets[1] & sets[2]
+    assert seeds["spent"] == list(range(100, 110))  # the first freeze's confirmation seeds
+    assert seeds["confirmation"] == list(range(300, 310))
+    assert protocol["tabular"]["alpha"] == 1.0 and protocol["tabular"]["epsilon"] == 0.1
     assert protocol.get("payoff", "sugar") == "sugar" and protocol["reliability"] == 1.0
     assert cd.ArousalConfig(**protocol["arousal"]) == cd.ArousalConfig()  # the founders
     assert protocol["operating_point"] == {
@@ -68,16 +72,32 @@ def test_the_live_arm_acquires_reverses_returns_and_keeps_the_stable_pair(short)
         assert phase["stable"] == 1.0 and phase["aroused_late"] <= 0.2
     assert life["phases"][1]["end_greedy"] == [0, 1, 1, 0]
     assert life["phases"][2]["end_greedy"] == [1, 0, 1, 0]
-    assert life["phases"][1]["first_try"] is not None and life["phases"][1]["flip"] is not None
+    turn = life["phases"][1]
+    assert turn["first_try"] is not None and turn["flip"] is not None
+    assert turn["witnesses"] >= 1 and turn["first_try"] <= turn["turned"] <= turn["flip"]
+    assert sum(turn["visits"]) == 300 and turn["approaches"][1] >= turn["witnesses"]
+    assert 0.0 <= turn["start_approach"][1] <= 1.0
     work = life["work"]
     assert work["routine"] > 2 * work["aroused"] > 0  # most of the life is routine
     assert nursery.gates([life], short)["300"]["reversed"] == 1.0
+
+
+def test_the_probes_do_not_disturb_the_life_they_read(short):
+    quick = {**short, "after": 100}
+    blind = {**quick, "probe_every": 50, "witness_probes": 0}
+    executed = ("final", "whole", "lag", "first_try", "visits", "approaches", "aroused")
+    for arm in ("live", "step"):
+        probed, unprobed = (nursery.run_life(arm, 5, 100, p) for p in (quick, blind))
+        for a, b in zip(probed["phases"], unprobed["phases"], strict=True):
+            assert [a[key] for key in executed] == [b[key] for key in executed]
+        assert probed["work"] == unprobed["work"]
 
 
 def test_the_controls_bracket_the_task(short):
     rows = {arm: nursery.run_life(arm, 0, 300, short) for arm in ("frozen", "random", "tabular")}
     assert rows["frozen"]["phases"][0]["final"] >= 0.9  # the same brain as live under rule A
     assert rows["frozen"]["phases"][1]["final"] < 0.7  # and no adaptation without outcomes
+    assert rows["frozen"]["phases"][1]["witnesses"] is None  # its choice never turned
     assert all(0.3 < p["final"] < 0.7 for p in rows["random"]["phases"])
     assert rows["tabular"]["phases"][0]["final"] >= 0.85
     released = nursery.run_life("defaults", 0, 100, {**short, "after": 100})
@@ -130,3 +150,36 @@ def test_gates_pool_the_exposures_and_count_a_crash_as_a_failure(protocol):
     assert not report["passed"] and report["pooled"]["crashed"] == 1
     ungated = [life(100, (0.5, 0.5, 0.5))]
     assert "passed" not in nursery.gates(ungated, protocol)  # exposure 100 carries no gate
+
+
+def test_a_receipt_binds_its_sources_and_refuses_changed_rows(tmp_path, capsys):
+    path = tmp_path / "receipt.json.gz"
+    run = ["--arms", "tabular", "random", "--seeds", "0", "1", "--exposures", "100"]
+    run += ["--workers", "1", "--out", str(path)]
+    assert nursery.main(run) == 0
+    agree = "canonical form, digest, sources, arithmetic agree"
+    assert nursery.verify(path, current=True) == (True, agree)
+    assert nursery.main(["--verify", str(path)]) == 0 and nursery.main(["--report", str(path)]) == 0
+    stored = json.loads(gzip.decompress(path.read_bytes()))
+    body = stored["body"]
+    assert stored["kind"] == nursery.SCHEMA and body["frozen_protocol"]
+    assert nursery.read_receipt(path) == body
+    files = [item["path"] for item in stored["source"]["files"]]
+    assert files[0] == "odour_nursery.py" and "cadence/generic.py" in files
+
+    def rewrite(content):
+        path.write_bytes(gzip.compress((nursery.canonical_json(content) + "\n").encode()))
+
+    edited = json.loads(json.dumps(stored))
+    edited["body"]["rows"][0]["phases"][0]["final"] = 2.0
+    rewrite(edited)
+    assert nursery.verify(path) == (False, "embedded digest does not verify")
+    fewer = nursery.Receipt.build(nursery.SCHEMA, {**body, "rows": body["rows"][:-1]})
+    rewrite(fewer.to_dict())
+    assert nursery.verify(path)[1] == "the rows are not the planned lives, each once and in order"
+    claimed = nursery.Receipt.build(nursery.SCHEMA, {**body, "gates": {"passed": True}})
+    rewrite(claimed.to_dict())
+    assert nursery.verify(path)[1] == "the stored gates do not follow from the rows"
+    assert nursery.main([*run, "--jitter", "0.1"]) == 0  # an override is recorded
+    assert not nursery.read_receipt(path)["frozen_protocol"]
+    capsys.readouterr()

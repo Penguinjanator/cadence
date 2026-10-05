@@ -400,11 +400,10 @@ class Brain:
         self.last_learning: dict[str, float] = {}
         self._last_settlement: Mapping[str, Any] | None = None
         # ``live``: the arousal of the stream, and the action it issued that awaits an outcome
-        # (observations, action, the forecast made before the outcome, sampled?, its free state)
+        # (observations, action, the forecast made before the outcome, sampled?, its free
+        # state, the brain's own best guess?)
         self.arousal: Arousal | None = None if arousal is None else Arousal(arousal)
-        self._lived: tuple[np.ndarray, np.ndarray, float, bool, BrainState | None, bool] | None = (
-            None
-        )
+        self._lived: tuple[np.ndarray, np.ndarray, float, bool, BrainState, bool] | None = None
         self._last_arousal: Mapping[str, Any] | None = None
 
     @property
@@ -907,7 +906,8 @@ class Brain:
         ``reward`` and ``done`` describe the preceding action, as in ``step``. The
         brain's ``arousal`` decides what this moment costs. Calm, it answers with
         the greedy choice of one qualified settle: no eligibility phases, no
-        learning, no memory write, no parameter changes. Its forecast for the
+        learning, no memory write, no parameter changes; the eligibility of earlier
+        sampled actions fades by one step, as time passes. Its forecast for the
         preceding action was the critic's value when it acted; the outcome is
         measured against that forecast with the value of the present state, and a
         surprising outcome or a reward below what life usually pays raises the
@@ -936,7 +936,7 @@ class Brain:
         if len(x) != 1 or (current is not None and len(np.atleast_2d(current.v)) != 1):
             raise ValueError("live follows one continuing stream; reset before changing streams")
         lived = self._lived
-        if lived is not None and lived[4] is not None and current is not lived[4]:
+        if lived is not None and current is not lived[4]:
             lived = None  # another operation acted since; the brain's own pending action governs
         sampled = agent._pending is not None
         routine = lived is not None and not lived[3] and not sampled
@@ -972,6 +972,10 @@ class Brain:
             own = True if lived is None else lived[5]
             surprise, want = arousal.outcome(error, float(r[0]), own=own, learned=sampled)
             self._lived = None  # this outcome is taken, exactly once
+            if routine:
+                # a moment without eligibility has passed: the credit of earlier sampled
+                # actions fades as it does between two outcomes that are learned from
+                agent.fade(ended)
             if routine and arousal.aroused and self.hippocampus is not None:
                 assert lived is not None
                 self._record(lived[0], lived[1], r, SynapticMemory.salience_vector(np.abs(r), 1))
@@ -992,15 +996,17 @@ class Brain:
         assert state is not None
         if agent._pending is not None:
             learning_sweeps += int(agent._pending[1].steps) + int(agent._pending[2].steps)
+        # the brain's own best guess: the most active motor neuron of every slot
         motor = np.asarray(state.activation)[0, self.motor_index]
-        best = self.learner.slot_count > 1 or int(np.argmax(motor)) == int(action[0])
+        slots = zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
+        best = [int(np.argmax(motor[start : start + size])) for start, size in slots]
         self._lived = (
             x.copy(),
             action.copy(),
             float(agent.value(state)[0]),
             aroused,
             state,
-            bool(best),
+            best == [int(choice) for choice in np.atleast_1d(action[0])],
         )
         self._last_arousal = MappingProxyType(
             {
@@ -1308,7 +1314,7 @@ class Brain:
             metadata["format"] = "cadence-generic/3"
             metadata["arousal"] = self.arousal.to_dict()
             lived = self._lived
-            if lived is not None and lived[4] is not None and agent.state is not lived[4]:
+            if lived is not None and agent.state is not lived[4]:
                 lived = None  # another operation acted since live issued its action
             if lived is not None:
                 data["lived/observations"], data["lived/action"] = lived[0], lived[1]
@@ -1458,12 +1464,14 @@ class Brain:
             result.hippocampus = memory
             result.arousal = arousal
             if "lived" in meta:
+                state = agent._free  # validated above: a lived action has its free state
+                assert state is not None
                 result._lived = (
                     data["lived/observations"].copy(),
                     data["lived/action"].copy(),
                     float(meta["lived"]["forecast"]),
                     bool(meta["lived"]["sampled"]),
-                    None,
+                    state,
                     bool(meta["lived"]["own"]),
                 )
         return result
