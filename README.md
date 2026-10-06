@@ -211,6 +211,23 @@ OPH, observer patches repair disagreements where they overlap until the whole
 network is consistent. In Cadence, neurons settle against what their connections
 predict, and learning changes those connections locally.
 
+## Cadence memecoin
+
+Cadence has an official memecoin on Solana. Its token address is
+`46doJPsSjEVMsNZm4b32UbbvbUXjFTM3TDPBWMM3pump`
+([chart on Dexscreener](https://dexscreener.com/solana/4tjiqzqocttntmdqqmev2spoegzipuerfyramnfxv9su)).
+Any other token using the Cadence name is unrelated to this project.
+
+Pragma Research did not deploy the token and holds none of it. It was set up so
+that Bernhard Mueller can claim all the SOL fees it generates, and those fees
+have been a very helpful source of funding for Cadence.
+
+Cadence itself does not use the token, and no integration into the core library
+is planned. We encourage the crypto community to build interesting projects that
+integrate it.
+
+Nothing here is financial advice.
+
 [Documentation](https://github.com/muellerberndt/cadence/blob/main/docs/index.md) ·
 [API](https://github.com/muellerberndt/cadence/blob/main/docs/api.md) ·
 [Contributing](https://github.com/muellerberndt/cadence/blob/main/CONTRIBUTING.md) ·
