@@ -115,6 +115,247 @@ learner is handed (the door terminal, a cut trip not), the checkpoint continuati
 the delay with the preceding outcome pending, the independence of a life from its probes,
 a refused answer charged and recorded, the gate arithmetic and the receipt's custody.
 
+## Results on ten fresh seeds, 2026-10-06
+
+Receipt: `results/confirmation-2026-10-06.json.gz`. Protocol SHA-256
+`8cc9ed188c91a7f7098a978b2e5f963f43b8d5e46797d4be5144a66ee9b8124d`, frozen at commit
+`b57f9fd`; seeds 800 to 809; cadence 0.75.0 with the `need` gene of this branch, NumPy 2.5.3,
+Python 3.13.0, macOS arm64. All 240 lives completed and none refused an answer. **Three of
+the four gates passed and the fourth did not, so the gates did not pass.** Of the 20 gated
+lives of the `live` arm, 20 acquired rule A (fed 1.00 at delay 2 and 0.99 at delay 5 at its
+end, median lags 9 and 66 trips), 19 re-adapted after the key moved (fed 0.97 and 1.00 at the
+end of rule B, median lags 27 and 38 trips, the door opened with the key on 99% of the visits),
+19 were frugal (0.31 and 0.13 wrong interactions per trip at the end of rule A, 0.45 and 0.24
+at the end of rule B) and 17 were calm against the 18 required. The misses: one life at delay
+2 kept touching the empty chest and the lamp while holding the key after the move, ended rule
+B fed on 0.70 of its trips with 2.1 wrong interactions per trip and spent 69% of the late
+moments aroused; one life at delay 2 spent 54% of the late half of rule A aroused while fed on
+every trip without a wrong interaction; one life at delay 5 acquired at trip 316 and
+re-adapted at trip 373 and was still searching in the second half of each rule (32% and 46%).
+At delay 10, ungated, 5 of 10 lives acquired rule A and 8 of 10 ended rule B fed (0.89 at its
+end, median lag 172 trips; the tabular learner 0.88).
+
+The controls on the same corridors: `step`, learning at every moment, ended rule B fed at 0.97
+and 0.68 while aroused at every moment and wasting 1.8 and 0.7 interactions per trip;
+`lambda-zero` at 0.68 and 0.33, the door's credit reaching only the last action;
+`yoked`, paid the same rewards at a random cell of the next trip, at 0.28 and 0.07, near
+random; `frozen` at 0.00 (no adaptation without outcomes); `blind`, without the pouch sense,
+at 1.00 and 1.00 with no wrong interaction at either delay, so the working trace carries the
+key through the levers and the pouch sense adds nothing at these delays; `tabular` at 0.90
+and 0.92, bounded by its epsilon; `random` at 0.22. The `live` arm's routine moment took
+0.71 to 0.79 ms (median) against 2.0 to 2.2 ms aroused, at 25 to 31 settling sweeps per
+routine moment and 22 to 24 per aroused moment: routine is cheaper in time (no learning
+phases), not in sweeps. It spent 13% and 21% of its moments aroused over the whole life and
+5% and 4% over the second half of rule A, wrote 1,870 and 2,943 records to memory and spent
+12,800 sweeps per life on the probes of saved copies.
+
+### Declared variants on the same seeds
+
+`results/variant-scarcity-2026-10-06.json.gz` (`--food 0.5`, the door paying one time in two
+with the key): no life acquired rule A or rule B at either delay (fed 0.25 and 0.22 at the end
+of rule A, 0.35 and 0.27 at the end of rule B), 83% to 88% of the moments aroused. The
+expected income at full feeding, 0.036 per moment, sits at the need of 0.03, and the forecast
+of the door is contradicted on every other trip, so the creature never leaves arousal and the
+flood of sampled wrong interactions holds it in the latch recorded below.
+`results/variant-composed-critic-2026-10-06.json.gz` (critic rate 0.3, eligibility decay 0.8,
+discount 0.9, all else the frozen point): 13 of 20 lives acquired rule A and 11 re-adapted
+(at delay 5, 4 and 3 of 10), against 20 and 19 for the frozen point.
+
+### The tables
+
+Every number below is read from the receipt by `--report`.
+
+### Rule A, chest holds the key: trips fed in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 1.00 (1.00) | 0.99 (0.92) | 0.69 (0.12) |
+| `step` | 0.94 (0.86) | 0.90 (0.78) | 0.57 (0.00) |
+| `lambda-zero` | 0.82 (0.04) | 0.51 (0.00) | 0.12 (0.00) |
+| `yoked` | 0.35 (0.14) | 0.14 (0.02) | 0.15 (0.02) |
+| `frozen` | 1.00 (1.00) | 0.99 (0.92) | 0.69 (0.12) |
+| `blind` | 1.00 (1.00) | 1.00 (1.00) | 0.57 (0.04) |
+| `tabular` | 0.68 (0.00) | 0.89 (0.84) | 0.89 (0.84) |
+| `random` | 0.25 (0.16) | 0.26 (0.16) | 0.23 (0.14) |
+
+### Rule B, lamp holds the key: trips fed in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.97 (0.70) | 1.00 (0.98) | 0.89 (0.02) |
+| `step` | 0.97 (0.90) | 0.68 (0.02) | 0.43 (0.00) |
+| `lambda-zero` | 0.68 (0.02) | 0.33 (0.00) | 0.13 (0.00) |
+| `yoked` | 0.28 (0.06) | 0.07 (0.02) | 0.13 (0.00) |
+| `frozen` | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) |
+| `blind` | 1.00 (1.00) | 1.00 (1.00) | 0.70 (0.02) |
+| `tabular` | 0.90 (0.84) | 0.92 (0.82) | 0.88 (0.78) |
+| `random` | 0.22 (0.10) | 0.22 (0.18) | 0.28 (0.12) |
+
+### Rule A: key taken in the last 50 trips, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 1.00 (1.00) | 1.00 (0.98) | 0.76 (0.34) |
+| `step` | 0.95 (0.90) | 0.92 (0.80) | 0.59 (0.04) |
+| `lambda-zero` | 0.85 (0.22) | 0.59 (0.10) | 0.24 (0.06) |
+| `yoked` | 0.52 (0.28) | 0.38 (0.18) | 0.35 (0.18) |
+| `frozen` | 1.00 (1.00) | 1.00 (0.98) | 0.76 (0.34) |
+| `blind` | 1.00 (1.00) | 1.00 (1.00) | 0.63 (0.22) |
+| `tabular` | 0.75 (0.04) | 0.95 (0.90) | 0.93 (0.90) |
+| `random` | 0.49 (0.38) | 0.50 (0.32) | 0.50 (0.44) |
+
+### Rule B: key taken in the last 50 trips, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.98 (0.80) | 1.00 (1.00) | 0.90 (0.14) |
+| `step` | 0.98 (0.94) | 0.69 (0.04) | 0.44 (0.00) |
+| `lambda-zero` | 0.72 (0.14) | 0.41 (0.12) | 0.25 (0.08) |
+| `yoked` | 0.49 (0.18) | 0.23 (0.14) | 0.28 (0.12) |
+| `frozen` | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) |
+| `blind` | 1.00 (1.00) | 1.00 (1.00) | 0.75 (0.10) |
+| `tabular` | 0.94 (0.86) | 0.97 (0.94) | 0.94 (0.88) |
+| `random` | 0.49 (0.42) | 0.48 (0.36) | 0.49 (0.38) |
+
+### Rule A: wrong interactions per trip in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.31 (0.00) | 0.13 (0.00) | 1.53 (0.00) |
+| `step` | 0.82 (0.02) | 0.55 (0.06) | 0.31 (0.12) |
+| `lambda-zero` | 0.53 (0.00) | 0.62 (0.00) | 1.39 (0.00) |
+| `yoked` | 0.78 (0.02) | 1.53 (0.84) | 2.96 (1.84) |
+| `frozen` | 0.31 (0.00) | 0.13 (0.00) | 1.53 (0.00) |
+| `blind` | 0.00 (0.00) | 0.00 (0.00) | 1.62 (0.00) |
+| `tabular` | 0.15 (0.04) | 0.49 (0.28) | 1.62 (1.10) |
+| `random` | 1.45 (1.20) | 2.98 (2.68) | 5.47 (5.14) |
+
+### Rule B: wrong interactions per trip in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.45 (0.00) | 0.24 (0.00) | 0.43 (0.00) |
+| `step` | 1.78 (0.92) | 0.67 (0.10) | 0.50 (0.06) |
+| `lambda-zero` | 0.39 (0.00) | 0.70 (0.00) | 1.37 (0.00) |
+| `yoked` | 0.88 (0.00) | 1.09 (0.68) | 2.26 (1.46) |
+| `frozen` | 1.00 (1.00) | 1.00 (1.00) | 0.77 (0.00) |
+| `blind` | 0.00 (0.00) | 0.00 (0.00) | 0.87 (0.00) |
+| `tabular` | 0.15 (0.06) | 0.53 (0.34) | 1.66 (1.06) |
+| `random` | 1.49 (1.30) | 2.91 (2.36) | 5.36 (4.74) |
+
+### Rule A: first 20-trip window 90% fed, median trip (lives / lives)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 9 (10/10) | 65 (10/10) | 303 (8/10) |
+| `step` | 122 (10/10) | 188 (10/10) | 250 (3/10) |
+| `lambda-zero` | 14 (8/10) | 6 (6/10) | 9 (2/10) |
+| `yoked` | 49 (4/10) | 132 (2/10) | 50 (2/10) |
+| `frozen` | 9 (10/10) | 65 (10/10) | 303 (8/10) |
+| `blind` | 14 (10/10) | 113 (10/10) | 56 (6/10) |
+| `tabular` | 20 (8/10) | 17 (10/10) | 33 (10/10) |
+| `random` | none (0/10) | none (0/10) | none (0/10) |
+
+### Rule B: first 20-trip window 90% fed, median trip (lives / lives)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 26 (10/10) | 38 (10/10) | 172 (9/10) |
+| `step` | 23 (10/10) | 122 (8/10) | 140 (6/10) |
+| `lambda-zero` | 29 (7/10) | 15 (3/10) | 116 (1/10) |
+| `yoked` | 27 (2/10) | none (0/10) | 464 (1/10) |
+| `frozen` | none (0/10) | none (0/10) | none (0/10) |
+| `blind` | 13 (10/10) | 32 (10/10) | 311 (6/10) |
+| `tabular` | 29 (10/10) | 9 (10/10) | 32 (10/10) |
+| `random` | none (0/10) | none (0/10) | none (0/10) |
+
+### Rule A behaviour: probability of taking at the chest without the key, median (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.965 (0.659) | 0.863 (0.558) | 0.555 (0.407) |
+| `step` | 0.844 (0.666) | 0.793 (0.592) | 0.464 (0.132) |
+| `lambda-zero` | 0.972 (0.241) | 0.728 (0.186) | 0.214 (0.172) |
+| `yoked` | 0.486 (0.408) | 0.454 (0.338) | 0.428 (0.276) |
+| `frozen` | 0.965 (0.659) | 0.863 (0.558) | 0.555 (0.407) |
+| `blind` | 0.971 (0.544) | 0.849 (0.518) | 0.478 (0.227) |
+| `tabular` | 0.939 (0.056) | 0.938 (0.691) | 0.889 (0.291) |
+| `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
+
+### Rule B behaviour: probability of taking at the lamp without the key, median (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.956 (0.747) | 0.920 (0.477) | 0.726 (0.217) |
+| `step` | 0.936 (0.731) | 0.598 (0.028) | 0.267 (0.015) |
+| `lambda-zero` | 0.899 (0.154) | 0.176 (0.149) | 0.144 (0.141) |
+| `yoked` | 0.424 (0.349) | 0.224 (0.152) | 0.280 (0.155) |
+| `frozen` | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) |
+| `blind` | 0.978 (0.829) | 0.950 (0.689) | 0.466 (0.156) |
+| `tabular` | 0.902 (0.757) | 0.927 (0.870) | 0.911 (0.857) |
+| `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
+
+### Rule B behaviour: probability of interacting at a lever with the key, median (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.045 (0.006) | 0.024 (0.006) | 0.063 (0.012) |
+| `step` | 0.315 (0.035) | 0.041 (0.020) | 0.019 (0.011) |
+| `lambda-zero` | 0.135 (0.007) | 0.147 (0.005) | 0.141 (0.034) |
+| `yoked` | 0.365 (0.022) | 0.226 (0.149) | 0.267 (0.148) |
+| `frozen` | none | none | none |
+| `blind` | 0.007 (0.002) | 0.011 (0.001) | 0.151 (0.006) |
+| `tabular` | 0.051 (0.050) | 0.092 (0.080) | 0.148 (0.137) |
+| `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
+
+### The live arm: arousal and work, medians over lives
+
+| Delay | aroused, whole life | aroused, second half of rule A | sweeps per routine moment | per aroused moment | learning sweeps | probe sweeps | memory reads | memory writes | routine ms (median, p90) | aroused ms (median, p90) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | 0.131 | 0.053 | 25.3 | 23.9 | 19287 | 12800 | 15449 | 1870 | 0.71, 2.42 | 2.01, 8.40 |
+| 5 | 0.210 | 0.042 | 31.0 | 22.0 | 33100 | 12800 | 16556 | 2943 | 0.79, 2.43 | 2.16, 10.27 |
+| 10 | 0.461 | 0.494 | 26.4 | 23.1 | 67488 | 12816 | 20110 | 6444 | 0.68, 2.03 | 1.94, 6.00 |
+
+### Gates
+
+```json
+{
+ "10": {
+  "acquired": 0.5,
+  "adapted": 0.8,
+  "calm": 0.4,
+  "crashed": 0,
+  "frugal": 0.5,
+  "lives": 10
+ },
+ "2": {
+  "acquired": 1.0,
+  "adapted": 0.9,
+  "calm": 0.8,
+  "crashed": 0,
+  "frugal": 0.9,
+  "lives": 10
+ },
+ "5": {
+  "acquired": 1.0,
+  "adapted": 1.0,
+  "calm": 0.9,
+  "crashed": 0,
+  "frugal": 1.0,
+  "lives": 10
+ },
+ "passed": false,
+ "pooled": {
+  "acquired": 1.0,
+  "adapted": 0.95,
+  "calm": 0.85,
+  "crashed": 0,
+  "frugal": 0.95,
+  "lives": 20
+ }
+}
+```
+
 ## The first freeze, 2026-10-06
 
 Receipts: `results/freeze1-confirmation-2026-10-06.json.gz` and the two variants beside it.

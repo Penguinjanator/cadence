@@ -252,6 +252,38 @@ def test_gates_pool_the_gated_delays_and_count_a_crash_as_a_failure(protocol):
     assert "passed" not in keydoor.gates(ungated, protocol)  # delay 10 carries no gate
 
 
+def test_the_confirmation_receipt_is_the_frozen_protocols_and_carries_its_gates(protocol):
+    path = HERE / "results" / "confirmation-2026-10-06.json.gz"
+    valid, reason = keydoor.verify(path)
+    assert valid, reason
+    body = keydoor.read_receipt(path)
+    assert body["frozen_protocol"] and body["genes_override"] is None
+    frozen = keydoor.hashlib.sha256((HERE / "protocol.json").read_bytes()).hexdigest()
+    assert body["protocol_sha256"] == frozen
+    assert body["seeds"] == protocol["seeds"]["confirmation"] and body["arms"] == list(keydoor.ARMS)
+    assert body["delays"] == protocol["delays"]
+    assert body["gates"] == keydoor.gates(body["rows"], protocol)
+    assert len(body["rows"]) == len(keydoor.ARMS) * len(protocol["delays"]) * 10
+
+
+def test_the_first_freezes_receipts_verify_by_their_own_kind():
+    """Bound to the sources of commit 35fcb14, they verify without ``--current``."""
+    for name in ("confirmation", "variant-scarcity", "variant-composed-critic"):
+        path = HERE / "results" / f"freeze1-{name}-2026-10-06.json.gz"
+        valid, reason = keydoor.verify(path)
+        assert valid, (name, reason)
+        body = keydoor.read_receipt(path)
+        assert body["protocol_sha256"].startswith("2f214aae")
+        assert body["seeds"] == list(range(700, 710))
+    first = keydoor.read_receipt(HERE / "results" / "freeze1-confirmation-2026-10-06.json.gz")
+    assert first["frozen_protocol"] and not first["gates"]["passed"]
+    pooled = first["gates"]["pooled"]
+    shares = (pooled["acquired"], pooled["adapted"], pooled["frugal"], pooled["calm"])
+    assert shares == (0.9, 1.0, 0.55, 0.7)
+    yoked = [r for r in first["rows"] if r["arm"] == "yoked"]
+    assert sum("error" in r for r in yoked) == 28  # the fault of that control, repaired since
+
+
 def test_a_receipt_binds_its_sources_and_refuses_changed_rows(tmp_path, capsys):
     path = tmp_path / "receipt.json.gz"
     run = ["--arms", "tabular", "random", "--seeds", "0", "--delays", "2", "--episodes", "30"]

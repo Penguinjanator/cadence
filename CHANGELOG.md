@@ -28,8 +28,17 @@
   energy, stays flat over a 14-cell trip so that only the actor's own eligibility carries
   the door's credit; the chamber's point raises the critic's rate to 5.0 with the
   eligibility decay and discount at 0.95, the composed values as controls. The frozen
-  protocol gates delays 2 and 5 and reports delay 10, which the brain does not acquire and
-  the tabular learner does.
+  protocol gates delays 2 and 5 and reports delay 10. Two freezes were confirmed on fresh
+  seeds; at the second, of the 20 gated lives 20 acquired rule A, 19 re-adapted after the
+  key moved (fed 1.00 at the end of rule B at delay 5), 19 were frugal and 17 calm against
+  the 18 the gate requires, so the gates did not pass; the first freeze's gates missed on
+  frugality and calm, and its yoked control crashed on trips cut to one cell. Learning at
+  every moment re-adapts at 0.97 and 0.68 while never resting; zero eligibility, yoked
+  rewards and the composed critic fall short; the blind arm, without the pouch sense, is
+  fed at 1.00 with no wrong interaction at both gated delays, so the working trace carries
+  the key. At delay 10 half the lives acquire and 8 of 10 re-adapt; the tabular learner
+  acquires it in every life. A scarcity variant (the door paying one time in two) acquires
+  nothing: the need sits at the expected income and the creature never leaves arousal.
 
 ## 0.75.0 — 2026-10-06
 
