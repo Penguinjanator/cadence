@@ -115,27 +115,33 @@ memory writes and reset semantics. The environment must be saved separately.
 | Inspectable settling work | `Brain.last_settlement` retains free-answer residuals, sweeps, checks and qualification, including refused attempts. It excludes eligibility, teaching, feedback and memory work. |
 | Short and long memory | Working traces and fast/persistent associations influence actions; graph parameters also retain learning. Their capacities, update clocks and interference differ. |
 | Local correction | Current teacher labels change graph parameters; actual chosen-action outcomes drive reward plasticity and associative writes. A teacher label does not automatically become a stored event or credit an earlier sequence. |
+| Routine and repair | `Brain.live`, for a brain constructed with `arousal`, answers greedily and learns nothing while outcomes match its forecast, and samples, learns and writes memory when an outcome surprises it or reward stays below its usual level. One stream; the law responds to change and its constants are genes. |
 | Private imagination | `Brain.imagine` evaluates **supplied** observation sequences with private trace and read-only durable memory. It does not learn or generate environmental transitions. |
 | Dreaming and sleep | `RecordPatchNet.dream` completes cues using the model and records; `sleep` teaches fixed completions to slow weights and rewrites residual records. This supported [sleep cycle](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night) is distinct from `Brain.imagine` and online associative consolidation, and is not integrated into `Brain.compose`. |
 | Learned consequences | `TemporalPatchNet` provides a separate learned temporal model and planning interface. Records provide other explicit prediction mechanisms. These are not automatically integrated into `Brain.compose`. |
 | State-and-error population experiments | `cadence.experimental.equilibrium` qualifies a joint stationary state under its own energy. It uses explicit `History`, not the default Brain's trace and associative memory; its law and guarantees stay distinct. |
 
 The full world-model lifecycle is the design direction, not a completed default
-capability. In particular, current `step` processes real feedback even when the
-task succeeded; it does not gate every update on witnessed failure. Warm state
-can help settlement, but a general contract for cheap stable operation,
-automatic mismatch-triggered local repair and integrated learned consequences
-still needs implementation and behavioral evidence. This guide adds no new
-threshold or success policy. Use each model's [actual contract](contracts.md).
+capability. `step` processes real feedback even when the task succeeded; it does
+not gate an update on witnessed failure. [`live`](continuous.md#routine-and-repair-live)
+gates learning by arousal for one stream: routine moments settle once and
+change no parameter or record, and a surprising outcome or a lasting shortfall of
+reward can start exploration and learning. Youth and sustained arousal also
+permit learning from successful outcomes; this is not a failure-only gate.
+Its evidence is the bounded
+[odour nursery](../benchmarks/reversal/README.md), where the associative memory
+carries the repair; settled-state reuse across moments, repair localized to
+declared dependencies and integrated learned consequences still need
+implementation and behavioral evidence. Use each model's [actual contract](contracts.md).
 The implementation work is owned by [learned-consequence integration](https://github.com/muellerberndt/cadence/issues/93)
 and [failure-driven repair and qualified reuse](https://github.com/muellerberndt/cadence/issues/122).
 
-Two narrower mechanisms already exist. [Centered dopamine](reward.md#centered-dopamine-and-selective-activity)
+Two narrower mechanisms also exist. [Centered dopamine](reward.md#centered-dopamine-and-selective-activity)
 can suppress familiar actor modulation when `dopamine_center` and
 `dopamine_floor` are configured; critic updates, momentum, eligibility and
 memory writes can still do work. [Life](api.md#life-cadencelife) selects habit,
-imagination and learning for a separate belief/steering composition. Neither
-silently changes `Brain.step` into a universal failure gate.
+imagination and learning for a separate belief/steering composition. None of
+these changes `Brain.step` into a failure gate.
 
 The default sensory projection feeds a chain of processing regions; neighboring
 regions and the association/motor pair exchange reciprocal signals. Processing

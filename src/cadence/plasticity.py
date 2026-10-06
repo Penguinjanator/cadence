@@ -335,12 +335,15 @@ class ActorCritic:
     def value(self, state: BrainState) -> np.ndarray:
         return np.asarray(state.activation[:, self.critic_index] @ self.w_critic + self.b_critic)
 
-    def probabilities(self, state: BrainState) -> np.ndarray:
+    def probabilities(self, state: BrainState, temperature: float | None = None) -> np.ndarray:
         """Action probabilities, normalized separately for each motor slot.
 
         Multiple categorical slots return ``(batch, slots, max_size)`` with
         zero padding for shorter slots. Bins keeps its uniform population shape.
+        ``temperature`` reads the same settled outputs at another softmax
+        temperature; left unset it is the learner's, the policy that learning credits.
         """
+        temperature = self._temperature(temperature)
         s = state.activation[:, self.learner.output_index]
         if self.bins is not None:
             s = s.reshape(len(s), self.bins.dims, self.bins.size)
@@ -349,14 +352,37 @@ class ActorCritic:
             for j, (start, size) in enumerate(
                 zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
             ):
-                z = s[:, start : start + size] / self.learner.config.temperature
-                z = np.exp(z - z.max(axis=1, keepdims=True))
-                p[:, j, :size] = z / z.sum(axis=1, keepdims=True)
+                p[:, j, :size] = self._softmax(s[:, start : start + size], temperature)
             return p
-        z = s / self.learner.config.temperature
-        z = z - z.max(axis=-1, keepdims=True)
+        return self._softmax(s, temperature)
+
+    @staticmethod
+    def _softmax(s: np.ndarray, temperature: float) -> np.ndarray:
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            z = s / temperature
+            if not np.isfinite(z).all():
+                # At a subnormal temperature, subtract before dividing: negative infinity
+                # has zero probability, while each largest logit stays exactly zero.
+                # Float32 inputs must not round the positive denominator down to zero.
+                logits = np.asarray(s, dtype=float)
+                z = (logits - logits.max(axis=-1, keepdims=True)) / temperature
+            else:
+                z = z - z.max(axis=-1, keepdims=True)
         p = np.exp(z)
         return np.asarray(p / p.sum(axis=-1, keepdims=True))
+
+    def _temperature(self, temperature: float | None) -> float:
+        """The softmax temperature of a reading: the learner's unless another is given."""
+        if temperature is None:
+            return float(self.learner.config.temperature)
+        if (
+            isinstance(temperature, (bool, np.bool_))
+            or not isinstance(temperature, (int, float, np.integer, np.floating))
+            or not np.isfinite(temperature)
+            or temperature <= 0
+        ):
+            raise ValueError("temperature must be finite and positive")
+        return float(temperature)
 
     def settle(self, drive: np.ndarray) -> BrainState:
         """The free phase for ``drive``, warm from the last one; cached for ``act``."""
@@ -382,13 +408,22 @@ class ActorCritic:
 
     # -- acting
 
-    def act(self, drive: np.ndarray, greedy: bool = False) -> np.ndarray:
+    def act(
+        self, drive: np.ndarray, greedy: bool = False, temperature: float | None = None
+    ) -> np.ndarray:
         """Settle (or reuse the cached free phase), sample an action per row, keep its eligibility.
 
         Discrete: an action index per row, or one index per categorical motor slot.
         With ``Bins``: one softmax draw per dimension of a population code.
+        ``temperature`` samples the same settled outputs at another softmax
+        temperature, a behaviour that explores more (above the learner's) or less.
+        The eligibility kept for the sampled action remains the score of the
+        learner's own policy, so credit for an explored action is an on-policy
+        estimate only at the learner's temperature. A greedy read ignores it.
         """
         drive = self._validated_drive(drive)
+        if temperature is not None:
+            temperature = self._temperature(temperature)  # before any state changes
         free = (
             self._free
             if self._free is not None
@@ -399,8 +434,8 @@ class ActorCritic:
         )
         self._pending = None  # eligibility always belongs to this decision, including greedy reads
         if self.bins is not None:
-            return self._act_bins(drive, free, greedy)
-        p = self.probabilities(free)
+            return self._act_bins(drive, free, greedy, temperature)
+        p = self.probabilities(free, None if greedy else temperature)
         if greedy:
             action = np.argmax(p, axis=-1)
         else:
@@ -410,7 +445,7 @@ class ActorCritic:
             action = np.minimum(action, limit)
         if not greedy:
             target = self.learner.targets(action)
-            # Credit must differentiate the policy that sampled this action.
+            # Credit differentiates the learner's policy, including explored actions.
             # A learner may use quadratic imitation; its loss must not silently
             # replace the categorical log-policy score in reward eligibility.
             beta = self.learner.config.beta
@@ -419,14 +454,16 @@ class ActorCritic:
             self._pending = ("states", plus, minus, self.value(free))
         return np.asarray(action, dtype=np.int64)
 
-    def _act_bins(self, drive: np.ndarray, free: BrainState, greedy: bool) -> np.ndarray:
+    def _act_bins(
+        self, drive: np.ndarray, free: BrainState, greedy: bool, temperature: float | None = None
+    ) -> np.ndarray:
         """One softmax draw per dimension; the taken levels' one-hots are the nudge's target,
         per group."""
         bins = self.bins
         assert bins is not None
         cfg = self.learner.config
         batch = len(drive)
-        p = self.probabilities(free)
+        p = self.probabilities(free, None if greedy else temperature)
         if greedy:
             choice = np.argmax(p, axis=2)
         else:
@@ -893,6 +930,40 @@ class ActorCritic:
     def value_of(self, drive: np.ndarray) -> np.ndarray:
         """The critic's value of a drive, settled cold, without touching the cached state."""
         return self.value(self.learner.free(drive))
+
+    def fade(self, done: np.ndarray | None = None) -> None:
+        """One moment passes that adds no eligibility: its action was answered greedily.
+
+        Every eligibility trace decays by ``gamma * lam``, the step ``learn`` applies
+        between two sampled actions, so the credit of earlier actions keeps fading with
+        time while nothing is learned. ``done`` rows forget their traces, as in
+        ``learn``. Parameters, the critic and optimizer history are unchanged.
+        """
+        decay = self.config.gamma * self.config.lam
+        ended = None if done is None else np.asarray(done)
+        if ended is not None and (ended.ndim != 1 or ended.dtype != np.bool_):
+            raise ValueError("done must be a boolean vector")
+        present = [
+            name
+            for name in ("trace", "trace_bias", "trace_critic")
+            if getattr(self, name) is not None
+        ]
+        rows = {len(getattr(self, name)) for name in present}
+        if self._trace_device is not None:
+            rows.add(int(self._trace_device[0].shape[0]))
+        if ended is not None and any(count != len(ended) for count in rows):
+            raise ValueError("done must match the streams of the eligibility traces")
+        if self._trace_device is not None:
+            trace, trace_bias = (decay * tensor for tensor in self._trace_device)
+            if ended is not None and ended.any():
+                keep = trace.new_tensor((~ended).astype(float))[:, None]
+                trace, trace_bias = trace * keep, trace_bias * keep
+            self._trace_device = (trace, trace_bias)
+        for name in present:
+            value = getattr(self, name)
+            value *= decay
+            if ended is not None and ended.any():
+                value[ended] = 0.0
 
     def reset(self) -> None:
         """Clear stream state and eligibility; keep learned parameters and optimizer history."""

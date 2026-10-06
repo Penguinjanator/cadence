@@ -8,9 +8,10 @@ then act again. There is no training/inference mode switch.
 
 This is the runtime loop for [one continuing equilibrium brain](world-model.md).
 Bootstrap, unchanged conditions and witnessed disruption belong to the same
-life. Current reward learning processes each actual outcome; it does not yet
-implement a universal policy of learning only after failure. Keep a task error
-separate from a numerical failure to settle.
+life. `step` processes each actual outcome. [`live`](#routine-and-repair-live)
+is the same life with arousal: routine while outcomes match the brain's
+forecast, exploring and learning when they do not. Keep a task error separate
+from a numerical failure to settle.
 
 ## Observations, actions and reward
 
@@ -215,6 +216,90 @@ Persistent memory costs `key_width × value_width` numbers, plus that amount per
 stream for fast weights. Reads neither consolidate nor decay memory. Learning
 weights does not require growing new anatomical connections.
 
+## Routine and repair: `live`
+
+`step` samples an action, keeps its eligibility and learns from its outcome at
+every moment. `live` lets the brain's arousal decide. A calm brain answers with
+the greedy choice of one qualified settle and learns nothing: no eligibility
+phases, no parameter change, no memory write; the eligibility of its earlier
+sampled actions fades with each moment. Two things rouse it. An outcome that
+contradicts the forecast it made before acting is a surprise. A reward that
+stays below what its life usually pays is a want, which also covers a failure it
+predicts correctly. An aroused brain samples, at a temperature the want raises,
+keeps eligibility, learns from every outcome and writes memory. The outcome that
+woke it is written to its memory at once. Only the outcomes of its own greedy
+choices enter its mood: what a sampled, non-greedy action brings teaches without
+rousing, so exploring does not keep the brain awake.
+
+```python
+from dataclasses import replace
+
+import numpy as np
+from cadence import ArousalConfig, Brain
+
+brain = Brain.compose(
+    4, 2, modules=(16,), seed=0,
+    working_memory_amplitude=0.3,   # the trace informs; the present input leads
+    consolidation=0.25,             # lasting memory takes half of a witnessed unit outcome
+    arousal=ArousalConfig(youth=30),
+)
+actor = brain.basal_ganglia         # one stream: a tenth of the composed actor rate
+actor.config = replace(actor.config, eta=0.1, eta_bias=0.01)
+
+cues = np.eye(4)
+rng = np.random.default_rng(0)
+cue = 0
+action = brain.live(cues[[cue]])
+modes, hits = [], []
+for moment in range(600):
+    rewarded = cue % 2 if moment < 300 else 1 - cue % 2   # the rule turns over halfway
+    hits.append(action[0] == rewarded)
+    reward = 1.0 if hits[-1] else -1.0
+    cue = int(rng.integers(4))
+    action = brain.live(cues[[cue]], reward=[reward])
+    modes.append(brain.last_arousal["mode"])
+
+assert modes[250:300].count("routine") >= 45 and sum(hits[250:300]) >= 45  # calm and right
+assert modes[300:340].count("aroused") >= 20                               # the change wakes it
+assert modes[-50:].count("routine") >= 45 and sum(hits[-50:]) >= 45        # repaired, calm again
+assert brain.arousal.moments["routine"] > 4 * brain.arousal.moments["aroused"]
+```
+
+Reward and `done` describe the preceding action, as in `step`, and `live`
+follows one stream. `brain.last_arousal` holds the readings of the moment and
+`brain.arousal` the stream's state with the moments and settling sweeps of each
+mode; [the API](api.md#arousal-cadencearousal) gives the law. A brain taught
+through `step` continues through `live` without a reset: the action `step`
+sampled is adopted. If the forecast settle refuses, nothing has changed and the
+same call can be retried. If the answer refuses after the outcome was taken, the
+outcome stays learned: retry with `live(observations)` alone.
+
+When an action awaits feedback, omitting `reward` supplies zero, as in `step`;
+it does not represent a missing or delayed outcome. Wait for the body's actual
+outcome before advancing this stream. Youth and sustained arousal permit learning
+from successful outcomes too. The arousal statistics control sampling and
+eligibility outside the neural solve; they are not another settled patch or a
+certificate of task failure. Every answer still comes from the qualified graph,
+and learning uses its existing local updates and associative write rule.
+
+The constants of the law are genes, `ArousalConfig`, and the values above are
+hand-set founders. The three other settings are the operating point of one
+continuing stream measured on the
+[odour nursery](../benchmarks/reversal/README.md): at the composed defaults the
+working trace outweighs the present input of a continuing life and the actor
+rate, selected on batches of streams, locks one stream's policy. They are
+development settings of that chamber, to be selected again for another task.
+
+What this establishes is bounded. The arousal responds to change: a brain whose
+life has always paid poorly, and whose youth has ended, is not roused by it, so a
+long bootstrap belongs to `step` or to a longer `youth`. In the nursery the
+associative memory carries the adaptation; the graph's reward learning alone
+does not acquire the task in one stream. The repair is not certain: 3 of the 40
+gated confirmation lives missed a reading, and one of them never searched for the
+moved reward. A routine moment still pays one full settle. A settled routine
+answer satisfies the neural equations and can still be wrong about the world; the
+next outcome is what tells.
+
 ## Reset and save
 
 `brain.reset()` clears live neural/eligibility state and the working trace,
@@ -229,7 +314,7 @@ resumed = Brain.load("continuing-brain.npz")
 ```
 
 Save/load includes parameters, critic, optimizers, traces, fast and persistent
-memory, random state and an action awaiting feedback. Resume the same rows and
+memory, random state, arousal and an action awaiting feedback. Resume the same rows and
 supply that action's actual outcome once. Save the environment separately.
 If a pattern separator is used, its actual projection and running mean are
 saved too. Shapes, finite values and continuation state are validated on load.
@@ -241,6 +326,7 @@ saved too. Shapes, finite values and continuation state are validated on load.
 | Neural activity | Retained | Actual interaction |
 | Working trace | Included | Each admitted action's free state |
 | Reward plasticity and demonstrations | Available through `step` | Actual outcomes and supplied current labels |
+| Arousal | None unless `arousal=` is given | Each outcome `live` receives |
 | Fast/persistent associations | Included | Observed chosen-action outcomes |
 | Recursive observers | Empty unless requested | The same neural solve when included |
 | Private imagination | Explicit call | Supplied hypothetical observations |

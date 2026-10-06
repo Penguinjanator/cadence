@@ -2,6 +2,51 @@
 
 ## Unreleased
 
+- Harden `live` continuation and its audit instruments: reject contradictory
+  pending-action checkpoints and incomplete arousal genes; preserve routine
+  feedback on a refused arousal update and identify already accepted sampled
+  feedback. Keep arousal statistics atomic on numerical overflow, and support
+  tiny positive averaging rates and sampling temperatures. Validate nursery
+  receipt plans, sources and readings, and count discarded reset brains and
+  frozen actions. Historical receipts retain their original sources and work
+  limitations; the old-rule control is not equal-work witnessed replay. Issues
+  88 and 122 retain their remaining acceptance requirements.
+- Add `Brain.live` and arousal for one continuing stream
+  ([issue 88](https://github.com/muellerberndt/cadence/issues/88),
+  [issue 122](https://github.com/muellerberndt/cadence/issues/122)). A brain
+  constructed with `arousal=ArousalConfig()` answers a routine moment with the
+  greedy choice of one qualified settle and changes no parameter, record or
+  optimizer state, while the eligibility of earlier sampled actions fades by one
+  step (`ActorCritic.fade`). An outcome that contradicts the forecast made before it
+  (surprise) or a reward below what the stream usually pays (want) rouses it; an
+  aroused brain samples at a temperature its want raises, keeps eligibility,
+  learns from every outcome and writes memory, and the outcome that woke it is
+  written to its memory. `Arousal` and `ArousalConfig` are exported; every
+  constant of the law is a gene with hand-set founders and a declared space for
+  `genes`. `Brain.act`, `ActorCritic.act` and `ActorCritic.probabilities` take
+  an optional sampling `temperature`; `Brain.last_arousal` reports each moment;
+  a brain with arousal saves it under the format name `cadence-generic/3`.
+  `step`, the composed defaults, the settling and learning equations and the
+  checkpoints of brains without arousal are unchanged.
+- Add the odour nursery (`benchmarks/reversal`): one continuing life through
+  acquisition, reversal and return with an unrelated stable skill, at pre-switch
+  exposures from 100 to 10,000 trials, on a frozen protocol with ten fresh
+  confirmation seeds, against always-learning, released-default, memory-only,
+  graph-only, frozen, replay, reset, tabular and uniform-random arms, with
+  source-bound receipts and a verifier. Its gates passed: of the 40 gated lives
+  39 reversed, 38 returned and 39 kept the stable pair, with median reversal lags
+  of 20 to 29 trials; three lives missed a reading and one of them never searched
+  for the moved reward. It reproduces the historical finding that the
+  always-learning brain stops sampling the choice that must change, counts the
+  witnessed approaches until the greedy choice turns (one), and measures the
+  routine share and the settling work of each mode. The associative memory
+  carries the adaptation, the graph's reward learning alone does not acquire the
+  task, a routine moment pays one full settle, and arousal on the released
+  composition stays at chance: the operating point of one continuing stream it
+  declares (working trace amplitude 0.3, consolidation 0.25, a tenth of the
+  composed actor rate) is a development setting of that chamber; no default
+  changes.
+
 - Add the bounded steady-rhythm chamber (`benchmarks/rhythm`) for
   [issue 116](https://github.com/muellerberndt/cadence/issues/116): one
   continuing `Brain.compose` life taught to alternate two actions under constant

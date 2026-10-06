@@ -712,7 +712,10 @@ that recursive benefit or automatic reflective behavior has been learned.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `Brain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, resting_bias=0.0, slots=1, seed=0, backend="cpu", device=None)`:
+- `Brain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None)`:
+  `arousal` takes an `ArousalConfig` and gives the brain the arousal that `live` runs
+  on; left unset the brain has none and `live` raises. `compose` and `build` pass it
+  through their options.
   `resting_bias` is a finite nonnegative real scalar; booleans and arrays are rejected.
   It initializes named populations outside the `sensory`, `visual`, `prefrontal`
   and `motor` families (the part of the name before `/`). Excluded family membership
@@ -773,7 +776,45 @@ that recursive benefit or automatic reflective behavior has been learned.
     state and pending actual outcomes remain unchanged. This predicts brain responses
     to supplied observations; use the separate `TemporalPatchNet.plan` interface for
     a learned external-world action/consequence model.
-  - `act(observations, *, greedy=False) -> actions`: one row per continuing stream.
+  - `live(observations, *, reward=None, done=None) -> actions`: one moment of a
+    continuing life on one stream, for a brain constructed with `arousal`. Reward and
+    done concern the preceding action, as in `step`; omitted reward consumes a
+    pending action as a zero-reward transition, not a missing outcome. A calm brain answers with the
+    greedy choice of one qualified settle and changes no parameter, memory record or
+    optimizer state; the eligibility of earlier sampled actions fades by one step
+    (`ActorCritic.fade`), as it does between two outcomes that are learned from. Its
+    forecast for the preceding action is the critic's value when it acted, and the
+    outcome is measured against that forecast with the value of the present state. Surprise or want raises the arousal (see
+    [Arousal](#arousal-cadencearousal)); only the outcome of the brain's own greedy
+    choice enters its mood, and what a sampled, non-greedy action brings teaches
+    without rousing. An aroused brain samples at
+    `learning.temperature * arousal.heat`, keeps eligibility and learns from the outcome
+    as `step` does; the outcome that woke a calm brain is written to its memory for the
+    situation it was chosen in. An action sampled by `step` or `act` is adopted, so a
+    bootstrapped brain continues without `reset`; this first adopted action is
+    treated as an own choice for arousal, even if it was sampled away from the greedy
+    choice. Another operation that acts on the
+    stream between two `live` calls takes it over: feedback then needs a preceding
+    action again. A refused forecast settle leaves everything unchanged, and the same
+    call can be retried; if the answer refuses after the outcome was taken, the outcome
+    stays learned and counted, and the retry is `live(observations)` without it.
+    An unrepresentable arousal update raises `ValueError`. For a routine action
+    its feedback remains pending; after a sampled action's feedback was learned,
+    the error says that feedback was accepted and must not be submitted again.
+    See [routine and repair](continuous.md#routine-and-repair-live).
+  - `last_arousal: Mapping[str, Any] | None`: an immutable snapshot of the latest `live`
+    moment: `mode` (`"routine"` or `"aroused"`), `level`, `error` (the unsigned
+    temporal-difference error of the preceding action against its forecast), `surprise`
+    and `want` (what that outcome added to the level), `temperature` (the sampling
+    temperature, `None` in routine), `learned` (a feedback update ran), `recorded` (the
+    waking outcome was written to memory), `sweeps` (free-solve sweeps of the forecast
+    and the answer) and `learning_sweeps` (eligibility and feedback sweeps). It is
+    `None` after construction, reset or load and is excluded from save files.
+    `arousal` holds the stream's `Arousal`, or `None`.
+  - `act(observations, *, greedy=False, temperature=None) -> actions`: one row per continuing stream.
+    `temperature` samples the settled motor state at another softmax temperature than
+    `learning.temperature`; the eligibility kept for the sampled action stays the score
+    of the learner's own policy, and a greedy read ignores it.
     The bounded free solve checks complete potential/adaptation equations, including
     observers, under `learning.free_steps` and `learning.tolerance`. Its numerical
     fallback changes neither the live model nor teaching phases. Cached states are
@@ -805,17 +846,76 @@ that recursive benefit or automatic reflective behavior has been learned.
     changes are rolled back; the action remains pending. Adjust the solve and retry the
     same outcome. This differs from an accepted outcome followed by a refused next action.
   - `reset()` clears working state, action cache, eligibility and reward centering; hippocampal
-    records and slow parameters are kept. `parameters()` counts actor/critic parameters
+    records and slow parameters are kept. A brain with arousal begins the next stream calm,
+    with what it was used to cleared and its age and work counts kept.
+    `parameters()` counts actor/critic parameters
     and the shared consolidated memory matrix; per-stream state is additional storage.
   - `save(path) -> Path`, `Brain.load(path, *, backend="cpu", device=None, precision=None)`:
     complete composition checkpoints, including both optimizers, critic, random state,
     stream traces, prepared state, both memory timescales and any action awaiting feedback.
+    A brain with arousal saves it, with the action `live` issued and its forecast, under
+    the format name `cadence-generic/3`; brains without arousal keep `cadence-generic/2`.
     The archive is replaced atomically. A learner-only checkpoint
     is rejected by `Brain.load`; `Learner.load` can extract a learner from either.
   Observations must be a nonempty finite batch, with image dimensions flattened per row.
   `fit` rejects noninteger labels and mismatched batches before updating. It resets current
   action/working state but keeps episodic records. `brain` always returns the current
   `learner.brain`, including after learning. See [compose a brain](brain.md#brain).
+
+## Arousal (`cadence.arousal`)
+
+The arousal of one continuing stream: when a composed brain leaves routine and how it
+returns. `Brain.live` runs it; the classes can also be used alone.
+
+- `ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05, slow=0.005, heat=2.0, youth=100)`:
+  the genes of the law, with the hand-set founders as defaults. `to_dict()` returns them;
+  `ArousalConfig.space()` declares their space for [`genes`](evolution.md#any-genome).
+  `fast` at `slow` removes the want, a large `tolerance` removes surprise and `heat` at
+  zero removes the wider exploration. Construction rejects values outside their ranges
+  and `fast < slow`.
+- `Arousal(config=None)`: the state.
+  `outcome(error, reward, *, own=True, learned=True) -> (surprise, want)` takes the
+  unsigned temporal-difference error of one outcome and its reward and applies
+
+  ```text
+  surprise = log(error / (tolerance * usual + floor * scale))   when positive, else 0
+  want     = clip((longrun - recent) / scale, 0, 1)
+  level    = decay * level + (1 - decay) * (surprise + want)
+  ```
+
+  where `usual` is the running size of the error and `recent` and `longrun` the running
+  reward at the `fast` and `slow` rates, corrected for their short history. `own` says
+  the action was the brain's own best guess: only such an outcome can surprise it and
+  enters `usual`, `recent` and `longrun`; the outcome of an explored action leaves them
+  alone and the level carries the present want forward. `scale` is the spread of the
+  outcomes the brain has learned from, the running RMS distance of their reward from
+  `longrun`: `learned` outcomes and the outcome that wakes the brain enter it, routine
+  outcomes do not, so a long calm does not shrink it. Scaling reward and error by
+  the same positive factor preserves the law within numerical precision away
+  from its absolute `1e-12` surprise guard. Shifting
+  reward by a constant also preserves it if an own outcome establishes the reward
+  reference before any explored outcome enters the spread. Before that reference
+  exists, explored rewards are measured against zero, so the reward origin matters.
+  These are properties of supplied scalar outcomes, not a reward-transformation
+  guarantee for the complete learning brain. A stream's first own outcome is no surprise.
+  `aroused` is true while `level >= threshold` and for the first `youth` moments of the
+  brain's life; `mode` names it. `heat` is `1 + config.heat * want`, the factor on the
+  policy temperature an aroused brain samples at. `lived(sweeps, learning_sweeps=0)`
+  counts one moment: `moments` and `sweeps` per mode, `learning_sweeps` and `age`.
+  `Brain.live` counts a moment when its action is issued; the work of a refused
+  attempt is reported by `Brain.last_settlement` and `Brain.last_learning` and is
+  absent from these counts.
+  `reset()` begins another stream calm and keeps the age and the counts.
+  `to_dict()` and `Arousal.from_dict(values)` carry the complete state.
+  An outcome whose running statistics cannot remain finite raises `ValueError`
+  without changing those statistics. Loading requires every saved gene and
+  continuation field.
+
+The law is relative: it responds to outcomes that differ from what the stream is used
+to. A brain whose life has always paid poorly, and whose youth has ended, is not roused
+by it. In a world that does not change, noise in the reward rate still rouses the
+founder genes for a small share of moments; the
+[odour nursery](../benchmarks/reversal/README.md) reports it.
 
 ## Genome (`cadence.genome`)
 
@@ -1040,8 +1140,13 @@ that recursive benefit or automatic reflective behavior has been learned.
   outputs are the action neurons; `critic` the neurons whose settled activation, read through a
   learned linear readout, is the expectation of the reward to come; `population` a `Bins` for
   a continuous action.
-  - `act(drive, greedy=False) -> action`: one free phase, then a draw from the softmax
+  - `act(drive, greedy=False, temperature=None) -> action`: one free phase, then a draw from the softmax
     over the output neurons (with `Bins`, one draw per dimension), or the most probable.
+    `temperature` draws from the same settled outputs at another softmax temperature,
+    a behaviour that explores more above the learner's and less below it; it must be
+    finite and positive and is checked before any state changes. The eligibility kept
+    for the sampled action stays the score of the learner's own policy, so credit for an
+    explored action is an on-policy estimate only at the learner's temperature.
     Cache reuse requires the same drive and unchanged brain parameters; caller buffers
     are copied. After learning, the next action refreshes its warm state. A greedy action clears
     pending eligibility and cannot be followed by `learn`. Repeated `act` replaces the
@@ -1070,10 +1175,16 @@ that recursive benefit or automatic reflective behavior has been learned.
     `observed` is a boolean batch vector for real transitions. Padding rows do not
     teach the actor or critic or enter reward statistics; their eligibility resets.
     Updates average over observed rows. At least one row must be observed.
+  - `fade(done=None)`: one moment passed that added no eligibility, its action having
+    been answered greedily. Every eligibility trace decays by `gamma * lam`, the step
+    `learn` applies between two sampled actions, and `done` rows forget their traces.
+    Parameters, the critic and optimizer history are unchanged. `Brain.live` calls it
+    for each routine outcome.
   - `reset()` (cached input/state, eligibility, salience and centering cleared; learned
-    parameters and optimizer history retained), `probabilities(state)` (shape `(batch, actions)`
+    parameters and optimizer history retained), `probabilities(state, temperature=None)` (shape `(batch, actions)`
     or `(batch, slots, max_size)` for categorical slots, with exact zero padding;
-    `(batch, dims, size)` with `Bins`), `settle(drive)`,
+    `(batch, dims, size)` with `Bins`; `temperature` reads the settled outputs at
+    another softmax temperature than the learner's), `settle(drive)`,
     `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
     `salience`, `delta_mean`, `delta_var`.
 - `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=None, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="auto", eligibility_steps=None)`:

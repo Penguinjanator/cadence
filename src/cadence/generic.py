@@ -33,6 +33,7 @@ from typing import Any
 
 import numpy as np
 
+from .arousal import Arousal, ArousalConfig
 from .brain import Backend, BrainState, Equilibrium
 from .brain import Brain as NeuralGraph
 from .connectome import Connectome
@@ -282,6 +283,37 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
         limit = learner.slot_sizes[None, :] if slotted else len(learner.output_index)
         if action.dtype.kind not in "iu" or (action < 0).any() or (action >= limit).any():
             raise ValueError("invalid saved action indices")
+    lived = meta.get("lived")
+    if "lived" not in meta:
+        if "lived/observations" in data or "lived/action" in data:
+            raise ValueError("saved lived arrays require lived metadata")
+    else:
+        if "arousal" not in meta or not isinstance(lived, dict):
+            raise ValueError("a saved lived action needs arousal state")
+        forecast, was_sampled = lived.get("forecast"), lived.get("sampled")
+        if (
+            isinstance(forecast, bool)
+            or not isinstance(forecast, (int, float))
+            or not np.isfinite(forecast)
+            or not isinstance(was_sampled, bool)
+            or not isinstance(lived.get("own"), bool)
+        ):
+            raise ValueError("invalid saved lived forecast")
+        if was_sampled != bool(meta.get("pending", False)) or batch != 1:
+            raise ValueError("a saved lived action must match the pending action of one stream")
+        observations = array("lived/observations", (1, sensory))
+        slotted = learner.slot_count > 1
+        action = array("lived/action", (1, learner.slot_count) if slotted else (1,))
+        limit = learner.slot_sizes[None, :] if slotted else len(learner.output_index)
+        if action.dtype.kind not in "iu" or (action < 0).any() or (action >= limit).any():
+            raise ValueError("invalid saved lived action indices")
+        if was_sampled:
+            if (
+                not np.array_equal(observations, array("moment/observations", (1, sensory)))
+                or not np.array_equal(action, array("moment/action", action.shape))
+                or float(forecast) != float(array("pending/value", (1,))[0])
+            ):
+                raise ValueError("saved lived action must match its pending feedback")
     working = meta["working_memory"]
     if working is not None:
         source, target = working["source"], working["target"]
@@ -314,12 +346,15 @@ class Brain:
         reward: ActorCriticConfig | None = None,
         resting_bias: float = 0.0,
         slots: int | Sequence[int] = 1,
+        arousal: ArousalConfig | None = None,
         seed: int = 0,
         backend: Backend = "cpu",
         device: str | None = None,
     ) -> None:
         populations = connectome.populations
         resting_bias = _validate_resting_bias(resting_bias)
+        if arousal is not None and not isinstance(arousal, ArousalConfig):
+            raise ValueError("arousal must be an ArousalConfig, or None")
         for name in ("association", "motor"):
             if name not in populations:
                 raise ValueError(f"a generic brain needs a population named {name!r}")
@@ -371,6 +406,12 @@ class Brain:
         self._prepared: np.ndarray | None = None  # the observations ``learn`` settled
         self.last_learning: dict[str, float] = {}
         self._last_settlement: Mapping[str, Any] | None = None
+        # ``live``: the arousal of the stream, and the action it issued that awaits an outcome
+        # (observations, action, the forecast made before the outcome, sampled?, its free
+        # state, the brain's own best guess?)
+        self.arousal: Arousal | None = None if arousal is None else Arousal(arousal)
+        self._lived: tuple[np.ndarray, np.ndarray, float, bool, BrainState, bool] | None = None
+        self._last_arousal: Mapping[str, Any] | None = None
 
     @property
     def brain(self) -> NeuralGraph:
@@ -397,6 +438,24 @@ class Brain:
         ``reset`` and ``load`` start with None; diagnostics are not checkpointed.
         """
         return self._last_settlement
+
+    @property
+    def last_arousal(self) -> Mapping[str, Any] | None:
+        """Immutable readings of the latest ``live`` moment, or None before the first.
+
+        ``mode`` is ``routine`` or ``aroused``, the mode this moment's action was
+        chosen in. ``error`` is the unsigned temporal-difference error of the
+        preceding action against the forecast made before its outcome, and
+        ``surprise`` and ``want`` are what that outcome added to the arousal
+        ``level``. ``temperature`` is the softmax temperature the action was
+        sampled at, None for a routine answer. ``learned`` says a feedback update
+        ran for the preceding outcome; ``recorded`` that the outcome which woke
+        the brain was written to its memory. ``sweeps`` counts the free-solve
+        sweeps of this moment's forecast and answer; ``learning_sweeps`` the
+        eligibility and feedback sweeps. These are counts of numerical work,
+        not energy. Diagnostics are not checkpointed.
+        """
+        return self._last_arousal
 
     # -- construction
 
@@ -848,6 +907,167 @@ class Brain:
             self.last_learning["demonstrations"] = float(batch)
         return self.act(x)
 
+    def live(self, observations: Any, *, reward: Any = None, done: Any = None) -> np.ndarray:
+        """One moment of a continuing life: routine while outcomes match, repair when not.
+
+        ``reward`` and ``done`` describe the preceding action, as in ``step``. The
+        brain's ``arousal`` decides what this moment costs. Calm, it answers with
+        the greedy choice of one qualified settle: no eligibility phases, no
+        learning, no memory write, no parameter changes; the eligibility of earlier
+        sampled actions fades by one step, as time passes. Its forecast for the
+        preceding action was the critic's value when it acted; the outcome is
+        measured against that forecast with the value of the present state, and a
+        surprising outcome or a reward below what life usually pays raises the
+        arousal (``Arousal`` gives the law). Aroused, the brain samples its
+        action, at a temperature raised by its want, keeps the eligibility and
+        learns from the outcome as ``step`` does. The outcome that woke a calm
+        brain is written to its memory for the situation it was chosen in; the
+        actor and critic learn from the outcomes that follow, while it is awake.
+
+        This follows one stream: pass one observation row. An action that
+        ``step`` or ``act`` sampled is adopted, so a bootstrapped brain continues
+        here without a reset. The mood follows the outcomes ``live`` receives.
+        If the forecast settle refuses, nothing has changed and the same call can
+        be retried. If the answer refuses after the outcome was taken, the
+        outcome stays learned and counted: retry with ``live(observations)``
+        without that reward. Readings of the moment are in ``last_arousal``.
+        """
+        arousal = self.arousal
+        if arousal is None:
+            raise ValueError(
+                "live needs arousal genes; construct the brain with arousal=ArousalConfig()"
+            )
+        x = self._observations(observations)
+        agent = self.basal_ganglia
+        current = agent.state
+        if len(x) != 1 or (current is not None and len(np.atleast_2d(current.v)) != 1):
+            raise ValueError("live follows one continuing stream; reset before changing streams")
+        lived = self._lived
+        if lived is not None and current is not lived[4]:
+            lived = None  # another operation acted since; the brain's own pending action governs
+        sampled = agent._pending is not None
+        routine = lived is not None and not lived[3] and not sampled
+        if not sampled and not routine and (reward is not None or done is not None):
+            raise RuntimeError("feedback needs a preceding action; start with live(observations)")
+        r = np.zeros(1) if reward is None else np.asarray(reward, dtype=float)
+        ended = np.zeros(1, bool) if done is None else np.asarray(done)
+        if r.shape != (1,) or not np.isfinite(r).all():
+            raise ValueError("reward must be one finite value for the stream")
+        if ended.shape != (1,) or ended.dtype != np.bool_:
+            raise ValueError("done must be one boolean for the stream")
+        answer: tuple[np.ndarray, BrainState] | None = None
+        error = surprise = want = 0.0
+        sweeps = learning_sweeps = 0
+        learned = recorded = False
+        if sampled:
+            report = self.learn(r, ended, x)
+            self._lived = None  # accepted feedback must never become pending again
+            self.last_learning = report
+            error = float(report["td_error"])
+            learning_sweeps += int(report["free_steps"])
+            learned = True
+        elif routine:
+            assert lived is not None
+            answer = self._forecast(x, bool(ended[0]))
+            assert self._last_settlement is not None
+            sweeps += int(self._last_settlement["steps"])
+            following = 0.0 if ended[0] else float(agent.value(answer[1])[0])
+            error = abs(float(r[0]) + agent.config.gamma * following - lived[2])
+            self.last_learning = {}
+        if sampled or routine:
+            # only the outcome of the brain's own best guess enters its mood; an adopted
+            # action has no record and counts as its own
+            own = True if lived is None else lived[5]
+            try:
+                surprise, want = arousal.outcome(error, float(r[0]), own=own, learned=sampled)
+            except ValueError as exc:
+                if sampled:
+                    raise ValueError(
+                        "feedback was accepted but arousal could not update; "
+                        "retry live(observations) without reward or done"
+                    ) from exc
+                raise
+            self._lived = None  # this outcome is taken, exactly once
+            if routine:
+                if ended[0] and self.working_memory is not None:
+                    self.working_memory.reset(1, rows=np.array([0]))
+                # a moment without eligibility has passed: the credit of earlier sampled
+                # actions fades as it does between two outcomes that are learned from
+                agent.fade(ended)
+            if routine and arousal.aroused and self.hippocampus is not None:
+                assert lived is not None
+                self._record(lived[0], lived[1], r, SynapticMemory.salience_vector(np.abs(r), 1))
+                recorded = True
+                assert answer is not None
+                # the record can change this moment's recall: settle again under it, warm
+                agent._free, agent._free_brain, agent._drive = answer[1], self.brain, answer[0]
+                answer = None
+        aroused = arousal.aroused
+        temperature = self.learner.config.temperature * arousal.heat if aroused else None
+        if answer is None:
+            action = self.act(x, greedy=not aroused, temperature=temperature)
+            assert self._last_settlement is not None
+            sweeps += int(self._last_settlement["steps"])
+        else:
+            action = self._choose(x, *answer, greedy=not aroused, temperature=temperature)
+        state = agent.state
+        assert state is not None
+        if agent._pending is not None:
+            learning_sweeps += int(agent._pending[1].steps) + int(agent._pending[2].steps)
+        # the brain's own best guess: the most active motor neuron of every slot
+        motor = np.asarray(state.activation)[0, self.motor_index]
+        slots = zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
+        best = [int(np.argmax(motor[start : start + size])) for start, size in slots]
+        self._lived = (
+            x.copy(),
+            action.copy(),
+            float(agent.value(state)[0]),
+            aroused,
+            state,
+            best == [int(choice) for choice in np.atleast_1d(action[0])],
+        )
+        self._last_arousal = MappingProxyType(
+            {
+                "mode": arousal.mode,
+                "level": float(arousal.level),
+                "error": float(error),
+                "surprise": float(surprise),
+                "want": float(want),
+                "temperature": None if temperature is None else float(temperature),
+                "learned": learned,
+                "recorded": recorded,
+                "sweeps": int(sweeps),
+                "learning_sweeps": int(learning_sweeps),
+            }
+        )
+        arousal.lived(sweeps, learning_sweeps)
+        return action
+
+    def _forecast(self, x: np.ndarray, ended: bool) -> tuple[np.ndarray, BrainState]:
+        """Read the next value without changing the stream. A finished episode's
+        forecast starts from rest and a fresh trace; accepting its outcome commits
+        that reset, so a refused forecast or arousal update preserves feedback."""
+        agent = self.basal_ganglia
+        trace = self.working_memory
+        if not ended:
+            return self._settled(x)
+        kept = (agent._free, agent._free_brain, agent._drive)
+        traces = (
+            None
+            if trace is None
+            else {name: getattr(trace, name).copy() for name in ("trace", "last", "cold")}
+        )
+        try:
+            if trace is not None:
+                trace.reset(1, rows=np.array([0]))
+            agent._free = None
+            return self._settled(x)
+        finally:
+            agent._free, agent._free_brain, agent._drive = kept
+            if trace is not None and traces is not None:
+                for name, value in traces.items():
+                    setattr(trace, name, value)
+
     # -- lower-level interaction operations
 
     def imagine(
@@ -916,7 +1136,9 @@ class Brain:
                 trace.update(phase.state)
         return tuple(phases)
 
-    def act(self, observations: Any, *, greedy: bool = False) -> np.ndarray:
+    def act(
+        self, observations: Any, *, greedy: bool = False, temperature: float | None = None
+    ) -> np.ndarray:
         """Qualify the whole graph and choose an action for each continuing stream.
 
         ``learning.free_steps`` bounds repair; ``learning.tolerance`` checks the
@@ -924,18 +1146,40 @@ class Brain:
         Exhaustion raises ``RuntimeError`` before changing activity, memory,
         random state or pending feedback. A cached state is always checked anew.
         Reward eligibility retains its separate finite nudged-phase contract.
+        ``temperature`` samples the settled motor state at another softmax
+        temperature than the learner's; the eligibility kept for the sampled
+        action remains the score of the learner's own policy.
         """
         x = self._observations(observations)
         current = self.basal_ganglia.state
         if current is not None and len(np.atleast_2d(current.v)) != len(x):
             raise ValueError("action batch must match the live streams; reset for new streams")
+        if temperature is not None:
+            temperature = self.basal_ganglia._temperature(temperature)
+        drive, free = self._settled(x)
+        return self._choose(x, drive, free, greedy=greedy, temperature=temperature)
+
+    def _settled(self, x: np.ndarray) -> tuple[np.ndarray, BrainState]:
+        """The drive of validated observations and its qualified free state, warm from the
+        stream's last state. Refusal raises before anything changes."""
         drive = self.stimulus(x)
-        free = self._qualified(drive, current, operation="act")
+        return drive, self._qualified(drive, self.basal_ganglia.state, operation="act")
+
+    def _choose(
+        self,
+        x: np.ndarray,
+        drive: np.ndarray,
+        free: BrainState,
+        *,
+        greedy: bool,
+        temperature: float | None = None,
+    ) -> np.ndarray:
+        """Issue the action of a qualified free state: the stream advances to it."""
         self.basal_ganglia._free = free
         self.basal_ganglia._free_brain = self.brain
         self.basal_ganglia._drive = drive.copy()
         self._prepared = None
-        action = self.basal_ganglia.act(drive, greedy=greedy)
+        action = self.basal_ganglia.act(drive, greedy=greedy, temperature=temperature)
         state = self.basal_ganglia.state
         if self.working_memory is not None and state is not None:
             self.working_memory.update(state)
@@ -988,23 +1232,7 @@ class Brain:
         try:
             if memory is not None and self._moment is not None:
                 keys, action = self._moment
-                # The chosen motor neurons in motor order: one per row, or one per slot.
-                rows: np.ndarray = np.arange(len(action))
-                value: np.ndarray = reward
-                chosen: np.ndarray = action
-                if action.ndim == 2:
-                    chosen = action + self.learner.slot_offsets[None, :]
-                    rows, value = rows[:, None], reward[:, None]
-                if isinstance(memory, SynapticMemory):
-                    target = np.zeros((len(action), len(self.motor_index)))
-                    target[rows, chosen] = value
-                    observed = np.zeros(target.shape, bool)
-                    observed[rows, chosen] = True
-                    memory.observe(keys, target, salience=importance, value_mask=observed)
-                else:
-                    target = memory.recall(keys)
-                    target[rows, chosen] = value
-                    memory.observe(keys, target)
+                self._record(keys, action, reward, importance)
             if trace is not None and done.any():
                 trace.reset(len(done), rows=np.flatnonzero(done))
             report = self.basal_ganglia.learn(reward, done, self.stimulus(following), bootstrap)
@@ -1022,8 +1250,33 @@ class Brain:
         self._prepared = following.copy()
         return report
 
+    def _record(
+        self, keys: np.ndarray, action: np.ndarray, reward: np.ndarray, importance: np.ndarray
+    ) -> None:
+        """Write the outcome of a chosen action for the situation it was chosen in."""
+        memory = self.hippocampus
+        assert memory is not None
+        # The chosen motor neurons in motor order: one per row, or one per slot.
+        rows: np.ndarray = np.arange(len(action))
+        value: np.ndarray = reward
+        chosen: np.ndarray = action
+        if action.ndim == 2:
+            chosen = action + self.learner.slot_offsets[None, :]
+            rows, value = rows[:, None], reward[:, None]
+        if isinstance(memory, SynapticMemory):
+            target = np.zeros((len(action), len(self.motor_index)))
+            target[rows, chosen] = value
+            observed = np.zeros(target.shape, bool)
+            observed[rows, chosen] = True
+            memory.observe(keys, target, salience=importance, value_mask=observed)
+        else:
+            target = memory.recall(keys)
+            target[rows, chosen] = value
+            memory.observe(keys, target)
+
     def reset(self) -> None:
-        """Start every stream afresh; hippocampal records are kept."""
+        """Start every stream afresh; hippocampal records are kept. A brain with arousal
+        begins the new stream calm, with what it was used to forgotten and its age kept."""
         self.basal_ganglia.reset()
         if self.working_memory is not None:
             self.working_memory.reset(0)
@@ -1031,6 +1284,10 @@ class Brain:
         self._prepared = None
         self.last_learning = {}
         self._last_settlement = None
+        self._lived = None
+        self._last_arousal = None
+        if self.arousal is not None:
+            self.arousal.reset()
 
     def parameters(self) -> int:
         """Actor/critic and consolidated weights; per-stream transient storage is additional."""
@@ -1069,6 +1326,20 @@ class Brain:
             "pending": agent._pending is not None,
             "last_learning": self.last_learning,
         }
+        if self.arousal is not None:
+            # Arousal is part of the continuation; earlier formats cannot carry it.
+            metadata["format"] = "cadence-generic/3"
+            metadata["arousal"] = self.arousal.to_dict()
+            lived = self._lived
+            if lived is not None and agent.state is not lived[4]:
+                lived = None  # another operation acted since live issued its action
+            if lived is not None:
+                data["lived/observations"], data["lived/action"] = lived[0], lived[1]
+                metadata["lived"] = {
+                    "forecast": float(lived[2]),
+                    "sampled": bool(lived[3]),
+                    "own": bool(lived[5]),
+                }
         if agent._pending is not None:
             kind, plus, minus, value = agent._pending
             if kind != "states":
@@ -1131,8 +1402,12 @@ class Brain:
             if not isinstance(meta, dict) or meta.get("format") not in (
                 "cadence-generic/1",
                 "cadence-generic/2",
+                "cadence-generic/3",
             ):
                 raise ValueError("unsupported Brain checkpoint format")
+            if ("arousal" in meta) != (meta["format"] == "cadence-generic/3"):
+                raise ValueError("arousal state belongs to checkpoint format cadence-generic/3")
+            arousal = Arousal.from_dict(meta["arousal"]) if "arousal" in meta else None
             if "hippocampus" not in meta:
                 raise ValueError("missing hippocampus metadata")
             resting_bias = _validate_resting_bias(meta.get("resting_bias", 0.0))
@@ -1204,4 +1479,16 @@ class Brain:
                 for name in ("trace", "last", "cold"):
                     setattr(result.working_memory, name, data["working/" + name].copy())
             result.hippocampus = memory
+            result.arousal = arousal
+            if "lived" in meta:
+                state = agent._free  # validated above: a lived action has its free state
+                assert state is not None
+                result._lived = (
+                    data["lived/observations"].copy(),
+                    data["lived/action"].copy(),
+                    float(meta["lived"]["forecast"]),
+                    bool(meta["lived"]["sampled"]),
+                    state,
+                    bool(meta["lived"]["own"]),
+                )
         return result

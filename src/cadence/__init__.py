@@ -10,6 +10,7 @@ See ``docs/contracts.md`` for their numerical and learning boundaries.
 from __future__ import annotations
 
 from . import regions
+from .arousal import Arousal, ArousalConfig
 from .belief import BeliefObservation, BeliefPatch, BeliefPath, BeliefReadback
 from .brain import Brain as NeuralGraph
 from .brain import BrainState, Equilibrium, Nudge, RefinementReport, available_backends
@@ -81,6 +82,8 @@ from .temporal import TemporalObservation, TemporalPatchNet, TemporalPhase, Temp
 from .temporal_memory import ConstraintReport, TemporalMemory
 
 __all__ = [
+    "Arousal",
+    "ArousalConfig",
     "BeliefObservation",
     "BeliefPatch",
     "BeliefPath",
