@@ -388,7 +388,9 @@ def run_life(
                 holding = False
                 got = take = 0
                 wrongs = 0
-                paid_at = int(luck.integers(len(cells) - 1)) if arm == "yoked" else -1
+                # the yoked control pays its bank at a random cell before the door; a trip cut to
+                # one cell pays at that cell
+                paid_at = int(luck.integers(max(1, len(cells) - 1))) if arm == "yoked" else -1
                 for i, kind in enumerate(cells):
                     began = time.perf_counter()
                     reward, done = (None, False) if pending is None else pending

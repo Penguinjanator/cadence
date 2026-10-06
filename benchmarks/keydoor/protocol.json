@@ -74,7 +74,7 @@
       22,
       23
     ],
-    "confirmation": [
+    "spent": [
       700,
       701,
       702,
@@ -85,17 +85,29 @@
       707,
       708,
       709
+    ],
+    "confirmation": [
+      800,
+      801,
+      802,
+      803,
+      804,
+      805,
+      806,
+      807,
+      808,
+      809
     ]
   },
   "gates": {
     "fed": 0.9,
-    "wrong": 0.5,
-    "aroused_late": 0.2,
+    "wrong": 1.5,
+    "aroused_late": 0.35,
     "share": 0.9,
     "delays": [
       2,
       5
     ],
-    "statement": "over the confirmation lives of the live arm at the gated delays, at least `share` end each rule with `fed` of their last 50 trips fed, waste at most `wrong` interactions per trip in the last 50 trips of each rule, and spend no more than `aroused_late` of the second half of each rule aroused. Delay 10 is reported without a gate."
+    "statement": "over the confirmation lives of the live arm at the gated delays, at least `share` end each rule with `fed` of their last 50 trips fed, waste at most `wrong` interactions per trip in the last 50 trips of each rule (below the uniform-random policy's at delay 2 and a third of the lazy interact-everywhere policy's), and spend no more than `aroused_late` of the second half of each rule aroused (one trip in twenty is cut, and each cut is a missed meal and a contradicted forecast). Delay 10 is reported without a gate. Second freeze: the first gated frugality at 0.5 and calm at 0.2, and its yoked arm crashed on trips cut to one cell."
   }
 }

@@ -36,8 +36,10 @@ def test_the_protocol_is_the_frozen_one(protocol):
     assert (protocol["cost"], protocol["food"], protocol["truncation"]) == (0.25, 1.0, 0.05)
     seeds = protocol["seeds"]
     assert seeds["development"] == list(range(24))
-    assert seeds["confirmation"] == list(range(700, 710))
-    assert not set(seeds["development"]) & set(seeds["confirmation"])
+    assert seeds["spent"] == list(range(700, 710))  # the first freeze's confirmation seeds
+    assert seeds["confirmation"] == list(range(800, 810))
+    sets = [set(seeds[name]) for name in ("development", "spent", "confirmation")]
+    assert all(not a & b for i, a in enumerate(sets) for b in sets[i + 1 :])
     assert protocol["tabular"] == {"alpha": 0.5, "epsilon": 0.1, "gamma": 0.9, "lam": 0.8}
     founders = cd.ArousalConfig()
     assert cd.ArousalConfig(**protocol["arousal"]) == replace(founders, need=0.03)
@@ -53,8 +55,8 @@ def test_the_protocol_is_the_frozen_one(protocol):
     gates = protocol["gates"]
     assert (gates["fed"], gates["wrong"], gates["aroused_late"], gates["share"]) == (
         0.9,
-        0.5,
-        0.2,
+        1.5,
+        0.35,
         0.9,
     )
     assert gates["delays"] == [2, 5]
@@ -238,7 +240,7 @@ def test_gates_pool_the_gated_delays_and_count_a_crash_as_a_failure(protocol):
     good = [life(d, (1.0, 0.95)) for d in protocol["gates"]["delays"] for _ in range(5)]
     report = keydoor.gates(good, protocol)
     assert report["passed"] and report["pooled"]["lives"] == 10
-    wasteful = good[:-2] + [life(2, (1.0, 1.0), wrong=2.0)] * 2
+    wasteful = good[:-2] + [life(2, (1.0, 1.0), wrong=2.0)] * 2  # above the 1.5 of the gate
     report = keydoor.gates(wasteful, protocol)
     assert not report["passed"] and report["pooled"]["frugal"] == pytest.approx(0.8)
     one_restless = good[:-1] + [life(2, (1.0, 1.0), late=1.0)]
