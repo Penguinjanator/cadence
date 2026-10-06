@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `Brain.predict` and `Brain.accuracy` now honor slotted motor readouts (`slots > 1`):
+  predictions are one choice per slot, shaped `(batch, slots)` like `act` and `step`,
+  instead of a single argmax over the whole motor menu, and slotted `accuracy`/`fit`
+  no longer fail with a broadcast error after teaching. One-slot brains are unchanged.
 - `ArousalConfig` gains `need`, a nonnegative required reward rate per moment. Its
   unmet fraction supplies an additional arousal signal even when poor rewards are
   expected. The default is zero, preserving the previous reward law. This is an

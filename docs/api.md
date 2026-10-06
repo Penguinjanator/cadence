@@ -763,6 +763,8 @@ that recursive benefit or automatic reflective behavior has been learned.
     epoch), `predict(observations)`, `accuracy(observations, labels)`: independent samples,
     without trace or associative recall. All three score through qualified independent
     predictions; `fit` teaches with the configured finite or qualified phase contract.
+    Predictions carry one choice per output slot, shaped `(batch,)` for one slot and
+    `(batch, slots)` when the motor neurons split into slots, matching `act` and `step`.
     A refused epoch score leaves its already accepted teaching updates in place.
     These operations do not switch modes. `fit` resets pending stream
     state before its updates; use `step` for a continuing life.

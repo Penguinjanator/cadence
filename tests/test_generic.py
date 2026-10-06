@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+import pytest
 
 import cadence as cd
 
@@ -134,6 +135,49 @@ def test_the_prefrontal_cortex_bridges_a_delay() -> None:
     assert delayed_response(remembering, episodes=1500, seed=8) >= 0.9
     forgetting = cd.Brain.build(3, 2, seed=8)
     assert delayed_response(forgetting, episodes=400, seed=8) < 0.75
+
+
+@pytest.mark.parametrize("slots", [2, [3, 1]])
+def test_slotted_brain_predict_accuracy_and_fit_match_the_slot_contract(
+    slots: int | list[int],
+) -> None:
+    """Slotted readouts answer one choice per slot everywhere, or the slot API is a lie."""
+    actions = sum(slots) if isinstance(slots, list) else 2 * slots
+    brain = cd.Brain.compose(4, actions, modules=(16,), slots=slots, seed=3)
+    rng = np.random.default_rng(3)
+    x = rng.normal(size=(30, 4))
+    y = np.stack(
+        [rng.integers(0, size, size=30) for size in brain.learner.slot_sizes], axis=1
+    )
+    brain.fit(x[:10], y[:10], epochs=1, batch=5)
+
+    predicted = brain.predict(x[10:20])
+    assert predicted.shape == (10, brain.learner.slot_count)
+    per_slot = brain.learner.predict(brain.stimulus(x[10:20], memory=False))
+    np.testing.assert_array_equal(predicted, per_slot)
+    # act reads memory, so its choices may differ; its shape and slot bounds may not
+    actions = brain.act(x[10:20], greedy=True)
+    assert actions.shape == (10, brain.learner.slot_count)
+    assert (
+        actions < np.asarray(brain.learner.slot_sizes)[None, :]
+    ).all() and (actions >= 0).all()
+
+    assert brain.accuracy(x[10:20], y[10:20]) == brain.learner.accuracy(
+        brain.stimulus(x[10:20], memory=False), y[10:20]
+    )
+
+    history = brain.fit(x[20:], y[20:], epochs=1, batch=5)
+    assert len(history) == 1 and 0.0 <= history[0] <= 1.0
+
+
+def test_fit_mismatched_labels_fail_before_teaching() -> None:
+    brain = cd.Brain.compose(4, 2, modules=(8,), seed=1)
+    x = np.zeros((4, 4))
+    before = brain.brain.efficacy.copy()
+    with pytest.raises(ValueError, match="same batch size"):
+        brain.fit(x, np.array([0], dtype=int))
+    np.testing.assert_array_equal(brain.brain.efficacy, before)
+    assert brain.learner.updates == 0
 
 
 def test_evolution_selects_a_generic_brain_genome() -> None:
