@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Harden `live` continuation and its audit instruments: reject contradictory
+  pending-action checkpoints and incomplete arousal genes; preserve routine
+  feedback on a refused arousal update and identify already accepted sampled
+  feedback. Keep arousal statistics atomic on numerical overflow, and support
+  tiny positive averaging rates and sampling temperatures. Validate nursery
+  receipt plans, sources and readings, and count discarded reset brains and
+  frozen actions. Historical receipts retain their original sources and work
+  limitations; the old-rule control is not equal-work witnessed replay. Issues
+  88 and 122 retain their remaining acceptance requirements.
 - Add `Brain.live` and arousal for one continuing stream
   ([issue 88](https://github.com/muellerberndt/cadence/issues/88),
   [issue 122](https://github.com/muellerberndt/cadence/issues/122)). A brain

@@ -44,7 +44,7 @@ Every arm of a seed lives the same odour sequence:
 | `memory-only` | the `live` brain with its actor's rates at zero: associative memory and critic learn, the graph's policy does not |
 | `graph-only` | the `live` brain without its associative memory: the graph's reward learning alone |
 | `frozen` | the `live` brain after rule A, answering greedily and receiving no outcome |
-| `replay` | the `live` brain re-living rule A after the change: it is paid what its action earned under rule A, the same work on old evidence |
+| `replay` | the `live` brain paid by the old rule A after the change: a counterfactual-world control with the same number of trials; no retained-record replay or equal-work matching |
 | `reset` | a newborn `live` brain at every rule change |
 | `tabular` | epsilon-greedy tabular Q-learning with the same odour, action and reward; alpha 1.0 and epsilon 0.1, selected on the development seeds |
 | `random` | uniform random actions |
@@ -66,6 +66,11 @@ sweeps per moment in each mode with the eligibility and feedback sweeps of arous
 moments. The copies are read and the living brain is not: a life gives the same executed
 actions with and without its probes. A refused answer raises and the life is recorded as
 crashed.
+
+The approach probabilities are probes of the actor's base-temperature policy on a
+saved copy. They are not the executed behavior probabilities of `live`: routine uses
+the greedy choice and aroused sampling can use a raised temperature. Per-action
+behavior probabilities are not retained by this instrument.
 
 ## Gates, fixed before the confirmation run
 
@@ -93,18 +98,25 @@ confirmation seeds, 500 lives, in about six minutes on nine laptop cores. `--arm
 `--payoff` and `--jitter` override the arousal genes, the operating point and the world,
 and mark the receipt `frozen_protocol: false`; a `null` in `--point` leaves that setting
 at its released default. The receipt is a `cadence.Receipt` bound to the chamber's source
-and every module of the library. `--verify` checks its canonical form and digest, one row
-for every planned life and the gates recomputed from the rows; `--current` also requires
-the source manifest and the protocol hash of the files present. `--report` prints the
+and every module of the library. `--verify` checks its canonical form and digest, source
+manifest integrity, a nonempty unique plan, the ranges and dimensions of the recorded
+readings, one row for every planned life and the gates recomputed from the rows. New
+receipts include the original protocol text and verify its hash and any claim of frozen
+settings; older receipts compare frozen settings when their protocol source is available.
+`--current` also requires the source manifest and the protocol hash of the files present.
+These checks validate the recorded summaries; they cannot reconstruct unrecorded executed
+actions or independently prove that a run occurred. `--report` prints the
 tables below. `results/` keeps the receipts quoted here. The guards run short lives of
 the `live` arm and its controls, the checkpoint continuation during a reversal, the
 independence of a life from its probes, the gate arithmetic and the receipt's custody.
 
-## Results on ten fresh seeds, 2026-10-05
+## Historical results on ten fresh seeds, 2026-10-05
 
 Receipt: `results/confirmation-2026-10-05.json.gz`. Protocol SHA-256
 `0a5f2b4e6c2e2767aebc57588caf3e338a0348f5ec14ab099f637413f09652c4`, frozen; seeds 300 to
-309; cadence 0.74.0 source of this change, NumPy 2.5.3, Python 3.13.0, macOS arm64. All
+309; cadence 0.74.0 at commit
+[`9b66228`](https://github.com/muellerberndt/cadence/commit/9b66228), NumPy 2.5.3,
+Python 3.13.0, macOS arm64. All
 500 lives completed and none refused an answer. **The gates passed.** Of the 40 gated
 lives of the `live` arm, 40 acquired rule A, 39 reversed, 38 returned, 39 kept the stable
 pair and 40 returned to routine; the median reversal lags were 22.5, 29, 20.5 and 22
@@ -113,6 +125,14 @@ exposure 1,000 never approached the moved sugar and ended both later rules avoid
 reversal pair; one at exposure 1,000 reversed and returned and ended the last rule at
 0.87; one at exposure 10,000 ended every rule at 1.00 and had the stable pair right at
 79% of the probes of a slow return.
+
+The audit corrections of 2026-10-06 preserve these receipt bytes and their source
+identity. They pass historical `--verify`; `--current` rejects them against changed
+sources. The tables below describe the recorded implementation. A subsequent run on
+these seeds is regression evidence, not a new fresh-seed confirmation. The audit also
+corrected accounting that omitted frozen answers and the first two brains of the reset
+arm; their historical work counters remain incomplete and must not be used for a cost
+comparison.
 
 ### Rule A: optimal share of the last 100 actions, mean (minimum)
 
@@ -374,7 +394,7 @@ both odours of the reversal pair is right in three trials of four and can meet s
 window by chance, so for arms that end rule B below 0.9 the lag tables count more lives
 than reversed. The last-100 shares and the greedy tables are the stricter readings.
 
-**What arousal changes.** The `live` arm's approach probability at that odour stays
+**What arousal changes.** The `live` arm's probed base-policy approach probability stays
 between 0.21 and 0.27 at every exposure, its first approach comes after about 20 trials
 whatever the exposure, and the outcome of that first approach turns its greedy choice.
 In 49 of its 50 lives the choice turned after exactly one approach; the other life never
@@ -391,7 +411,9 @@ in one stream at these budgets. `defaults` stays at chance.
 
 **No adaptation without new evidence.** `frozen` and `replay` end rule B at chance for
 the reversal pair (0.49 to 0.52 overall) and are right again at once when rule A returns.
-`replay` does the work of a living brain on the old outcomes and changes nothing.
+The arm named `replay` receives counterfactual rewards calculated from rule A for its
+current actions. It keeps the original behavior in this chamber. It does not replay
+retained witnessed records, and its arousal-dependent work is not matched to `live`.
 
 **Against starting over.** A newborn brain at every change (`reset`) reverses in 53 to 77
 trials, inside its sampling youth, and has the stable pair right at 96% to 98% of the
@@ -409,7 +431,12 @@ is raised when reward is missing and absent otherwise.
 sweeps for its answer after about 11.5 for its feedback and eligibility. Routine saves
 the eligibility phases, the parameter updates and the memory writes. It saves no settling
 work: every moment pays one full qualified settle. Sweeps count numerical work; they are
-neither wall time nor energy.
+neither wall time nor energy. The counters cover successful action/feedback calls,
+including an answer requested after the final executed trial and extra answers discarded
+at reset boundaries. They exclude construction, checkpoint probes, memory operations and
+work before a crashed life aborts. Current runs accumulate all reset brains and count
+frozen answers; the historical receipts predate those accounting fixes. This is partial
+solver-work accounting, not the complete-work comparison required by issue 88 or 122.
 
 ## Declared variants on the confirmation seeds
 
@@ -603,11 +630,17 @@ confirmation seeds were first run on the frozen protocol.
 
 ## What this does and does not establish
 
-The `live` arm answers the two questions of issue 88 for this chamber. The choice that
+The `live` arm supplies bounded acquisition, reversal, return and stable-pair evidence
+for issue 88. The choice that
 must change is sampled again because a lasting shortfall of reward rouses the brain and
 widens its sampling, and one witnessed outcome turns the choice because the lasting
 record takes half of it. The always-learning arm shows the historical failure on the same
 sequences, and its cause.
+
+Issue 88 remains open: its equal-work replay control must replay retained actual
+witnesses, executed behavior probabilities must be recorded, and complete work including
+probes and refused attempts must be accounted for. The arm named `replay`, base-policy
+probes and counters here do not satisfy those gates.
 
 The repair is incomplete. Three of the 40 confirmation lives missed a reading, two at
 exposure 1,000 and one at 10,000; on the development and diagnostic seeds 5 of 72 lives
@@ -645,8 +678,10 @@ The arousal level is a scalar computed from the brain's own temporal-difference 
 reward, as its dopamine is; it is a hand-set law whose constants are genes, and a
 settling arousal patch inside the graph is not attempted here.
 
-Routine is not cheaper in settling work. Reuse of a settled state across moments and
-repair localized to declared dependencies, the remaining parts of issue 122, are not
-attempted.
+Issue 122 remains open. Routine is not cheaper in settling work. Reuse of a settled state
+across moments, dependency-local repair and their invalidation tests are not attempted.
+Its broader gates also require action-specific learned forecasts, changed goals and
+delayed outcomes, familiar nonidentical inputs, memory interventions, complete work and
+latency comparisons, and independent preservation evidence beyond this bounded chamber.
 
 Sweeps count numerical work. They are not wall time or energy.

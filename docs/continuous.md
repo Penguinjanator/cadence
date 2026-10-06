@@ -274,6 +274,14 @@ sampled is adopted. If the forecast settle refuses, nothing has changed and the
 same call can be retried. If the answer refuses after the outcome was taken, the
 outcome stays learned: retry with `live(observations)` alone.
 
+When an action awaits feedback, omitting `reward` supplies zero, as in `step`;
+it does not represent a missing or delayed outcome. Wait for the body's actual
+outcome before advancing this stream. Youth and sustained arousal permit learning
+from successful outcomes too. The arousal statistics control sampling and
+eligibility outside the neural solve; they are not another settled patch or a
+certificate of task failure. Every answer still comes from the qualified graph,
+and learning uses its existing local updates and associative write rule.
+
 The constants of the law are genes, `ArousalConfig`, and the values above are
 hand-set founders. The three other settings are the operating point of one
 continuing stream measured on the

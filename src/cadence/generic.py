@@ -284,7 +284,7 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
         if action.dtype.kind not in "iu" or (action < 0).any() or (action >= limit).any():
             raise ValueError("invalid saved action indices")
     lived = meta.get("lived")
-    if lived is None:
+    if "lived" not in meta:
         if "lived/observations" in data or "lived/action" in data:
             raise ValueError("saved lived arrays require lived metadata")
     else:
@@ -301,12 +301,19 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
             raise ValueError("invalid saved lived forecast")
         if was_sampled != bool(meta.get("pending", False)) or batch != 1:
             raise ValueError("a saved lived action must match the pending action of one stream")
-        array("lived/observations", (1, sensory))
+        observations = array("lived/observations", (1, sensory))
         slotted = learner.slot_count > 1
         action = array("lived/action", (1, learner.slot_count) if slotted else (1,))
         limit = learner.slot_sizes[None, :] if slotted else len(learner.output_index)
         if action.dtype.kind not in "iu" or (action < 0).any() or (action >= limit).any():
             raise ValueError("invalid saved lived action indices")
+        if was_sampled:
+            if (
+                not np.array_equal(observations, array("moment/observations", (1, sensory)))
+                or not np.array_equal(action, array("moment/action", action.shape))
+                or float(forecast) != float(array("pending/value", (1,))[0])
+            ):
+                raise ValueError("saved lived action must match its pending feedback")
     working = meta["working_memory"]
     if working is not None:
         source, target = working["source"], working["target"]
@@ -954,6 +961,7 @@ class Brain:
         learned = recorded = False
         if sampled:
             report = self.learn(r, ended, x)
+            self._lived = None  # accepted feedback must never become pending again
             self.last_learning = report
             error = float(report["td_error"])
             learning_sweeps += int(report["free_steps"])
@@ -970,9 +978,19 @@ class Brain:
             # only the outcome of the brain's own best guess enters its mood; an adopted
             # action has no record and counts as its own
             own = True if lived is None else lived[5]
-            surprise, want = arousal.outcome(error, float(r[0]), own=own, learned=sampled)
+            try:
+                surprise, want = arousal.outcome(error, float(r[0]), own=own, learned=sampled)
+            except ValueError as exc:
+                if sampled:
+                    raise ValueError(
+                        "feedback was accepted but arousal could not update; "
+                        "retry live(observations) without reward or done"
+                    ) from exc
+                raise
             self._lived = None  # this outcome is taken, exactly once
             if routine:
+                if ended[0] and self.working_memory is not None:
+                    self.working_memory.reset(1, rows=np.array([0]))
                 # a moment without eligibility has passed: the credit of earlier sampled
                 # actions fades as it does between two outcomes that are learned from
                 agent.fade(ended)
@@ -1026,9 +1044,9 @@ class Brain:
         return action
 
     def _forecast(self, x: np.ndarray, ended: bool) -> tuple[np.ndarray, BrainState]:
-        """Settle the present situation without issuing an action, to read its value. A
-        finished episode starts the next from rest with a fresh trace; a refusal restores
-        both, so nothing has changed."""
+        """Read the next value without changing the stream. A finished episode's
+        forecast starts from rest and a fresh trace; accepting its outcome commits
+        that reset, so a refused forecast or arousal update preserves feedback."""
         agent = self.basal_ganglia
         trace = self.working_memory
         if not ended:
@@ -1044,12 +1062,11 @@ class Brain:
                 trace.reset(1, rows=np.array([0]))
             agent._free = None
             return self._settled(x)
-        except Exception:
+        finally:
             agent._free, agent._free_brain, agent._drive = kept
             if trace is not None and traces is not None:
                 for name, value in traces.items():
                     setattr(trace, name, value)
-            raise
 
     # -- lower-level interaction operations
 

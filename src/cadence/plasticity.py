@@ -352,12 +352,22 @@ class ActorCritic:
             for j, (start, size) in enumerate(
                 zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
             ):
-                z = s[:, start : start + size] / temperature
-                z = np.exp(z - z.max(axis=1, keepdims=True))
-                p[:, j, :size] = z / z.sum(axis=1, keepdims=True)
+                p[:, j, :size] = self._softmax(s[:, start : start + size], temperature)
             return p
-        z = s / temperature
-        z = z - z.max(axis=-1, keepdims=True)
+        return self._softmax(s, temperature)
+
+    @staticmethod
+    def _softmax(s: np.ndarray, temperature: float) -> np.ndarray:
+        with np.errstate(over="ignore", divide="ignore", invalid="ignore"):
+            z = s / temperature
+            if not np.isfinite(z).all():
+                # At a subnormal temperature, subtract before dividing: negative infinity
+                # has zero probability, while each largest logit stays exactly zero.
+                # Float32 inputs must not round the positive denominator down to zero.
+                logits = np.asarray(s, dtype=float)
+                z = (logits - logits.max(axis=-1, keepdims=True)) / temperature
+            else:
+                z = z - z.max(axis=-1, keepdims=True)
         p = np.exp(z)
         return np.asarray(p / p.sum(axis=-1, keepdims=True))
 
@@ -435,7 +445,7 @@ class ActorCritic:
             action = np.minimum(action, limit)
         if not greedy:
             target = self.learner.targets(action)
-            # Credit must differentiate the policy that sampled this action.
+            # Credit differentiates the learner's policy, including explored actions.
             # A learner may use quadratic imitation; its loss must not silently
             # replace the categorical log-policy score in reward eligibility.
             beta = self.learner.config.beta

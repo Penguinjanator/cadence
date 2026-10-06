@@ -174,10 +174,14 @@ def test_a_receipt_binds_its_sources_and_refuses_changed_rows(tmp_path, capsys):
     edited["body"]["rows"][0]["phases"][0]["final"] = 2.0
     rewrite(edited)
     assert nursery.verify(path) == (False, "embedded digest does not verify")
-    fewer = nursery.Receipt.build(nursery.SCHEMA, {**body, "rows": body["rows"][:-1]})
+    fewer = nursery.Receipt.build(
+        nursery.SCHEMA, {**body, "rows": body["rows"][:-1]}, nursery.sources()
+    )
     rewrite(fewer.to_dict())
     assert nursery.verify(path)[1] == "the rows are not the planned lives, each once and in order"
-    claimed = nursery.Receipt.build(nursery.SCHEMA, {**body, "gates": {"passed": True}})
+    claimed = nursery.Receipt.build(
+        nursery.SCHEMA, {**body, "gates": {"passed": True}}, nursery.sources()
+    )
     rewrite(claimed.to_dict())
     assert nursery.verify(path)[1] == "the stored gates do not follow from the rows"
     assert nursery.main([*run, "--jitter", "0.1"]) == 0  # an override is recorded
@@ -206,3 +210,88 @@ def test_the_first_freezes_receipt_keeps_its_protocol_hash_and_its_gates(protoco
     assert first["seeds"] == protocol["seeds"]["spent"]
     assert nursery.gates(first["rows"], first["protocol"]) == first["gates"]
     assert first["gates"]["passed"] and first["gates"]["pooled"]["reversed"] == 1.0
+
+
+@pytest.mark.parametrize("arm,extra", [("frozen", 1), ("reset", 3)])
+def test_work_counts_all_brains_and_frozen_answers(protocol, arm, extra):
+    short = {**protocol, "after": 8, "witness_probes": 0}
+    row = nursery.run_life(arm, 0, 10, short)
+    work = row["work"]
+    # Each executed trial requests the following action, plus an initial answer and
+    # two discarded boundary answers in the reset control. All solves are charged.
+    assert work["routine"] + work["aroused"] == 10 + 2 * 8 + extra
+    if arm == "frozen":
+        assert work["routine"] == 16 and work["sweeps_routine"] > 0
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "kind",
+        "schema",
+        "empty_plan",
+        "duplicate_plan",
+        "missing_sources",
+        "manifest_digest",
+        "phase_count",
+        "share",
+        "trial",
+        "visits",
+        "approaches",
+        "probabilities",
+        "frozen_settings",
+    ],
+)
+def test_resigned_receipts_cannot_turn_invalid_readings_into_evidence(tmp_path, mutation):
+    stored = json.loads(
+        gzip.decompress((HERE / "results" / "confirmation-2026-10-05.json.gz").read_bytes())
+    )
+    body = stored["body"]
+    phase = body["rows"][0]["phases"][0]
+    if mutation == "kind":
+        stored["kind"] = "unrelated/1"
+    elif mutation == "schema":
+        body["protocol"]["schema"] = "unrelated/1"
+    elif mutation == "empty_plan":
+        body["arms"], body["rows"], body["gates"] = [], [], {}
+    elif mutation == "duplicate_plan":
+        body["arms"] *= 2
+        body["rows"] *= 2
+    elif mutation == "missing_sources":
+        stored["source"] = nursery.source_manifest([])
+    elif mutation == "manifest_digest":
+        stored["source"]["manifest_sha256"] = "0" * 64
+    elif mutation == "phase_count":
+        body["rows"][0]["phases"] = []
+    elif mutation == "share":
+        phase["final"] = 2.0
+    elif mutation == "trial":
+        phase["lag"] = phase["length"]
+    elif mutation == "visits":
+        phase["visits"][0] += 1
+    elif mutation == "approaches":
+        phase["approaches"][0] = phase["visits"][0] + 1
+    elif mutation == "probabilities":
+        phase["start_approach"][0] = -0.1
+    elif mutation == "frozen_settings":
+        body["protocol"]["operating_point"]["actor_eta"] = 0.2
+    stored["digest"] = nursery.canonical_sha256({k: stored[k] for k in ("kind", "body", "source")})
+    path = tmp_path / "edited.json"
+    path.write_text(nursery.canonical_json(stored) + "\n")
+    assert nursery.verify(path)[0] is False
+
+
+@pytest.mark.parametrize(
+    "data", [b"[]\n", b"null\n", b"{}\n", b"not json", gzip.compress(b"{}")[:-4]]
+)
+def test_malformed_receipts_fail_closed(tmp_path, data):
+    path = tmp_path / ("bad.json.gz" if data.startswith(b"\x1f\x8b") else "bad.json")
+    path.write_bytes(data)
+    assert nursery.verify(path)[0] is False
+
+
+def test_every_source_bound_historical_receipt_still_verifies():
+    for path in sorted((HERE / "results").glob("*.json.gz")):
+        if path.name.startswith("first-freeze"):
+            continue  # historical raw body predates the Receipt wrapper and source manifest
+        assert nursery.verify(path)[0], (path, nursery.verify(path))

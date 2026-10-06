@@ -134,8 +134,9 @@ world's transitions or turn predictions into witnessed experience.
 
 Distinguish implemented contracts from the desired world-model lifecycle.
 `Brain.compose` does not yet integrate learned environmental transition prediction.
-`step` does not gate learning on witnessed failure; `live` does for one stream
-through its [arousal law](docs/continuous.md#routine-and-repair-live), and its
+`step` does not gate learning on witnessed failure; `live` gates it by arousal
+for one stream through its [arousal law](docs/continuous.md#routine-and-repair-live).
+Youth and sustained arousal also allow learning from successful outcomes. Its
 routine moment still pays one full settle. Stable inputs do not guarantee cheap
 operation. Do not invent thresholds, success policies or runtime
 changes to make documentation imply those capabilities. Missing integration and

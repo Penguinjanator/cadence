@@ -778,7 +778,8 @@ that recursive benefit or automatic reflective behavior has been learned.
     a learned external-world action/consequence model.
   - `live(observations, *, reward=None, done=None) -> actions`: one moment of a
     continuing life on one stream, for a brain constructed with `arousal`. Reward and
-    done concern the preceding action, as in `step`. A calm brain answers with the
+    done concern the preceding action, as in `step`; omitted reward consumes a
+    pending action as a zero-reward transition, not a missing outcome. A calm brain answers with the
     greedy choice of one qualified settle and changes no parameter, memory record or
     optimizer state; the eligibility of earlier sampled actions fades by one step
     (`ActorCritic.fade`), as it does between two outcomes that are learned from. Its
@@ -790,11 +791,16 @@ that recursive benefit or automatic reflective behavior has been learned.
     `learning.temperature * arousal.heat`, keeps eligibility and learns from the outcome
     as `step` does; the outcome that woke a calm brain is written to its memory for the
     situation it was chosen in. An action sampled by `step` or `act` is adopted, so a
-    bootstrapped brain continues without `reset`. Another operation that acts on the
+    bootstrapped brain continues without `reset`; this first adopted action is
+    treated as an own choice for arousal, even if it was sampled away from the greedy
+    choice. Another operation that acts on the
     stream between two `live` calls takes it over: feedback then needs a preceding
     action again. A refused forecast settle leaves everything unchanged, and the same
     call can be retried; if the answer refuses after the outcome was taken, the outcome
     stays learned and counted, and the retry is `live(observations)` without it.
+    An unrepresentable arousal update raises `ValueError`. For a routine action
+    its feedback remains pending; after a sampled action's feedback was learned,
+    the error says that feedback was accepted and must not be submitted again.
     See [routine and repair](continuous.md#routine-and-repair-live).
   - `last_arousal: Mapping[str, Any] | None`: an immutable snapshot of the latest `live`
     moment: `mode` (`"routine"` or `"aroused"`), `level`, `error` (the unsigned
@@ -884,9 +890,14 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   alone and the level carries the present want forward. `scale` is the spread of the
   outcomes the brain has learned from, the running RMS distance of their reward from
   `longrun`: `learned` outcomes and the outcome that wakes the brain enter it, routine
-  outcomes do not, so a long calm does not shrink it. The law is unchanged when every
-  reward and error is multiplied by one positive number and every reward shifted by a
-  constant. A stream's first own outcome is no surprise.
+  outcomes do not, so a long calm does not shrink it. Scaling reward and error by
+  the same positive factor preserves the law within numerical precision away
+  from its absolute `1e-12` surprise guard. Shifting
+  reward by a constant also preserves it if an own outcome establishes the reward
+  reference before any explored outcome enters the spread. Before that reference
+  exists, explored rewards are measured against zero, so the reward origin matters.
+  These are properties of supplied scalar outcomes, not a reward-transformation
+  guarantee for the complete learning brain. A stream's first own outcome is no surprise.
   `aroused` is true while `level >= threshold` and for the first `youth` moments of the
   brain's life; `mode` names it. `heat` is `1 + config.heat * want`, the factor on the
   policy temperature an aroused brain samples at. `lived(sweeps, learning_sweeps=0)`
@@ -896,6 +907,9 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   absent from these counts.
   `reset()` begins another stream calm and keeps the age and the counts.
   `to_dict()` and `Arousal.from_dict(values)` carry the complete state.
+  An outcome whose running statistics cannot remain finite raises `ValueError`
+  without changing those statistics. Loading requires every saved gene and
+  continuation field.
 
 The law is relative: it responds to outcomes that differ from what the stream is used
 to. A brain whose life has always paid poorly, and whose youth has ended, is not roused

@@ -20,8 +20,11 @@ Only the outcome of the brain's own best guess can surprise it and enters what i
 to: what an explored action brings is play. The brain is aroused while
 ``level >= threshold`` and during its first ``youth`` moments, and an aroused brain
 samples at ``1 + heat * want`` times its policy's temperature. The law is unchanged when
-rewards and errors are multiplied by one positive number and rewards are shifted by a
-constant.
+rewards and errors are multiplied by one positive number, away from its absolute
+``1e-12`` surprise guard. Reward shifts also preserve the law when the first learned
+outcome is the brain's own best guess: this establishes the reward reference before
+its spread forms.
+Explored outcomes before that reference measure their spread from zero.
 
 Every constant of the law is a gene of ``ArousalConfig``. The values here are hand-set
 founders and stay as the control; ``ArousalConfig.space()`` declares the space for
@@ -145,7 +148,11 @@ class Arousal:
         count = self.outcomes if count is None else count
         if not count:
             return 0.0
-        return accumulated / (1.0 - (1.0 - rate) ** count)
+        correction = 1.0 - (1.0 - rate) ** count
+        if correction == 0.0:
+            # A valid positive rate can be too small for ``1 - rate`` to differ from one.
+            correction = float(-np.expm1(count * np.log1p(-rate)))
+        return accumulated / correction
 
     @property
     def scale(self) -> float:
@@ -206,22 +213,42 @@ class Arousal:
         if not np.isfinite(error) or not np.isfinite(reward):
             raise ValueError("error and reward must be finite")
         c = self.config
+        outcomes, spreads = self.outcomes, self.spreads
+        recent, longrun, usual = self._recent, self._longrun, self._usual
+        square, scale = self._square, self.scale
         surprise = 0.0
         if own:
-            first = self.outcomes == 0
-            usual = self.usual  # what the forecast's error usually was, before this outcome
-            self.outcomes += 1
-            self._recent += c.fast * (reward - self._recent)
-            self._longrun += c.slow * (reward - self._longrun)
-            self._usual += c.slow * (error - self._usual)
-            unit = c.tolerance * usual + c.floor * self.scale + _TINY
+            first = outcomes == 0
+            previous_usual = self.usual  # the error before this outcome
+            outcomes += 1
+            recent += c.fast * (reward - recent)
+            longrun += c.slow * (reward - longrun)
+            usual += c.slow * (error - usual)
+            unit = c.tolerance * previous_usual + c.floor * scale + _TINY
             if error > unit and not first:
-                surprise = float(np.log(error / unit))
-        want = self.want
-        self.level = c.decay * self.level + (1.0 - c.decay) * (surprise + want)
-        if learned or self.aroused:
-            self.spreads += 1
-            self._square += c.slow * ((reward - self.longrun) ** 2 - self._square)
+                ratio = error / unit
+                surprise = float(
+                    np.log(ratio) if np.isfinite(ratio) else np.log(error) - np.log(unit)
+                )
+        expected = self._reading(longrun, c.slow, outcomes)
+        want = (
+            float(np.clip((expected - self._reading(recent, c.fast, outcomes)) / scale, 0.0, 1.0))
+            if scale > 0.0
+            else 0.0
+        )
+        level = c.decay * self.level + (1.0 - c.decay) * (surprise + want)
+        if learned or self.age < c.youth or level >= c.threshold:
+            spreads += 1
+            try:
+                square += c.slow * ((reward - expected) ** 2 - square)
+            except OverflowError as exc:
+                raise ValueError("arousal moments must remain finite") from exc
+        if not np.isfinite([recent, longrun, usual, square, level]).all():
+            raise ValueError("arousal moments must remain finite")
+        # Admit the complete outcome together so an unrepresentable spread can be retried.
+        self.outcomes, self.spreads = outcomes, spreads
+        self._recent, self._longrun, self._usual = recent, longrun, usual
+        self._square, self.level = square, level
         return surprise, want
 
     def lived(self, sweeps: int, learning_sweeps: int = 0) -> None:
@@ -255,6 +282,8 @@ class Arousal:
         """Restore a saved arousal, rejecting incomplete or invalid state."""
         if not isinstance(values, dict) or not isinstance(values.get("config"), dict):
             raise ValueError("invalid saved arousal")
+        if set(values["config"]) != set(ArousalConfig.__slots__):
+            raise ValueError("invalid or incomplete saved arousal config")
         try:
             arousal = cls(ArousalConfig(**values["config"]))
             for name in ("age", "outcomes", "spreads", "learning_sweeps"):

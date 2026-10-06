@@ -124,9 +124,11 @@ memory writes and reset semantics. The environment must be saved separately.
 The full world-model lifecycle is the design direction, not a completed default
 capability. `step` processes real feedback even when the task succeeded; it does
 not gate an update on witnessed failure. [`live`](continuous.md#routine-and-repair-live)
-is the explicit loop that does, for one stream: routine moments settle once and
+gates learning by arousal for one stream: routine moments settle once and
 change no parameter or record, and a surprising outcome or a lasting shortfall of
-reward starts exploration and learning. Its evidence is the bounded
+reward can start exploration and learning. Youth and sustained arousal also
+permit learning from successful outcomes; this is not a failure-only gate.
+Its evidence is the bounded
 [odour nursery](../benchmarks/reversal/README.md), where the associative memory
 carries the repair; settled-state reuse across moments, repair localized to
 declared dependencies and integrated learned consequences still need

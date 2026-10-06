@@ -22,8 +22,8 @@ Arms, all on the same odour sequence per seed:
 - ``memory-only`` and ``graph-only``  the ``live`` brain with its actor's rates at zero,
   and without its associative memory: which part carries the adaptation;
 - ``frozen``   the ``live`` brain after rule A, answering greedily without outcomes;
-- ``replay``   the ``live`` brain re-living rule A after the change: it is paid what its
-  action earned under rule A, the same work on old evidence;
+- ``replay``   the ``live`` brain paid by the old rule A after the change: a
+  counterfactual-world control, not replay of retained witnessed outcomes;
 - ``reset``    a newborn ``live`` brain at every rule change;
 - ``tabular``  epsilon-greedy tabular Q-learning, the matched-information conventional
   online learner, its two settings selected on the development seeds;
@@ -55,6 +55,7 @@ import sys
 import tempfile
 import time
 import warnings
+import zlib
 from dataclasses import replace
 from multiprocessing import get_context
 from pathlib import Path
@@ -63,7 +64,7 @@ from typing import Any
 import numpy as np
 
 import cadence as cd
-from cadence.receipts import Receipt, canonical_json, source_manifest
+from cadence.receipts import Receipt, canonical_json, canonical_sha256, source_manifest
 
 SCHEMA = "odour-nursery/2"
 AVOID, APPROACH = 0, 1
@@ -159,7 +160,12 @@ class BrainLife:
         x = np.eye(ODOURS)[[odour]]
         brain = self.brain
         if self.frozen:
-            return int(brain.act(x, greedy=True)[0]), False
+            action = int(brain.act(x, greedy=True)[0])
+            settlement = brain.last_settlement
+            assert settlement is not None
+            self.work["routine"] += 1
+            self.work["sweeps_routine"] += int(settlement["steps"])
+            return action, False
         feedback = {} if reward is None else {"reward": [reward]}
         if self.use_live:
             action = int(brain.live(x, **feedback)[0])
@@ -272,12 +278,17 @@ def run_life(
     jitter = float(protocol.get("jitter", 0.0))  # measurement noise added to every reward
     luck = np.random.default_rng(protocol["odour_seed"] + 7919 + seed)
     life = make_life(arm, protocol, seed, genes)
+    retired_work = {"routine": 0, "aroused": 0, "sweeps_routine": 0, "sweeps_aroused": 0}
+    retired_learning_sweeps = 0
     started = time.time()
     odour = int(odours.integers(ODOURS))
     action, aroused = life.act(odour, None)
     phases: list[dict[str, Any]] = []
     for index, (sugar, length) in enumerate(rules):
         if index and arm == "reset":
+            for key in retired_work:
+                retired_work[key] += life.work[key]
+            retired_learning_sweeps += life.learning_sweeps
             # a newborn's seed meets no other generator of this life (odours, luck, brains)
             life = make_life(arm, protocol, 100_000 * index + seed, genes)
             action, aroused = life.act(odour, None)
@@ -299,7 +310,8 @@ def run_life(
                 tries.append(trial)
             if trial % every == 0:
                 probes.append((trial, *life.probe()))
-            # the replay arm keeps receiving the outcomes of rule A: no new evidence
+            # The replay-named arm is a counterfactual world paying by rule A. It does
+            # not replay previously witnessed records or match the live arm's work.
             reward = reward_of(odour, action, 0 if arm == "replay" else sugar, payoff)
             if reliability < 1.0 and luck.random() >= reliability:
                 reward = 0.0
@@ -367,10 +379,10 @@ def run_life(
         "seconds": round(time.time() - started, 2),
     }
     if isinstance(life, BrainLife):
-        work = life.work
+        work = {key: value + retired_work[key] for key, value in life.work.items()}
         result["work"] = {
             **work,
-            "learning_sweeps": life.learning_sweeps,
+            "learning_sweeps": life.learning_sweeps + retired_learning_sweeps,
             "sweeps_per_routine_moment": work["sweeps_routine"] / max(1, work["routine"]),
             "sweeps_per_aroused_moment": work["sweeps_aroused"] / max(1, work["aroused"]),
         }
@@ -657,12 +669,112 @@ def planned(body: dict[str, Any]) -> list[tuple[str, int, int]]:
     return [(a, e, s) for a in body["arms"] for e in body["exposures"] for s in body["seeds"]]
 
 
+def validate_readings(body: dict[str, Any]) -> str | None:
+    """Reject impossible readings before calculating gates from a re-signed receipt."""
+    protocol = body["protocol"]
+    if protocol["schema"] != SCHEMA:
+        return "the protocol has the wrong schema"
+    for key in ("arms", "exposures", "seeds"):
+        values = body[key]
+        if not isinstance(values, list) or not values or len(set(values)) != len(values):
+            return "the plan must contain nonempty, unique arms, exposures and seeds"
+    if any(arm not in ARMS for arm in body["arms"]):
+        return "the plan contains an unknown arm"
+    for key, minimum in (("exposures", 1), ("seeds", 0)):
+        if any(type(v) is not int or v < minimum for v in body[key]):
+            return "the plan contains an invalid exposure or seed"
+    for key in ("after", "hold", "probe_every"):
+        if type(protocol[key]) is not int or protocol[key] <= 0:
+            return "the protocol contains an invalid trial count"
+
+    def share(value: Any) -> bool:
+        return type(value) in (int, float) and 0 <= value <= 1
+
+    for key in ("final", "stable", "aroused_late", "share"):
+        if not share(protocol["gates"][key]):
+            return "the protocol contains an invalid gate"
+    lag_bound = protocol["gates"]["lag_bound"]
+    if type(lag_bound) not in (int, float) or lag_bound < 0:
+        return "the protocol contains an invalid lag bound"
+    for row in body["rows"]:
+        if "error" in row:
+            if not isinstance(row["error"], str) or not row["error"]:
+                return "a crashed life must record its error"
+            continue
+        phases = row["phases"]
+        if not isinstance(phases, list) or len(phases) != 3:
+            return "a completed life must contain exactly three phases"
+        for phase, sugar, length in zip(
+            phases, (0, 1, 0), (row["exposure"], protocol["after"], protocol["after"]), strict=True
+        ):
+            if phase["sugar"] != sugar or phase["length"] != length:
+                return "a phase differs from the planned rule or length"
+            if any(not share(phase[key]) for key in ("final", "whole", "aroused", "aroused_late")):
+                return "a recorded share is outside [0, 1]"
+            if phase["stable"] is not None and not share(phase["stable"]):
+                return "a recorded share is outside [0, 1]"
+            for key in ("lag", "greedy_lag", "first_try", "flip", "turned"):
+                value = phase[key]
+                bound = length - protocol["hold"] if key == "lag" else length - 1
+                if value is not None and (type(value) is not int or not 0 <= value <= bound):
+                    return "a recorded trial is outside its phase"
+            for key in ("visits", "approaches"):
+                values = phase[key]
+                if len(values) != ODOURS or any(type(v) is not int or v < 0 for v in values):
+                    return "odour counts must be four nonnegative integers"
+            if sum(phase["visits"]) != length or any(
+                a > v for a, v in zip(phase["approaches"], phase["visits"], strict=True)
+            ):
+                return "odour counts do not agree with the executed trials"
+            witnesses = phase["witnesses"]
+            if witnesses is not None and (
+                type(witnesses) is not int or not 0 <= witnesses <= phase["approaches"][sugar]
+            ):
+                return "the witness count exceeds the executed approaches"
+            for key in ("start_approach", "end_approach"):
+                if len(phase[key]) != ODOURS or any(not share(v) for v in phase[key]):
+                    return "approach probabilities must be four shares in [0, 1]"
+            choices = phase["end_greedy"]
+            allowed = (-1,) if row["arm"] == "random" else (AVOID, APPROACH)
+            if len(choices) != ODOURS or any(
+                type(v) is not int or v not in allowed for v in choices
+            ):
+                return "the greedy choices are invalid"
+    return None
+
+
 def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> tuple[bool, str]:
     """Check a receipt: canonical form and digest, one row for every planned life, and
     the gates recomputed from the rows. ``current`` also requires the source manifest and
     the protocol hash to be those of the files present now."""
 
     def check(body: dict[str, Any]) -> str | None:
+        if stored["kind"] != SCHEMA:
+            return "the receipt has the wrong kind"
+        manifest = stored["source"]
+        entries = manifest["files"]
+        paths = [entry["path"] for entry in entries]
+        if (
+            not entries
+            or len(set(paths)) != len(paths)
+            or not {
+                "odour_nursery.py",
+                "cadence/generic.py",
+                "cadence/arousal.py",
+                "cadence/plasticity.py",
+            }.issubset(paths)
+        ):
+            return "the receipt lacks its declared chamber and library sources"
+        if manifest["manifest_sha256"] != canonical_sha256(entries) or any(
+            not isinstance(entry["sha256"], str)
+            or len(entry["sha256"]) != 64
+            or any(c not in "0123456789abcdef" for c in entry["sha256"])
+            for entry in entries
+        ):
+            return "the embedded source manifest does not verify"
+        problem = validate_readings(body)
+        if problem:
+            return problem
         rows = body["rows"]
         if [(r["arm"], r["exposure"], r["seed"]) for r in rows] != planned(body):
             return "the rows are not the planned lives, each once and in order"
@@ -670,17 +782,39 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
             return "the stored gates do not follow from the rows"
         if current and body["protocol_sha256"] != hashlib.sha256(protocol.read_bytes()).hexdigest():
             return "the protocol file differs from the recorded hash"
+        raw_protocol = body.get("protocol_source")
+        if raw_protocol is None and (
+            current or body["protocol_sha256"] == hashlib.sha256(PROTOCOL.read_bytes()).hexdigest()
+        ):
+            raw_protocol = (protocol if current else PROTOCOL).read_text()
+        if raw_protocol is not None:
+            if hashlib.sha256(raw_protocol.encode()).hexdigest() != body["protocol_sha256"]:
+                return "the embedded protocol source differs from its recorded hash"
+            if body["frozen_protocol"] and (
+                body["protocol"] != json.loads(raw_protocol) or body["genes_override"] is not None
+            ):
+                return "the frozen settings differ from the recorded protocol"
         return None
 
     try:
         data = path.read_bytes()
         if path.suffix == ".gz":
             data = gzip.decompress(data)
+        stored = json.loads(data)
         with tempfile.TemporaryDirectory() as directory:
             plain = Path(directory) / "receipt.json"
             plain.write_bytes(data)
             return Receipt.verify(plain, sources=sources() if current else None, check=check)
-    except (OSError, ValueError, KeyError, TypeError) as error:
+    except (
+        OSError,
+        ValueError,
+        KeyError,
+        TypeError,
+        AttributeError,
+        IndexError,
+        EOFError,
+        zlib.error,
+    ) as error:
         return False, f"cannot verify the receipt: {error}"
 
 
@@ -763,6 +897,7 @@ def main(argv: list[str] | None = None) -> int:
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "protocol_sha256": hashlib.sha256(frozen).hexdigest(),
+        "protocol_source": frozen.decode(),
         # the settings are the frozen file's: no override, and the file is this chamber's
         "frozen_protocol": not overridden and frozen == PROTOCOL.read_bytes(),
         "protocol": protocol,
