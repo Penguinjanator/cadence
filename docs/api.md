@@ -888,8 +888,10 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   level    = decay * level + (1 - decay) * (surprise + want)
   ```
 
-  where `usual` is the running size of the error and `recent` and `longrun` the running
-  reward at the `fast` and `slow` rates, corrected for their short history. `need` is the
+  Each want term is zero when its denominator is zero; `need=0` preserves the
+  previous law exactly. Here `usual` is the running size of the error; `recent` and
+  `longrun` are the running reward at the `fast` and `slow` rates, corrected for their
+  short history. `need` is the
   reward per moment the body requires; the share of it the recent reward leaves unmet is
   a want of its own, measured against the need and not against the spread, because a
   reward that comes once in `L` moments has a spread near `1 / sqrt(L)` while its mean is
@@ -901,16 +903,15 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   alone and the level carries the present want forward. `scale` is the spread of the
   outcomes the brain has learned from, the running RMS distance of their reward from
   `longrun`: `learned` outcomes and the outcome that wakes the brain enter it, routine
-  outcomes do not, so a long calm does not shrink it. Scaling reward and error by
+  outcomes do not, so a long calm does not shrink it. Scaling reward, error and need by
   the same positive factor preserves the law within numerical precision away
-  from its absolute `1e-12` surprise guard. Shifting
+  from its absolute `1e-12` surprise guard. With `need=0`, shifting
   reward by a constant also preserves it if an own outcome establishes the reward
   reference before any explored outcome enters the spread. Before that reference
   exists, explored rewards are measured against zero, so the reward origin matters.
   These are properties of supplied scalar outcomes, not a reward-transformation
-  guarantee for the complete learning brain; the need is a level of reward, so scaling
-  preserves the law when the need is scaled with the rewards, and a shift changes what
-  is unmet. A stream's first own outcome is no surprise.
+  guarantee for the complete learning brain. A positive need is a level of reward, so a
+  shift changes what is unmet. A stream's first own outcome is no surprise.
   `record_error` is the unsigned error of the record the brain held for its chosen
   action against the outcome, when it held one; it has its own running size,
   `usual_record`, and its own count, `records`, and the moment's surprise is the larger
@@ -928,12 +929,15 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   `reset()` begins another stream calm and keeps the age and the counts.
   `to_dict()` and `Arousal.from_dict(values)` carry the complete state.
   An outcome whose running statistics cannot remain finite raises `ValueError`
-  without changing those statistics. Loading requires every saved gene and
-  continuation field.
+  without changing those statistics. New saves carry a `cadence-arousal/1` format
+  marker and loading requires every saved gene and continuation field. Unversioned
+  checkpoints with the complete pre-need gene set load with `need=0`, preserving
+  their previous law; other missing genes are rejected.
 
-The law is relative: it responds to outcomes that differ from what the stream is used
-to. A brain whose life has always paid poorly, and whose youth has ended, is not roused
-by it. In a world that does not change, noise in the reward rate still rouses the
+The default law (`need=0`) is relative: it responds to outcomes that differ from what
+the stream is used to. A brain whose life has always paid poorly, and whose youth has
+ended, is not roused by it. A positive need adds a persistent want when recent reward
+falls below it. In a world that does not change, noise in the reward rate still rouses the
 founder genes for a small share of moments; the
 [odour nursery](../benchmarks/reversal/README.md) reports it.
 

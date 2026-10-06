@@ -230,8 +230,8 @@ stays below what its life usually pays is a want, which also covers a failure it
 predicts correctly; so is a reward below the body's `need`, a gene the founders set
 at zero, measured as the share of the need left unmet, which a rare reward's small
 mean cannot dilute and which never habituates. An aroused brain samples, at a
-temperature the want raises,
-keeps eligibility, learns from every outcome and writes memory. The outcome that
+temperature the want raises, keeps eligibility, learns from every outcome and writes memory.
+The outcome that
 woke it is written to its memory at once. Only the outcomes of its own greedy
 choices enter its mood: what a sampled, non-greedy action brings teaches without
 rousing, so exploring does not keep the brain awake.
@@ -295,9 +295,11 @@ working trace outweighs the present input of a continuing life and the actor
 rate, selected on batches of streams, locks one stream's policy. They are
 development settings of that chamber, to be selected again for another task.
 
-What this establishes is bounded. The arousal responds to change: a brain whose
-life has always paid poorly, and whose youth has ended, is not roused by it, so a
-long bootstrap belongs to `step` or to a longer `youth`. In the nursery the
+What this establishes is bounded. With the founder `need=0`, arousal responds to change:
+a brain whose life has always paid poorly, and whose youth has ended, is not roused by it,
+so a long bootstrap belongs to `step` or to a longer `youth`. A positive `need` can keep
+an unmet want active, but its behavioral benefit must be measured for the task.
+In the nursery the
 associative memory carries the adaptation; the graph's reward learning alone
 does not acquire the task in one stream. The repair is not certain: 3 of the 40
 gated confirmation lives missed a reading, and one of them never searched for the

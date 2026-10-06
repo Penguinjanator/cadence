@@ -30,7 +30,8 @@ def quick(protocol):
 
 
 def test_the_protocol_is_the_frozen_one(protocol):
-    assert protocol["schema"] == keydoor.SCHEMA == "key-door/1"
+    assert protocol["schema"] == keydoor.LEGACY_SCHEMA == "key-door/1"
+    assert keydoor.SCHEMA == "key-door/2"
     assert protocol["delays"] == [2, 5, 10] and protocol["episodes"] == 500
     assert (protocol["length"], protocol["jitter"]) == (14, 1)
     assert (protocol["cost"], protocol["food"], protocol["truncation"]) == (0.25, 1.0, 0.05)
@@ -156,7 +157,7 @@ def test_the_controls_bracket_the_task(quick):
 
 def test_the_probes_do_not_disturb_the_life_they_read(quick):
     executed = ("fed", "took", "wrong", "lag", "visits", "aroused", "behaviour_interact")
-    measurement = ("probes", "probe_sweeps", "checkpoints", "latency_ms")
+    measurement = ("probes", "probe_sweeps", "probe_memory_reads", "checkpoints", "latency_ms")
     unprobed = {**quick, "probe_every": 10_000}
     for arm in ("live", "step"):
         probed, plain = (keydoor.run_life(arm, 5, 2, p) for p in (quick, unprobed))
@@ -321,3 +322,200 @@ def test_a_receipt_binds_its_sources_and_refuses_changed_rows(tmp_path, capsys):
     rewrite(keydoor.Receipt.build(keydoor.SCHEMA, tampered, keydoor.sources()).to_dict())
     assert keydoor.verify(path)[1] == "a recorded share is outside [0, 1]"
     capsys.readouterr()
+
+
+def test_world_schedules_do_not_depend_on_actions_or_yoked_relocation(quick, monkeypatch):
+    schedules = []
+
+    class Scripted(keydoor.Random):
+        def act(self, kind, holding, reward, done):
+            schedules[-1].append((kind, done))
+            return _selected, True
+
+    monkeypatch.setattr(keydoor, "make_life", lambda *args: Scripted(0))
+    for _selected, arm in (
+        (keydoor.PASS, "random"),
+        (keydoor.INTERACT, "random"),
+        (keydoor.INTERACT, "yoked"),
+    ):
+        schedules.append([])
+        row = keydoor.run_life(arm, 0, 2, {**quick, "food": 0.5, "truncation": 0.5})
+        assert "error" not in row
+    assert schedules[0] == schedules[1] == schedules[2]
+
+
+def test_door_reading_uses_the_last_fifty_completed_trips_and_probes_the_end(quick, monkeypatch):
+    class Scripted(keydoor.Random):
+        trips = 0
+        probes = []
+
+        def act(self, kind, holding, reward, done):
+            action = int(kind == keydoor.DOOR or (kind == keydoor.CHEST and self.trips < 5))
+            self.trips += int(kind == keydoor.DOOR)
+            return action, True
+
+        def probe(self):
+            self.probes.append(self.trips)
+            return super().probe()
+
+    life = Scripted(0)
+    monkeypatch.setattr(keydoor, "make_life", lambda *args: life)
+    row = keydoor.run_life("random", 0, 2, {**quick, "truncation": 0})
+    assert row["phases"][0]["opened"] is None  # early key visits are outside the window
+    assert life.probes == [0, 20, 40, 60, 60, 80, 100, 120]
+    assert row["pending_outcome"] == {"reward": 0.0, "done": True}
+    assert row["yoked_bank"] == 0.0
+
+
+def test_no_completed_trips_are_null_readings_and_cannot_pass_gates(quick):
+    row = keydoor.run_life("random", 0, 2, {**quick, "truncation": 1.0})
+    for phase in row["phases"]:
+        assert phase["episodes"] == 0 and phase["cut"] == quick["episodes"]
+        assert all(phase[k] is None for k in ("fed", "fed_whole", "took", "wrong", "opened", "lag"))
+    assert not keydoor.gates([{**row, "arm": "live"}], quick)["passed"]
+    assert "no completed trips" in keydoor.summarize([row])
+    keydoor.canonical_json(row)
+
+
+def test_cli_can_write_verify_and_report_a_life_with_no_completed_trips(quick, tmp_path, capsys):
+    source = tmp_path / "protocol.json"
+    source.write_text(json.dumps({**quick, "truncation": 1.0, "episodes": 1}))
+    output = tmp_path / "receipt.json.gz"
+    assert (
+        keydoor.main(
+            [
+                "--protocol",
+                str(source),
+                "--arms",
+                "random",
+                "--seeds",
+                "0",
+                "--delays",
+                "2",
+                "--workers",
+                "1",
+                "--out",
+                str(output),
+            ]
+        )
+        == 0
+    )
+    assert keydoor.verify(output, current=True, protocol=source)[0]
+    assert keydoor.main(["--report", str(output)]) == 0
+    capsys.readouterr()
+
+
+def test_food_availability_does_not_shift_when_an_arm_skips_early_meals(quick, monkeypatch):
+    class Scripted(keydoor.Random):
+        def __init__(self, skip):
+            super().__init__(0)
+            self.skip, self.trips, self.rewards = skip, 0, []
+
+        def act(self, kind, holding, reward, done):
+            if done:
+                self.rewards.append(reward)
+            action = int(
+                self.trips >= self.skip and kind in (keydoor.CHEST, keydoor.LAMP, keydoor.DOOR)
+            )
+            self.trips += int(kind == keydoor.DOOR)
+            return action, True
+
+    histories = []
+    for skip in (0, 20):
+        life = Scripted(skip)
+        monkeypatch.setattr(keydoor, "make_life", lambda *args, life=life: life)
+        row = keydoor.run_life("random", 0, 2, {**quick, "food": 0.5, "truncation": 0})
+        assert "error" not in row
+        histories.append(life.rewards + [row["pending_outcome"]["reward"]])
+    assert histories[0][20:] == histories[1][20:]
+    assert set(histories[0][20:]) == {0.0, 1.0}
+
+
+def test_each_delivered_reward_belongs_to_the_preceding_executed_action(quick, monkeypatch):
+    recorded = []
+
+    class Scripted(keydoor.Random):
+        def act(self, kind, holding, reward, done):
+            action = int(self.rng.integers(2))
+            recorded.append((kind, holding, reward, done, action))
+            return action, True
+
+    monkeypatch.setattr(keydoor, "make_life", lambda *args: Scripted(11))
+    row = keydoor.run_life("random", 0, 2, {**quick, "episodes": 5, "truncation": 0})
+    expected = []
+    for i, (kind, holding, _reward, _done, action) in enumerate(recorded):
+        keyed = keydoor.CHEST if i < 5 * quick["length"] else keydoor.LAMP
+        outcome = 0.0
+        if action == keydoor.INTERACT:
+            if kind == keydoor.DOOR:
+                outcome = float(holding)
+            elif kind != keydoor.FLOOR and not (kind == keyed and not holding):
+                outcome = -quick["cost"]
+        expected.append(outcome)
+    assert [r[2] for r in recorded] == [None, *expected[:-1]]
+    assert row["pending_outcome"]["reward"] == expected[-1]
+
+
+@pytest.mark.parametrize("changes", [{"arms": []}, {"seeds": [0, 0]}, {"delays": [12]}])
+def test_invalid_plans_are_refused_before_running(quick, changes):
+    with pytest.raises(ValueError):
+        keydoor.run(quick, **{"arms": ["random"], "seeds": [0], "delays": [2], **changes})
+
+
+def test_receipt_rejects_self_signed_inconsistent_manifest_phases_and_work(tmp_path, capsys):
+    path = tmp_path / "receipt.json.gz"
+    assert (
+        keydoor.main(
+            [
+                "--arms",
+                "random",
+                "--seeds",
+                "0",
+                "--episodes",
+                "30",
+                "--workers",
+                "1",
+                "--out",
+                str(path),
+            ]
+        )
+        == 0
+    )
+    stored = json.loads(gzip.decompress(path.read_bytes()))
+
+    def check_edit(edit, message):
+        edited = json.loads(json.dumps(stored))
+        edit(edited)
+        edited["digest"] = keydoor.canonical_sha256(
+            {k: edited[k] for k in ("kind", "body", "source")}
+        )
+        path.write_bytes(gzip.compress((keydoor.canonical_json(edited) + "\n").encode()))
+        assert message in keydoor.verify(path)[1]
+        assert keydoor.main(["--report", str(path)]) == 1
+
+    check_edit(lambda s: s["source"].update(manifest_sha256="0" * 64), "source manifest digest")
+    check_edit(lambda s: s["body"]["rows"][0]["phases"].reverse(), "rule A and rule B")
+    check_edit(lambda s: s["body"]["rows"][0]["work"].update(learning_sweeps=-1), "work counters")
+    check_edit(lambda s: s["body"].update(arms=[], rows=[], gates={}), "nonempty and unique")
+    capsys.readouterr()
+
+
+@pytest.mark.parametrize("arm", ["live", "step"])
+def test_feedback_work_is_charged_when_the_following_action_refuses(protocol, monkeypatch, arm):
+    life = keydoor.make_life(arm, protocol, 0, protocol["arousal"])
+    life.act(keydoor.FLOOR, False, None, False)
+    before = life.work["learning_sweeps"]
+    original = life.brain.act
+
+    def refuse(*args, **kwargs):
+        life.brain.learner.config = replace(
+            life.brain.learner.config, free_steps=1, tolerance=1e-15
+        )
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(life.brain, "act", refuse)
+    with pytest.raises(RuntimeError, match="did not settle"):
+        life.act(keydoor.CHEST, False, 0.0, False)
+    assert life.brain.last_learning["free_steps"] > 0
+    assert life.work["learning_sweeps"] == before + life.brain.last_learning["free_steps"]
+    assert life.work["refused_sweeps"] == 1

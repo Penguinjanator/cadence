@@ -4,12 +4,15 @@ A creature walks a corridor once per episode: empty floor, a chest, a lamp, ``D`
 and a door, met in that order; every trip has the same number of cells, so a longer delay
 means fewer floor cells before the chest. At every cell it passes or interacts. Under rule
 A the chest holds the key; under rule B the lamp does. Interacting at the door with the key
-in the pouch pays +1 and ends the episode; interacting with anything that holds no key
-costs ``cost``; passing pays nothing. Taking the key pays nothing by itself: its worth
-arrives ``D + 1`` cells later, after irrelevant choices at the levers, so credit cannot
+in the pouch pays +1 and ends the episode; interacting with a chest, lamp or lever that
+supplies no key costs ``cost``; floor interactions, empty-door interactions and passing
+pay nothing. Taking the key pays nothing by itself: its worth
+arrives ``D + 2`` cells later from the chest or ``D + 1`` from the lamp, after irrelevant
+choices at the levers, so credit cannot
 follow the last action blindly. The creature sees the kind of cell it faces and, with the
 pouch sense, whether it holds the key. The number of levers varies by one from episode to
-episode: event time is irregular. The outcome of the door is delivered with the first
+episode: the delay varies in decision counts, with no physical-time interface. The outcome
+of the door is delivered with the first
 observation of the next episode, ``done`` set, as ``step`` and ``live`` define it. A share
 ``truncation`` of the trips is cut short before the door, the key lost with them; such a
 trip ends with ``done`` clear, so the forecast carries over into the next trip (a truncated
@@ -23,7 +26,7 @@ Arms, all on the same corridor sequence per seed:
 - ``step``        the same brain without arousal, learning at every moment (the simpler control);
 - ``lambda-zero`` the ``live`` brain with the eligibility decay ``lam`` at zero;
 - ``yoked``       the ``live`` brain whose door outcome is paid at a random cell of the next
-                  trip instead of at the door: the same rewards, credited to nothing it did;
+                  trip instead of at the door: its own earned rewards, with credit retimed;
 - ``frozen``      the ``live`` brain after rule A, answering greedily without outcomes;
 - ``blind``       the ``live`` brain without the pouch sense;
 - ``tabular``     epsilon-greedy Q(lambda) over (cell, pouch): the matched-information
@@ -38,7 +41,9 @@ choice and the probability of interacting, per cell and pouch state, of a saved 
 reloaded copy every 25 episodes; the probability of interacting under the behaviour that
 acted and under the base policy, per cell and pouch state, read from the living brain;
 the share of aroused moments; and the work of the life. Receipts are ``cadence.Receipt``s
-bound to this file and every module of the library. Run
+bound to this file and every module of the library. New receipts use ``key-door/2``;
+historical ``key-door/1`` receipts retain their original scheduling and metric limitations.
+Run
 ``python benchmarks/keydoor/key_door.py --help``.
 """
 
@@ -62,9 +67,10 @@ from typing import Any
 import numpy as np
 
 import cadence as cd
-from cadence.receipts import Receipt, canonical_json, source_manifest
+from cadence.receipts import Receipt, canonical_json, canonical_sha256, source_manifest
 
-SCHEMA = "key-door/1"
+SCHEMA = "key-door/2"
+LEGACY_SCHEMA = "key-door/1"
 PASS, INTERACT = 0, 1
 FLOOR, CHEST, LAMP, LEVER, DOOR = range(5)
 KINDS = ("floor", "chest", "lamp", "lever", "door")
@@ -74,6 +80,8 @@ PROTOCOL = Path(__file__).with_name("protocol.json")
 
 def corridor(delay: int, length: int, jitter: int, rng: np.random.Generator) -> list[int]:
     """The cells of one trip: floor, chest, lamp, the levers and the door, ``length`` in all."""
+    if delay < 0 or jitter < 0 or length < 3 + delay + jitter:
+        raise ValueError("the corridor must fit the chest, lamp, door and all jittered levers")
     levers = max(0, delay + (int(rng.integers(-jitter, jitter + 1)) if jitter else 0))
     floors = max(0, length - 3 - levers)
     return [*([FLOOR] * floors), CHEST, LAMP, *([LEVER] * levers), DOOR]
@@ -101,6 +109,7 @@ def fresh_work() -> dict[str, int]:
         "probe_sweeps": 0,
         "checkpoints": 0,
         "memory_reads": 0,
+        "probe_memory_reads": 0,
         "memory_writes": 0,
         "brains": 0,
         "refused_sweeps": 0,
@@ -146,15 +155,27 @@ class BrainLife:
         self.work = fresh_work()
         self.work["brains"] = 1
         self.last = (0.5, 0.5, 1.0)
+        self._count_memory(brain, "memory_reads")
+        learn = brain.learn
+
+        def counted_learn(*args: Any, **kwargs: Any) -> dict[str, float]:
+            report = learn(*args, **kwargs)
+            # Accepted feedback remains work even when the following answer refuses.
+            self.work["learning_sweeps"] += int(report.get("free_steps", 0))
+            return report
+
+        brain.learn = counted_learn  # type: ignore[method-assign]
+
+    def _count_memory(self, brain: cd.Brain, counter: str) -> None:
         memory = brain.hippocampus
         if memory is not None:
-            original = memory.stimulate
+            original = memory.recall
 
-            def counted(drive: np.ndarray, inplace: bool = False) -> np.ndarray:
-                self.work["memory_reads"] += 1
-                return original(drive, inplace=inplace)
+            def counted(*args: Any, **kwargs: Any) -> np.ndarray:
+                self.work[counter] += 1
+                return original(*args, **kwargs)
 
-            memory.stimulate = counted  # type: ignore[method-assign]
+            memory.recall = counted  # type: ignore[method-assign]
 
     def _read(self, action: int, temperature: float | None) -> None:
         agent = self.brain.basal_ganglia
@@ -189,7 +210,8 @@ class BrainLife:
                 mode = "aroused" if aroused else "routine"
                 self.work[mode] += 1
                 self.work["sweeps_" + mode] += int(reading["sweeps"])
-                self.work["learning_sweeps"] += int(reading["learning_sweeps"])
+                feedback_sweeps = int(brain.last_learning.get("free_steps", 0))
+                self.work["learning_sweeps"] += int(reading["learning_sweeps"]) - feedback_sweeps
                 self._read(action, reading["temperature"])
                 return action, aroused
             action = int(brain.step(x, **feedback)[0])
@@ -200,7 +222,6 @@ class BrainLife:
             pending = brain.basal_ganglia._pending
             if pending is not None:
                 self.work["learning_sweeps"] += int(pending[1].steps) + int(pending[2].steps)
-            self.work["learning_sweeps"] += int(brain.last_learning.get("free_steps", 0))
             self._read(action, brain.learner.config.temperature)
             return action, True
         except Exception:
@@ -226,6 +247,7 @@ class BrainLife:
                 for kind in range(5):
                     copy = cd.Brain.load(path)
                     self.work["checkpoints"] += 1
+                    self._count_memory(copy, "probe_memory_reads")
                     try:
                         choice = copy.act(observe(kind, holding, self.pouch), greedy=True)
                     except Exception:
@@ -346,7 +368,10 @@ def run_life(
     length = int(protocol["length"])
     window, floor = int(protocol["window"]), float(protocol["window_floor"])
     cells_rng = np.random.default_rng(protocol["corridor_seed"] + seed)
-    luck = np.random.default_rng(protocol["corridor_seed"] + 7919 + seed)
+    # Exogenous events must not depend on how many rewards an arm earns or relocates.
+    cuts_rng = np.random.default_rng(protocol["corridor_seed"] + 7919 + seed)
+    food_rng = np.random.default_rng(protocol["corridor_seed"] + 15401 + seed)
+    yoked_rng = np.random.default_rng(protocol["corridor_seed"] + 23719 + seed)
     started = time.time()
     life = make_life(arm, protocol, seed, genes)
     latency: dict[str, list[float]] = {"routine": [], "aroused": []}
@@ -382,15 +407,17 @@ def run_life(
                 if episode % every == 0:
                     probes.append((episode, *life.probe()))
                 cells = corridor(delay, length, jitter, cells_rng)
-                cut = luck.random() < truncation
+                cut = cuts_rng.random() < truncation
+                available = food_rng.random() < food  # one draw per trip, for every arm
                 if cut:  # the trip ends somewhere before the door, the key lost with it
-                    cells = cells[: int(luck.integers(1, len(cells) - 1))]
+                    cells = cells[: int(cuts_rng.integers(1, len(cells)))]
                 holding = False
                 got = take = 0
                 wrongs = 0
+                opening = None
                 # the yoked control pays its bank at a random cell before the door; a trip cut to
                 # one cell pays at that cell
-                paid_at = int(luck.integers(max(1, len(cells) - 1))) if arm == "yoked" else -1
+                paid_at = int(yoked_rng.integers(max(1, len(cells) - 1))) if arm == "yoked" else -1
                 for i, kind in enumerate(cells):
                     began = time.perf_counter()
                     reward, done = (None, False) if pending is None else pending
@@ -405,18 +432,18 @@ def run_life(
                     executed += life.last[2]
                     outcome = 0.0
                     if kind == DOOR and holding:
-                        opened.append(int(action == INTERACT))
+                        opening = int(action == INTERACT)
                     if action == INTERACT:
                         if kind == keyed and not holding:
                             holding, take = True, 1
                         elif kind == DOOR:
-                            if holding and luck.random() < food:
+                            if holding and available:
                                 outcome, got = 1.0, 1
                         elif kind != FLOOR:  # the floor has nothing to interact with
                             outcome, wrongs = -cost, wrongs + 1
                     if arm == "yoked":
                         # the door's outcome is banked and paid at a random cell of the next
-                        # episode, where it credits nothing the creature did for it
+                        # episode, retiming credit for the creature's own earned reward
                         if kind == DOOR:
                             bank, outcome = outcome, 0.0
                         if i == paid_at:
@@ -428,6 +455,8 @@ def run_life(
                 fed.append(got)
                 took.append(take)
                 wrong.append(wrongs)
+                opened.append(opening)
+            probes.append((int(protocol["episodes"]), *life.probe()))
             lag = next(
                 (
                     k
@@ -437,17 +466,18 @@ def run_life(
                 None,
             )
             n = min(50, len(fed))
+            openings = [v for v in opened[-n:] if v is not None] if n else []
             phases.append(
                 {
                     "keyed": KINDS[keyed],
                     "episodes": len(fed),
                     "cut": cuts,
                     "moments": moments,
-                    "fed": float(np.mean(fed[-n:])),
-                    "fed_whole": float(np.mean(fed)),
-                    "took": float(np.mean(took[-n:])),
-                    "wrong": float(np.mean(wrong[-n:])),
-                    "opened": float(np.mean(opened[-n:])) if opened else None,
+                    "fed": float(np.mean(fed[-n:])) if n else None,
+                    "fed_whole": float(np.mean(fed)) if fed else None,
+                    "took": float(np.mean(took[-n:])) if n else None,
+                    "wrong": float(np.mean(wrong[-n:])) if n else None,
+                    "opened": float(np.mean(openings)) if openings else None,
                     "lag": lag,
                     "behaviour_interact": [
                         [round(b / v, 4) if v else None for b, v in zip(brow, vrow, strict=True)]
@@ -471,6 +501,10 @@ def run_life(
         result["completed_phases"] = len(phases)
     else:
         result["phases"] = phases
+        result["pending_outcome"] = (
+            None if pending is None else {"reward": pending[0], "done": pending[1]}
+        )
+        result["yoked_bank"] = bank
     result["seconds"] = round(time.time() - started, 2)
     result["work"] = ledger()
     return result
@@ -499,6 +533,7 @@ def run(
     genes: dict[str, Any] | None = None,
     workers: int = 1,
 ) -> list[dict[str, Any]]:
+    validate_plan(protocol, arms, seeds, delays)
     jobs = [
         (arm, seed, delay, protocol, genes) for arm in arms for delay in delays for seed in seeds
     ]
@@ -517,9 +552,15 @@ def gates(rows: list[dict[str, Any]], protocol: dict[str, Any]) -> dict[str, Any
     interactions and calm again; a crashed life passes nothing."""
     g = protocol["gates"]
     tests = {
-        "acquired": lambda r: r["phases"][0]["fed"] >= g["fed"],
-        "adapted": lambda r: r["phases"][1]["fed"] >= g["fed"],
-        "frugal": lambda r: all(p["wrong"] <= g["wrong"] for p in r["phases"]),
+        "acquired": lambda r: (
+            r["phases"][0]["fed"] is not None and r["phases"][0]["fed"] >= g["fed"]
+        ),
+        "adapted": lambda r: (
+            r["phases"][1]["fed"] is not None and r["phases"][1]["fed"] >= g["fed"]
+        ),
+        "frugal": lambda r: all(
+            p["wrong"] is not None and p["wrong"] <= g["wrong"] for p in r["phases"]
+        ),
         "calm": lambda r: all(p["aroused_late"] <= g["aroused_late"] for p in r["phases"]),
     }
 
@@ -559,6 +600,12 @@ def summarize(rows: list[dict[str, Any]]) -> str:
             fed = [r["phases"][index]["fed"] for r in good]
             took = [r["phases"][index]["took"] for r in good]
             wrong = [r["phases"][index]["wrong"] for r in good]
+            fed, took, wrong = (
+                [v for v in values if v is not None] for values in (fed, took, wrong)
+            )
+            if not fed:
+                parts.append(f"{name}: no completed trips")
+                continue
             lags = [r["phases"][index]["lag"] for r in good]
             found = [v for v in lags if v is not None]
             parts.append(
@@ -597,6 +644,9 @@ def markdown(report: dict[str, Any]) -> str:
     def share(index: int, key: str) -> Any:
         def cell(group: list[dict[str, Any]]) -> str:
             values = [r["phases"][index][key] for r in group]
+            values = [v for v in values if v is not None]
+            if not values:
+                return "none"
             return f"{np.mean(values):.2f} ({min(values):.2f})"
 
         return cell
@@ -727,33 +777,159 @@ def planned(body: dict[str, Any]) -> list[tuple[str, int, int]]:
     return [(a, d, s) for a in body["arms"] for d in body["delays"] for s in body["seeds"]]
 
 
+def validate_plan(
+    protocol: dict[str, Any], arms: list[str], seeds: list[int], delays: list[int]
+) -> None:
+    """Reject empty or duplicate plans and world settings without their declared meaning."""
+    for name, values in (("arms", arms), ("seeds", seeds), ("delays", delays)):
+        if not values or len(set(values)) != len(values):
+            raise ValueError(f"{name} must be nonempty and unique")
+    if any(a not in ARMS for a in arms):
+        raise ValueError("unknown arm in the plan")
+    if any(type(v) is not int or v < 0 for v in [*seeds, *delays]):
+        raise ValueError("seeds and delays must be nonnegative integers")
+    for name in ("episodes", "probe_every", "window", "length"):
+        if type(protocol[name]) is not int or protocol[name] <= 0:
+            raise ValueError(f"{name} must be a positive integer")
+    if type(protocol["jitter"]) is not int or protocol["jitter"] < 0:
+        raise ValueError("jitter must be a nonnegative integer")
+    if max(delays) + protocol["jitter"] + 3 > protocol["length"]:
+        raise ValueError("the planned delays do not fit the fixed corridor length")
+    for name in ("food", "truncation", "window_floor"):
+        value = protocol.get(name, 1.0 if name == "food" else 0.0)
+        if not isinstance(value, (int, float)) or not 0 <= value <= 1:
+            raise ValueError(f"{name} must be in [0, 1]")
+    if not np.isfinite(protocol["cost"]) or protocol["cost"] < 0:
+        raise ValueError("cost must be finite and nonnegative")
+
+
 def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> tuple[bool, str]:
     """Canonical form and digest, one row per planned life, the gates recomputed, the
     protocol text against its hash; ``current`` also requires the present sources."""
 
     def check(body: dict[str, Any]) -> str | None:
-        if stored["kind"] != SCHEMA or body["protocol"]["schema"] != SCHEMA:
+        if stored["kind"] not in (SCHEMA, LEGACY_SCHEMA) or body["protocol"]["schema"] not in (
+            SCHEMA,
+            LEGACY_SCHEMA,
+        ):
             return "the receipt has the wrong kind"
+        source = stored["source"]
+        files = source["files"]
+        if source["manifest_sha256"] != canonical_sha256(files):
+            return "the embedded source manifest digest does not verify"
+        paths = [entry["path"] for entry in files]
+        if (
+            not paths
+            or paths[0] != "key_door.py"
+            or len(set(paths)) != len(paths)
+            or not {"cadence/generic.py", "cadence/arousal.py", "cadence/receipts.py"} <= set(paths)
+            or any(
+                not isinstance(entry["sha256"], str)
+                or len(entry["sha256"]) != 64
+                or any(c not in "0123456789abcdef" for c in entry["sha256"])
+                for entry in files
+            )
+        ):
+            return "the embedded source manifest is incomplete or malformed"
+        validate_plan(body["protocol"], body["arms"], body["seeds"], body["delays"])
         rows = body["rows"]
         if [(r["arm"], r["delay"], r["seed"]) for r in rows] != planned(body):
             return "the rows are not the planned lives, each once and in order"
         for row in rows:
+            work = row.get("work")
+            if work is not None:
+                counters = set(fresh_work()) - {"probe_memory_reads"}
+                if stored["kind"] == SCHEMA:
+                    counters.add("probe_memory_reads")
+                if any(type(work[k]) is not int or work[k] < 0 for k in counters):
+                    return "work counters must be nonnegative integers"
+                for mode in ("routine", "aroused"):
+                    if work["sweeps_per_" + mode + "_moment"] != work["sweeps_" + mode] / max(
+                        1, work[mode]
+                    ):
+                        return "the sweeps per moment do not follow from the work counters"
             if "error" in row:
+                if not row["error"] or row["completed_phases"] not in (0, 1):
+                    return "a crashed life has invalid completion accounting"
                 continue
+            if len(row["phases"]) != 2 or [p["keyed"] for p in row["phases"]] != ["chest", "lamp"]:
+                return "a completed life must contain rule A and rule B, once and in order"
             for phase in row["phases"]:
-                if not all(0 <= phase[k] <= 1 for k in ("fed", "took", "aroused", "aroused_late")):
+                for k in ("episodes", "cut", "moments"):
+                    if type(phase[k]) is not int or phase[k] < 0:
+                        return "phase counts must be nonnegative integers"
+                shares = (
+                    "fed",
+                    "fed_whole",
+                    "took",
+                    "opened",
+                    "aroused",
+                    "aroused_late",
+                    "executed_probability",
+                )
+                if not all(phase[k] is None or 0 <= phase[k] <= 1 for k in shares):
                     return "a recorded share is outside [0, 1]"
+                if any(
+                    phase[k] is None for k in ("aroused", "aroused_late", "executed_probability")
+                ):
+                    return "a completed phase is missing moment readings"
+                if phase["episodes"]:
+                    if any(phase[k] is None for k in ("fed", "fed_whole", "took", "wrong")):
+                        return "a completed trip is missing outcome readings"
+                    if (
+                        phase["fed"] > phase["took"]
+                        or not 0 <= phase["wrong"] <= body["protocol"]["length"] - 2
+                    ):
+                        return "the outcomes contradict the key or wrong-interaction bounds"
+                elif any(
+                    phase[k] is not None
+                    for k in ("fed", "fed_whole", "took", "wrong", "opened", "lag")
+                ):
+                    return "a phase without completed trips has outcome readings"
+                visits = phase["visits"]
+                if (
+                    len(visits) != 2
+                    or any(len(v) != 5 for v in visits)
+                    or any(type(v) is not int or v < 0 for vs in visits for v in vs)
+                ):
+                    return "visits must be a nonnegative integer 2 by 5 table"
                 if sum(map(sum, phase["visits"])) != phase["moments"]:
                     return "visits do not agree with the moments lived"
+                if sum(v[DOOR] for v in visits) != phase["episodes"]:
+                    return "door visits do not agree with completed trips"
                 if phase["episodes"] + phase["cut"] != body["protocol"]["episodes"]:
                     return "the trips that reached the door and the cut trips do not add up"
+                if phase["lag"] is not None and (
+                    type(phase["lag"]) is not int
+                    or not 0 <= phase["lag"] <= phase["episodes"] - body["protocol"]["window"]
+                ):
+                    return "the lag is not a completed-trip window index"
+            if work is None or work["brains"] != int(row["arm"] not in ("random", "tabular")):
+                return "the work does not identify the arm's brain"
+            if work["brains"] and work["routine"] + work["aroused"] != sum(
+                p["moments"] for p in row["phases"]
+            ):
+                return "the work moments do not agree with the phases"
+            if stored["kind"] == SCHEMA:
+                pending = row["pending_outcome"]
+                if (
+                    type(pending["done"]) is not bool
+                    or not -body["protocol"]["cost"] <= pending["reward"] <= 1
+                ):
+                    return "the pending outcome is outside the world's range"
+                if row["yoked_bank"] not in (0.0, 1.0) or (
+                    row["arm"] != "yoked" and row["yoked_bank"] != 0
+                ):
+                    return "the yoked bank is invalid"
         if gates(rows, body["protocol"]) != body["gates"]:
             return "the stored gates do not follow from the rows"
         text = body["protocol_source"]
         if hashlib.sha256(text.encode()).hexdigest() != body["protocol_sha256"]:
             return "the embedded protocol source differs from its recorded hash"
         if body["frozen_protocol"] and (
-            body["protocol"] != json.loads(text) or body["genes_override"] is not None
+            body["protocol"] != json.loads(text)
+            or body["genes_override"] is not None
+            or body["protocol"]["schema"] != stored["kind"]
         ):
             return "the frozen settings differ from the recorded protocol"
         if current and body["protocol_sha256"] != hashlib.sha256(protocol.read_bytes()).hexdigest():
@@ -768,7 +944,14 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
         with tempfile.TemporaryDirectory() as directory:
             plain = Path(directory) / "receipt.json"
             plain.write_bytes(data)
-            return Receipt.verify(plain, sources=sources() if current else None, check=check)
+            valid, reason = Receipt.verify(
+                plain, sources=sources() if current else None, check=check
+            )
+            if valid and stored["kind"] == LEGACY_SCHEMA:
+                reason += (
+                    "; legacy key-door/1: policy-dependent schedules and historical metric limits"
+                )
+            return valid, reason
     except (
         OSError,
         ValueError,
@@ -784,11 +967,11 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("--protocol", type=Path, default=PROTOCOL)
-    parser.add_argument("--arms", nargs="*", default=list(ARMS), choices=ARMS)
+    parser.add_argument("--arms", nargs="+", default=list(ARMS), choices=ARMS)
     parser.add_argument(
-        "--seeds", nargs="*", default=["development"], help="seed numbers or set names"
+        "--seeds", nargs="+", default=["development"], help="seed numbers or set names"
     )
-    parser.add_argument("--delays", nargs="*", type=int, default=None)
+    parser.add_argument("--delays", nargs="+", type=int, default=None)
     parser.add_argument("--genes", default=None, help="JSON overrides of the arousal genes")
     parser.add_argument(
         "--point", default=None, help="JSON overrides of the operating point; null removes"
@@ -809,6 +992,10 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     if args.report is not None:
+        valid, reason = verify(args.report)
+        if not valid:
+            print(json.dumps({"verified": False, "reason": reason}))
+            return 1
         print(markdown(read_receipt(args.report)))
         return 0
     if args.verify is not None:
@@ -818,8 +1005,8 @@ def main(argv: list[str] | None = None) -> int:
     manifest = source_manifest(sources())
     frozen = args.protocol.read_bytes()
     protocol = json.loads(frozen)
-    if protocol.get("schema") != SCHEMA:
-        parser.error(f"the protocol's schema is not {SCHEMA}")
+    if protocol.get("schema") not in (SCHEMA, LEGACY_SCHEMA):
+        parser.error(f"the protocol's schema is not {SCHEMA} or {LEGACY_SCHEMA}")
     overridden = False
     for name in ("cost", "food", "episodes"):
         if getattr(args, name) is not None:
@@ -835,6 +1022,10 @@ def main(argv: list[str] | None = None) -> int:
     for value in args.seeds:
         seeds.extend(protocol["seeds"][value] if value in protocol["seeds"] else [int(value)])
     delays = args.delays or protocol["delays"]
+    try:
+        validate_plan(protocol, args.arms, seeds, delays)
+    except (ValueError, TypeError, KeyError) as error:
+        parser.error(str(error))
     rows = run(
         protocol, arms=args.arms, seeds=seeds, delays=delays, genes=genes, workers=args.workers
     )
@@ -846,7 +1037,9 @@ def main(argv: list[str] | None = None) -> int:
         "platform": platform.platform(),
         "protocol_sha256": hashlib.sha256(frozen).hexdigest(),
         "protocol_source": frozen.decode(),
-        "frozen_protocol": not overridden and frozen == PROTOCOL.read_bytes(),
+        "frozen_protocol": not overridden
+        and protocol["schema"] == SCHEMA
+        and frozen == PROTOCOL.read_bytes(),
         "protocol": protocol,
         "genes_override": genes,
         "arms": list(args.arms),

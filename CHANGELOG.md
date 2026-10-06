@@ -2,43 +2,40 @@
 
 ## Unreleased
 
-- `ArousalConfig` gains `need`, the reward per moment the body requires. The share of
-  the need that the recent reward leaves unmet is a want of its own, measured against
-  the need rather than against the spread of outcomes: a reward that comes once in `L`
-  moments has a mean of `1 / L` and a spread near `1 / sqrt(L)`, so a brain that loses
-  it falls short of its long-run reward by only `1 / sqrt(L)` spreads and, with the
-  founders' threshold, is not roused, while it is short of its whole need. A need never
-  habituates and a life that never paid wants from its first moment. The founder is
-  zero, which leaves the law and every released result unchanged; the gene is in
-  `ArousalConfig.space()` with zero inside it.
-- Add the key-door nursery (`benchmarks/keydoor`), the delayed key-door reward chamber of
-  [issue 111](https://github.com/muellerberndt/cadence/issues/111), roadmap row 07: one
-  continuing life walks a 14-cell corridor (floor, chest, lamp, 2, 5 or 10 levers varying by
-  one, door) once per trip, +1 at the door with the key, a cost of 0.25 for touching anything
-  without one, the key in the chest for 500 trips and then in the lamp, one trip in twenty
-  cut before the door with `done` clear. The `live` arm at a declared operating point is
-  measured against the always-learning loop, zero eligibility, yoked rewards, frozen, blind
-  (no pouch sense), a tabular Q(lambda) with the same information and uniform random, with
-  behaviour and base-policy probabilities per cell and pouch state, greedy probes on saved
-  copies, the complete work ledger and source-bound receipts. The development seeds
-  established three findings recorded in its README: a want measured in reward spreads is
-  diluted by a sparse reward (the `need` gene above), punished exploration drives the two
-  motor units to the same saturated answer for every cell (the latch of `docs/reward.md`,
-  now in a continuing life), and the composed critic, whose step is divided by its trace
-  energy, stays flat over a 14-cell trip so that only the actor's own eligibility carries
-  the door's credit; the chamber's point raises the critic's rate to 5.0 with the
-  eligibility decay and discount at 0.95, the composed values as controls. The frozen
-  protocol gates delays 2 and 5 and reports delay 10. Two freezes were confirmed on fresh
-  seeds; at the second, of the 20 gated lives 20 acquired rule A, 19 re-adapted after the
-  key moved (fed 1.00 at the end of rule B at delay 5), 19 were frugal and 17 calm against
-  the 18 the gate requires, so the gates did not pass; the first freeze's gates missed on
-  frugality and calm, and its yoked control crashed on trips cut to one cell. Learning at
-  every moment re-adapts at 0.97 and 0.68 while never resting; zero eligibility, yoked
-  rewards and the composed critic fall short; the blind arm, without the pouch sense, is
-  fed at 1.00 with no wrong interaction at both gated delays, so the working trace carries
-  the key. At delay 10 half the lives acquire and 8 of 10 re-adapt; the tabular learner
-  acquires it in every life. A scarcity variant (the door paying one time in two) acquires
-  nothing: the need sits at the expected income and the creature never leaves arousal.
+- `ArousalConfig` gains `need`, a nonnegative required reward rate per moment. Its
+  unmet fraction supplies an additional arousal signal even when poor rewards are
+  expected. The default is zero, preserving the previous reward law. This is an
+  opt-in scalar need in the existing System 1 lifecycle, not a general goal detector,
+  learned goal representation or default promotion.
+- Keep the need calculation finite for extreme finite rewards and need values by
+  clipping before subtraction or division. New saved arousal state carries the
+  `cadence-arousal/1` marker; complete legacy configurations without `need` load
+  with `need=0`, while an incomplete marked configuration is rejected. This
+  preserves continuation of existing zero-need lives without treating missing
+  fields in new checkpoints as valid defaults.
+- Add the key-door nursery (`benchmarks/keydoor`) for
+  [#111](https://github.com/muellerberndt/cadence/issues/111), roadmap row 07. One
+  continuing life encounters delayed door rewards and a moved key source, with
+  always-learning, zero-eligibility, retimed-own-reward, frozen, no-pouch, tabular
+  Q(lambda) and random controls. Two historical `key-door/1` freezes failed their
+  declared gates. The second records acquisition in 20/20 gated lives, re-adaptation
+  in 19/20, frugality in 19/20 and calm in 17/20 against 18 required; delay 10 is
+  ungated. These are exploratory results at selected settings: shared random draws
+  made cut and food schedules differ between arms. The no-pouch result does not
+  identify trace memory; a scarcity variant's unchanged 90%-fed gate is unsuitable
+  when successful door openings pay with probability 0.5. Moving the key does not
+  test changed goals, and varying lever counts does not validate physical-time
+  semantics. Broad delayed-credit and reuse acceptance remains open.
+- Correct the key-door instrument under `key-door/2`: separate world and yoked
+  random streams, draw food availability independently of actions, include every
+  pre-door cut position, measure door openings within the last 50 completed trips,
+  probe the actual phase end, record undelivered final feedback and yoked rewards,
+  and count probe memory reads separately. Preserve all historical receipt and
+  protocol bytes; corrected runs are not frozen confirmation of that old protocol.
+  Verification labels legacy limitations and reporting verifies before rendering.
+  No corrected confirmation campaign or passing capability gate accompanies these
+  fixes. Historical routine latency is a within-life laptop observation, not
+  matched-state efficiency, reduced settlement work or electrical-energy evidence.
 
 ## 0.75.0 — 2026-10-06
 

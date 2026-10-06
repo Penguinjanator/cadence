@@ -15,39 +15,64 @@ same information and uniform-random actions. It establishes no default. Read
 [world-model guide](../../docs/world-model.md) and
 [numerical contracts](../../docs/contracts.md) before interpreting results.
 
+## Evidence status after review
+
+The six retained receipts use `key-door/1` and remain byte-for-byte unchanged. Both
+historical freezes failed their declared gates. Their summaries are exploratory evidence
+from their pinned sources, not confirmation of the corrected instrument. The historical
+world shared a random stream between cuts, action-dependent food draws and yoked payment
+placement; consequently, arms did not receive matched cut/food schedules despite sharing
+uncut corridor layouts. This limits paired comparisons and causal interpretations.
+
+The current instrument emits `key-door/2`, with separate random streams for corridor
+layout, cuts, food availability and yoked placement. Food availability is drawn on every
+trip, independently of actions. It also corrects the endpoint probes, door-opening window,
+pre-door cut range and work accounting, and records the final undelivered outcome and
+yoked reward bank. `protocol.json` preserves the second historical freeze's bytes; a
+current run is marked `frozen_protocol: false`. No corrected confirmation campaign or
+passing gate is supplied here. A new source-bound protocol and fresh confirmation would be
+needed to promote the corrected comparison.
+
 ## What runs
 
 A creature walks a corridor once per trip: empty floor, a chest, a lamp, `D` levers and a
 door, met in that order, 14 cells in all, so that every trip takes the same number of
 moments whatever the delay. At every cell it passes or interacts. Under rule A the chest
 holds the key; under rule B the lamp does. Interacting at the door with the key in the
-pouch pays +1 and ends the trip; interacting with the chest, the lamp or a lever when it
-holds no key costs 0.25; the floor has nothing to interact with; taking the key pays
-nothing by itself. Its worth arrives `D + 1` cells later, after the levers, whose number
-varies by one from trip to trip, so event time is irregular and credit cannot follow the
-last action blindly. The creature sees the kind of the cell it faces and, through the
+pouch pays +1 and ends the trip. Taking the available key pays nothing; other interactions
+at a chest, lamp or lever cost 0.25, including while already holding the key. Floor
+interactions and a door interaction without the key pay zero. The door follows `L + 2`
+cells after the chest or `L + 1` after the lamp, where `L` is the actual lever count, which
+varies by one from trip to trip, varying the delay in event counts. This does not test
+irregular physical time, clock input or cadence invariance. Intervening choices make the
+last action alone an insufficient account of the earlier key-taking action. The creature
+sees the kind of the cell it faces and, through the
 pouch sense, whether it holds the key. One trip in twenty is cut short before the door at
 a random cell, the key lost with it; such a trip ends with `done` clear, so the forecast
 carries over into the next trip (a truncated bootstrap), while the door's end is terminal.
 The outcome of a trip's last cell is delivered with the first observation of the next
-trip, as `step` and `live` define it. A life is one stream without resets: rule A for 500
-trips, then rule B for 500. Nothing announces the change. The delays are 2, 5 and 10.
+trip, as `step` and `live` define it. The final action still has an undelivered outcome
+when the run stops; the current receipt records it. A life is one stream without resets:
+rule A for 500 trips, then rule B for 500. Nothing announces the change. The delays are
+2, 5 and 10. The reward source moves; the goal and required reward rate stay fixed. This
+is a contingency-reversal test, not a changed-goal or devaluation test.
 
 The need of this body is 0.03 reward per moment, a gene of `ArousalConfig` added for this
 chamber: at full feeding the income is 1/14 per moment, so a fed creature's need is met and
 a starving one wants its whole need. Its selection and the reason for its law are recorded
 [below](#how-the-operating-point-and-the-founders-were-selected).
 
-Every arm of a seed lives the same corridor sequence:
+In the current instrument every arm of a seed shares the corridor, cut and food-availability
+schedules. Historical `/1` arms shared only the uncut layouts, as noted above:
 
 | Arm | What it is |
 | --- | --- |
 | `live` | `Brain.compose(6, 2, modules=(32,))` at the protocol's operating point, with `ArousalConfig()` at its founders and the chamber's need, through `Brain.live` |
 | `step` | the same brain and operating point without arousal, through `step`: it samples and learns at every moment (the simpler control) |
-| `lambda-zero` | the `live` brain with the eligibility decay `lam` at zero: credit reaches only the last action |
-| `yoked` | the `live` brain whose door outcome is banked and paid at a random cell of the next trip: the same rewards, credited to nothing it did for them |
-| `frozen` | the `live` brain after rule A, answering greedily and receiving no outcome |
-| `blind` | the `live` brain without the pouch sense: it cannot tell whether it holds the key |
+| `lambda-zero` | the `live` brain with eligibility decay `lam` at zero, removing direct eligibility credit to earlier actions; bootstrapped value learning remains |
+| `yoked` | the `live` brain whose own door reward is banked and paid at a random cell of the next trip; it does not receive a paired `live` arm's rewards |
+| `frozen` | the `live` brain after rule A, answering greedily and receiving no outcome, including the final rule-A outcome still pending at the switch |
+| `blind` | a brain built without the pouch input; retained internal state remains available, and this arm does not isolate the working trace |
 | `tabular` | epsilon-greedy Q(lambda) over (cell, pouch), the conventional online learner with the same information; its settings selected on the development seeds |
 | `random` | uniform random actions |
 
@@ -61,17 +86,25 @@ the selection on the development seeds is recorded
 Readings per rule, over the trips that reached the door: the share of trips that ended with
 food, the share in which the key was taken, the wrong interactions per trip and the share
 of door visits with the key at which the creature interacted, each over the last 50 trips;
-the lag, the first trip from which 90% of the next 20 trips are fed; the number of trips
+the lag, the zero-based index among completed, non-cut trips of the first 20-trip window
+with at least 90% fed (not a sustained-acquisition criterion); the number of trips
 cut short; the greedy choice and the policy's probability of interacting, per cell and
 pouch state, of a saved and reloaded copy every 25 trips; the probability of interacting
 under the behaviour that acted and under the base policy, per cell and pouch state and
 over the visits, read from the living brain; the share of aroused moments over the rule
 and over its second half; and the work of the life: moments and settling sweeps per mode,
-learning sweeps, probes, checkpoints, memory reads and writes, brains, refused sweeps and
-the latency of a moment in each mode. The greedy probes read a blank-trace copy and are
-reported separately from the executed behaviour.
+learning sweeps, probes, checkpoints, life and probe memory reads, memory writes, brains,
+refused sweeps and the latency of a moment in each mode. Greedy probes use saved copies
+with the inherited working trace and are reported separately from executed behavior.
+Current `/2` reports include a probe at the actual phase end and door openings within the
+last 50 completed trips. Historical `/1` endpoint probes were taken before trip 475 of
+500, and its opening statistic covered the last 50 keyed door visits, potentially spanning
+a longer period. Historical memory-read counts omitted both saved-copy probes and the
+direct record-forecast recall. Current counts include both, with probe reads separate.
+A successful routine forecast preceding a refused action can still escape the sweep
+ledger, so this instrument is not a complete attempted-work meter.
 
-## Gates, fixed before the confirmation run
+## Historical gates, fixed before each confirmation attempt
 
 Over the confirmation lives of the `live` arm at delays 2 and 5, at least 90% end each
 rule with 90% of their last 50 trips fed, waste at most 1.5 wrong interactions per trip in
@@ -80,24 +113,28 @@ aroused. Delay 10 is reported without a gate. [protocol.json](protocol.json) hol
 gates, the seeds and every setting. It was committed and pushed before its confirmation
 seeds were run. It is the chamber's second freeze; [the first](#the-first-freeze-2026-10-06)
 gated frugality at 0.5 wrong interactions per trip and calm at 20%, and is recorded below
-with its result. The frugality bound of 1.5 is below the uniform-random policy's wrong
-interactions at delay 2 (1.5 per trip) and a third of the lazy interact-everywhere
-policy's at delay 2 (4 to 5); it admits one retained habit per trip, which the first
-freeze showed to be a phenomenon of its own, reported per life below rather than gated. The
-calm bound of 35% follows one trip in twenty being cut: each cut is a missed meal and a
-contradicted forecast, and a bout of arousal follows it by the law.
+with its result. The frugality bound of 1.5 equals the uniform-random expectation at delay
+2, not a strict improvement over it; the recorded random means below are 1.45 and 1.49.
+It admits one retained habit per trip. The calm bound was relaxed to 35% after observing
+arousal bouts following cut trips in the first freeze. A 5% cut rate does not derive a
+35% arousal bound or imply that every cut contradicts a forecast. These revised criteria
+are historical evaluation choices, not a pass of the original stricter contract. The
+pooled gate does not require 90% success separately at each delay or that the same lives
+pass every component. Both frozen attempts failed even this pooled test.
 
 ## Run and verify
 
 ```sh
-python benchmarks/keydoor/key_door.py --seeds confirmation --out /tmp/keydoor.json.gz
+python benchmarks/keydoor/key_door.py --arms live tabular random --seeds 0 --delays 2 --episodes 20 --workers 1 --out /tmp/keydoor.json.gz
 python benchmarks/keydoor/key_door.py --verify /tmp/keydoor.json.gz --current
 python benchmarks/keydoor/key_door.py --report /tmp/keydoor.json.gz
 python -m pytest -q benchmarks/keydoor
 ```
 
-The first command runs the frozen protocol: eight arms, three delays and ten confirmation
-seeds, 240 lives. `--arms`, `--seeds` and `--delays` select a part. `--genes`, `--point`,
+The first command runs a short development check of the corrected instrument, not a
+confirmation campaign. The historical full design contained eight arms, three delays and
+ten confirmation seeds, 240 lives. `--arms`, `--seeds` and `--delays` select a part.
+`--genes`, `--point`,
 `--cost`, `--food` and `--episodes` override the arousal genes, the operating point and the
 world, and mark the receipt `frozen_protocol: false`; a `null` in `--point` leaves that
 setting at its released default, and `--point '{"learner": {...}}'` sets the settling
@@ -107,7 +144,10 @@ one row for every planned life in order, the ranges of the recorded shares, the 
 against the moments lived, the trips that reached the door and the cut trips against the
 trips planned, the gates recomputed from the rows, the embedded protocol text against its
 hash and any claim of frozen settings. `--current` also requires the source manifest and
-the protocol hash of the files present. These checks validate the recorded summaries; they
+the protocol hash of the files present. Historical receipts should be verified without
+`--current`; their old source identities do not match the corrected instrument. The
+verifier reports their legacy limits explicitly, and `--report` verifies a receipt before
+rendering it. These checks validate the recorded summaries; they
 cannot reconstruct unrecorded executed actions or independently prove that a run occurred.
 `--report` prints the tables. `results/` keeps the receipts quoted here. The guards run
 short lives of the `live` arm and its controls, the world's accounting through what the
@@ -115,7 +155,7 @@ learner is handed (the door terminal, a cut trip not), the checkpoint continuati
 the delay with the preceding outcome pending, the independence of a life from its probes,
 a refused answer charged and recorded, the gate arithmetic and the receipt's custody.
 
-## Results on ten fresh seeds, 2026-10-06
+## Historical second-freeze results, 2026-10-06 (`key-door/1`)
 
 Receipt: `results/confirmation-2026-10-06.json.gz`. Protocol SHA-256
 `8cc9ed188c91a7f7098a978b2e5f963f43b8d5e46797d4be5144a66ee9b8124d`, frozen at commit
@@ -124,7 +164,8 @@ Python 3.13.0, macOS arm64. All 240 lives completed and none refused an answer. 
 the four gates passed and the fourth did not, so the gates did not pass.** Of the 20 gated
 lives of the `live` arm, 20 acquired rule A (fed 1.00 at delay 2 and 0.99 at delay 5 at its
 end, median lags 9 and 66 trips), 19 re-adapted after the key moved (fed 0.97 and 1.00 at the
-end of rule B, median lags 27 and 38 trips, the door opened with the key on 99% of the visits),
+end of rule B, median lags 27 and 38 completed trips, and the historical conditional
+door-opening statistic was 99%),
 19 were frugal (0.31 and 0.13 wrong interactions per trip at the end of rule A, 0.45 and 0.24
 at the end of rule B) and 17 were calm against the 18 required. The misses: one life at delay
 2 kept touching the empty chest and the lamp while holding the key after the move, ended rule
@@ -135,35 +176,47 @@ re-adapted at trip 373 and was still searching in the second half of each rule (
 At delay 10, ungated, 5 of 10 lives acquired rule A and 8 of 10 ended rule B fed (0.89 at its
 end, median lag 172 trips; the tabular learner 0.88).
 
-The controls on the same corridors: `step`, learning at every moment, ended rule B fed at 0.97
+The historical controls, with the unmatched-cut limitation above: `step`, learning at every moment, ended rule B fed at 0.97
 and 0.68 while aroused at every moment and wasting 1.8 and 0.7 interactions per trip;
-`lambda-zero` at 0.68 and 0.33, the door's credit reaching only the last action;
-`yoked`, paid the same rewards at a random cell of the next trip, at 0.28 and 0.07, near
-random; `frozen` at 0.00 (no adaptation without outcomes); `blind`, without the pouch sense,
-at 1.00 and 1.00 with no wrong interaction at either delay, so the working trace carries the
-key through the levers and the pouch sense adds nothing at these delays; `tabular` at 0.90
+`lambda-zero` at 0.68 and 0.33 with direct eligibility credit restricted to the last action;
+`yoked`, with its own earned door rewards retimed, at 0.28 and 0.07;
+`frozen` at 0.00 (no adaptation without outcomes); `blind`, without the pouch sense,
+at 1.00 and 1.00 with no wrong interaction at either delay. This does not demonstrate
+trace-mediated key memory: a current-cell policy can interact only at the rewarded
+container and the door. No trace lesion or transplant isolates the mechanism here; `tabular` at 0.90
 and 0.92, bounded by its epsilon; `random` at 0.22. The `live` arm's routine moment took
 0.71 to 0.79 ms (median) against 2.0 to 2.2 ms aroused, at 25 to 31 settling sweeps per
-routine moment and 22 to 24 per aroused moment: routine is cheaper in time (no learning
-phases), not in sweeps. It spent 13% and 21% of its moments aroused over the whole life and
+routine moment and 22 to 24 per aroused moment. These within-life laptop measurements
+show lower median latency during routine, which omits learning phases. They do not compare
+matched states, establish reduced settling work or measure electrical energy. It spent
+13% and 21% of its moments aroused over the whole life and
 5% and 4% over the second half of rule A, wrote 1,870 and 2,943 records to memory and spent
-12,800 sweeps per life on the probes of saved copies.
+12,800 sweeps per life on the probes of saved copies. The historical ledger omits probe
+and direct record-forecast memory reads, and the final outcome remains undelivered. Retiming an arm's own
+rewards changes its later behavior and reward count; this control cannot by itself isolate
+TD credit from altered reward timing and state correlations.
 
 ### Declared variants on the same seeds
 
 `results/variant-scarcity-2026-10-06.json.gz` (`--food 0.5`, the door paying one time in two
-with the key): no life acquired rule A or rule B at either delay (fed 0.25 and 0.22 at the end
-of rule A, 0.35 and 0.27 at the end of rule B), 83% to 88% of the moments aroused. The
-expected income at full feeding, 0.036 per moment, sits at the need of 0.03, and the forecast
-of the door is contradicted on every other trip, so the creature never leaves arousal and the
-flood of sampled wrong interactions holds it in the latch recorded below.
+with the key): fed shares were 0.25 and 0.22 at the end of rule A, and 0.35 and 0.27 at
+the end of rule B. The original 90%-fed acquisition gate is unsuitable here: even a
+policy that always obtains the key and opens the door has expected feeding of 50%.
+Failure of that gate does not mean nothing was learned. Key-taking shares were 0.69 and
+0.60 in A and 0.74 and 0.65 in B; the lives remained substantially aroused (83% to 91%
+of moments across the delay/rule groups). Ideal uncut gross income is about 0.036 per
+moment, above the need of 0.03; cuts and costs reduce it. The summaries alone do not
+establish the cause of persistent arousal or a saturation latch in every life. No new
+scarcity success gate is fitted to these results.
 `results/variant-composed-critic-2026-10-06.json.gz` (critic rate 0.3, eligibility decay 0.8,
 discount 0.9, all else the frozen point): 13 of 20 lives acquired rule A and 11 re-adapted
 (at delay 5, 4 and 3 of 10), against 20 and 19 for the frozen point.
 
 ### The tables
 
-Every number below is read from the receipt by `--report`.
+The tables retain the historical `/1` receipt values; corrected `/2` measurement semantics
+do not retroactively change them. Lag units are completed, non-cut trips. Door openings,
+probes and work retain the historical limitations stated above.
 
 ### Rule A, chest holds the key: trips fed in the last 50, mean (minimum)
 
@@ -243,7 +296,7 @@ Every number below is read from the receipt by `--report`.
 | `tabular` | 0.15 (0.06) | 0.53 (0.34) | 1.66 (1.06) |
 | `random` | 1.49 (1.30) | 2.91 (2.36) | 5.36 (4.74) |
 
-### Rule A: first 20-trip window 90% fed, median trip (lives / lives)
+### Rule A: first 20-completed-trip window 90% fed, median zero-based index (lives / lives)
 
 | Arm | D=2 | D=5 | D=10 |
 | --- | --- | --- | --- |
@@ -256,7 +309,7 @@ Every number below is read from the receipt by `--report`.
 | `tabular` | 20 (8/10) | 17 (10/10) | 33 (10/10) |
 | `random` | none (0/10) | none (0/10) | none (0/10) |
 
-### Rule B: first 20-trip window 90% fed, median trip (lives / lives)
+### Rule B: first 20-completed-trip window 90% fed, median zero-based index (lives / lives)
 
 | Arm | D=2 | D=5 | D=10 |
 | --- | --- | --- | --- |
@@ -308,7 +361,7 @@ Every number below is read from the receipt by `--report`.
 | `tabular` | 0.051 (0.050) | 0.092 (0.080) | 0.148 (0.137) |
 | `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
 
-### The live arm: arousal and work, medians over lives
+### Historical live-arm arousal and recorded work, medians over lives
 
 | Delay | aroused, whole life | aroused, second half of rule A | sweeps per routine moment | per aroused moment | learning sweeps | probe sweeps | memory reads | memory writes | routine ms (median, p90) | aroused ms (median, p90) |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -373,19 +426,22 @@ acquired rule A (fed 0.24, aroused 87% of the late half) and then re-adapted to 
 rule B. At delay 10, 4 of 10 acquired and 2 of 10 re-adapted. The controls: `step` ended
 rule B fed at 0.98 and 0.77 while aroused at every moment and wasting 0.8 to 1.5
 interactions per trip; `lambda-zero` 0.51 and 0.30; `frozen` 0.00 (no adaptation without
-outcomes); `blind`, without the pouch sense, 0.98 and 0.91 (the working trace carries the
-key); `tabular` 0.90 and 0.92, and 0.91 at delay 10 where the brain reached 0.48;
+outcomes); `blind`, without the pouch sense, 0.98 and 0.91 (this does not isolate trace
+memory); `tabular` 0.90 and 0.92, and 0.91 at delay 10 where the brain reached 0.48;
 `random` 0.25. The `yoked` arm crashed in 28 of 30 lives on a trip cut to one cell, where
 its random payment cell had no range (`integers(0)`): a fault of that control alone,
 repaired in the second freeze. The scarcity variant (`--food 0.5`, the door paying one time
-in two) acquired nothing at either delay (fed 0.14 to 0.36, aroused 88% to 92%): with the
-expected income at the need, the forecast of the door is contradicted on every other trip
-and the creature never leaves arousal. The composed-critic variant (critic rate 0.3,
+in two) recorded fed shares of 0.14 to 0.36 and arousal of 88% to 92%. Its unchanged
+90%-fed gate is unsuitable for a world that pays a successful door opening with
+probability 0.5; these failures do not establish absence of acquisition. The composed-critic variant (critic rate 0.3,
 eligibility decay 0.8, discount 0.9, all else the frozen point) acquired 11 of 20 and
 re-adapted 10 of 20, against 18 and 20 for the frozen point. The gates of the second
 freeze were revised on this record as stated above; the point and the world were not.
 
 ## How the operating point and the founders were selected
+
+The following are source-specific development observations and proposed explanations.
+They are not independent causal demonstrations or guarantees for the corrected source.
 
 Development used seeds 0 to 3 at every delay; the confirmation seeds were first run on the
 frozen protocol. The odour nursery's operating point (working-trace amplitude 0.3,
@@ -419,7 +475,8 @@ the chamber was built up from a short corridor to the one above.
   the two motor units settled to the same activation for every cell and pouch state (a
   cosine of 1.000 between all ten situations), the pass unit near 0.95, the interact unit
   below rest, and the policy answered pass with a base probability of 0.005 everywhere.
-  A unit at its rail has no slope left for the nudge, so no reward could move it again.
+  These readings suggest saturation limited the nudge in the observed runs; they do not
+  prove that no later reward or admissible experience could change the state.
   The synapses stayed near initialization (mean efficacy 1.38 at birth, 1.41 after 300
   trips) and the motor bias reached 0.21, so the efficacy cap of 8 could not bite. The
   calm policy of a fed creature sits on motor activations near rest, with margins of a
@@ -430,7 +487,7 @@ the chamber was built up from a short corridor to the one above.
   a sharper learner temperature of 0.1 or 0.05 deepened it; a heat of 0.5, an actor rate
   of 0.03, a trace amplitude of 0, a bias rate of 0, 64 modules and an efficacy cap of 2
   changed nothing. The lives that acquired rule A at delay 5 under these settings never
-  re-adapted after the key moved, for the same reason.
+  re-adapted after the key moved; the same mechanism is a hypothesis for those failures.
 - **The critic carries delayed credit.** The brains that acquired rule A at delay 5 had a
   flat critic: a value of 0.1 to 0.2 at every cell, 0.2 at the door with the key where +1
   follows with certainty, and the same value with and without the key. The composed
@@ -438,8 +495,8 @@ the chamber was built up from a short corridor to the one above.
   which over a 14-cell trip is about 27, on a code whose activations average 0.03; it
   learns its bias and little else. Taking the key then produces no value jump, and the
   only credit for the chest is the actor's own eligibility, (gamma * lam)^k with k the
-  cells to the door: 0.43 at delay 2 and 0.28 at delay 5, which is why delay 2 was solved
-  and delay 5 was not. Raising the critic's rate makes the key's value appear (about
+  cells to the door: 0.43 at delay 2 and 0.28 at delay 5. This is a candidate explanation
+  for the observed delay difference, not an isolated causal result. Raising the critic's rate makes the key's value appear (about
   +0.4 for holding it at the end of rule A) and the lives at delay 5 acquire and
   re-adapt; the rate is selected below with the composed 0.3 as the control. An
   unnormalized critic at 0.05 did the same for one seed and was slower for the other.
@@ -466,7 +523,8 @@ the chamber was built up from a short corridor to the one above.
   that costs a quarter per trip and that a fed and calm creature does not unlearn; one
   life at delay 5 latched after the key moved; one life at delay 5 spent 21% of the late
   moments of rule A aroused. The frozen point is rate 5, decay 0.95, discount 0.95, and
-  the gates stay as first declared. Delay 10 is left ungated: 0 to 2 of 4 development
+  these development comparisons used the first gates; the later second freeze relaxed
+  frugality and calm as disclosed above. Delay 10 is left ungated: 0 to 2 of 4 development
   lives acquired it under any point tried, while the tabular learner acquires it.
 - **The tabular learner.** Alpha in 0.1, 0.2 and 0.5, epsilon in 0.05, 0.1 and 0.2 and
   lambda in 0.8 and 0.9 were run on the development seeds at every delay, with gamma 0.9.

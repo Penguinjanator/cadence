@@ -58,6 +58,7 @@ __all__ = ["Arousal", "ArousalConfig"]
 
 MODES = ("routine", "aroused")
 _TINY = 1e-12  # keeps the unit of surprise positive in a world that has paid nothing yet
+_SAVED_FORMAT = "cadence-arousal/1"
 
 
 def _log_ratio(error: float, unit: float) -> float:
@@ -106,7 +107,7 @@ class ArousalConfig:
         slow = _real("slow", self.slow, low=0.0, high=1.0, open_low=True)
         fast = _real("fast", self.fast, low=0.0, high=1.0, open_low=True)
         if fast < slow:
-            raise ValueError("fast must be at least slow; equal rates remove the want")
+            raise ValueError("fast must be at least slow; equal rates remove the long-run want")
         _real("heat", self.heat, low=0.0)
         _real("value_surprise", self.value_surprise, low=0.0)
         _real("record_surprise", self.record_surprise, low=0.0)
@@ -127,7 +128,7 @@ class ArousalConfig:
     def space() -> dict[str, tuple[Any, ...]]:
         """The gene space of the law for ``cadence.genes``; mutate ``to_dict()`` over it.
 
-        ``fast`` at ``slow`` removes the want, a large ``tolerance`` removes surprise,
+        ``fast`` at ``slow`` removes the long-run want, a large ``tolerance`` removes surprise,
         ``heat`` at zero removes the wider exploration, either surprise weight at zero
         removes that channel and ``need`` at zero removes the need's want: the controls are
         inside the space. A mutation that leaves
@@ -217,9 +218,12 @@ class Arousal:
         """The shortfall of the recent reward below the long-run reward in reward scales, or
         below the body's need as a share of that need, whichever is larger."""
         want = 0.0 if scale <= 0.0 else float(np.clip((longrun - recent) / scale, 0.0, 1.0))
-        need = self.config.need
+        need = float(self.config.need)
         if need > 0.0:
-            want = max(want, float(np.clip((need - recent) / need, 0.0, 1.0)))
+            # Clip before arithmetic: a negative reward with a tiny need can overflow
+            # the ratio, and a large need can overflow the subtraction.
+            unmet = 1.0 if recent <= 0.0 else (0.0 if recent >= need else (need - recent) / need)
+            want = max(want, unmet)
         return want
 
     @property
@@ -324,6 +328,7 @@ class Arousal:
 
     def to_dict(self) -> dict[str, Any]:
         return {
+            "format": _SAVED_FORMAT,
             "config": self.config.to_dict(),
             "level": float(self.level),
             "age": int(self.age),
@@ -345,10 +350,18 @@ class Arousal:
         """Restore a saved arousal, rejecting incomplete or invalid state."""
         if not isinstance(values, dict) or not isinstance(values.get("config"), dict):
             raise ValueError("invalid saved arousal")
-        if set(values["config"]) != set(ArousalConfig.__slots__):
+        if "format" in values and values["format"] != _SAVED_FORMAT:
+            raise ValueError("invalid saved arousal format")
+        config = values["config"]
+        genes = set(ArousalConfig.__slots__)
+        if "format" not in values and set(config) == genes - {"need"}:
+            # Before need existed every saved life used the zero-need law. A marker
+            # on new saves distinguishes that legacy schema from a missing new gene.
+            config = {**config, "need": 0.0}
+        if set(config) != genes:
             raise ValueError("invalid or incomplete saved arousal config")
         try:
-            arousal = cls(ArousalConfig(**values["config"]))
+            arousal = cls(ArousalConfig(**config))
             for name in ("age", "outcomes", "spreads", "records", "learning_sweeps"):
                 value = values[name]
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
