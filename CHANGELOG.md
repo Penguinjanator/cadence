@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+- Odour nursery, third freeze (`benchmarks/reversal`), for the readings
+  [issue 88](https://github.com/muellerberndt/cadence/issues/88) still required:
+  the probability of approaching each odour under the behaviour that acted and under
+  the base policy, and the probability of each executed action, read from the living
+  brain at every trial; a `replay` control that presents the brain's own witnessed
+  records of the first rule to its memory again, one per trial, in place of the
+  earlier counterfactual payoff; and the complete work of a life, with probes,
+  checkpoint files, memory reads and writes, presentations, brains built, the sweeps
+  of a refused attempt and the wall time of a moment per mode. Receipts of the earlier
+  freezes verify by their own kind. The confirmation ran once on fresh seeds.
+- `ArousalConfig` gains `value_surprise` and `record_surprise`: a brain with an
+  associative memory also forecasts the outcome of its chosen action from the record
+  it holds, and the error of that record is a second surprise channel with its own
+  usual size (`Arousal.usual_record`, `Brain.last_arousal["record_error"]`). The
+  founders weigh it at zero, so the law is unchanged by default: on the nursery's
+  development seeds the record channel woke the brain sooner and left more lives
+  searching too briefly. Checkpoints of brains with arousal carry the record forecast
+  of the awaited action.
+
 - Harden `live` continuation and its audit instruments: reject contradictory
   pending-action checkpoints and incomplete arousal genes; preserve routine
   feedback on a refused arousal update and identify already accepted sampled

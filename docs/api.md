@@ -783,8 +783,10 @@ that recursive benefit or automatic reflective behavior has been learned.
     greedy choice of one qualified settle and changes no parameter, memory record or
     optimizer state; the eligibility of earlier sampled actions fades by one step
     (`ActorCritic.fade`), as it does between two outcomes that are learned from. Its
-    forecast for the preceding action is the critic's value when it acted, and the
-    outcome is measured against that forecast with the value of the present state. Surprise or want raises the arousal (see
+    forecasts for the preceding action are the critic's value when it acted and, when it
+    has an associative memory, the record it held for that action in that situation
+    (`last_arousal["record_error"]`); the outcome is measured against the value with the
+    value of the present state and against the record as it is. Surprise or want raises the arousal (see
     [Arousal](#arousal-cadencearousal)); only the outcome of the brain's own greedy
     choice enters its mood, and what a sampled, non-greedy action brings teaches
     without rousing. An aroused brain samples at
@@ -804,7 +806,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     See [routine and repair](continuous.md#routine-and-repair-live).
   - `last_arousal: Mapping[str, Any] | None`: an immutable snapshot of the latest `live`
     moment: `mode` (`"routine"` or `"aroused"`), `level`, `error` (the unsigned
-    temporal-difference error of the preceding action against its forecast), `surprise`
+    temporal-difference error of the preceding action against its forecast),
+    `record_error` (the unsigned error of the record held for that action, `None`
+    without a memory or an outcome), `surprise`
     and `want` (what that outcome added to the level), `temperature` (the sampling
     temperature, `None` in routine), `learned` (a feedback update ran), `recorded` (the
     waking outcome was written to memory), `sweeps` (free-solve sweeps of the forecast
@@ -867,15 +871,15 @@ that recursive benefit or automatic reflective behavior has been learned.
 The arousal of one continuing stream: when a composed brain leaves routine and how it
 returns. `Brain.live` runs it; the classes can also be used alone.
 
-- `ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05, slow=0.005, heat=2.0, youth=100)`:
+- `ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05, slow=0.005, heat=2.0, youth=100, value_surprise=1.0, record_surprise=0.0)`:
   the genes of the law, with the hand-set founders as defaults. `to_dict()` returns them;
   `ArousalConfig.space()` declares their space for [`genes`](evolution.md#any-genome).
-  `fast` at `slow` removes the want, a large `tolerance` removes surprise and `heat` at
-  zero removes the wider exploration. Construction rejects values outside their ranges
-  and `fast < slow`.
+  `fast` at `slow` removes the want, a large `tolerance` removes surprise, `heat` at
+  zero removes the wider exploration, and each surprise weight at zero removes its
+  channel. Construction rejects values outside their ranges and `fast < slow`.
 - `Arousal(config=None)`: the state.
-  `outcome(error, reward, *, own=True, learned=True) -> (surprise, want)` takes the
-  unsigned temporal-difference error of one outcome and its reward and applies
+  `outcome(error, reward, *, own=True, learned=True, record_error=None) -> (surprise, want)`
+  takes the unsigned temporal-difference error of one outcome and its reward and applies
 
   ```text
   surprise = log(error / (tolerance * usual + floor * scale))   when positive, else 0
@@ -898,6 +902,13 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   exists, explored rewards are measured against zero, so the reward origin matters.
   These are properties of supplied scalar outcomes, not a reward-transformation
   guarantee for the complete learning brain. A stream's first own outcome is no surprise.
+  `record_error` is the unsigned error of the record the brain held for its chosen
+  action against the outcome, when it held one; it has its own running size,
+  `usual_record`, and its own count, `records`, and the moment's surprise is the larger
+  of `value_surprise` times the value channel's and `record_surprise` times the record
+  channel's. With the founders the record channel is measured and weighs nothing: on
+  the [odour nursery](../benchmarks/reversal/README.md)'s development seeds it woke
+  the brain sooner and left more lives searching too briefly.
   `aroused` is true while `level >= threshold` and for the first `youth` moments of the
   brain's life; `mode` names it. `heat` is `1 + config.heat * want`, the factor on the
   policy temperature an aroused brain samples at. `lived(sweeps, learning_sweeps=0)`

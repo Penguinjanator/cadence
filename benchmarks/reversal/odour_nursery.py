@@ -22,8 +22,9 @@ Arms, all on the same odour sequence per seed:
 - ``memory-only`` and ``graph-only``  the ``live`` brain with its actor's rates at zero,
   and without its associative memory: which part carries the adaptation;
 - ``frozen``   the ``live`` brain after rule A, answering greedily without outcomes;
-- ``replay``   the ``live`` brain paid by the old rule A after the change: a
-  counterfactual-world control, not replay of retained witnessed outcomes;
+- ``replay``   the ``live`` brain after rule A, answering greedily and taking no outcome
+  from the world, while its own witnessed records of rule A are presented to its memory
+  again, one per trial: equal presentations on old evidence;
 - ``reset``    a newborn ``live`` brain at every rule change;
 - ``tabular``  epsilon-greedy tabular Q-learning, the matched-information conventional
   online learner, its two settings selected on the development seeds;
@@ -32,11 +33,17 @@ Arms, all on the same odour sequence per seed:
 Readings per rule: the share of optimal executed actions in the last 100 trials; the lag
 (first trial from which the next 40 executed actions are at least 90% optimal); the
 greedy choice and the policy's approach probability per odour of a saved and reloaded
-copy every 25 trials; how often each odour was met and approached; the first executed
-approach at the newly rewarded odour, the approaches executed there before the greedy
-choice turned, and the trials between (too few contradicting witnesses, or a failure to
-revise after them); whether the stable pair stayed right; the share of aroused moments
-and the settling sweeps per moment and mode.
+copy every 25 trials; the probability of approaching each odour under the behaviour that
+acted (greedy in routine, heated sampling when aroused) and under the base policy, read
+from the living brain's own settled state at each trial, and the probability with which
+each executed action was taken; how often each odour was met and approached; the first
+executed approach at the newly rewarded odour, the approaches executed there before the
+greedy choice turned, and the trials between (too few contradicting witnesses, or a
+failure to revise after them); whether the stable pair stayed right; the share of aroused
+moments; and the work of the life: settling sweeps per moment and mode, eligibility and
+feedback sweeps, probe sweeps and checkpoints, memory reads and writes, replay
+presentations, brains built, sweeps of a refused attempt, and the wall time of a moment
+in each mode.
 
 A run writes a ``cadence.Receipt`` bound to this file and every module of the library;
 ``--verify`` checks one. Nothing here is a claim about a body: the world is a table. Run
@@ -66,7 +73,8 @@ import numpy as np
 import cadence as cd
 from cadence.receipts import Receipt, canonical_json, canonical_sha256, source_manifest
 
-SCHEMA = "odour-nursery/2"
+SCHEMA = "odour-nursery/3"
+HISTORICAL = ("odour-nursery/2",)  # receipts of earlier freezes still verify by their own kind
 AVOID, APPROACH = 0, 1
 ODOURS = 4
 STABLE_SUGAR, STABLE_PLAIN = 2, 3
@@ -131,65 +139,151 @@ def make_brain(point: dict[str, Any], seed: int, genes: dict[str, Any] | None) -
     return brain
 
 
-def frozen_choices(brain: cd.Brain) -> tuple[list[int], list[float]]:
+def frozen_choices(brain: cd.Brain) -> tuple[list[int], list[float], int]:
     """The greedy choice and the policy's approach probability per odour, each read on its
-    own saved and reloaded copy; the live brain is never read for a measurement."""
-    choices, approach = [], []
+    own saved and reloaded copy, and the sweeps those copies settled; the live brain is
+    never read for a measurement."""
+    choices, approach, sweeps = [], [], 0
     with tempfile.TemporaryDirectory() as directory:
         path = brain.save(os.path.join(directory, "brain.npz"))
         for odour in range(ODOURS):
             copy = cd.Brain.load(path)
             choices.append(int(copy.act(np.eye(ODOURS)[[odour]], greedy=True)[0]))
             state = copy.basal_ganglia.state
-            assert state is not None
+            assert state is not None and copy.last_settlement is not None
             approach.append(float(copy.basal_ganglia.probabilities(state)[0, APPROACH]))
-    return choices, approach
+            sweeps += int(copy.last_settlement["steps"])
+    return choices, approach, sweeps
+
+
+def fresh_work() -> dict[str, int]:
+    """The ledger of a life's work: moments and settling sweeps per mode, eligibility and
+    feedback sweeps, probes with their sweeps and checkpoint files, memory reads and
+    writes, replay presentations, brains built and the sweeps of a refused attempt."""
+    return {
+        "routine": 0,
+        "aroused": 0,
+        "sweeps_routine": 0,
+        "sweeps_aroused": 0,
+        "learning_sweeps": 0,
+        "probes": 0,
+        "probe_sweeps": 0,
+        "checkpoints": 0,
+        "memory_reads": 0,
+        "memory_writes": 0,
+        "presentations": 0,
+        "brains": 0,
+        "refused_sweeps": 0,
+    }
 
 
 class BrainLife:
-    """A composed brain living through ``live`` (with arousal) or ``step`` (without)."""
+    """A composed brain living through ``live`` (with arousal) or ``step`` (without).
+
+    ``last`` holds, for the latest action, the probability of approaching the odour met
+    under the behaviour that acted and under the base policy, and the probability with
+    which the executed action was taken; all three are read from the living brain's own
+    settled state. ``work`` is the life's ledger (``fresh_work``)."""
 
     def __init__(self, brain: cd.Brain, *, use_live: bool) -> None:
         self.brain = brain
         self.use_live = use_live
         self.frozen = False
-        self.work = {"routine": 0, "aroused": 0, "sweeps_routine": 0, "sweeps_aroused": 0}
-        self.learning_sweeps = 0
+        self.work = fresh_work()
+        self.work["brains"] = 1
+        self.last = (0.5, 0.5, 1.0)
+        memory = brain.hippocampus
+        if memory is not None:  # every read of the associative memory is counted
+            original = memory.stimulate
+
+            def counted(drive: np.ndarray, inplace: bool = False) -> np.ndarray:
+                self.work["memory_reads"] += 1
+                return original(drive, inplace=inplace)
+
+            memory.stimulate = counted  # type: ignore[method-assign]
+
+    def _read(self, action: int, temperature: float | None) -> None:
+        agent = self.brain.basal_ganglia
+        state = agent.state
+        assert state is not None
+        policy = np.asarray(agent.probabilities(state))[0]
+        if temperature is None:  # the greedy choice was executed with certainty
+            behaviour = np.zeros(2)
+            behaviour[int(np.argmax(policy))] = 1.0
+        else:
+            behaviour = np.asarray(agent.probabilities(state, temperature))[0]
+        self.last = (float(behaviour[APPROACH]), float(policy[APPROACH]), float(behaviour[action]))
 
     def act(self, odour: int, reward: float | None) -> tuple[int, bool]:
         x = np.eye(ODOURS)[[odour]]
         brain = self.brain
-        if self.frozen:
-            action = int(brain.act(x, greedy=True)[0])
+        try:
+            if self.frozen:
+                action = int(brain.act(x, greedy=True)[0])
+                settlement = brain.last_settlement
+                assert settlement is not None
+                self.work["routine"] += 1
+                self.work["sweeps_routine"] += int(settlement["steps"])
+                self._read(action, None)
+                return action, False
+            feedback = {} if reward is None else {"reward": [reward]}
+            if self.use_live:
+                action = int(brain.live(x, **feedback)[0])
+                reading = brain.last_arousal
+                assert reading is not None
+                aroused = reading["mode"] == "aroused"
+                mode = "aroused" if aroused else "routine"
+                self.work[mode] += 1
+                self.work["sweeps_" + mode] += int(reading["sweeps"])
+                self.work["learning_sweeps"] += int(reading["learning_sweeps"])
+                self._read(action, reading["temperature"])
+                return action, aroused
+            action = int(brain.step(x, **feedback)[0])
             settlement = brain.last_settlement
             assert settlement is not None
-            self.work["routine"] += 1
-            self.work["sweeps_routine"] += int(settlement["steps"])
-            return action, False
-        feedback = {} if reward is None else {"reward": [reward]}
-        if self.use_live:
-            action = int(brain.live(x, **feedback)[0])
-            reading = brain.last_arousal
-            assert reading is not None
-            aroused = reading["mode"] == "aroused"
-            mode = "aroused" if aroused else "routine"
-            self.work[mode] += 1
-            self.work["sweeps_" + mode] += int(reading["sweeps"])
-            self.learning_sweeps += int(reading["learning_sweeps"])
-            return action, aroused
-        action = int(brain.step(x, **feedback)[0])
-        settlement = brain.last_settlement
-        assert settlement is not None
-        self.work["aroused"] += 1
-        self.work["sweeps_aroused"] += int(settlement["steps"])
-        pending = brain.basal_ganglia._pending
-        if pending is not None:
-            self.learning_sweeps += int(pending[1].steps) + int(pending[2].steps)
-        self.learning_sweeps += int(brain.last_learning.get("free_steps", 0))
-        return action, True
+            self.work["aroused"] += 1
+            self.work["sweeps_aroused"] += int(settlement["steps"])
+            pending = brain.basal_ganglia._pending
+            if pending is not None:
+                self.work["learning_sweeps"] += int(pending[1].steps) + int(pending[2].steps)
+            self.work["learning_sweeps"] += int(brain.last_learning.get("free_steps", 0))
+            self._read(action, brain.learner.config.temperature)
+            return action, True
+        except Exception:
+            # the work of a refused or failed attempt is charged before the life is
+            # recorded as crashed
+            settlement = brain.last_settlement
+            if settlement is not None and not settlement["qualified"]:
+                self.work["refused_sweeps"] += int(settlement["steps"])
+            raise
+
+    def present(self, odour: int, action: int, reward: float) -> None:
+        """Present one of the brain's own witnessed records to its memory again, as the
+        outcome was recorded when it was witnessed."""
+        memory = self.brain.hippocampus
+        assert isinstance(memory, cd.SynapticMemory)
+        target = np.zeros((1, len(self.brain.motor_index)))
+        target[0, action] = reward
+        observed = np.zeros(target.shape, bool)
+        observed[0, action] = True
+        memory.observe(
+            np.eye(ODOURS)[[odour]],
+            target,
+            salience=cd.SynapticMemory.salience_vector(np.array([abs(reward)]), 1),
+            value_mask=observed,
+        )
+        self.work["presentations"] += 1
 
     def probe(self) -> tuple[list[int], list[float]]:
-        return frozen_choices(self.brain)
+        choices, approach, sweeps = frozen_choices(self.brain)
+        self.work["probes"] += 1
+        self.work["probe_sweeps"] += sweeps
+        self.work["checkpoints"] += 1 + ODOURS  # one file saved, one copy loaded per odour
+        return choices, approach
+
+    def ledger(self) -> dict[str, int]:
+        memory = self.brain.hippocampus
+        return {**self.work, "memory_writes": 0 if memory is None else int(memory.writes)}
 
 
 class Tabular:
@@ -200,18 +294,22 @@ class Tabular:
         self.q = np.zeros((ODOURS, 2))
         self.alpha, self.epsilon = alpha, epsilon
         self.rng = np.random.default_rng(seed)
-        self.last: tuple[int, int] | None = None
+        self.memo: tuple[int, int] | None = None
         self.frozen = False
+        self.last = (0.5, 0.5, 0.5)
 
     def act(self, odour: int, reward: float | None) -> tuple[int, bool]:
-        if reward is not None and self.last is not None and not self.frozen:
-            o, a = self.last
+        if reward is not None and self.memo is not None and not self.frozen:
+            o, a = self.memo
             self.q[o, a] += self.alpha * (reward - self.q[o, a])
+        greedy = int(np.argmax(self.q[odour]))
         if self.rng.random() < self.epsilon:
             action = int(self.rng.integers(2))
         else:
-            action = int(np.argmax(self.q[odour]))
-        self.last = (odour, action)
+            action = greedy
+        self.memo = (odour, action)
+        approach = 1 - self.epsilon / 2 if greedy == APPROACH else self.epsilon / 2
+        self.last = (approach, approach, approach if action == APPROACH else 1 - approach)
         return action, True
 
     def probe(self) -> tuple[list[int], list[float]]:
@@ -225,6 +323,7 @@ class Random:
     def __init__(self, seed: int) -> None:
         self.rng = np.random.default_rng(seed)
         self.frozen = False
+        self.last = (0.5, 0.5, 0.5)
 
     def act(self, odour: int, reward: float | None) -> tuple[int, bool]:
         return int(self.rng.integers(2)), True
@@ -266,7 +365,8 @@ def run_life(
     genes: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """One arm, one seed, one pre-switch exposure: rule A for ``exposure`` trials, rule B,
-    then rule A again. Returns the readings per rule and the life's work."""
+    then rule A again. Returns the readings per rule and the life's work; a life whose
+    answer refuses is returned with its error and the work done until then."""
     warnings.simplefilter("ignore")
     genes = {**protocol["arousal"], **(genes or {})}
     every, hold, floor = protocol["probe_every"], protocol["hold"], protocol["hold_floor"]
@@ -277,115 +377,151 @@ def run_life(
     payoff = protocol.get("payoff", "sugar")
     jitter = float(protocol.get("jitter", 0.0))  # measurement noise added to every reward
     luck = np.random.default_rng(protocol["odour_seed"] + 7919 + seed)
-    life = make_life(arm, protocol, seed, genes)
-    retired_work = {"routine": 0, "aroused": 0, "sweeps_routine": 0, "sweeps_aroused": 0}
-    retired_learning_sweeps = 0
     started = time.time()
-    odour = int(odours.integers(ODOURS))
-    action, aroused = life.act(odour, None)
+    life = make_life(arm, protocol, seed, genes)
+    retired: list[dict[str, int]] = []  # the ledgers of a reset arm's earlier brains
+    latency: dict[str, list[float]] = {"routine": [], "aroused": []}
+    records: list[tuple[int, int, float]] = []  # the replay arm's witnessed rule A
     phases: list[dict[str, Any]] = []
-    for index, (sugar, length) in enumerate(rules):
-        if index and arm == "reset":
-            for key in retired_work:
-                retired_work[key] += life.work[key]
-            retired_learning_sweeps += life.learning_sweeps
-            # a newborn's seed meets no other generator of this life (odours, luck, brains)
-            life = make_life(arm, protocol, 100_000 * index + seed, genes)
-            action, aroused = life.act(odour, None)
-        if index == 1 and arm == "frozen":
-            life.frozen = True
-        new_sugar = sugar if index else None
-        hits, modes = [], []
-        probes: list[tuple[int, list[int], list[float]]] = []
-        visits, approaches = [0] * ODOURS, [0] * ODOURS
-        tries: list[int] = []  # the trials of the executed approaches at the new sugar odour
-        turned = None  # the approach whose outcome first left the greedy choice there turned
-        for trial in range(length):
-            hits.append(int(action == optimal(odour, sugar)))
-            modes.append(aroused)
-            visits[odour] += 1
-            approaches[odour] += int(action == APPROACH)
-            witnessed = odour == new_sugar and action == APPROACH
-            if witnessed:
-                tries.append(trial)
-            if trial % every == 0:
-                probes.append((trial, *life.probe()))
-            # The replay-named arm is a counterfactual world paying by rule A. It does
-            # not replay previously witnessed records or match the live arm's work.
-            reward = reward_of(odour, action, 0 if arm == "replay" else sugar, payoff)
-            if reliability < 1.0 and luck.random() >= reliability:
-                reward = 0.0
-            if jitter > 0.0:
-                reward += float(luck.normal(0.0, jitter))
-            odour = int(odours.integers(ODOURS))
-            # A refused answer raises and the life is recorded as crashed: this small brain
-            # is expected to settle every moment within its budget.
-            action, aroused = life.act(odour, reward)
-            # The outcome of an approach at the new sugar odour is taken: has the greedy
-            # choice there turned? Read on a copy, for the first approaches of the rule.
-            if witnessed and turned is None and len(tries) <= protocol["witness_probes"]:
-                if life.probe()[0][new_sugar] == APPROACH:
-                    turned = trial
-        executed = np.asarray(hits)
-        lag = next(
-            (k for k in range(0, length - hold + 1) if executed[k : k + hold].mean() >= floor),
-            None,
-        )
-        right = [all(c == optimal(o, sugar) for o, c in enumerate(p[1])) for p in probes]
-        greedy_lag = next(
-            (probes[k][0] for k in range(len(probes) - 1) if right[k] and right[k + 1]), None
-        )
-        # the greedy choice at the new sugar odour: first seen turned at a probe (`flip`),
-        # and the approaches executed there until it turned (`witnesses`)
-        flip = witnesses = None
-        if new_sugar is not None:
-            flip = next((p[0] for p in probes if p[1][new_sugar] == APPROACH), None)
-            if turned is not None and (flip is None or turned < flip):
-                witnesses = sum(t <= turned for t in tries)
-            elif flip is not None:
-                witnesses = sum(t < flip for t in tries)
-        stable = [
-            p[1][STABLE_SUGAR] == APPROACH and p[1][STABLE_PLAIN] == AVOID
-            for p in probes
-            if index or p[0] >= protocol["stable_after"]
-        ]
-        phases.append(
-            {
-                "sugar": sugar,
-                "length": length,
-                "final": float(executed[-min(100, length) :].mean()),
-                "whole": float(executed.mean()),
-                "lag": lag,
-                "greedy_lag": greedy_lag,
-                "first_try": tries[0] if tries else None,
-                "flip": flip,
-                "turned": turned,
-                "witnesses": witnesses,
-                "visits": visits,
-                "approaches": approaches,
-                "start_approach": [round(v, 4) for v in probes[0][2]],
-                "stable": float(np.mean(stable)) if stable else None,
-                "aroused": float(np.mean(modes)),
-                "aroused_late": float(np.mean(modes[length // 2 :])),
-                "end_greedy": probes[-1][1],
-                "end_approach": [round(v, 4) for v in probes[-1][2]],
-            }
-        )
-    result: dict[str, Any] = {
-        "arm": arm,
-        "seed": seed,
-        "exposure": exposure,
-        "phases": phases,
-        "seconds": round(time.time() - started, 2),
-    }
-    if isinstance(life, BrainLife):
-        work = {key: value + retired_work[key] for key, value in life.work.items()}
-        result["work"] = {
-            **work,
-            "learning_sweeps": life.learning_sweeps + retired_learning_sweeps,
-            "sweeps_per_routine_moment": work["sweeps_routine"] / max(1, work["routine"]),
-            "sweeps_per_aroused_moment": work["sweeps_aroused"] / max(1, work["aroused"]),
+
+    def act(odour: int, reward: float | None) -> tuple[int, bool]:
+        began = time.perf_counter()
+        action, aroused = life.act(odour, reward)
+        latency["aroused" if aroused else "routine"].append(time.perf_counter() - began)
+        return action, aroused
+
+    def ledger() -> dict[str, Any]:
+        work = dict(life.ledger()) if isinstance(life, BrainLife) else fresh_work()
+        for earlier in retired:
+            for key, value in earlier.items():
+                work[key] += value
+        work["sweeps_per_routine_moment"] = work["sweeps_routine"] / max(1, work["routine"])
+        work["sweeps_per_aroused_moment"] = work["sweeps_aroused"] / max(1, work["aroused"])
+        work["latency_ms"] = {
+            mode: [round(1000.0 * float(v), 3) for v in np.percentile(times, (50, 90, 100))]
+            if times
+            else None
+            for mode, times in latency.items()
         }
+        return work
+
+    result: dict[str, Any] = {"arm": arm, "seed": seed, "exposure": exposure}
+    odour = int(odours.integers(ODOURS))
+    try:
+        action, aroused = act(odour, None)
+        for index, (sugar, length) in enumerate(rules):
+            if index and arm == "reset":
+                retired.append(life.ledger())
+                # a newborn's seed meets no other generator of this life (odours, luck, brains)
+                life = make_life(arm, protocol, 100_000 * index + seed, genes)
+                action, aroused = act(odour, None)
+            if index == 1 and arm in ("frozen", "replay"):
+                life.frozen = True  # no outcome from the world reaches the brain again
+            new_sugar = sugar if index else None
+            hits, modes = [], []
+            probes: list[tuple[int, list[int], list[float]]] = []
+            visits, approaches = [0] * ODOURS, [0] * ODOURS
+            behaviour, policy = [0.0] * ODOURS, [0.0] * ODOURS
+            executed = 0.0
+            tries: list[int] = []  # the trials of the executed approaches at the new sugar odour
+            turned = None  # the approach whose outcome first left the greedy choice there turned
+            for trial in range(length):
+                hits.append(int(action == optimal(odour, sugar)))
+                modes.append(aroused)
+                visits[odour] += 1
+                approaches[odour] += int(action == APPROACH)
+                behaviour[odour] += life.last[0]
+                policy[odour] += life.last[1]
+                executed += life.last[2]
+                witnessed = odour == new_sugar and action == APPROACH
+                if witnessed:
+                    tries.append(trial)
+                if trial % every == 0:
+                    probes.append((trial, *life.probe()))
+                reward = reward_of(odour, action, sugar, payoff)
+                if reliability < 1.0 and luck.random() >= reliability:
+                    reward = 0.0
+                if jitter > 0.0:
+                    reward += float(luck.normal(0.0, jitter))
+                if arm == "replay":
+                    if index == 0:
+                        records.append((odour, action, reward))  # witnessed, as paid
+                    else:
+                        # one of its own witnessed records of rule A is presented to the
+                        # memory again: equal presentations, no new evidence
+                        life.present(*records[trial % len(records)])
+                odour = int(odours.integers(ODOURS))
+                # A refused answer raises and the life is recorded as crashed: this small
+                # brain is expected to settle every moment within its budget.
+                action, aroused = act(odour, reward)
+                # The outcome of an approach at the new sugar odour is taken: has the greedy
+                # choice there turned? Read on a copy, for the first approaches of the rule.
+                if witnessed and turned is None and len(tries) <= protocol["witness_probes"]:
+                    if life.probe()[0][new_sugar] == APPROACH:
+                        turned = trial
+            hit = np.asarray(hits)
+            lag = next(
+                (k for k in range(0, length - hold + 1) if hit[k : k + hold].mean() >= floor),
+                None,
+            )
+            right = [all(c == optimal(o, sugar) for o, c in enumerate(p[1])) for p in probes]
+            greedy_lag = next(
+                (probes[k][0] for k in range(len(probes) - 1) if right[k] and right[k + 1]),
+                None,
+            )
+            # the greedy choice at the new sugar odour: first seen turned at a probe (`flip`),
+            # and the approaches executed there until it turned (`witnesses`)
+            flip = witnesses = None
+            if new_sugar is not None:
+                flip = next((p[0] for p in probes if p[1][new_sugar] == APPROACH), None)
+                if turned is not None and (flip is None or turned < flip):
+                    witnesses = sum(t <= turned for t in tries)
+                elif flip is not None:
+                    witnesses = sum(t < flip for t in tries)
+            stable = [
+                p[1][STABLE_SUGAR] == APPROACH and p[1][STABLE_PLAIN] == AVOID
+                for p in probes
+                if index or p[0] >= protocol["stable_after"]
+            ]
+            phases.append(
+                {
+                    "sugar": sugar,
+                    "length": length,
+                    "final": float(hit[-min(100, length) :].mean()),
+                    "whole": float(hit.mean()),
+                    "lag": lag,
+                    "greedy_lag": greedy_lag,
+                    "first_try": tries[0] if tries else None,
+                    "flip": flip,
+                    "turned": turned,
+                    "witnesses": witnesses,
+                    "visits": visits,
+                    "approaches": approaches,
+                    # the behaviour that acted and the base policy: P(approach) per odour,
+                    # mean over the odour's visits; and the executed action's probability
+                    "behaviour_approach": [
+                        round(b / v, 4) if v else None
+                        for b, v in zip(behaviour, visits, strict=True)
+                    ],
+                    "policy_approach": [
+                        round(b / v, 4) if v else None for b, v in zip(policy, visits, strict=True)
+                    ],
+                    "executed_probability": round(executed / length, 4),
+                    "start_approach": [round(v, 4) for v in probes[0][2]],
+                    "stable": float(np.mean(stable)) if stable else None,
+                    "aroused": float(np.mean(modes)),
+                    "aroused_late": float(np.mean(modes[length // 2 :])),
+                    "end_greedy": probes[-1][1],
+                    "end_approach": [round(v, 4) for v in probes[-1][2]],
+                }
+            )
+    except Exception as error:  # a crashed life is a recorded outcome, with its work
+        result["error"] = f"{type(error).__name__}: {error}"[:300]
+        result["completed_phases"] = len(phases)
+    else:
+        result["phases"] = phases
+    result["seconds"] = round(time.time() - started, 2)
+    result["work"] = ledger()
     return result
 
 
@@ -393,12 +529,13 @@ def _job(args: tuple[str, int, int, dict[str, Any], dict[str, Any] | None]) -> d
     arm, seed, exposure, protocol, genes = args
     try:
         return run_life(arm, seed, exposure, protocol, genes)
-    except Exception as error:  # a crashed life is a recorded outcome, not a missing row
+    except Exception as error:  # a life that could not start is a recorded outcome too
         return {
             "arm": arm,
             "seed": seed,
             "exposure": exposure,
             "error": f"{type(error).__name__}: {error}"[:300],
+            "completed_phases": 0,
         }
 
 
@@ -511,8 +648,12 @@ def markdown(report: dict[str, Any]) -> str:
     rows = report["rows"]
     exposures = sorted({r["exposure"] for r in rows})
     arms = [a for a in ARMS if any(r["arm"] == a for r in rows)]
-    # the first freeze's receipt predates the coverage and witness readings
-    witnessed = all("witnesses" in r["phases"][1] for r in rows if "error" not in r)
+    # the first freeze's receipt predates the coverage and witness readings, and the
+    # second freeze's the behaviour readings and the complete work ledger
+    completed = [r for r in rows if "error" not in r]
+    witnessed = all("witnesses" in r["phases"][1] for r in completed)
+    behaved = all("behaviour_approach" in r["phases"][1] for r in completed)
+    worked = all(set(fresh_work()) <= set(r.get("work", {})) for r in completed if "work" in r)
 
     def lives(arm: str, exposure: int) -> list[dict[str, Any]]:
         return [
@@ -546,6 +687,11 @@ def markdown(report: dict[str, Any]) -> str:
     def start(group: list[dict[str, Any]]) -> str:
         values = [r["phases"][1]["start_approach"][1] for r in group]
         return f"{np.median(values):.3f} ({min(values):.3f})"
+
+    def behaviour(group: list[dict[str, Any]]) -> str:
+        values = [r["phases"][1]["behaviour_approach"][1] for r in group]
+        found = [v for v in values if v is not None]
+        return f"{np.median(found):.3f} ({min(found):.3f})" if found else "none"
 
     def unturned(group: list[dict[str, Any]]) -> str:
         left = [p for p in (r["phases"][1] for r in group) if p["witnesses"] is None]
@@ -593,6 +739,12 @@ def markdown(report: dict[str, Any]) -> str:
                 unturned,
             ),
         ]
+    if behaved:
+        out += table(
+            "Behaviour under rule B: probability of approaching the new sugar odour, mean "
+            "over its visits, median over lives (minimum)",
+            behaviour,
+        )
     out += table("Stable pair right at the probes, mean (minimum)", stable)
     head = (
         "| Exposure | first approach at the new sugar odour | from it to the turned greedy "
@@ -600,6 +752,39 @@ def markdown(report: dict[str, Any]) -> str:
         "aroused, whole life | aroused, second half of rule A | sweeps per routine moment | "
         "sweeps per aroused moment | learning sweeps per aroused moment |"
     )
+    work_head = (
+        "| Arm | answer sweeps per routine moment | per aroused moment | learning sweeps | "
+        "probe sweeps | checkpoint files | memory reads | memory writes | presentations | "
+        "brains | refused sweeps | routine ms (median, p90) | aroused ms (median, p90) |"
+    )
+    if worked:
+        out += ["### Work per life at the longest exposure, medians over lives", "", work_head]
+        out.append("| --- |" + " --- |" * 12)
+
+    def med(works: list[dict[str, Any]], key: str) -> str:
+        return f"{np.median([w[key] for w in works]):.0f}"
+
+    def ms(works: list[dict[str, Any]], mode: str) -> str:
+        times = [w["latency_ms"][mode] for w in works if w["latency_ms"][mode]]
+        if not times:
+            return "none"
+        return f"{np.median([t[0] for t in times]):.2f}, {np.median([t[1] for t in times]):.2f}"
+
+    for arm in arms if worked else []:
+        works = [r["work"] for r in lives(arm, exposures[-1]) if "work" in r]
+        if not works:
+            continue
+        out.append(
+            f"| `{arm}` | {np.median([w['sweeps_per_routine_moment'] for w in works]):.1f} | "
+            f"{np.median([w['sweeps_per_aroused_moment'] for w in works]):.1f} | "
+            f"{med(works, 'learning_sweeps')} | {med(works, 'probe_sweeps')} | "
+            f"{med(works, 'checkpoints')} | {med(works, 'memory_reads')} | "
+            f"{med(works, 'memory_writes')} | {med(works, 'presentations')} | "
+            f"{med(works, 'brains')} | {med(works, 'refused_sweeps')} | "
+            f"{ms(works, 'routine')} | {ms(works, 'aroused')} |"
+        )
+    if worked:
+        out.append("")
     out += ["### The live arm: witnesses, arousal and work, medians over lives", "", head]
     out.append("| --- |" + " --- |" * 7)
     for exposure in exposures:
@@ -669,10 +854,12 @@ def planned(body: dict[str, Any]) -> list[tuple[str, int, int]]:
     return [(a, e, s) for a in body["arms"] for e in body["exposures"] for s in body["seeds"]]
 
 
-def validate_readings(body: dict[str, Any]) -> str | None:
-    """Reject impossible readings before calculating gates from a re-signed receipt."""
+def validate_readings(body: dict[str, Any], kind: str = SCHEMA) -> str | None:
+    """Reject impossible readings before calculating gates from a re-signed receipt.
+    A receipt of an earlier freeze lacks the readings added since; those are checked when
+    present."""
     protocol = body["protocol"]
-    if protocol["schema"] != SCHEMA:
+    if protocol["schema"] != kind:
         return "the protocol has the wrong schema"
     for key in ("arms", "exposures", "seeds"):
         values = body[key]
@@ -697,10 +884,23 @@ def validate_readings(body: dict[str, Any]) -> str | None:
     if type(lag_bound) not in (int, float) or lag_bound < 0:
         return "the protocol contains an invalid lag bound"
     for row in body["rows"]:
+        work = row.get("work")
+        if work is not None and kind == SCHEMA:
+            counts = {key: work.get(key) for key in fresh_work()}
+            if any(type(v) is not int or v < 0 for v in counts.values()):
+                return "the work ledger must hold nonnegative counts"
+            for mode in ("routine", "aroused"):
+                times = work["latency_ms"][mode]
+                if times is not None and (
+                    len(times) != 3 or any(type(v) is not float or v < 0 for v in times)
+                ):
+                    return "latencies must be three nonnegative milliseconds"
         if "error" in row:
             if not isinstance(row["error"], str) or not row["error"]:
                 return "a crashed life must record its error"
             continue
+        if work is None and kind == SCHEMA and row["arm"] not in ("tabular", "random"):
+            return "a completed brain life must carry its work ledger"
         phases = row["phases"]
         if not isinstance(phases, list) or len(phases) != 3:
             return "a completed life must contain exactly three phases"
@@ -734,6 +934,16 @@ def validate_readings(body: dict[str, Any]) -> str | None:
             for key in ("start_approach", "end_approach"):
                 if len(phase[key]) != ODOURS or any(not share(v) for v in phase[key]):
                     return "approach probabilities must be four shares in [0, 1]"
+            if kind == SCHEMA:
+                for key in ("behaviour_approach", "policy_approach"):
+                    values = phase[key]
+                    if len(values) != ODOURS or any(
+                        (v is None) != (visits == 0) or (v is not None and not share(v))
+                        for v, visits in zip(values, phase["visits"], strict=True)
+                    ):
+                        return "behaviour probabilities must be shares for the odours met"
+                if not share(phase["executed_probability"]):
+                    return "the executed probability must be a share in [0, 1]"
             choices = phase["end_greedy"]
             allowed = (-1,) if row["arm"] == "random" else (AVOID, APPROACH)
             if len(choices) != ODOURS or any(
@@ -749,7 +959,7 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
     the protocol hash to be those of the files present now."""
 
     def check(body: dict[str, Any]) -> str | None:
-        if stored["kind"] != SCHEMA:
+        if stored["kind"] not in (SCHEMA, *HISTORICAL):
             return "the receipt has the wrong kind"
         manifest = stored["source"]
         entries = manifest["files"]
@@ -772,7 +982,7 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
             for entry in entries
         ):
             return "the embedded source manifest does not verify"
-        problem = validate_readings(body)
+        problem = validate_readings(body, stored["kind"])
         if problem:
             return problem
         rows = body["rows"]

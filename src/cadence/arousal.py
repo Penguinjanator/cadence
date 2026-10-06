@@ -16,6 +16,13 @@ The law, per outcome of the stream's preceding action::
 ``error`` is the temporal-difference error against the forecast made before the outcome;
 ``usual`` is its running size; ``recent`` and ``longrun`` are the running reward at a
 fast and a slow rate; ``scale`` is the spread of the outcomes the brain has learned from.
+A brain with an associative memory also forecasts the outcome of the action it chose, from
+the record it holds for that action in that situation; the error of that record against
+the outcome is a second surprise with its own usual size, and the moment's surprise is the
+larger of the two, each weighted by its gene (``value_surprise``, ``record_surprise``).
+The founders weigh the record's surprise at zero: on the odour nursery's development seeds
+it woke the brain sooner and left more lives searching too briefly, so the value forecast
+remains the control and the record's channel is left to selection.
 Only the outcome of the brain's own best guess can surprise it and enters what it is used
 to: what an explored action brings is play. The brain is aroused while
 ``level >= threshold`` and during its first ``youth`` moments, and an aroused brain
@@ -46,6 +53,13 @@ MODES = ("routine", "aroused")
 _TINY = 1e-12  # keeps the unit of surprise positive in a world that has paid nothing yet
 
 
+def _log_ratio(error: float, unit: float) -> float:
+    """``log(error / unit)`` for a positive error above its unit, even when the ratio
+    itself is not representable."""
+    ratio = error / unit
+    return float(np.log(ratio) if np.isfinite(ratio) else np.log(error) - np.log(unit))
+
+
 def _real(
     name: str, value: Any, *, low: float, high: float = np.inf, open_low: bool = False
 ) -> float:
@@ -72,6 +86,8 @@ class ArousalConfig:
     slow: float = 0.005  # rate of the long-run reward, the usual error and the reward scale
     heat: float = 2.0  # exploration temperature gained per unit of want
     youth: int = 100  # the first moments of a life are aroused
+    value_surprise: float = 1.0  # weight of the surprise at a contradicted value forecast
+    record_surprise: float = 0.0  # weight of the surprise at a contradicted action record
 
     def __post_init__(self) -> None:
         _real("threshold", self.threshold, low=0.0)
@@ -84,6 +100,8 @@ class ArousalConfig:
         if fast < slow:
             raise ValueError("fast must be at least slow; equal rates remove the want")
         _real("heat", self.heat, low=0.0)
+        _real("value_surprise", self.value_surprise, low=0.0)
+        _real("record_surprise", self.record_surprise, low=0.0)
         if (
             isinstance(self.youth, (bool, np.bool_))
             or not isinstance(self.youth, (int, np.integer))
@@ -100,9 +118,10 @@ class ArousalConfig:
     def space() -> dict[str, tuple[Any, ...]]:
         """The gene space of the law for ``cadence.genes``; mutate ``to_dict()`` over it.
 
-        ``fast`` at ``slow`` removes the want, a large ``tolerance`` removes surprise and
-        ``heat`` at zero removes the wider exploration: the controls are inside the space.
-        A mutation that leaves ``fast`` below ``slow`` is refused at construction."""
+        ``fast`` at ``slow`` removes the want, a large ``tolerance`` removes surprise,
+        ``heat`` at zero removes the wider exploration and either surprise weight at zero
+        removes that channel: the controls are inside the space. A mutation that leaves
+        ``fast`` below ``slow`` is refused at construction."""
         return {
             "threshold": ("log", 0.3, 0.02, 2.0),
             "decay": ("linear", 0.05, 0.0, 0.99),
@@ -112,6 +131,8 @@ class ArousalConfig:
             "slow": ("log", 0.3, 0.0005, 0.05),
             "heat": ("linear", 0.5, 0.0, 4.0),
             "youth": ("int", 0, 1000),
+            "value_surprise": ("linear", 0.3, 0.0, 2.0),
+            "record_surprise": ("linear", 0.3, 0.0, 2.0),
         }
 
 
@@ -137,10 +158,12 @@ class Arousal:
         self.level = 0.0
         self.outcomes = 0  # outcomes that entered what the stream is used to
         self.spreads = 0  # outcomes that entered the reward scale
+        self.records = 0  # own outcomes that an action record had forecast
         self._square = 0.0
         self._recent = 0.0
         self._longrun = 0.0
         self._usual = 0.0
+        self._usual_record = 0.0
 
     # -- what the stream is used to: running averages, corrected for their short history
 
@@ -175,6 +198,11 @@ class Arousal:
         return self._reading(self._usual, self.config.slow)
 
     @property
+    def usual_record(self) -> float:
+        """The running size of the error of the action records' forecasts."""
+        return self._reading(self._usual_record, self.config.slow, self.records)
+
+    @property
     def want(self) -> float:
         """The shortfall of the recent reward below the long-run reward, in reward scales."""
         scale = self.scale
@@ -198,7 +226,13 @@ class Arousal:
     # -- the law
 
     def outcome(
-        self, error: float, reward: float, *, own: bool = True, learned: bool = True
+        self,
+        error: float,
+        reward: float,
+        *,
+        own: bool = True,
+        learned: bool = True,
+        record_error: float | None = None,
     ) -> tuple[float, float]:
         """Take one outcome: the unsigned TD error against the forecast made before it and
         the reward. Returns the surprise and the want that entered the level.
@@ -207,15 +241,23 @@ class Arousal:
         surprise it and enters what it is used to; the outcome of an explored action is
         play, and the level then only carries its present want forward. ``learned`` says
         the brain learns from the outcome (it was sampled while aroused); learned outcomes
-        and the outcome that wakes the brain enter the reward scale. A stream's first own
-        outcome has no usual error to be measured against and is no surprise."""
+        and the outcome that wakes the brain enter the reward scale. ``record_error`` is
+        the unsigned error of the record the brain held for the chosen action against the
+        outcome, when it held one; it is measured against its own usual size, and the
+        larger of the two weighted surprises enters the level. A stream's first own
+        outcome of either kind has no usual error to be measured against and is no
+        surprise."""
         error, reward = abs(float(error)), float(reward)
         if not np.isfinite(error) or not np.isfinite(reward):
             raise ValueError("error and reward must be finite")
+        if record_error is not None:
+            record_error = abs(float(record_error))
+            if not np.isfinite(record_error):
+                raise ValueError("record_error must be finite")
         c = self.config
-        outcomes, spreads = self.outcomes, self.spreads
+        outcomes, spreads, records = self.outcomes, self.spreads, self.records
         recent, longrun, usual = self._recent, self._longrun, self._usual
-        square, scale = self._square, self.scale
+        usual_record, square, scale = self._usual_record, self._square, self.scale
         surprise = 0.0
         if own:
             first = outcomes == 0
@@ -226,10 +268,15 @@ class Arousal:
             usual += c.slow * (error - usual)
             unit = c.tolerance * previous_usual + c.floor * scale + _TINY
             if error > unit and not first:
-                ratio = error / unit
-                surprise = float(
-                    np.log(ratio) if np.isfinite(ratio) else np.log(error) - np.log(unit)
-                )
+                surprise = c.value_surprise * _log_ratio(error, unit)
+            if record_error is not None:
+                previous_record = self.usual_record
+                first_record = records == 0
+                records += 1
+                usual_record += c.slow * (record_error - usual_record)
+                unit = c.tolerance * previous_record + c.floor * scale + _TINY
+                if record_error > unit and not first_record:
+                    surprise = max(surprise, c.record_surprise * _log_ratio(record_error, unit))
         expected = self._reading(longrun, c.slow, outcomes)
         want = (
             float(np.clip((expected - self._reading(recent, c.fast, outcomes)) / scale, 0.0, 1.0))
@@ -243,12 +290,12 @@ class Arousal:
                 square += c.slow * ((reward - expected) ** 2 - square)
             except OverflowError as exc:
                 raise ValueError("arousal moments must remain finite") from exc
-        if not np.isfinite([recent, longrun, usual, square, level]).all():
+        if not np.isfinite([recent, longrun, usual, usual_record, square, level]).all():
             raise ValueError("arousal moments must remain finite")
         # Admit the complete outcome together so an unrepresentable spread can be retried.
-        self.outcomes, self.spreads = outcomes, spreads
+        self.outcomes, self.spreads, self.records = outcomes, spreads, records
         self._recent, self._longrun, self._usual = recent, longrun, usual
-        self._square, self.level = square, level
+        self._usual_record, self._square, self.level = usual_record, square, level
         return surprise, want
 
     def lived(self, sweeps: int, learning_sweeps: int = 0) -> None:
@@ -268,10 +315,12 @@ class Arousal:
             "age": int(self.age),
             "outcomes": int(self.outcomes),
             "spreads": int(self.spreads),
+            "records": int(self.records),
             "square": float(self._square),
             "recent": float(self._recent),
             "longrun": float(self._longrun),
             "usual": float(self._usual),
+            "usual_record": float(self._usual_record),
             "moments": {mode: int(self.moments[mode]) for mode in MODES},
             "sweeps": {mode: int(self.sweeps[mode]) for mode in MODES},
             "learning_sweeps": int(self.learning_sweeps),
@@ -286,22 +335,24 @@ class Arousal:
             raise ValueError("invalid or incomplete saved arousal config")
         try:
             arousal = cls(ArousalConfig(**values["config"]))
-            for name in ("age", "outcomes", "spreads", "learning_sweeps"):
+            for name in ("age", "outcomes", "spreads", "records", "learning_sweeps"):
                 value = values[name]
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                     raise ValueError(f"invalid saved arousal count: {name}")
             arousal.age, arousal.outcomes = values["age"], values["outcomes"]
-            arousal.spreads = values["spreads"]
+            arousal.spreads, arousal.records = values["spreads"], values["records"]
             arousal.learning_sweeps = values["learning_sweeps"]
-            for name in ("level", "square", "recent", "longrun", "usual"):
+            nonnegative = ("level", "square", "usual", "usual_record")
+            for name in ("level", "square", "recent", "longrun", "usual", "usual_record"):
                 value = values[name]
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     raise ValueError(f"invalid saved arousal value: {name}")
-                if not np.isfinite(value) or (name in ("level", "square", "usual") and value < 0):
+                if not np.isfinite(value) or (name in nonnegative and value < 0):
                     raise ValueError(f"invalid saved arousal value: {name}")
             arousal.level = float(values["level"])
             arousal._square, arousal._recent = float(values["square"]), float(values["recent"])
             arousal._longrun, arousal._usual = float(values["longrun"]), float(values["usual"])
+            arousal._usual_record = float(values["usual_record"])
             for name in ("moments", "sweeps"):
                 counts = values[name]
                 if not isinstance(counts, dict) or set(counts) != set(MODES):

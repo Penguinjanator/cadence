@@ -223,7 +223,9 @@ every moment. `live` lets the brain's arousal decide. A calm brain answers with
 the greedy choice of one qualified settle and learns nothing: no eligibility
 phases, no parameter change, no memory write; the eligibility of its earlier
 sampled actions fades with each moment. Two things rouse it. An outcome that
-contradicts the forecast it made before acting is a surprise. A reward that
+contradicts the forecast it made before acting is a surprise; the brain forecasts
+with the critic's value of the situation and, through a gene that the founders
+weigh at zero, with the record it holds for the action it chose. A reward that
 stays below what its life usually pays is a want, which also covers a failure it
 predicts correctly. An aroused brain samples, at a temperature the want raises,
 keeps eligibility, learns from every outcome and writes memory. The outcome that

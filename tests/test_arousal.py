@@ -152,6 +152,25 @@ def test_equal_rates_remove_the_want_and_a_wide_tolerance_removes_surprise():
     assert no_surprise.outcome(1.5, 1.0)[0] == 0.0
 
 
+def test_a_contradicted_action_record_is_its_own_surprise_channel():
+    weighted = cd.Arousal(cd.ArousalConfig(youth=0, record_surprise=1.0))
+    silent = cd.Arousal(cd.ArousalConfig(youth=0, record_surprise=0.0))  # the founders
+    for arousal in (weighted, silent):
+        for moment in range(300):  # a usual TD error of 0.5, records that are right
+            arousal.outcome(0.5, float(moment % 2), record_error=0.0)
+        assert arousal.records == 300 and arousal.usual_record == 0.0
+    # the TD error of this outcome is usual; the record held for the action was wrong by 2
+    assert weighted.outcome(0.5, -1.0, record_error=2.0)[0] > 1.0 and weighted.aroused
+    assert silent.outcome(0.5, -1.0, record_error=2.0)[0] == 0.0 and not silent.aroused
+    assert silent.usual_record > 0.0  # the record channel is measured whatever its weight
+    none = cd.Arousal(cd.ArousalConfig(youth=0, record_surprise=1.0))
+    for moment in range(50):
+        none.outcome(0.5, float(moment % 2))  # a brain without records
+    assert none.records == 0 and none.outcome(0.5, -1.0)[0] == 0.0
+    with pytest.raises(ValueError):
+        none.outcome(0.5, 0.0, record_error=float("nan"))
+
+
 def test_arousal_state_round_trips_and_rejects_corruption():
     arousal = cd.Arousal(cd.ArousalConfig(youth=2))
     for value in (0.5, 1.0, 0.2):
@@ -419,6 +438,25 @@ def test_a_stepped_brain_continues_through_live_and_reset_begins_calm():
     brain.act(eye[[1]], greedy=True)  # another operation takes the stream
     with pytest.raises(RuntimeError, match="preceding action"):
         brain.live(eye[[2]], reward=[1.0])
+
+
+def test_live_forecasts_its_action_from_the_record_it_holds(tmp_path):
+    brain = calm_brain(seed=7)
+    eye = np.eye(4)
+    brain.live(eye[[0]])
+    assert brain.last_arousal["record_error"] is None  # no outcome yet
+    assert brain._lived[6] == pytest.approx(0.0)  # an empty memory forecasts nothing
+    brain.live(eye[[1]], reward=[1.0])  # the outcome of the first action, forecast 0
+    assert brain.last_arousal["record_error"] == pytest.approx(1.0)
+    twin = cd.Brain.load(brain.save(tmp_path / "life.npz"))
+    assert twin._lived[6] == pytest.approx(brain._lived[6])
+    graph = cd.Brain.compose(
+        4, 2, modules=(16,), seed=0, episodic=False, arousal=cd.ArousalConfig(youth=0)
+    )
+    graph.live(eye[[0]])
+    assert graph._lived[6] is None
+    graph.live(eye[[1]], reward=[1.0])
+    assert graph.last_arousal["record_error"] is None  # no memory, no record forecast
 
 
 def test_a_slotted_brain_lives_and_owns_only_its_best_guess_in_every_slot():

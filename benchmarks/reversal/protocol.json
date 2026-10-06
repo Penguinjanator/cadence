@@ -1,7 +1,8 @@
 {
-  "schema": "odour-nursery/2",
+  "schema": "odour-nursery/3",
   "world": "four one-hot odours; avoid (0) or approach (1); approach the sugar odour +1, another odour -1, avoid 0; odours 0 and 1 are the reversal pair (sugar at 0 under rule A, at 1 under rule B); odour 2 is always sugar and odour 3 never",
   "life": "one stream, no resets: rule A for the exposure, rule B for `after` trials, rule A again for `after` trials; changes are unannounced",
+  "replay": "after rule A the replay arm answers greedily and takes no outcome from the world; at every trial one of its own witnessed (odour, action, outcome) records of rule A is presented to its associative memory again, in the order witnessed and round again, as the outcome was recorded when witnessed; presentations are counted",
   "odour_seed": 1000,
   "reliability": 1.0,
   "exposures": [
@@ -33,7 +34,9 @@
     "fast": 0.05,
     "slow": 0.005,
     "heat": 2.0,
-    "youth": 100
+    "youth": 100,
+    "value_surprise": 1.0,
+    "record_surprise": 0.0
   },
   "tabular": {
     "alpha": 1.0,
@@ -127,9 +130,7 @@
       106,
       107,
       108,
-      109
-    ],
-    "confirmation": [
+      109,
       300,
       301,
       302,
@@ -140,9 +141,21 @@
       307,
       308,
       309
+    ],
+    "confirmation": [
+      500,
+      501,
+      502,
+      503,
+      504,
+      505,
+      506,
+      507,
+      508,
+      509
     ]
   },
-  "history": "Second freeze. The first freeze (schema odour-nursery/1, SHA-256 381f23ca76287e0b83eeea99d0d5f5a3ae1adba2fce2be2eed0c814706ab1f8f) ran its confirmation seeds, 100 to 109, once on 2026-10-05 and passed its gates. A review of the code then found that the actor's eligibility did not fade during routine moments, and the library was corrected. This freeze keeps the world, the life, the operating point, the arousal founders and the gates. Its confirmation seeds are fresh and the first set is spent. The tabular learner's two settings were selected on the development seeds. A reset arm's newborn brain takes a seed that meets no other generator of its life. The diagnostic seeds were used for development at the longest exposure. Readings were added: how often each odour was met and approached, the policy's approach probabilities when a rule turns, and the approaches executed at the new sugar odour until the greedy choice there turned, read on a copy after each of the first `witness_probes` of them.",
+  "history": "Third freeze. The first freeze (schema odour-nursery/1, SHA-256 381f23ca76287e0b83eeea99d0d5f5a3ae1adba2fce2be2eed0c814706ab1f8f) ran seeds 100 to 109 once on 2026-10-05 and passed; the eligibility of routine moments was then corrected. The second freeze (schema odour-nursery/2, SHA-256 0a5f2b4e6c2e2767aebc57588caf3e338a0348f5ec14ab099f637413f09652c4) ran seeds 300 to 309 once on 2026-10-05 and passed; an audit then hardened the law's numerics and the receipts without changing the law. This freeze keeps the world, the life, the operating point, the arousal founders and the gates. It adds what issue 88 still required: the probability of the behaviour that acted and of the base policy, read from the living brain at every trial; a replay control that presents the brain's own witnessed records of rule A again, one per trial, instead of paying current actions by the old rule; and the complete work of a life including probes, checkpoint files, memory reads and writes, presentations, brains built, the sweeps of a refused attempt and the wall time of a moment per mode. The arousal law gains a second surprise channel, the error of the record the brain held for its chosen action, as a gene whose founder weight is zero: on the development seeds it woke the brain sooner (median reversal lag 18 trials against 23) and left more lives searching too briefly (89 of 96 passed every reading with the record channel alone and 90 of 96 with both channels, against 94 of 96 with the value forecast alone), so the value forecast stays the control. The confirmation seeds are fresh; those of the first two freezes are spent.",
   "gates": {
     "final": 0.9,
     "stable": 0.95,
