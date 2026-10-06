@@ -1,5 +1,6 @@
 """Arousal and ``Brain.live``: routine changes nothing, surprise and want wake the brain."""
 
+import json
 from dataclasses import replace
 
 import numpy as np
@@ -100,6 +101,73 @@ def test_reward_below_the_long_run_is_a_want_that_habituates():
     assert arousal.heat >= 1.0
 
 
+def test_a_need_is_a_want_of_its_own_that_a_sparse_reward_meets_and_that_never_habituates():
+    """Fed once in fourteen moments, a brain's income is 1/14 per moment while its reward
+    spread is near 1/sqrt(14): losing the food leaves the long-run want below the
+    threshold, and it habituates; the need's want is the unmet share of the need."""
+    content = cd.Arousal(cd.ArousalConfig(youth=0))
+    needy = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04))
+    assert needy.want == 1.0 and needy.heat == 3.0  # never paid: the whole need is unmet
+    assert content.want == 0.0
+    peaks = {}
+    for arousal in (content, needy):
+        for moment in range(2800):  # a youth that learns, then the same pay in routine
+            young = moment < 1400
+            arousal.outcome(0.1 if young else 0.0, float(moment % 14 == 0), learned=young)
+        assert arousal.want < 0.1 and not arousal.aroused  # the need is met by the income
+        wants = []
+        for _ in range(100):  # the food stops; every forecast of nothing is right
+            arousal.outcome(0.0, 0.0, learned=False)
+            wants.append(arousal.want)
+        peaks[arousal] = max(wants)
+    assert peaks[content] < 1 / np.sqrt(14) and not content.aroused  # below the threshold
+    assert needy.want > 0.95 and needy.heat > 2.9 and needy.aroused
+    for _ in range(3000):
+        content.outcome(0.0, 0.0, learned=False)
+        needy.outcome(0.0, 0.0, learned=False)
+    assert content.want < 0.05 and not content.aroused  # the poorer life became usual
+    assert needy.want == 1.0 and needy.aroused  # a need is a level: it stays unmet
+    scaled = cd.Arousal(cd.ArousalConfig(youth=0, need=40 * 0.04))
+    plain = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04))
+    for moment in range(300):
+        a = plain.outcome(0.1, float(moment % 14 == 0), learned=moment < 200)
+        b = scaled.outcome(4.0, 40.0 * float(moment % 14 == 0), learned=moment < 200)
+        assert a == pytest.approx(b, rel=1e-9, abs=1e-12)
+    with pytest.raises(ValueError):
+        cd.ArousalConfig(need=-0.1)
+    assert "need" in cd.ArousalConfig.space() and cd.ArousalConfig().need == 0.0
+
+
+@pytest.mark.parametrize("need", [-0.1, True, np.bool_(False), np.nan, np.inf, -np.inf, "0.1"])
+def test_need_rejects_invalid_genes(need):
+    with pytest.raises(ValueError, match="need"):
+        cd.ArousalConfig(need=need)
+
+
+@pytest.mark.parametrize(
+    "need", [float(np.nextafter(0.0, 1.0)), np.nextafter(0.0, 1.0), np.float32(3e38)]
+)
+def test_need_clips_extreme_shortfalls_without_overflow(need):
+    arousal = cd.Arousal(cd.ArousalConfig(youth=0, need=need, fast=1.0, slow=1.0))
+    with np.errstate(all="raise"):
+        for reward, expected in [(-1e38, 1.0), (0.0, 1.0), (float(need), 0.0)]:
+            assert arousal.outcome(0.0, reward) == (0.0, expected)
+            assert arousal.want == expected
+            assert np.isfinite(arousal.level) and np.isfinite(arousal.heat)
+    assert cd.Arousal.from_dict(arousal.to_dict()).to_dict() == arousal.to_dict()
+
+
+def test_only_own_outcomes_change_whether_need_is_met_even_with_equal_rates():
+    arousal = cd.Arousal(cd.ArousalConfig(youth=0, need=0.25, fast=1.0, slow=1.0))
+    assert arousal.outcome(0.0, 0.25) == (0.0, 0.0)
+    assert arousal.outcome(0.0, 0.0, own=False) == (0.0, 0.0)
+    assert arousal.recent == 0.25
+    assert arousal.outcome(0.0, 0.0) == (0.0, 1.0)
+    assert arousal.outcome(0.0, 0.5, own=False) == (0.0, 1.0)
+    assert arousal.recent == 0.0
+    assert arousal.outcome(0.0, 0.5) == (0.0, 0.0)
+
+
 def test_the_law_is_unchanged_by_the_scale_and_the_zero_of_reward():
     rng = np.random.default_rng(3)
     plain = cd.Arousal(cd.ArousalConfig(youth=0))
@@ -185,6 +253,27 @@ def test_arousal_state_round_trips_and_rejects_corruption():
         cd.Arousal.from_dict({k: v for k, v in saved.items() if k != "recent"})
     with pytest.raises(ValueError):
         arousal.outcome(float("inf"), 0.0)
+
+
+def test_legacy_arousal_without_need_migrates_without_changing_its_saved_state():
+    arousal = cd.Arousal(cd.ArousalConfig(youth=2))
+    for value in (0.5, 1.0, 0.2):
+        arousal.outcome(value, value)
+        arousal.lived(7, 3)
+    legacy = arousal.to_dict()
+    del legacy["format"]
+    del legacy["config"]["need"]
+    restored = cd.Arousal.from_dict(legacy)
+    assert restored.config.need == 0.0
+    assert restored.to_dict() == arousal.to_dict()
+    assert "need" not in legacy["config"] and "format" not in legacy
+    for gene in legacy["config"]:
+        corrupt = {**legacy, "config": {k: v for k, v in legacy["config"].items() if k != gene}}
+        with pytest.raises(ValueError, match="incomplete saved arousal config"):
+            cd.Arousal.from_dict(corrupt)
+    for format in (None, "cadence-arousal/0", "cadence-arousal/2"):
+        with pytest.raises(ValueError, match="arousal format"):
+            cd.Arousal.from_dict({**legacy, "format": format})
 
 
 # -- the behaviour temperature
@@ -345,13 +434,14 @@ def test_every_outcome_is_taken_exactly_once_through_both_modes():
 
 
 @pytest.mark.parametrize("wake", [False, True])
-def test_a_saved_life_continues_identically(tmp_path, wake):
+@pytest.mark.parametrize("need", [0.0, 0.15])
+def test_a_saved_life_continues_identically(tmp_path, wake, need):
     eye = np.eye(4)
 
     def world(action: int, moment: int) -> tuple[np.ndarray, float]:
         return eye[[(3 * moment + 1) % 4]], (1.0 if action == moment % 2 else -1.0)
 
-    brain = calm_brain(seed=5, youth=0 if not wake else 4)
+    brain = calm_brain(seed=5, youth=0 if not wake else 4, need=need)
     action = brain.live(eye[[0]])
     for moment in range(3 if wake else 1):
         x, reward = world(int(action[0]), moment)
@@ -368,6 +458,7 @@ def test_a_saved_life_continues_identically(tmp_path, wake):
         b = twin.live(x, reward=[reward])
         actions.append(int(a[0]))
         twins.append(int(b[0]))
+        assert brain.last_arousal == twin.last_arousal
     assert actions == twins
     assert twin.arousal.to_dict() == brain.arousal.to_dict()
     np.testing.assert_array_equal(twin.brain.efficacy, brain.brain.efficacy)
@@ -376,6 +467,32 @@ def test_a_saved_life_continues_identically(tmp_path, wake):
         "routine",
         "aroused",
     }
+
+
+def test_a_legacy_saved_brain_continues_with_zero_need(tmp_path):
+    brain = calm_brain(seed=5, youth=8)
+    eye = np.eye(4)
+    brain.live(eye[[0]])
+    for moment in range(5):
+        brain.live(eye[[moment % 4]], reward=[float(moment % 2)])
+    assert brain.basal_ganglia._pending is not None
+    path = brain.save(tmp_path / "legacy.npz")
+    with np.load(path) as archive:
+        arrays = {key: archive[key] for key in archive.files}
+    meta = json.loads(str(arrays["generic"]))
+    del meta["arousal"]["format"]
+    del meta["arousal"]["config"]["need"]
+    arrays["generic"] = np.array(json.dumps(meta))
+    np.savez_compressed(path, **arrays)
+    twin = cd.Brain.load(path)
+    assert twin.arousal.to_dict() == brain.arousal.to_dict()
+    for moment in range(40):
+        x, reward = eye[[moment % 4]], [float(moment % 3 == 0) - 0.5]
+        np.testing.assert_array_equal(brain.live(x, reward=reward), twin.live(x, reward=reward))
+        assert brain.last_arousal == twin.last_arousal
+    assert brain.arousal.to_dict() == twin.arousal.to_dict()
+    for name, value in snapshot(brain).items():
+        np.testing.assert_array_equal(snapshot(twin)[name], value)
 
 
 def test_a_refused_forecast_changes_nothing_and_the_same_call_can_be_retried():
@@ -522,8 +639,6 @@ def test_live_runs_on_the_torch_backend_and_fades_device_eligibility(tmp_path):
 
 
 def test_brains_without_arousal_keep_their_checkpoint_format(tmp_path):
-    import json
-
     plain = cd.Brain.compose(4, 2, modules=(8,), seed=0)
     plain.step(np.eye(4)[[0]])
     with np.load(plain.save(tmp_path / "plain.npz")) as data:

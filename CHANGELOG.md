@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased
+
+- `ArousalConfig` gains `need`, a nonnegative required reward rate per moment. Its
+  unmet fraction supplies an additional arousal signal even when poor rewards are
+  expected. The default is zero, preserving the previous reward law. This is an
+  opt-in scalar need in the existing System 1 lifecycle, not a general goal detector,
+  learned goal representation or default promotion.
+- Keep the need calculation finite for extreme finite rewards and need values by
+  clipping before subtraction or division. New saved arousal state carries the
+  `cadence-arousal/1` marker; complete legacy configurations without `need` load
+  with `need=0`, while an incomplete marked configuration is rejected. This
+  preserves continuation of existing zero-need lives without treating missing
+  fields in new checkpoints as valid defaults.
+- Add the key-door nursery (`benchmarks/keydoor`) for
+  [#111](https://github.com/muellerberndt/cadence/issues/111), roadmap row 07. One
+  continuing life encounters delayed door rewards and a moved key source, with
+  always-learning, zero-eligibility, retimed-own-reward, frozen, no-pouch, tabular
+  Q(lambda) and random controls. Two historical `key-door/1` freezes failed their
+  declared gates. The second records acquisition in 20/20 gated lives, re-adaptation
+  in 19/20, frugality in 19/20 and calm in 17/20 against 18 required; delay 10 is
+  ungated. These are exploratory results at selected settings: shared random draws
+  made cut and food schedules differ between arms. The no-pouch result does not
+  identify trace memory; a scarcity variant's unchanged 90%-fed gate is unsuitable
+  when successful door openings pay with probability 0.5. Moving the key does not
+  test changed goals, and varying lever counts does not validate physical-time
+  semantics. Broad delayed-credit and reuse acceptance remains open.
+- Correct the key-door instrument under `key-door/2`: separate world and yoked
+  random streams, draw food availability independently of actions, include every
+  pre-door cut position, measure door openings within the last 50 completed trips,
+  probe the actual phase end, record undelivered final feedback and yoked rewards,
+  count probe memory reads separately, and retain completed forecast work when the
+  following answer refuses. Preserve all historical receipt and
+  protocol bytes; corrected runs are not frozen confirmation of that old protocol.
+  Verification labels legacy limitations and reporting verifies before rendering.
+  No corrected confirmation campaign or passing capability gate accompanies these
+  fixes. Historical routine latency is a within-life laptop observation, not
+  matched-state efficiency, reduced settlement work or electrical-energy evidence.
+
 ## 0.75.0 — 2026-10-06
 
 - Add `Brain.live` and arousal for one continuing stream
