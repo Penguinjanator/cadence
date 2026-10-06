@@ -41,9 +41,11 @@ adds a first routine-and-repair loop for one stream, measured on one bounded
 chamber. Integrated learned world prediction, repair localized to what failed
 and cheap stable operation remain development goals. Cadence is alpha research software.
 
-The examples and guides use Cadence 0.74.0, including action diagnostics through
-`Brain.last_settlement`. This maintenance release strengthens preservation checks
-and research instruments while keeping the 0.73.0 numerical runtime and defaults.
+The examples and guides use Cadence 0.75.0, including action diagnostics through
+`Brain.last_settlement`. This release adds `Brain.live`, the routine-and-repair loop
+of one continuing stream with its arousal genes, and the odour nursery that measures
+it; the settling, learning and memory equations and the composed defaults are those
+of 0.74.0.
 Start with the simplest existing System 1: proposed additions must remain local
 repair within the same equilibrium and demonstrate benefit without losing
 working capabilities. Animal and human brains guide the abstraction, including
@@ -92,10 +94,10 @@ Python 3.11+ and NumPy are required.
 Install the published release for this basic example:
 
 ```sh
-python -m pip install cadence-net==0.74.0
+python -m pip install cadence-net==0.75.0
 ```
 
-Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.74.0/docs/README.md)
+Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.75.0/docs/README.md)
 describes the APIs included in that package.
 
 ```python

@@ -1,35 +1,7 @@
 # Changelog
 
-## Unreleased
+## 0.75.0 — 2026-10-06
 
-- Odour nursery, third freeze (`benchmarks/reversal`), for the readings
-  [issue 88](https://github.com/muellerberndt/cadence/issues/88) still required:
-  the probability of approaching each odour under the behaviour that acted and under
-  the base policy, and the probability of each executed action, read from the living
-  brain at every trial; a `replay` control that presents the brain's own witnessed
-  records of the first rule to its memory again, one per trial, in place of the
-  earlier counterfactual payoff; and the complete work of a life, with probes,
-  checkpoint files, memory reads and writes, presentations, brains built, the sweeps
-  of a refused attempt and the wall time of a moment per mode. Receipts of the earlier
-  freezes verify by their own kind. The confirmation ran once on fresh seeds.
-- `ArousalConfig` gains `value_surprise` and `record_surprise`: a brain with an
-  associative memory also forecasts the outcome of its chosen action from the record
-  it holds, and the error of that record is a second surprise channel with its own
-  usual size (`Arousal.usual_record`, `Brain.last_arousal["record_error"]`). The
-  founders weigh it at zero, so the law is unchanged by default: on the nursery's
-  development seeds the record channel woke the brain sooner and left more lives
-  searching too briefly. Checkpoints of brains with arousal carry the record forecast
-  of the awaited action.
-
-- Harden `live` continuation and its audit instruments: reject contradictory
-  pending-action checkpoints and incomplete arousal genes; preserve routine
-  feedback on a refused arousal update and identify already accepted sampled
-  feedback. Keep arousal statistics atomic on numerical overflow, and support
-  tiny positive averaging rates and sampling temperatures. Validate nursery
-  receipt plans, sources and readings, and count discarded reset brains and
-  frozen actions. Historical receipts retain their original sources and work
-  limitations; the old-rule control is not equal-work witnessed replay. Issues
-  88 and 122 retain their remaining acceptance requirements.
 - Add `Brain.live` and arousal for one continuing stream
   ([issue 88](https://github.com/muellerberndt/cadence/issues/88),
   [issue 122](https://github.com/muellerberndt/cadence/issues/122)). A brain
@@ -47,15 +19,23 @@
   a brain with arousal saves it under the format name `cadence-generic/3`.
   `step`, the composed defaults, the settling and learning equations and the
   checkpoints of brains without arousal are unchanged.
+- `ArousalConfig` gains `value_surprise` and `record_surprise`: a brain with an
+  associative memory also forecasts the outcome of its chosen action from the record
+  it holds, and the error of that record is a second surprise channel with its own
+  usual size (`Arousal.usual_record`, `Brain.last_arousal["record_error"]`). The
+  founders weigh it at zero, so the law is unchanged by default: on the nursery's
+  development seeds the record channel woke the brain sooner and left more lives
+  searching too briefly. Checkpoints of brains with arousal carry the record forecast
+  of the awaited action.
 - Add the odour nursery (`benchmarks/reversal`): one continuing life through
   acquisition, reversal and return with an unrelated stable skill, at pre-switch
   exposures from 100 to 10,000 trials, on a frozen protocol with ten fresh
   confirmation seeds, against always-learning, released-default, memory-only,
   graph-only, frozen, replay, reset, tabular and uniform-random arms, with
-  source-bound receipts and a verifier. Its gates passed: of the 40 gated lives
-  39 reversed, 38 returned and 39 kept the stable pair, with median reversal lags
-  of 20 to 29 trials; three lives missed a reading and one of them never searched
-  for the moved reward. It reproduces the historical finding that the
+  source-bound receipts and a verifier. Its gates passed on fresh seeds at each of its
+  three freezes; at the third, of the 40 gated lives 39 reversed, 39 returned and 40
+  kept the stable pair, with median reversal lags of 15 to 30 trials, and one life
+  never searched for the moved reward. It reproduces the historical finding that the
   always-learning brain stops sampling the choice that must change, counts the
   witnessed approaches until the greedy choice turns (one), and measures the
   routine share and the settling work of each mode. The associative memory
@@ -65,7 +45,25 @@
   declares (working trace amplitude 0.3, consolidation 0.25, a tenth of the
   composed actor rate) is a development setting of that chamber; no default
   changes.
-
+- Odour nursery, third freeze (`benchmarks/reversal`), for the readings
+  [issue 88](https://github.com/muellerberndt/cadence/issues/88) still required:
+  the probability of approaching each odour under the behaviour that acted and under
+  the base policy, and the probability of each executed action, read from the living
+  brain at every trial; a `replay` control that presents the brain's own witnessed
+  records of the first rule to its memory again, one per trial, in place of the
+  earlier counterfactual payoff; and the complete work of a life, with probes,
+  checkpoint files, memory reads and writes, presentations, brains built, the sweeps
+  of a refused attempt and the wall time of a moment per mode. Receipts of the earlier
+  freezes verify by their own kind. The confirmation ran once on fresh seeds.
+- Harden `live` continuation and its audit instruments: reject contradictory
+  pending-action checkpoints and incomplete arousal genes; preserve routine
+  feedback on a refused arousal update and identify already accepted sampled
+  feedback. Keep arousal statistics atomic on numerical overflow, and support
+  tiny positive averaging rates and sampling temperatures. Validate nursery
+  receipt plans, sources and readings, and count discarded reset brains and
+  frozen actions. Historical receipts retain their original sources and work
+  limitations; the old-rule control is not equal-work witnessed replay. Issues
+  88 and 122 retain their remaining acceptance requirements.
 - Add the bounded steady-rhythm chamber (`benchmarks/rhythm`) for
   [issue 116](https://github.com/muellerberndt/cadence/issues/116): one
   continuing `Brain.compose` life taught to alternate two actions under constant
