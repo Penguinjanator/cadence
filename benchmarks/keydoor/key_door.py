@@ -113,6 +113,7 @@ def fresh_work() -> dict[str, int]:
         "memory_writes": 0,
         "brains": 0,
         "refused_sweeps": 0,
+        "aborted_forecast_sweeps": 0,
     }
 
 
@@ -165,6 +166,17 @@ class BrainLife:
             return report
 
         brain.learn = counted_learn  # type: ignore[method-assign]
+        forecast = brain._forecast
+        self._forecast_sweeps = 0
+
+        def counted_forecast(*args: Any, **kwargs: Any) -> Any:
+            answer = forecast(*args, **kwargs)
+            settlement = brain.last_settlement
+            assert settlement is not None
+            self._forecast_sweeps += int(settlement["steps"])
+            return answer
+
+        brain._forecast = counted_forecast  # type: ignore[method-assign]
 
     def _count_memory(self, brain: cd.Brain, counter: str) -> None:
         memory = brain.hippocampus
@@ -192,6 +204,7 @@ class BrainLife:
     def act(self, kind: int, holding: bool, reward: float | None, done: bool) -> tuple[int, bool]:
         x = observe(kind, holding, self.pouch)
         brain = self.brain
+        self._forecast_sweeps = 0
         try:
             if self.frozen:
                 action = int(brain.act(x, greedy=True)[0])
@@ -210,6 +223,7 @@ class BrainLife:
                 mode = "aroused" if aroused else "routine"
                 self.work[mode] += 1
                 self.work["sweeps_" + mode] += int(reading["sweeps"])
+                self._forecast_sweeps = 0  # the successful reading already includes this work
                 feedback_sweeps = int(brain.last_learning.get("free_steps", 0))
                 self.work["learning_sweeps"] += int(reading["learning_sweeps"]) - feedback_sweeps
                 self._read(action, reading["temperature"])
@@ -225,8 +239,11 @@ class BrainLife:
             self._read(action, brain.learner.config.temperature)
             return action, True
         except Exception:
+            self.work["aborted_forecast_sweeps"] += self._forecast_sweeps
             self._charge_refusal(brain)
             raise
+        finally:
+            self._forecast_sweeps = 0
 
     def _charge_refusal(self, brain: cd.Brain) -> None:
         settlement = brain.last_settlement
@@ -838,9 +855,10 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
         for row in rows:
             work = row.get("work")
             if work is not None:
-                counters = set(fresh_work()) - {"probe_memory_reads"}
+                new_counters = {"probe_memory_reads", "aborted_forecast_sweeps"}
+                counters = set(fresh_work()) - new_counters
                 if stored["kind"] == SCHEMA:
-                    counters.add("probe_memory_reads")
+                    counters.update(new_counters)
                 if any(type(work[k]) is not int or work[k] < 0 for k in counters):
                     return "work counters must be nonnegative integers"
                 for mode in ("routine", "aroused"):

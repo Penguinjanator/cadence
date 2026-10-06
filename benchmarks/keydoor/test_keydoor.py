@@ -519,3 +519,55 @@ def test_feedback_work_is_charged_when_the_following_action_refuses(protocol, mo
     assert life.brain.last_learning["free_steps"] > 0
     assert life.work["learning_sweeps"] == before + life.brain.last_learning["free_steps"]
     assert life.work["refused_sweeps"] == 1
+
+
+def test_a_completed_routine_forecast_is_charged_if_the_woken_answer_refuses(
+    protocol, monkeypatch, tmp_path
+):
+    genes = {**protocol["arousal"], "youth": 0, "threshold": 0.05}
+    life = keydoor.make_life("live", protocol, 0, genes)
+    life.act(keydoor.FLOOR, False, None, False)
+    assert life.work["routine"] == 1 and not life.brain.arousal.aroused
+    twin = cd.Brain.load(life.brain.save(tmp_path / "before.npz"))
+    forecast_steps = []
+
+    # Both brains run the same real forecast, accept the waking outcome and then refuse
+    # the next answer. The independent twin records the forecast's completed work.
+    forecast = twin._forecast
+
+    def record_forecast(*args, **kwargs):
+        answer = forecast(*args, **kwargs)
+        forecast_steps.append(twin.last_settlement["steps"])
+        return answer
+
+    monkeypatch.setattr(twin, "_forecast", record_forecast)
+    for brain in (life.brain, twin):
+        original = brain.act
+
+        def refuse(*args, brain=brain, original=original, **kwargs):
+            brain.learner.config = replace(brain.learner.config, free_steps=1, tolerance=1e-15)
+            return original(*args, **kwargs)
+
+        monkeypatch.setattr(brain, "act", refuse)
+    with pytest.raises(RuntimeError, match="did not settle"):
+        life.act(keydoor.CHEST, False, 0.0, False)
+    with pytest.raises(RuntimeError, match="did not settle"):
+        twin.live(keydoor.observe(keydoor.CHEST, False, True), reward=[0.0], done=[False])
+    assert life.brain.arousal.aroused and life.brain.hippocampus.writes == 1
+    assert len(forecast_steps) == 1 and forecast_steps[0] > 0
+    assert life.work["aborted_forecast_sweeps"] == sum(forecast_steps)
+    assert life.work["refused_sweeps"] == 1
+    assert life._forecast_sweeps == 0
+    with (
+        np.load(life.brain.save(tmp_path / "after.npz")) as actual,
+        np.load(twin.save(tmp_path / "twin.npz")) as expected,
+    ):
+        assert actual.files == expected.files
+        for name in actual.files:
+            np.testing.assert_array_equal(actual[name], expected[name], err_msg=name)
+
+    # A retry without another outcome must not count the preceding forecast twice.
+    with pytest.raises(RuntimeError, match="did not settle"):
+        life.act(keydoor.CHEST, False, None, False)
+    assert life.work["aborted_forecast_sweeps"] == sum(forecast_steps)
+    assert life.work["refused_sweeps"] == 2

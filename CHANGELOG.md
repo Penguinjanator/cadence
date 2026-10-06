@@ -30,7 +30,8 @@
   random streams, draw food availability independently of actions, include every
   pre-door cut position, measure door openings within the last 50 completed trips,
   probe the actual phase end, record undelivered final feedback and yoked rewards,
-  and count probe memory reads separately. Preserve all historical receipt and
+  count probe memory reads separately, and retain completed forecast work when the
+  following answer refuses. Preserve all historical receipt and
   protocol bytes; corrected runs are not frozen confirmation of that old protocol.
   Verification labels legacy limitations and reporting verifies before rendering.
   No corrected confirmation campaign or passing capability gate accompanies these

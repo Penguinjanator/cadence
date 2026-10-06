@@ -101,8 +101,9 @@ last 50 completed trips. Historical `/1` endpoint probes were taken before trip 
 500, and its opening statistic covered the last 50 keyed door visits, potentially spanning
 a longer period. Historical memory-read counts omitted both saved-copy probes and the
 direct record-forecast recall. Current counts include both, with probe reads separate.
-A successful routine forecast preceding a refused action can still escape the sweep
-ledger, so this instrument is not a complete attempted-work meter.
+Completed routine forecasts preceding a refused action are counted separately in
+`aborted_forecast_sweeps`; `refused_sweeps` counts the failing solve. These are
+algorithmic work counts, not measurements of electrical energy.
 
 ## Historical gates, fixed before each confirmation attempt
 
