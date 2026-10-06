@@ -10,12 +10,18 @@ it explores. ``Brain.live`` runs this loop for a composed brain.
 The law, per outcome of the stream's preceding action::
 
     surprise = log(|error| / (tolerance * usual + floor * scale))   when positive, else 0
-    want     = clip((longrun - recent) / scale, 0, 1)
+    want     = max(clip((longrun - recent) / scale, 0, 1), clip((need - recent) / need, 0, 1))
     level    = decay * level + (1 - decay) * (surprise + want)
 
 ``error`` is the temporal-difference error against the forecast made before the outcome;
 ``usual`` is its running size; ``recent`` and ``longrun`` are the running reward at a
-fast and a slow rate; ``scale`` is the spread of the outcomes the brain has learned from.
+fast and a slow rate; ``scale`` is the spread of the outcomes the brain has learned from;
+``need`` is the reward per moment the body requires, and the share of it the recent reward
+leaves unmet is a want of its own, so a life that never paid, or stopped paying for good,
+still wants. The need's want is measured against the need and not against the spread,
+because a reward that comes rarely has a spread far above its mean: a brain fed once in
+``L`` moments that loses its food falls short of its long-run reward by only ``1 / sqrt(L)``
+spreads, while it is short of its whole need. A need of zero has no want of its own.
 A brain with an associative memory also forecasts the outcome of the action it chose, from
 the record it holds for that action in that situation; the error of that record against
 the outcome is a second surprise with its own usual size, and the moment's surprise is the
@@ -27,10 +33,11 @@ Only the outcome of the brain's own best guess can surprise it and enters what i
 to: what an explored action brings is play. The brain is aroused while
 ``level >= threshold`` and during its first ``youth`` moments, and an aroused brain
 samples at ``1 + heat * want`` times its policy's temperature. The law is unchanged when
-rewards and errors are multiplied by one positive number, away from its absolute
+rewards, errors and the need are multiplied by one positive number, away from its absolute
 ``1e-12`` surprise guard. Reward shifts also preserve the law when the first learned
-outcome is the brain's own best guess: this establishes the reward reference before
-its spread forms.
+outcome is the brain's own best guess, which establishes the reward reference before
+its spread forms, and the need is zero: a need is a level of reward, and shifting the
+rewards changes what is unmet.
 Explored outcomes before that reference measure their spread from zero.
 
 Every constant of the law is a gene of ``ArousalConfig``. The values here are hand-set
@@ -88,6 +95,7 @@ class ArousalConfig:
     youth: int = 100  # the first moments of a life are aroused
     value_surprise: float = 1.0  # weight of the surprise at a contradicted value forecast
     record_surprise: float = 0.0  # weight of the surprise at a contradicted action record
+    need: float = 0.0  # the reward per moment the body requires; the unmet share is a want
 
     def __post_init__(self) -> None:
         _real("threshold", self.threshold, low=0.0)
@@ -102,6 +110,7 @@ class ArousalConfig:
         _real("heat", self.heat, low=0.0)
         _real("value_surprise", self.value_surprise, low=0.0)
         _real("record_surprise", self.record_surprise, low=0.0)
+        _real("need", self.need, low=0.0)
         if (
             isinstance(self.youth, (bool, np.bool_))
             or not isinstance(self.youth, (int, np.integer))
@@ -119,8 +128,9 @@ class ArousalConfig:
         """The gene space of the law for ``cadence.genes``; mutate ``to_dict()`` over it.
 
         ``fast`` at ``slow`` removes the want, a large ``tolerance`` removes surprise,
-        ``heat`` at zero removes the wider exploration and either surprise weight at zero
-        removes that channel: the controls are inside the space. A mutation that leaves
+        ``heat`` at zero removes the wider exploration, either surprise weight at zero
+        removes that channel and ``need`` at zero removes the need's want: the controls are
+        inside the space. A mutation that leaves
         ``fast`` below ``slow`` is refused at construction."""
         return {
             "threshold": ("log", 0.3, 0.02, 2.0),
@@ -133,6 +143,7 @@ class ArousalConfig:
             "youth": ("int", 0, 1000),
             "value_surprise": ("linear", 0.3, 0.0, 2.0),
             "record_surprise": ("linear", 0.3, 0.0, 2.0),
+            "need": ("linear", 0.02, 0.0, 1.0),
         }
 
 
@@ -202,13 +213,20 @@ class Arousal:
         """The running size of the error of the action records' forecasts."""
         return self._reading(self._usual_record, self.config.slow, self.records)
 
+    def _want(self, longrun: float, recent: float, scale: float) -> float:
+        """The shortfall of the recent reward below the long-run reward in reward scales, or
+        below the body's need as a share of that need, whichever is larger."""
+        want = 0.0 if scale <= 0.0 else float(np.clip((longrun - recent) / scale, 0.0, 1.0))
+        need = self.config.need
+        if need > 0.0:
+            want = max(want, float(np.clip((need - recent) / need, 0.0, 1.0)))
+        return want
+
     @property
     def want(self) -> float:
-        """The shortfall of the recent reward below the long-run reward, in reward scales."""
-        scale = self.scale
-        if scale <= 0.0:
-            return 0.0
-        return float(np.clip((self.longrun - self.recent) / scale, 0.0, 1.0))
+        """The shortfall of the recent reward below the long-run reward, in reward scales,
+        or below the body's need, as a share of the need."""
+        return self._want(self.longrun, self.recent, self.scale)
 
     @property
     def aroused(self) -> bool:
@@ -278,11 +296,7 @@ class Arousal:
                 if record_error > unit and not first_record:
                     surprise = max(surprise, c.record_surprise * _log_ratio(record_error, unit))
         expected = self._reading(longrun, c.slow, outcomes)
-        want = (
-            float(np.clip((expected - self._reading(recent, c.fast, outcomes)) / scale, 0.0, 1.0))
-            if scale > 0.0
-            else 0.0
-        )
+        want = self._want(expected, self._reading(recent, c.fast, outcomes), scale)
         level = c.decay * self.level + (1.0 - c.decay) * (surprise + want)
         if learned or self.age < c.youth or level >= c.threshold:
             spreads += 1

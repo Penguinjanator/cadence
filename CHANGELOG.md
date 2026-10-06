@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+- `ArousalConfig` gains `need`, the reward per moment the body requires. The share of
+  the need that the recent reward leaves unmet is a want of its own, measured against
+  the need rather than against the spread of outcomes: a reward that comes once in `L`
+  moments has a mean of `1 / L` and a spread near `1 / sqrt(L)`, so a brain that loses
+  it falls short of its long-run reward by only `1 / sqrt(L)` spreads and, with the
+  founders' threshold, is not roused, while it is short of its whole need. A need never
+  habituates and a life that never paid wants from its first moment. The founder is
+  zero, which leaves the law and every released result unchanged; the gene is in
+  `ArousalConfig.space()` with zero inside it.
+- Add the key-door nursery (`benchmarks/keydoor`), the delayed key-door reward chamber of
+  [issue 111](https://github.com/muellerberndt/cadence/issues/111), roadmap row 07: one
+  continuing life walks a 14-cell corridor (floor, chest, lamp, 2, 5 or 10 levers varying by
+  one, door) once per trip, +1 at the door with the key, a cost of 0.25 for touching anything
+  without one, the key in the chest for 500 trips and then in the lamp, one trip in twenty
+  cut before the door with `done` clear. The `live` arm at a declared operating point is
+  measured against the always-learning loop, zero eligibility, yoked rewards, frozen, blind
+  (no pouch sense), a tabular Q(lambda) with the same information and uniform random, with
+  behaviour and base-policy probabilities per cell and pouch state, greedy probes on saved
+  copies, the complete work ledger and source-bound receipts. The development seeds
+  established three findings recorded in its README: a want measured in reward spreads is
+  diluted by a sparse reward (the `need` gene above), punished exploration drives the two
+  motor units to the same saturated answer for every cell (the latch of `docs/reward.md`,
+  now in a continuing life), and the composed critic, whose step is divided by its trace
+  energy, stays flat over a 14-cell trip so that only the actor's own eligibility carries
+  the door's credit; the chamber's point raises the critic's rate to 5.0 with the
+  eligibility decay and discount at 0.95, the composed values as controls. The frozen
+  protocol gates delays 2 and 5 and reports delay 10, which the brain does not acquire and
+  the tabular learner does.
+
 ## 0.75.0 — 2026-10-06
 
 - Add `Brain.live` and arousal for one continuing stream

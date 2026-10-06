@@ -227,7 +227,10 @@ contradicts the forecast it made before acting is a surprise; the brain forecast
 with the critic's value of the situation and, through a gene that the founders
 weigh at zero, with the record it holds for the action it chose. A reward that
 stays below what its life usually pays is a want, which also covers a failure it
-predicts correctly. An aroused brain samples, at a temperature the want raises,
+predicts correctly; so is a reward below the body's `need`, a gene the founders set
+at zero, measured as the share of the need left unmet, which a rare reward's small
+mean cannot dilute and which never habituates. An aroused brain samples, at a
+temperature the want raises,
 keeps eligibility, learns from every outcome and writes memory. The outcome that
 woke it is written to its memory at once. Only the outcomes of its own greedy
 choices enter its mood: what a sampled, non-greedy action brings teaches without

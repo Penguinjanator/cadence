@@ -871,24 +871,31 @@ that recursive benefit or automatic reflective behavior has been learned.
 The arousal of one continuing stream: when a composed brain leaves routine and how it
 returns. `Brain.live` runs it; the classes can also be used alone.
 
-- `ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05, slow=0.005, heat=2.0, youth=100, value_surprise=1.0, record_surprise=0.0)`:
+- `ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05, slow=0.005, heat=2.0, youth=100, value_surprise=1.0, record_surprise=0.0, need=0.0)`:
   the genes of the law, with the hand-set founders as defaults. `to_dict()` returns them;
   `ArousalConfig.space()` declares their space for [`genes`](evolution.md#any-genome).
-  `fast` at `slow` removes the want, a large `tolerance` removes surprise, `heat` at
-  zero removes the wider exploration, and each surprise weight at zero removes its
-  channel. Construction rejects values outside their ranges and `fast < slow`.
+  `fast` at `slow` removes the long-run want, a large `tolerance` removes surprise, `heat`
+  at zero removes the wider exploration, each surprise weight at zero removes its
+  channel, and `need` at zero removes the need's want. Construction rejects values
+  outside their ranges, a negative `need` and `fast < slow`.
 - `Arousal(config=None)`: the state.
   `outcome(error, reward, *, own=True, learned=True, record_error=None) -> (surprise, want)`
   takes the unsigned temporal-difference error of one outcome and its reward and applies
 
   ```text
   surprise = log(error / (tolerance * usual + floor * scale))   when positive, else 0
-  want     = clip((longrun - recent) / scale, 0, 1)
+  want     = max(clip((longrun - recent) / scale, 0, 1), clip((need - recent) / need, 0, 1))
   level    = decay * level + (1 - decay) * (surprise + want)
   ```
 
   where `usual` is the running size of the error and `recent` and `longrun` the running
-  reward at the `fast` and `slow` rates, corrected for their short history. `own` says
+  reward at the `fast` and `slow` rates, corrected for their short history. `need` is the
+  reward per moment the body requires; the share of it the recent reward leaves unmet is
+  a want of its own, measured against the need and not against the spread, because a
+  reward that comes once in `L` moments has a spread near `1 / sqrt(L)` while its mean is
+  `1 / L`: a brain that loses such a reward falls short of its long-run reward by only
+  `1 / sqrt(L)` spreads, and is short of its whole need. A need never habituates; a life
+  that never paid wants from its first moment. `own` says
   the action was the brain's own best guess: only such an outcome can surprise it and
   enters `usual`, `recent` and `longrun`; the outcome of an explored action leaves them
   alone and the level carries the present want forward. `scale` is the spread of the
@@ -901,7 +908,9 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   reference before any explored outcome enters the spread. Before that reference
   exists, explored rewards are measured against zero, so the reward origin matters.
   These are properties of supplied scalar outcomes, not a reward-transformation
-  guarantee for the complete learning brain. A stream's first own outcome is no surprise.
+  guarantee for the complete learning brain; the need is a level of reward, so scaling
+  preserves the law when the need is scaled with the rewards, and a shift changes what
+  is unmet. A stream's first own outcome is no surprise.
   `record_error` is the unsigned error of the record the brain held for its chosen
   action against the outcome, when it held one; it has its own running size,
   `usual_record`, and its own count, `records`, and the moment's surprise is the larger

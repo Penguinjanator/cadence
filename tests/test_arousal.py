@@ -100,6 +100,43 @@ def test_reward_below_the_long_run_is_a_want_that_habituates():
     assert arousal.heat >= 1.0
 
 
+def test_a_need_is_a_want_of_its_own_that_a_sparse_reward_meets_and_that_never_habituates():
+    """Fed once in fourteen moments, a brain's income is 1/14 per moment while its reward
+    spread is near 1/sqrt(14): losing the food leaves the long-run want below the
+    threshold, and it habituates; the need's want is the unmet share of the need."""
+    content = cd.Arousal(cd.ArousalConfig(youth=0))
+    needy = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04))
+    assert needy.want == 1.0 and needy.heat == 3.0  # never paid: the whole need is unmet
+    assert content.want == 0.0
+    peaks = {}
+    for arousal in (content, needy):
+        for moment in range(2800):  # a youth that learns, then the same pay in routine
+            young = moment < 1400
+            arousal.outcome(0.1 if young else 0.0, float(moment % 14 == 0), learned=young)
+        assert arousal.want < 0.1 and not arousal.aroused  # the need is met by the income
+        wants = []
+        for _ in range(100):  # the food stops; every forecast of nothing is right
+            arousal.outcome(0.0, 0.0, learned=False)
+            wants.append(arousal.want)
+        peaks[arousal] = max(wants)
+    assert peaks[content] < 1 / np.sqrt(14) and not content.aroused  # below the threshold
+    assert needy.want > 0.95 and needy.heat > 2.9 and needy.aroused
+    for _ in range(3000):
+        content.outcome(0.0, 0.0, learned=False)
+        needy.outcome(0.0, 0.0, learned=False)
+    assert content.want < 0.05 and not content.aroused  # the poorer life became usual
+    assert needy.want == 1.0 and needy.aroused  # a need is a level: it stays unmet
+    scaled = cd.Arousal(cd.ArousalConfig(youth=0, need=40 * 0.04))
+    plain = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04))
+    for moment in range(300):
+        a = plain.outcome(0.1, float(moment % 14 == 0), learned=moment < 200)
+        b = scaled.outcome(4.0, 40.0 * float(moment % 14 == 0), learned=moment < 200)
+        assert a == pytest.approx(b, rel=1e-9, abs=1e-12)
+    with pytest.raises(ValueError):
+        cd.ArousalConfig(need=-0.1)
+    assert "need" in cd.ArousalConfig.space() and cd.ArousalConfig().need == 0.0
+
+
 def test_the_law_is_unchanged_by_the_scale_and_the_zero_of_reward():
     rng = np.random.default_rng(3)
     plain = cd.Arousal(cd.ArousalConfig(youth=0))
