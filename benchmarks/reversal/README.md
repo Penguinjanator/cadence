@@ -44,7 +44,7 @@ Every arm of a seed lives the same odour sequence:
 | `memory-only` | the `live` brain with its actor's rates at zero: associative memory and critic learn, the graph's policy does not |
 | `graph-only` | the `live` brain without its associative memory: the graph's reward learning alone |
 | `frozen` | the `live` brain after rule A, answering greedily and receiving no outcome |
-| `replay` | the `live` brain paid by the old rule A after the change: a counterfactual-world control with the same number of trials; no retained-record replay or equal-work matching |
+| `replay` | the `live` brain after rule A, answering greedily and taking no outcome from the world, while its own witnessed records of rule A are presented to its memory again, one per trial: equal presentations on old evidence |
 | `reset` | a newborn `live` brain at every rule change |
 | `tabular` | epsilon-greedy tabular Q-learning with the same odour, action and reward; alpha 1.0 and epsilon 0.1, selected on the development seeds |
 | `random` | uniform random actions |
@@ -57,20 +57,22 @@ defaults are 3.0, 0.05, 1.0 and 0.05. Its selection on the development seeds is 
 Readings per rule: the share of optimal executed actions in the last 100 trials; the lag,
 the first trial from which the next 40 executed actions are at least 90% optimal; the
 greedy choice and the policy's approach probability per odour of a saved and reloaded
-copy every 25 trials; how often each odour was met and approached; the first executed
-approach at the newly rewarded odour and the number of approaches executed there until
-the greedy choice turned, read on a copy after each of the first 20 of them, which
-separate too few contradicting witnesses from a failure to revise after them; whether the
-stable pair stayed right at the probes; the share of aroused moments; and the free-solve
-sweeps per moment in each mode with the eligibility and feedback sweeps of aroused
-moments. The copies are read and the living brain is not: a life gives the same executed
-actions with and without its probes. A refused answer raises and the life is recorded as
-crashed.
-
-The approach probabilities are probes of the actor's base-temperature policy on a
-saved copy. They are not the executed behavior probabilities of `live`: routine uses
-the greedy choice and aroused sampling can use a raised temperature. Per-action
-behavior probabilities are not retained by this instrument.
+copy every 25 trials; the probability of approaching each odour under the behaviour that
+acted (the greedy choice with certainty in routine, heated sampling when aroused) and
+under the base policy, read from the living brain's own settled state at every trial,
+with the probability of each executed action; how often each odour was met and
+approached; the first executed approach at the newly rewarded odour and the number of
+approaches executed there until the greedy choice turned, read on a copy after each of
+the first 20 of them, which separate too few contradicting witnesses from a failure to
+revise after them; whether the stable pair stayed right at the probes; the share of
+aroused moments; and the work of the life. The work ledger counts moments and settling
+sweeps per mode, eligibility and feedback sweeps, probes with their sweeps and checkpoint
+files, reads and writes of the associative memory, replay presentations, brains built and
+the sweeps of a refused attempt, and records the wall time of a moment in each mode. The
+probe copies are read and the living brain is not: a life gives the same executed actions
+with and without its probes, and reading a probability from the settled state changes
+nothing. A refused answer raises; the life is recorded as crashed with the work it had
+done.
 
 ## Gates, fixed before the confirmation run
 
@@ -81,7 +83,7 @@ aroused; at each of those exposures the median reversal lag is at most 150 trial
 that never reverses counting as beyond it. Exposure 100 ends inside the youth and is
 reported without a gate. [protocol.json](protocol.json) holds the gates, the seeds and
 every setting. It was committed and pushed before its confirmation seeds were run. It is
-the chamber's second freeze; [the first](#the-first-freeze) is recorded below.
+the chamber's third freeze; [the first two](#the-earlier-freezes) are recorded below.
 
 ## Run and verify
 
@@ -93,7 +95,7 @@ python -m pytest -q benchmarks/reversal
 ```
 
 The first command runs the frozen protocol: ten arms, five exposures and ten
-confirmation seeds, 500 lives, in about six minutes on nine laptop cores. `--arms`,
+confirmation seeds, 500 lives, in about eight minutes on nine laptop cores. `--arms`,
 `--seeds` and `--exposures` select a part. `--genes`, `--point`, `--reliability`,
 `--payoff` and `--jitter` override the arousal genes, the operating point and the world,
 and mark the receipt `frozen_protocol: false`; a `null` in `--point` leaves that setting
@@ -110,147 +112,137 @@ tables below. `results/` keeps the receipts quoted here. The guards run short li
 the `live` arm and its controls, the checkpoint continuation during a reversal, the
 independence of a life from its probes, the gate arithmetic and the receipt's custody.
 
-## Historical results on ten fresh seeds, 2026-10-05
+## Results on ten fresh seeds, 2026-10-06
 
-Receipt: `results/confirmation-2026-10-05.json.gz`. Protocol SHA-256
-`0a5f2b4e6c2e2767aebc57588caf3e338a0348f5ec14ab099f637413f09652c4`, frozen; seeds 300 to
-309; cadence 0.74.0 at commit
-[`9b66228`](https://github.com/muellerberndt/cadence/commit/9b66228), NumPy 2.5.3,
-Python 3.13.0, macOS arm64. All
-500 lives completed and none refused an answer. **The gates passed.** Of the 40 gated
-lives of the `live` arm, 40 acquired rule A, 39 reversed, 38 returned, 39 kept the stable
-pair and 40 returned to routine; the median reversal lags were 22.5, 29, 20.5 and 22
-trials at exposures of 300, 1,000, 3,000 and 10,000. Three lives missed a reading: one at
-exposure 1,000 never approached the moved sugar and ended both later rules avoiding the
-reversal pair; one at exposure 1,000 reversed and returned and ended the last rule at
-0.87; one at exposure 10,000 ended every rule at 1.00 and had the stable pair right at
-79% of the probes of a slow return.
-
-The audit corrections of 2026-10-06 preserve these receipt bytes and their source
-identity. They pass historical `--verify`; `--current` rejects them against changed
-sources. The tables below describe the recorded implementation. A subsequent run on
-these seeds is regression evidence, not a new fresh-seed confirmation. The audit also
-corrected accounting that omitted frozen answers and the first two brains of the reset
-arm; their historical work counters remain incomplete and must not be used for a cost
-comparison.
+Receipt: `results/confirmation-2026-10-06.json.gz`. Protocol SHA-256
+`2f60a49656f101f7a2489a99b98c1fc724178dd2e29100f3285ac431b45eab2c`, frozen; seeds 500 to
+509; cadence 0.74.0 at commit
+[`45e48cf`](https://github.com/muellerberndt/cadence/commit/45e48cf), NumPy 2.5.3,
+Python 3.13.0, macOS arm64. All 500 lives completed and none refused an answer. **The
+gates passed.** Of the 40 gated lives of the `live` arm, 40 acquired rule A, 39 reversed,
+39 returned, 40 kept the stable pair and 40 returned to routine; the median reversal lags
+were 15.5, 24.5, 30 and 17 trials at exposures of 300, 1,000, 3,000 and 10,000. One life,
+at exposure 10,000, never approached the moved sugar: aroused for 16% of rule B, it
+approached that odour with a behaviour probability of 0.017 over the rule and ended both
+later rules avoiding the reversal pair.
 
 ### Rule A: optimal share of the last 100 actions, mean (minimum)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 0.75 (0.67) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `step` | 0.75 (0.67) | 0.89 (0.81) | 0.96 (0.77) | 0.98 (0.96) | 0.99 (0.97) |
-| `defaults` | 0.49 (0.42) | 0.50 (0.43) | 0.50 (0.44) | 0.48 (0.42) | 0.50 (0.41) |
-| `memory-only` | 0.73 (0.65) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `graph-only` | 0.47 (0.39) | 0.64 (0.45) | 0.64 (0.45) | 0.73 (0.46) | 0.74 (0.44) |
-| `frozen` | 0.75 (0.67) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `replay` | 0.75 (0.67) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `reset` | 0.75 (0.67) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `tabular` | 0.69 (0.52) | 0.90 (0.71) | 0.95 (0.92) | 0.95 (0.90) | 0.94 (0.89) |
-| `random` | 0.48 (0.39) | 0.53 (0.48) | 0.50 (0.42) | 0.51 (0.41) | 0.47 (0.38) |
+| `live` | 0.76 (0.64) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (0.98) |
+| `step` | 0.76 (0.64) | 0.85 (0.76) | 0.97 (0.90) | 0.93 (0.43) | 0.98 (0.96) |
+| `defaults` | 0.53 (0.45) | 0.53 (0.46) | 0.49 (0.45) | 0.51 (0.47) | 0.48 (0.41) |
+| `memory-only` | 0.75 (0.63) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
+| `graph-only` | 0.52 (0.46) | 0.60 (0.49) | 0.63 (0.45) | 0.75 (0.50) | 0.80 (0.45) |
+| `frozen` | 0.76 (0.64) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (0.98) |
+| `replay` | 0.76 (0.64) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (0.98) |
+| `reset` | 0.76 (0.64) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (0.98) |
+| `tabular` | 0.64 (0.42) | 0.91 (0.68) | 0.96 (0.92) | 0.95 (0.92) | 0.95 (0.92) |
+| `random` | 0.49 (0.40) | 0.49 (0.43) | 0.49 (0.44) | 0.52 (0.43) | 0.49 (0.42) |
 
 ### Rule B: optimal share of the last 100 actions, mean (minimum)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 1.00 (1.00) | 1.00 (1.00) | 0.97 (0.73) | 1.00 (1.00) | 1.00 (1.00) |
-| `step` | 0.94 (0.71) | 0.94 (0.76) | 0.91 (0.75) | 0.84 (0.67) | 0.86 (0.43) |
-| `defaults` | 0.47 (0.39) | 0.49 (0.41) | 0.50 (0.42) | 0.52 (0.45) | 0.49 (0.43) |
-| `memory-only` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 0.98 (0.77) |
-| `graph-only` | 0.50 (0.16) | 0.55 (0.40) | 0.58 (0.34) | 0.64 (0.46) | 0.65 (0.47) |
-| `frozen` | 0.49 (0.43) | 0.49 (0.45) | 0.51 (0.43) | 0.52 (0.45) | 0.52 (0.42) |
-| `replay` | 0.49 (0.43) | 0.49 (0.45) | 0.51 (0.43) | 0.52 (0.45) | 0.52 (0.42) |
-| `reset` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `tabular` | 0.96 (0.91) | 0.94 (0.87) | 0.95 (0.93) | 0.95 (0.89) | 0.96 (0.91) |
-| `random` | 0.52 (0.43) | 0.49 (0.42) | 0.48 (0.40) | 0.51 (0.38) | 0.46 (0.41) |
+| `live` | 0.97 (0.71) | 1.00 (0.99) | 1.00 (1.00) | 1.00 (1.00) | 0.97 (0.67) |
+| `step` | 0.95 (0.86) | 0.97 (0.91) | 0.95 (0.79) | 0.87 (0.71) | 0.75 (0.47) |
+| `defaults` | 0.50 (0.42) | 0.50 (0.42) | 0.51 (0.39) | 0.51 (0.42) | 0.51 (0.45) |
+| `memory-only` | 0.97 (0.71) | 1.00 (0.98) | 1.00 (1.00) | 0.99 (0.95) | 1.00 (1.00) |
+| `graph-only` | 0.54 (0.39) | 0.56 (0.41) | 0.56 (0.46) | 0.58 (0.42) | 0.55 (0.49) |
+| `frozen` | 0.49 (0.42) | 0.51 (0.43) | 0.50 (0.42) | 0.52 (0.46) | 0.47 (0.39) |
+| `replay` | 0.49 (0.42) | 0.51 (0.43) | 0.50 (0.42) | 0.52 (0.46) | 0.47 (0.39) |
+| `reset` | 1.00 (1.00) | 1.00 (0.97) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
+| `tabular` | 0.96 (0.92) | 0.95 (0.92) | 0.94 (0.88) | 0.95 (0.92) | 0.95 (0.93) |
+| `random` | 0.48 (0.38) | 0.48 (0.40) | 0.51 (0.44) | 0.51 (0.45) | 0.50 (0.41) |
 
 ### Rule A again: optimal share of the last 100 actions, mean (minimum)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 0.98 (0.77) | 1.00 (1.00) | 0.97 (0.82) | 1.00 (1.00) | 1.00 (1.00) |
-| `step` | 0.90 (0.62) | 0.93 (0.66) | 0.97 (0.89) | 0.93 (0.60) | 0.89 (0.57) |
-| `defaults` | 0.48 (0.39) | 0.49 (0.41) | 0.51 (0.45) | 0.49 (0.43) | 0.51 (0.45) |
-| `memory-only` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 0.96 (0.64) | 0.97 (0.74) |
-| `graph-only` | 0.64 (0.39) | 0.56 (0.41) | 0.56 (0.44) | 0.63 (0.42) | 0.64 (0.45) |
+| `live` | 0.97 (0.72) | 1.00 (0.99) | 1.00 (1.00) | 1.00 (1.00) | 0.98 (0.76) |
+| `step` | 0.96 (0.78) | 0.96 (0.78) | 0.98 (0.96) | 0.84 (0.37) | 0.82 (0.46) |
+| `defaults` | 0.51 (0.45) | 0.49 (0.34) | 0.50 (0.45) | 0.53 (0.45) | 0.51 (0.44) |
+| `memory-only` | 0.97 (0.72) | 1.00 (0.99) | 1.00 (1.00) | 0.99 (0.94) | 1.00 (1.00) |
+| `graph-only` | 0.61 (0.49) | 0.59 (0.49) | 0.54 (0.38) | 0.62 (0.45) | 0.68 (0.46) |
 | `frozen` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
 | `replay` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `reset` | 1.00 (1.00) | 1.00 (0.98) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `tabular` | 0.96 (0.93) | 0.96 (0.95) | 0.96 (0.92) | 0.95 (0.93) | 0.95 (0.92) |
-| `random` | 0.50 (0.40) | 0.48 (0.40) | 0.51 (0.41) | 0.47 (0.41) | 0.51 (0.44) |
+| `reset` | 1.00 (1.00) | 1.00 (0.97) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
+| `tabular` | 0.96 (0.93) | 0.95 (0.93) | 0.94 (0.92) | 0.96 (0.91) | 0.95 (0.93) |
+| `random` | 0.50 (0.37) | 0.52 (0.41) | 0.49 (0.41) | 0.52 (0.45) | 0.49 (0.43) |
 
 ### Reversal lag in trials, median (lives that reversed / lives)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 33 (10/10) | 22 (10/10) | 29 (10/10) | 20 (10/10) | 22 (10/10) |
-| `step` | 58 (10/10) | 52 (10/10) | 155 (9/10) | 218 (7/10) | 139 (7/10) |
+| `live` | 41 (10/10) | 15 (10/10) | 24 (10/10) | 30 (10/10) | 16 (9/10) |
+| `step` | 74 (10/10) | 63 (10/10) | 139 (10/10) | 212 (7/10) | 168 (6/10) |
 | `defaults` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
-| `memory-only` | 31 (10/10) | 20 (10/10) | 19 (10/10) | 20 (10/10) | 23 (9/10) |
-| `graph-only` | none (0/10) | 254 (1/10) | 415 (3/10) | 152 (2/10) | 355 (3/10) |
+| `memory-only` | 33 (10/10) | 14 (10/10) | 26 (10/10) | 31 (10/10) | 21 (10/10) |
+| `graph-only` | none (0/10) | 391 (1/10) | none (0/10) | 387 (1/10) | none (0/10) |
 | `frozen` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 | `replay` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
-| `reset` | 74 (10/10) | 77 (10/10) | 65 (10/10) | 53 (10/10) | 70 (10/10) |
-| `tabular` | 60 (10/10) | 26 (10/10) | 46 (10/10) | 30 (10/10) | 68 (10/10) |
+| `reset` | 71 (10/10) | 79 (10/10) | 85 (10/10) | 75 (10/10) | 69 (10/10) |
+| `tabular` | 123 (10/10) | 57 (10/10) | 92 (10/10) | 53 (10/10) | 39 (10/10) |
 | `random` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 
 ### Return lag in trials, median (lives that returned / lives)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 23 (9/10) | 17 (10/10) | 24 (9/10) | 19 (10/10) | 29 (10/10) |
-| `step` | 158 (9/10) | 97 (10/10) | 118 (10/10) | 185 (9/10) | 148 (8/10) |
+| `live` | 20 (10/10) | 32 (10/10) | 15 (10/10) | 24 (10/10) | 19 (10/10) |
+| `step` | 23 (10/10) | 61 (10/10) | 80 (10/10) | 353 (7/10) | 118 (6/10) |
 | `defaults` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
-| `memory-only` | 22 (10/10) | 24 (10/10) | 24 (10/10) | 15 (10/10) | 20 (10/10) |
-| `graph-only` | 333 (3/10) | 254 (2/10) | 305 (4/10) | 510 (3/10) | 91 (3/10) |
+| `memory-only` | 17 (10/10) | 26 (10/10) | 19 (10/10) | 27 (10/10) | 21 (10/10) |
+| `graph-only` | 353 (1/10) | 204 (2/10) | 28 (1/10) | 138 (2/10) | 35 (3/10) |
 | `frozen` | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) |
 | `replay` | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) |
-| `reset` | 76 (10/10) | 77 (10/10) | 72 (10/10) | 66 (10/10) | 60 (10/10) |
-| `tabular` | 71 (10/10) | 53 (10/10) | 89 (10/10) | 50 (10/10) | 76 (10/10) |
+| `reset` | 82 (10/10) | 70 (10/10) | 78 (10/10) | 76 (10/10) | 72 (10/10) |
+| `tabular` | 51 (10/10) | 59 (10/10) | 40 (10/10) | 50 (10/10) | 21 (10/10) |
 | `random` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 
 ### Greedy choices after the reversal: first of two consecutive probes with every odour right, median trial (lives / lives)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 25 (10/10) | 37 (10/10) | 25 (9/10) | 25 (10/10) | 25 (10/10) |
-| `step` | 25 (10/10) | 50 (10/10) | 187 (8/10) | 150 (4/10) | 237 (6/10) |
-| `defaults` | none (0/10) | 525 (1/10) | 125 (1/10) | none (0/10) | none (0/10) |
-| `memory-only` | 50 (10/10) | 25 (10/10) | 25 (10/10) | 25 (10/10) | 25 (9/10) |
-| `graph-only` | none (0/10) | none (0/10) | 400 (1/10) | 175 (1/10) | 350 (1/10) |
+| `live` | 50 (9/10) | 25 (10/10) | 25 (10/10) | 50 (10/10) | 25 (9/10) |
+| `step` | 25 (10/10) | 37 (10/10) | 150 (9/10) | 225 (5/10) | 350 (4/10) |
+| `defaults` | 300 (3/10) | 100 (3/10) | 225 (1/10) | none (0/10) | none (0/10) |
+| `memory-only` | 50 (9/10) | 25 (10/10) | 37 (10/10) | 50 (10/10) | 25 (10/10) |
+| `graph-only` | none (0/10) | 400 (1/10) | none (0/10) | none (0/10) | none (0/10) |
 | `frozen` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 | `replay` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 | `reset` | 25 (10/10) | 25 (10/10) | 25 (10/10) | 25 (10/10) | 25 (10/10) |
-| `tabular` | 112 (10/10) | 50 (10/10) | 87 (10/10) | 50 (10/10) | 100 (10/10) |
+| `tabular` | 137 (10/10) | 75 (10/10) | 137 (10/10) | 62 (10/10) | 62 (10/10) |
 | `random` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 
 ### First executed approach at the new sugar odour after the reversal, median trial (lives / lives)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 23 (10/10) | 18 (10/10) | 20 (9/10) | 24 (10/10) | 20 (10/10) |
-| `step` | 8 (10/10) | 37 (10/10) | 85 (9/10) | 185 (6/10) | 57 (7/10) |
-| `defaults` | 11 (9/10) | 2 (7/10) | 10 (7/10) | 185 (8/10) | 2 (8/10) |
-| `memory-only` | 28 (10/10) | 17 (10/10) | 18 (10/10) | 21 (10/10) | 21 (9/10) |
-| `graph-only` | 21 (5/10) | 9 (6/10) | 6 (6/10) | 23 (6/10) | 17 (6/10) |
+| `live` | 35 (9/10) | 23 (10/10) | 22 (10/10) | 30 (10/10) | 12 (9/10) |
+| `step` | 8 (10/10) | 27 (10/10) | 104 (9/10) | 383 (7/10) | 129 (7/10) |
+| `defaults` | 4 (9/10) | 6 (7/10) | 5 (10/10) | 3 (9/10) | 3 (7/10) |
+| `memory-only` | 37 (9/10) | 18 (10/10) | 24 (10/10) | 30 (10/10) | 18 (10/10) |
+| `graph-only` | 4 (9/10) | 17 (9/10) | 11 (9/10) | 20 (8/10) | 15 (8/10) |
 | `frozen` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
-| `replay` | 69 (1/10) | 409 (1/10) | none (0/10) | 286 (1/10) | none (0/10) |
-| `reset` | 2 (10/10) | 9 (10/10) | 7 (10/10) | 7 (10/10) | 3 (10/10) |
-| `tabular` | 70 (10/10) | 38 (10/10) | 65 (10/10) | 38 (10/10) | 81 (10/10) |
-| `random` | 6 (10/10) | 3 (10/10) | 1 (10/10) | 12 (10/10) | 3 (10/10) |
+| `replay` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
+| `reset` | 2 (10/10) | 2 (10/10) | 4 (10/10) | 2 (10/10) | 4 (10/10) |
+| `tabular` | 77 (10/10) | 60 (10/10) | 119 (10/10) | 61 (10/10) | 49 (10/10) |
+| `random` | 5 (10/10) | 5 (10/10) | 6 (10/10) | 3 (10/10) | 5 (10/10) |
 
 ### Policy's approach probability at the new sugar odour when the rule turns, median (minimum)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 0.268 (0.174) | 0.251 (0.131) | 0.266 (0.167) | 0.238 (0.118) | 0.215 (0.078) |
-| `step` | 0.270 (0.174) | 0.103 (0.043) | 0.023 (0.014) | 0.009 (0.008) | 0.007 (0.006) |
-| `defaults` | 0.012 (0.005) | 0.008 (0.004) | 0.162 (0.004) | 0.005 (0.004) | 0.501 (0.004) |
-| `memory-only` | 0.383 (0.326) | 0.378 (0.322) | 0.384 (0.328) | 0.381 (0.337) | 0.373 (0.327) |
-| `graph-only` | 0.402 (0.241) | 0.376 (0.245) | 0.385 (0.260) | 0.328 (0.241) | 0.298 (0.177) |
-| `frozen` | 0.268 (0.174) | 0.251 (0.131) | 0.266 (0.167) | 0.238 (0.118) | 0.215 (0.078) |
-| `replay` | 0.268 (0.174) | 0.251 (0.131) | 0.266 (0.167) | 0.238 (0.118) | 0.215 (0.078) |
-| `reset` | 0.505 (0.394) | 0.511 (0.393) | 0.509 (0.383) | 0.516 (0.383) | 0.510 (0.356) |
+| `live` | 0.318 (0.153) | 0.321 (0.194) | 0.332 (0.115) | 0.319 (0.161) | 0.315 (0.120) |
+| `step` | 0.318 (0.153) | 0.155 (0.036) | 0.023 (0.009) | 0.009 (0.008) | 0.006 (0.006) |
+| `defaults` | 0.462 (0.004) | 0.494 (0.005) | 0.763 (0.004) | 0.995 (0.004) | 0.995 (0.004) |
+| `memory-only` | 0.425 (0.165) | 0.415 (0.207) | 0.430 (0.125) | 0.435 (0.194) | 0.415 (0.290) |
+| `graph-only` | 0.463 (0.278) | 0.444 (0.306) | 0.409 (0.192) | 0.387 (0.138) | 0.345 (0.027) |
+| `frozen` | 0.318 (0.153) | 0.321 (0.194) | 0.332 (0.115) | 0.319 (0.161) | 0.315 (0.120) |
+| `replay` | 0.318 (0.153) | 0.321 (0.194) | 0.332 (0.115) | 0.319 (0.161) | 0.315 (0.120) |
+| `reset` | 0.520 (0.448) | 0.501 (0.458) | 0.501 (0.448) | 0.506 (0.458) | 0.521 (0.448) |
 | `tabular` | 0.050 (0.050) | 0.050 (0.050) | 0.050 (0.050) | 0.050 (0.050) | 0.050 (0.050) |
 | `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
 
@@ -258,11 +250,11 @@ comparison.
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 1 (10/10) | 1 (10/10) | 1 (9/10) | 1 (10/10) | 1 (10/10) |
-| `step` | 1 (10/10) | 1 (10/10) | 1 (9/10) | 1 (5/10) | 1 (7/10) |
-| `defaults` | 0 (6/10) | 0 (4/10) | 1 (5/10) | 0 (4/10) | 0 (6/10) |
-| `memory-only` | 1 (10/10) | 1 (10/10) | 1 (10/10) | 1 (10/10) | 1 (9/10) |
-| `graph-only` | 6 (4/10) | 3 (5/10) | 7 (6/10) | 3 (6/10) | 4 (5/10) |
+| `live` | 1 (9/10) | 1 (10/10) | 1 (10/10) | 1 (10/10) | 1 (9/10) |
+| `step` | 1 (10/10) | 1 (10/10) | 1 (9/10) | 1 (6/10) | 1 (7/10) |
+| `defaults` | 2 (6/10) | 0 (6/10) | 0 (7/10) | 0 (6/10) | 0 (7/10) |
+| `memory-only` | 1 (9/10) | 1 (10/10) | 1 (10/10) | 1 (10/10) | 1 (10/10) |
+| `graph-only` | 1 (7/10) | 2 (7/10) | 1 (7/10) | 2 (7/10) | 3 (7/10) |
 | `frozen` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 | `replay` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 | `reset` | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) |
@@ -273,41 +265,71 @@ comparison.
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | none (0/10) | none (0/10) | 0 (1/10) | none (0/10) | none (0/10) |
-| `step` | none (0/10) | none (0/10) | 0 (1/10) | 0 (5/10) | 0 (3/10) |
-| `defaults` | 1 (4/10) | 0 (6/10) | 0 (5/10) | 1 (6/10) | 0 (4/10) |
-| `memory-only` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | 0 (1/10) |
-| `graph-only` | 0 (6/10) | 0 (5/10) | 0 (4/10) | 0 (4/10) | 0 (5/10) |
+| `live` | 0 (1/10) | none (0/10) | none (0/10) | none (0/10) | 0 (1/10) |
+| `step` | none (0/10) | none (0/10) | 0 (1/10) | 0 (4/10) | 0 (3/10) |
+| `defaults` | 1 (4/10) | 0 (4/10) | 1 (3/10) | 1 (4/10) | 0 (3/10) |
+| `memory-only` | 0 (1/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
+| `graph-only` | 2 (3/10) | 2 (3/10) | 2 (3/10) | 0 (3/10) | 0 (3/10) |
 | `frozen` | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) |
 | `replay` | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) | 0 (10/10) |
 | `reset` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
 | `tabular` | none (0/10) | none (0/10) | none (0/10) | none (0/10) | none (0/10) |
-| `random` | 70 (10/10) | 76 (10/10) | 73 (10/10) | 73 (10/10) | 70 (10/10) |
+| `random` | 76 (10/10) | 72 (10/10) | 73 (10/10) | 79 (10/10) | 77 (10/10) |
+
+### Behaviour under rule B: probability of approaching the new sugar odour, mean over its visits, median over lives (minimum)
+
+| Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
+| --- | --- | --- | --- | --- | --- |
+| `live` | 0.941 (0.003) | 0.960 (0.870) | 0.952 (0.942) | 0.939 (0.749) | 0.978 (0.017) |
+| `step` | 0.939 (0.871) | 0.909 (0.710) | 0.631 (0.010) | 0.161 (0.007) | 0.341 (0.006) |
+| `defaults` | 0.577 (0.005) | 0.583 (0.004) | 0.746 (0.004) | 0.980 (0.004) | 0.996 (0.004) |
+| `memory-only` | 0.940 (0.003) | 0.967 (0.913) | 0.956 (0.931) | 0.935 (0.746) | 0.975 (0.795) |
+| `graph-only` | 0.759 (0.000) | 0.346 (0.000) | 0.572 (0.000) | 0.781 (0.000) | 0.195 (0.000) |
+| `frozen` | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) |
+| `replay` | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) |
+| `reset` | 0.989 (0.984) | 0.987 (0.983) | 0.986 (0.981) | 0.986 (0.980) | 0.988 (0.984) |
+| `tabular` | 0.836 (0.555) | 0.869 (0.461) | 0.784 (0.473) | 0.827 (0.534) | 0.876 (0.583) |
+| `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
 
 ### Stable pair right at the probes, mean (minimum)
 
 | Arm | 100 | 300 | 1,000 | 3,000 | 10,000 |
 | --- | --- | --- | --- | --- | --- |
-| `live` | 1.00 (0.92) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 0.99 (0.79) |
-| `step` | 0.97 (0.71) | 1.00 (0.88) | 0.98 (0.67) | 0.96 (0.04) | 0.93 (0.00) |
-| `defaults` | 0.00 (0.00) | 0.04 (0.00) | 0.05 (0.00) | 0.02 (0.00) | 0.01 (0.00) |
+| `live` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
+| `step` | 1.00 (1.00) | 1.00 (0.96) | 0.99 (0.75) | 0.96 (0.38) | 0.81 (0.00) |
+| `defaults` | 0.06 (0.00) | 0.06 (0.00) | 0.03 (0.00) | 0.02 (0.00) | 0.01 (0.00) |
 | `memory-only` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `graph-only` | 0.26 (0.00) | 0.21 (0.00) | 0.30 (0.00) | 0.36 (0.00) | 0.45 (0.00) |
+| `graph-only` | 0.12 (0.00) | 0.18 (0.00) | 0.19 (0.00) | 0.36 (0.00) | 0.46 (0.00) |
 | `frozen` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
 | `replay` | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) |
-| `reset` | 0.97 (0.96) | 0.98 (0.96) | 0.98 (0.96) | 0.98 (0.96) | 0.98 (0.96) |
-| `tabular` | 0.97 (0.62) | 0.94 (0.00) | 0.99 (0.75) | 1.00 (0.92) | 1.00 (0.98) |
+| `reset` | 0.96 (0.96) | 0.97 (0.92) | 0.98 (0.96) | 0.97 (0.96) | 0.97 (0.92) |
+| `tabular` | 0.96 (0.71) | 0.91 (0.12) | 0.98 (0.81) | 0.99 (0.94) | 1.00 (0.98) |
 | `random` | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) |
+
+### Work per life at the longest exposure, medians over lives
+
+| Arm | answer sweeps per routine moment | per aroused moment | learning sweeps | probe sweeps | checkpoint files | memory reads | memory writes | presentations | brains | refused sweeps | routine ms (median, p90) | aroused ms (median, p90) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `live` | 32.0 | 20.9 | 1482 | 57568 | 2250 | 11364 | 163 | 0 | 1 | 0 | 0.50, 0.69 | 1.24, 1.62 |
+| `step` | 0.0 | 25.9 | 138413 | 58608 | 2250 | 22401 | 11200 | 0 | 1 | 0 | none | 1.51, 2.15 |
+| `defaults` | 0.0 | 5.5 | 59446 | 57600 | 2250 | 22401 | 11200 | 0 | 1 | 0 | none | 1.34, 1.99 |
+| `memory-only` | 32.0 | 15.4 | 1336 | 57568 | 2250 | 11352 | 150 | 0 | 1 | 0 | 0.62, 0.92 | 1.52, 2.19 |
+| `graph-only` | 32.0 | 24.1 | 10338 | 58736 | 2268 | 0 | 0 | 0 | 1 | 0 | 0.58, 1.12 | 1.41, 2.49 |
+| `frozen` | 32.0 | 20.2 | 1120 | 57440 | 2245 | 11308 | 107 | 0 | 1 | 0 | 0.66, 1.01 | 1.61, 2.26 |
+| `replay` | 32.0 | 20.2 | 1120 | 57440 | 2245 | 11308 | 1307 | 1200 | 1 | 0 | 0.57, 0.83 | 1.50, 2.00 |
+| `reset` | 32.0 | 20.8 | 3232 | 57568 | 2250 | 11510 | 307 | 0 | 3 | 0 | 0.56, 0.80 | 1.28, 1.79 |
+| `tabular` | 0.0 | 0.0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | none | 0.00, 0.00 |
+| `random` | 0.0 | 0.0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | none | 0.00, 0.00 |
 
 ### The live arm: witnesses, arousal and work, medians over lives
 
 | Exposure | first approach at the new sugar odour | from it to the turned greedy choice | aroused, whole life | aroused, second half of rule A | sweeps per routine moment | sweeps per aroused moment | learning sweeps per aroused moment |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 100 | 23 (10/10) | 0 (10/10) | 0.111 | 1.000 | 32.0 | 22.2 | 11.7 |
-| 300 | 18 (10/10) | 0 (10/10) | 0.097 | 0.000 | 32.0 | 22.9 | 11.5 |
-| 1,000 | 20 (9/10) | 0 (9/10) | 0.069 | 0.000 | 32.0 | 22.1 | 11.6 |
-| 3,000 | 24 (10/10) | 0 (10/10) | 0.035 | 0.000 | 32.0 | 22.1 | 11.5 |
-| 10,000 | 20 (10/10) | 0 (10/10) | 0.016 | 0.001 | 32.0 | 21.4 | 11.7 |
+| 100 | 35 (9/10) | 0 (9/10) | 0.112 | 1.000 | 31.9 | 20.7 | 10.6 |
+| 300 | 23 (10/10) | 0 (10/10) | 0.097 | 0.000 | 31.9 | 21.5 | 10.9 |
+| 1,000 | 22 (10/10) | 0 (10/10) | 0.066 | 0.000 | 32.0 | 21.0 | 10.7 |
+| 3,000 | 30 (10/10) | 0 (10/10) | 0.036 | 0.000 | 32.0 | 20.5 | 11.0 |
+| 10,000 | 12 (9/10) | 0 (9/10) | 0.014 | 0.000 | 32.0 | 20.9 | 10.5 |
 
 ### Gates
 
@@ -319,7 +341,7 @@ comparison.
   "crashed": 0,
   "lives": 10,
   "returned": 0.9,
-  "reversed": 1.0,
+  "reversed": 0.9,
   "stable_kept": 0.0
  },
  "1000": {
@@ -327,8 +349,8 @@ comparison.
   "calm": 1.0,
   "crashed": 0,
   "lives": 10,
-  "returned": 0.8,
-  "reversed": 0.9,
+  "returned": 1.0,
+  "reversed": 1.0,
   "stable_kept": 1.0
  },
  "10000": {
@@ -336,9 +358,9 @@ comparison.
   "calm": 1.0,
   "crashed": 0,
   "lives": 10,
-  "returned": 1.0,
-  "reversed": 1.0,
-  "stable_kept": 0.9
+  "returned": 0.9,
+  "reversed": 0.9,
+  "stable_kept": 1.0
  },
  "300": {
   "acquired": 1.0,
@@ -364,15 +386,15 @@ comparison.
   "calm": 1.0,
   "crashed": 0,
   "lives": 40,
-  "returned": 0.95,
+  "returned": 0.975,
   "reversed": 0.975,
-  "stable_kept": 0.975
+  "stable_kept": 1.0
  },
  "reversal_lag": {
-  "1000": 29.0,
-  "10000": 22.0,
-  "300": 22.5,
-  "3000": 20.5
+  "1000": 24.5,
+  "10000": 17.0,
+  "300": 15.5,
+  "3000": 30.0
  }
 }
 ```
@@ -380,67 +402,91 @@ comparison.
 ### Reading the tables
 
 **The historical failure and its cause.** The `step` arm reproduces what the reports
-found. The longer it lives rule A, the lower its policy's probability of approaching the
-odour that will carry the sugar when the rule turns (0.27, 0.10, 0.023, 0.009 and 0.007
-across the exposures), the later its first approach there, and the fewer of its lives
-end rule B with 90% of their last 100 actions optimal (9, 9, 7, 4 and 6 of 10). Of the
-nine `step` lives whose greedy choice never turned, eight had not approached the new
-sugar odour once and one had approached it once. In the 41 lives whose choice turned, one
-approach sufficed in all but two, which needed two and four. The failure is too few
+found. The longer it lives rule A, the lower its probability of approaching the odour
+that will carry the sugar: under rule B its behaviour approached that odour with a median
+probability of 0.94, 0.91, 0.63, 0.16 and 0.34 across the exposures, and its lives end
+rule B with 90% of their last 100 actions optimal in 9, 10, 9, 5 and 3 of 10. Of the eight
+`step` lives whose greedy choice never turned, seven had not approached the new sugar
+odour once and one had approached it once; in the 42 lives whose choice turned, one
+approach sufficed in all but three, which needed two. The failure is too few
 contradicting witnesses; at this operating point a witnessed outcome is taken.
 
 A lag is the first window of 40 executed actions with 36 optimal. A brain that avoids
 both odours of the reversal pair is right in three trials of four and can meet such a
 window by chance, so for arms that end rule B below 0.9 the lag tables count more lives
-than reversed. The last-100 shares and the greedy tables are the stricter readings.
+than reversed. The last-100 shares, the greedy tables and the behaviour table are the
+stricter readings.
 
-**What arousal changes.** The `live` arm's probed base-policy approach probability stays
-between 0.21 and 0.27 at every exposure, its first approach comes after about 20 trials
-whatever the exposure, and the outcome of that first approach turns its greedy choice.
-In 49 of its 50 lives the choice turned after exactly one approach; the other life never
-approached. Its median reversal lag is 20 to 29 trials at exposures of 300 and more, and
-in 47 of 50 lives its greedy choices are right for every odour at the probe of trial 25
-or 50. At exposures of 300 and more it lives routine for 90% to 98% of its moments, and
-the second half of rule A is aroused in 0.1% of moments or fewer.
+**What arousal changes.** Under rule B the `live` arm's behaviour approaches the new sugar
+odour with a median probability of 0.94 to 0.98 at every exposure: it executes its greedy
+choice with certainty in routine (median executed probability 0.99 over the rule) and
+samples when roused. Its first approach comes after 12 to 31 trials in the median life
+whatever the exposure, the outcome of that first approach turns its greedy choice in every
+life whose choice turned (48 of 50), and its median reversal lag is 15 to 30 trials at
+exposures of 300 and more. It lives routine for 90% to 99% of its moments at those
+exposures.
 
 **What carries the adaptation.** `memory-only` matches `live`: with the actor's rates at
 zero the associative memory and the critic carry acquisition, reversal and return.
-`graph-only` ends the rules between 0.47 and 0.74 and needs three to seven witnesses
-where its choice turns at all: the graph's own reward learning does not acquire this task
-in one stream at these budgets. `defaults` stays at chance.
+`graph-only` ends the rules between 0.52 and 0.80 and its behaviour at the new sugar odour
+wanders: the graph's own reward learning does not acquire this task in one stream at these
+budgets. `defaults` stays at chance.
 
 **No adaptation without new evidence.** `frozen` and `replay` end rule B at chance for
-the reversal pair (0.49 to 0.52 overall) and are right again at once when rule A returns.
-The arm named `replay` receives counterfactual rewards calculated from rule A for its
-current actions. It keeps the original behavior in this chamber. It does not replay
-retained witnessed records, and its arousal-dependent work is not matched to `live`.
+the reversal pair (0.47 to 0.52 overall) and are right again at once when rule A returns.
+`replay` presents its own witnessed records of rule A to its memory 1,200 times over the
+two later rules, one per trial, and writes them: equal presentations on old evidence
+change nothing about rule B.
 
-**Against starting over.** A newborn brain at every change (`reset`) reverses in 53 to 77
-trials, inside its sampling youth, and has the stable pair right at 96% to 98% of the
-probes, because it learns that pair again each time. `live` reverses sooner and keeps the
-pair.
+**Against starting over.** A newborn brain at every change (`reset`) reverses in 69 to 85
+trials, inside its sampling youth, and has the stable pair right at 92% to 96% of the
+probes, because it learns that pair again each time; three brains are built. `live`
+reverses sooner and keeps the pair.
 
 **Against the table.** At exposures of 300 and more the tabular learner ends the rules at
-0.90 to 0.96, the price of exploring a tenth of its actions for life, and reverses with a
-median lag of 26 to 68 trials, the wait for a random approach at the new sugar odour. It
-needs no brain for four odours and it is the matched-information reference. `live` ends
-the rules at 1.00 in the lives that pass and reverses in 20 to 29 trials: its exploration
-is raised when reward is missing and absent otherwise.
+0.91 to 0.96, the price of exploring a tenth of its actions for life, and reverses with a
+median lag of 39 to 92 trials. It needs no brain for four odours and it is the
+matched-information reference. `live` ends the rules at 1.00 in the lives that pass and
+reverses in 15 to 30 trials: its exploration is raised when reward is missing and absent
+otherwise.
 
-**Work.** A routine moment settles once, 32 sweeps, and an aroused moment takes about 22
-sweeps for its answer after about 11.5 for its feedback and eligibility. Routine saves
-the eligibility phases, the parameter updates and the memory writes. It saves no settling
-work: every moment pays one full qualified settle. Sweeps count numerical work; they are
-neither wall time nor energy. The counters cover successful action/feedback calls,
-including an answer requested after the final executed trial and extra answers discarded
-at reset boundaries. They exclude construction, checkpoint probes, memory operations and
-work before a crashed life aborts. Current runs accumulate all reset brains and count
-frozen answers; the historical receipts predate those accounting fixes. This is partial
-solver-work accounting, not the complete-work comparison required by issue 88 or 122.
+**Work.** At exposure 10,000 a `live` life answers 11,200 moments. A routine moment settles
+once, 32 sweeps, and an aroused moment takes about 21 sweeps for its answer; its
+eligibility and feedback sweeps come to about 1,500 over the life, against 138,000 for
+`step`, which learns at every moment. `live` reads its memory about 11,400 times and
+writes it about 160 times; `step` reads 22,400 times and writes 11,200. The probes of the
+instrument cost about 57,600 sweeps and 2,250 checkpoint files per life, the same for
+every brain arm, and are counted apart from the life. No attempt was refused. On this
+laptop a routine moment of `live` took 0.50 ms at the median and 0.69 ms at the 90th
+percentile, an aroused moment 1.24 and 1.62 ms, and a moment of `step` 1.51 and 2.15 ms;
+wall time on one loaded machine is indicative only. Routine saves the eligibility phases,
+the parameter updates and the memory writes; it saves no settling work, since every moment
+pays one full qualified settle. Sweeps count numerical work; they are neither wall time
+nor energy.
 
-## Declared variants on the confirmation seeds
+### The record forecast, on this freeze's seeds
 
-These runs change one thing each, at exposures of 300, 3,000 and 10,000, and are marked
+The second surprise channel, the error of the record the brain held for its chosen
+action, at weight one against the founders' zero (`variant-record-surprise-2026-10-06.json.gz`,
+`frozen_protocol: false`). On the development seeds this channel left more lives
+searching too briefly; here it passed every reading in 40 of 40 lives against 39 of 40,
+with median reversal lags of 4.5 to 12 trials. The two samples together give 130 of 136
+lives passing with the channel and 133 of 136 without it, and the founders stay as frozen.
+
+| Arousal law | Exposure | Rule A | Rule B | Rule A again | reversal lag | stable pair | aroused |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| founders (value forecast) | 300 | 1.00 (1.00) | 1.00 (0.99) | 1.00 (0.99) | 15 (10/10) | 1.00 (1.00) | 0.097 |
+| founders (value forecast) | 1,000 | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 24 (10/10) | 1.00 (1.00) | 0.066 |
+| founders (value forecast) | 3,000 | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 30 (10/10) | 1.00 (1.00) | 0.036 |
+| founders (value forecast) | 10,000 | 1.00 (0.98) | 0.97 (0.67) | 0.98 (0.76) | 16 (9/10) | 1.00 (1.00) | 0.014 |
+| record channel weighed one | 300 | 1.00 (1.00) | 1.00 (0.98) | 1.00 (1.00) | 5 (10/10) | 1.00 (1.00) | 0.090 |
+| record channel weighed one | 1,000 | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 4 (10/10) | 1.00 (1.00) | 0.057 |
+| record channel weighed one | 3,000 | 1.00 (1.00) | 1.00 (1.00) | 1.00 (1.00) | 12 (10/10) | 1.00 (1.00) | 0.037 |
+| record channel weighed one | 10,000 | 1.00 (0.98) | 1.00 (1.00) | 1.00 (1.00) | 6 (10/10) | 1.00 (1.00) | 0.015 |
+
+## Declared variants of the second freeze, 2026-10-05
+
+These runs, on the second freeze's confirmation seeds and source, change one thing each, at exposures of 300, 3,000 and 10,000, and are marked
 `frozen_protocol: false`. They were declared before they were run and carry no gate; the
 frozen gates are quoted where they help. Cells are the mean (minimum) share of optimal
 actions in the last 100 trials of each rule, the median reversal lag with the lives that
@@ -557,7 +603,7 @@ The released consolidation works less reliably (25 of 30 lives pass every readin
 result does not depend on the 32-neuron module: one module of 64 neurons passes every
 reading in 27 of 30 lives and two modules of 32 in 29 of 30.
 
-## The first freeze
+## The earlier freezes
 
 The chamber was first frozen with confirmation seeds 100 to 109 (protocol SHA-256
 `381f23ca76287e0b83eeea99d0d5f5a3ae1adba2fce2be2eed0c814706ab1f8f`) and run once on
@@ -575,7 +621,27 @@ again with fresh seeds, the same world, operating point, arousal founders and ga
 second freeze also selects the tabular learner's two settings on the development seeds
 (the first used alpha 0.2 and epsilon 0.1 unselected), gives a reset arm's newborn brain
 a seed that meets no other generator of its life, adds the coverage and witness readings,
-and binds its receipts to the source. The results above are the second freeze's.
+and binds its receipts to the source.
+
+The second freeze (protocol SHA-256
+`0a5f2b4e6c2e2767aebc57588caf3e338a0348f5ec14ab099f637413f09652c4`, seeds 300 to 309)
+ran once on 2026-10-05 at commit
+[`9b66228`](https://github.com/muellerberndt/cadence/commit/9b66228) and passed every
+gate: of its 40 gated lives 40 acquired, 39 reversed, 38 returned, 39 kept the stable pair
+and 40 returned to routine, with median reversal lags of 22.5, 29, 20.5 and 22 trials.
+Three lives missed a reading: one at exposure 1,000 never approached the moved sugar and
+ended both later rules avoiding the reversal pair; one at exposure 1,000 ended the last
+rule at 0.87; one at exposure 10,000 had the stable pair right at 79% of the probes of a
+slow return. Its receipt is `results/confirmation-2026-10-05.json.gz`, with the variant
+receipts of that day beside it; `--report` prints their tables. An audit on 2026-10-06
+then hardened the law's numerics and the receipts without changing the law, and its arm
+named `replay` was found to pay current actions by the old rule rather than to replay
+witnessed records; its work counters covered successful solver calls only. The third
+freeze keeps the law, the operating point and the gates of the second and adds the
+behaviour probabilities, the retained-record replay and the complete work ledger that
+issue 88 required. The declared variants of the second freeze stand: the law and the
+operating point are unchanged, and the readings they report were not changed by the
+third freeze.
 
 ## How the operating point and the founders were selected
 
@@ -619,6 +685,17 @@ confirmation seeds were first run on the frozen protocol.
   both misses at exposure 10,000. On the 48 diagnostic seeds at exposure 10,000, 45 lives
   ended every rule at 0.9 with the correction and 46 without it: the correction did not
   change the rate of misses.
+- **The action record as a forecast.** The audit of the second freeze asked for a learned
+  forecast tied to the chosen action. The record the associative memory holds for the
+  chosen action in the situation met is one, and a second surprise channel measures its
+  error against its own usual size. On the development seeds at the four gated exposures
+  the record channel alone woke the brain sooner (median reversal lag 18 trials against
+  23) and left more lives searching too briefly, caught avoiding both odours of the
+  reversal pair after one or two punishments: 89 of 96 lives passed every reading with the
+  record channel alone and 90 of 96 with both channels, against 94 of 96 with the value
+  forecast alone. The founders weigh the record channel at zero, so the law of the second
+  freeze is unchanged; the channel is a gene (`record_surprise`) left to selection. On the
+  confirmation seeds the same comparison is a declared variant below.
 - **The lag gate.** The gate on the reversal lag was first a ratio between the longest and
   the shortest exposure. A ratio of two medians of about 20 trials moves with single
   lives, and before the first confirmation it was replaced by the bound of 150 trials at
@@ -637,10 +714,11 @@ widens its sampling, and one witnessed outcome turns the choice because the last
 record takes half of it. The always-learning arm shows the historical failure on the same
 sequences, and its cause.
 
-Issue 88 remains open: its equal-work replay control must replay retained actual
-witnesses, executed behavior probabilities must be recorded, and complete work including
-probes and refused attempts must be accounted for. The arm named `replay`, base-policy
-probes and counters here do not satisfy those gates.
+The readings issue 88 still required after the second freeze are in this one: the
+probabilities of the behaviour that acted, read from the living brain at every trial; a
+replay control that presents the brain's own witnessed records again, with its
+presentations counted; and the complete work of a life, probes, memory operations,
+construction, refused attempts and wall time included.
 
 The repair is incomplete. Three of the 40 confirmation lives missed a reading, two at
 exposure 1,000 and one at 10,000; on the development and diagnostic seeds 5 of 72 lives
@@ -664,11 +742,13 @@ or short-term recall; those remain with issues
 [121](https://github.com/muellerberndt/cadence/issues/121). The declared operating point
 is required: with arousal on the released composition the life stays at chance.
 
-In this chamber the want does the rousing. The forecast is the critic's value of the
-situation, and the next odour is random, so the usual error of a correct forecast is about
-half a reward; a contradicted approach exceeds twice that by little and adds little
-surprise. With the want removed no life reverses, and with surprise removed every life
-passes. A forecast specific to the chosen action is not used.
+In this chamber the want does the rousing. The founders' forecast is the critic's value
+of the situation, and the next odour is random, so the usual error of a correct forecast
+is about half a reward; a contradicted approach exceeds twice that by little and adds
+little surprise. With the want removed no life reverses, and with surprise removed every
+life passes. A forecast specific to the chosen action, the record the memory holds for
+it, is measured and available as a gene; at its founder weight of zero it does nothing,
+because with it the brain woke sooner and searched less.
 
 The arousal law responds to change. In a world that does not change, noise in the reward
 rate still rouses the founder genes for a small share of moments (the table reports it),
@@ -678,10 +758,11 @@ The arousal level is a scalar computed from the brain's own temporal-difference 
 reward, as its dopamine is; it is a hand-set law whose constants are genes, and a
 settling arousal patch inside the graph is not attempted here.
 
-Issue 122 remains open. Routine is not cheaper in settling work. Reuse of a settled state
-across moments, dependency-local repair and their invalidation tests are not attempted.
-Its broader gates also require action-specific learned forecasts, changed goals and
-delayed outcomes, familiar nonidentical inputs, memory interventions, complete work and
-latency comparisons, and independent preservation evidence beyond this bounded chamber.
+Issue 122 remains open. Routine is not cheaper in settling work, and the wall time of a
+moment here is a single laptop's. Reuse of a settled state across moments,
+dependency-local repair and their invalidation tests are not attempted. Its broader gates
+also require changed goals and delayed outcomes, familiar nonidentical inputs, memory
+interventions beyond the arms here, and independent preservation evidence beyond this
+bounded chamber.
 
 Sweeps count numerical work. They are not wall time or energy.

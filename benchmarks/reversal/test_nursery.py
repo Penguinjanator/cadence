@@ -226,6 +226,22 @@ def test_a_receipt_binds_its_sources_and_refuses_changed_rows(tmp_path, capsys):
     capsys.readouterr()
 
 
+def test_the_confirmation_receipt_is_the_frozen_protocols_and_carries_its_gates(protocol):
+    path = HERE / "results" / "confirmation-2026-10-06.json.gz"
+    assert nursery.verify(path) == (True, "canonical form, digest, arithmetic agree")
+    body = nursery.read_receipt(path)
+    assert body["frozen_protocol"] and body["protocol"] == protocol
+    assert body["seeds"] == protocol["seeds"]["confirmation"]
+    assert body["arms"] == list(nursery.ARMS) and body["exposures"] == protocol["exposures"]
+    assert len(body["rows"]) == 500 and not any("error" in row for row in body["rows"])
+    gates = body["gates"]
+    assert gates["passed"] and gates["pooled"]["lives"] == 40 and gates["pooled"]["crashed"] == 0
+    shares = {name: round(40 * gates["pooled"][name]) for name in ("reversed", "returned")}
+    assert shares == {"reversed": 39, "returned": 39}  # the one missed life stays recorded
+    replay = [r["work"] for r in body["rows"] if r["arm"] == "replay"]
+    assert all(w["presentations"] == 2 * protocol["after"] for w in replay)
+
+
 def test_the_second_freezes_receipt_is_its_own_protocols_and_carries_its_gates(protocol):
     path = HERE / "results" / "confirmation-2026-10-05.json.gz"
     assert nursery.verify(path) == (True, "canonical form, digest, arithmetic agree")
