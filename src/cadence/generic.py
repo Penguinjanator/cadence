@@ -825,20 +825,39 @@ class Brain:
             )
         return phase.state
 
+    def _choices(self, state: BrainState) -> np.ndarray:
+        """The most active motor neuron per output slot: ``(batch,)`` for one slot,
+        ``(batch, slots)`` when the motor neurons split into several readouts."""
+        out = np.asarray(state.activation)[:, self.motor_index]
+        learner = self.learner
+        if learner.slot_count > 1 and learner.slot_size == 0:  # unequal slots: one argmax each
+            choice = [
+                np.argmax(out[:, offset : offset + size], axis=1)
+                for offset, size in zip(learner.slot_offsets, learner.slot_sizes, strict=True)
+            ]
+            return np.asarray(np.stack(choice, axis=1), dtype=np.int64)
+        if learner.slot_count > 1:
+            out = out.reshape(len(out), learner.slot_count, learner.slot_size)
+        return np.asarray(np.argmax(out, axis=-1), dtype=np.int64)
+
     def predict(self, observations: Any) -> np.ndarray:
-        """Qualified independent observations, without reading or changing live memory."""
+        """Qualified independent observations, without reading or changing live memory.
+
+        One choice per output slot: ``(batch,)`` for one slot, ``(batch, slots)``
+        when ``slots`` split the motor neurons, matching ``act`` and ``step``."""
         state = self._qualified(self.stimulus(observations, memory=False), operation="predict")
-        return np.asarray(np.argmax(state.activation[:, self.motor_index], axis=1))
+        return self._choices(state)
 
     def accuracy(self, observations: Any, labels: Any) -> float:
         x = self._observations(observations)
         expected = self.learner._labels(np.asarray(labels))
         if len(expected) != len(x):
             raise ValueError("observations and labels must have the same batch size")
-        hits = sum(
-            int(np.sum(self.predict(x[start : start + 256]) == expected[start : start + 256]))
-            for start in range(0, len(x), 256)
-        )
+        hits = 0
+        for start in range(0, len(x), 256):
+            predicted = self.predict(x[start : start + 256])
+            wanted = expected[start : start + 256]
+            hits += int(np.sum(predicted == wanted.reshape(predicted.shape)))
         return hits / expected.size
 
     # -- ongoing interaction
