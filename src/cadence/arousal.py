@@ -29,16 +29,15 @@ larger of the two, each weighted by its gene (``value_surprise``, ``record_surpr
 The founders weigh the record's surprise at zero: on the odour nursery's development seeds
 it woke the brain sooner and left more lives searching too briefly, so the value forecast
 remains the control and the record's channel is left to selection.
-Only the outcome of the brain's own best guess can surprise it and enters what it is used
-to: what an explored action brings is play. The brain is aroused while
+Only the outcome of the brain's own best guess can surprise it and enters its usual
+forecast error. Every actual outcome enters the recent and long-run reward: exploring
+does not stop the brain from noticing what its life pays. The brain is aroused while
 ``level >= threshold`` and during its first ``youth`` moments, and an aroused brain
 samples at ``1 + heat * want`` times its policy's temperature. The law is unchanged when
 rewards, errors and the need are multiplied by one positive number, away from its absolute
-``1e-12`` surprise guard. Reward shifts also preserve the law when the first learned
-outcome is the brain's own best guess, which establishes the reward reference before
-its spread forms, and the need is zero: a need is a level of reward, and shifting the
-rewards changes what is unmet.
-Explored outcomes before that reference measure their spread from zero.
+``1e-12`` surprise guard. Reward shifts also preserve the law when the need is zero:
+every outcome establishes the reward reference before its spread forms. A need is a
+level of reward, and shifting the rewards changes what is unmet.
 
 Every constant of the law is a gene of ``ArousalConfig``. The values here are hand-set
 founders and stay as the control; ``ArousalConfig.space()`` declares the space for
@@ -58,7 +57,7 @@ __all__ = ["Arousal", "ArousalConfig"]
 
 MODES = ("routine", "aroused")
 _TINY = 1e-12  # keeps the unit of surprise positive in a world that has paid nothing yet
-_SAVED_FORMAT = "cadence-arousal/1"
+_SAVED_FORMAT = "cadence-arousal/2"
 
 
 def _log_ratio(error: float, unit: float) -> float:
@@ -168,7 +167,8 @@ class Arousal:
 
     def reset(self) -> None:
         self.level = 0.0
-        self.outcomes = 0  # outcomes that entered what the stream is used to
+        self.outcomes = 0  # own outcomes that entered the usual TD error
+        self.rewards = 0  # all outcomes that entered the recent and long-run reward
         self.spreads = 0  # outcomes that entered the reward scale
         self.records = 0  # own outcomes that an action record had forecast
         self._square = 0.0
@@ -198,11 +198,11 @@ class Arousal:
 
     @property
     def recent(self) -> float:
-        return self._reading(self._recent, self.config.fast)
+        return self._reading(self._recent, self.config.fast, self.rewards)
 
     @property
     def longrun(self) -> float:
-        return self._reading(self._longrun, self.config.slow)
+        return self._reading(self._longrun, self.config.slow, self.rewards)
 
     @property
     def usual(self) -> float:
@@ -260,8 +260,8 @@ class Arousal:
         the reward. Returns the surprise and the want that entered the level.
 
         ``own`` says the action was the brain's own best guess. Only such an outcome can
-        surprise it and enters what it is used to; the outcome of an explored action is
-        play, and the level then only carries its present want forward. ``learned`` says
+        surprise it and enters its usual forecast error. Every actual outcome enters
+        recent and long-run reward, so income stays current while exploring. ``learned`` says
         the brain learns from the outcome (it was sampled while aroused); learned outcomes
         and the outcome that wakes the brain enter the reward scale. ``record_error`` is
         the unsigned error of the record the brain held for the chosen action against the
@@ -278,15 +278,16 @@ class Arousal:
                 raise ValueError("record_error must be finite")
         c = self.config
         outcomes, spreads, records = self.outcomes, self.spreads, self.records
+        rewards = self.rewards + 1
         recent, longrun, usual = self._recent, self._longrun, self._usual
         usual_record, square, scale = self._usual_record, self._square, self.scale
+        recent += c.fast * (reward - recent)
+        longrun += c.slow * (reward - longrun)
         surprise = 0.0
         if own:
             first = outcomes == 0
             previous_usual = self.usual  # the error before this outcome
             outcomes += 1
-            recent += c.fast * (reward - recent)
-            longrun += c.slow * (reward - longrun)
             usual += c.slow * (error - usual)
             unit = c.tolerance * previous_usual + c.floor * scale + _TINY
             if error > unit and not first:
@@ -299,8 +300,8 @@ class Arousal:
                 unit = c.tolerance * previous_record + c.floor * scale + _TINY
                 if record_error > unit and not first_record:
                     surprise = max(surprise, c.record_surprise * _log_ratio(record_error, unit))
-        expected = self._reading(longrun, c.slow, outcomes)
-        want = self._want(expected, self._reading(recent, c.fast, outcomes), scale)
+        expected = self._reading(longrun, c.slow, rewards)
+        want = self._want(expected, self._reading(recent, c.fast, rewards), scale)
         level = c.decay * self.level + (1.0 - c.decay) * (surprise + want)
         if learned or self.age < c.youth or level >= c.threshold:
             spreads += 1
@@ -312,6 +313,7 @@ class Arousal:
             raise ValueError("arousal moments must remain finite")
         # Admit the complete outcome together so an unrepresentable spread can be retried.
         self.outcomes, self.spreads, self.records = outcomes, spreads, records
+        self.rewards = rewards
         self._recent, self._longrun, self._usual = recent, longrun, usual
         self._usual_record, self._square, self.level = usual_record, square, level
         return surprise, want
@@ -333,6 +335,7 @@ class Arousal:
             "level": float(self.level),
             "age": int(self.age),
             "outcomes": int(self.outcomes),
+            "rewards": int(self.rewards),
             "spreads": int(self.spreads),
             "records": int(self.records),
             "square": float(self._square),
@@ -350,7 +353,7 @@ class Arousal:
         """Restore a saved arousal, rejecting incomplete or invalid state."""
         if not isinstance(values, dict) or not isinstance(values.get("config"), dict):
             raise ValueError("invalid saved arousal")
-        if "format" in values and values["format"] != _SAVED_FORMAT:
+        if "format" in values and values["format"] not in (_SAVED_FORMAT, "cadence-arousal/1"):
             raise ValueError("invalid saved arousal format")
         config = values["config"]
         genes = set(ArousalConfig.__slots__)
@@ -362,11 +365,23 @@ class Arousal:
             raise ValueError("invalid or incomplete saved arousal config")
         try:
             arousal = cls(ArousalConfig(**config))
+            # Older laws admitted only own outcomes to income. Keep those accumulated
+            # readings and their count; future actual outcomes use the repaired law.
+            rewards = (
+                values["rewards"]
+                if values.get("format") == _SAVED_FORMAT
+                else values.get("rewards", values["outcomes"])
+            )
+            if isinstance(rewards, bool) or not isinstance(rewards, int) or rewards < 0:
+                raise ValueError("invalid saved arousal count: rewards")
             for name in ("age", "outcomes", "spreads", "records", "learning_sweeps"):
                 value = values[name]
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                     raise ValueError(f"invalid saved arousal count: {name}")
             arousal.age, arousal.outcomes = values["age"], values["outcomes"]
+            if rewards < arousal.outcomes:
+                raise ValueError("invalid saved arousal count: rewards")
+            arousal.rewards = rewards
             arousal.spreads, arousal.records = values["spreads"], values["records"]
             arousal.learning_sweeps = values["learning_sweeps"]
             nonnegative = ("level", "square", "usual", "usual_record")

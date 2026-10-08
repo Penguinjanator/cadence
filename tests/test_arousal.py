@@ -157,14 +157,14 @@ def test_need_clips_extreme_shortfalls_without_overflow(need):
     assert cd.Arousal.from_dict(arousal.to_dict()).to_dict() == arousal.to_dict()
 
 
-def test_only_own_outcomes_change_whether_need_is_met_even_with_equal_rates():
+def test_every_outcome_changes_whether_need_is_met_even_with_equal_rates():
     arousal = cd.Arousal(cd.ArousalConfig(youth=0, need=0.25, fast=1.0, slow=1.0))
     assert arousal.outcome(0.0, 0.25) == (0.0, 0.0)
-    assert arousal.outcome(0.0, 0.0, own=False) == (0.0, 0.0)
-    assert arousal.recent == 0.25
-    assert arousal.outcome(0.0, 0.0) == (0.0, 1.0)
-    assert arousal.outcome(0.0, 0.5, own=False) == (0.0, 1.0)
+    assert arousal.outcome(0.0, 0.0, own=False) == (0.0, 1.0)
     assert arousal.recent == 0.0
+    assert arousal.outcome(0.0, 0.0) == (0.0, 1.0)
+    assert arousal.outcome(0.0, 0.5, own=False) == (0.0, 0.0)
+    assert arousal.recent == 0.5
     assert arousal.outcome(0.0, 0.5) == (0.0, 0.0)
 
 
@@ -184,14 +184,17 @@ def test_the_law_is_unchanged_by_the_scale_and_the_zero_of_reward():
     assert moved.scale == pytest.approx(40.0 * plain.scale)
 
 
-def test_what_an_explored_action_brings_is_play():
+def test_explored_outcomes_change_income_without_surprising_or_recalibrating_error():
     arousal = cd.Arousal(cd.ArousalConfig(youth=0))
     for moment in range(300):
         arousal.outcome(0.1, float(moment % 2))
-    used_to = (arousal.usual, arousal.recent, arousal.longrun, arousal.outcomes)
+    usual = (arousal.usual, arousal.usual_record, arousal.outcomes, arousal.records)
+    income = (arousal.recent, arousal.longrun)
     surprise, _ = arousal.outcome(5.0, -3.0, own=False)  # a costly exploration
     assert surprise == 0.0
-    assert (arousal.usual, arousal.recent, arousal.longrun, arousal.outcomes) == used_to
+    assert (arousal.usual, arousal.usual_record, arousal.outcomes, arousal.records) == usual
+    assert arousal.recent < income[0] and arousal.longrun < income[1]
+    assert arousal.rewards == 301
     assert arousal.outcome(5.0, -3.0)[0] > 1.0  # the same outcome of its own best guess
 
 
@@ -271,7 +274,7 @@ def test_legacy_arousal_without_need_migrates_without_changing_its_saved_state()
         corrupt = {**legacy, "config": {k: v for k, v in legacy["config"].items() if k != gene}}
         with pytest.raises(ValueError, match="incomplete saved arousal config"):
             cd.Arousal.from_dict(corrupt)
-    for format in (None, "cadence-arousal/0", "cadence-arousal/2"):
+    for format in (None, "cadence-arousal/0", "cadence-arousal/3"):
         with pytest.raises(ValueError, match="arousal format"):
             cd.Arousal.from_dict({**legacy, "format": format})
 

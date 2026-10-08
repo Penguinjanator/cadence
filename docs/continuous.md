@@ -236,9 +236,12 @@ at zero, measured as the share of the need left unmet, which a rare reward's sma
 mean cannot dilute and which never habituates. An aroused brain samples, at a
 temperature the want raises, keeps eligibility, learns from every outcome and writes memory.
 The outcome that
-woke it is written to its memory at once. Only the outcomes of its own greedy
-choices enter its mood: what a sampled, non-greedy action brings teaches without
-rousing, so exploring does not keep the brain awake.
+woke it is written to its memory at once. Only outcomes of its own greedy choices
+can surprise it or change its usual forecast error. Every actual reward updates
+its recent and long-run income, including sampled, non-greedy choices. Otherwise a
+brain exploring with many motor slots can stop noticing its changed income and
+remain aroused by an old shortfall. The brain can habituate to a poorer life while
+sampling; a positive unmet `need` still keeps it wanting.
 
 ```python
 from dataclasses import replace
