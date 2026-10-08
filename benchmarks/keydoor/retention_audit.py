@@ -277,6 +277,19 @@ def main(argv: list[str] | None = None) -> int:
     if arms != ["live", "blind"]:
         parser.error("the declared body comparison is live and blind")
     kd.validate_plan(protocol, arms, seeds, delays)
+    destinations = [
+        args.out,
+        *(
+            args.out.parent / f"{arm}-d{delay}-s{seed}"
+            for arm in arms
+            for delay in delays
+            for seed in seeds
+        ),
+    ]
+    if any(path.exists() for path in destinations):
+        parser.error(
+            "the receipt and founder directories must be new; existing evidence is retained"
+        )
     manifest = kd.source_manifest(sources())
     args.out.parent.mkdir(parents=True, exist_ok=True)
     rows, assays = [], []

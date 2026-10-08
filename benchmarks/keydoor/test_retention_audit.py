@@ -50,6 +50,10 @@ def test_development_assay_preserves_the_underlying_life_and_verifies_artifacts(
     receipt = tmp_path / "run/receipt.json"
     assert audit.main(["--protocol", str(source), "--out", str(receipt)]) == 0
     assert audit.verify(receipt, current=True, artifacts=True)[0]
+    original_bytes = receipt.read_bytes()
+    with pytest.raises(SystemExit):
+        audit.main(["--protocol", str(source), "--out", str(receipt)])
+    assert receipt.read_bytes() == original_bytes
     body = json.loads(receipt.read_text())["body"]
     assert body["confirmation"] is False and not body["chamber"]["gates"]["passed"]
     for row, assays in zip(body["chamber"]["rows"], body["assays"], strict=True):
