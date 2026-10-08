@@ -110,8 +110,9 @@ without refusal.
 
 The separate [positive-need continuation receipt](continuation-acquired-positive-need-2026-10-08.json)
 and [source audit](continuation-acquired-positive-need-2026-10-08.sources.json)
-continue the same six previously acquired arena brains for 600 moments each,
-with their original needs and owed outcomes, using seed 77. Compared with the
+continue the same six previously acquired arena brains in one 600-moment royale,
+with their original needs and owed outcomes, using seed 77. Fighters that die
+issue fewer than 600 actions. Compared with the
 income correction alone, the combined policy changes reduce closing from
 40.67% to 37.28% and damage dealt from 318.4 to 258.2. Uniform random closes
 25.02% and deals no damage. Arousal falls from 78.93% to 75.90%, and learning
