@@ -10,7 +10,7 @@ pay nothing. Taking the key pays nothing by itself: its worth
 arrives ``D + 2`` cells later from the chest or ``D + 1`` from the lamp, after irrelevant
 choices at the levers, so credit cannot
 follow the last action blindly. The creature sees the kind of cell it faces and, with the
-pouch sense, whether it holds the key. The number of levers varies by one from episode to
+pouch sense, whether it holds the key. The number of levers varies by the protocol's jitter from episode to
 episode: the delay varies in decision counts, with no physical-time interface. The outcome
 of the door is delivered with the first
 observation of the next episode, ``done`` set, as ``step`` and ``live`` define it. A share
@@ -41,7 +41,7 @@ Arms, all on the same corridor sequence per seed:
 - ``random``      uniform random actions.
 
 ``key-door/3`` lives through the protocol's ``rules`` in order, chest, lamp and the chest
-again, so the return of the first contingency reads the retained skill; its lever count
+again, measuring reacquisition after competing experience; its lever count
 varies by ``jitter`` cells from trip to trip, the irregular event time of the acceptance.
 
 Readings per rule, over the trips that reached the door: the share of episodes that ended
@@ -82,6 +82,8 @@ import cadence as cd
 from cadence.receipts import Receipt, canonical_json, canonical_sha256, source_manifest
 
 SCHEMA = "key-door/3"
+INSTRUMENT_REVISION = 2
+FROZEN_PROTOCOL_SHA256 = "f8bf4d7698c72905fca4e1384a4c07389ba87360b899177e19cc765208bf56c9"
 LEGACY_SCHEMA = "key-door/1"
 LEGACY_SCHEMAS = ("key-door/1", "key-door/2")
 DEFAULT_RULES = ["chest", "lamp"]
@@ -237,6 +239,7 @@ class BrainLife:
         x = observe(kind, holding, self.pouch)
         brain = self.brain
         self._forecast_sweeps = 0
+        preceding_settlement = brain.last_settlement
         try:
             if self.frozen:
                 action = int(brain.act(x, greedy=True)[0])
@@ -272,14 +275,14 @@ class BrainLife:
             return action, True
         except Exception:
             self.work["aborted_forecast_sweeps"] += self._forecast_sweeps
-            self._charge_refusal(brain)
+            self._charge_refusal(brain, preceding_settlement)
             raise
         finally:
             self._forecast_sweeps = 0
 
-    def _charge_refusal(self, brain: cd.Brain) -> None:
+    def _charge_refusal(self, brain: cd.Brain, preceding: Any = None) -> None:
         settlement = brain.last_settlement
-        if settlement is not None and not settlement["qualified"]:
+        if settlement is not None and settlement is not preceding and not settlement["qualified"]:
             self.work["refused_sweeps"] += int(settlement["steps"])
 
     def probe(self) -> tuple[list[list[int]], list[list[float]]]:
@@ -297,10 +300,11 @@ class BrainLife:
                     copy = cd.Brain.load(path)
                     self.work["checkpoints"] += 1
                     self._count_memory(copy, "probe_memory_reads")
+                    preceding_settlement = copy.last_settlement
                     try:
                         choice = copy.act(observe(kind, holding, self.pouch), greedy=True)
                     except Exception:
-                        self._charge_refusal(copy)
+                        self._charge_refusal(copy, preceding_settlement)
                         raise
                     row_c.append(int(choice[0]))
                     state = copy.basal_ganglia.state
@@ -345,6 +349,8 @@ class Recurrent:
         self.temperature = temperature
         self.clip = clip  # the largest norm of one moment's gradient; a declared guard
         self.clipped = 0
+        self.value_clipped = 0
+        self.updates = 0
         self.Wx = rng.normal(0.0, 0.3, (hidden, 6))
         self.Wh = rng.normal(0.0, 0.3, (hidden, hidden)) / np.sqrt(hidden)
         self.b = np.zeros(hidden)
@@ -401,29 +407,43 @@ class Recurrent:
                 shared = getattr(self, name)
                 shared += self.alpha * delta * self.actor_trace[name]
                 shared += self.alpha_value * delta * self.value_trace[name]
+            self.updates += 1
             if done:
                 for trace in (self.actor_trace, self.value_trace):
                     for v in trace.values():
                         v[:] = 0.0
                 h_prev = np.zeros_like(self.h)
-                h, probs, value = self._forward(x, h_prev)
+            # Bootstrap from the preceding weights, then choose and differentiate one
+            # coherent policy after learning. Mixing old activations with new readout
+            # weights is not the gradient of the policy that executed the action.
+            h, probs, value = self._forward(x, h_prev)
+        elif done:
+            h_prev = np.zeros_like(self.h)
+            h, probs, value = self._forward(x, h_prev)
         if self.frozen:
             action = int(np.argmax(probs))
         else:
             action = int(self.rng.random() < probs[INTERACT])
         # the eligibility of this decision: decayed traces plus the gradients through h,
-        # each moment's gradient bounded in norm so a large step cannot run the weights away
+        # each actor/critic gradient bounded in norm; accumulated traces and weights
+        # themselves are not bounded by this guard.
         onehot = np.zeros(2)
         onehot[action] = 1.0
         dlogits = (onehot - probs) / self.temperature
         gz_actor = (self.Wa.T @ dlogits) * (1.0 - h * h)
         gz_value = self.wv * (1.0 - h * h)
+        shared_norm = 1.0 + x @ x + h_prev @ h_prev
         norm = float(
-            np.sqrt(np.sum(dlogits**2) + np.sum(gz_actor**2) * (1.0 + x @ x + h_prev @ h_prev))
+            np.sqrt(np.sum(dlogits**2) * (1.0 + h @ h) + np.sum(gz_actor**2) * shared_norm)
         )
         if norm > self.clip:
             dlogits, gz_actor = dlogits * (self.clip / norm), gz_actor * (self.clip / norm)
             self.clipped += 1
+        value_norm = float(np.sqrt(1.0 + h @ h + np.sum(gz_value**2) * shared_norm))
+        value_scale = min(1.0, self.clip / value_norm)
+        if value_scale < 1.0:
+            self.value_clipped += 1
+        gz_value *= value_scale
         decay = self.gamma * self.lam
         for trace in (self.actor_trace, self.value_trace):
             for v in trace.values():
@@ -433,8 +453,8 @@ class Recurrent:
         self.actor_trace["Wx"] += np.outer(gz_actor, x)
         self.actor_trace["Wh"] += np.outer(gz_actor, h_prev)
         self.actor_trace["b"] += gz_actor
-        self.value_trace["wv"] += h
-        self.value_trace["bv"] += 1.0
+        self.value_trace["wv"] += value_scale * h
+        self.value_trace["bv"] += value_scale
         self.value_trace["Wx"] += np.outer(gz_value, x)
         self.value_trace["Wh"] += np.outer(gz_value, h_prev)
         self.value_trace["b"] += gz_value
@@ -471,6 +491,7 @@ class Tabular:
         self.memo: tuple[int, int, int] | None = None
         self.frozen = False
         self.last = (0.5, 0.5, 0.5)
+        self.updates = 0
 
     def act(self, kind: int, holding: bool, reward: float | None, done: bool) -> tuple[int, bool]:
         h = int(holding)
@@ -480,6 +501,7 @@ class Tabular:
             self.trace *= self.gamma * self.lam
             self.trace[ph, pk, pa] += 1.0
             self.q += self.alpha * (target - self.q[ph, pk, pa]) * self.trace
+            self.updates += 1
             if done:
                 self.trace[:] = 0.0
         greedy = int(np.argmax(self.q[h, kind]))
@@ -572,9 +594,32 @@ def run_life(
     latency: dict[str, list[float]] = {"routine": [], "aroused": []}
     phases: list[dict[str, Any]] = []
     result: dict[str, Any] = {"arm": arm, "seed": seed, "delay": delay}
+    calls = {"action_calls": 0, "failed_action_calls": 0, "probe_calls": 0, "failed_probe_calls": 0}
+    failed_call_seconds = 0.0
+
+    def probe() -> tuple[list[list[int]], list[list[float]]]:
+        nonlocal failed_call_seconds
+        calls["probe_calls"] += 1
+        began = time.perf_counter()
+        try:
+            return life.probe()
+        except Exception:
+            calls["failed_probe_calls"] += 1
+            failed_call_seconds += time.perf_counter() - began
+            raise
 
     def ledger() -> dict[str, Any]:
         work = dict(life.ledger()) if isinstance(life, BrainLife) else fresh_work()
+        work.update(calls)
+        work["failed_call_seconds"] = failed_call_seconds
+        work["control_updates"] = getattr(life, "updates", 0)
+        work["actor_gradient_clips"] = getattr(life, "clipped", 0)
+        work["value_gradient_clips"] = getattr(life, "value_clipped", 0)
+        if isinstance(life, Recurrent):
+            parameters = {**life._actor(), **life._value()}
+            work["control_parameters"] = sum(v.size for v in parameters.values())
+        else:
+            work["control_parameters"] = int(life.q.size) if isinstance(life, Tabular) else 0
         work["sweeps_per_routine_moment"] = work["sweeps_routine"] / max(1, work["routine"])
         work["sweeps_per_aroused_moment"] = work["sweeps_aroused"] / max(1, work["aroused"])
         work["latency_ms"] = {
@@ -601,7 +646,7 @@ def run_life(
             probes: list[tuple[int, list[list[int]], list[list[float]]]] = []
             for episode in range(int(protocol["episodes"])):
                 if episode % every == 0:
-                    probes.append((episode, *life.probe()))
+                    probes.append((episode, *probe()))
                 cells = corridor(delay, length, jitter, cells_rng)
                 cut = cuts_rng.random() < truncation
                 available = food_rng.random() < food  # one draw per trip, for every arm
@@ -617,7 +662,13 @@ def run_life(
                 for i, kind in enumerate(cells):
                     began = time.perf_counter()
                     reward, done = (None, False) if pending is None else pending
-                    action, aroused = life.act(kind, holding, reward, done)
+                    calls["action_calls"] += 1
+                    try:
+                        action, aroused = life.act(kind, holding, reward, done)
+                    except Exception:
+                        calls["failed_action_calls"] += 1
+                        failed_call_seconds += time.perf_counter() - began
+                        raise
                     latency["aroused" if aroused else "routine"].append(time.perf_counter() - began)
                     modes.append(aroused)
                     moments += 1
@@ -652,7 +703,7 @@ def run_life(
                 took.append(take)
                 wrong.append(wrongs)
                 opened.append(opening)
-            probes.append((int(protocol["episodes"]), *life.probe()))
+            probes.append((int(protocol["episodes"]), *probe()))
             lag = next(
                 (
                     k
@@ -690,6 +741,17 @@ def run_life(
                     "start_greedy": probes[0][1],
                     "end_greedy": probes[-1][1],
                     "end_interact": [[round(v, 4) for v in row] for row in probes[-1][2]],
+                    "readings": {
+                        "fed": fed,
+                        "took": took,
+                        "wrong": wrong,
+                        "opened": opened,
+                        "aroused_moments": int(sum(modes)),
+                        "aroused_late_moments": int(sum(modes[len(modes) // 2 :])),
+                        "behaviour_sum": behaviour.tolist(),
+                        "policy_sum": policy.tolist(),
+                        "executed_probability_sum": executed,
+                    },
                 }
             )
     except Exception as error:  # a crashed life is a recorded outcome, with its work
@@ -743,7 +805,8 @@ def run(
 
 
 def gates(rows: list[dict[str, Any]], protocol: dict[str, Any]) -> dict[str, Any]:
-    """The protocol's gates over the ``live`` rows, per delay and pooled over the gated
+    """Historical marginal gates, preserved for the frozen receipts. Over ``live`` rows,
+    per delay and pooled over the gated
     delays: the share of lives fed at the end of each rule, taking the key, wasting few
     interactions and calm again; a crashed life passes nothing."""
     g = protocol["gates"]
@@ -786,6 +849,61 @@ def gates(rows: list[dict[str, Any]], protocol: dict[str, Any]) -> dict[str, Any
         report["passed"] = bool(
             pooled["crashed"] == 0 and all(pooled[name] >= g["share"] for name in tests)
         )
+    return report
+
+
+def confirmation_eligible(body: dict[str, Any]) -> bool:
+    """Admission to the declared third freeze, never a selected or overridden subset."""
+    protocol = body["protocol"]
+    return (
+        body["protocol_sha256"] == FROZEN_PROTOCOL_SHA256
+        and protocol == json.loads(body["protocol_source"])
+        and body["genes_override"] is None
+        and body["arms"] == list(ARMS)
+        and body["delays"] == protocol["delays"]
+        and body["seeds"] == protocol["seeds"]["confirmation"]
+    )
+
+
+def audit_gates(
+    rows: list[dict[str, Any]], protocol: dict[str, Any], *, eligible: bool
+) -> dict[str, Any]:
+    """A separate joint audit; historical marginal labels remain reproducible above."""
+    report = gates(rows, protocol)
+    live = [r for r in rows if r["arm"] == "live"]
+    for label, summary in report.items():
+        if not isinstance(summary, dict):
+            continue
+        subset = (
+            [r for r in live if r["delay"] in protocol["gates"]["delays"]]
+            if label == "pooled"
+            else [r for r in live if str(r["delay"]) == label]
+        )
+        qualified = []
+        for row in subset:
+            readings = gates([row], protocol)[str(row["delay"])]
+            qualified.append(
+                all(
+                    readings[k] == 1.0
+                    for k in ("acquired", "adapted", "frugal", "calm")
+                    + (("retained",) if "retained" in readings else ())
+                )
+            )
+        summary["jointly_qualified"] = float(np.mean(qualified))
+    expected = [
+        (a, d, s)
+        for a in ARMS
+        for d in protocol["delays"]
+        for s in protocol["seeds"]["confirmation"]
+    ]
+    admissible = eligible and [(r["arm"], r["delay"], r["seed"]) for r in rows] == expected
+    report["admissible"] = admissible
+    report["passed"] = bool(
+        admissible
+        and "pooled" in report
+        and report["pooled"]["crashed"] == 0
+        and report["pooled"]["jointly_qualified"] >= protocol["gates"]["share"]
+    )
     return report
 
 
@@ -1023,6 +1141,93 @@ def validate_plan(
             raise ValueError(f"{name} must be in [0, 1]")
     if not np.isfinite(protocol["cost"]) or protocol["cost"] < 0:
         raise ValueError("cost must be finite and nonnegative")
+    if protocol.get("rules", DEFAULT_RULES) not in (DEFAULT_RULES, ["chest", "lamp", "chest"]):
+        raise ValueError("rules must be chest, lamp, optionally followed by chest")
+    if "recurrent" in arms:
+        recurrent = protocol["recurrent"]
+        if type(recurrent["hidden"]) is not int or recurrent["hidden"] <= 0:
+            raise ValueError("the recurrent hidden size must be a positive integer")
+        for name in ("alpha", "alpha_value", "gamma", "lam", "temperature", "clip"):
+            value = recurrent[name]
+            if (
+                not np.isfinite(value)
+                or value < 0
+                or (name in ("temperature", "clip") and value == 0)
+                or (name in ("gamma", "lam") and value > 1)
+            ):
+                raise ValueError(f"invalid recurrent {name}")
+
+
+def check_phase_readings(phase: dict[str, Any], protocol: dict[str, Any]) -> str | None:
+    """Recompute revision-2 summaries from completed-trip readings and moment sums."""
+    readings = phase["readings"]
+    count = phase["episodes"]
+    for name in ("fed", "took", "wrong", "opened"):
+        values = readings[name]
+        if len(values) != count:
+            return "trip readings do not match completed trips"
+        if any(
+            (v is not None or name != "opened")
+            and (
+                type(v) is not int
+                or v < 0
+                or v > (protocol["length"] - 2 if name == "wrong" else 1)
+            )
+            for v in values
+        ):
+            return "invalid completed-trip reading"
+    if any(
+        f > t or (f and o != 1)
+        for f, t, o in zip(readings["fed"], readings["took"], readings["opened"], strict=True)
+    ):
+        return "trip food contradicts the key or executed door interaction"
+    n = min(50, count)
+    for name in ("fed", "took", "wrong", "opened"):
+        values = [v for v in readings[name][-n:] if v is not None] if n else []
+        expected = float(np.mean(values)) if values else None
+        if phase[name] != expected:
+            return "outcome summaries do not follow from trip readings"
+    whole = float(np.mean(readings["fed"])) if count else None
+    lag = next(
+        (
+            i
+            for i in range(count - protocol["window"] + 1)
+            if np.mean(readings["fed"][i : i + protocol["window"]]) >= protocol["window_floor"]
+        ),
+        None,
+    )
+    if phase["fed_whole"] != whole or phase["lag"] != lag:
+        return "feeding or lag does not follow from trip readings"
+    for share, key, total in (
+        ("aroused", "aroused_moments", phase["moments"]),
+        ("aroused_late", "aroused_late_moments", phase["moments"] - phase["moments"] // 2),
+    ):
+        value = readings[key]
+        if type(value) is not int or not 0 <= value <= total or phase[share] != value / total:
+            return "arousal shares do not follow from moment counts"
+    for share, key in (("behaviour_interact", "behaviour_sum"), ("policy_interact", "policy_sum")):
+        sums = readings[key]
+        if len(sums) != 2 or any(len(row) != 5 for row in sums):
+            return "probability sums must be a 2 by 5 table"
+        expected = []
+        for values, visits in zip(sums, phase["visits"], strict=True):
+            if any(
+                not np.isfinite(v) or not 0 <= v <= n for v, n in zip(values, visits, strict=True)
+            ):
+                return "probability sums exceed their visits"
+            expected.append(
+                [round(v / n, 4) if n else None for v, n in zip(values, visits, strict=True)]
+            )
+        if phase[share] != expected:
+            return "policy summaries do not follow from probability sums"
+    executed = readings["executed_probability_sum"]
+    if (
+        not np.isfinite(executed)
+        or not 0 <= executed <= phase["moments"]
+        or phase["executed_probability"] != round(executed / phase["moments"], 4)
+    ):
+        return "executed probability does not follow from its sum"
+    return None
 
 
 def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> tuple[bool, str]:
@@ -1034,6 +1239,9 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
         if stored["kind"] not in kinds or body["protocol"]["schema"] not in kinds:
             return "the receipt has the wrong kind"
         rules = body["protocol"].get("rules", DEFAULT_RULES)
+        revision = body.get("instrument_revision", 1)
+        if type(revision) is not int or revision not in (1, INSTRUMENT_REVISION):
+            return "unsupported instrument revision"
         source = stored["source"]
         files = source["files"]
         if source["manifest_sha256"] != canonical_sha256(files):
@@ -1070,6 +1278,36 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                         1, work[mode]
                     ):
                         return "the sweeps per moment do not follow from the work counters"
+                if revision == INSTRUMENT_REVISION:
+                    counters = (
+                        "action_calls",
+                        "failed_action_calls",
+                        "probe_calls",
+                        "failed_probe_calls",
+                        "control_updates",
+                        "actor_gradient_clips",
+                        "value_gradient_clips",
+                        "control_parameters",
+                    )
+                    if any(type(work[k]) is not int or work[k] < 0 for k in counters):
+                        return "control and call counters must be nonnegative integers"
+                    if (
+                        work["failed_action_calls"] > work["action_calls"]
+                        or work["failed_probe_calls"] > work["probe_calls"]
+                    ):
+                        return "failed calls exceed attempted calls"
+                    if (
+                        not np.isfinite(work["failed_call_seconds"])
+                        or work["failed_call_seconds"] < 0
+                    ):
+                        return "failed-call time must be finite and nonnegative"
+                    if row["arm"] == "recurrent":
+                        hidden = body["protocol"]["recurrent"]["hidden"]
+                        parameters = hidden * hidden + 10 * hidden + 3
+                    else:
+                        parameters = 20 if row["arm"] == "tabular" else 0
+                    if work["control_parameters"] != parameters:
+                        return "control parameter count differs from the declared learner"
             if "error" in row:
                 if not row["error"] or row["completed_phases"] not in range(len(rules)):
                     return "a crashed life has invalid completion accounting"
@@ -1121,11 +1359,41 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                     return "door visits do not agree with completed trips"
                 if phase["episodes"] + phase["cut"] != body["protocol"]["episodes"]:
                     return "the trips that reached the door and the cut trips do not add up"
+                minimum = phase["episodes"] * body["protocol"]["length"] + phase["cut"]
+                maximum = minimum + phase["cut"] * (body["protocol"]["length"] - 2)
+                if revision == INSTRUMENT_REVISION and not minimum <= phase["moments"] <= maximum:
+                    return "phase moments do not fit the completed and cut corridors"
                 if phase["lag"] is not None and (
                     type(phase["lag"]) is not int
                     or not 0 <= phase["lag"] <= phase["episodes"] - body["protocol"]["window"]
                 ):
                     return "the lag is not a completed-trip window index"
+                for name in (
+                    "behaviour_interact",
+                    "policy_interact",
+                    "end_interact",
+                    "start_greedy",
+                    "end_greedy",
+                ):
+                    matrix = phase[name]
+                    if len(matrix) != 2 or any(len(v) != 5 for v in matrix):
+                        return "policy and probe readings must be 2 by 5 tables"
+                    for h, values in enumerate(matrix):
+                        for k, value in enumerate(values):
+                            if name.endswith("greedy"):
+                                if type(value) is not int or value not in (
+                                    (-1,) if row["arm"] == "random" else (0, 1)
+                                ):
+                                    return "invalid greedy probe action"
+                            elif value is None:
+                                if name == "end_interact" or phase["visits"][h][k] != 0:
+                                    return "a visited policy or probe probability is missing"
+                            elif not np.isfinite(value) or not 0 <= value <= 1:
+                                return "a policy or probe probability is outside [0, 1]"
+                if revision == INSTRUMENT_REVISION:
+                    problem = check_phase_readings(phase, body["protocol"])
+                    if problem:
+                        return problem
             if work is None or work["brains"] != int(row["arm"] not in BRAINLESS):
                 return "the work does not identify the arm's brain"
             if work["brains"] and work["routine"] + work["aroused"] != sum(
@@ -1143,7 +1411,29 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                     row["arm"] != "yoked" and row["yoked_bank"] != 0
                 ):
                     return "the yoked bank is invalid"
-        if gates(rows, body["protocol"]) != body["gates"]:
+            if revision == INSTRUMENT_REVISION:
+                if (
+                    work["action_calls"] != sum(p["moments"] for p in row["phases"])
+                    or work["failed_action_calls"] != 0
+                    or work["failed_probe_calls"] != 0
+                ):
+                    return "action calls do not agree with completed life moments"
+                probes = len(rules) * (
+                    (body["protocol"]["episodes"] - 1) // body["protocol"]["probe_every"] + 2
+                )
+                if work["probe_calls"] != probes:
+                    return "probe calls do not agree with the planned observations"
+                expected_updates = (
+                    work["action_calls"] - 1 if row["arm"] in ("recurrent", "tabular") else 0
+                )
+                if work["control_updates"] != expected_updates:
+                    return "control updates do not agree with delivered feedback"
+        expected_gates = (
+            audit_gates(rows, body["protocol"], eligible=confirmation_eligible(body))
+            if revision == INSTRUMENT_REVISION
+            else gates(rows, body["protocol"])
+        )
+        if expected_gates != body["gates"]:
             return "the stored gates do not follow from the rows"
         text = body["protocol_source"]
         if hashlib.sha256(text.encode()).hexdigest() != body["protocol_sha256"]:
@@ -1154,6 +1444,10 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
             or body["protocol"]["schema"] != stored["kind"]
         ):
             return "the frozen settings differ from the recorded protocol"
+        if revision == INSTRUMENT_REVISION and body["frozen_protocol"] != confirmation_eligible(
+            body
+        ):
+            return "a frozen confirmation requires the complete declared census without overrides"
         if current and body["protocol_sha256"] != hashlib.sha256(protocol.read_bytes()).hexdigest():
             return "the protocol file differs from the recorded hash"
         return None
@@ -1175,6 +1469,11 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                 )
             elif valid and stored["kind"] != SCHEMA:
                 reason += "; key-door/2: the corrected two-rule instrument"
+            elif valid and stored["body"].get("instrument_revision", 1) == 1:
+                reason += (
+                    "; historical key-door/3: mixed recurrent gradients, incomplete clipping "
+                    "and marginal gates; summaries only"
+                )
             return valid, reason
     except (
         OSError,
@@ -1257,23 +1556,23 @@ def main(argv: list[str] | None = None) -> int:
     )
     print(summarize(rows))
     body = {
+        "instrument_revision": INSTRUMENT_REVISION,
         "cadence": cd.__version__,
         "numpy": np.__version__,
         "python": sys.version.split()[0],
         "platform": platform.platform(),
         "protocol_sha256": hashlib.sha256(frozen).hexdigest(),
         "protocol_source": frozen.decode(),
-        "frozen_protocol": not overridden
-        and protocol["schema"] == SCHEMA
-        and frozen == PROTOCOL.read_bytes(),
+        "frozen_protocol": False,
         "protocol": protocol,
         "genes_override": genes,
         "arms": list(args.arms),
         "delays": list(delays),
         "seeds": seeds,
-        "gates": gates(rows, protocol),
         "rows": rows,
     }
+    body["frozen_protocol"] = not overridden and confirmation_eligible(body)
+    body["gates"] = audit_gates(rows, protocol, eligible=body["frozen_protocol"])
     print(json.dumps(body["gates"], indent=1))
     if args.out is not None:
         write_receipt(args.out, body, manifest)

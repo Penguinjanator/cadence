@@ -17,35 +17,41 @@ same information and uniform-random actions. It establishes no default. Read
 
 ## Evidence status after review
 
-The six retained receipts use `key-door/1` and remain byte-for-byte unchanged. Both
-historical freezes failed their declared gates. Their summaries are exploratory evidence
-from their pinned sources, not confirmation of the corrected instrument. The historical
-world shared a random stream between cuts, action-dependent food draws and yoked payment
-placement; consequently, arms did not receive matched cut/food schedules despite sharing
-uncut corridor layouts. This limits paired comparisons and causal interpretations.
+All historical protocols and compressed receipts remain byte-for-byte unchanged. The two
+`key-door/1` freezes and the `key-door/3` freeze failed their declared gates. Their tables
+below describe their pinned sources. The `/1` world coupled action-dependent food draws,
+cuts and yoked placement; `/2` separated those streams and repaired the endpoint probes,
+cut range, door-opening window and work accounting.
 
-The current instrument emits `key-door/2`, with separate random streams for corridor
-layout, cuts, food availability and yoked placement. Food availability is drawn on every
-trip, independently of actions. It also corrects the endpoint probes, door-opening window,
-pre-door cut range and work accounting, and records the final undelivered outcome and
-yoked reward bank. `protocol.json` preserves the second historical freeze's bytes; a
-current run is marked `frozen_protocol: false`. No corrected confirmation campaign or
-passing gate is supplied here. A new source-bound protocol and fresh confirmation would be
-needed to promote the corrected comparison.
+The current `key-door/3` instrument has `instrument_revision: 2`. Maintainer review found
+that the recurrent control combined activations from before a feedback update with weights
+from after it, omitted the actor readout from its gradient norm, and did not clip critic
+gradients. The corrected control chooses and differentiates one policy after feedback and
+bounds each complete actor and critic gradient. This changes the recurrent control; the
+historical recurrent results are not results of the correction. Cadence's runtime,
+operating point and defaults are unchanged.
 
-## key-door/3: the third rule, the copy as a variant, the recurrent control, 2026-10-08
+Revision 2 records completed-trip outcomes and moment sums so verification can recompute
+feeding, cost, return lag, arousal and policy summaries. It counts every arm's action and
+probe calls, conventional updates and parameters, gradient clips and failed-call time.
+Its separate joint audit requires the same lives to meet all criteria and the complete
+unchanged confirmation census; development, selected arms, selected delays and overrides
+cannot pass. Historical marginal gate labels remain historical. An audit of already spent
+seeds is not a fresh confirmation, and issue 111 remains open.
+
+## Historical key-door/3 freeze, 2026-10-08
 
 The third freeze, [`protocol-3.json`](protocol-3.json), SHA-256
 `f8bf4d7698c72905fca4e1384a4c07389ba87360b899177e19cc765208bf56c9`, committed before its
 confirmation seeds 900 to 909 were run. It keeps key-door/2's corrected instrument and
 operating point and adds, as roadmap row 07 asked: a third rule, the key back in the chest
-after the lamp, so the return of the first contingency reads the retained skill (gate:
+after the lamp, to measure return/reacquisition of the first contingency (the historical “retained” gate:
 at least 90% of the gated lives end that rule fed and find their first 20-trip window at
 90% fed within 50 completed trips); lever counts varying by two from trip to trip in a
 15-cell corridor, the irregular event time of the acceptance (physical time stays
 unmodelled, as the rhythm chamber established per-event determinism for this library);
 a `recurrent` arm, an online Elman actor-critic with eligibility traces and a gradient
-guard, the competent recurrent online learner with the same information, its rate 0.02
+guard, a recurrent online learner with the same information, its rate 0.02
 and decay 0.8 selected on the development seeds; and a `copy` arm, the live brain carrying
 the efference copy of its own last command (0.76.0) at a dose of 0.3 selected on the
 development seeds, reported and not gated, because every dose harmed the creature there
@@ -58,15 +64,16 @@ development receipts are in `results/development-3-*`; the live arm on developme
 returned key back within a median of 6 and 13 completed trips against 23 and 125 at first
 acquisition.
 
-Receipt `results/confirmation-3-2026-10-08.json.gz`, verified against the present
-sources: 300 lives, none crashed, no refused answer. **The declared gates failed**, pooled
+Receipt `results/confirmation-3-2026-10-08.json.gz`, bound to the source at
+commit `6b6dc0e` (before maintainer corrections): 300 lives, none crashed, no refused answer. **The declared gates failed**, pooled
 over delays 2 and 5: acquired 0.80, adapted 0.90, frugal 0.80, calm 0.65 and retained 0.90
 against 0.90 required. Two lives per gated delay end rule A below 90% fed (minima 0.58
 and 0.46), three lives at delay 2 waste more than 1.5 interactions per trip, and seven of
-twenty spend more than 35% of a rule's second half aroused. Re-adaptation and the return
-of the first rule pass: the live brain ends the third rule fed in 0.99 of its last 50 trips
-at both delays, the same as the frozen rule-A policy's 1.00 and 0.98, so rule B did not
-cost it rule A, and finds its window at a median of 17 and 12 completed trips. Delay 10
+twenty spend more than 35% of a rule's second half aroused. The marginal re-adaptation and return
+readings meet their historical bounds: the live brain ends the third rule fed in 0.99 of its last 50 trips
+at both delays, the same as the frozen rule-A policy's 1.00 and 0.98, and finds its window at a median of 17 and 12 completed trips. The third rule
+allows another 500 learning trips; this is return/reacquisition evidence, not a test of
+preserved skill without relearning. Delay 10
 stays unsolved by the brain (0.49 fed) and solved by the tabular learner (0.83 to 0.90).
 
 The controls say where the creature's credit comes from. The yoked arm, its own door
@@ -84,8 +91,8 @@ tabular learner stays at 0.80 to 0.92 with its epsilon. The uniform-random polic
 fed at 1.00, 1.00 and 1.00 at delay 2 and 1.00, 0.97 and 0.99 at delay 5, with 0.00 to
 0.23 wrong interactions per trip and 3% to 8% of its late moments aroused; it even feeds
 0.82 at delay 10 under rule A. The pouch bit tells the creature whether it holds the key;
-the blind creature carries that fact in its working trace from the chest or the lamp, and
-its policy over the cell kinds alone is simpler. This is a measured lead, not a result: a
+a reactive policy over cell kinds alone can also succeed here. No working-trace ablation
+is supplied, so the blind result does not establish memory of key possession. This is a measured lead, not a result: a
 key-door/4 that declares the pouch-less body as its live arm, with the pouch arm as the
 control, on fresh seeds, is the next freeze. It would be a change of the world's body, an
 adapter choice, not of the brain.
@@ -353,23 +360,23 @@ adapter choice, not of the brain.
 ```
 
 
-The failures of the third freeze stand with the first two. The misses are the known
-mechanism gaps of this row: a fed and calm creature keeps a cheap habit because routine
-learns nothing, two lives per delay acquire slowly or latch, and the calm bound is missed
-after cut trips. The retained-skill reading is new and positive, the recurrent control is
-competent at acquisition and weak at re-adaptation, and the copy is not the repair here.
+The failures of the third freeze stand with the first two. Two lives per delay end rule A below
+the feeding bound and the calm bound is also missed. These readings do not isolate a
+mechanism responsible for the misses. Return/reacquisition is positive under the historical
+marginal criterion; the recurrent comparison needs the correction above, and the copy
+variant did not improve this chamber.
 
 ## What runs
 
 A creature walks a corridor once per trip: empty floor, a chest, a lamp, `D` levers and a
-door, met in that order, 14 cells in all, so that every trip takes the same number of
+door, met in that order, 15 cells in all, so that every trip takes the same number of
 moments whatever the delay. At every cell it passes or interacts. Under rule A the chest
 holds the key; under rule B the lamp does. Interacting at the door with the key in the
 pouch pays +1 and ends the trip. Taking the available key pays nothing; other interactions
 at a chest, lamp or lever cost 0.25, including while already holding the key. Floor
 interactions and a door interaction without the key pay zero. The door follows `L + 2`
 cells after the chest or `L + 1` after the lamp, where `L` is the actual lever count, which
-varies by one from trip to trip, varying the delay in event counts. This does not test
+varies by up to two from trip to trip, varying the delay in event counts. This does not test
 irregular physical time, clock input or cadence invariance. Intervening choices make the
 last action alone an insufficient account of the earlier key-taking action. The creature
 sees the kind of the cell it faces and, through the
@@ -379,12 +386,12 @@ carries over into the next trip (a truncated bootstrap), while the door's end is
 The outcome of a trip's last cell is delivered with the first observation of the next
 trip, as `step` and `live` define it. The final action still has an undelivered outcome
 when the run stops; the current receipt records it. A life is one stream without resets:
-rule A for 500 trips, then rule B for 500. Nothing announces the change. The delays are
+rule A for 500 trips, rule B for 500, then rule A again for 500. Nothing announces the change. The delays are
 2, 5 and 10. The reward source moves; the goal and required reward rate stay fixed. This
 is a contingency-reversal test, not a changed-goal or devaluation test.
 
 The need of this body is 0.03 reward per moment, a gene of `ArousalConfig` added for this
-chamber: at full feeding the income is 1/14 per moment, so a fed creature's need is met and
+chamber: at full feeding the income is 1/15 per moment, so a fed creature's need is met and
 a starving one wants its whole need. Its selection and the reason for its law are recorded
 [below](#how-the-operating-point-and-the-founders-were-selected).
 
@@ -394,6 +401,8 @@ schedules. Historical `/1` arms shared only the uncut layouts, as noted above:
 | Arm | What it is |
 | --- | --- |
 | `live` | `Brain.compose(6, 2, modules=(32,))` at the protocol's operating point, with `ArousalConfig()` at its founders and the chamber's need, through `Brain.live` |
+| `copy` | the live arm with the protocol’s declared efference-copy variant; the founder value zero is the live control |
+| `recurrent` | an online Elman actor-critic over the same cell and pouch inputs, with one-moment gradients and eligibility traces; revision 2 corrects its update and clipping |
 | `step` | the same brain and operating point without arousal, through `step`: it samples and learns at every moment (the simpler control) |
 | `lambda-zero` | the `live` brain with eligibility decay `lam` at zero, removing direct eligibility credit to earlier actions; bootstrapped value learning remains |
 | `yoked` | the `live` brain whose own door reward is banked and paid at a random cell of the next trip; it does not receive a paired `live` arm's rewards |
@@ -422,14 +431,18 @@ and over its second half; and the work of the life: moments and settling sweeps 
 learning sweeps, probes, checkpoints, life and probe memory reads, memory writes, brains,
 refused sweeps and the latency of a moment in each mode. Greedy probes use saved copies
 with the inherited working trace and are reported separately from executed behavior.
-Current `/2` reports include a probe at the actual phase end and door openings within the
+Current reports include a probe at the actual phase end and door openings within the
 last 50 completed trips. Historical `/1` endpoint probes were taken before trip 475 of
 500, and its opening statistic covered the last 50 keyed door visits, potentially spanning
 a longer period. Historical memory-read counts omitted both saved-copy probes and the
 direct record-forecast recall. Current counts include both, with probe reads separate.
 Completed routine forecasts preceding a refused action are counted separately in
 `aborted_forecast_sweeps`; `refused_sweeps` counts the failing solve. These are
-algorithmic work counts, not measurements of electrical energy.
+algorithmic work counts, not measurements of electrical energy. The conventional controls
+also record action/probe calls, updates and parameter counts; recurrent actor and critic
+clip counts are separate. Moment latency and total elapsed time include their compute.
+These are not matched FLOP or energy budgets. Recurrent probes start from zero hidden state;
+brain probes inherit saved context, so those probe tables are not matched state ablations.
 
 ## Historical gates, fixed before each confirmation attempt
 
@@ -459,8 +472,9 @@ python -m pytest -q benchmarks/keydoor
 ```
 
 The first command runs a short development check of the corrected instrument, not a
-confirmation campaign. The historical full design contained eight arms, three delays and
-ten confirmation seeds, 240 lives. `--arms`, `--seeds` and `--delays` select a part.
+confirmation campaign. The third freeze contained ten arms, three delays and
+ten confirmation seeds, 300 lives; the earlier two-rule design had 240 lives. `--arms`, `--seeds` and `--delays` select a part and make the current census ineligible
+for confirmation.
 `--genes`, `--point`,
 `--cost`, `--food` and `--episodes` override the arousal genes, the operating point and the
 world, and mark the receipt `frozen_protocol: false`; a `null` in `--point` leaves that
@@ -473,9 +487,11 @@ trips planned, the gates recomputed from the rows, the embedded protocol text ag
 hash and any claim of frozen settings. `--current` also requires the source manifest and
 the protocol hash of the files present. Historical receipts should be verified without
 `--current`; their old source identities do not match the corrected instrument. The
-verifier reports their legacy limits explicitly, and `--report` verifies a receipt before
-rendering it. These checks validate the recorded summaries; they
-cannot reconstruct unrecorded executed actions or independently prove that a run occurred.
+verifier reports their historical limits explicitly, and `--report` verifies a receipt before
+rendering it. Revision 2 additionally recomputes summaries from the stored trip outcomes
+and moment sums, validates policy/probe tables, and checks the full-census joint audit.
+Historical receipts contain summaries only. Neither format records every executed action
+or independently proves that a run occurred.
 `--report` prints the tables. `results/` keeps the receipts quoted here. The guards run
 short lives of the `live` arm and its controls, the world's accounting through what the
 learner is handed (the door terminal, a cut trip not), the checkpoint continuation inside

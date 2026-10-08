@@ -178,7 +178,14 @@ def test_the_controls_bracket_the_task(quick):
 
 def test_the_probes_do_not_disturb_the_life_they_read(quick):
     executed = ("fed", "took", "wrong", "lag", "visits", "aroused", "behaviour_interact")
-    measurement = ("probes", "probe_sweeps", "probe_memory_reads", "checkpoints", "latency_ms")
+    measurement = (
+        "probes",
+        "probe_calls",
+        "probe_sweeps",
+        "probe_memory_reads",
+        "checkpoints",
+        "latency_ms",
+    )
     unprobed = {**quick, "probe_every": 10_000}
     for arm in ("live", "step"):
         probed, plain = (keydoor.run_life(arm, 5, 2, p) for p in (quick, unprobed))
