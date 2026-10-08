@@ -166,7 +166,7 @@ against 0.90 required. Two lives per gated delay end rule A below 90% fed (minim
 and 0.46), three lives at delay 2 waste more than 1.5 interactions per trip, and seven of
 twenty spend more than 35% of a rule's second half aroused. The marginal re-adaptation and return
 readings meet their historical bounds: the live brain ends the third rule fed in 0.99 of its last 50 trips
-at both delays, the same as the frozen rule-A policy's 1.00 and 0.98, and finds its window at a median of 17 and 12 completed trips. The third rule
+at both delays, close to the frozen rule-A policy's 1.00 and 0.98, and finds its window at a median of 17 and 12 completed trips. The third rule
 allows another 500 learning trips; this is return/reacquisition evidence, not a test of
 preserved skill without relearning. Delay 10
 stays unsolved by the brain (0.49 fed) and solved by the tabular learner (0.83 to 0.90).
@@ -182,15 +182,17 @@ and 15), re-adapts in 9 and 7 of 10 (0.89, 0.68) and returns on every life (0.99
 tabular learner stays at 0.80 to 0.92 with its epsilon. The uniform-random policy feeds
 0.23 to 0.30.
 
-**The blind arm is the best arm.** Without the pouch sense, the creature ends every rule
+**The blind body has the strongest historical Cadence results at the gated delays.**
+Without the pouch sense, the creature ends every rule
 fed at 1.00, 1.00 and 1.00 at delay 2 and 1.00, 0.97 and 0.99 at delay 5, with 0.00 to
 0.23 wrong interactions per trip and 3% to 8% of its late moments aroused; it even feeds
 0.82 at delay 10 under rule A. The pouch bit tells the creature whether it holds the key;
 a reactive policy over cell kinds alone can also succeed here. No working-trace ablation
-is supplied, so the blind result does not establish memory of key possession. This is a measured lead, not a result: a
-key-door/4 that declares the pouch-less body as its live arm, with the pouch arm as the
-control, on fresh seeds, is the next freeze. It would be a change of the world's body, an
-adapter choice, not of the brain.
+is supplied, so the blind result does not establish memory of key possession. Its 16/20
+joint result still misses the unchanged bound. The pouch-less body remains a candidate
+for bounded development with the pouch body as its control; a new confirmation would
+require a separately declared candidate that meets the original criteria in development.
+This would change the world's body, an adapter choice, without changing the brain.
 
 #### Rule A, chest holds the key: episodes fed in the last 50, mean (minimum)
 
