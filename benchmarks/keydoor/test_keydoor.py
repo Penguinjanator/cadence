@@ -545,7 +545,7 @@ def test_feedback_work_is_charged_when_the_following_action_refuses(protocol, mo
     life = keydoor.make_life(arm, protocol, 0, protocol["arousal"])
     life.act(keydoor.FLOOR, False, None, False)
     before = life.work["learning_sweeps"]
-    original = life.brain.act
+    original = life.brain._settled
 
     def refuse(*args, **kwargs):
         life.brain.learner.config = replace(
@@ -553,7 +553,7 @@ def test_feedback_work_is_charged_when_the_following_action_refuses(protocol, mo
         )
         return original(*args, **kwargs)
 
-    monkeypatch.setattr(life.brain, "act", refuse)
+    monkeypatch.setattr(life.brain, "_settled", refuse)
     with pytest.raises(RuntimeError, match="did not settle"):
         life.act(keydoor.CHEST, False, 0.0, False)
     assert life.brain.last_learning["free_steps"] > 0
@@ -582,16 +582,21 @@ def test_a_completed_routine_forecast_is_charged_if_the_woken_answer_refuses(
 
     monkeypatch.setattr(twin, "_forecast", record_forecast)
     for brain in (life.brain, twin):
-        original = brain.act
+        original = brain._settled
 
         def refuse(*args, brain=brain, original=original, **kwargs):
-            # one sweep from rest at an impossible tolerance: the woken answer must refuse
-            # (a cached forecast state can sit at an exact fixed point and would pass)
-            brain.learner.config = replace(brain.learner.config, free_steps=1, tolerance=1e-15)
-            brain.basal_ganglia._free = None
+            # The shared settlement path also serves the preceding routine forecast.
+            # Only the answer after accepting the waking outcome must refuse.
+            if brain.arousal.aroused:
+                # One sweep from rest at an impossible tolerance: a cached forecast
+                # state can sit at an exact fixed point and would otherwise pass.
+                brain.learner.config = replace(
+                    brain.learner.config, free_steps=1, tolerance=1e-15
+                )
+                brain.basal_ganglia._free = None
             return original(*args, **kwargs)
 
-        monkeypatch.setattr(brain, "act", refuse)
+        monkeypatch.setattr(brain, "_settled", refuse)
     # a punishment no calm forecast allowed for wakes either brain for certain
     with pytest.raises(RuntimeError, match="did not settle"):
         life.act(keydoor.CHEST, False, -1.0, False)
