@@ -92,9 +92,10 @@ or weaken qualification to manufacture a whole-brain answer.
    default already has recurrence and memory; a layered layout does not make it
    feed-forward. Add depth or optional observers for a task requirement, not as a
    substitute for testing the lifecycle.
-3. Keep that brain alive during interaction. Use `act`/`step` to read memory,
-   execute its action, and report the actual outcome exactly once. Declare the
-   application's teacher/correction policy; teaching targets label the current
+3. Keep that brain alive during interaction. For one creature, construct it with
+   `arousal=ArousalConfig()` and use `live` to read memory, execute its action and
+   report the actual outcome exactly once. Use `step` for explicit teaching,
+   batched streams or learning from every outcome; targets label the current
    observation, while rewards describe the preceding executed action.
 4. Introduce a disturbance, detect a witnessed mismatch or failed objective,
    and apply supported learning. Keep numerical settlement separate from durable
@@ -107,7 +108,9 @@ or weaken qualification to manufacture a whole-brain answer.
 
 ## Keep the main interface simple
 
-Use `Brain.compose` for a continuing brain and `NeuralGraph` for its lower-level
+Lead user guides with `Brain.compose(..., arousal=ArousalConfig())` and `brain.live(...)`
+for one continuing brain. Keep `step` and separate `act`/`learn` as explicit controls,
+and `last_settlement` as diagnostics. Use `NeuralGraph` for the lower-level
 neural graph. `modules` selects region sizes; adjacent regions and the
 association/motor pair exchange signals, while sensory inputs supply a held
 drive. Optional `observers` read and return to that same graph. Working trace

@@ -22,11 +22,11 @@ controller. A graph can be deep and modular without observers.
 
 ```python
 import numpy as np
-from cadence import Brain
+from cadence import ArousalConfig, Brain
 
-brain = Brain.compose(4, 2, modules=(16, 8), observers=(8,), seed=7)
+brain = Brain.compose(inputs=4, actions=2, arousal=ArousalConfig())
 reading = np.array([[1.0, 0.0, 0.0, 0.0]])
-action = brain.step(reading)
+action = brain.live(reading)
 assert action.shape == (1,)
 ```
 
@@ -37,8 +37,10 @@ coordinates. Finite free/nudged learning phases retain their own contracts.
 Qualified free solves may use numerical damping inside one budget and then
 check the original model. See [contracts](contracts.md).
 
-`step` learns from the preceding actual action/outcome and acts on the current
-observation. `imagine` privately settles supplied observations with a copied
+`live` receives the preceding action's actual outcome and acts on the current
+observation, with arousal deciding when to explore and learn. Use `step` for
+explicit teaching, batches or learning from every outcome.
+`imagine` privately settles supplied observations with a copied
 trace. It does not learn from predictions or model environmental consequences
 by itself. Saved continuation includes pending feedback and memories; the body
 is saved separately.
@@ -47,7 +49,7 @@ is saved separately.
 
 | Operation | Interface | Meaning |
 | --- | --- | --- |
-| Continuing perception, action and reward learning | `Brain.step` | One recurrent graph with explicit action/outcome timing |
+| Continuing perception, action and reward learning | `Brain.live` | One stream with arousal; `step` supports explicit teaching, batches and learning from every outcome |
 | Earlier activity affecting later answers | `Trace`, `Afterglow` | Retained temporal input with declared decay and optional movement weighting |
 | Fast and persistent associations | `SynapticMemory` | Observed key/value updates with finite capacity and possible interference |
 | Individual event records and consolidation | `RecordPatchNet` | Context, learned parameters, writable records and `sleep` |

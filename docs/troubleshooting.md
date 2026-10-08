@@ -6,7 +6,7 @@ number can be wrong.
 
 ## Install and run
 
-**`pip install cadence-net==0.75.0` and then `import cadence`.** The distribution is `cadence-net`;
+**`pip install cadence-net==0.76.0` and then `import cadence`.** The distribution is `cadence-net`;
 the import is `cadence`. Python 3.11 or newer and NumPy are the only requirements.
 
 **Do I need a GPU?** No. Everything runs on NumPy float64. `[fast]` adds Numba and SciPy
@@ -14,7 +14,9 @@ for the settling brain's transport, `[accel]` adds torch and `[apple]` adds MLX 
 settling brain on a device; the temporal and record patches are NumPy, and the belief
 patch's slow half has a torch twin ([backends](backends.md)).
 
-**Which interface do I want?** Start with `Brain.compose`. The
+**Which interface do I want?** Start with `Brain.compose(..., arousal=ArousalConfig())`
+and `brain.live(...)` for one continuing stream. Use `step` for explicit teaching,
+batches or learning from every outcome. The
 [specialist guides](quickstart.md#specialist-guides) cover other model contracts;
 [build from your data](build.md) explains their shapes and encodings.
 

@@ -1,12 +1,14 @@
 # API reference
 
 Start with [Brain.compose](#brain-cadence) for a continuing brain with memory
-and optional observers. [NeuralGraph](#neuralgraph-cadence) is the lower-level
+and optional observers, then use `brain.live(...)` for one continuing stream
+with `arousal=ArousalConfig()`. [NeuralGraph](#neuralgraph-cadence) is the lower-level
 graph API. The [quickstart](quickstart.md) runs the main interaction loop;
 sections below describe specialist operations. Pass optional arguments by keyword.
 
-This reference describes Cadence 0.75.0, including `Brain.last_settlement`
-diagnostics. Install it with `python -m pip install cadence-net==0.75.0`.
+This reference describes Cadence 0.76.0. Install it with
+`python -m pip install cadence-net==0.76.0`. `Brain.last_settlement` is an optional
+diagnostic report, independent of the interaction loop you use.
 
 The temporal patch: [TemporalPatchNet](#temporalpatchnet-cadencetemporal),
 [TemporalPlan](#temporalplan-cadenceplanning), [TemporalMemory](#temporalmemory-cadencetemporal_memory),
@@ -782,7 +784,8 @@ that recursive benefit or automatic reflective behavior has been learned.
     `(batch, slots)` when the motor neurons split into slots, matching `act` and `step`.
     A refused epoch score leaves its already accepted teaching updates in place.
     These operations do not switch modes. `fit` resets pending stream
-    state before its updates; use `step` for a continuing life.
+    state before its updates; use `live` for one continuing life, or `step` for
+    explicit teaching, batches or learning from every outcome.
   - `imagine(observations, *, budget=1024, tolerance=1e-6) -> tuple[Equilibrium, ...]`:
     `observations` is a sequence of finite, nonempty batches with the same stream
     identities. Each possible observation uses its own bounded free solve, including

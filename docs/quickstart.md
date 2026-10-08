@@ -1,7 +1,8 @@
 # Start a continuing brain
 
-Use `Brain.compose` to build **System 1**: connected processing regions,
-motor choices, a working trace and fast/persistent associative memory. Regions
+Build one **System 1** brain with `Brain.compose`, then run it with `brain.live`.
+It includes connected processing regions, motor choices, a working trace and
+fast/persistent associative memory. Regions
 carry local state, exchange signals and repair disagreement in one neural
 settlement. Optional **System 2** adds observing regions with returning feedback
 in that same graph.
@@ -11,35 +12,38 @@ bootstrap a useful interpretation, use it, repair witnessed failures and continu
 the same brain. This quickstart exercises equilibrium action and memory;
 it does not yet integrate learned environmental transitions.
 
-Python 3.11+ and NumPy are required. Install Cadence 0.75.0:
+Python 3.11+ and NumPy are required. Install Cadence 0.76.0:
 
 ```bash
-python -m pip install cadence-net==0.75.0
+python -m pip install cadence-net==0.76.0
 ```
 
 ## Observe, act and learn
 
 ```python
 import numpy as np
-from cadence import Brain
+from cadence import ArousalConfig, Brain
 
-brain = Brain.compose(inputs=4, actions=2, modules=(16, 8), seed=7)
+brain = Brain.compose(inputs=4, actions=2, arousal=ArousalConfig())
 observation = np.array([[1.0, 0.0, 0.0, 0.0]])
-action = brain.step(observation)
+action = brain.live(observation)
 
 # Execute the choice in a tiny environment: action 0 earns one unit.
 reward = (action == 0).astype(float)
 next_observation = np.array([[0.0, 1.0, 0.0, 0.0]])
-action = brain.step(next_observation, reward=reward, done=np.array([False]))
+action = brain.live(next_observation, reward=reward)
 assert action.shape == (1,)
 assert brain.learner.updates > 0
 ```
 
-Each input row is one continuing stream; its output is an action index.
-`modules=(16, 8)` gives two reciprocally connected processing regions. A deeper
-base is still System 1. `step` learns from the **previous action's actual outcome**
-before choosing the next action. `teacher=` instead labels the current
-observation. Keep row identities fixed until `reset()`.
+`live` follows one continuing stream: pass one observation row and execute its
+returned action index. The constructor uses the default System 1 layout and
+enables arousal. A young or aroused brain explores and learns; a calm brain
+answers greedily without learning. Report the **previous action's actual outcome**
+before requesting the next action. Use `reset()` to start a different stream.
+
+For batches, supplied teaching labels or learning from every outcome, use
+[`step`](continuous.md). It is the explicit learning loop for those tasks.
 
 This short example exercises a feedback update, not a learned policy benchmark.
 Memory and learned associations can affect later choices; capacity is finite
@@ -82,9 +86,10 @@ resumed = Brain.load("brain.npz")
 
 # Resume the same pending action with the same measured outcome.
 reward = (action == 0).astype(float)
-continued = brain.step(observation, reward=reward, done=np.array([False]))
-replayed = resumed.step(observation, reward=reward, done=np.array([False]))
+continued = brain.live(observation, reward=reward)
+replayed = resumed.live(observation, reward=reward)
 assert np.array_equal(continued, replayed)
+assert brain.arousal.to_dict() == resumed.arousal.to_dict()
 ```
 
 `imagine` carries a private trace through supplied observations. It leaves live
@@ -98,11 +103,14 @@ feedback. Save the environment separately and resume its stream identities too.
 
 ## Add optional observers
 
+Optional System 2 extends a two-module System 1 with observers:
+
 ```python
 recursive = Brain.compose(
     inputs=4, actions=2, modules=(16, 8), observers=(8,), seed=7,
+    arousal=ArousalConfig(),
 )
-assert recursive.step(observation).shape == (1,)
+assert recursive.live(observation).shape == (1,)
 ```
 
 Observers read and return influence to processing regions, motor regions and
@@ -111,10 +119,10 @@ This provides recursive feedback; a useful task advantage must be learned and
 measured.
 
 Actions and independent predictions require the full neural equation residual
-to meet the configured tolerance. A refused `act` leaves live state, memory,
-randomness and pending feedback unchanged. If `step` already learned an outcome
-before the next action refused, retry `act` without submitting that outcome
-again. See [numerical contracts](contracts.md).
+to meet the configured tolerance. If `live` refuses its forecast before accepting
+feedback, the same call can be retried. If it accepts the outcome and then refuses
+the next action, retry `live(observation)` without submitting the outcome again.
+See [routine and repair](continuous.md#routine-and-repair-live).
 
 ## Specialist guides
 

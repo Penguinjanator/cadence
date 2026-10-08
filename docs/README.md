@@ -8,8 +8,8 @@ relationships and retained memories support a family of such interpretations
 across situations. Start with [the world-model guide](world-model.md), then run
 the [quickstart](quickstart.md) and [continuing example](../examples/continuing_brain.py).
 
-These guides use Cadence 0.75.0. Install it with
-`python -m pip install cadence-net==0.75.0`; contributors can install the checkout
+These guides use Cadence 0.76.0. Install it with
+`python -m pip install cadence-net==0.76.0`; contributors can install the checkout
 with `python -m pip install -e .` from the repository root.
 The [index](index.md) is the catalogue; this page gives a reading order.
 
@@ -35,7 +35,7 @@ exact signatures, defaults, mutation and refusal behavior.
 
 | You want to… | Start with | Read next |
 | --- | --- | --- |
-| Run one memory-using brain through real observations and actions | `Brain.compose` | [Quickstart](quickstart.md), [continuous interaction](continuous.md), [memory](memory.md) |
+| Run one memory-using brain through real observations and actions | `Brain.compose(..., arousal=ArousalConfig())`, then `brain.live(...)` | [Quickstart](quickstart.md), [continuous interaction](continuous.md), [memory](memory.md) |
 | Declare custom neural regions and reciprocal projections | `Genome`, `develop`, `NeuralGraph`; optional `Brain` wrapper | [Composition](brain.md), [cortices](cortex.md), [connectomes](connectomes.md) |
 | Study explicit reciprocal patches and optional recursive observation | `PatchNet` | [PatchNet](patchnet.md), [recursive settlement](recursive-settlement.md), [recursive training](recursive-training.md) |
 | Learn environmental transitions and plan actions through them | `TemporalPatchNet`, `TemporalMemory` | [Interaction](interaction.md), [planning](planning.md), [response protection](temporal-memory.md) |
@@ -43,7 +43,9 @@ exact signatures, defaults, mutation and refusal behavior.
 | Explore belief assimilation, steering and selective activity | `BeliefPatch`, `Steered`, `Life` | [Belief](belief.md), [steering](steering.md), [habit/imagination/learning](howto-rung.md) |
 | Study exact state-and-error readback under its own equations | `cadence.experimental.equilibrium` | [Advanced population guide](equilibrium/index.md) |
 
-`Brain.compose` is the primary application entry. The other rows expose
+`Brain.compose` constructs the brain; `live` advances its one continuing life.
+`last_settlement` only reports diagnostics. Use `step` when you explicitly need
+batched streams, teacher labels or learning from every outcome. The other rows expose
 specialist mechanisms with distinct state and learning contracts; importing two
 classes does not automatically integrate them into one equilibrium.
 
@@ -67,10 +69,10 @@ flowchart LR
 ```
 
 Keep learned relations and relevant memory across this loop, and save pending
-feedback when pausing. `step` consumes the preceding action's outcome before
+feedback when pausing. `live` consumes the preceding action's outcome before
 settling the current observation. If that next solve refuses after accepting the
-feedback, retry `act` without submitting the outcome again. The
-[interaction guide](continuous.md#qualification-and-refusal) explains both retry cases.
+feedback, retry `live(observations)` without submitting the outcome again. The
+[interaction guide](continuous.md#routine-and-repair-live) explains both retry cases.
 
 ## Recognize the intended lifecycle
 
@@ -115,6 +117,7 @@ recurrence; they are not required for this lifecycle.
 | Continuing action, memory and saved feedback | [Brain](brain.md), [continuous interaction](continuous.md) and [memory](memory.md); a qualified neural state uses held trace and memory inputs. |
 | Action settling diagnostics | `Brain.last_settlement` reports accepted and refused free-answer solves. [Full recording](api.md#record-every-settling-step) can capture additional solver calls; it incurs overhead. |
 | Local teaching and reward updates | [Learning](learning.md) and [reward](reward.md); supplied labels and real feedback retain their distinct contracts. Centered dopamine can suppress actor modulation, not all learning or work. |
+| Routine and repair in one life | `Brain.live` uses arousal to choose between greedy routine and exploration with learning; see [continuous interaction](continuous.md#routine-and-repair-live). Routine still pays a full settle. |
 | Dreaming and sleep consolidation | [Record-patch sleep](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night) transfers retained completions into slow weights. [Behavioral tests](../tests/test_record_patch.py) check recall after removing the record store; sleep does not guarantee correction of false memories. |
 | Selective activity in a separate composition | [Life](api.md#life-cadencelife) governs a belief/steering model with an application-supplied habit. It is not an automatic gate inside `Brain.compose`. |
 | Learned environmental consequences | [Temporal planning](planning.md), [record patches](record-patch.md) and [belief models](belief.md); integration into the default continuing brain is tracked in [the consequence-model issue](https://github.com/muellerberndt/cadence/issues/93). |

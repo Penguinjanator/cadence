@@ -290,6 +290,14 @@ printed by `report.py` from the stored per-event actions. This archived receipt 
 bound to the sources at commit `1b916fb`, before the maintainer fixes; its source
 hashes describe that revision and remain unchanged.
 
+Maintainer verification: `results/confirmation-2-maintainer-2026-10-08.json.gz`
+repeats the frozen protocol on the runtime sources at `3c64122`, after the fixes.
+All 20 founders completed in 440 seconds; canonical form, digest, sources and
+artifact hashes verify. All 960 recorded action sequences (165,520 row-events),
+scores and solver-work counters match the original, as do all 5,515 arrays across
+185 saved artifacts. Timing was remeasured, with zero missed deadlines against
+one in the original run. The tables below retain the original measurements.
+
 #### Window controls, means over founders (alternation / agreement / refusals)
 
 | Branch | efference/every | efference/mismatch | selected/every | selected/mismatch |

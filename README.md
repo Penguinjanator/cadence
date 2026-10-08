@@ -41,11 +41,11 @@ adds a first routine-and-repair loop for one stream, measured on one bounded
 chamber. Integrated learned world prediction, repair localized to what failed
 and cheap stable operation remain development goals. Cadence is alpha research software.
 
-The examples and guides use Cadence 0.75.0, including action diagnostics through
-`Brain.last_settlement`. This release adds `Brain.live`, the routine-and-repair loop
-of one continuing stream with its arousal genes, and the odour nursery that measures
-it; the settling, learning and memory equations and the composed defaults are those
-of 0.74.0.
+**One way to start:** create a brain with `Brain.compose(..., arousal=ArousalConfig())`,
+then call `brain.live(...)` for each observation and actual outcome. `compose`
+constructs the brain; `live` runs its life. `brain.last_settlement` is an optional
+diagnostic report. Release history belongs in the [changelog](CHANGELOG.md).
+
 Start with the simplest existing System 1: proposed additions must remain local
 repair within the same equilibrium and demonstrate benefit without losing
 working capabilities. Animal and human brains guide the abstraction, including
@@ -94,37 +94,39 @@ Python 3.11+ and NumPy are required.
 Install the published release for this basic example:
 
 ```sh
-python -m pip install cadence-net==0.75.0
+python -m pip install cadence-net==0.76.0
 ```
 
-Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.75.0/docs/README.md)
+Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.76.0/docs/README.md)
 describes the APIs included in that package.
 
 ```python
 import numpy as np
-from cadence import Brain
+from cadence import ArousalConfig, Brain
 
-brain = Brain.compose(inputs=4, actions=2, modules=(16, 8), seed=7)
+brain = Brain.compose(inputs=4, actions=2, arousal=ArousalConfig())
 observation = np.array([[1.0, 0.0, 0.0, 0.0]])
-action = brain.step(observation)
+action = brain.live(observation)
 
 # A tiny environment rewards action 0 and supplies the next observation.
 reward = (action == 0).astype(float)
 next_observation = np.array([[0.0, 1.0, 0.0, 0.0]])
-action = brain.step(next_observation, reward=reward, done=np.array([False]))
+action = brain.live(next_observation, reward=reward)
 assert action.shape == (1,)
 ```
 
-`step` learns from the **preceding action's** measured reward, then chooses the
-next action. `teacher=` can label the **current observation**. Keep each batch
-row attached to the same life. There is no training/inference mode switch.
+`live` takes the **preceding action's** measured reward, then chooses the next
+action for one continuing stream. Supply one observation row per call. A calm
+brain acts greedily without learning; youth or arousal enables exploration,
+learning and memory writes. There is no training/inference mode switch.
 [Continuous interaction](https://github.com/muellerberndt/cadence/blob/main/docs/continuous.md)
-covers teaching, resets and saved continuation.
-The [continuing brain example](https://github.com/muellerberndt/cadence/blob/main/examples/continuing_brain.py) keeps the same brain
-through bootstrap, unchanged conditions, disruption and correction, then checks
-a checkpoint awaiting feedback. It records task outcomes and free-answer work
-separately, and teaches a repeated cue only after a witnessed mistake. Real
-reward learning and associative writes still process every observed outcome.
+covers arousal, resets and saved continuation.
+
+For explicit teaching, batched streams or learning from every outcome, use the
+lower-level `step` loop. Its `teacher=` labels the current observation. The
+[continuing brain example](https://github.com/muellerberndt/cadence/blob/main/examples/continuing_brain.py)
+demonstrates that explicit teaching policy through changed conditions and saved
+continuation. It is an advanced control over the same composed brain.
 
 The constructor includes a working trace and fast/persistent associative memory.
 The trace carries recent activity; learned graph parameters and consolidated
@@ -167,6 +169,7 @@ not inferred from a small residual.
 ```python
 recursive = Brain.compose(
     inputs=4, actions=2, modules=(16, 8), observers=(8,), seed=7,
+    arousal=ArousalConfig(),
 )
 ```
 
@@ -177,9 +180,9 @@ for experience and evaluation.
 
 Actions and independent predictions require the full neural equation residual
 to meet the configured tolerance. Exhausting the budget refuses an action without
-changing its live state, memory or pending feedback. If `step` has learned a real
-outcome before the next action refuses, retry `act` without submitting that reward
-again. Numerical damping stays within the total budget and checks the original
+changing its live state, memory or pending feedback. If `live` has accepted an
+outcome before the next action refuses, retry `live(observation)` without submitting
+that reward again. Numerical damping stays within the total budget and checks the original
 equations. It does not change the teaching rule. See [contracts](https://github.com/muellerberndt/cadence/blob/main/docs/contracts.md).
 
 ## Go further

@@ -2,18 +2,22 @@
 
 `Brain.compose` creates a continuing **System 1** brain with working
 trace, plastic connections and fast/persistent associative memory. Optional
-observer regions add **System 2** feedback in the same neural graph. `step`
-connects either layout to its body: observe, learn from the preceding outcome,
-then act again. There is no training/inference mode switch.
+observer regions add **System 2** feedback in the same neural graph. For one
+creature, construct it with `arousal=ArousalConfig()` and use `brain.live(...)`:
+observe, report the preceding action's actual outcome, then act again. There is
+no training/inference mode switch. The [quickstart](quickstart.md) is the small
+starting example.
 
 This is the runtime loop for [one continuing equilibrium brain](world-model.md).
 Bootstrap, unchanged conditions and witnessed disruption belong to the same
-life. `step` processes each actual outcome. [`live`](#routine-and-repair-live)
-is the same life with arousal: routine while outcomes match the brain's
-forecast, exploring and learning when they do not. Keep a task error separate
-from a numerical failure to settle.
+life. [`live`](#routine-and-repair-live) lets arousal decide when to explore and
+learn and when to answer greedily without learning. The explicit `step` loop
+below is for batched streams, teacher labels or learning from every outcome.
+Keep a task error separate from a numerical failure to settle.
 
-## Observations, actions and reward
+<a id="observations-actions-and-reward"></a>
+
+## Explicit learning with `step`
 
 ```python
 import numpy as np
