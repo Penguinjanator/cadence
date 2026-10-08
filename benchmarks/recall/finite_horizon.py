@@ -16,7 +16,7 @@ Arms, one continuing life each per founder, on the same frozen episodes:
                 by the world; supplied assistance, counted separately;
 - ``random``    the frozen uniform-random actions of every row.
 
-Revision 2 retains raw accepted-event trace transitions, paired neural/trace separation,
+Revision 3 retains raw accepted-event trace transitions, paired neural/trace separation,
 motor margins, history transport and both event-time forks. Each founder runs in a bounded
 child process. A deadline kills and reaps that worker, preserves completed journals and
 leaves all unfinished planned rows in the denominator. The byte cap is checked between
@@ -68,7 +68,18 @@ from cadence import Brain, LearnerConfig, Receipt  # noqa: E402
 from cadence.learning import LearningPhaseError  # noqa: E402
 
 SCHEMA = "finite-recall/1"
-INSTRUMENT_REVISION = 2
+INSTRUMENT_REVISION = 3
+TRACE_FIELDS = (
+    "before_trace",
+    "before_last",
+    "before_cold",
+    "after_trace",
+    "after_last",
+    "after_cold",
+    "activation",
+    "decay",
+)
+DIAGNOSTIC_FIELDS = ("trace", "neural", "motor", "potential")
 PROTOCOL_PATH = Path(__file__).with_name("protocol-finite.json")
 ARMS = ("vanished", "default", "history", "random")
 CONTROLS = ("intact", "erased", "shuffled", "reset")
@@ -189,6 +200,8 @@ class Work:
             return
         if self.trace_directory is None:
             return
+        if self.pending_traces and self.pending_traces[-1]["activation"].shape != h.shape:
+            self.flush_traces()
         self.pending_traces.append(
             {
                 **{f"before_{k}": np.asarray(v).copy() for k, v in before.items()},
@@ -206,20 +219,17 @@ class Work:
         assert self.trace_directory is not None
         self.trace_directory.mkdir(exist_ok=True)
         path = self.trace_directory / f"chunk-{self.trace_chunks:05d}.npz"
-        np.savez_compressed(
-            path,
-            **{
-                f"{index}/{name}": value
-                for index, row in enumerate(self.pending_traces)
-                for name, value in row.items()
-            },
-        )
+        np.savez_compressed(path, **pack_traces(self.pending_traces))
         count = len(self.pending_traces)
         self.trace_chunks += 1
         self.retained_trace_records += count
         self.record(
             "trace_chunk",
-            {"path": str(path.relative_to(self.trace_directory.parent)), "count": count},
+            {
+                "path": str(path.relative_to(self.trace_directory.parent)),
+                "count": count,
+                "encoding": "stacked-trace/1",
+            },
         )
         self.pending_traces.clear()
 
@@ -385,6 +395,28 @@ def audit_trace(before: dict, after: dict, h: np.ndarray, decay: float) -> float
     return error
 
 
+def pack_traces(records: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]:
+    """Lossless leading event axis; compression shares repeated values across events."""
+    if not records or any(set(r) != set(TRACE_FIELDS) for r in records):
+        raise ValueError("trace records lack the exact declared fields")
+    for name in TRACE_FIELDS:
+        first = records[0][name]
+        if any(r[name].shape != first.shape or r[name].dtype != first.dtype for r in records):
+            raise ValueError("trace packing cannot change shapes or promote dtypes")
+    return {name: np.stack([record[name] for record in records]) for name in TRACE_FIELDS}
+
+
+def unpack_traces(arrays: Any, count: int) -> list[dict[str, np.ndarray]]:
+    if set(arrays) != set(TRACE_FIELDS):
+        raise ValueError("packed trace fields differ from the declared schema")
+    packed = {name: arrays[name] for name in TRACE_FIELDS}
+    if any(value.ndim < 1 or len(value) != count for value in packed.values()):
+        raise ValueError("packed trace event census differs")
+    return [
+        {name: np.asarray(packed[name][index]) for name in TRACE_FIELDS} for index in range(count)
+    ]
+
+
 def same_arrays(first: Path, second: Path) -> bool:
     with np.load(first, allow_pickle=False) as a, np.load(second, allow_pickle=False) as b:
         return set(a.files) == set(b.files) and all(np.array_equal(a[k], b[k]) for k in a.files)
@@ -471,6 +503,23 @@ def diagnostics_from_arrays(
         "motor_margin": (
             motor[np.arange(len(labels)), labels] - motor[np.arange(len(labels)), 1 - labels]
         ).tolist(),
+    }
+
+
+def retain_diagnostics(directory: Path, index: int, diagnostic: dict) -> dict:
+    """Keep raw vectors once, outside repeated progress/receipt JSON."""
+    target = directory / "query-diagnostics" / f"{index:04d}.npz"
+    target.parent.mkdir(exist_ok=True)
+    np.savez_compressed(
+        target, **{name: np.asarray(diagnostic[name]) for name in DIAGNOSTIC_FIELDS}
+    )
+    return {
+        **{k: v for k, v in diagnostic.items() if k not in DIAGNOSTIC_FIELDS},
+        "raw": {
+            "encoding": "query-arrays/1",
+            "path": target.relative_to(directory).as_posix(),
+            "sha256": sha256(target),
+        },
     }
 
 
@@ -743,7 +792,9 @@ def evaluate_arm(
             trial["branches"] = branches
             checkpoint.unlink()
         if answer is not None:
-            trial["diagnostics"] = query_diagnostics(brain, arrays["labels"])
+            trial["diagnostics"] = retain_diagnostics(
+                directory, index, query_diagnostics(brain, arrays["labels"])
+            )
         trial["random"] = arrays["uniform_actions"].tolist()
         trials.append(trial)
         write_progress(directory / "evaluation-progress.json", progress)
@@ -1397,28 +1448,12 @@ def audit_work(work: dict, journal: Path, *, incomplete: bool = False) -> None:
     for row in journal_rows(journal, incomplete=incomplete):
         if row["operation"] != "trace_chunk":
             continue
+        require_equal(row["encoding"], "stacked-trace/1", "trace encoding")
         with np.load(journal.parent / row["path"], allow_pickle=False) as arrays:
-            required = {
-                f"{i}/{name}"
-                for i in range(row["count"])
-                for name in (
-                    "before_trace",
-                    "before_last",
-                    "before_cold",
-                    "after_trace",
-                    "after_last",
-                    "after_cold",
-                    "activation",
-                    "decay",
-                )
-            }
-            require_equal(set(arrays.files), required, "raw trace chunk census")
-            for i in range(row["count"]):
-                before = {k: arrays[f"{i}/before_{k}"] for k in ("trace", "last", "cold")}
-                after = {k: arrays[f"{i}/after_{k}"] for k in ("trace", "last", "cold")}
-                error = audit_trace(
-                    before, after, arrays[f"{i}/activation"], float(arrays[f"{i}/decay"])
-                )
+            for record in unpack_traces(arrays, row["count"]):
+                before = {k: record[f"before_{k}"] for k in ("trace", "last", "cold")}
+                after = {k: record[f"after_{k}"] for k in ("trace", "last", "cold")}
+                error = audit_trace(before, after, record["activation"], float(record["decay"]))
                 max_error = max(max_error, error)
                 count += 1
     require_equal(count, work["retained_trace_records"], "retained trace count")
@@ -1433,6 +1468,8 @@ def audit_work(work: dict, journal: Path, *, incomplete: bool = False) -> None:
 def audit_current(body: dict, directory: Path) -> None:
     declaration = json.loads((directory / "declaration.json").read_text())
     require_equal(body["declaration"], declaration, "declaration copy")
+    require_equal(declaration["trace_encoding"], "stacked-trace/1", "declared trace encoding")
+    require_equal(declaration["query_encoding"], "query-arrays/1", "declared query encoding")
     protocol, digest = load_protocol(directory / "protocol.json")
     require_equal(body["protocol"], protocol, "protocol body")
     require_equal(declaration["protocol_sha256"], digest, "declared protocol hash")
@@ -1522,19 +1559,35 @@ def audit_current(body: dict, directory: Path) -> None:
                     )
                 if arm != "random" and "diagnostics" in trial:
                     d = trial["diagnostics"]
+                    require_equal(d["raw"]["encoding"], "query-arrays/1", "query encoding")
+                    require_equal(
+                        d["raw"]["path"],
+                        f"query-diagnostics/{index:04d}.npz",
+                        "query diagnostic identity",
+                    )
+                    diagnostic_path = base / arm / d["raw"]["path"]
+                    require_equal(
+                        sha256(diagnostic_path), d["raw"]["sha256"], "query diagnostic hash"
+                    )
+                    with np.load(diagnostic_path, allow_pickle=False) as archive:
+                        require_equal(
+                            set(archive.files), set(DIAGNOSTIC_FIELDS), "query raw array census"
+                        )
+                        raw_d = {name: archive[name] for name in DIAGNOSTIC_FIELDS}
                     expected_d = diagnostics_from_arrays(
-                        np.asarray(d["trace"]),
-                        np.asarray(d["neural"]),
-                        np.asarray(d["motor"]),
+                        raw_d["trace"],
+                        raw_d["neural"],
+                        raw_d["motor"],
                         episode["labels"],
                     )
-                    potential = np.asarray(d["potential"])
+                    potential = raw_d["potential"]
                     expected_d.update(
-                        potential=potential.tolist(),
                         paired_potential_distance=np.linalg.norm(
                             potential[::2] - potential[1::2], axis=1
                         ).tolist(),
                     )
+                    expected_d = {k: v for k, v in expected_d.items() if k not in DIAGNOSTIC_FIELDS}
+                    expected_d["raw"] = d["raw"]
                     require_equal(d, expected_d, "query diagnostic arithmetic")
                 if arm == "history":
                     require_equal(
@@ -1768,6 +1821,8 @@ def main(argv: list[str] | None = None) -> int:
     declaration = {
         "schema": SCHEMA,
         "instrument_revision": INSTRUMENT_REVISION,
+        "trace_encoding": "stacked-trace/1",
+        "query_encoding": "query-arrays/1",
         "evidence_scope": "Corrected instrument; previously used seeds provide an audit, "
         "not fresh confirmation.",
         "protocol_sha256": protocol_sha,

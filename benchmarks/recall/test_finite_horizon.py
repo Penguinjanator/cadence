@@ -198,7 +198,9 @@ def test_a_small_run_scores_forks_seams_and_timing_and_its_receipt_verifies(prot
     gates = founder["gates"]
     assert set(gates["conditions"]) == {c.name for c in inputs.TEST_CONDITIONS}
     assert -1 <= gates["horizon"] <= 2 and isinstance(gates["closure"], bool)
-    assert body["declaration"]["instrument_revision"] == 2
+    assert body["declaration"]["instrument_revision"] == 3
+    assert (out / "summary.json").stat().st_size < 1024 * 1024
+    assert sum(p.stat().st_size for p in out.rglob("*") if p.is_file()) < 32 * 1024 * 1024
     assert body["unmet_protocol_obligations"] == [] and not body["closure"]
     assert founder["hard_guard"]["completed"] and founder["hard_guard"]["reaped"]
     assert vanished["work"]["retained_trace_records"] == vanished["work"]["trace_audits"]
@@ -236,14 +238,29 @@ def test_a_small_run_scores_forks_seams_and_timing_and_its_receipt_verifies(prot
     # Re-signing a changed raw transition cannot manufacture a valid recurrence.
     stored["body"] = body
     chunk = next((out / "founder-0/vanished/training-traces").glob("*.npz"))
+    original_chunk = chunk.read_bytes()
     with np.load(chunk, allow_pickle=False) as archive:
         arrays = {k: archive[k] for k in archive.files}
-    arrays["0/after_trace"] = arrays["0/after_trace"] + 0.1
+    arrays["after_trace"][0] += 0.1
     np.savez_compressed(chunk, **arrays)
     stored["body"]["artifacts"][chunk.relative_to(out).as_posix()] = chamber.sha256(chunk)
     chamber.Receipt.build(chamber.SCHEMA, stored["body"], sources).write(out / "summary.json")
     valid, reason = chamber.verify(out)
     assert not valid and "accepted-event update" in reason
+    chunk.write_bytes(original_chunk)
+    body["artifacts"][chunk.relative_to(out).as_posix()] = chamber.sha256(chunk)
+    # A diagnostic vector changed behind a re-signed hash still has to match its margins.
+    diagnostic = body["founders"][0]["arms"]["vanished"]["trials"][0]["diagnostics"]
+    path = out / "founder-0/vanished" / diagnostic["raw"]["path"]
+    with np.load(path, allow_pickle=False) as archive:
+        vectors = {k: archive[k] for k in archive.files}
+    vectors["motor"][0, 0] += 0.5
+    np.savez_compressed(path, **vectors)
+    diagnostic["raw"]["sha256"] = chamber.sha256(path)
+    body["artifacts"][path.relative_to(out).as_posix()] = chamber.sha256(path)
+    chamber.Receipt.build(chamber.SCHEMA, body, sources).write(out / "summary.json")
+    valid, reason = chamber.verify(out)
+    assert not valid and "query diagnostic arithmetic" in reason
 
 
 @pytest.mark.parametrize("bad", [["--seeds", "0", "0"], ["--repeats", "0", "1"]])
@@ -356,3 +373,34 @@ def test_query_diagnostics_and_history_traffic_use_observations_not_answers():
     assert traffic["buffer_bytes"] == 1088
     assert traffic["query_bytes_transported"] == 1024
     assert traffic["payload_bytes_read"] == traffic["payload_bytes_written"] == 256
+
+
+def test_packed_trace_records_preserve_exact_values_shapes_and_dtypes(tmp_path):
+    records = []
+    for index in range(7):
+        record = {
+            name: np.full((2, 3), index / 10, dtype=np.float64)
+            for name in chamber.TRACE_FIELDS
+            if name not in ("before_cold", "after_cold", "decay")
+        }
+        record.update(
+            before_cold=np.array([True, False]),
+            after_cold=np.array([False, False]),
+            decay=np.asarray(0.8),
+        )
+        records.append(record)
+    packed = chamber.pack_traces(records)
+    path = tmp_path / "packed.npz"
+    np.savez_compressed(path, **packed)
+    with np.load(path, allow_pickle=False) as archive:
+        restored = chamber.unpack_traces(archive, len(records))
+        with pytest.raises(ValueError, match="event census"):
+            chamber.unpack_traces(archive, len(records) + 1)
+    for before, after in zip(records, restored, strict=True):
+        for name in chamber.TRACE_FIELDS:
+            assert before[name].dtype == after[name].dtype
+            assert before[name].shape == after[name].shape
+            assert before[name].tobytes() == after[name].tobytes()
+    records[-1]["activation"] = records[-1]["activation"].astype(np.float32)
+    with pytest.raises(ValueError, match="promote dtypes"):
+        chamber.pack_traces(records)
