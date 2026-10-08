@@ -14,7 +14,9 @@ for the settling brain's transport, `[accel]` adds torch and `[apple]` adds MLX 
 settling brain on a device; the temporal and record patches are NumPy, and the belief
 patch's slow half has a torch twin ([backends](backends.md)).
 
-**Which interface do I want?** Start with `Brain.compose`. The
+**Which interface do I want?** Start with `Brain.compose(..., arousal=ArousalConfig())`
+and `brain.live(...)` for one continuing stream. Use `step` for explicit teaching,
+batches or learning from every outcome. The
 [specialist guides](quickstart.md#specialist-guides) cover other model contracts;
 [build from your data](build.md) explains their shapes and encodings.
 

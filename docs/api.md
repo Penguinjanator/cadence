@@ -784,7 +784,8 @@ that recursive benefit or automatic reflective behavior has been learned.
     `(batch, slots)` when the motor neurons split into slots, matching `act` and `step`.
     A refused epoch score leaves its already accepted teaching updates in place.
     These operations do not switch modes. `fit` resets pending stream
-    state before its updates; use `step` for a continuing life.
+    state before its updates; use `live` for one continuing life, or `step` for
+    explicit teaching, batches or learning from every outcome.
   - `imagine(observations, *, budget=1024, tolerance=1e-6) -> tuple[Equilibrium, ...]`:
     `observations` is a sequence of finite, nonempty batches with the same stream
     identities. Each possible observation uses its own bounded free solve, including
