@@ -8,15 +8,18 @@ its only consistent answer. This chamber is the smallest version of that observa
 voice, an onset every ``period`` rows, the heard event and a constant drive as the only input,
 the next event as the only label.
 
-The declared mechanism is the efference copy with a decay above zero (0.76.0): a decaying copy
-of the brain's own last onset is a count of rows since it. The declared contract is that the
+This is an engineered sensory-history comparison, not a supported use of the public
+own-command efference contract or a repair of issue 140. The adapter writes heard inputs
+directly into the efference storage and restores that storage after acts. It supplies a
+decaying input-history feature; the next event remains a teaching label only. The
 heard event enters the copy before the brain answers a row, in teaching, in watching and in
 the prime of a play, and the brain's own command is taken back out of it, so that the copy
 carries the heard stream alone; in the closed loop the brain's own command is the heard event
 and stays. Without that contract a brain whose copy holds only its own greedy commands never
 has an onset in it while it still emits holds, and the majority fixed point seals itself.
-Teaching follows the routine rule of ``Brain.live``: a row answered right teaches nothing, a
-wrong or refused answer is followed by one lesson on that row; a lesson on every row (the
+Teaching uses an explicit label-based mismatch policy, not ``Brain.live``: a row answered
+right teaches nothing, a wrong or refused answer is followed by one lesson on that row;
+a lesson on every row (the
 watching recipe of the C64 lane) made the pattern come and go from pass to pass on the
 development seeds. Arms on the same founder weights and the same rows:
 
@@ -32,8 +35,8 @@ development seeds. Arms on the same founder weights and the same rows:
 
 Every brain arm is first watched: from reset it hears the taught rows once more with free
 greedy acts and no lesson, and its agreement with the next event is the open-loop reading (the
-agreement inside teaching is not that reading, since there every act follows a lesson on the
-same row). Then every arm plays ``plays`` closed loops of ``rows`` rows from primes at every
+agreement inside teaching precedes any conditional lesson on the same row). Then every arm
+plays closed loops of ``rows`` rows from primes at every
 phase of the pattern. Readings: onset rate against the truth's, agreement with the primed
 pattern's own continuation, agreement with the other phases' continuations (prime dependence)
 and the pairwise correlation of the plays across primes (the issue's own measure). Receipts
@@ -59,6 +62,8 @@ import cadence as cd
 from cadence import Brain, LearnerConfig, Receipt
 
 SCHEMA = "loop-rhythm/1"
+INSTRUMENT_REVISION = 2
+IDENTITY = "engineered heard-event history adapter; not public own-command efference or Brain.live"
 PROTOCOL_PATH = Path(__file__).with_name("protocol-loop.json")
 ARMS = ("copy", "own", "nocopy", "frozen", "ngram", "hold", "random")
 BRAIN_ARMS = ("copy", "own", "nocopy", "frozen")
@@ -80,6 +85,14 @@ def load_protocol(path: Path = PROTOCOL_PATH) -> tuple[dict, str]:
         raise ValueError(f"protocol lacks {missing}")
     if set(protocol["seeds"]["development"]) & set(protocol["seeds"]["confirmation"]):
         raise ValueError("confirmation seeds must be fresh")
+    if (
+        protocol["pattern"]["period"] < 2
+        or protocol["teaching"]["rows"] < 2
+        or protocol["teaching"]["passes"] < 0
+        or protocol["play"]["rows"] < 2
+        or protocol["play"]["prime"] < protocol["pattern"]["period"]
+    ):
+        raise ValueError("invalid pattern, teaching or play length")
     return protocol, hashlib.sha256(raw).hexdigest()
 
 
@@ -131,9 +144,19 @@ class Work:
         self.lessons = self.refused_lessons = self.acts = self.refused_acts = 0
         self.lesson_sweeps = self.act_sweeps = 0
         self.seconds = 0.0
+        self.events: list[dict] = []
+        self.adapter_rows = self.adapter_updates = 0
+        self.adapter_seconds = 0.0
+        self.checkpoint_writes = self.checkpoint_reads = self.checkpoint_bytes = 0
+        self.checkpoint_seconds = 0.0
+        self.control_updates = self.control_predictions = 0
+        self.control_seconds = 0.0
+        self.phase = "unclassified"
 
     def summary(self) -> dict:
-        return dict(vars(self))
+        return {
+            name: value for name, value in vars(self).items() if name not in ("events", "phase")
+        }
 
 
 def act(brain: Brain, x: np.ndarray, work: Work) -> int | None:
@@ -151,6 +174,14 @@ def act(brain: Brain, x: np.ndarray, work: Work) -> int | None:
     finally:
         work.seconds += time.perf_counter() - start
     work.act_sweeps += int(brain.last_settlement["steps"])
+    work.events.append(
+        {
+            "kind": "act",
+            "phase": work.phase,
+            "answer": answer,
+            "steps": int(brain.last_settlement["steps"]),
+        }
+    )
     return answer
 
 
@@ -165,10 +196,26 @@ def teach(brain: Brain, x: np.ndarray, label: int, work: Work) -> bool:
         work.refused_lessons += 1
         report = error.report
         work.lesson_sweeps += int(report["total_steps"])
+        work.events.append(
+            {
+                "kind": "lesson",
+                "phase": work.phase,
+                "refused": True,
+                "steps": int(report["total_steps"]),
+            }
+        )
         return False
     finally:
         work.seconds += time.perf_counter() - start
     work.lesson_sweeps += int(report["total_steps"])
+    work.events.append(
+        {
+            "kind": "lesson",
+            "phase": work.phase,
+            "refused": False,
+            "steps": int(report["total_steps"]),
+        }
+    )
     return True
 
 
@@ -205,21 +252,28 @@ def hear(
     the copy, so the copy carries the heard stream alone, one update per row. Under ``own`` the
     copy carries nothing but the brain's own commands."""
     echo = brain.efference if arm in CONTRACT_ARMS else None
+    began = time.perf_counter()
+    settling_before = work.seconds
+    work.adapter_rows += 1
     if echo is not None:
         if not len(echo.trace):
             echo.reset(1)
         echo.issue(np.eye(2)[[event]])
+        work.adapter_updates += 1
     x = observation(event)
     before = memory_state(brain)
     answer = act(brain, x, work)
     if label is not None and answer != label:
         after = memory_state(brain)
         restore_memory(brain, before)
-        teach(brain, x, label, work)
-        restore_memory(brain, after)
+        try:
+            teach(brain, x, label, work)
+        finally:
+            restore_memory(brain, after)
     if echo is not None and not keep:
         for k, v in before["efference"].items():
             setattr(echo, k, v)
+    work.adapter_seconds += time.perf_counter() - began - (work.seconds - settling_before)
     return answer
 
 
@@ -228,24 +282,26 @@ def teach_brain(brain: Brain, arm: str, rows: np.ndarray, passes: int, work: Wor
     a wrong or refused answer is followed by a lesson on that row with the next event as the
     label. The agreement per pass is the share of right answers, each given before any lesson
     on its row (the online reading); ``watch_brain`` is the reading after teaching."""
-    agreement, lessons = [], []
-    for _ in range(passes):
+    agreement, lessons, answers = [], [], []
+    for batch in range(passes):
+        work.phase = f"teaching:{batch}"
         brain.reset()
-        hits = total = 0
+        hits = 0
+        answered = []
         given = work.lessons
         for t in range(len(rows) - 1):
             label = int(rows[t + 1])
             answer = hear(brain, arm, int(rows[t]), work, label=label)
-            if answer is None:
-                continue
+            answered.append(answer)
             hits += int(answer == label)
-            total += 1
-        agreement.append(hits / max(1, total))
+        agreement.append(hits / max(1, len(rows) - 1))
         lessons.append(work.lessons - given)
+        answers.append(answered)
     return {
         "agreement_per_pass": agreement,
         "lessons_per_pass": lessons,
         "last_pass_agreement": agreement[-1] if agreement else None,
+        "answers": answers,
     }
 
 
@@ -254,27 +310,45 @@ def watch_brain(brain: Brain, arm: str, rows: np.ndarray, work: Work) -> dict:
     and no lesson; agreement is the share of its answers equal to the next event, onset recall
     the share of onsets it announced."""
     brain.reset()
+    work.phase = "watching"
     hits = total = onsets = announced = 0
+    answers = []
     for t in range(len(rows) - 1):
         label = int(rows[t + 1])
         answer = hear(brain, arm, int(rows[t]), work)
-        if answer is None:
-            continue
-        total += 1
+        answers.append(answer)
+        total += int(answer is not None)
         hits += int(answer == label)
         if label == ONSET:
             onsets += 1
             announced += int(answer == ONSET)
     return {
-        "agreement": hits / max(1, total),
+        "agreement": hits / max(1, len(rows) - 1),
         "onset_recall": announced / max(1, onsets),
         "rows": total,
         "refusals": len(rows) - 1 - total,
+        "answers": answers,
     }
 
 
+def checkpoint(brain: Brain, path: Path, work: Work) -> None:
+    began = time.perf_counter()
+    brain.save(path)
+    work.checkpoint_writes += 1
+    work.checkpoint_bytes += path.stat().st_size
+    work.checkpoint_seconds += time.perf_counter() - began
+
+
 def play_brain(
-    brain: Brain, arm: str, prime: np.ndarray, rows: int, work: Work
+    brain: Brain,
+    arm: str,
+    prime: np.ndarray,
+    rows: int,
+    work: Work,
+    *,
+    phase: int = 0,
+    directory: Path | None = None,
+    custody: dict | None = None,
 ) -> list[int | None]:
     """Hear the prime, then hear your own output for ``rows`` rows. The answer to the last
     prime row is the first event of the loop, and from there every heard event is the brain's
@@ -282,14 +356,59 @@ def play_brain(
     brain.reset()
     answer: int | None = None
     last = len(prime) - 1
+    work.phase = f"prime:{phase}"
     for t, event in enumerate(prime):
         answer = hear(brain, arm, int(event), work, keep=t == last)
     out: list[int | None] = [answer]
     heard = HOLD if answer is None else answer
+    twin = None
+    twin_heard = HOLD
+    checkpoint_heard = HOLD
+    twin_out: list[int | None] = []
+    probe_at = min(8, rows - 1)
     for _ in range(rows - 1):
+        if directory is not None and len(out) == probe_at:
+            path = directory / "mid-loop.npz"
+            checkpoint(brain, path, work)
+            began = time.perf_counter()
+            twin = Brain.load(path)
+            work.checkpoint_reads += 1
+            work.checkpoint_bytes += path.stat().st_size
+            work.checkpoint_seconds += time.perf_counter() - began
+            twin_heard = heard
+            checkpoint_heard = heard
+        work.phase = f"play:{phase}"
         answer = act(brain, observation(heard), work)
         out.append(answer)
         heard = HOLD if answer is None else answer
+        if twin is not None:
+            work.phase = "continuation"
+            restored = act(twin, observation(twin_heard), work)
+            twin_out.append(restored)
+            twin_heard = HOLD if restored is None else restored
+    if twin is not None:
+        assert directory is not None and custody is not None
+        original_path, restored_path = directory / "continued.npz", directory / "restored.npz"
+        checkpoint(brain, original_path, work)
+        checkpoint(twin, restored_path, work)
+        began = time.perf_counter()
+        with (
+            np.load(original_path, allow_pickle=False) as original,
+            np.load(restored_path, allow_pickle=False) as restored,
+        ):
+            equal = original.files == restored.files and all(
+                np.array_equal(original[name], restored[name]) for name in original.files
+            )
+        work.checkpoint_reads += 2
+        work.checkpoint_bytes += original_path.stat().st_size + restored_path.stat().st_size
+        work.checkpoint_seconds += time.perf_counter() - began
+        custody.update(
+            after_rows=probe_at,
+            heard=checkpoint_heard,
+            answers=twin_out,
+            actions_equal=twin_out == out[probe_at:],
+            arrays_equal=equal,
+        )
     return out
 
 
@@ -327,7 +446,7 @@ class NGram:
 
 
 def score_play(out: list[int | None], truth: np.ndarray) -> dict:
-    played = np.array([HOLD if v is None else v for v in out])
+    played = np.array([-1 if v is None else v for v in out])
     return {
         "onset_rate": float(np.mean(played == ONSET)),
         "agreement": float(np.mean(played == truth)),
@@ -336,6 +455,8 @@ def score_play(out: list[int | None], truth: np.ndarray) -> dict:
 
 
 def correlation(a: list[int | None], b: list[int | None]) -> float | None:
+    if any(v is None for v in a + b):
+        return None
     x = np.array([HOLD if v is None else v for v in a], dtype=float)
     y = np.array([HOLD if v is None else v for v in b], dtype=float)
     if x.std() == 0 or y.std() == 0:
@@ -344,6 +465,7 @@ def correlation(a: list[int | None], b: list[int | None]) -> float | None:
 
 
 def run_founder(seed: int, arm: str, protocol: dict, directory: Path) -> dict:
+    began = time.perf_counter()
     directory.mkdir(parents=True)
     warnings.simplefilter("ignore")
     period = int(protocol["pattern"]["period"])
@@ -357,29 +479,61 @@ def run_founder(seed: int, arm: str, protocol: dict, directory: Path) -> dict:
     rng = np.random.default_rng(seed)
     if arm in BRAIN_ARMS:
         brain = make_brain(seed, protocol, arm)
-        brain.save(directory / "initial.npz")
+        checkpoint(brain, directory / "initial.npz", work)
         if arm != "frozen":
             result["teaching"] = teach_brain(
                 brain, arm, rows, int(protocol["teaching"]["passes"]), work
             )
-            brain.save(directory / "taught.npz")
+            checkpoint(brain, directory / "taught.npz", work)
         result["watching"] = watch_brain(brain, arm, rows, work)
-        plays = [play_brain(brain, arm, prime, play_rows, work) for prime in primes]
+        result["continuation"] = {}
+        plays = [
+            play_brain(
+                brain,
+                arm,
+                prime,
+                play_rows,
+                work,
+                phase=phase,
+                directory=directory if phase == 0 else None,
+                custody=result["continuation"] if phase == 0 else None,
+            )
+            for phase, prime in enumerate(primes)
+        ]
     elif arm == "ngram":
+        started = time.perf_counter()
         table = NGram(int(protocol["ngram"]["order"]))
         table.teach(rows)
         plays = [table.play(prime, play_rows) for prime in primes]
+        work.control_updates = len(rows) - 1
+        work.control_predictions = period * play_rows
+        work.control_seconds = time.perf_counter() - started
     elif arm == "hold":
+        started = time.perf_counter()
         plays = [[HOLD] * play_rows for _ in primes]
+        work.control_predictions = period * play_rows
+        work.control_seconds = time.perf_counter() - started
     else:
+        started = time.perf_counter()
         plays = [[int(v) for v in rng.integers(0, 2, play_rows)] for _ in primes]
+        work.control_predictions = period * play_rows
+        work.control_seconds = time.perf_counter() - started
     result["plays"] = [[-1 if v is None else v for v in play] for play in plays]
+    result.update(score_plays(plays, truths))
+    result["work"] = work.summary()
+    result["events"] = work.events
+    result["elapsed_seconds"] = time.perf_counter() - began
+    return result
+
+
+def score_plays(plays: list[list[int | None]], truths: list[np.ndarray]) -> dict:
+    result: dict[str, Any] = {}
     result["scores"] = [score_play(play, truth) for play, truth in zip(plays, truths, strict=True)]
     # prime dependence: a play should agree with its own prime's continuation more than with
     # the continuations of the other phases
     cross = [
         [
-            float(np.mean(np.array([HOLD if v is None else v for v in play]) == other))
+            float(np.mean(np.array([-1 if v is None else v for v in play]) == other))
             for other in truths
         ]
         for play in plays
@@ -396,23 +550,36 @@ def run_founder(seed: int, arm: str, protocol: dict, directory: Path) -> dict:
     result["mean_onset_rate"] = float(np.mean([s["onset_rate"] for s in result["scores"]]))
     result["mean_agreement"] = float(np.mean([s["agreement"] for s in result["scores"]]))
     result["refusals"] = int(sum(s["refusals"] for s in result["scores"]))
-    result["work"] = work.summary()
     return result
 
 
-def gates(rows: list[dict], protocol: dict) -> dict:
+def gates(
+    rows: list[dict], protocol: dict, seeds: list[int] | None = None,
+    *, frozen_protocol: bool = True,
+) -> dict:
     g = protocol["gates"]
     period = int(protocol["pattern"]["period"])
     truth_rate = 1.0 / period
     hold_agreement = 1.0 - truth_rate
-    out: dict[str, Any] = {}
+    seeds = protocol["seeds"]["confirmation"] if seeds is None else seeds
+    pairs = [(r["seed"], r["arm"]) for r in rows]
+    expected = {(seed, arm) for seed in seeds for arm in ARMS}
+    complete = len(pairs) == len(set(pairs)) and set(pairs) == expected
+    admitted = complete and frozen_protocol and seeds == protocol["seeds"]["confirmation"]
+    out: dict[str, Any] = {"complete": complete, "admitted": admitted, "passed": False}
     for arm in sorted({r["arm"] for r in rows}, key=ARMS.index):
         group = [r for r in rows if r["arm"] == arm]
         fires = sum(
-            abs(r["mean_onset_rate"] - truth_rate) <= g["onset_tolerance"] * truth_rate
+            all(
+                abs(s["onset_rate"] - truth_rate) <= g["onset_tolerance"] * truth_rate
+                for s in r["scores"]
+            )
             for r in group
         )
-        follows = sum(r["mean_agreement"] >= hold_agreement + g["agreement_margin"] for r in group)
+        follows = sum(
+            all(s["agreement"] >= hold_agreement + g["agreement_margin"] for s in r["scores"])
+            for r in group
+        )
         depends = sum(bool(r["prime_dependent"]) for r in group)
         out[arm] = {
             "founders": len(group),
@@ -421,41 +588,204 @@ def gates(rows: list[dict], protocol: dict) -> dict:
             "prime_dependent": depends,
             "mean_onset_rate": float(np.mean([r["mean_onset_rate"] for r in group])),
             "mean_agreement": float(np.mean([r["mean_agreement"] for r in group])),
-            "refusals": int(sum(r["refusals"] for r in group)),
+            "refusals": int(sum(r["work"]["refused_acts"] for r in group)),
         }
         if all("watching" in r for r in group):
             out[arm]["mean_watching"] = float(np.mean([r["watching"]["agreement"] for r in group]))
     if "copy" in out and "frozen" in out:
         frozen = {r["seed"]: r for r in rows if r["arm"] == "frozen"}
         learned = sum(
-            abs(r["mean_onset_rate"] - truth_rate) <= g["onset_tolerance"] * truth_rate
-            and r["mean_agreement"] >= hold_agreement + g["agreement_margin"]
-            and bool(r["prime_dependent"])
-            and not (
-                r["seed"] in frozen
-                and frozen[r["seed"]]["mean_agreement"] >= hold_agreement + g["agreement_margin"]
+            all(
+                abs(s["onset_rate"] - truth_rate) <= g["onset_tolerance"] * truth_rate
+                and s["agreement"] >= hold_agreement + g["agreement_margin"]
+                for s in r["scores"]
             )
+            and bool(r["prime_dependent"])
+            and r["work"]["refused_acts"] == 0
+            and r["seed"] in frozen
+            and frozen[r["seed"]]["work"]["refused_acts"] == 0
+            and frozen[r["seed"]]["mean_agreement"] < hold_agreement + g["agreement_margin"]
             for r in rows
             if r["arm"] == "copy"
         )
         out["copy"]["learned"] = learned
-        out["passed"] = learned >= g["share"] and out["copy"]["refusals"] == 0
+        out["passed"] = (
+            admitted and learned >= g["share"] and all(r["work"]["refused_acts"] == 0 for r in rows)
+        )
     return out
+
+
+def check_run(run: dict, protocol: dict, directory: Path) -> None:
+    """Recompute observations, work and scores; summary fields are not evidence by themselves."""
+    period, count = protocol["pattern"]["period"], protocol["play"]["rows"]
+    primes = [pattern(period, protocol["play"]["prime"], phase) for phase in range(period)]
+    truths = [continuation(period, prime, count) for prime in primes]
+    assert len(run["plays"]) == period
+    assert all(
+        len(play) == count and all(type(v) is int and v in (-1, HOLD, ONSET) for v in play)
+        for play in run["plays"]
+    )
+    plays = [[None if v == -1 else v for v in play] for play in run["plays"]]
+    for key, value in score_plays(plays, truths).items():
+        assert run[key] == value, f"play arithmetic differs: {key}"
+    work, events = run["work"], run["events"]
+    assert all(
+        e["kind"] in ("act", "lesson") and type(e["steps"]) is int and e["steps"] >= 0
+        for e in events
+    )
+    acts = [e for e in events if e["kind"] == "act"]
+    lessons = [e for e in events if e["kind"] == "lesson"]
+    assert work["acts"] == len(acts) and work["lessons"] == len(lessons)
+    assert work["act_sweeps"] == sum(e["steps"] for e in acts)
+    assert work["lesson_sweeps"] == sum(e["steps"] for e in lessons)
+    assert work["refused_acts"] == sum(e["answer"] is None for e in acts)
+    assert work["refused_lessons"] == sum(e["refused"] for e in lessons)
+    assert all(np.isfinite(v) and v >= 0 for v in work.values())
+    assert np.isfinite(run["elapsed_seconds"]) and run["elapsed_seconds"] >= 0
+    arm = run["arm"]
+    rows = pattern(period, protocol["teaching"]["rows"])
+    if arm not in BRAIN_ARMS:
+        assert not events and work["adapter_rows"] == work["adapter_updates"] == 0
+        assert (
+            work["checkpoint_writes"] == work["checkpoint_reads"] == work["checkpoint_bytes"] == 0
+        )
+        assert work["control_predictions"] == period * count
+        assert work["control_updates"] == (len(rows) - 1 if arm == "ngram" else 0)
+        if arm == "ngram":
+            table = NGram(protocol["ngram"]["order"])
+            table.teach(rows)
+            expected = [table.play(prime, count) for prime in primes]
+        elif arm == "hold":
+            expected = [[HOLD] * count for _ in primes]
+        else:
+            rng = np.random.default_rng(run["seed"])
+            expected = [rng.integers(0, 2, count).tolist() for _ in primes]
+        assert run["plays"] == expected
+        return
+
+    def answers(phase: str) -> list[int | None]:
+        return [e["answer"] for e in acts if e["phase"] == phase]
+
+    expected_phases = {"watching", "continuation"}
+    expected_phases.update(
+        f"{kind}:{phase}" for kind in ("prime", "play") for phase in range(period)
+    )
+    if arm != "frozen":
+        teaching = run["teaching"]
+        assert len(teaching["answers"]) == protocol["teaching"]["passes"]
+        agreements, given = [], []
+        for batch, values in enumerate(teaching["answers"]):
+            phase = f"teaching:{batch}"
+            expected_phases.add(phase)
+            assert len(values) == len(rows) - 1 and values == answers(phase)
+            agreements.append(
+                sum(a == int(b) for a, b in zip(values, rows[1:], strict=True)) / len(values)
+            )
+            given.append(sum(e["phase"] == phase for e in lessons))
+            assert given[-1] == sum(a != int(b) for a, b in zip(values, rows[1:], strict=True))
+        assert teaching["agreement_per_pass"] == agreements
+        assert teaching["lessons_per_pass"] == given
+        assert teaching["last_pass_agreement"] == (agreements[-1] if agreements else None)
+    else:
+        assert "teaching" not in run and not lessons
+    assert all(e["phase"] in expected_phases for e in events)
+    assert all(e["phase"].startswith("teaching:") for e in lessons)
+    watching = run["watching"]
+    values = answers("watching")
+    assert values == watching["answers"] and len(values) == len(rows) - 1
+    assert watching["rows"] == sum(a is not None for a in values)
+    assert watching["refusals"] == sum(a is None for a in values)
+    assert watching["agreement"] == sum(
+        a == int(b) for a, b in zip(values, rows[1:], strict=True)
+    ) / len(values)
+    assert watching["onset_recall"] == sum(
+        a == ONSET and b == ONSET for a, b in zip(values, rows[1:], strict=True)
+    ) / max(1, int(np.sum(rows[1:] == ONSET)))
+    for phase in range(period):
+        primed = answers(f"prime:{phase}")
+        assert len(primed) == len(primes[phase]) and primed[-1] == plays[phase][0]
+        assert answers(f"play:{phase}") == plays[phase][1:]
+    custody = run["continuation"]
+    probe_at = min(8, count - 1)
+    expected_heard = HOLD if plays[0][probe_at - 1] is None else plays[0][probe_at - 1]
+    assert custody["after_rows"] == probe_at and custody["heard"] == expected_heard
+    assert custody["answers"] == answers("continuation") == plays[0][probe_at:]
+    assert custody["actions_equal"] and custody["arrays_equal"]
+    folder = directory / f"seed{run['seed']}-{arm}"
+    names = ["initial.npz", "mid-loop.npz", "continued.npz", "restored.npz"]
+    if arm != "frozen":
+        names.append("taught.npz")
+    assert work["checkpoint_writes"] == len(names) and work["checkpoint_reads"] == 3
+    assert work["checkpoint_bytes"] == sum(
+        (folder / name).stat().st_size for name in names + names[1:4]
+    )
+    with (
+        np.load(folder / "continued.npz", allow_pickle=False) as original,
+        np.load(folder / "restored.npz", allow_pickle=False) as restored,
+    ):
+        assert original.files == restored.files and all(
+            np.array_equal(original[k], restored[k]) for k in original.files
+        )
+    heard_rows = sum(
+        not e["phase"].startswith("play:") and e["phase"] != "continuation" for e in acts
+    )
+    assert work["adapter_rows"] == heard_rows
+    assert work["adapter_updates"] == (heard_rows if arm in CONTRACT_ARMS else 0)
+    assert work["control_updates"] == work["control_predictions"] == 0
 
 
 def verify(directory: Path) -> tuple[bool, str]:
     try:
         path = directory / "summary.json"
         raw = json.loads(path.read_text())
+        assert raw["kind"] == SCHEMA
         sources = [(item["path"], directory / item["path"]) for item in raw["source"]["files"]]
+        required_sources = {"source/loop_rhythm.py"} | {
+            "source/cadence/" + p.relative_to(Path(cd.__file__).parent).as_posix()
+            for p in Path(cd.__file__).parent.rglob("*.py")
+        }
+        assert {name for name, _ in sources} == required_sources, "incomplete source manifest"
 
         def check(body: dict) -> str | None:
+            assert (
+                body["instrument_revision"] == INSTRUMENT_REVISION and body["identity"] == IDENTITY
+            )
+            declaration = body["declaration"]
+            assert declaration == json.loads((directory / "declaration.json").read_text())
+            protocol = json.loads((directory / "protocol.json").read_text())
+            overrides = declaration["overrides"]
+            assert set(overrides) <= {"passes", "seeds", "arms", "protocol"}
+            if "passes" in overrides:
+                protocol["teaching"]["passes"] = overrides["passes"]
+            assert protocol == body["protocol"]
+            seeds, arms = declaration["seeds"], declaration["arms"]
+            assert len(seeds) == len(set(seeds)) and len(arms) == len(set(arms))
+            assert all(type(s) is int and s >= 0 for s in seeds) and set(arms) <= set(ARMS)
+            assert seeds == overrides.get("seeds", protocol["seeds"]["confirmation"])
+            assert arms == overrides.get("arms", list(ARMS))
+            expected = {(seed, arm) for seed in seeds for arm in arms}
+            actual = [(r["seed"], r["arm"]) for r in body["runs"]]
+            assert len(actual) == len(set(actual)) and set(actual) == expected
+            assert body["frozen_protocol"] == declaration["frozen_protocol"] == (not overrides)
+            assert declaration["protocol_sha256"] == body["protocol_sha256"]
+            assert body["protocol_sha256"] == overrides.get("protocol", sha256(PROTOCOL_PATH))
+            expected_artifacts = {"protocol.json", "declaration.json"}
+            for run in body["runs"]:
+                check_run(run, protocol, directory)
+                if run["arm"] in BRAIN_ARMS:
+                    names = ["initial.npz", "mid-loop.npz", "continued.npz", "restored.npz"]
+                    if run["arm"] != "frozen":
+                        names.append("taught.npz")
+                    expected_artifacts.update(f"seed{run['seed']}-{run['arm']}/{n}" for n in names)
+            assert set(body["artifacts"]) == expected_artifacts
             for name, expected in body["artifacts"].items():
                 if sha256(directory / name) != expected:
                     return f"artifact differs: {name}"
             if body["protocol_sha256"] != sha256(directory / "protocol.json"):
                 return "protocol copy differs from the recorded hash"
-            if gates(body["runs"], body["protocol"]) != body["gates"]:
+            if gates(
+                body["runs"], body["protocol"], seeds, frozen_protocol=body["frozen_protocol"]
+            ) != body["gates"]:
                 return "the stored gates do not follow from the runs"
             return None
 
@@ -463,7 +793,7 @@ def verify(directory: Path) -> tuple[bool, str]:
         return valid, (
             "canonical form, digest, sources, artifact hashes and gates agree" if valid else reason
         )
-    except (OSError, ValueError, KeyError, TypeError) as error:
+    except (OSError, ValueError, KeyError, TypeError, AssertionError, IndexError) as error:
         return False, f"cannot verify artifact: {error}"
 
 
@@ -484,9 +814,17 @@ def main(argv: list[str] | None = None) -> int:
     protocol, protocol_sha = load_protocol(args.protocol)
     overrides: dict[str, Any] = {}
     if args.passes is not None:
+        if args.passes < 0:
+            parser.error("passes must be nonnegative")
         protocol["teaching"]["passes"] = args.passes
         overrides["passes"] = args.passes
     seeds = list(protocol["seeds"]["confirmation"]) if args.seeds is None else list(args.seeds)
+    if args.seeds is not None:
+        overrides["seeds"] = seeds
+    if args.arms != list(ARMS):
+        overrides["arms"] = list(args.arms)
+    if protocol_sha != sha256(PROTOCOL_PATH):
+        overrides["protocol"] = protocol_sha
     if (
         len(seeds) != len(set(seeds))
         or any(s < 0 for s in seeds)
@@ -499,8 +837,10 @@ def main(argv: list[str] | None = None) -> int:
     began = time.perf_counter()
     declaration = {
         "schema": SCHEMA,
+        "instrument_revision": INSTRUMENT_REVISION,
+        "identity": IDENTITY,
         "protocol_sha256": protocol_sha,
-        "frozen_protocol": not overrides and args.seeds is None,
+        "frozen_protocol": not overrides,
         "overrides": overrides,
         "seeds": seeds,
         "arms": list(args.arms),
@@ -559,16 +899,22 @@ def main(argv: list[str] | None = None) -> int:
         and p.name != "summary.json"
     }
     summary = {
+        "instrument_revision": INSTRUMENT_REVISION,
+        "identity": IDENTITY,
         "declaration": declaration,
         "protocol": protocol,
         "protocol_sha256": protocol_sha,
         "frozen_protocol": declaration["frozen_protocol"],
         "runs": runs,
-        "gates": gates(runs, protocol),
+        "gates": gates(runs, protocol, seeds, frozen_protocol=declaration["frozen_protocol"]),
         "seconds": time.perf_counter() - began,
         "artifacts": artifacts,
         "work_scope": (
-            "Every lesson and free act of every arm and play is charged; sweeps are not joules."
+            "All brain acts and lessons, including refused and continuation work, are recorded. "
+            "Adapter, conventional-control and checkpoint operations have separate counts/times; "
+            "founder elapsed time includes scoring and bookkeeping. Receipt/source copying and "
+            "verification are outside these founder counters. "
+            "Sweeps are not joules; no efficiency claim."
         ),
     }
     Receipt.build(SCHEMA, summary, sources).write(args.out / "summary.json")
