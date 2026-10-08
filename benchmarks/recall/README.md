@@ -146,7 +146,7 @@ checkpoint unchanged; clean-2 replayed from its saved cue under two timestamp
 schedules, and with one versus two events at matched elapsed time. Every admitted
 real act retains trace/last/cold before and after, source activation and decay in
 compressed chunks for independent recurrence replay. The declared caps are 900
-seconds and 160 MiB per founder. Revision 2 kills and reaps a founder's child process
+seconds and 160 MiB per founder. Revision 3 kills and reaps a founder's child process
 at the wall deadline; it checks retained bytes between operations. A capped or
 failed worker retains its completed journals and partial progress, records unknown
 unfinished work explicitly, and leaves all unrun rows in the denominator. The horizon
@@ -163,7 +163,7 @@ the selected budget. All 15 finite receipts have intact canonical digests and
 source-manifest self-consistency, and their stored scores reproduce from their
 raw trials. That does not repair the wrong schedule or omitted work.
 
-Instrument revision 2 uses the declared repeat counts, retains completed-call
+Instrument revision 3 uses the declared repeat counts, retains completed-call
 journals and raw recurrence arrays, charges seam/timing/imagination/refusal and
 checkpoint work, and verifies the frozen inputs, trial census, selected teaching
 rows, scores, raw trace replay, diagnostic arithmetic and gates. Each query reports
@@ -225,9 +225,8 @@ nothing on any founder or condition, the finding of the 2026-10-03 exploration n
 a frozen protocol with source-bound receipts. The declared recipe is founder-bound:
 one founder learns nothing at all with the same lessons that teach its history twin,
 one recalls at delays 1 and 2 but not at 0, one at 0 and partly at 1. The distractor
-and order conditions fail everywhere. The next freeze selects the trace amplitude and
-the lesson budget on development founders and runs new fresh founders; the current
-`--repeats` override marks such development runs as not frozen.
+and order conditions fail everywhere. The subsequent development below selected trace amplitude and lesson budget before
+freezes 2 and 3; the `--repeats` override marks those development runs as not frozen.
 
 ### Development founders 0 and 1: the amplitude, the decay and the lesson budget
 
@@ -334,5 +333,50 @@ support a causal role for the trace in the successful conditions. The composed
 trace control fails the declared recall gates. Replacement and ordered recall
 remain weak, while the supplied-history comparator is often competent. These
 results do not establish a necessary new memory mechanism or the outcome of the
-unexecuted 384-episode protocol. Corrected, source-bound audits are needed before
-reconsidering #84 closure.
+then-unexecuted 384-episode protocol. The corrected audits below now test that budget.
+
+### Corrected 384-episode audits: closure still fails
+
+The separately retained [protocol 2 audit](results/audit-finite-2-maintainer-2026-10-08.json.gz)
+and [protocol 3 audit](results/audit-finite-3-maintainer-2026-10-08.json.gz) were produced
+by instrument revision 3 at
+[`94bb365`](https://github.com/muellerberndt/cadence/commit/94bb36561c90bdd871293b2893bf3e882f4b138d),
+with the recorded Cadence 0.77.0 source. These are correction audits on the six
+previously used founders, **not fresh confirmation**. They use the original frozen
+protocols, genes, thresholds and caps without overrides. Each brain arm completed
+all **384 training and 312 evaluation episodes**, with batch size 8.
+
+| Protocol | Founder | Vanished-cue lesson attempts / row presentations | Contiguous horizon | Qualified teacher refusals, all arms | Closure |
+| --- | --- | --- | --- | --- | --- |
+| 2, every | 304 | 384 / 3072 | none | 5 | failed |
+| 2, every | 305 | 384 / 3072 | 0 | 3 | failed |
+| 2, every | 306 | 384 / 3072 | 0 | 14 | failed |
+| 3, selective | 307 | 346 / 1237 | none | 0 | failed |
+| 3, selective | 308 | 364 / 1351 | none | 0 | failed |
+| 3, selective | 309 | 334 / 1112 | none | 0 | failed |
+
+Lesson/row counts include refused teaching attempts; all 22 refusals remain in the
+work and acceptance records. There were no unexpected free-action refusals or unrun
+evaluation rows. Every founder fails the required nuisance gate. The two protocols
+use different founders, so this table is not a paired causal comparison of teaching rules.
+
+The verifier independently replayed **78,264 admitted trace transitions**, with
+maximum discrepancy at most 1.12e-16. Saved continuation, private/refused purity,
+timestamp invariance, event-count diagnostics and query diagnostic arithmetic all
+passed. Each history arm transported 393,216 training and 319,488 evaluation bytes
+through its query-history coordinates, in addition to its separately recorded
+buffer, copying and payload work. Worker time including replay was 97.4–196.3 seconds;
+retained storage including the shared sources and complete receipt was 136.4–149.4 MiB
+per founder, within the unchanged 900-second/160-MiB caps.
+
+An earlier revision-2 audit exceeded the output cap because raw query vectors were
+duplicated across progress and receipt JSON. That capped/interrupted attempt and
+its completed journals remain local; no protocol-3 run used that encoding. Revision 3
+losslessly stacks raw trace arrays and stores raw query vectors once in compressed
+artifacts. Round-trip and re-signed tamper tests verify the encoding; the completed
+founder-304 lives shared with the earlier attempt have identical training answers,
+evaluation answers, scores and final checkpoint arrays.
+
+These completed audits establish the failure at the declared budget, rather than
+guessing from the earlier half-budget runs. They provide no promotion of a recall
+horizon across all founders, and **#84 remains open under its original gates**.

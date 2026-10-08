@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.78.0 — 2026-10-08
 
 - Add the period-four loop chamber for #140, retaining the declared protocol and
   original receipts. Its passing `copy` arm uses an external sensory-history
@@ -16,14 +16,22 @@
   freezes 2 and 3 actually ran 192 episodes per founder, not the declared 384;
   preserve those authentic receipts as protocol deviations. Add strict census,
   score and work checks and retain the original `every` teaching behavior. Report
-  corrected measurements separately; a one-founder success does not establish
-  the declared recall horizon. Library behavior, interfaces and defaults are unchanged.
+  corrected measurements separately. Full 384-episode correction audits complete
+  on all six reused founders: protocol 2 horizons are none/0/0, protocol 3 has no
+  passing prefix, and every founder fails nuisance acceptance. Both receipts verify;
+  #84 remains open. Library behavior, interfaces and defaults are unchanged.
 - Retain and replay raw recall-trace transitions, measure separation and motor
   margins, compare equal-time histories with different event counts, and enforce
-  founder time limits while preserving unfinished work. Add the missing shuffled-time
+  founder time limits while preserving unfinished work. Losslessly pack the evidence
+  after retaining an oversized incomplete attempt; all corrected audits fit the
+  unchanged 160-MiB cap. Add the missing shuffled-time
   and untaught controls to the native period-two rhythm instrument, with explicit
   actuator timing, recovery and continuation bounds declared before confirmation.
   Charge saved-copy work and remove a redundant, previously uncounted replay.
+  Complete the missing paced recurrent-control comparison: all 16 cases meet
+  the unchanged bounds, while the brain's two development attempts still fail
+  physical timing. Verify rounded display fields at their declared precision;
+  all acceptance bounds continue to use raw timestamps.
 - Add key-door/3's third, returning rule, longer corridor, variable delays and
   recurrent control for [#111](https://github.com/muellerberndt/cadence/issues/111).
   The original 300 lives failed the declared acceptance gate. Return performance

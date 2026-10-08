@@ -936,3 +936,43 @@ learning/control/custody work is present, but the predeclared physical timing
 contract still fails development on this host. The older rhythm/1, rhythm/2 and
 reward receipts above retain their original bytes and scope; this new verifier
 does not retroactively certify their timing or work accounting.
+
+### Physical timing of the recurrent control
+
+The original flip-flop comparisons measured event sequences without physical pacing.
+[`timing_control.py`](timing_control.py) completes that missing comparison using the
+already-trained `efference/every` control checkpoints from development seeds 0–1.
+Its separate declaration freezes the original inputs, checkpoints, source hashes,
+software/thread setup and all eight distinct physical schedules per founder before
+any control action. It does not retrain or run a brain, change the timing protocol,
+or claim fresh confirmation. Numerical solver settings do not apply to this control;
+their physical schedule is the same regular 100ms schedule measured here.
+
+[All 16 control cases](results/development-timing-control-1.json.gz) passed the
+unchanged physical bounds in 54.98 seconds, including host load and shuffled time.
+The 512 policy calls (2,048 rows) had no failures or missed deadlines. Maximum start
+lateness was 14.71ms, issued-action phase drift 16.40ms, and issued-period error
+12.00ms against the 25ms bound. Every action was independently reconstructed from
+the saved policy, and checkpoint state, complete work and the full case census
+verified. Dense policy work was 28,672 multiply-accumulates, excluding feature
+construction, argmax, memory traffic and verification; measured policy CPU/wall
+time was 0.065/0.085 seconds. Source: `e71b5131936de6dd8d55ab23db215a55570c4dc8`.
+
+The first verifier rejected five rounded display values because subtracting relative
+timestamps crossed a rounding midpoint by a few floating-point bits. The unchanged
+capsule passes the corrected independent verifier at
+`e3ff063e3d48de2049769ff8e6745e058e3a9831`: it checks the declared display precision,
+while every physical gate still uses the original unrounded timestamps. The focused
+suite passes 22 tests. No timed rerun or timing-bound change was needed.
+
+This supplies the missing competent physical recurrent control for #116's comparison
+item. It leaves the brain's **0/2 joint timing result** unchanged. Sequential runs
+do not identify the cause of earlier host stalls, and fresh brain confirmation and
+issue closure remain unsupported. Replay requires the preserved full development
+capsule and its recorded environment:
+
+```sh
+python benchmarks/rhythm/timing_control.py --prepare /path/to/timing-development-02 --out /tmp/rhythm-control
+python benchmarks/rhythm/timing_control.py --run /tmp/rhythm-control
+python benchmarks/rhythm/timing_control.py --verify /tmp/rhythm-control
+```
