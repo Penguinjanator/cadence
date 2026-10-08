@@ -612,6 +612,30 @@ The three reward receipts in `results/` were regenerated on the released `cadenc
 exclusion); every founder's action sequence is identical to the receipt taken on the branch
 before the release.
 
+### Maintainer audit with instrument revision 2
+
+The corrected chamber at `0a0a0d7` reran all three unchanged protocols, with 40
+founders each and no cap or override. All 120 main-life action sequences, rewards,
+arousal readings, scores and greedy probes match the historical receipts. The
+same-founder gates remain failed / passed / failed, with 3/5, 4/5 and 3/5 jointly
+qualifying founders respectively. The runtime differs from 0.76.0 only in its
+version string; the corrections are in the instrument.
+
+With the checkpoint's actual world boundary restored, recovery after each tested
+pause or distractor is 3/5, 4/5 and 5/5 for the live arm of reward/1, reward/2 and
+reward/3. The corresponding eligibility controls recover in 5/5, 4/5 and 4/5.
+In reward/2, the corrected live recovery is 4/5; the historical instrument's 3/5
+also included its unintended missing-reward disturbance. Initial/final saves,
+greedy-probe time and baseline calls are now included in work accounting.
+
+Separate receipts retain the corrected measurements and source manifests:
+[`reward/1 audit`](results/audit-reward-1-maintainer-2026-10-08.json.gz),
+[`reward/2 audit`](results/audit-reward-2-maintainer-2026-10-08.json.gz), and
+[`reward/3 audit`](results/audit-reward-3-maintainer-2026-10-08.json.gz).
+Their canonical forms, sources, artifacts, event arithmetic, census and gates
+verify. These reuse the original seeds as an instrument audit, not fresh
+confirmation. The historical tables above remain unchanged.
+
 ### Reading the reward chambers
 
 The frozen arm is the zero of learning: a greedy founder under identical drive holds one
