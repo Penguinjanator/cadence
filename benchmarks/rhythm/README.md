@@ -256,9 +256,13 @@ python benchmarks/rhythm/steady_rhythm.py --out /tmp/rhythm-2 \
 python benchmarks/rhythm/steady_rhythm.py --verify /tmp/rhythm-2
 python benchmarks/rhythm/report.py /tmp/rhythm-2/summary.json
 python benchmarks/rhythm/develop_recipe.py --out /tmp/rhythm-dev --decays 0.1 \
-    --amplitudes 3.0 --rates default --efference-amplitudes 0.3 1.0 3.0 \
+    --amplitudes 3.0 --rates default --efference-amplitudes 0.0 0.3 1.0 3.0 \
     --efference-decays 0.0 0.2 0.5
 ```
+
+The development command includes the amplitude-zero control once for each decay;
+those control cells are identical because decay has no effect without a copy.
+The archived table keeps one copy of each amplitude-zero control cell.
 
 ### Development, seeds 0 to 5, 24 bouts
 
@@ -282,7 +286,9 @@ candidate; a slower decay or a weaker read is worse.
 Receipt: `results/confirmation-2-2026-10-08.json.gz`, verified (canonical form,
 digest, sources and artifact hashes agree), frozen protocol, 20 founders planned and
 completed, none capped, no refused act or lesson, 442 seconds. The tables are
-printed by `report.py` from the stored per-event actions.
+printed by `report.py` from the stored per-event actions. This archived receipt is
+bound to the sources at commit `1b916fb`, before the maintainer fixes; its source
+hashes describe that revision and remain unchanged.
 
 #### Window controls, means over founders (alternation / agreement / refusals)
 

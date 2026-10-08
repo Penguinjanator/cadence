@@ -346,12 +346,22 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
         if array("working/cold", (batch,)).dtype != np.bool_:
             raise ValueError("invalid saved working-memory cold flags")
     efference = meta.get("efference")
+    if efference is None and (
+        "efference" in populations or any(name.startswith("efference/") for name in data)
+    ):
+        raise ValueError("saved efference neurons and state require efference metadata")
     if efference is not None:
         if meta.get("format") != "cadence-generic/4":
             raise ValueError("an efference copy belongs to checkpoint format cadence-generic/4")
         source, target = efference["source"], efference["target"]
-        if source not in populations or target not in populations:
+        if (
+            source != "motor"
+            or target != "efference"
+            or target not in populations
+            or len(populations[target]) != len(populations[source])
+        ):
             raise ValueError("invalid saved efference ports")
+        _validate_efference_amplitude(efference["amplitude"])
         width = len(populations[source])
         array("efference/trace", (batch, width))
         array("efference/last", (batch, width))
@@ -412,7 +422,7 @@ class Brain:
             excluded = np.zeros(connectome.n, dtype=bool)
             for name, members in populations.items():
                 head = name.split("/", 1)[0]
-                boundary = head in ("sensory", "visual", "prefrontal", "motor")
+                boundary = head in ("sensory", "visual", "prefrontal", "motor", "efference")
                 target = excluded if boundary else selected
                 target[np.asarray(members, dtype=np.int64)] = True
             bias[selected & ~excluded] = resting_bias
@@ -1148,27 +1158,26 @@ class Brain:
 
     def _forecast(self, x: np.ndarray, ended: bool) -> tuple[np.ndarray, BrainState]:
         """Read the next value without changing the stream. A finished episode's
-        forecast starts from rest and a fresh trace; accepting its outcome commits
+        forecast starts from rest and fresh traces; accepting its outcome commits
         that reset, so a refused forecast or arousal update preserves feedback."""
         agent = self.basal_ganglia
-        trace = self.working_memory
         if not ended:
             return self._settled(x)
         kept = (agent._free, agent._free_brain, agent._drive)
-        traces = (
-            None
-            if trace is None
-            else {name: getattr(trace, name).copy() for name in ("trace", "last", "cold")}
-        )
+        traces = [
+            (trace, {name: getattr(trace, name).copy() for name in ("trace", "last", "cold")})
+            for trace in (self.working_memory, self.efference)
+            if trace is not None
+        ]
         try:
-            if trace is not None:
+            for trace, _ in traces:
                 trace.reset(1, rows=np.array([0]))
             agent._free = None
             return self._settled(x)
         finally:
             agent._free, agent._free_brain, agent._drive = kept
-            if trace is not None and traces is not None:
-                for name, value in traces.items():
+            for trace, values in traces:
+                for name, value in values.items():
                     setattr(trace, name, value)
 
     # -- lower-level interaction operations

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Harden the opt-in efference copy at episode and checkpoint boundaries: routine
+  terminal forecasts clear both traces before choosing the next action and restore
+  them on refusal; `resting_bias` leaves command neurons silent until a command;
+  loading rejects invalid command ports, read gains and missing continuation state.
 - Add the efference copy, `Brain.compose(..., efference_amplitude=..., efference_decay=...)`
   and `cadence.Efference`: a trace written from the command the brain issued, one
   `efference` neuron per motor neuron, read by the association region through a plastic

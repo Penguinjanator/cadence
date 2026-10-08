@@ -1,6 +1,7 @@
 """The efference copy: a trace of the issued command, a gene with zero as its control."""
 
 import json
+from dataclasses import replace
 
 import numpy as np
 import pytest
@@ -162,7 +163,7 @@ def test_feedback_resets_the_copy_of_ended_rows_and_rolls_back_a_refused_update(
     np.testing.assert_array_equal(brain.efference.cold, cold)
 
 
-def test_a_routine_moment_that_ends_the_episode_starts_the_copy_afresh():
+def test_a_routine_moment_that_ends_the_episode_starts_the_copy_afresh(tmp_path):
     brain = cd.Brain.compose(
         4,
         2,
@@ -176,9 +177,48 @@ def test_a_routine_moment_that_ends_the_episode_starts_the_copy_afresh():
     brain.live(DRIVE, reward=[0.0])
     assert brain.last_arousal["mode"] == "routine"
     assert brain.efference.trace.any()
+    twin = cd.Brain.load(brain.save(tmp_path / "before-terminal"))
+    twin.reset()
     action = brain.live(DRIVE, reward=[0.0], done=[True])
+    np.testing.assert_array_equal(action, twin.live(DRIVE))
+    np.testing.assert_array_equal(brain.basal_ganglia.state.v, twin.basal_ganglia.state.v)
+    for memory in ("working_memory", "efference"):
+        for name in ("trace", "last", "cold"):
+            np.testing.assert_array_equal(
+                getattr(getattr(brain, memory), name), getattr(getattr(twin, memory), name)
+            )
     # the ended row was cleared before this moment's command was issued into it
     np.testing.assert_allclose(brain.efference.trace, 0.8 * np.eye(2)[action])
+
+
+@pytest.mark.parametrize("refusal", ["forecast", "arousal"])
+def test_refused_terminal_routine_feedback_preserves_the_copy(tmp_path, monkeypatch, refusal):
+    brain = composed(echo=3.0, arousal=cd.ArousalConfig(youth=0))
+    brain.live(DRIVE)
+    before = brain.save(tmp_path / "before")
+    config, lived = brain.learner.config, brain._lived
+    outcome = brain.arousal.outcome
+    if refusal == "forecast":
+        brain.learner.config = replace(config, free_steps=0)
+        error, message = RuntimeError, "did not settle"
+    else:
+        def reject(*args, **kwargs):
+            raise ValueError("arousal refused the outcome")
+
+        monkeypatch.setattr(brain.arousal, "outcome", reject)
+        error, message = ValueError, "arousal refused"
+    with pytest.raises(error, match=message):
+        brain.live(DRIVE, reward=[0.0], done=[True])
+    assert brain._lived is lived
+    brain.learner.config = config
+    monkeypatch.setattr(brain.arousal, "outcome", outcome)
+    assert_same_checkpoint(before, brain.save(tmp_path / "after"))
+    twin = cd.Brain.load(before)
+    np.testing.assert_array_equal(
+        brain.live(DRIVE, reward=[0.0], done=[True]),
+        twin.live(DRIVE, reward=[0.0], done=[True]),
+    )
+    assert_same_checkpoint(brain.save(tmp_path / "retried"), twin.save(tmp_path / "twin"))
 
 
 def test_reset_clears_the_copy():
