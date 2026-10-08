@@ -1,7 +1,7 @@
 {
-  "format": "cadence-robot-arena/issue158-development/2",
+  "format": "cadence-robot-arena/issue158-development/1",
   "scope": "Exploratory paired continuation; no claim of acquired fighting skill or fresh confirmation.",
-  "cadence_source": "/Users/muellerberndt/Projects/oph-meta/temp/cadence-issue159-20261008",
+  "cadence_source": "/Users/muellerberndt/Projects/oph-meta/temp/cadence-robot-blockers-20261008",
   "cadence_commit": "2566ccf2c23b76505a82b941111535ffd50f8ae4",
   "arousal_sha256": "3538fd0732be622b3c0c36d399eb365736bd44705d50b05da678364b472dd47f",
   "arena_commit": "14eb800543923c9e1f64f28319490ea4435decb6",
@@ -12,34 +12,6 @@
     "Mantis-3.42": "fe6e1e868b2a7b0403fa34167add04a0b283bd491bf66f8e2b9e107a651c1749",
     "Dozer-2.114": "3364c5a3a84f8bc234e106185999a26d95823931931b749a7512a5bff76e03a8",
     "Mantis-3.97": "d70e9c1096f4050b205a936082a8a3370ee429dea9f54da6e1decd5776795466"
-  },
-  "league_sha256": "50b5617772e89e05a4f753624811f5614e3a932a51a1696fa5e653fa2c227316",
-  "harness_sha256": "deb87de75a1c253fa75755909fbc2c73ae9112daba4c9294665c4a664e5ea188",
-  "initial_owed": {
-    "Crab-2.33": [
-      0.6816782944923734,
-      true
-    ],
-    "Mantis-3.75": [
-      0.6592535427867601,
-      true
-    ],
-    "Crab-3.110": [
-      -0.548758210978784,
-      true
-    ],
-    "Mantis-3.42": [
-      0.15025352164489314,
-      true
-    ],
-    "Dozer-2.114": [
-      0.5839851529209925,
-      true
-    ],
-    "Mantis-3.97": [
-      0.5851950722378456,
-      true
-    ]
   },
   "policy": "random",
   "stage": {
@@ -182,33 +154,7 @@
           "refused": 0,
           "ms_per_moment": 0.0
         }
-      ],
-      "final_owed": {
-        "Crab-2.33": [
-          0.9358195952050506,
-          true
-        ],
-        "Mantis-3.75": [
-          -0.2641804047949493,
-          true
-        ],
-        "Crab-3.110": [
-          0.5949028966275574,
-          true
-        ],
-        "Mantis-3.42": [
-          -0.5863524024280381,
-          true
-        ],
-        "Dozer-2.114": [
-          -0.986352402428038,
-          true
-        ],
-        "Mantis-3.97": [
-          0.20424704282010653,
-          true
-        ]
-      }
+      ]
     },
     {
       "seed": 78,
@@ -340,33 +286,7 @@
           "refused": 0,
           "ms_per_moment": 0.0
         }
-      ],
-      "final_owed": {
-        "Crab-2.33": [
-          0.9358195952050506,
-          true
-        ],
-        "Mantis-3.75": [
-          -0.2641804047949493,
-          true
-        ],
-        "Crab-3.110": [
-          0.59490289662756,
-          true
-        ],
-        "Mantis-3.42": [
-          -0.5863524024280381,
-          true
-        ],
-        "Dozer-2.114": [
-          -0.986352402428038,
-          true
-        ],
-        "Mantis-3.97": [
-          0.20424704282010653,
-          true
-        ]
-      }
+      ]
     },
     {
       "seed": 79,
@@ -498,35 +418,8 @@
           "refused": 0,
           "ms_per_moment": 0.0
         }
-      ],
-      "final_owed": {
-        "Crab-2.33": [
-          0.9358195952050506,
-          true
-        ],
-        "Mantis-3.75": [
-          -0.2641804047949493,
-          true
-        ],
-        "Crab-3.110": [
-          0.5949028966275574,
-          true
-        ],
-        "Mantis-3.42": [
-          -0.5863524024280408,
-          true
-        ],
-        "Dozer-2.114": [
-          -0.9863524024280407,
-          true
-        ],
-        "Mantis-3.97": [
-          0.2042470428201092,
-          true
-        ]
-      }
+      ]
     }
   ],
-  "checkpoints_unchanged": true,
-  "league_unchanged": true
+  "checkpoints_unchanged": true
 }

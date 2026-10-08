@@ -5,7 +5,7 @@
 - Fix income freezing during exploration in multi-slot `Brain.live` lives
   ([#158](https://github.com/muellerberndt/cadence/issues/158)). Every actual reward
   updates recent and long-run income; surprise and its usual error remain limited
-  to the brain's own greedy choices. Keep defaults and action credit unchanged.
+  to the brain's own greedy choices. Keep configuration defaults and action credit unchanged.
   Save the separate income count and migrate earlier checkpoints without resetting
   their acquired state.
 
