@@ -199,6 +199,16 @@ def verify(path: Path, *, current: bool = False, artifacts: bool = False) -> tup
                     or assay["durable_before_sha256"] != assay["durable_after_sha256"]
                 ):
                     return "the assay changed source custody or learned state"
+                work = assay["work"]
+                if (
+                    work["checkpoints"] != 4
+                    or work["greedy_calls"] != 1
+                    or type(work["sweeps"]) is not int
+                    or work["sweeps"] <= 0
+                    or not np.isfinite(work["seconds"])
+                    or work["seconds"] < 0
+                ):
+                    return "invalid stable-skill work counters"
                 if artifacts:
                     if len(assay["artifacts"]) != 3:
                         return "the source, branch and unchanged source checkpoints are required"
@@ -220,6 +230,8 @@ def verify(path: Path, *, current: bool = False, artifacts: bool = False) -> tup
                     ):
                         return "the checkpoint state does not match the preservation readings"
                     restored = kd.cd.Brain.load(checkpoints[1])
+                    if restored.basal_ganglia.state.steps != work["sweeps"]:
+                        return "stable-skill sweeps differ from the saved branch"
                     policy = restored.basal_ganglia.probabilities(restored.basal_ganglia.state)[0]
                     if (
                         int(np.argmax(policy)) != assay["action"]

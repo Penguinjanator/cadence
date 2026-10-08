@@ -249,3 +249,25 @@ def test_historical_third_freeze_keeps_original_bytes_and_explicit_limits():
     assert "instrument_revision" not in body
     assert body["gates"] == keydoor.gates(body["rows"], body["protocol"])
     assert not body["gates"]["passed"]
+
+
+def test_early_copy_archive_is_custody_only_and_unknown_instruments_stay_rejected(tmp_path):
+    path = HERE / "results/development-3-copy-amp3-2026-10-08.json.gz"
+    original = json.loads(gzip.decompress(path.read_bytes()))
+    valid, reason = keydoor.verify(path)
+    assert valid and "custody only" in reason and "source unavailable" in reason
+    for change in ("source", "arm"):
+        edited = copy.deepcopy(original)
+        if change == "source":
+            edited["source"]["files"][0]["sha256"] = "0" * 64
+            edited["source"]["manifest_sha256"] = keydoor.canonical_sha256(
+                edited["source"]["files"]
+            )
+        else:
+            edited["body"]["arms"][1] = "unknown"
+        edited["digest"] = keydoor.canonical_sha256(
+            {k: edited[k] for k in ("kind", "body", "source")}
+        )
+        forged = tmp_path / f"{change}.json"
+        forged.write_text(keydoor.canonical_json(edited) + "\n")
+        assert not keydoor.verify(forged)[0]

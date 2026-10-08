@@ -84,6 +84,7 @@ from cadence.receipts import Receipt, canonical_json, canonical_sha256, source_m
 SCHEMA = "key-door/3"
 INSTRUMENT_REVISION = 2
 FROZEN_PROTOCOL_SHA256 = "f8bf4d7698c72905fca4e1384a4c07389ba87360b899177e19cc765208bf56c9"
+EARLY_COPY_MANIFEST_SHA256 = "d3c82d71925d7a8a1d1e19bfb2b2b7962caf7df89acbe1b9313d8aa170c8d5a2"
 LEGACY_SCHEMA = "key-door/1"
 LEGACY_SCHEMAS = ("key-door/1", "key-door/2")
 DEFAULT_RULES = ["chest", "lamp"]
@@ -1118,13 +1119,18 @@ def planned(body: dict[str, Any]) -> list[tuple[str, int, int]]:
 
 
 def validate_plan(
-    protocol: dict[str, Any], arms: list[str], seeds: list[int], delays: list[int]
+    protocol: dict[str, Any],
+    arms: list[str],
+    seeds: list[int],
+    delays: list[int],
+    *,
+    permitted_arms: tuple[str, ...] = ARMS,
 ) -> None:
     """Reject empty or duplicate plans and world settings without their declared meaning."""
     for name, values in (("arms", arms), ("seeds", seeds), ("delays", delays)):
         if not values or len(set(values)) != len(values):
             raise ValueError(f"{name} must be nonempty and unique")
-    if any(a not in ARMS for a in arms):
+    if any(a not in permitted_arms for a in arms):
         raise ValueError("unknown arm in the plan")
     if any(type(v) is not int or v < 0 for v in [*seeds, *delays]):
         raise ValueError("seeds and delays must be nonnegative integers")
@@ -1260,10 +1266,35 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
             )
         ):
             return "the embedded source manifest is incomplete or malformed"
-        validate_plan(body["protocol"], body["arms"], body["seeds"], body["delays"])
+        early_copy = (
+            revision == 1
+            and stored["kind"] == SCHEMA
+            and source["manifest_sha256"] == EARLY_COPY_MANIFEST_SHA256
+        )
+        old_arms = ("live", "nocopy", "tabular")
+        if early_copy and body["arms"] != list(old_arms):
+            return "the archived early-copy instrument has an unknown arm census"
+        validate_plan(
+            body["protocol"],
+            body["arms"],
+            body["seeds"],
+            body["delays"],
+            permitted_arms=old_arms if early_copy else ARMS,
+        )
         rows = body["rows"]
         if [(r["arm"], r["delay"], r["seed"]) for r in rows] != planned(body):
             return "the rows are not the planned lives, each once and in order"
+        if early_copy:
+            # This source predates the present arm names; no current metric/gate
+            # interpretation is substituted for its unmodified historical bytes.
+            source_text = body["protocol_source"]
+            if (
+                hashlib.sha256(source_text.encode()).hexdigest() != body["protocol_sha256"]
+                or body["protocol"] != json.loads(source_text)
+                or body["genes_override"] is not None
+            ):
+                return "the archived early-copy protocol custody differs"
+            return None
         for row in rows:
             work = row.get("work")
             if work is not None:
@@ -1469,6 +1500,12 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                 )
             elif valid and stored["kind"] != SCHEMA:
                 reason += "; key-door/2: the corrected two-rule instrument"
+            elif valid and stored["source"]["manifest_sha256"] == EARLY_COPY_MANIFEST_SHA256:
+                reason = (
+                    "canonical form, digest, source-manifest integrity, protocol and census agree; "
+                    "archived early-copy instrument: custody only, no current arithmetic or gate "
+                    "verification; original chamber source unavailable"
+                )
             elif valid and stored["body"].get("instrument_revision", 1) == 1:
                 reason += (
                     "; historical key-door/3: mixed recurrent gradients, incomplete clipping "
@@ -1519,6 +1556,17 @@ def main(argv: list[str] | None = None) -> int:
         if not valid:
             print(json.dumps({"verified": False, "reason": reason}))
             return 1
+        if "custody only" in reason:
+            print(
+                json.dumps(
+                    {
+                        "verified": True,
+                        "reason": reason,
+                        "report": "the archived arm semantics require its original renderer",
+                    }
+                )
+            )
+            return 0
         print(markdown(read_receipt(args.report)))
         return 0
     if args.verify is not None:

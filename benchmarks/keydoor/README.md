@@ -39,6 +39,61 @@ unchanged confirmation census; development, selected arms, selected delays and o
 cannot pass. Historical marginal gate labels remain historical. An audit of already spent
 seeds is not a fresh confirmation, and issue 111 remains open.
 
+## Maintainer development: stable skill and joint census, 2026-10-08
+
+The original 20 gated founders meet all five predicates jointly in **11/20 live** and
+**16/20 blind** lives, below the unchanged 90% bound. Live marginal counts are 16 acquired,
+18 adapted, 16 frugal, 13 calm and 18 returned; blind counts are 20, 19, 20, 17 and 19.
+The blind misses are all at delay 5: seed 903 returns at lag 68; seed 904 ends B fed on
+0.66 of trips and late arousal 0.405; seeds 906 and 908 acquire late (lags 425 and 400),
+with late arousal 0.653 and 0.527. These are audits of spent seeds, not new confirmation.
+
+The separately declared [`protocol-retention-development.json`](protocol-retention-development.json)
+and [`retention_audit.py`](retention_audit.py), run from source `abbe9adb`, measure a stable
+problem shared by both rules: a door faced with a key. At birth, after A and after B, each
+saved copy starts a fresh stream, retains learned weights and records, and makes one greedy
+action without receiving feedback. The original life and its pending outcome remain intact.
+This asks whether the usable door response survives competing experience; it does not ask a
+frozen policy to infer the unannounced return to A.
+
+Four development lives (live/blind, seeds 0 and 1, delay 5, 500 A trips then 500 B trips)
+completed without refusals. All four fed on the private door probe after A and after B.
+Three already fed on that probe at birth. Blind seed 1 changed from pass to interact after A
+and preserved it after B; its interaction probabilities were 0.496, 0.941 and 0.959.
+The continuing lives ended A/B fed at 1.00/1.00 and 0.96/0.86 for live, and 1.00/1.00
+for both blind lives. This is bounded development evidence for one stable response;
+it does not close the failed joint gate or establish preservation of an unobservable rule.
+
+The [compressed receipt](results/development-retention-maintainer-2026-10-08.json.gz) and
+[verification receipt](results/verification-retention-maintainer-2026-10-08.json) bind the
+readings to `abbe9adb`; its original verification checked all 36 local checkpoint artifacts.
+Later verifier-only edits change the current source manifest: `--current` for this historical
+run requires its pinned source. The NPZ files remain in local
+`runs/cadence-pr156-maintainer-20261008/retention/`. All original checkpoint state
+and all private-copy learned state were preserved. Founder elapsed time totalled 251.51
+seconds; there were 58,632 actual decisions. The assay charges its four Brain save/load
+operations and greedy solve per boundary; state-file verification reads are included in
+elapsed time. No energy or efficiency comparison follows.
+
+```sh
+python benchmarks/keydoor/retention_audit.py --out /tmp/keydoor-retention/receipt.json
+python benchmarks/keydoor/retention_audit.py --verify /tmp/keydoor-retention/receipt.json --current --artifacts
+```
+
+One bounded follow-up is declared in
+[`protocol-eligibility-development.json`](protocol-eligibility-development.json): blind-body
+founders 2 and 3 at delay 5, comparing the existing eligibility gene `lam=0.95` with `0.98`,
+all three 500-trip phases and every original gate unchanged. The
+[`eligibility_development.py`](eligibility_development.py) helper stops after those four lives.
+This targets the observed late acquisition; it also changes penalty credit and normalized
+critic updates, so improvement is not assumed. No result from that comparison is claimed here.
+
+The early `development-3-copy-amp3` receipt used another instrument: its arms were
+`live` (with the copy), `nocopy` and `tabular`, with chamber hash `d1fd408a4600…`.
+Its original chamber source has not been recovered. The current verifier admits only that
+exact archived source manifest as **custody only** (canonical bytes, digest, protocol and
+census), and does not reinterpret its arithmetic or gates. Every historical byte is retained.
+
 ## Historical key-door/3 freeze, 2026-10-08
 
 The third freeze, [`protocol-3.json`](protocol-3.json), SHA-256

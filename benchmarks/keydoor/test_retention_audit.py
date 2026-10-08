@@ -1,11 +1,13 @@
 """Private stable-skill readings must not teach or disturb the continuing creature."""
 
+import copy
 import importlib.util
 import json
 import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 HERE = Path(__file__).parent
 spec = importlib.util.spec_from_file_location("key_door", HERE / "key_door.py")
@@ -56,7 +58,36 @@ def test_development_assay_preserves_the_underlying_life_and_verifies_artifacts(
         assert plain["pending_outcome"] == row["pending_outcome"]
         assert [a["boundary"] for a in assays] == list(audit.BOUNDARIES)
         assert row["work"]["checkpoints"] - plain["work"]["checkpoints"] == 12
+    original = json.loads(receipt.read_text())
+    for key in ("checkpoints", "sweeps"):
+        edited = copy.deepcopy(original)
+        edited["body"]["assays"][0][0]["work"][key] += 1
+        edited["digest"] = kd.canonical_sha256({k: edited[k] for k in ("kind", "body", "source")})
+        receipt.write_text(kd.canonical_json(edited) + "\n")
+        assert not audit.verify(receipt, artifacts=True)[0]
+    receipt.write_text(kd.canonical_json(original) + "\n")
     artifact = receipt.parent / body["assays"][0][0]["artifacts"][0]["path"]
     artifact.write_bytes(b"damaged")
     assert not audit.verify(receipt, artifacts=True)[0]
     capsys.readouterr()
+
+
+def test_eligibility_development_command_plan_is_bounded_without_running_lives(tmp_path):
+    specification = importlib.util.spec_from_file_location(
+        "eligibility_development", HERE / "eligibility_development.py"
+    )
+    helper = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(helper)
+    protocol = json.loads(helper.PROTOCOL.read_text())
+    plan = helper.commands(tmp_path, protocol)
+    assert [name for name, _ in plan] == ["control", "candidate"]
+    for (_, command), value in zip(plan, (0.95, 0.98), strict=True):
+        assert json.loads(command[command.index("--point") + 1]) == {"lam": value}
+        assert command[command.index("--seeds") + 1 : command.index("--delays")] == ["2", "3"]
+    for key, value in (
+        ("seeds", [2, 3, 4]),
+        ("maximum_lives", 6),
+        ("base_protocol_sha256", "0" * 64),
+    ):
+        with pytest.raises(ValueError, match="only the declared four-life"):
+            helper.commands(tmp_path, {**protocol, key: value})
