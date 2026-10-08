@@ -116,6 +116,22 @@ def shuffle_permutation(cues: np.ndarray) -> np.ndarray:
     return permutation
 
 
+def interval_schedules(seed: int, events: int, intervals: list[float]) -> dict:
+    """Two schedules with identical interval multisets; timing never enters an observation."""
+    values = np.resize(np.asarray(intervals, dtype=float), events - 1)
+    if events < 3 or not len(intervals) or not np.all(np.isfinite(values) & (values > 0)):
+        raise ValueError("positive intervals and at least three events are required")
+    ordered = np.sort(values)
+    rng = np.random.default_rng(np.random.SeedSequence([seed, 3]))
+    shuffled = rng.permutation(ordered)
+    if np.array_equal(ordered, shuffled) and len(np.unique(values)) > 1:
+        shuffled = np.roll(shuffled, 1)
+    return {
+        name: {"slot": np.arange(events), "due_ms": np.r_[0.0, np.cumsum(gaps)]}
+        for name, gaps in (("ordered", ordered), ("shuffled_time", shuffled))
+    }
+
+
 def freeze_inputs(path: Path, *, seed: int, protocol: dict) -> dict[str, np.ndarray]:
     """Write every observation, cue, random action and slot schedule before any model runs."""
     teaching, window, disturbances = (
@@ -158,6 +174,12 @@ def freeze_inputs(path: Path, *, seed: int, protocol: dict) -> dict[str, np.ndar
         schedule = slot_schedule("regular", cadence["events"], variant, cadence["disturbed_slot"])
         arrays[f"cadence/regular{variant}/slot"] = schedule["slot"]
         arrays[f"cadence/regular{variant}/due_ms"] = schedule["due_ms"]
+    if "intervals_ms" in cadence:
+        for name, schedule in interval_schedules(
+            seed, cadence["events"], cadence["intervals_ms"]
+        ).items():
+            for key, value in schedule.items():
+                arrays[f"cadence/{name}/{key}"] = value
     np.savez_compressed(path, **arrays)
     for value in arrays.values():
         value.flags.writeable = False
