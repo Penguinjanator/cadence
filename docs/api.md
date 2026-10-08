@@ -950,7 +950,8 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   `Brain.live` counts a moment when its action is issued; the work of a refused
   attempt is reported by `Brain.last_settlement` and `Brain.last_learning` and is
   absent from these counts.
-  `reset()` begins another stream calm and keeps the age and the counts.
+  `reset()` begins another stream calm and keeps the age and work counts; it clears
+  the income/error averages and their observation counts.
   `to_dict()` and `Arousal.from_dict(values)` carry the complete state.
   An outcome whose running statistics cannot remain finite raises `ValueError`
   without changing those statistics. New saves carry a `cadence-arousal/2` format
