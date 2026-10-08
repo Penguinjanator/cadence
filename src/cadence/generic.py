@@ -1070,8 +1070,8 @@ class Brain:
             error = abs(float(r[0]) + agent.config.gamma * following - lived[2])
             self.last_learning = {}
         if sampled or routine:
-            # only the outcome of the brain's own best guess enters its mood; an adopted
-            # action has no record and counts as its own
+            # Only the brain's own best guess can surprise it; every actual reward
+            # enters its income. An adopted action has no record and counts as its own.
             own = True if lived is None else lived[5]
             try:
                 surprise, want = arousal.outcome(

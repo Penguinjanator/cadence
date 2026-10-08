@@ -705,6 +705,68 @@ confirmation seeds were first run on the frozen protocol.
   largest share of lives ending every rule at or above 0.9 was 94%, at epsilon 0.1 with
   alpha 0.5 or 1.0; alpha 1.0 had the lower median reversal lag, 38 trials against 52.
 
+## Income tracking repair — 2026-10-08
+
+Issue [#158](https://github.com/muellerberndt/cadence/issues/158) exposes a different
+failure of the historical own-only mood law: a brain exploring with several motor
+slots rarely chooses its greedy action in every slot, so its income averages can
+remain stuck at an earlier stage. The repair admits every actual reward to recent
+and long-run income, while surprise and both usual forecast errors remain own-only.
+The settlement, learning equations, action credit and genes are unchanged.
+
+The scalar regression in `tests/test_arousal_income.py` starts both laws with 200
+alternating 0/1 outcomes, 600 at 0.5, 60 at 0.25, then 1,500 sampled outcomes at
+0.25. It supplies no surprise or reset. The previous law ends with want 0.9367
+and is aroused for all of the last 300 outcomes; the repair ends with want 0.0106
+and is calm for those 300. Its income approaches 0.25 while both laws retain
+860 own outcomes for error calibration. A positive unmet need still persists.
+This is an income-law regression, not a learned-skill result.
+
+The historical costly-exploration finding above remains relevant. To check its
+preserved behavioral gates, five paired development founders (0–4) were run on
+the cost payoff with exposure 300 and 600 trials in each later rule. The control
+is source `2566ccf`; the repaired runtime is `9c2ac1f` (also integrated as
+`b041dc7`). The same observations, world, genes, memory, reward rules and work
+accounting apply. Each side contains five continuing lives and 7,505 issued
+actions. Seeds 0–1 ran first; the declared extension then added 2–4 without
+tuning. These are reused development seeds, not fresh confirmation, and this
+single exposure does not repeat the original full confirmation census.
+
+| Reading across the five lives | Own-only income control | All-outcome income repair |
+| --- | ---: | ---: |
+| Lives meeting every measured acquisition/reversal/return/stable/calm gate | 5/5 | 5/5 |
+| Final executed accuracy and stable-pair probes, every phase | 1.00 | 1.00 |
+| Late aroused share, every phase | 0.00 | 0.00 |
+| Median acquisition / reversal / return lag | 83 / 36 / 35 | 83 / 68 / 77 |
+| Aroused actions / all issued actions | 863 / 7,505 (11.50%) | 1,495 / 7,505 (19.92%) |
+| Routine / aroused settling sweeps | 212,256 / 18,048 | 192,160 / 33,440 |
+| Learning / probe sweeps | 9,606 / 39,680 | 18,108 / 39,808 |
+| Memory writes / reads | 873 / 8,378 | 1,506 / 9,011 |
+| Refused sweeps | 0 | 0 |
+
+The repair costs more exploration and slower recovery here. Seed 2's return lag
+increases from 53 to 225 trials. The unchanged gates require final accuracy at
+least 0.9, stable-pair correctness at least 0.95 and late arousal at most 0.2 in
+at least 90% of lives, plus median **reversal** lag at most 150; they do not bound
+each individual return lag. No gate was relaxed. This preserves those bounded
+capabilities while repairing the stale-income defect; it does not establish a
+speed, efficiency or robot-fighting improvement.
+
+The four small source-bound receipts retain both halves of each comparison:
+[control 0–1](results/development-income-control-initial-2026-10-08.json.gz),
+[repair 0–1](results/development-income-candidate-initial-2026-10-08.json.gz),
+[control 2–4](results/development-income-control-additional-2026-10-08.json.gz),
+[repair 2–4](results/development-income-candidate-additional-2026-10-08.json.gz).
+All passed the existing digest/source/arithmetic verifier. An initial control
+attempt was rejected because source files changed while it ran; its results
+were not admitted, and the control was rerun in an unchanged checkout. Reproduce
+each pair at its stated source with:
+
+```bash
+python benchmarks/reversal/odour_nursery.py --arms live --seeds 0 1 --exposures 300 --payoff cost --workers 1 --out income-initial.json.gz
+python benchmarks/reversal/odour_nursery.py --arms live --seeds 2 3 4 --exposures 300 --payoff cost --workers 1 --out income-additional.json.gz
+```
+
 ## What this does and does not establish
 
 The `live` arm supplies bounded acquisition, reversal, return and stable-pair evidence

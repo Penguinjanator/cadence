@@ -808,8 +808,8 @@ that recursive benefit or automatic reflective behavior has been learned.
     (`last_arousal["record_error"]`); the outcome is measured against the value with the
     value of the present state and against the record as it is. Surprise or want raises the arousal (see
     [Arousal](#arousal-cadencearousal)); only the outcome of the brain's own greedy
-    choice enters its mood, and what a sampled, non-greedy action brings teaches
-    without rousing. An aroused brain samples at
+    choice can surprise it or change its usual forecast error. Every actual reward
+    updates its recent and long-run income, including sampled choices. An aroused brain samples at
     `learning.temperature * arousal.heat`, keeps eligibility and learns from the outcome
     as `step` does; the outcome that woke a calm brain is written to its memory for the
     situation it was chosen in. An action sampled by `step` or `act` is adopted, so a
@@ -922,16 +922,17 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   `1 / sqrt(L)` spreads, and is short of its whole need. A need never habituates; a life
   that never paid wants from its first moment. `own` says
   the action was the brain's own best guess: only such an outcome can surprise it and
-  enters `usual`, `recent` and `longrun`; the outcome of an explored action leaves them
-  alone and the level carries the present want forward. `scale` is the spread of the
+  enters `usual`. Every actual outcome updates `recent` and `longrun`, including
+  explored actions, so want follows the income actually received while sampling.
+  `outcomes` counts own outcomes used for the usual TD error; `rewards` separately
+  counts all outcomes used for the two income averages. `scale` is the spread of the
   outcomes the brain has learned from, the running RMS distance of their reward from
   `longrun`: `learned` outcomes and the outcome that wakes the brain enter it, routine
   outcomes do not, so a long calm does not shrink it. Scaling reward, error and need by
   the same positive factor preserves the law within numerical precision away
   from its absolute `1e-12` surprise guard. With `need=0`, shifting
-  reward by a constant also preserves it if an own outcome establishes the reward
-  reference before any explored outcome enters the spread. Before that reference
-  exists, explored rewards are measured against zero, so the reward origin matters.
+  reward by a constant also preserves it: the first outcome establishes the reward
+  reference even when it comes from an explored action.
   These are properties of supplied scalar outcomes, not a reward-transformation
   guarantee for the complete learning brain. A positive need is a level of reward, so a
   shift changes what is unmet. A stream's first own outcome is no surprise.
@@ -949,13 +950,18 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   `Brain.live` counts a moment when its action is issued; the work of a refused
   attempt is reported by `Brain.last_settlement` and `Brain.last_learning` and is
   absent from these counts.
-  `reset()` begins another stream calm and keeps the age and the counts.
+  `reset()` begins another stream calm and keeps the age and work counts; it clears
+  the income/error averages and their observation counts.
   `to_dict()` and `Arousal.from_dict(values)` carry the complete state.
   An outcome whose running statistics cannot remain finite raises `ValueError`
-  without changing those statistics. New saves carry a `cadence-arousal/1` format
+  without changing those statistics. New saves carry a `cadence-arousal/2` format
   marker and loading requires every saved gene and continuation field. Unversioned
   checkpoints with the complete pre-need gene set load with `need=0`, preserving
-  their previous law; other missing genes are rejected.
+  their zero-need configuration; other missing genes are rejected. The previous
+  `cadence-arousal/1` and unversioned saves admitted only own outcomes to income:
+  loading preserves their accumulated readings and initializes `rewards` from
+  `outcomes`. Future sampled rewards enter income under the repaired law, without
+  resetting acquired parameters, memory, age or pending feedback.
 
 The default law (`need=0`) is relative: it responds to outcomes that differ from what
 the stream is used to. A brain whose life has always paid poorly, and whose youth has
