@@ -828,7 +828,18 @@ trace settings and beats its untaught twin. Seed 1 fails at both settings;
 the historical trace and every own-command variant fail the complete behavior
 screen. There are no refused acts. This demonstrates native learned generation
 on one development founder, while reliability, fresh confirmation and the C64
-corpus remain unestablished. **Issue 140 remains open; no default is promoted.**
+corpus remain unestablished.
+
+The predeclared follow-up kept the composed trace and no copy, adding development
+seeds 2–5 with matched untaught, n-gram, hold and random controls. None of these
+four learned the correct phase at every prime; aggregate taught agreement ranges
+from 0.656 to 0.750 against 0.250–0.258 untaught. All n-gram controls pass; hold
+and random fail. The complete result is **1/6 development founders**, below the
+5/6 threshold declared before extending the sample, so no fresh confirmation
+runs. Both [taught](results/development-native-extension-taught-2026-10-08.json.gz)
+and [untaught](results/development-native-extension-untaught-2026-10-08.json.gz)
+receipts verify from the retained `8e508141` source; no act was refused.
+**Issue 140 remains open; no default is promoted.**
 
 ### Reading the loop controls
 
@@ -908,6 +919,20 @@ separate thread limit. The instrument now sets `VECLIB_MAXIMUM_THREADS=1` before
 NumPy import and records per-act process CPU time beside wall time. A same-seed,
 same-gate rerun can test this resource configuration; the omission is not proven
 to have caused the failure. Other user workloads were present and were left alone.
-No fresh confirmation has run, and no numerical gate was relaxed. The older
-rhythm/1, rhythm/2 and reward receipts above retain their original bytes and scope;
-this new verifier does not retroactively certify their timing or work accounting.
+[The same-gate rerun](results/development-timing-2.json.gz), with the Accelerate
+limit and CPU records, also completed all eight cases and verified: **joint passes
+0/2**, with 29 and 10 accepted deadline misses. Both primary founders again passed
+learning, history, recovery and saved continuation. In the slowest 50ms-cadence
+acts, seeds 0/1 spent 247.29/166.28ms wall time but only 5.49/6.39ms process CPU;
+outer recording overhead was 0.03ms. This points to waiting or descheduling, not
+hundreds of milliseconds of brain computation or CPU-consuming garbage collection;
+it does not identify the underlying OS/backend cause. Both acts qualified in
+32 sweeps. The thread setting alone did not establish the declared timing envelope.
+
+The updated focused suite passes 33 tests. Both original full capsules verified,
+and the new verifier also checks the preserved first attempt. No fresh confirmation
+has run, and no numerical gate was relaxed. **#116 remains open:** the bounded
+learning/control/custody work is present, but the predeclared physical timing
+contract still fails development on this host. The older rhythm/1, rhythm/2 and
+reward receipts above retain their original bytes and scope; this new verifier
+does not retroactively certify their timing or work accounting.
