@@ -40,6 +40,20 @@
   kept in `results/development-efference.json`) gives 1.00 on all six founders in the
   `every` arm against 0.78 without the copy. `examples/walking_rhythm.py` shows one
   founder with and without it. The copy is a gene with zero as its control, not a default.
+- Add the reward-rhythm chamber (`benchmarks/rhythm/reward_rhythm.py`, protocols
+  `protocol-reward.json` and `protocol-reward-2.json`): the beat paid by the world. One
+  continuing `Brain.live` life, the same drive every moment, one unit for a step on the
+  other foot than the last, nothing for a repeat, paid at the next moment; no teacher. The
+  walker carries the efference copy; arms without it, on the composed reward defaults, always
+  learning, at the control eligibility decay, frozen, a tabular learner given the same one
+  bit, and uniform random. reward/1 (key-door operating point, need 0.5) failed its gate on
+  fresh seeds 301 to 305: 3/5 acquired, one of them from birth, two limping at two changed
+  steps in three. reward/2 (eligibility decay 0, a gate on learned beats against the frozen
+  founder) passed on fresh seeds 401 to 405: 4/5 learned, none from birth, all five calm in
+  the window and continuing identically from a mid-life checkpoint; the walker without the
+  copy never earns and stays restless on every founder. The limp, a period-three attractor
+  paid above the need, is the residual failure. `examples/walking_for_reward.py` shows one
+  founder with and without the copy. No default changes.
 - `Brain.predict` and `Brain.accuracy` now honor slotted motor readouts (`slots > 1`):
   predictions are one choice per slot, shaped `(batch, slots)` like `act` and `step`,
   instead of a single argmax over the whole motor menu, and slotted `accuracy`/`fit`
