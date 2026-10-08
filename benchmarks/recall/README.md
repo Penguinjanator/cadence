@@ -197,3 +197,110 @@ one recalls at delays 1 and 2 but not at 0, one at 0 and partly at 1. The distra
 and order conditions fail everywhere. The next freeze selects the trace amplitude and
 the lesson budget on development founders and runs new fresh founders; the current
 `--repeats` override marks such development runs as not frozen.
+
+### Development founders 0 and 1: the amplitude, the decay and the lesson budget
+
+Receipts `results/development-finite-*-2026-10-08.json.gz`, every one verified, 32 training
+repeats (384 lessons) and 24 evaluation repeats unless marked. Horizon per founder, and the
+intact accuracy of the declared recipe on the clean delays, the one-event distractor, the
+replacement and the latest-of-two order condition (founder 0 / founder 1):
+
+| amplitude | decay | repeats | horizon | clean-0 | clean-1 | clean-2 | distractor-1 | replacement-1 | order-latest-1 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.1 | 0.5 | 32 | none / none | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.1 | 0.8 | 32 | 0 / none | 1.00 / 0.50 | 0.76 / 0.50 | 0.74 / 0.50 | 1.00 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.3 | 0.5 | 32 | 0 / none | 1.00 / 0.50 | 0.50 / 0.77 | 0.50 / 0.62 | 0.93 / 0.71 | 0.50 / 0.53 | 0.50 / 0.50 |
+| **0.3** | **0.8** | **32** | **1 / 0** | 1.00 / 0.99 | 0.98 / 0.80 | 0.94 / 0.88 | 0.92 / 0.94 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.3 | 0.8 | 64 | none / none | 0.58 / 0.50 | 0.76 / 0.50 | 0.80 / 0.50 | 0.50 / 0.50 | 0.72 / 0.50 | 0.70 / 0.50 |
+| 0.3 | 0.9 | 32 | none / none | 0.52 / 0.50 | 0.67 / 0.50 | 0.55 / 0.50 | 0.70 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.5 | 0.8 | 32 | none / none | 0.50 / 0.81 | 0.50 / 0.90 | 0.50 / 1.00 | 0.50 / 0.79 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 1.0 (recall/1) | 0.8 | 32 | none / none | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 3.0 (composed default) | 0.8 | 32 | none / none | 0.50 / 0.49 | 0.50 / 0.51 | 0.50 / 0.49 | 0.50 / 0.50 | 0.50 / 0.66 | 0.50 / 0.52 |
+| 0.3 | 0.8 | 32, surprise rule | none / 2 | 0.77 / 0.99 | 0.76 / 1.00 | 0.61 / 1.00 | 0.74 / 1.00 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 1.0 | 0.8 | 32, surprise rule | none / none | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.3 | 0.8 | 64, surprise rule | 0 / none | 1.00 / 0.50 | 0.79 / 0.50 | 0.79 / 0.50 | 0.92 / 0.50 | 0.97 / 0.50 | 0.67 / 0.50 |
+
+Amplitude is the knob: at 1.0 and 3.0 both founders recall nothing at any delay, at 0.3 with
+decay 0.8 one founder has horizon 1 and the other horizon 0 (clean-1 at 0.80 with a paired
+share of 0.59). Doubling the lesson budget to 64 repeats takes the recall away again on
+founder 0 (clean-0 from 1.00 to 0.58, while clean-8 rises to 0.94) and founder 1 learns
+nothing: more lessons on a mapping already learned move it. Replacement and the order of two
+cues are at chance at every point but one; the external history control reads 1.00 on them
+throughout. The selected point, amplitude 0.3, decay 0.8, 32 repeats, was declared in
+[`protocol-finite-2.json`](protocol-finite-2.json) with recall/1's gates, caps, conditions
+and controls unchanged before founders 304 to 306 ran.
+
+### recall/2 on fresh founders 304, 305 and 306: closure failed
+
+Protocol SHA-256 `a91ddb6755ed476b1408ecc1c07c362fb9b8d8969ac5df3d665bad4d885237bb`; receipt
+`results/finite-2-2026-10-08.json.gz`, verified: every founder complete within its caps
+(185 seconds for the three), no refused act or lesson, the trace audit at 1.1e-16 on 1,750
+audited acts per brain arm, every seam, imagination, refusal and timing check equal.
+
+| founder | condition | intact | paired | erased | shuffled→transplanted | default | history | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 304 | every condition | 0.50 | 0.00 | 0.50 | 0.50 | 0.50 | 0.78 to 1.00 | 0.45 to 0.57 |
+| 305 | every condition | 0.36 to 0.50 | 0.00 | 0.50 | 0.36 to 0.50 | 0.50 | 0.50 to 1.00 | 0.44 to 0.55 |
+| 306 | clean-0 / clean-1 / clean-2 | **1.00 / 1.00 / 1.00** | 1.00 | 0.50 | 1.00 | 0.50 | 1.00 | 0.48 to 0.53 |
+| 306 | distractor-1 / distractor-2 | 0.72 / 0.50 | 0.45 / 0.00 | 0.50 | 0.72 / 0.50 | 0.50 | 1.00 | 0.45 / 0.54 |
+| 306 | replacement-1 / order-latest-1 | 0.79 / 0.56 | 0.58 / 0.11 | 0.50 | 0.79 / 0.56 | 0.50 | 1.00 | 0.43 / 0.52 |
+| 306 | partial-1 / noise-1 / clean-4 / clean-8 | 0.50 / 0.65 / 0.72 / 0.50 | 0.00 / 0.29 / 0.45 / 0.00 | 0.50 | same as intact | 0.50 | 1.00 | 0.46 to 0.55 |
+
+Horizons: 304 none, 305 none, 306 zero (delays 1 and 2 clean at 1.00 through the trace, with
+the erased and reset forks at 0.50, but the one-event distractor at 0.72 fails the prefix).
+Closure fails as declared and #84 stays open. The selected recipe is founder-bound exactly as
+recall/1's was: two fresh founders learn nothing from the same 384 lessons that teach their
+history twins to 1.00, one recalls a vanished cue across two fillers and loses it to a
+distractor. The composed default trace again recalls nothing on any founder.
+
+### recall/3 on fresh founders 307, 308 and 309 under the surprise rule: closure failed
+
+The loop chamber of issue #140 (`benchmarks/rhythm/loop_rhythm.py`) found that a lesson on
+every row makes a learned pattern come and go from pass to pass, and the 64-repeat row above
+is the same finding here. The third freeze therefore declares the routine rule of
+`Brain.live` as the worker's `surprise` teaching rule: at every QUERY the free greedy act
+first, then one lesson on the rows it answered wrong, on the drive that act read, as the
+steady-rhythm chamber's `mismatch` arm teaches; a right answer teaches nothing. On the
+development founders the rule gave horizons 2 and none against 1 and 0 under the every rule
+at the same trace and budget, nothing at amplitude 1.0 under either rule, and the recall lost
+again at 64 repeats under either rule. [`protocol-finite-3.json`](protocol-finite-3.json),
+SHA-256 `957a66fbf60f077c1ffa40d4bbc91bed05e9ff270a9a8a16d108df6061e172a1`, keeps recall/2's
+trace, budget, gates, caps, conditions and controls; receipt
+`results/finite-3-2026-10-08.json.gz`, verified: every founder complete within its caps (186
+seconds for the three), no refused act or lesson, the trace audit at 2.8e-17 on 1,750 audited
+acts per brain arm, every seam, imagination, refusal and timing check equal. The rule gave 167
+to 184 lessons on 557 to 722 rows per founder, against 384 lessons on 3,072 rows under the
+every rule; the history twins needed 29 to 35.
+
+| founder | condition | intact | paired | erased | shuffled→transplanted | default | history | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 307 | clean-0 / clean-1 / clean-2 / clean-4 | 0.50 / 0.50 / 0.50 / 0.56 | 0.00 to 0.12 | 0.50 | same as intact | 0.44 to 0.51 | 1.00 | 0.50 to 0.55 |
+| 307 | clean-8 / capacity-2 / capacity-4 | 0.93 / 0.74 / 0.62 | 0.85 / 0.49 / 0.25 | 0.50 | same as intact | 0.46 to 0.52 | 1.00 | 0.52 to 0.56 |
+| 307 | every other condition | 0.50 to 0.52 | 0.00 to 0.03 | 0.50 | same as intact | 0.45 to 0.52 | 1.00 | 0.41 to 0.55 |
+| 308 | clean-0 / clean-1 / clean-2 / clean-4 / clean-8 | 0.50 / 0.52 / 0.66 / 0.85 / 0.62 | 0.00 / 0.03 / 0.31 / 0.70 / 0.25 | 0.50 | same as intact | 0.50 | 1.00 | 0.47 to 0.56 |
+| 308 | partial-1 / noise-1 | 0.59 / 0.68 | 0.19 / 0.35 | 0.50 | same as intact | 0.50 | 1.00 | 0.46 / 0.54 |
+| 308 | every other condition | 0.50 to 0.62 | 0.00 to 0.24 | 0.50 | same as intact | 0.50 | 1.00 | 0.47 to 0.57 |
+| 309 | clean-0 / clean-1 | **0.99 / 0.89** | 0.99 / 0.78 | 0.50 | 0.99 / 0.89 | 0.50 / 0.49 | 1.00 | 0.49 / 0.47 |
+| 309 | clean-2 / clean-4 / clean-8 | 0.86 / 0.85 / 0.50 | 0.73 / 0.71 / 0.00 | 0.50 | same as intact | 0.59 / 0.67 / 0.49 | 1.00 | 0.45 to 0.52 |
+| 309 | distractor-1 / distractor-2 / noise-1 / partial-1 | **0.99** / 0.84 / **1.00** / 0.83 | 0.98 / 0.68 / 1.00 / 0.73 | 0.50 | same as intact | 0.46 to 0.54 | 1.00 | 0.44 to 0.55 |
+| 309 | replacement-1 / order-latest-1 | 0.50 / 0.79 | 0.00 / 0.58 | 0.50 | same as intact | 0.57 / 0.53 | 1.00 | 0.53 / 0.46 |
+
+Horizons: 307 none (its only passing condition is the eight-event delay, with no prefix
+under it), 308 none, 309 one (delay 2 reads 0.86 with a paired share of 0.73, under the
+gate's 0.75). Closure fails as declared and #84 stays open. Where founder 309 recalls, it
+recalls through the trace: its erased and reset forks sit at 0.50 and every shuffled fork
+answers the transplanted history's value; the default trace recalls nothing on any founder.
+
+What the three freezes establish for roadmap row 02. On the founders that learn it, the
+working trace at decay 0.8 and amplitude 0.3 is a recall of one vanished cue across one or
+two fillers, through the trace and nothing else, with the paired share dropping below the
+gate at delay 2 and the eight-event delay out of reach; the composed amplitude of 3 recalls
+nothing at any delay on any founder. Whether a founder learns it at all is a property of the
+founder, under either teaching rule: 3 of 6 fresh founders (303, 306, 309) and 2 of 2
+development founders across the two rules. The replacement of a cue by a later one and the
+latest of two cues are at chance on every founder but one, under every setting tried, while
+the history control reads them at 1.00: a decaying superposition of settled states does not
+let the readout prefer the later of two cues 0.8 apart in weight, and the lessons those rows
+keep producing are the ones that move a mapping already learned (the 64-repeat rows). A
+closure of #84 needs either an acquisition that does not depend on the founder or a memory
+that writes the later cue over the earlier one; this instrument can now tell which.

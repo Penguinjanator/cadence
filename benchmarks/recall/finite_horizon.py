@@ -171,12 +171,16 @@ class Work:
                 self.trace_audit_max_error = max(self.trace_audit_max_error, error)
         return answer
 
-    def teach(self, brain: Brain, x: np.ndarray, labels: np.ndarray) -> bool:
+    def teach(
+        self, brain: Brain, x: np.ndarray, labels: np.ndarray, *, drive: np.ndarray | None = None
+    ) -> bool:
+        """One lesson on the rows of ``labels``; ``drive`` is the stimulus the rows' free act
+        read when the lesson follows that act (the trace has moved on since)."""
         start = time.perf_counter()
         self.teacher_attempts += 1
         accepted = True
         try:
-            _, report = brain.learner.step(brain.stimulus(x), labels)
+            _, report = brain.learner.step(brain.stimulus(x) if drive is None else drive, labels)
         except LearningPhaseError as error:
             self.teacher_refusals += 1
             report = error.report
@@ -251,10 +255,16 @@ def check_caps(began: float, directory: Path, caps: dict) -> None:
 def train_arm(
     arm: str, brain: Brain, frozen: dict, protocol: dict, began: float, directory: Path
 ) -> dict:
-    """The 192 frozen training episodes: greedy acts, one lesson at every QUERY."""
+    """The frozen training episodes: greedy acts and, at every QUERY, under the ``every``
+    rule one lesson before the act (recall/1 and recall/2); under the ``surprise`` rule the
+    act first and a lesson only on the rows it answered wrong, on the drive that act read, so
+    that a right answer is routine and teaches nothing (recall/3)."""
     work = Work()
     count = int(len(frozen["train/condition"]))
     refused_life = False
+    rule = str(protocol["training"].get("rule", "every"))
+    if rule not in ("every", "surprise"):
+        raise ValueError("training.rule must be 'every' or 'surprise'")
     for index in range(count):
         if index % 16 == 0:
             check_caps(began, directory, protocol["caps"])
@@ -263,15 +273,26 @@ def train_arm(
         if arm == "history":
             observations = inputs.append_observed_history(observations)
         for event, x in enumerate(observations):
-            if event == len(observations) - 1:
+            query = event == len(observations) - 1
+            if query and rule == "every":
                 work.teach(brain, x, arrays["labels"])
+            drive = brain.stimulus(x) if query and rule == "surprise" else None
             answer = work.act(brain, x)
             if answer is None:
                 refused_life = True
                 break
+            if drive is not None:
+                wrong = np.asarray(answer) != np.asarray(arrays["labels"])
+                if wrong.any():
+                    work.teach(brain, x, np.asarray(arrays["labels"])[wrong], drive=drive[wrong])
         if refused_life:
             break
-    return {"episodes": count, "completed": not refused_life, "work": work.summary()}
+    return {
+        "episodes": count,
+        "completed": not refused_life,
+        "rule": rule,
+        "work": work.summary(),
+    }
 
 
 def fork_answers(checkpoint: Path, x: np.ndarray, permutation: np.ndarray, work: Work) -> dict:

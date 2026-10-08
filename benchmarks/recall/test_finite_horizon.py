@@ -55,6 +55,34 @@ def test_the_protocol_declares_the_reviewed_recipe_and_fresh_founders(protocol):
     assert declared["gates"]["minimum_horizon"] == 1
 
 
+def test_the_second_protocol_changes_only_the_selected_amplitude_budget_and_founders(protocol):
+    declared, _ = protocol
+    second = json.loads((ROOT / "protocol-finite-2.json").read_text())
+    assert second["seeds"]["founders"] == [304, 305, 306]
+    assert second["brain"]["trace_amplitude"] == 0.3 and second["brain"]["trace_decay"] == 0.8
+    assert second["training"]["repeats"] == 32 and second["training"]["episodes"] == 384
+    assert "selection" in second
+    same = {k: v for k, v in second.items() if k not in ("seeds", "brain", "training", "selection")}
+    assert same == {k: v for k, v in declared.items() if k not in ("seeds", "brain", "training")}
+    assert {k: v for k, v in second["brain"].items() if k != "trace_amplitude"} == {
+        k: v for k, v in declared["brain"].items() if k != "trace_amplitude"
+    }
+    assert second["gates"] == declared["gates"] and second["caps"] == declared["caps"]
+
+
+def test_the_third_protocol_adds_only_the_surprise_rule_and_fresh_founders():
+    second = json.loads((ROOT / "protocol-finite-2.json").read_text())
+    third = json.loads((ROOT / "protocol-finite-3.json").read_text())
+    assert third["seeds"]["founders"] == [307, 308, 309]
+    assert third["training"]["rule"] == "surprise" and "rule" not in second["training"]
+    assert {k: v for k, v in third["training"].items() if k not in ("rule", "lesson")} == {
+        k: v for k, v in second["training"].items() if k != "lesson"
+    }
+    assert {k: v for k, v in third.items() if k not in ("seeds", "training", "selection")} == {
+        k: v for k, v in second.items() if k not in ("seeds", "training", "selection")
+    }
+
+
 def test_the_arms_differ_only_in_their_declared_trace_genes(protocol):
     declared, _ = protocol
     vanished = chamber.brain_for("vanished", declared, 301)
@@ -66,6 +94,58 @@ def test_the_arms_differ_only_in_their_declared_trace_genes(protocol):
     np.testing.assert_array_equal(vanished.brain.efficacy, default.brain.efficacy)
     assert vanished.hippocampus is None and vanished.efference is None
     assert vanished.learner.config.qualified and vanished.learner.config.nudged_steps == 128
+
+
+def test_the_surprise_rule_teaches_only_the_rows_answered_wrong(protocol, tmp_path):
+    declared, _ = protocol
+    surprise = json.loads(json.dumps(declared))
+    surprise["training"]["rule"] = "surprise"
+    frozen = chamber.freeze_small(tmp_path / "episodes.npz", 0, {"train": 2, "test": 1})
+    began = chamber.time.time()
+    seen: list[tuple[int, int]] = []
+    real_teach = chamber.Work.teach
+
+    def spy(self, brain, x, labels, *, drive=None):
+        seen.append((len(labels), 0 if drive is None else len(drive)))
+        return real_teach(self, brain, x, labels, drive=drive)
+
+    chamber.Work.teach = spy
+    try:
+        every = chamber.train_arm(
+            "vanished",
+            chamber.brain_for("vanished", declared, 0),
+            frozen,
+            declared,
+            began,
+            tmp_path,
+        )
+        taught_every = list(seen)
+        seen.clear()
+        gated = chamber.train_arm(
+            "vanished",
+            chamber.brain_for("vanished", surprise, 0),
+            frozen,
+            surprise,
+            began,
+            tmp_path,
+        )
+    finally:
+        chamber.Work.teach = real_teach
+    assert every["rule"] == "every" and gated["rule"] == "surprise"
+    assert len(taught_every) == every["episodes"] and all(
+        n == inputs.STREAMS and d == 0 for n, d in taught_every
+    )
+    # a lesson under the rule carries only the wrong rows, on the drive their act read
+    assert len(seen) <= gated["episodes"] and all(
+        0 < n <= inputs.STREAMS and d == n for n, d in seen
+    )
+    assert gated["work"]["teacher_presentations"] < every["work"]["teacher_presentations"]
+    with pytest.raises(ValueError):
+        bad = json.loads(json.dumps(declared))
+        bad["training"]["rule"] = "always"
+        chamber.train_arm(
+            "vanished", chamber.brain_for("vanished", bad, 0), frozen, bad, began, tmp_path
+        )
 
 
 def test_the_trace_audit_accepts_the_source_recurrence_and_rejects_a_skipped_update():

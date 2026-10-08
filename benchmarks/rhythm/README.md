@@ -672,3 +672,141 @@ generally better default.
 - A life is 600 moments on one founder with one stream; recovery after disturbances is
   3/5 for the walker and 4/5 for the control, with the limping founder never recovering.
 - The paced and host-load variants of the supervised chamber are not repeated here.
+
+## loop/1: the closed loop of issue 140, 2026-10-08
+
+Issue [#140](https://github.com/muellerberndt/cadence/issues/140) reports a brain that
+predicts the next event of a pattern well on held-out rows and collapses, when fed its own
+output, to one trajectory that does not depend on the prime: on the C64 rows of 0.73.1 the
+loop held forever. A brain that cannot count rows since its last onset, hearing its own
+holds, has hold as its only consistent answer, and the majority fixed point seals itself.
+[`loop_rhythm.py`](loop_rhythm.py) is the smallest version of that observation: one voice,
+an onset every four rows, the heard event and a constant drive as the only input, the next
+event as the only label, 256 taught rows. After teaching, every arm plays four closed loops
+from primes at every phase of the pattern: 16 real rows, then 64 rows hearing nothing but
+its own last answer. [`protocol-loop.json`](protocol-loop.json) declares the pattern, the
+C64 lane's recipe of 0.73.1 at the rate of 0.01 it measured as the edge, the copy, the
+teaching contract, the seeds and the gates.
+
+The declared mechanism is the efference copy of 0.76.0 with a decay above zero: the fading
+copy of the brain's own last onset is a count of rows since it (0.35, 0.23, 0.15, 0.10 of
+the onset cell at decay 0.65). The declared contract is that the heard event enters the copy
+before the brain answers a row, in teaching, in the open-loop watching and in the prime of a
+play, and the brain's own command is then taken back out of it, so the copy carries the
+heard stream alone, one update per row; in the closed loop the brain's own command is the
+heard event and stays. Teaching follows the routine rule of `Brain.live`: a row answered
+right teaches nothing, a wrong or refused answer is followed by one lesson on that row, with
+the trace and the copy put back to what the act read. Arms on the same founder weights:
+`copy` (the mechanism), `own` (the same copy written only by the brain's own greedy
+commands, the simpler control of the contract), `nocopy` (the working trace alone, the
+0.73.1 setting), `frozen` (the `copy` founder without lessons, played under the same
+contract), `ngram` (a table over the last four events taught on the same rows, the matched
+conventional learner that counts explicitly), `hold` (hold forever) and `random`. Readings
+per founder: the open-loop watching (from reset, the taught rows once more with free greedy
+acts and no lesson), the onset rate of the plays against the truth's, agreement with the
+primed pattern's own continuation, agreement with the other phases' continuations (prime
+dependence: a play must agree with its own prime's continuation more than with every other
+phase's) and the pairwise correlation of the plays across primes, the issue's own measure.
+The gate, declared before the fresh seeds ran: at least four of five `copy` founders fire
+within 20 percent of the truth's onset rate, agree with their primes' continuations at least
+0.05 above hold forever (0.75), are prime dependent at every phase, and are not already
+above that agreement untaught; no refused act.
+
+```sh
+python benchmarks/rhythm/loop_rhythm.py --out /tmp/loop-1
+python benchmarks/rhythm/loop_rhythm.py --verify /tmp/loop-1
+```
+
+The frozen run, seven arms on the five confirmation seeds, takes about two minutes on one
+laptop CPU. `--seeds`, `--arms`, `--passes` and `--protocol` mark a receipt not frozen.
+
+### Development, seeds 0 to 5
+
+The first contract issued the copy after the act during a play's prime, so the copy ran one
+row behind the heard stream there and nowhere else; 2 of 6 founders looped
+(`results/development-loop-first-contract-2026-10-08.json.gz`). With the contract corrected
+and the open-loop watching added, the lesson-on-every-row recipe of the C64 lane showed
+the real failure: the pattern came and went from pass to pass. Founder 0 at decay 0.8 read
+0.75, 0.86, 0.97, 0.99, 0.75, 0.97, 1.0, 0.9, 0.76, 0.99 and ended at 0.75 after 24 passes
+of 255 lessons each; which founders watched the pattern at the end was a matter of when
+teaching stopped. With lessons on surprise only, every founder learned within the first
+passes, the lessons stopped, and the loop followed. Founders watching the pattern at 0.99
+or above after teaching, founders that learned the loop under the gate, and the lessons
+given per founder (`results/development-loop-*.json.gz`):
+
+| lessons | copy decay | passes | watched ≥ 0.99 | learned the loop | lessons per founder |
+| --- | --- | --- | --- | --- | --- |
+| every row | 0.5 | 24 | 0 of 6 | 0 of 6 | 6,120 |
+| every row | 0.65 | 24 | 3 of 6 | 3 of 6 | 6,120 |
+| every row | 0.8 | 24 | 0 of 6 (one at 0.96) | 0 of 6 | 6,120 |
+| every row | 0.9 | 24 | 2 of 6 | 0 of 6 | 6,120 |
+| every row | 0.5 | 48 | 1 of 6 | 1 of 6 | 12,240 |
+| every row | 0.8 | 48 | 0 of 6 | 0 of 6 | 12,240 |
+| on surprise | 0.5 | 24 | 6 of 6 | 5 of 6 | 5 to 96 |
+| on surprise | **0.65** | 24 | 6 of 6 | 5 of 6 | 9 to 145 |
+| on surprise | 0.8 | 24 | 5 of 6 (one at 0.93) | 5 of 6 | 50 to 409 |
+
+Decay 0.65 had the highest mean agreement of the loops (0.980 against 0.959 and 0.928) and
+was declared. The residual failure under the gate is one founder at one phase: founder 3
+at decay 0.65 watches the pattern at 1.00 and loops it from three of the four primes, but
+from the prime that ends on an onset its first onset comes one row late and the loop keeps
+that phase for all 64 rows (0.52 against its own prime's continuation, 0.98 against the
+phase-0 continuation), so it is not prime dependent at every phase. The same founder slips
+at two phases at decay 0.5; founder 4 at decay 0.8 watches at 0.93 and limps between gaps
+of three and four rows. The every-row founders that watched the pattern at 0.98 or better
+at decay 0.9 looped it at 0.88 and 0.90 without prime dependence: at that decay the count
+is too flat to hold the phase.
+
+### Confirmation on fresh seeds 601 to 605, gate passed
+
+Protocol SHA-256 `13499a1dae5861e51967bd8f3bde08c1d6edbb075bf996409aab2a18f8a81023`; receipt
+`results/confirmation-loop-2026-10-08.json.gz`, verified, 35 founder-arms, 124 seconds, no
+refused act or lesson. Watching is the open-loop agreement after teaching; loop is the mean
+agreement of the four plays with their primes' own continuations; lessons are the lessons
+given in 24 passes of 255 rows.
+
+| seed | copy watching / loop / prime dependent / lessons | own watching / loop / lessons | nocopy watching / loop / lessons | frozen watching / loop | ngram | hold | random |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 601 | **1.00 / 1.00 / yes / 25** | 0.75 / 0.61 / 2,263 | 0.75 / 0.72 / 3,028 | 0.25 / 0.25 | 1.00 | 0.75 | 0.46 |
+| 602 | **1.00 / 1.00 / yes / 28** | 0.75 / 0.75 / 2,272 | 0.75 / 0.67 / 3,015 | 0.25 / 0.41 | 1.00 | 0.75 | 0.46 |
+| 603 | **1.00 / 1.00 / yes / 7** | 0.25 / 0.25 / 2,253 | 0.74 / 0.75 / 3,023 | 0.75 / 0.75 | 1.00 | 0.75 | 0.54 |
+| 604 | **1.00 / 1.00 / yes / 42** | 0.25 / 0.25 / 2,262 | 0.73 / 0.73 / 3,026 | 0.25 / 0.38 | 1.00 | 0.75 | 0.47 |
+| 605 | **1.00 / 1.00 / yes / 126** | 0.75 / 0.68 / 2,368 | 0.75 / 0.75 / 3,021 | 0.49 / 0.63 | 1.00 | 0.75 | 0.45 |
+
+Five of five `copy` founders learned the loop: every play at every phase agrees with its own
+prime's continuation at 1.00, fires at the truth's rate and keeps the prime's phase, after 7
+to 126 lessons; the pairwise correlation of their four plays is −0.33, the correlation of
+the four phase shifts of a period-four pattern, as for the n-gram table. The untaught
+founders fire on nearly every row (601, 602, 604), hold (603) or mix (605): none had the
+loop from birth. Work: every brain arm 6,691 acts at 32 sweeps an act (214,112 sweeps for
+`copy`, 153,408 to 164,032 for `nocopy`, whose brain is smaller); the `copy` lessons cost
+122 to 1,306 sweeps against 17,000 to 30,000 for the arms that never learned.
+
+### Reading the loop controls
+
+- `own`, the copy written only by the brain's own commands, is the contract's control: while
+  the brain emits holds its copy never carries an onset, so the count it would need is not in
+  its input; two founders fire on every row, three hold or nearly hold, and all five keep
+  taking about 95 lessons a pass to the end.
+- `nocopy`, the working trace alone, is the 0.73.1 setting: every founder holds, at 0.67 to
+  0.75 against hold forever's 0.75, after about 125 lessons a pass to the end. The trace at
+  amplitude 0.1 carries the settled state, not the count.
+- `ngram` is what the four events of history are worth to a learner that reads them as a
+  table: 1.00 everywhere. `hold` is the 0.75 any silent brain earns on a quarter-onset
+  pattern; `random` sits at 0.45 to 0.54.
+- `frozen` is the zero of learning under the same contract.
+
+### Failures and limits of loop/1
+
+- One of six development founders fails the loop at one phase at the declared decay, with a
+  late first onset the loop then keeps; the fresh seeds had no such founder. The gate is
+  four of five and passed at five.
+- One voice, period four, 16-row primes. The C64 rows of the issue (several voices, longer
+  periods) are not measured; the copy's count fades to 0.02 of the onset cell after eight
+  rows at decay 0.65, so periods well beyond eight are outside its range at this amplitude.
+- Lessons on surprise only is this chamber's declared contract, selected on the development
+  seeds against the every-row recipe; it is not a library default and the rhythm, reward and
+  key-door chambers keep their own contracts. A right answer at the wrong margin is routine
+  here as it is in `Brain.live`.
+- The cross-prime correlation reported by the issue is read on plays that are already scored
+  by agreement; a loop that is prime dependent and wrong would score low on both.
