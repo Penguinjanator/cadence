@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+## 0.77.0 — 2026-10-08
+
+- Correct the reward-rhythm instrument's saved world boundaries, refusal retries
+  and work accounting. Require the same founders to satisfy every acceptance
+  criterion, retain missing controls and unfinished runs in the denominator, and
+  verify receipt arithmetic against recorded events. Preserve the original
+  protocols and receipts; corrected reruns have separate source-bound receipts.
+  Align the runnable example's income and alternation windows. Library behavior,
+  public interfaces and composed defaults remain unchanged.
+- Add the reward-rhythm chamber (`benchmarks/rhythm/reward_rhythm.py`, protocols
+  `protocol-reward.json`, `protocol-reward-2.json` and `protocol-reward-3.json`):
+  the beat paid by the world. One
+  continuing `Brain.live` life, the same drive every moment, one unit for a step on the
+  other foot than the last, nothing for a repeat, paid at the next moment; no teacher. The
+  walker carries the efference copy; arms without it, on the composed reward defaults, always
+  learning, at the control eligibility decay, frozen, a tabular learner given the same one
+  bit, and uniform random. reward/1 (key-door operating point, need 0.5) failed its gate on
+  fresh seeds 301 to 305: 3/5 acquired, one of them from birth, two limping at two changed
+  steps in three. reward/2 (eligibility decay 0, a gate on learned beats against the frozen
+  founder) passed on fresh seeds 401 to 405: 4/5 learned, none from birth, all five calm in
+  the window and continuing identically from a mid-life checkpoint; the walker without the
+  copy earns occasional rewards while exploring but its greedy probe holds one foot.
+  The limp, a period-three attractor
+  paid above the need, is the residual failure; reward/3 (need 0.9, fresh seeds 501 to 505)
+  removes it on all five founders but fails its learned-credit gate on two with the beat from
+  birth. The receipts are taken on the released 0.76.0. `examples/walking_for_reward.py` shows
+  one founder with and without the copy. No default changes.
+
 ## 0.76.0 — 2026-10-08
 
 - Give the introductory guides one recommended continuing-life loop:
