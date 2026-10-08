@@ -8,7 +8,10 @@
   freeze. Label selective teaching as an application policy. Require every prime,
   matched untaught founders, complete controls, no refusals and saved continuation;
   independently verify raw answers, scores and work. This bounded adapter result
-  does not close native closed-loop generation.
+  does not close native closed-loop generation. A separate trace-only development
+  comparison finds learned prime-dependent playback on one founder at two existing
+  trace settings; the simplest setting passes only 1/6 development founders after
+  a predeclared extension, so fresh confirmation is not attempted.
 - Correct the finite recall worker to honor its declared lesson count. Historical
   freezes 2 and 3 actually ran 192 episodes per founder, not the declared 384;
   preserve those authentic receipts as protocol deviations. Add strict census,

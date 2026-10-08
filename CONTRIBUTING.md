@@ -103,9 +103,9 @@ pytest -q
 
 The test suite includes `tests/test_documentation.py`, which executes every Python block
 of the listed guides in order and checks that every local link and anchor in `README.md`
-and `docs/` resolves. Default pytest collection also includes acquisition
-provenance, refusal, source-admission, archive and confirmation-audit tests in
-`benchmarks/acquisition/`.
+and `docs/` resolves. Default pytest collection also includes the acquisition, recall, rhythm, reversal
+and key-door instruments, including their provenance, refusal, source-admission,
+archive and confirmation-audit tests.
 A change to a guide's code is a change to a test. The
 [minimal-install job](.github/workflows/ci.yml) builds the wheel with NumPy alone
 and runs 20 pages without optional backends: `README.md` and, under `docs/`,
@@ -143,7 +143,7 @@ Run the default foundation and preserved population solver separately to locate
 slow cases. These two commands together retain the complete test inventory:
 
 ```bash
-python -m pytest -q tests benchmarks/acquisition --ignore=tests/equilibrium --durations=10
+python -m pytest -q --ignore=tests/equilibrium --durations=10
 python -m pytest -q tests/equilibrium --durations=10
 ```
 
