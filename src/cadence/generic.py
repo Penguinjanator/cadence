@@ -507,8 +507,10 @@ class Brain:
         chosen in. ``error`` is the unsigned temporal-difference error of the
         preceding action against the forecast made before its outcome, and
         ``surprise`` and ``want`` are what that outcome added to the arousal
-        ``level``. ``temperature`` is the softmax temperature the action was
-        sampled at, None for a routine answer. ``learned`` says a feedback update
+        ``level``. ``temperature`` is the exploration temperature; ``temperatures``
+        gives the actual temperature per motor slot. Both are None in routine.
+        ``heated_slot`` names the one slot sampled hotter than the base policy,
+        or None if there was no extra heating. ``learned`` says a feedback update
         ran for the preceding outcome; ``recorded`` that the outcome which woke
         the brain was written to its memory. ``sweeps`` counts the free-solve
         sweeps of this moment's forecast and answer; ``learning_sweeps`` the
@@ -1013,7 +1015,8 @@ class Brain:
         measured against the value with the value of the present state and against
         the record as it is, and a surprising outcome or a reward below what life
         usually pays raises the arousal (``Arousal`` gives the law). Aroused, the brain samples its
-        action, at a temperature raised by its want, keeps the eligibility and
+        action from its policy. Want raises the temperature of one uniformly chosen
+        motor slot; the other slots keep the base temperature. It keeps eligibility and
         learns from the outcome as ``step`` does. The outcome that woke a calm
         brain is written to its memory for the situation it was chosen in; the
         actor and critic learn from the outcomes that follow, while it is awake.
@@ -1103,12 +1106,24 @@ class Brain:
                 answer = None
         aroused = arousal.aroused
         temperature = self.learner.config.temperature * arousal.heat if aroused else None
+        # Validate before qualification; invalid heating must draw nothing.
+        if temperature is not None:
+            agent._temperature(temperature)
         if answer is None:
-            action = self.act(x, greedy=not aroused, temperature=temperature)
+            answer = self._settled(x)
             assert self._last_settlement is not None
             sweeps += int(self._last_settlement["steps"])
-        else:
-            action = self._choose(x, *answer, greedy=not aroused, temperature=temperature)
+        # Extra exploration perturbs one motor slot at a time. The other slots
+        # still sample their learned policy; one-slot sampling is unchanged.
+        temperatures: float | np.ndarray | None = temperature
+        heated_slot = None
+        if temperature is not None and temperature > self.learner.config.temperature:
+            slot_count = self.learner.slot_count
+            heated_slot = int(agent.rng.integers(slot_count)) if slot_count > 1 else 0
+            if slot_count > 1:
+                temperatures = np.full(slot_count, self.learner.config.temperature)
+                temperatures[heated_slot] = temperature
+        action = self._choose(x, *answer, greedy=not aroused, temperature=temperatures)
         state = agent.state
         assert state is not None
         if agent._pending is not None:
@@ -1136,6 +1151,13 @@ class Brain:
                 "surprise": float(surprise),
                 "want": float(want),
                 "temperature": None if temperature is None else float(temperature),
+                "temperatures": None
+                if temperatures is None
+                else tuple(
+                    float(value)
+                    for value in np.broadcast_to(temperatures, (self.learner.slot_count,))
+                ),
+                "heated_slot": heated_slot,
                 "learned": learned,
                 "recorded": recorded,
                 "sweeps": int(sweeps),

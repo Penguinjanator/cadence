@@ -389,14 +389,13 @@ class ActorCritic:
         if isinstance(temperature, (Sequence, np.ndarray)) and not isinstance(temperature, str):
             values = np.asarray(temperature)
             slots = self.bins.dims if self.bins is not None else self.learner.slot_count
-            if (
-                values.shape != (slots,)
-                or values.dtype.kind not in "iuf"
-                or not np.isfinite(values).all()
-                or (values <= 0).any()
-            ):
+            if values.shape != (slots,) or values.dtype.kind not in "iuf":
                 raise ValueError("temperature must be finite and positive, one per motor slot")
-            return values.astype(float, copy=True)
+            with np.errstate(over="ignore", under="ignore"):
+                values = values.astype(float, copy=True)
+            if not np.isfinite(values).all() or (values <= 0).any():
+                raise ValueError("temperature must be finite and positive, one per motor slot")
+            return values
         if (
             isinstance(temperature, (bool, np.bool_))
             or not isinstance(temperature, (int, float, np.integer, np.floating))
@@ -404,7 +403,10 @@ class ActorCritic:
             or temperature <= 0
         ):
             raise ValueError("temperature must be finite and positive")
-        return float(temperature)
+        converted = float(temperature)
+        if not np.isfinite(converted) or converted <= 0:
+            raise ValueError("temperature must remain finite and positive in float64")
+        return converted
 
     def settle(self, drive: np.ndarray) -> BrainState:
         """The free phase for ``drive``, warm from the last one; cached for ``act``."""

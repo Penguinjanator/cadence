@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Apply extra arousal heat to one uniformly chosen motor slot per moment
+  ([#159](https://github.com/muellerberndt/cadence/issues/159)); other slots sample
+  the learned base policy. Preserve the one-slot sampling law and existing genes.
+  Report actual per-slot temperatures and the heated slot, and preserve random state
+  across refused answers and saved continuation.
 - Credit the policy that actually sampled a reward-bearing action. Scalar or
   per-slot behavior temperatures now reach the local actor nudges, with one common
   score scale and bounded gains. Preserve the base-temperature update, actual-action

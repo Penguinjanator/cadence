@@ -76,6 +76,25 @@ def test_invalid_slot_temperatures_preserve_pending_action_and_randomness(temper
     assert agent._pending is pending and agent.state is state
 
 
+@pytest.mark.skipif(
+    np.finfo(np.longdouble).max == np.finfo(float).max,
+    reason="longdouble has no wider exponent range on this platform",
+)
+@pytest.mark.parametrize("vector", [False, True])
+def test_temperatures_must_be_representable_before_action_mutation(vector):
+    brain = cd.Brain.compose(2, 6, modules=(8,), slots=2, seed=2)
+    x = np.array([[0.2, 0.8]])
+    brain.act(x)
+    agent = brain.basal_ganglia
+    before, pending = agent.rng.bit_generator.state, agent._pending
+    for value in (np.finfo(np.longdouble).max, np.finfo(np.longdouble).tiny):
+        temperature = np.array([value, value]) if vector else value
+        with pytest.raises(ValueError, match="temperature"):
+            brain.act(x, temperature=temperature)
+        assert agent.rng.bit_generator.state == before
+        assert agent._pending is pending
+
+
 def test_population_code_samples_and_credits_per_dimension_temperatures(monkeypatch):
     bins = cd.Bins(dims=2, size=3)
     connectome = cd.layered(2, 4, 6, density=1.0, seed=0)

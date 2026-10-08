@@ -811,8 +811,10 @@ that recursive benefit or automatic reflective behavior has been learned.
     value of the present state and against the record as it is. Surprise or want raises the arousal (see
     [Arousal](#arousal-cadencearousal)); only the outcome of the brain's own greedy
     choice can surprise it or change its usual forecast error. Every actual reward
-    updates its recent and long-run income, including sampled choices. An aroused brain samples at
-    `learning.temperature * arousal.heat`, keeps eligibility and learns from the outcome
+    updates its recent and long-run income, including sampled choices. An aroused brain
+    samples its base policy, with one uniformly selected motor slot at
+    `learning.temperature * arousal.heat`; other slots keep `learning.temperature`.
+    When extra heat is zero no slot is selected. It keeps eligibility and learns from the outcome
     as `step` does; the outcome that woke a calm brain is written to its memory for the
     situation it was chosen in. An action sampled by `step` or `act` is adopted, so a
     bootstrapped brain continues without `reset`; this first adopted action is
@@ -831,8 +833,11 @@ that recursive benefit or automatic reflective behavior has been learned.
     temporal-difference error of the preceding action against its forecast),
     `record_error` (the unsigned error of the record held for that action, `None`
     without a memory or an outcome), `surprise`
-    and `want` (what that outcome added to the level), `temperature` (the sampling
-    temperature, `None` in routine), `learned` (a feedback update ran), `recorded` (the
+    and `want` (what that outcome added to the level), `temperature` (the exploration
+    temperature), `temperatures` (an immutable tuple of actual temperatures per motor
+    slot; both temperature readings are `None` in routine), `heated_slot` (the slot
+    receiving extra heat, or `None` when no extra heat is applied),
+    `learned` (a feedback update ran), `recorded` (the
     waking outcome was written to memory), `sweeps` (free-solve sweeps of the forecast
     and the answer) and `learning_sweeps` (eligibility and feedback sweeps). It is
     `None` after construction, reset or load and is excluded from save files.
@@ -948,7 +953,9 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   the brain sooner and left more lives searching too briefly.
   `aroused` is true while `level >= threshold` and for the first `youth` moments of the
   brain's life; `mode` names it. `heat` is `1 + config.heat * want`, the factor on the
-  policy temperature an aroused brain samples at. `lived(sweeps, learning_sweeps=0)`
+  policy temperature for the one motor slot selected for extra exploration.
+  Other slots keep their base policy temperature; every slot remains available to
+  the uniform selection on subsequent moments. `lived(sweeps, learning_sweeps=0)`
   counts one moment: `moments` and `sweeps` per mode, `learning_sweeps` and `age`.
   `Brain.live` counts a moment when its action is issued; the work of a refused
   attempt is reported by `Brain.last_settlement` and `Brain.last_learning` and is
