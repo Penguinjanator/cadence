@@ -3,7 +3,9 @@
 Development comparison for [#158](https://github.com/muellerberndt/cadence/issues/158),
 2026-10-08. This checks the income repair on continuing acquired robot brains;
 it does not establish improved fighting skill. The related exploration and greedy
-policy limitations in #159/#160 remain tracked by #111.
+policy limitations in #159/#160 were outside this income-only comparison.
+The subsequent [policy repairs and their mixed arena results](../arena_policy/README.md)
+are recorded separately; the broader #111 capability gate remains open.
 
 The arena is [cadence-robot-arena](https://github.com/muellerberndt/cadence-robot-arena)
 at `14eb800543923c9e1f64f28319490ea4435decb6`. Each run loads the same six evolved

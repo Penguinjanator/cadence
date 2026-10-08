@@ -504,9 +504,11 @@ and a complete runnable example.
   `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`,
   `batched`.
 - `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None)`: extra drive
-  `beta · (target − s)` on the masked neurons, or `beta · (target − softmax(s/T))` over the
+  `beta · mask · (target − s)`, or `beta · mask · (target − softmax(s/T))` over each
   masked group with a temperature; `weight` scales rows. `groups` assigns a separate
-  softmax group per neuron (`-1` excludes a neuron). `drive(s)`.
+  softmax group per neuron (`-1` excludes a neuron). The temperature is a finite positive
+  scalar or one value per neuron, constant within each active group. Fractional masks
+  scale the local drive in both modes. `drive(s)`.
 - `available_backends()`: `{"cpu": "numpy float64", "torch": "mps float32" | "cuda float64" | "cpu float64", "mlx": "gpu float32"}`, for what is installed.
 
 ## Blocks (`cadence.blocks`)
@@ -809,8 +811,10 @@ that recursive benefit or automatic reflective behavior has been learned.
     value of the present state and against the record as it is. Surprise or want raises the arousal (see
     [Arousal](#arousal-cadencearousal)); only the outcome of the brain's own greedy
     choice can surprise it or change its usual forecast error. Every actual reward
-    updates its recent and long-run income, including sampled choices. An aroused brain samples at
-    `learning.temperature * arousal.heat`, keeps eligibility and learns from the outcome
+    updates its recent and long-run income, including sampled choices. An aroused brain
+    samples its base policy, with one uniformly selected motor slot at
+    `learning.temperature * arousal.heat`; other slots keep `learning.temperature`.
+    When extra heat is zero no slot is selected. It keeps eligibility and learns from the outcome
     as `step` does; the outcome that woke a calm brain is written to its memory for the
     situation it was chosen in. An action sampled by `step` or `act` is adopted, so a
     bootstrapped brain continues without `reset`; this first adopted action is
@@ -829,16 +833,20 @@ that recursive benefit or automatic reflective behavior has been learned.
     temporal-difference error of the preceding action against its forecast),
     `record_error` (the unsigned error of the record held for that action, `None`
     without a memory or an outcome), `surprise`
-    and `want` (what that outcome added to the level), `temperature` (the sampling
-    temperature, `None` in routine), `learned` (a feedback update ran), `recorded` (the
+    and `want` (what that outcome added to the level), `temperature` (the exploration
+    temperature), `temperatures` (an immutable tuple of actual temperatures per motor
+    slot; both temperature readings are `None` in routine), `heated_slot` (the slot
+    receiving extra heat, or `None` when no extra heat is applied),
+    `learned` (a feedback update ran), `recorded` (the
     waking outcome was written to memory), `sweeps` (free-solve sweeps of the forecast
     and the answer) and `learning_sweeps` (eligibility and feedback sweeps). It is
     `None` after construction, reset or load and is excluded from save files.
     `arousal` holds the stream's `Arousal`, or `None`.
   - `act(observations, *, greedy=False, temperature=None) -> actions`: one row per continuing stream.
     `temperature` samples the settled motor state at another softmax temperature than
-    `learning.temperature`; the eligibility kept for the sampled action stays the score
-    of the learner's own policy, and a greedy read ignores it.
+    `learning.temperature`, or takes one finite positive temperature per motor slot.
+    Eligibility credits the policy that actually sampled the action; a greedy read
+    ignores the supplied temperatures.
     The bounded free solve checks complete potential/adaptation equations, including
     observers, under `learning.free_steps` and `learning.tolerance`. Its numerical
     fallback changes neither the live model nor teaching phases. Cached states are
@@ -945,7 +953,9 @@ returns. `Brain.live` runs it; the classes can also be used alone.
   the brain sooner and left more lives searching too briefly.
   `aroused` is true while `level >= threshold` and for the first `youth` moments of the
   brain's life; `mode` names it. `heat` is `1 + config.heat * want`, the factor on the
-  policy temperature an aroused brain samples at. `lived(sweeps, learning_sweeps=0)`
+  policy temperature for the one motor slot selected for extra exploration.
+  Other slots keep their base policy temperature; every slot remains available to
+  the uniform selection on subsequent moments. `lived(sweeps, learning_sweeps=0)`
   counts one moment: `moments` and `sweeps` per mode, `learning_sweeps` and `age`.
   `Brain.live` counts a moment when its action is issued; the work of a refused
   attempt is reported by `Brain.last_settlement` and `Brain.last_learning` and is
@@ -1196,10 +1206,14 @@ founder genes for a small share of moments; the
   - `act(drive, greedy=False, temperature=None) -> action`: one free phase, then a draw from the softmax
     over the output neurons (with `Bins`, one draw per dimension), or the most probable.
     `temperature` draws from the same settled outputs at another softmax temperature,
-    a behaviour that explores more above the learner's and less below it; it must be
-    finite and positive and is checked before any state changes. The eligibility kept
-    for the sampled action stays the score of the learner's own policy, so credit for an
-    explored action is an on-policy estimate only at the learner's temperature.
+    or supplies one temperature per motor slot (per dimension with `Bins`). Values
+    must be finite and positive and are checked before any state changes. Eligibility
+    uses the same temperatures: its boundary drive is `c/T` times the categorical
+    nudge, where `c` is the minimum of the base temperature and all supplied
+    temperatures. The contrast therefore estimates `c * grad(log policy)` for the
+    actual joint draw under the equilibrium assumptions. This keeps the original
+    scale at the base temperature and bounds each mask gain by one, even for tiny
+    temperatures. The supplied temperature is held fixed during the local phases.
     Cache reuse requires the same drive and unchanged brain parameters; caller buffers
     are copied. After learning, the next action refreshes its warm state. A greedy action clears
     pending eligibility and cannot be followed by `learn`. Repeated `act` replaces the
@@ -1237,7 +1251,7 @@ founder genes for a small share of moments; the
     parameters and optimizer history retained), `probabilities(state, temperature=None)` (shape `(batch, actions)`
     or `(batch, slots, max_size)` for categorical slots, with exact zero padding;
     `(batch, dims, size)` with `Bins`; `temperature` reads the settled outputs at
-    another softmax temperature than the learner's), `settle(drive)`,
+    another softmax temperature than the learner's, or one per motor slot), `settle(drive)`,
     `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
     `salience`, `delta_mean`, `delta_var`.
 - `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=None, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="auto", eligibility_steps=None)`:

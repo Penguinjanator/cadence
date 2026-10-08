@@ -233,8 +233,13 @@ weigh at zero, with the record it holds for the action it chose. A reward that
 stays below what its life usually pays is a want, which also covers a failure it
 predicts correctly; so is a reward below the body's `need`, a gene the founders set
 at zero, measured as the share of the need left unmet, which a rare reward's small
-mean cannot dilute and which never habituates. An aroused brain samples, at a
-temperature the want raises, keeps eligibility, learns from every outcome and writes memory.
+mean cannot dilute and which never habituates. An aroused brain samples its policy,
+keeps eligibility, learns from every outcome and writes memory. Want raises the
+temperature of one uniformly chosen motor slot per moment; the other slots keep
+the base policy temperature, so extra exploration does not flatten every motor
+choice at once. A one-slot brain retains its existing sampling law. Eligibility
+credits the actual temperatures used, and `last_arousal["temperatures"]` records
+them alongside `heated_slot` (or `None` when no extra heat was applied).
 The outcome that
 woke it is written to its memory at once. Only outcomes of its own greedy choices
 can surprise it or change its usual forecast error. Every actual reward updates

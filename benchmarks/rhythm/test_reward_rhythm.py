@@ -215,22 +215,22 @@ def test_refused_answer_after_feedback_retries_without_crediting_it_twice(
     x = chamber.observation(inputs.KIND_DRIVE)
     chamber.moment(brain, arm, x, None, work)
     updates, counted = brain.basal_ganglia.updates, work.counts["learning_sweeps"]
-    act = brain.act
+    settled = brain._settled
 
     def refuse_after_feedback(*args, **kwargs):
         config = brain.learner.config
         brain.learner.config = replace(config, free_steps=0, tolerance=0.0)
         try:
-            return act(*args, **kwargs)
+            return settled(*args, **kwargs)
         finally:
             brain.learner.config = config
 
-    monkeypatch.setattr(brain, "act", refuse_after_feedback)
+    monkeypatch.setattr(brain, "_settled", refuse_after_feedback)
     refused = chamber.moment(brain, arm, x, 1.0, work)
     assert refused["action"] is None and refused["retry_reward"] is None
     assert brain.basal_ganglia.updates == updates + 1
     assert work.counts["learning_sweeps"] == counted + brain.last_learning["free_steps"]
-    monkeypatch.setattr(brain, "act", act)
+    monkeypatch.setattr(brain, "_settled", settled)
     retried = chamber.moment(brain, arm, x, refused["retry_reward"], work)
     assert retried["action"] is not None and work.counts["refusals"] == 1
     assert brain.basal_ganglia.updates == updates + 1

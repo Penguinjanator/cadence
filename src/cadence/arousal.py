@@ -32,8 +32,9 @@ remains the control and the record's channel is left to selection.
 Only the outcome of the brain's own best guess can surprise it and enters its usual
 forecast error. Every actual outcome enters the recent and long-run reward: exploring
 does not stop the brain from noticing what its life pays. The brain is aroused while
-``level >= threshold`` and during its first ``youth`` moments, and an aroused brain
-samples at ``1 + heat * want`` times its policy's temperature. The law is unchanged when
+``level >= threshold`` and during its first ``youth`` moments. An aroused brain samples
+its policy, with one uniformly chosen motor slot at ``1 + heat * want`` times the base
+temperature; other slots keep the base temperature. The law is unchanged when
 rewards, errors and the need are multiplied by one positive number, away from its absolute
 ``1e-12`` surprise guard. Reward shifts also preserve the law when the need is zero:
 every outcome establishes the reward reference before its spread forms. A need is a
@@ -242,7 +243,7 @@ class Arousal:
 
     @property
     def heat(self) -> float:
-        """The factor on the policy temperature an aroused brain samples at."""
+        """The temperature factor for the one motor slot selected for extra exploration."""
         return 1.0 + self.config.heat * self.want
 
     # -- the law

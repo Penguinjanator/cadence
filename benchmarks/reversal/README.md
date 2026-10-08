@@ -767,6 +767,66 @@ python benchmarks/reversal/odour_nursery.py --arms live --seeds 0 1 --exposures 
 python benchmarks/reversal/odour_nursery.py --arms live --seeds 2 3 4 --exposures 300 --payoff cost --workers 1 --out income-additional.json.gz
 ```
 
+## Temperature-consistent credit and slot exploration — 2026-10-08
+
+The combined repair at `6fae103` adds two separate changes to the income repair:
+actor eligibility now uses the policy that actually sampled the action, and
+extra arousal heat applies to one uniformly chosen motor slot while other slots
+sample the base policy. No new genes or configured default values are introduced.
+The local actor nudge uses
+the actual temperature and a bounded mask gain, so every output contributes to
+the same scaled joint policy score. Finite phases retain their approximation
+error. The independent derivative and action-independent-baseline checks are
+in `tests/test_behavior_credit.py`; sampling, refusal and saved-continuation
+checks are in `tests/test_arousal_slots.py`.
+
+The same five development founders (0–4), cost payoff, exposure 300 and 600-trial
+later rules were checked against the original gates, without tuning. The
+[combined receipt](results/development-temperature-combined-2026-10-08.json.gz)
+passes its digest/source/arithmetic verifier. This is bounded preservation on
+reused development founders, not a new confirmation census or a robot-skill claim.
+
+| Reading across the five lives | Income repair alone (`9c2ac1f`) | Combined repair (`6fae103`) |
+| --- | ---: | ---: |
+| Lives meeting all measured acquisition/reversal/return/stable/calm gates | 5/5 | 5/5 |
+| Final executed accuracy and stable-pair probes, every phase | 1.00 | 1.00 |
+| Late aroused share, every phase | 0.00 | 0.00 |
+| Median acquisition / reversal / return lag | 83 / 68 / 77 | 83 / 68 / 129 |
+| Longest individual return lag | 225 | 239 |
+| Aroused actions / all issued actions | 1,495 / 7,505 (19.92%) | 1,659 / 7,505 (22.11%) |
+| Routine / aroused settling sweeps | 192,160 / 33,440 | 186,912 / 33,792 |
+| Learning / probe sweeps | 18,108 / 39,808 | 18,042 / 39,808 |
+| Memory writes / reads | 1,506 / 9,011 | 1,670 / 9,175 |
+| Refused sweeps | 0 | 0 |
+
+The combined repair retains the declared capabilities but returns more slowly
+in this cost task. Original gates remain final accuracy at least 0.9,
+stable-pair correctness at least 0.95, late arousal at most 0.2 in at least 90%
+of lives, and median reversal lag at most 150. There is no individual return-lag
+gate. The slower returns and all earlier comparisons above remain recorded;
+these data do not support a recovery-speed improvement.
+
+The sampler change leaves a one-slot life unchanged. A separate
+[credits-only control](results/development-temperature-credit-only-2026-10-08.json.gz)
+at `7e308f6`, seed 0, matches the combined seed 0 exactly in every recorded phase
+and every work field except latency. Both acquire/reverse/return in 89/68/82
+trials. This isolates the sampler from the credit correction; it is not a
+comparison between five independent new tasks. The control receipt also passes
+the verifier. The source manifests in both receipts identify every runtime file.
+
+The multi-slot sampling test separately holds bounded motor preferences fixed
+and reads the actual live-selected temperatures. With five three-state slots,
+activation margin 1, base temperature 0.5 and heated temperature 1.5, the exact
+probability of the preferred complete command is 0.02924 when all slots are
+heated and 0.18926 when one slot is heated (0.30188 without extra heat). This is
+a motor-boundary control, not acquired behavior. For `S` slots, each slot's
+marginal distribution differs from its base policy by only `1/S` of the change
+caused by heating that slot every moment; all alternatives remain available.
+
+Reproduction at each stated source uses the earlier cost-payoff command with
+`--seeds 0 1 2 3 4` for the combined receipt and `--seeds 0` for the credits-only
+control. Both use one worker and the original protocol and operating point.
+
 ## What this does and does not establish
 
 The `live` arm supplies bounded acquisition, reversal, return and stable-pair evidence
