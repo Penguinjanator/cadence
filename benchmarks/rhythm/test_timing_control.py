@@ -174,6 +174,19 @@ def test_changed_baseline_receipt_is_refused_before_artifact_use(tmp_path):
         control.basis(tmp_path)
 
 
+def test_display_rounding_midpoint_preserves_unrounded_acceptance(recorded, config):
+    directory, case = recorded
+    # Captured first-run cancellation: absolute-clock subtraction rounded down,
+    # but the stored relative timestamp subtracts to 1.3965000049211085ms.
+    case["timing"]["begin_ms"][2] = 201.3965000049211085
+    case["lateness_ms"][2] = 1.396
+    case["solve_ms"][2] = 0.603
+    control.verify_case(case, directory, config)
+    case["lateness_ms"][2] += 0.002
+    with pytest.raises(AssertionError):
+        control.verify_case(case, directory, config)
+
+
 def test_failed_policy_call_is_charged_without_invented_completed_arithmetic():
     class Broken:
         def act(self, observation):

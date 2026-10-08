@@ -338,8 +338,15 @@ def verify_case(case: dict, directory: Path, config: dict) -> None:
     begin = np.asarray(case["timing"]["begin_ms"])
     end = np.asarray(case["timing"]["end_ms"])
     assert np.all(begin[1:] >= end[:-1]), "overlapping sequential actions"
-    assert case["solve_ms"] == [round(float(v), 3) for v in end - begin]
-    assert case["lateness_ms"] == [round(float(v), 3) for v in begin - due]
+    for key, raw in (("solve_ms", end - begin), ("lateness_ms", begin - due)):
+        displayed = np.asarray(case[key], dtype=float)
+        assert displayed.shape == raw.shape and np.isfinite(displayed).all()
+        assert np.array_equal(displayed, np.round(displayed, 3))
+        # The scheduler rounds absolute-clock differences to .001ms. Subtracting
+        # relative timestamps can land across the same rounding midpoint by a
+        # few floating-point ulps. This checks display precision only; every
+        # physical acceptance bound still uses the unchanged unrounded events.
+        assert np.all(np.abs(displayed - raw) <= 0.000501)
     assert all(
         r["wall_seconds"] * 1000 <= elapsed + 1e-5
         for r, elapsed in zip(records, end - begin, strict=True)
