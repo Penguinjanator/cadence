@@ -53,6 +53,7 @@ testpaths = [
     "benchmarks/rhythm",
     "benchmarks/reversal",
     "benchmarks/keydoor",
+    "benchmarks/recall",
 ]
 
 [tool.ruff]

@@ -2,28 +2,25 @@
 
 ## Unreleased
 
-- Add the loop chamber of issue #140 (`benchmarks/rhythm/loop_rhythm.py`,
-  `protocol-loop.json`): a brain taught to predict the next event of a period-four pattern
-  plays it in the closed loop from a prime, hearing only its own output. The declared
-  mechanism is the efference copy with a decay above zero, a count of rows since the last
-  onset, under the contract that the heard event enters the copy before the brain answers
-  and its own command is taken back; teaching follows the routine rule of `Brain.live`, a
-  lesson only on a wrong or refused answer, after the C64 lane's lesson-on-every-row recipe
-  made the pattern come and go from pass to pass on the development seeds. loop/1 passed
-  its gate on fresh seeds 601 to 605: five of five founders loop the pattern at every phase
-  at 1.00 after 7 to 126 lessons, none from birth; the copy written only by the brain's own
-  commands, the trace alone, hold forever and uniform random fail, the n-gram table passes.
-  No default changes.
-- Add the second and third freezes of the finite recall chamber of issue #84
-  (`benchmarks/recall/protocol-finite-2.json`, `protocol-finite-3.json`). The working-trace
-  amplitude (0.3; 1.0 and the composed 3.0 recall nothing at any delay) and the lesson budget
-  were selected on development founders; the `surprise` teaching rule (the free act first, a
-  lesson only on the rows it answered wrong, on the drive that act read) is a declared option
-  of the worker, recall/1's `every` rule unchanged and byte-identical. Both freezes failed
-  closure on fresh founders: one founder in three recalls a vanished cue across one or two
-  fillers through the trace alone, the others learn nothing from the lessons that teach their
-  history twins; a replaced cue stays at chance everywhere. #84 stays open with the measured
-  horizon. Development and confirmation receipts are in `benchmarks/recall/results/`.
+- Add the period-four loop chamber for #140, retaining the declared protocol and
+  original receipts. Its passing `copy` arm uses an external sensory-history
+  adapter; the native own-command and trace-only controls fail in the original
+  freeze. Label selective teaching as an application policy. Require every prime,
+  matched untaught founders, complete controls, no refusals and saved continuation;
+  independently verify raw answers, scores and work. This bounded adapter result
+  does not close native closed-loop generation.
+- Correct the finite recall worker to honor its declared lesson count. Historical
+  freezes 2 and 3 actually ran 192 episodes per founder, not the declared 384;
+  preserve those authentic receipts as protocol deviations. Add strict census,
+  score and work checks and retain the original `every` teaching behavior. Report
+  corrected measurements separately; a one-founder success does not establish
+  the declared recall horizon. Library behavior, interfaces and defaults are unchanged.
+- Retain and replay raw recall-trace transitions, measure separation and motor
+  margins, compare equal-time histories with different event counts, and enforce
+  founder time limits while preserving unfinished work. Add the missing shuffled-time
+  and untaught controls to the native period-two rhythm instrument, with explicit
+  actuator timing, recovery and continuation bounds declared before confirmation.
+  Charge saved-copy work and remove a redundant, previously uncounted replay.
 
 ## 0.77.0 — 2026-10-08
 

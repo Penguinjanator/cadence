@@ -673,7 +673,7 @@ generally better default.
   3/5 for the walker and 4/5 for the control, with the limping founder never recovering.
 - The paced and host-load variants of the supervised chamber are not repeated here.
 
-## loop/1: the closed loop of issue 140, 2026-10-08
+## loop/1: an engineered sensory-history comparison for issue 140, 2026-10-08
 
 Issue [#140](https://github.com/muellerberndt/cadence/issues/140) reports a brain that
 predicts the next event of a pattern well on held-out rows and collapses, when fed its own
@@ -688,16 +688,18 @@ its own last answer. [`protocol-loop.json`](protocol-loop.json) declares the pat
 C64 lane's recipe of 0.73.1 at the rate of 0.01 it measured as the edge, the copy, the
 teaching contract, the seeds and the gates.
 
-The declared mechanism is the efference copy of 0.76.0 with a decay above zero: the fading
-copy of the brain's own last onset is a count of rows since it (0.35, 0.23, 0.15, 0.10 of
-the onset cell at decay 0.65). The declared contract is that the heard event enters the copy
+The `copy` arm supplies a decaying history of heard inputs by directly editing the brain's
+efference storage. This is an instrument-side adapter, not the public own-command
+efference contract or a supported application recipe. The learned graph still settles its
+answer, and no future label enters this history; the adapter supplies a designed temporal
+feature (0.35, 0.23, 0.15, 0.10 of the onset cell at decay 0.65). The heard event enters the copy
 before the brain answers a row, in teaching, in the open-loop watching and in the prime of a
 play, and the brain's own command is then taken back out of it, so the copy carries the
 heard stream alone, one update per row; in the closed loop the brain's own command is the
-heard event and stays. Teaching follows the routine rule of `Brain.live`: a row answered
+heard event and stays. Teaching uses an explicit label-based mismatch policy: a row answered
 right teaches nothing, a wrong or refused answer is followed by one lesson on that row, with
 the trace and the copy put back to what the act read. Arms on the same founder weights:
-`copy` (the mechanism), `own` (the same copy written only by the brain's own greedy
+`copy` (the sensory-history adapter), `own` (the same copy written only by the brain's own greedy
 commands, the simpler control of the contract), `nocopy` (the working trace alone, the
 0.73.1 setting), `frozen` (the `copy` founder without lessons, played under the same
 contract), `ngram` (a table over the last four events taught on the same rows, the matched
@@ -712,13 +714,37 @@ within 20 percent of the truth's onset rate, agree with their primes' continuati
 0.05 above hold forever (0.75), are prime dependent at every phase, and are not already
 above that agreement untaught; no refused act.
 
+That gate evaluates the declared adapter comparison. It does not establish a repair of
+#140 in the native continuing brain: the public own-command and trace-only arms fail here.
+The conditional teacher policy also differs from `Brain.live`, whose arousal law can learn
+from correct outcomes during youth or sustained arousal. The n-gram receives the same
+event stream with explicit history; memory representation and its cost differ between arms.
+
 ```sh
 python benchmarks/rhythm/loop_rhythm.py --out /tmp/loop-1
 python benchmarks/rhythm/loop_rhythm.py --verify /tmp/loop-1
 ```
 
 The frozen run, seven arms on the five confirmation seeds, takes about two minutes on one
-laptop CPU. `--seeds`, `--arms`, `--passes` and `--protocol` mark a receipt not frozen.
+laptop CPU. Changed seed, arm, pass or protocol selections mark a receipt not frozen.
+
+The tables and original receipts below retain their original source and metrics. Maintainer
+instrument revision 2 records raw act/lesson events, checks scores against those events,
+requires every planned control and each prime's threshold, and counts refused answers as
+misses. Missing same-founder frozen controls cannot earn learning credit; refusals during
+teaching, watching, primes or continuation also prevent acceptance. The instrument records
+adapter/control work and checkpoint I/O separately and tests a mid-loop save/resume branch.
+Its receipts identify the adapter explicitly; no library behavior or frozen protocol changed.
+Corrected reruns use separate receipts and already-used seeds are audits, not fresh confirmation.
+The historical receipts' original verification is not a revision-2 arithmetic or continuation
+check; reproducing that verification requires their original source snapshot. The current
+verifier requires revision-2 event records and checkpoint artifacts.
+
+The original first-contract and every-row development receipts contain 10 and 11 refused
+acts, respectively. Their teaching/watching metrics dropped refused rows from denominators,
+and their play scores credited a refusal as HOLD. Interpret those historical comparisons
+with that limitation; the old receipts lack the per-row teaching/watch events needed to
+reconstruct every corrected metric. The original confirmation records zero refused acts.
 
 ### Development, seeds 0 to 5
 
@@ -757,7 +783,7 @@ of three and four rows. The every-row founders that watched the pattern at 0.98 
 at decay 0.9 looped it at 0.88 and 0.90 without prime dependence: at that decay the count
 is too flat to hold the phase.
 
-### Confirmation on fresh seeds 601 to 605, gate passed
+### Historical confirmation on seeds 601 to 605, adapter gate passed
 
 Protocol SHA-256 `13499a1dae5861e51967bd8f3bde08c1d6edbb075bf996409aab2a18f8a81023`; receipt
 `results/confirmation-loop-2026-10-08.json.gz`, verified, 35 founder-arms, 124 seconds, no
@@ -773,12 +799,13 @@ given in 24 passes of 255 rows.
 | 604 | **1.00 / 1.00 / yes / 42** | 0.25 / 0.25 / 2,262 | 0.73 / 0.73 / 3,026 | 0.25 / 0.38 | 1.00 | 0.75 | 0.47 |
 | 605 | **1.00 / 1.00 / yes / 126** | 0.75 / 0.68 / 2,368 | 0.75 / 0.75 / 3,021 | 0.49 / 0.63 | 1.00 | 0.75 | 0.45 |
 
-Five of five `copy` founders learned the loop: every play at every phase agrees with its own
+Five of five founders using the sensory-history adapter learned the loop: every play at every phase agrees with its own
 prime's continuation at 1.00, fires at the truth's rate and keeps the prime's phase, after 7
 to 126 lessons; the pairwise correlation of their four plays is −0.33, the correlation of
 the four phase shifts of a period-four pattern, as for the n-gram table. The untaught
 founders fire on nearly every row (601, 602, 604), hold (603) or mix (605): none had the
-loop from birth. Work: every brain arm 6,691 acts at 32 sweeps an act (214,112 sweeps for
+loop from birth. Original work: each taught brain arm made 6,691 acts (the untaught arm
+made 571); `copy` used 32 sweeps per act (214,112 sweeps total for
 `copy`, 153,408 to 164,032 for `nocopy`, whose brain is smaller); the `copy` lessons cost
 122 to 1,306 sweeps against 17,000 to 30,000 for the arms that never learned.
 
@@ -806,7 +833,45 @@ loop from birth. Work: every brain arm 6,691 acts at 32 sweeps an act (214,112 s
   rows at decay 0.65, so periods well beyond eight are outside its range at this amplitude.
 - Lessons on surprise only is this chamber's declared contract, selected on the development
   seeds against the every-row recipe; it is not a library default and the rhythm, reward and
-  key-door chambers keep their own contracts. A right answer at the wrong margin is routine
-  here as it is in `Brain.live`.
+  key-door chambers keep their own contracts. The teacher compares each free answer with its
+  supplied next-event label; this is not the arousal-based policy of `Brain.live`.
 - The cross-prime correlation reported by the issue is read on plays that are already scored
   by agreement; a loop that is prime dependent and wrong would score low on both.
+
+
+## Predeclared event-time completion of #116
+
+[`protocol-timing.json`](protocol-timing.json) reuses the native `rhythm/2`
+`efference` recipe unchanged. It adds an untaught matched founder, ordered and
+shuffled schedules with the same interval multiset, unrounded due/begin/end/deadline
+records, and physically paced numerical-budget and tolerance comparisons. Neither
+time nor the action index enters the observations. `every` and `mismatch` are
+explicit application teacher policies; this chamber does not exercise `Brain.live`.
+The primary timing arm is `efference/every`; all four recipe/teacher combinations
+receive the learning, history, disturbance and continuation comparisons.
+
+Before inspecting development seeds 0–1, the protocol declares one joint threshold:
+at least four of five fresh founders 1701–1705 must satisfy **all** learning, control,
+recovery, refusal, timing and continuation criteria. Each primary row must alternate
+at least 95% of pairs over 64 cue-free events, beat its untaught and random baselines
+by 0.20, and retain at least 90% in every eight-event block. Each disturbance must
+recover within eight events and retain 95% alternation over the final 24 events.
+Every accepted cadence must preserve every reference action, issue no refused
+act, finish by the next distinct due time, begin within half that deadline interval,
+and keep issued-action phase drift within half the smallest positive interval and
+issued-action period error within 25ms. Both use solve-end timestamps; request lateness
+uses solve-start timestamps. The 16-sweep budget remains a recorded stress case outside the declared
+supported envelope of 64 sweeps or more. Missing planned comparisons fail admission.
+
+This is an externally scheduled, event-driven period-two trajectory. The clock
+supplies due times; native brain history determines each action. It does not claim
+an endogenous physical oscillator. Checkpoints include the world event cursor and
+phase anchor, including the remaining pause events; physical forks reanchor their
+monotonic host clock. The verifier independently recounts actions/refusals and solve
+work, checks every saved continuation array and checkpoint-I/O record, and recomputes
+the joint gate from raw actions and timestamps. The saved restored fork is reused,
+removing the old instrument's duplicate uncharged replay.
+
+Development and confirmation have not yet been reported here. The older rhythm/1,
+rhythm/2 and reward receipts above retain their original bytes and measured scope;
+this new verifier does not retroactively certify their timing or work accounting.

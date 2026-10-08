@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import importlib.util
 import json
+import os
 import sys
 import warnings
 from pathlib import Path
@@ -196,11 +198,52 @@ def test_a_small_run_scores_forks_seams_and_timing_and_its_receipt_verifies(prot
     gates = founder["gates"]
     assert set(gates["conditions"]) == {c.name for c in inputs.TEST_CONDITIONS}
     assert -1 <= gates["horizon"] <= 2 and isinstance(gates["closure"], bool)
+    assert body["declaration"]["instrument_revision"] == 2
+    assert body["unmet_protocol_obligations"] == [] and not body["closure"]
+    assert founder["hard_guard"]["completed"] and founder["hard_guard"]["reaped"]
+    assert vanished["work"]["retained_trace_records"] == vanished["work"]["trace_audits"]
+    assert (
+        vanished["work"]["trace_audits"]
+        == vanished["work"]["action_attempts"] - vanished["work"]["action_refusals"]
+    )
+    event_fork = vanished["timing"]["matched_elapsed_events"]
+    assert [b["events"] for b in event_fork["branches"]] == [1, 2]
+    assert [b["elapsed"] for b in event_fork["branches"]] == [2.0, 2.0]
+    assert event_fork["trace_distance"] > 0
+    assert len(vanished["trials"][0]["diagnostics"]["paired_trace_distance"]) == 4
+    assert (
+        body["founders"][0]["arms"]["history"]["trials"][0]["history_traffic"]["buffer_bytes"]
+        == 1088
+    )
+    assert vanished["work"]["imagined_phases"] > 0
+    assert vanished["work"]["expected_refusals"] == len(inputs.TEST_CONDITIONS)
+    assert vanished["timing"]["work"][0]["action_attempts"] > 0
+    assert all(s["reports_equal"] for s in replacement.values())
     # the receipt refuses edited scores
     stored = json.loads((out / "summary.json").read_text())
     stored["body"]["founders"][0]["gates"]["horizon"] = 2
     (out / "summary.json").write_text(json.dumps(stored))
     assert not chamber.verify(out)[0]
+    # A new canonical signature still cannot legitimize unsupported arithmetic.
+    sources = [(entry["path"], out / entry["path"]) for entry in stored["source"]["files"]]
+    chamber.Receipt.build(chamber.SCHEMA, stored["body"], sources).write(out / "summary.json")
+    assert not chamber.verify(out)[0]
+    stored["body"]["founders"][0]["gates"] = gates
+    stored["body"]["founders"][0]["scores"]["vanished"]["clean-0"]["intact"]["correct"] += 1
+    chamber.Receipt.build(chamber.SCHEMA, stored["body"], sources).write(out / "summary.json")
+    valid, reason = chamber.verify(out)
+    assert not valid and "trial scores" in reason
+    # Re-signing a changed raw transition cannot manufacture a valid recurrence.
+    stored["body"] = body
+    chunk = next((out / "founder-0/vanished/training-traces").glob("*.npz"))
+    with np.load(chunk, allow_pickle=False) as archive:
+        arrays = {k: archive[k] for k in archive.files}
+    arrays["0/after_trace"] = arrays["0/after_trace"] + 0.1
+    np.savez_compressed(chunk, **arrays)
+    stored["body"]["artifacts"][chunk.relative_to(out).as_posix()] = chamber.sha256(chunk)
+    chamber.Receipt.build(chamber.SCHEMA, stored["body"], sources).write(out / "summary.json")
+    valid, reason = chamber.verify(out)
+    assert not valid and "accepted-event update" in reason
 
 
 @pytest.mark.parametrize("bad", [["--seeds", "0", "0"], ["--repeats", "0", "1"]])
@@ -209,3 +252,107 @@ def test_invalid_cli_is_rejected_before_creating_an_attempt(tmp_path, bad):
     with pytest.raises(SystemExit):
         chamber.main(["--out", str(out), *bad])
     assert not out.exists()
+
+
+def test_declared_repeat_budget_is_used_without_a_cli_override(tmp_path, monkeypatch):
+    declared, _ = chamber.load_protocol(ROOT / "protocol-finite-2.json")
+    observed = []
+
+    def inspect(arm, brain, frozen, protocol, began, directory, *, work, progress):
+        observed.append((len(frozen["train/condition"]), len(frozen["test/condition"])))
+        progress.update(
+            episodes=len(frozen["train/condition"]), completed=False, work=work.summary()
+        )
+        return progress
+
+    monkeypatch.setattr(chamber, "train_arm", inspect)
+    result = chamber.run_founder(304, declared, tmp_path / "declared", None)
+    assert observed == [(384, 312)] * 3
+    assert not result["gates"]["closure"]
+
+
+def test_every_rule_preserves_the_original_teach_then_act_life(protocol, tmp_path):
+    declared = protocol[0]
+    frozen = chamber.freeze_small(tmp_path / "episodes.npz", 0, {"train": 1, "test": 1})
+    current = chamber.brain_for("vanished", declared, 0)
+    reference = chamber.brain_for("vanished", declared, 0)
+    result = chamber.train_arm("vanished", current, frozen, declared, chamber.time.time(), tmp_path)
+    for index in range(len(frozen["train/condition"])):
+        episode = chamber.episode_arrays(frozen, "train", index)
+        for event, observation in enumerate(episode["observations"]):
+            if event == len(episode["observations"]) - 1:
+                reference.learner.step(reference.stimulus(observation), episode["labels"])
+            reference.act(observation, greedy=True)
+    assert result["completed_episodes"] == result["episodes"] == 12
+    assert chamber.same_arrays(
+        current.save(tmp_path / "current.npz"), reference.save(tmp_path / "reference.npz")
+    )
+
+
+def test_cap_keeps_completed_work_and_the_full_random_denominator(protocol, tmp_path, monkeypatch):
+    actual = chamber.Work.act
+    attempts = 0
+
+    def capped(self, *args, **kwargs):
+        nonlocal attempts
+        answer = actual(self, *args, **kwargs)
+        attempts += 1
+        if attempts == 2:
+            raise chamber.Capped("injected after a completed call")
+        return answer
+
+    monkeypatch.setattr(chamber.Work, "act", capped)
+    result = chamber.run_founder(0, protocol[0], tmp_path / "capped", {"train": 1, "test": 1})
+    assert result["capped"] and not result["gates"]["closure"]
+    assert result["arms"]["vanished"]["training"]["work"]["action_attempts"] == 2
+    assert len(result["arms"]["random"]["trials"]) == len(inputs.TEST_CONDITIONS)
+    assert result["scores"]["history"]["clean-0"]["answer"]["planned"] == inputs.STREAMS
+
+
+def test_a_missing_control_cannot_improve_the_measured_horizon():
+    receipt = json.loads(
+        gzip.decompress((ROOT / "results/finite-3-2026-10-08.json.gz").read_bytes())
+    )
+    founder = receipt["body"]["founders"][2]
+    declared = receipt["body"]["protocol"]
+    assert chamber.gates_for(founder, declared)["horizon"] == 1
+    founder["scores"]["vanished"]["clean-1"]["erased"]["attempted"] = 0
+    assert chamber.gates_for(founder, declared)["horizon"] == 0
+
+
+def test_hard_deadline_reaps_an_artificial_worker_and_keeps_all_denominators(protocol, tmp_path):
+    guard = chamber.guarded_process(
+        [sys.executable, "-c", "import time; print('started', flush=True); time.sleep(60)"],
+        tmp_path / "worker.log",
+        0.25,
+    )
+    assert guard["timed_out"] and guard["reaped"] and not guard["completed"]
+    assert guard["elapsed_seconds"] < 10
+    with pytest.raises(ProcessLookupError):
+        os.kill(guard["pid"], 0)
+    founder = chamber.recover_founder(0, protocol[0], tmp_path / "founder", {"train": 1, "test": 1})
+    founder["hard_guard"] = guard
+    assert founder["capped"] and founder["incomplete_work"]
+    assert set(founder["arms"]) == set(chamber.ARMS)
+    assert not chamber.gates_for(founder, protocol[0])["closure"]
+    for arm, conditions in founder["scores"].items():
+        for condition in conditions.values():
+            branch = "answer" if arm in ("history", "random") else "intact"
+            assert condition[branch]["planned"] == inputs.STREAMS
+            if arm != "random":
+                assert condition[branch]["correct"] == condition[branch]["attempted"] == 0
+
+
+def test_query_diagnostics_and_history_traffic_use_observations_not_answers():
+    trace = np.array([[1.0, 0.0], [0.0, 1.0]])
+    neural = trace * 2
+    motor = np.array([[0.7, 0.2], [0.1, 0.8]])
+    result = chamber.diagnostics_from_arrays(trace, neural, motor, np.array([0, 1]))
+    np.testing.assert_allclose(result["paired_trace_distance"], [np.sqrt(2)])
+    np.testing.assert_allclose(result["paired_neural_distance"], [2 * np.sqrt(2)])
+    np.testing.assert_allclose(result["motor_margin"], [0.5, 0.7])
+    episode = inputs.make_episode(np.random.default_rng(0), inputs.TEST_CONDITIONS[0])
+    traffic = chamber.history_traffic(episode.observations)
+    assert traffic["buffer_bytes"] == 1088
+    assert traffic["query_bytes_transported"] == 1024
+    assert traffic["payload_bytes_read"] == traffic["payload_bytes_written"] == 256
