@@ -541,6 +541,12 @@ and a complete runnable example.
   the focused `Trace`. With `source="input"` it is an afterimage of the picture itself, the
   memory that reads a cue against a static background (`tests/test_child.py`: 1.00 where the
   Echo reads chance).
+- `Efference(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="motor", target="efference")`:
+  the corollary discharge, a `Trace` written from the command the brain issued instead of a
+  settled activation: `issue(command)` decays the trace toward the `(batch, motor)` one-hot of
+  the executed action (`update(state)` raises). One `target` neuron per motor neuron; the
+  association region reads it through a plastic projection. `Brain.compose(...,
+  efference_amplitude=...)` adds it; `Brain.efference` holds it.
 - `FastSynapses(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb", separator=None, writes=0)`:
   one mutable `(pre, post)` matrix per stream; `writes` counts the rows written. `separator`
   is a `PatternSeparator` applied to keys and queries, which makes the matrix
@@ -703,6 +709,12 @@ that recursive benefit or automatic reflective behavior has been learned.
   about 12 actions (issue 124). An explicit value is used as given; compare
   observed operating points rather than assuming the same activity at every
   vocabulary size.
+  `efference_amplitude` above zero (default 0.0, the released composition, byte-identical)
+  appends an `efference` population of one neuron per motor neuron and a plastic
+  `efference` to `association` projection at the working trace's scale 12; `efference_decay`
+  (default 0.2) sets how the copy of the issued command fades. Every earlier region and
+  projection is developed from the same random draws, so the brain with the copy is the
+  brain without it plus those neurons and that projection. It is a gene; zero is its control.
 - `Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, slots=1, **options)`:
   develops `Brain.genome(...)` and wraps it. `inputs` is a vector length, or an image
   shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
@@ -712,13 +724,13 @@ that recursive benefit or automatic reflective behavior has been learned.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `Brain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None)`:
+- `Brain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, efference_decay=0.2, efference_amplitude=0.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None)`:
   `arousal` takes an `ArousalConfig` and gives the brain the arousal that `live` runs
   on; left unset the brain has none and `live` raises. `compose` and `build` pass it
   through their options.
   `resting_bias` is a finite nonnegative real scalar; booleans and arrays are rejected.
-  It initializes named populations outside the `sensory`, `visual`, `prefrontal`
-  and `motor` families (the part of the name before `/`). Excluded family membership
+  It initializes named populations outside the `sensory`, `visual`, `prefrontal`,
+  `efference` and `motor` families (the part of the name before `/`). Excluded family membership
   takes precedence over overlapping aliases; unnamed neurons also start at zero.
   In `compose`, modules, association and observers receive the value. In an image
   builder the whole visual region stays at zero. Biases remain plastic, and a
@@ -727,7 +739,9 @@ that recursive benefit or automatic reflective behavior has been learned.
   save/load preserves both without reapplying the initializer. Files without this
   metadata retain their stored bias vector and use `resting_bias=0.0`.
   The connectome needs populations `sensory` or `visual/input`, `association` and `motor`, and uses
-  `prefrontal` for a working memory when present. `learning` defaults to
+  `prefrontal` for a working memory and `efference` (one neuron per motor neuron) for an
+  efference copy when present. `efference_amplitude` is the read gain of that copy, a finite
+  nonnegative real scalar; `efference_decay` its decay across moments. `learning` defaults to
   `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, free_steps=1024, nudged_steps=12, momentum=0.9)` (whose unset `eta_bias` derives `eta / 10` = 0.05),
   `reward` to `ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_bias=0.05, eta_critic=0.3, eligibility_steps=12)`,
   the measured composed bias rate; a bare `ActorCriticConfig` derives `eta / 10`.
@@ -741,11 +755,12 @@ that recursive benefit or automatic reflective behavior has been learned.
   instead use the configured `learning.damping` allowance. The separate reward
   eligibility mechanism retains its finite-phase contract.
   Attributes `connectome`, `brain`, `learner`, `basal_ganglia` (`ActorCritic` reading the
-  association cortex), `working_memory` (`Trace` or `None`), `hippocampus` (`SynapticMemory`
+  association cortex), `working_memory` (`Trace` or `None`), `efference` (`Efference` or
+  `None`), `hippocampus` (`SynapticMemory`
   from sensory to motor neurons, or `None`), `sensory_index`, `association_index`,
   `motor_index`.
   - `stimulus(observations, *, memory=True)`: the drive of a batch; with `memory`, the
-    working memory and the hippocampal recall are added.
+    working memory, the efference copy and the hippocampal recall are added.
   - `step(observations, *, reward=None, done=None, teacher=None, salience=None, bootstrap=None)`:
     the ongoing interaction API, returning the next sampled actions. Reward/done concern
     the preceding action; teacher labels concern the current observation. Omitted reward
@@ -861,6 +876,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     stream traces, prepared state, both memory timescales and any action awaiting feedback.
     A brain with arousal saves it, with the action `live` issued and its forecast, under
     the format name `cadence-generic/3`; brains without arousal keep `cadence-generic/2`.
+    A brain with an efference copy saves as `cadence-generic/4`, with or without arousal;
+    `load` refuses a `cadence-generic/4` file without the copy's state and a copy under an
+    earlier format name.
     The archive is replaced atomically. A learner-only checkpoint
     is rejected by `Brain.load`; `Learner.load` can extract a learner from either.
   Observations must be a nonempty finite batch, with image dimensions flattened per row.

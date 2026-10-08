@@ -30,6 +30,21 @@ region exchanges signals with motor neurons, and its working trace enters throug
 context neurons. `SynapticMemory` records the actually chosen action's reward;
 its fast and persistent associations influence later choices.
 
+`Brain.compose(..., efference_amplitude=1.0)` adds the efference copy, the
+corollary discharge of the issued command. The working trace is written from
+the settled state before the decision, so under identical observations it
+carries which action was executed only through the margin the motor
+competition left, and nothing of a sampled choice. The copy is one
+`efference` neuron per motor neuron, driven by the fading one-hot of the action
+each stream issued (`efference_decay`, default 0.2) and read by the association
+region through a plastic projection of the working trace's scale. The write is
+fixed, like the working trace's; what to do after what it did is learned. The
+founder value `efference_amplitude=0.0` builds the released composition,
+byte-identical; the copy is a gene selected against that control. The
+[steady-rhythm chamber](../benchmarks/rhythm/README.md) measures it on the
+task the working trace alone did not carry: alternate two actions under
+identical drive.
+
 The base can already be deep. Add recursive readback separately:
 
 ```python
@@ -68,7 +83,7 @@ within a slot, the unset `lateral` follows the largest slot, and `save`/`load` c
 the grouping (issue 142).
 
 `Brain.compose(..., resting_bias=0.5)` initializes the modules, association region
-and any observers with that bias. Sensory, working-memory and motor biases start
+and any observers with that bias. Sensory, working-memory, efference and motor biases start
 at zero. The value must be a finite nonnegative real scalar; booleans and arrays
 are rejected. The default remains zero. This is a selectable operating-point
 candidate: it can reduce silence under some random drives, but positive bias
@@ -88,7 +103,7 @@ All these biases remain plastic. `brain.resting_bias` records the initialization
 choice; `brain.brain.bias` holds the current learned values. Checkpoints preserve
 both, and loading restores the learned vector without reapplying initialization.
 For custom connectomes, named populations outside the `sensory`, `visual`,
-`prefrontal` and `motor` families are eligible. A neuron in any excluded family
+`prefrontal`, `efference` and `motor` families are eligible. A neuron in any excluded family
 keeps zero initial bias even if another population aliases it. Image builders
 therefore leave the entire visual region at zero, including its processing cells.
 

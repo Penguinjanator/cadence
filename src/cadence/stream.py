@@ -247,6 +247,42 @@ class Afterglow(Trace):
 
 
 @dataclass
+class Efference(Trace):
+    """The corollary discharge: a Trace written from the command the brain issued, not from
+    a settled activation.
+
+    One ``efference`` neuron per motor neuron carries the fading one-hot of the actions the
+    stream executed, and the next moment reads it through the plastic projection from the
+    ``efference`` range into the association region. The working trace copies the settled
+    state before the decision, so under identical observations it carries the executed
+    action only through whatever margin the motor competition left, and nothing of a
+    sampled choice; this trace carries the command itself. The write is fixed, as the
+    working trace's is; what the brain does with its own last command is learned.
+    """
+
+    source: str = "motor"
+    target: str = "efference"
+
+    def update(self, state: BrainState) -> None:
+        raise TypeError("the efference copy is written by the issued command; use issue")
+
+    def issue(self, command: np.ndarray) -> None:
+        """After the decision: the trace decays toward the ``(batch, motor)`` command, one
+        row per stream with ones at the motor neurons of the executed action. ``focus``
+        does not apply: a command is not a settled activation with a movement to weigh."""
+        command = np.asarray(command, dtype=float)
+        if command.ndim != 2 or command.shape[1] != len(self.hidden):
+            raise ValueError("a command is one row of motor values per stream")
+        if not np.isfinite(command).all():
+            raise ValueError("a command must be finite")
+        if len(self.trace) != len(command):
+            self.reset(len(command))
+        self.trace = self.decay * self.trace + (1.0 - self.decay) * command
+        self.last = command.copy()
+        self.cold[:] = False
+
+
+@dataclass
 class PatternSeparator:
     """Pattern separation: expand a key into a wider random code and keep the strongest winners.
 

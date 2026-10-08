@@ -228,3 +228,199 @@ they establish event-time semantics, not robustness to a solver that fails to
 qualify, and no budget down to 16 sweeps produced a refusal on this 68-neuron graph.
 Issue 93 consumes a passed continuing-action seam; this chamber reports a failed
 one for the current System 1 and the instrument to measure a repair.
+
+## rhythm/2: the efference copy, 2026-10-08
+
+The rhythm/1 result above is the measured limit of a System 1 whose only carried
+history is the working trace, a copy of the settled association state taken before
+the decision. Under identical drive that state records which action was executed
+only through the margin the motor competition left, and the flip-flop control that
+scores 1.00 is handed its own previous action explicitly. rhythm/2 declares one
+mechanism against that limit: the efference copy, `Brain.compose(...,
+efference_amplitude=3.0, efference_decay=0.0)`, one `efference` neuron per motor
+neuron driven by the one-hot of the command the row issued at the previous event
+and read by the association region through a plastic projection at the working
+trace's scale. The write is fixed, like the working trace's; what to do after what
+it did is learned. Nothing else changes: the `efference` recipe is the rhythm/1
+`selected` recipe plus the copy, and `selected` runs on every founder as the
+control, byte-identical to rhythm/1. The copy is a gene with zero as its control,
+not a default. [`protocol-2.json`](protocol-2.json), SHA-256
+`017b7f8b2c9ea53cc97a04f2fbf854f844158bcb73610e1f1723c14d088b87a4`, keeps every
+other declaration of rhythm/1, declares the carried phase state as the working
+trace and the copy, and lets the `erased`, `shuffled`, `static` and `reset` controls
+act on both. Its confirmation seeds 201 to 205 are fresh.
+
+```sh
+python benchmarks/rhythm/steady_rhythm.py --out /tmp/rhythm-2 \
+    --protocol benchmarks/rhythm/protocol-2.json --recipes efference selected
+python benchmarks/rhythm/steady_rhythm.py --verify /tmp/rhythm-2
+python benchmarks/rhythm/report.py /tmp/rhythm-2/summary.json
+python benchmarks/rhythm/develop_recipe.py --out /tmp/rhythm-dev --decays 0.1 \
+    --amplitudes 3.0 --rates default --efference-amplitudes 0.0 0.3 1.0 3.0 \
+    --efference-decays 0.0 0.2 0.5
+```
+
+The development command includes the amplitude-zero control once for each decay;
+those control cells are identical because decay has no effect without a copy.
+The archived table keeps one copy of each amplitude-zero control cell.
+
+### Development, seeds 0 to 5, 24 bouts
+
+`results/development-efference.json` keeps every cell, the amplitude-0 control
+included. Mean window alternation over the six development founders:
+
+| efference amplitude | decay | every | mismatch |
+| --- | --- | --- | --- |
+| 0 (the rhythm/1 selected brain) | | 0.78 | 0.69 |
+| 0.3 | 0.0 / 0.2 / 0.5 | 0.63 / 0.75 / 0.82 | 0.55 / 0.65 / 0.61 |
+| 1.0 | 0.0 / 0.2 / 0.5 | 0.84 / 0.85 / 0.60 | 0.66 / 0.72 / 0.56 |
+| 3.0 | 0.0 / 0.2 / 0.5 | **1.00** / 0.85 / 0.74 | **0.93** / 0.86 / 0.74 |
+
+The control reproduces the rhythm/1 development figure (0.73 over both arms).
+Amplitude 3.0 at decay 0.0, the one-hot of the last command and nothing older,
+alternates at 1.00 on all six founders in the `every` arm and was frozen as the
+candidate; a slower decay or a weaker read is worse.
+
+### Confirmation on the five fresh seeds, 2026-10-08
+
+Receipt: `results/confirmation-2-2026-10-08.json.gz`, verified (canonical form,
+digest, sources and artifact hashes agree), frozen protocol, 20 founders planned and
+completed, none capped, no refused act or lesson, 442 seconds. The tables are
+printed by `report.py` from the stored per-event actions. This archived receipt is
+bound to the sources at commit `1b916fb`, before the maintainer fixes; its source
+hashes describe that revision and remain unchanged.
+
+#### Window controls, means over founders (alternation / agreement / refusals)
+
+| Branch | efference/every | efference/mismatch | selected/every | selected/mismatch |
+| --- | --- | --- | --- | --- |
+| intact | **0.97** / 0.89 / 0 | **0.93** / 0.78 / 0 | 0.50 / 0.55 / 0 | 0.40 / 0.50 / 0 |
+| restored | 0.97 / 0.89 / 0 | 0.93 / 0.78 / 0 | 0.50 / 0.55 / 0 | 0.40 / 0.50 / 0 |
+| erased | 0.97 / 0.59 / 0 | 0.90 / 0.49 / 0 | 0.47 / 0.52 / 0 | 0.41 / 0.48 / 0 |
+| shuffled | 0.97 / 0.50 / 0 | 0.93 / 0.46 / 0 | 0.50 / 0.52 / 0 | 0.40 / 0.49 / 0 |
+| reset | 0.97 / 0.59 / 0 | 0.90 / 0.49 / 0 | 0.48 / 0.52 / 0 | 0.42 / 0.47 / 0 |
+| static | 0.00 / 0.50 / 0 | 0.00 / 0.50 / 0 | 0.00 / 0.50 / 0 | 0.00 / 0.50 / 0 |
+| static_cold | 0.00 / 0.50 / 0 | 0.00 / 0.50 / 0 | 0.00 / 0.50 / 0 | 0.00 / 0.50 / 0 |
+| flipflop | 1.00 / 1.00 / 0 | 1.00 / 1.00 / 0 | 1.00 / 1.00 / 0 | 1.00 / 1.00 / 0 |
+| random | 0.50 / 0.53 / 0 | 0.50 / 0.48 / 0 | 0.50 / 0.48 / 0 | 0.50 / 0.49 / 0 |
+| shuffled_donor | 0.97 / 0.89 / 0 | 0.93 / 0.78 / 0 | 0.50 / 0.55 / 0 | 0.40 / 0.50 / 0 |
+
+#### Founders
+
+| Recipe | Arm | Seed | intact alternation | intact agreement | blocks of 8 | erased | reset | static | flipflop | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| efference | every | 201 | 1.00 | 0.98 | 1.00 1.00 1.00 1.00 1.00 1.00 1.00 0.96 | 1.00 | 1.00 | 0.00 | 1.00 | 0.50 |
+| efference | every | 202 | 1.00 | 1.00 | 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 | 1.00 | 1.00 | 0.00 | 1.00 | 0.51 |
+| efference | every | 203 | 1.00 | 1.00 | 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 | 1.00 | 1.00 | 0.00 | 1.00 | 0.53 |
+| efference | every | 204 | 1.00 | 1.00 | 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 | 0.97 | 0.97 | 0.00 | 1.00 | 0.43 |
+| efference | every | 205 | 0.86 | 0.48 | 0.82 0.86 0.89 0.79 0.93 0.82 0.93 0.86 | 0.89 | 0.89 | 0.00 | 1.00 | 0.54 |
+| efference | mismatch | 201 | 0.74 | 0.59 | 0.79 0.75 0.71 0.75 0.79 0.75 0.79 0.75 | 0.79 | 0.79 | 0.00 | 1.00 | 0.50 |
+| efference | mismatch | 202 | 0.90 | 0.52 | 0.93 0.93 0.86 0.89 0.96 0.93 0.89 0.86 | 0.89 | 0.89 | 0.00 | 1.00 | 0.51 |
+| efference | mismatch | 203 | 1.00 | 1.00 | 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 | 0.98 | 0.98 | 0.00 | 1.00 | 0.53 |
+| efference | mismatch | 204 | 1.00 | 1.00 | 1.00 1.00 1.00 1.00 1.00 1.00 1.00 1.00 | 0.87 | 0.87 | 0.00 | 1.00 | 0.43 |
+| efference | mismatch | 205 | 1.00 | 0.79 | 1.00 0.96 1.00 1.00 1.00 1.00 1.00 1.00 | 0.95 | 0.95 | 0.00 | 1.00 | 0.54 |
+| selected | every | 201 | 0.64 | 0.52 | 0.54 0.68 0.54 0.68 0.54 0.71 0.75 0.64 | 0.63 | 0.70 | 0.00 | 1.00 | 0.50 |
+| selected | every | 202 | 0.00 | 0.50 | 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 | 0.08 | 0.08 | 0.00 | 1.00 | 0.51 |
+| selected | every | 203 | 0.71 | 0.68 | 0.71 0.68 0.68 0.71 0.68 0.68 0.71 0.68 | 0.48 | 0.48 | 0.00 | 1.00 | 0.53 |
+| selected | every | 204 | 0.62 | 0.51 | 0.57 0.61 0.57 0.64 0.64 0.64 0.57 0.64 | 0.60 | 0.60 | 0.00 | 1.00 | 0.43 |
+| selected | every | 205 | 0.56 | 0.52 | 0.46 0.36 0.50 0.43 0.68 0.71 0.54 0.79 | 0.56 | 0.56 | 0.00 | 1.00 | 0.54 |
+| selected | mismatch | 201 | 0.46 | 0.50 | 0.61 0.39 0.36 0.32 0.57 0.57 0.50 0.46 | 0.53 | 0.54 | 0.00 | 1.00 | 0.50 |
+| selected | mismatch | 202 | 0.00 | 0.50 | 0.00 0.00 0.00 0.00 0.00 0.00 0.00 0.00 | 0.24 | 0.24 | 0.00 | 1.00 | 0.51 |
+| selected | mismatch | 203 | 0.49 | 0.50 | 0.43 0.43 0.43 0.43 0.43 0.43 0.43 0.43 | 0.25 | 0.25 | 0.00 | 1.00 | 0.53 |
+| selected | mismatch | 204 | 0.46 | 0.54 | 0.39 0.50 0.46 0.54 0.46 0.43 0.46 0.39 | 0.44 | 0.44 | 0.00 | 1.00 | 0.43 |
+| selected | mismatch | 205 | 0.58 | 0.48 | 0.75 0.68 0.46 0.54 0.43 0.50 0.71 0.54 | 0.60 | 0.60 | 0.00 | 1.00 | 0.54 |
+
+#### Disturbances, means over founders
+
+| Disturbance | Model | pre alternation | post alternation | agreement hold | agreement continue | recovered rows / rows |
+| --- | --- | --- | --- | --- | --- | --- |
+| distractor | efference/every brain | 0.96 | 0.97 | 0.10 | 0.90 | 16/20 |
+| pause1 | efference/every brain | 0.96 | 0.97 | 0.08 | 0.93 | 16/20 |
+| pause2 | efference/every brain | 0.96 | 0.98 | 0.90 | 0.93 | 16/20 |
+| pause4 | efference/every brain | 0.96 | 0.98 | 0.91 | 0.92 | 16/20 |
+| distractor | efference/mismatch brain | 0.94 | 0.92 | 0.27 | 0.75 | 11/20 |
+| pause1 | efference/mismatch brain | 0.94 | 0.93 | 0.24 | 0.77 | 11/20 |
+| pause2 | efference/mismatch brain | 0.94 | 0.94 | 0.77 | 0.78 | 11/20 |
+| pause4 | efference/mismatch brain | 0.94 | 0.93 | 0.72 | 0.77 | 12/20 |
+| distractor | selected/every brain | 0.46 | 0.49 | 0.44 | 0.54 | 1/20 |
+| pause1 | selected/every brain | 0.46 | 0.50 | 0.44 | 0.53 | 1/20 |
+| pause2 | selected/every brain | 0.46 | 0.47 | 0.53 | 0.51 | 1/20 |
+| pause4 | selected/every brain | 0.46 | 0.50 | 0.51 | 0.50 | 1/20 |
+| distractor | selected/mismatch brain | 0.44 | 0.39 | 0.53 | 0.50 | 0/20 |
+| pause1 | selected/mismatch brain | 0.44 | 0.42 | 0.50 | 0.48 | 0/20 |
+| pause2 | selected/mismatch brain | 0.44 | 0.41 | 0.48 | 0.50 | 0/20 |
+| pause4 | selected/mismatch brain | 0.44 | 0.39 | 0.47 | 0.51 | 0/20 |
+| every disturbance | flipflop | 1.00 | 1.00 | 0.00 (odd) / 1.00 (even) | 1.00 | 20/20 |
+| every disturbance | random | 0.46 to 0.50 | 0.49 to 0.52 | 0.50 to 0.54 | 0.47 to 0.53 | 0/20 |
+
+#### Cadence, repair speed and host load
+
+Per-event actions are identical to the unpaced reference in 20 of 20 founders at
+100, 50 and 200 ms per event, with an extra event in slot 10, with slot 10 skipped,
+beside one spinning process per logical CPU (one missed deadline, in a `selected`
+founder, with identical actions), at free-step budgets 256 and 64 and at tolerances
+0.01 and 0.0001; zero refusals in every one of those variants. At a budget of 16
+sweeps, two founders differ from the reference and 128 row-events refuse, all of them
+in `efference/every`: the copy's drive makes a free solve that needs more than 16
+sweeps on those founders. Every act of both recipes takes 32 sweeps per event at the
+protocol's budget of 1024 (the solver checks the residual after 32 sweeps and
+qualifies); the rhythm/1 receipt recorded 20.4 on its library of 2026-10-04, and the
+`selected` recipe takes the same 32 sweeps per act on the released 0.75.0 wheel, on
+main and on this branch, so the difference is the library's since then, not the copy's.
+
+#### Custody and work
+
+- shuffled rows reproducing the donor row's intact sequence: 80/80; erased equals
+  reset in 18/20 founders; window cue followed in 41/80 rows
+- probe continuation equal (actions and saved arrays): 20/20; mid-pause
+  continuation equal: 20/20
+- efference/every: lessons 1440, refused 0, free budget exhausted 0, last-bout
+  agreement with the label 0.92 (selected/every: 0.57); flip-flop lessons 5760
+- efference/mismatch: lessons 559, refused 0, last-bout agreement 0.89
+  (selected/mismatch: 1214 lessons, 0.46); flip-flop lessons 134
+- teaching sweeps per founder, `every` arm: 2,035 to 3,531 with the copy against
+  2,035 to 2,495 without; a lesson on the copy's drive costs more sweeps
+
+### Reading the rhythm/2 controls
+
+`static` and `static_cold` score zero for the copy as for the trace: with no carried
+history the brain holds one action, so the carried history is the whole carrier of
+the beat. `erased` and `reset` lose the phase once and resume alternating from the
+next event (agreement with the continued ideal 0.49 to 0.59, alternation 0.90 to
+0.97): at decay 0 the copy is rewritten in full by the next act, so erasing it costs
+one event of phase and nothing of the rhythm, which lives in the learned projection
+from the copy. Every `shuffled` row reproduces the donor row's intact sequence event
+for event, so the transplanted history determines the trajectory. After a distractor
+or a one-event pause the brain continues the beat through the event (agreement with
+`continue` 0.90 to 0.93, with `hold` 0.08 to 0.10), as the flip-flop does; after a
+pause of two or four events both hypotheses coincide. Recovery to uninterrupted
+alternation: 16 of 20 rows in the `every` arm and 11 to 12 in `mismatch`, against 0
+to 1 for the control and 20 of 20 for the flip-flop.
+
+### Failures and limits of rhythm/2
+
+- Seed 205 in the `every` arm alternates in 86 percent of event pairs and holds the
+  cue in 48 percent of rows; seed 201 in `mismatch` alternates in 74 percent. The
+  mean with every founder in the denominator is 0.97 and 0.93, not 1.00; the
+  flip-flop is 1.00 on every founder.
+- The control holds one action in seed 202 under both arms and alternates in 46 to
+  71 percent of pairs elsewhere, means 0.50 and 0.40: the rhythm/1 limit again on
+  five new founders.
+- The copy costs work: more teaching sweeps per founder and refusals at a 16-sweep
+  free budget where the control had none. It is one more bounded state per stream
+  and one more plastic projection; it is not free.
+- The copy at decay 0 carries one event of history. A longer sequence, a pause the
+  brain should wait through rather than step through, and the reward-driven version
+  of the task are not measured here; neither are more actions, more modules or
+  observers. Integration with issue 93 stays open.
+- Four rows share one set of parameters; a founder with another seed is another
+  brain. The paced measurements are from one laptop.
+
+Against the acceptance boxes of issue 116: box 2's learning half, which rhythm/1
+reported failed, now passes on the declared window for four of five fresh founders
+in the `every` arm and three of five in `mismatch`, with the fifth and the other two
+above 0.74; boxes 3 and 4 are measured with the same instrument, with recovery
+present for the brain and complete for the control; box 5's custody passes on five
+fresh seeds and the timing envelope is confirmed at budgets of 64 sweeps and above.
+The copy is the declared mechanism of this result, selected on the development
+seeds and confirmed once on fresh seeds; no default changes.

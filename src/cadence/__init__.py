@@ -77,7 +77,7 @@ from .records import Mulberry32, Records
 from .reference import conformance
 from .regions import Region
 from .steering import Boundary, Gaze, Rule, Softmax, Steered, SteeredPath
-from .stream import Afterglow, Echo, FastSynapses, PatternSeparator, Trace, stateful
+from .stream import Afterglow, Echo, Efference, FastSynapses, PatternSeparator, Trace, stateful
 from .temporal import TemporalObservation, TemporalPatchNet, TemporalPhase, TemporalReadback
 from .temporal_memory import ConstraintReport, TemporalMemory
 
@@ -146,6 +146,7 @@ __all__ = [
     "Echo",
     "Afterglow",
     "Trace",
+    "Efference",
     "FastSynapses",
     "SynapticMemory",
     "NeuronModel",

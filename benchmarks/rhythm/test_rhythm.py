@@ -247,3 +247,61 @@ def test_invalid_cli_is_rejected_before_creating_an_attempt(tmp_path, bad):
     with pytest.raises(SystemExit) as error:
         chamber.main(["--out", str(output), *bad])
     assert error.value.code == 2 and not output.exists()
+
+
+# -- rhythm/2: the efference copy as the declared mechanism
+
+
+@pytest.fixture(scope="module")
+def protocol_2():
+    return inputs.load_protocol(ROOT / "protocol-2.json")
+
+
+def test_protocol_2_declares_the_copy_against_the_rhythm_1_control_on_fresh_seeds(
+    protocol, protocol_2
+):
+    one, _ = protocol
+    two, digest = protocol_2
+    assert digest == hashlib.sha256((ROOT / "protocol-2.json").read_bytes()).hexdigest()
+    assert two["schema"] == "steady-rhythm/2"
+    assert two["recipes"]["selected"] == one["recipes"]["selected"]
+    candidate = dict(two["recipes"]["efference"])
+    assert candidate.pop("efference_amplitude") == 3.0 and candidate.pop("efference_decay") == 0.0
+    assert candidate == one["recipes"]["selected"]
+    assert two["seeds"]["development"] == one["seeds"]["development"]
+    assert len(two["seeds"]["confirmation"]) == 5
+    assert not set(two["seeds"]["confirmation"]) & set(one["seeds"]["confirmation"])
+    assert not set(two["seeds"]["confirmation"]) & set(two["seeds"]["development"])
+    for key in ("event", "teaching", "window", "disturbances", "cadence", "controls", "caps"):
+        assert two[key] == one[key]
+
+
+def test_the_efference_recipe_carries_the_copy_and_every_history_control_acts_on_it(
+    protocol_2, tmp_path
+):
+    declared, _ = protocol_2
+    control = chamber.make_brain(0, declared, "selected")
+    brain = chamber.make_brain(0, declared, "efference")
+    assert control.efference is None and brain.efference is not None
+    assert brain.efference.decay == 0.0 and brain.efference.amplitude == 3.0
+    assert len(brain.connectome.populations["efference"]) == inputs.ACTIONS
+    x = inputs.observation(inputs.KIND_DRIVE)
+    answer = chamber.Work().act(brain, x)
+    np.testing.assert_array_equal(brain.efference.last, np.eye(inputs.ACTIONS)[answer])
+    np.testing.assert_array_equal(brain.efference.trace, np.eye(inputs.ACTIONS)[answer])
+    chamber.Work().act(brain, x)
+    probe = brain.save(tmp_path / "probe.npz")
+    erased = chamber.Brain.load(probe)
+    chamber.erase_trace(erased)
+    for memory in (erased.working_memory, erased.efference):
+        assert not memory.trace.any() and memory.cold.all()
+    permutation = np.array([2, 3, 0, 1])
+    shuffled = chamber.Brain.load(probe)
+    chamber.transplant_trace(shuffled, permutation)
+    for memory, original in (
+        (shuffled.working_memory, brain.working_memory),
+        (shuffled.efference, brain.efference),
+    ):
+        np.testing.assert_array_equal(memory.trace, original.trace[permutation])
+        np.testing.assert_array_equal(memory.last, original.last[permutation])
+    assert chamber.same_saved_arrays(probe, brain.save(tmp_path / "after.npz"))
