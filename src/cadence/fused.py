@@ -86,6 +86,43 @@ if njit is not None:
         return r * (leak / rest)
 
     @_compiled
+    def _softmax_groups(
+        s: np.ndarray, group: np.ndarray, gid: np.ndarray, ngroups: int,
+        temperatures: np.ndarray, p: np.ndarray, zmax: np.ndarray, total: np.ndarray,
+    ) -> None:
+        for g in range(ngroups):
+            zmax[g] = -np.inf
+            total[g] = 0.0
+        finite = True
+        for k in range(group.shape[0]):
+            i = group[k]
+            z = s[i] / temperatures[i]
+            p[k] = z
+            finite = finite and np.isfinite(z)
+            if z > zmax[gid[i]]:
+                zmax[gid[i]] = z
+        if not finite:
+            # A subnormal temperature may overflow raw logits. Center first only
+            # in that case, preserving the ordinary scalar path's arithmetic.
+            for g in range(ngroups):
+                zmax[g] = -np.inf
+            for k in range(group.shape[0]):
+                i = group[k]
+                if s[i] > zmax[gid[i]]:
+                    zmax[gid[i]] = s[i]
+            for k in range(group.shape[0]):
+                i = group[k]
+                p[k] = (s[i] - zmax[gid[i]]) / temperatures[i]
+            for g in range(ngroups):
+                zmax[g] = 0.0
+        for k in range(group.shape[0]):
+            g = gid[group[k]]
+            p[k] = np.exp(p[k] - zmax[g])
+            total[g] += p[k]
+        for k in range(group.shape[0]):
+            p[k] /= total[gid[group[k]]]
+
+    @_compiled
     def _kernel(
         v: np.ndarray,
         a: np.ndarray,
@@ -114,7 +151,7 @@ if njit is not None:
         gid: np.ndarray,
         ngroups: int,
         beta: float,
-        softmax_t: float,
+        softmax_t: np.ndarray,
         weight: np.ndarray,
         anchor: np.ndarray,
         anchor_gain: np.ndarray,
@@ -170,22 +207,8 @@ if njit is not None:
             moved = 0.0
             for b in range(batch):
                 # the nudge on this row, from the activations before the step: one softmax per group
-                if has_nudge and softmax_t > 0.0:
-                    for g in range(ngroups):
-                        zmax[g] = -1e300
-                        total[g] = 0.0
-                    for k in range(group.shape[0]):
-                        g = gid[group[k]]
-                        z = s[b, group[k]] / softmax_t
-                        p[k] = z
-                        if z > zmax[g]:
-                            zmax[g] = z
-                    for k in range(group.shape[0]):
-                        g = gid[group[k]]
-                        p[k] = np.exp(p[k] - zmax[g])
-                        total[g] += p[k]
-                    for k in range(group.shape[0]):
-                        p[k] /= total[gid[group[k]]]
+                if has_nudge and softmax_t[0] > 0.0:
+                    _softmax_groups(s[b], group, gid, ngroups, softmax_t, p, zmax, total)
                 for r in range(ranges):
                     if frozen[r]:
                         continue
@@ -193,14 +216,14 @@ if njit is not None:
                         tot = synaptic_input[b, i] + standing[b, i]
                         if has_adapt:
                             tot -= adapt_strength * a[b, i]
-                        if has_nudge and nmask[i] > 0.0 and softmax_t <= 0.0:
+                        if has_nudge and nmask[i] > 0.0 and softmax_t[0] <= 0.0:
                             tot += beta * weight[b] * nmask[i] * (target[b, i] - s[b, i])
                         if anchor_gain[i] > 0.0:
                             tot += anchor_gain[i] * (anchor[b, i] - s[b, i])
                         tot -= v[b, i]
                         vn = v[b, i] + dt * tot
-                        if has_nudge and softmax_t > 0.0 and nmask[i] > 0.0:
-                            vn += dt * beta * weight[b] * (target[b, i] - p[position[i]])
+                        if has_nudge and softmax_t[0] > 0.0 and nmask[i] > 0.0:
+                            vn += dt * beta * weight[b] * (target[b, i] - p[position[i]]) * nmask[i]
                         if masked:
                             vn *= keep[b, i]
                         if (
@@ -234,10 +257,10 @@ if njit is not None:
 def _nudge_arrays(
     nudge: Nudge | None, batch: int, n: int
 ) -> tuple[
-    np.ndarray, np.ndarray, np.ndarray, int, float, float, np.ndarray, np.ndarray, np.ndarray
+    np.ndarray, np.ndarray, np.ndarray, int, float, np.ndarray, np.ndarray, np.ndarray, np.ndarray
 ]:
     """The nudge as the dense arrays the kernels read: target, mask, group id per neuron
-    (0..ngroups-1, -1 for none), the group count, beta, the softmax temperature (0 for a
+    (0..ngroups-1, -1 for none), the group count, beta, the per-neuron softmax temperatures (0 for a
     plain nudge) and the per-row weight. A softmax nudge drives only grouped neurons."""
     if nudge is None:
         return (
@@ -246,14 +269,17 @@ def _nudge_arrays(
             np.full(n, -1, dtype=np.int64),
             0,
             0.0,
-            0.0,
+            np.zeros(n),
             np.ones(batch),
             np.zeros((1, 1)),
             np.zeros(n),
         )
     target = np.ascontiguousarray(np.broadcast_to(nudge.target, (batch, n)).astype(float))
     nmask = np.asarray(nudge.mask, float)
-    softmax_t = float(nudge.softmax_temperature) if nudge.softmax_temperature is not None else 0.0
+    softmax_t = (
+        np.zeros(n) if nudge.softmax_temperature is None
+        else np.full(n, nudge.softmax_temperature)
+    )
     weight = np.ones(batch) if nudge.weight is None else np.asarray(nudge.weight, float)
     beta = float(nudge.beta)
     if nudge.groups is None:
@@ -266,7 +292,7 @@ def _nudge_arrays(
         for k, g in enumerate(ids):
             gid[raw == g] = k
         ngroups = len(ids)
-    if softmax_t > 0:
+    if softmax_t[0] > 0:
         nmask = np.where(gid >= 0, nmask, 0.0)
     anchor, anchor_gain = np.zeros((1, 1)), np.zeros(n)
     if nudge.anchor is not None:
@@ -395,7 +421,7 @@ if njit is not None:
         gid: np.ndarray,
         ngroups: int,
         beta: float,
-        softmax_t: float,
+        softmax_t: np.ndarray,
         weight: np.ndarray,
         anchor: np.ndarray,
         anchor_gain: np.ndarray,
@@ -423,22 +449,8 @@ if njit is not None:
         zmax = np.empty(max(ngroups, 1))
         total = np.empty(max(ngroups, 1))
         for b in range(batch):
-            if has_nudge and softmax_t > 0.0:
-                for g in range(ngroups):
-                    zmax[g] = -1e300
-                    total[g] = 0.0
-                for k in range(group.shape[0]):
-                    g = gid[group[k]]
-                    z = s[b, group[k]] / softmax_t
-                    p[k] = z
-                    if z > zmax[g]:
-                        zmax[g] = z
-                for k in range(group.shape[0]):
-                    g = gid[group[k]]
-                    p[k] = np.exp(p[k] - zmax[g])
-                    total[g] += p[k]
-                for k in range(group.shape[0]):
-                    p[k] /= total[gid[group[k]]]
+            if has_nudge and softmax_t[0] > 0.0:
+                _softmax_groups(s[b], group, gid, ngroups, softmax_t, p, zmax, total)
             worst = 0.0
             finite = True
             for i in range(n):
@@ -448,8 +460,8 @@ if njit is not None:
                 if anchor_gain[i] > 0.0:
                     tot += anchor_gain[i] * (anchor[b, i] - s[b, i])
                 if has_nudge and nmask[i] > 0.0:
-                    if softmax_t > 0.0:
-                        tot += beta * weight[b] * (target[b, i] - p[position[i]])
+                    if softmax_t[0] > 0.0:
+                        tot += beta * weight[b] * (target[b, i] - p[position[i]]) * nmask[i]
                     else:
                         tot += beta * weight[b] * nmask[i] * (target[b, i] - s[b, i])
                 k_ = keep[b, i] if masked else 1.0

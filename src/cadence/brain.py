@@ -106,7 +106,9 @@ class Nudge:
     as much as their share. ``weight``, one number per batch row, scales the
     nudge row by row; a negative weight pushes away from the target. That is
     how a reward enters: the target is the action taken and the weight its
-    advantage.
+    advantage. A temperature vector has one entry per neuron and must be constant
+    within each competing group, allowing different motor slots to explore at
+    different temperatures in the same equilibrium.
 
     Optional ``anchor`` and ``anchor_gain`` add an independent quadratic
     boundary drive ``anchor_gain * (anchor - s)``. This term is held fixed
@@ -118,7 +120,7 @@ class Nudge:
     target: np.ndarray  # (batch, n) or (n,)
     mask: np.ndarray  # (n,)
     beta: float
-    softmax_temperature: float | None = None
+    softmax_temperature: float | np.ndarray | None = None
     weight: np.ndarray | None = None  # (batch,)
     groups: np.ndarray | None = None  # (n,) group id per neuron, -1 for none: one softmax per group
     # An independent quadratic boundary: anchor_gain * (anchor - s).
@@ -141,8 +143,23 @@ class Nudge:
         object.__setattr__(self, "target", target.astype(float, copy=True))
         object.__setattr__(self, "mask", mask.astype(float, copy=True))
         temperature = self.softmax_temperature
-        if temperature is not None and (not np.isfinite(temperature) or temperature <= 0):
-            raise ValueError("softmax_temperature must be finite and positive")
+        if temperature is not None:
+            temperatures = np.asarray(temperature, dtype=float)
+            if (
+                temperatures.ndim > 1
+                or (temperatures.ndim == 1 and temperatures.shape != mask.shape)
+                or not np.isfinite(temperatures).all()
+                or (temperatures <= 0).any()
+            ):
+                raise ValueError(
+                    "softmax_temperature must be finite and positive, scalar or per neuron"
+                )
+            if temperatures.ndim == 1:
+                temperatures = temperatures.copy()
+                temperatures.flags.writeable = False
+                object.__setattr__(self, "softmax_temperature", temperatures)
+            else:
+                object.__setattr__(self, "softmax_temperature", float(temperatures))
         if self.weight is not None and np.asarray(self.weight).ndim != 1:
             raise ValueError("nudge weight must have one entry per batch row")
         if self.groups is not None and np.asarray(self.groups).shape != mask.shape:
@@ -152,6 +169,12 @@ class Nudge:
             if not np.issubdtype(groups.dtype, np.integer) or (groups < -1).any():
                 raise ValueError("nudge groups must be integer IDs, -1 for ungrouped neurons")
             object.__setattr__(self, "groups", groups.copy())
+        if isinstance(self.softmax_temperature, np.ndarray):
+            for members in _softmax_groups(self):
+                if not np.all(
+                    self.softmax_temperature[members] == self.softmax_temperature[members[0]]
+                ):
+                    raise ValueError("softmax_temperature must be constant within each group")
         if self.weight is not None:
             weight = np.asarray(self.weight, dtype=float)
             if not np.isfinite(weight).all():
@@ -182,11 +205,17 @@ class Nudge:
         else:
             out = np.zeros_like(s)
             for group in _softmax_groups(self):
-                z = s[:, group] / self.softmax_temperature
-                z -= z.max(axis=1, keepdims=True)
+                temperature = _group_temperature(self, group)
+                with np.errstate(over="ignore", invalid="ignore"):
+                    z = s[:, group] / temperature
+                    if not np.isfinite(z).all():
+                        logits = s[:, group]
+                        z = (logits - logits.max(axis=1, keepdims=True)) / temperature
+                    else:
+                        z -= z.max(axis=1, keepdims=True)
                 p = np.exp(z)
                 p /= p.sum(axis=1, keepdims=True)
-                out[:, group] = self.beta * (full_target[:, group] - p)
+                out[:, group] = self.beta * (full_target[:, group] - p) * self.mask[group]
         if self.weight is not None:
             if np.asarray(self.weight).shape != (len(s),):
                 raise ValueError("nudge weight must have one entry per batch row")
@@ -203,6 +232,12 @@ def _softmax_groups(nudge: Nudge) -> list[np.ndarray]:
         return [masked.astype(np.int64)] if masked.size else []
     ids = np.asarray(nudge.groups)[masked]
     return [masked[ids == g].astype(np.int64) for g in np.unique(ids[ids >= 0])]
+
+
+def _group_temperature(nudge: Nudge, members: np.ndarray) -> float:
+    temperature = nudge.softmax_temperature
+    assert temperature is not None
+    return float(temperature[members[0]]) if isinstance(temperature, np.ndarray) else temperature
 
 
 @dataclass(frozen=True)
@@ -1306,7 +1341,10 @@ class _TorchKernel:
 
         target = to(np.broadcast_to(nudge.target, (batch, self.n)))
         mask = to(nudge.mask)
-        groups = [torch.from_numpy(members).to(self.device) for members in _softmax_groups(nudge)]
+        groups = [
+            (torch.from_numpy(members).to(self.device), _group_temperature(nudge, members))
+            for members in _softmax_groups(nudge)
+        ] if nudge.softmax_temperature is not None else []
         weight = None
         if nudge.weight is not None:
             weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
@@ -1333,9 +1371,18 @@ class _TorchKernel:
             push = nudge.beta * (target - s) * mask
         else:  # one softmax per group of competing neurons
             push = torch.zeros_like(s)
-            for members in groups:
-                p = torch.softmax(s[:, members] / nudge.softmax_temperature, dim=1)
-                push[:, members] = nudge.beta * (target[:, members] - p)
+            for members, temperature in groups:
+                logits = s[:, members]
+                tiny = torch.finfo(logits.dtype).tiny
+                if temperature < tiny:
+                    # Divide in representable pieces: zero remains zero, negative
+                    # overflow remains a legitimate zero-probability logit.
+                    logits = logits - logits.max(dim=1, keepdim=True).values
+                    while temperature < tiny:
+                        logits = logits / tiny
+                        temperature /= tiny
+                p = torch.softmax(logits / temperature, dim=1)
+                push[:, members] = nudge.beta * (target[:, members] - p) * mask[members]
         if weight is not None:
             push = push * weight
         if anchor is not None:
@@ -1633,7 +1680,10 @@ class _MlxKernel:
         if nudge is not None:
             target = to(np.broadcast_to(nudge.target, (batch, self.n)))
             mask = to(nudge.mask)
-            groups = [mx.array(members) for members in _softmax_groups(nudge)]
+            groups = [
+                (mx.array(members), _group_temperature(nudge, members))
+                for members in _softmax_groups(nudge)
+            ] if nudge.softmax_temperature is not None else []
             if nudge.weight is not None:
                 weight = to(np.asarray(nudge.weight, dtype=float))[:, None]
             if nudge.anchor is not None:
@@ -1661,9 +1711,16 @@ class _MlxKernel:
                     push = nudge.beta * (target - s) * mask
                 else:  # one softmax per group of competing neurons
                     push = mx.zeros_like(s)
-                    for members in groups:
-                        p = mx.softmax(s[:, members] / nudge.softmax_temperature, axis=1)
-                        push[:, members] = nudge.beta * (target[:, members] - p)
+                    for members, temperature in groups:
+                        logits = s[:, members]
+                        tiny = float(np.finfo(np.float32).tiny)
+                        if temperature < tiny:
+                            logits = logits - mx.max(logits, axis=1, keepdims=True)
+                            while temperature < tiny:
+                                logits = logits / tiny
+                                temperature /= tiny
+                        p = mx.softmax(logits / temperature, axis=1)
+                        push[:, members] = nudge.beta * (target[:, members] - p) * mask[members]
                 if weight is not None:
                     push = push * weight
                 if anchor is not None:
