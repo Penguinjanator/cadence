@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.79.0 — 2026-10-08
+
 - Apply extra arousal heat to one uniformly chosen motor slot per moment
   ([#159](https://github.com/muellerberndt/cadence/issues/159)); other slots sample
   the learned base policy. Preserve the one-slot sampling law and existing genes.
@@ -19,6 +21,14 @@
   to the brain's own greedy choices. Keep configuration defaults and action credit unchanged.
   Save the separate income count and migrate earlier checkpoints without resetting
   their acquired state.
+- Retain bounded arena and nursery preservation evidence, including failed
+  comparisons. Five nursery founder pairs retain their original gates, with slower
+  median reacquisition. In one 80,000-moment arena pair both brains retain
+  observation-dependent behavior; the corrected policy has weaker closing and
+  combat scores than the earlier runtime. Continuation of six acquired fighters
+  also has weaker closing and damage. These checks establish neither general
+  combat improvement nor recovery of every previously acquired policy. Publish
+  the receipts, source identities and limitations with the mechanisms they test.
 
 ## 0.78.0 — 2026-10-08
 
