@@ -68,6 +68,8 @@ def make_brain(seed: int, protocol: dict, recipe: str = "selected") -> Brain:
         episodic=spec["episodic"],
         working_memory_decay=spec["working_memory_decay"],
         working_memory_amplitude=spec["working_memory_amplitude"],
+        # rhythm/2: the efference copy as a gene; absent keys build the rhythm/1 brain
+        **{key: spec[key] for key in ("efference_amplitude", "efference_decay") if key in spec},
     )
 
 
@@ -362,17 +364,23 @@ def teach_life(brain: Brain, flip: FlipFlop, frozen: dict, arm: str, work: Work)
     }
 
 
-def erase_trace(brain: Brain) -> None:
+def carried(brain: Brain) -> list:
+    """The carried history of the brain: its working trace and, under rhythm/2, its
+    efference copy. Every history control acts on all of it."""
     trace = brain.working_memory
     assert trace is not None
-    trace.reset(inputs.ROWS)
+    return [trace] if brain.efference is None else [trace, brain.efference]
+
+
+def erase_trace(brain: Brain) -> None:
+    for memory in carried(brain):
+        memory.reset(inputs.ROWS)
 
 
 def transplant_trace(brain: Brain, permutation: np.ndarray) -> None:
-    trace = brain.working_memory
-    assert trace is not None
-    for name in ("trace", "last", "cold"):
-        setattr(trace, name, getattr(trace, name)[permutation].copy())
+    for memory in carried(brain):
+        for name in ("trace", "last", "cold"):
+            setattr(memory, name, getattr(memory, name)[permutation].copy())
 
 
 def window_stage(

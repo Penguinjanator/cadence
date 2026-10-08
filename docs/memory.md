@@ -18,6 +18,7 @@ provides independent stream records and an immediate residual-write rule.
 | Mechanism | What it retains | What changes it | What survives `brain.reset()` |
 | --- | --- | --- | --- |
 | Working `Trace` | Recent association-region activity used as context | Each admitted live action | Nothing; the trace is cleared |
+| `Efference` copy (opt-in gene) | The fading one-hot of the commands the stream issued | Each admitted live action | Nothing; the copy is cleared |
 | Graph plasticity | Learned synaptic parameters and biases | Supervised contrasts and reward-modulated eligibility | Learned parameters |
 | `SynapticMemory` | Cue-to-outcome associations, with fast per-stream `F` and shared persistent `C` | Observed chosen-action outcomes | Both `F` and `C` |
 
@@ -27,7 +28,8 @@ the number of durable associations they can retain. A lost response can come
 from a missing trace, interfering parameter updates or interfering record writes.
 Test the mechanism that was used to acquire the response.
 
-`predict` and `accuracy` ignore both the working trace and associative store.
+`predict` and `accuracy` ignore the working trace, the efference copy and the
+associative store.
 They qualify the current learned graph's independent response. `act` reads both
 memory pathways before qualifying the full graph state. To test consolidated
 recall, reset live state and clear only fast residuals before each free query:

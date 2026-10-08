@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Add the efference copy, `Brain.compose(..., efference_amplitude=..., efference_decay=...)`
+  and `cadence.Efference`: a trace written from the command the brain issued, one
+  `efference` neuron per motor neuron, read by the association region through a plastic
+  projection at the working trace's scale. The working trace copies the settled state
+  before the decision, so a brain whose observations do not change could not learn what
+  to do after what it did; the steady-rhythm chamber of
+  [#116](https://github.com/muellerberndt/cadence/issues/116) recorded that limit at
+  0.37 to 0.44 alternation against 1.00 for a control given its own previous action. The
+  default `efference_amplitude=0.0` builds the released composition byte-identically; the
+  copy is a gene with zero as its control. `act`, `step`, `live`, `learn`, `reset`,
+  `imagine` (a private copy issued the imagined response's own best guess), `save` and
+  `load` carry it; a checkpoint with the copy is `cadence-generic/4`, and checkpoints
+  without one keep their formats. `predict` and `accuracy` ignore it as they ignore the
+  working trace.
 - `Brain.predict` and `Brain.accuracy` now honor slotted motor readouts (`slots > 1`):
   predictions are one choice per slot, shaped `(batch, slots)` like `act` and `step`,
   instead of a single argmax over the whole motor menu, and slotted `accuracy`/`fit`

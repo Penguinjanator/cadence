@@ -64,10 +64,19 @@ def main(argv: list[str] | None = None) -> int:
         help="'default' keeps the composed law; '<eta>n' normalizes at 0.99",
     )
     parser.add_argument("--arms", nargs="+", default=["every", "mismatch"])
+    parser.add_argument(
+        "--efference-amplitudes",
+        type=float,
+        nargs="+",
+        default=[0.0],
+        help="read gains of the efference copy; 0.0 is the rhythm/1 brain without one",
+    )
+    parser.add_argument("--efference-decays", type=float, nargs="+", default=[0.2])
+    parser.add_argument("--protocol", type=Path, default=inputs.PROTOCOL_PATH)
     parser.add_argument("--seeds", type=int, nargs="+", default=None)
     parser.add_argument("--bouts", type=int, default=None, help="teaching bouts; default protocol")
     args = parser.parse_args(argv)
-    protocol, protocol_sha = inputs.load_protocol()
+    protocol, protocol_sha = inputs.load_protocol(args.protocol)
     seeds = protocol["seeds"]["development"] if args.seeds is None else args.seeds
     if args.bouts is not None:
         protocol["teaching"]["bouts"] = args.bouts
@@ -80,10 +89,12 @@ def main(argv: list[str] | None = None) -> int:
     }
     began = time.perf_counter()
     cells = []
-    for decay, amplitude, rate, arm, seed in itertools.product(
+    for decay, amplitude, rate, echo, echo_decay, arm, seed in itertools.product(
         args.decays,
         args.amplitudes,
         args.rates,
+        args.efference_amplitudes,
+        args.efference_decays,
         args.arms,
         seeds,
     ):
@@ -91,6 +102,12 @@ def main(argv: list[str] | None = None) -> int:
         brain = candidate["recipes"]["selected"]
         brain["working_memory_decay"] = decay
         brain["working_memory_amplitude"] = amplitude
+        if echo:
+            brain["efference_amplitude"] = echo
+            brain["efference_decay"] = echo_decay
+        else:
+            brain.pop("efference_amplitude", None)
+            brain.pop("efference_decay", None)
         if rate != "default":
             eta = float(rate.rstrip("n"))
             brain["learning"].update(
@@ -100,6 +117,8 @@ def main(argv: list[str] | None = None) -> int:
             "decay": decay,
             "amplitude": amplitude,
             "rate": rate,
+            "efference_amplitude": echo,
+            "efference_decay": echo_decay if echo else None,
             **cell(seed, arm, candidate, frozen[seed]),
         }
         cells.append(result)
@@ -112,6 +131,8 @@ def main(argv: list[str] | None = None) -> int:
             "decays": args.decays,
             "amplitudes": args.amplitudes,
             "rates": args.rates,
+            "efference_amplitudes": args.efference_amplitudes,
+            "efference_decays": args.efference_decays,
             "arms": args.arms,
             "bouts": protocol["teaching"]["bouts"],
         },

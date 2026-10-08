@@ -42,7 +42,7 @@ from .learning import Learner, LearnerConfig, learning_neuron_model
 from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
 from .regions import Region, motor_cortex, prefrontal_cortex, slot_sizes, visual_cortex
-from .stream import FastSynapses, PatternSeparator, Trace
+from .stream import Efference, FastSynapses, PatternSeparator, Trace
 
 __all__ = ["Brain"]
 
@@ -107,6 +107,19 @@ def _validate_resting_bias(value: Any) -> float:
     if not np.isfinite(bias) or bias < 0:
         raise ValueError("resting_bias must be a finite nonnegative real scalar")
     return bias
+
+
+def _validate_efference_amplitude(value: Any) -> float:
+    """The read gain of the efference copy: a finite nonnegative real scalar; zero is the
+    released brain without one."""
+    if (
+        isinstance(value, (bool, np.bool_))
+        or not isinstance(value, (int, float, np.integer, np.floating))
+        or not np.isfinite(value)
+        or value < 0
+    ):
+        raise ValueError("efference_amplitude must be a finite nonnegative real scalar")
+    return float(value)
 
 
 def _load_memory(metadata: Any, data: Mapping[str, Any], neurons: int) -> FastSynapses | None:
@@ -332,13 +345,26 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
         array("working/last", (batch, width))
         if array("working/cold", (batch,)).dtype != np.bool_:
             raise ValueError("invalid saved working-memory cold flags")
+    efference = meta.get("efference")
+    if efference is not None:
+        if meta.get("format") != "cadence-generic/4":
+            raise ValueError("an efference copy belongs to checkpoint format cadence-generic/4")
+        source, target = efference["source"], efference["target"]
+        if source not in populations or target not in populations:
+            raise ValueError("invalid saved efference ports")
+        width = len(populations[source])
+        array("efference/trace", (batch, width))
+        array("efference/last", (batch, width))
+        if array("efference/cold", (batch,)).dtype != np.bool_:
+            raise ValueError("invalid saved efference cold flags")
 
 
 class Brain:
     """Senses, an association cortex, a motor cortex, basal ganglia and consolidating memory.
 
     ``connectome`` needs populations ``sensory`` (or ``visual/input`` for an image),
-    ``association`` and ``motor``, and ``prefrontal`` for a working memory; ``genome`` builds
+    ``association`` and ``motor``, ``prefrontal`` for a working memory and ``efference``
+    (one neuron per motor neuron) for a copy of the issued command; ``genome`` builds
     one. Use ``Brain.compose`` for the default brain with working memory.
     """
 
@@ -350,6 +376,8 @@ class Brain:
         consolidation: float = 0.05,
         working_memory_decay: float = 0.2,
         working_memory_amplitude: float = 3.0,
+        efference_decay: float = 0.2,
+        efference_amplitude: float = 0.0,
         learning: LearnerConfig | None = None,
         reward: ActorCriticConfig | None = None,
         resting_bias: float = 0.0,
@@ -361,6 +389,7 @@ class Brain:
     ) -> None:
         populations = connectome.populations
         resting_bias = _validate_resting_bias(resting_bias)
+        efference_amplitude = _validate_efference_amplitude(efference_amplitude)
         if arousal is not None and not isinstance(arousal, ArousalConfig):
             raise ValueError("arousal must be an ArousalConfig, or None")
         for name in ("association", "motor"):
@@ -403,6 +432,17 @@ class Brain:
                 amplitude=working_memory_amplitude,
                 source="association",
                 target="prefrontal",
+            )
+        self.efference: Efference | None = None
+        if "efference" in populations:
+            if len(populations["efference"]) != len(self.motor_index):
+                raise ValueError("an efference population needs one neuron per motor neuron")
+            self.efference = Efference(
+                connectome,
+                decay=efference_decay,
+                amplitude=efference_amplitude,
+                source="motor",
+                target="efference",
             )
         self.hippocampus: FastSynapses | None = None
         if episodic:
@@ -609,6 +649,12 @@ class Brain:
         ``options`` configures the existing constructor's learning and memory;
         ``resting_bias`` initializes processing-region biases to a selected nonnegative
         value; it does not guarantee responsive activity or successful acquisition.
+        A positive ``efference_amplitude`` adds the efference copy: one ``efference``
+        neuron per motor neuron, driven by the fading one-hot of the command the
+        stream issued (``efference_decay``) and read by the association region
+        through a plastic projection of the working trace's scale. The founder
+        value zero builds the brain without it, byte-identical to the released
+        composition; the copy is a gene to select against that control.
         Use ``genome``/``Genome`` for custom ports, sparsity and named wiring.
         """
 
@@ -670,6 +716,12 @@ class Brain:
             regions.append(Region(name, width))
             projections.extend(Projection(source, name) for source in observed)
             observed.append(name)
+        if _validate_efference_amplitude(options.get("efference_amplitude", 0.0)):
+            # Appended last: every earlier region and projection is developed from the same
+            # random draws, so the brain with the copy is the brain without it plus the
+            # efference neurons and their one projection.
+            regions.append(Region("efference", actions))
+            projections.append(Projection("efference", "association", scale=12.0, reciprocal=False))
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
         return cls(develop(genome, seed=seed), seed=seed, slots=slots, **options)
 
@@ -696,6 +748,8 @@ class Brain:
         drive[:, self.sensory_index] = x * self.brain.neuron_model.stimulus_amplitude
         if memory and self.working_memory is not None:
             drive = self.working_memory.stimulate(drive)
+        if memory and self.efference is not None:
+            drive = self.efference.stimulate(drive)
         if memory and self.hippocampus is not None:
             drive = self.hippocampus.stimulate(drive)
         return drive
@@ -1024,6 +1078,8 @@ class Brain:
             if routine:
                 if ended[0] and self.working_memory is not None:
                     self.working_memory.reset(1, rows=np.array([0]))
+                if ended[0] and self.efference is not None:
+                    self.efference.reset(1, rows=np.array([0]))
                 # a moment without eligibility has passed: the credit of earlier sampled
                 # actions fades as it does between two outcomes that are learned from
                 agent.fade(ended)
@@ -1167,11 +1223,17 @@ class Brain:
         if trace is not None:
             for name in ("trace", "last", "cold"):
                 setattr(trace, name, getattr(trace, name).copy())
+        echo = copy(self.efference)
+        if echo is not None:
+            for name in ("trace", "last", "cold"):
+                setattr(echo, name, getattr(echo, name).copy())
         phases = []
         for value in sequence:
             drive = self.stimulus(value, memory=False)
             if trace is not None:
                 drive = trace.stimulate(drive)
+            if echo is not None:
+                drive = echo.stimulate(drive)
             if self.hippocampus is not None:
                 drive = self.hippocampus.stimulate(drive)
             phase = self._equilibrate(drive, current, budget=budget, tolerance=tolerance)
@@ -1181,6 +1243,9 @@ class Brain:
             current = _copy_state(phase.state)
             if trace is not None:
                 trace.update(phase.state)
+            if echo is not None:
+                # the imagined branch issues the response's own best guess, privately
+                echo.issue(self._command(self._choices(phase.state)))
         return tuple(phases)
 
     def act(
@@ -1230,8 +1295,21 @@ class Brain:
         state = self.basal_ganglia.state
         if self.working_memory is not None and state is not None:
             self.working_memory.update(state)
+        if self.efference is not None:
+            self.efference.issue(self._command(action))
         self._moment = None if greedy else (x.copy(), action.copy())
         return action
+
+    def _command(self, action: np.ndarray) -> np.ndarray:
+        """The ``(batch, motor)`` one-hot of an issued action: one per row, or one per slot."""
+        action = np.asarray(action, dtype=np.int64)
+        command = np.zeros((len(action), len(self.motor_index)))
+        rows = np.arange(len(action))
+        if action.ndim == 2:
+            command[rows[:, None], action + self.learner.slot_offsets[None, :]] = 1.0
+        else:
+            command[rows, action] = 1.0
+        return command
 
     def learn(
         self,
@@ -1276,12 +1354,20 @@ class Brain:
             if trace is None or not done.any()
             else {name: getattr(trace, name).copy() for name in ("trace", "last", "cold")}
         )
+        echo = self.efference
+        echo_values = (
+            {}
+            if echo is None or not done.any()
+            else {name: getattr(echo, name).copy() for name in ("trace", "last", "cold")}
+        )
         try:
             if memory is not None and self._moment is not None:
                 keys, action = self._moment
                 self._record(keys, action, reward, importance)
             if trace is not None and done.any():
                 trace.reset(len(done), rows=np.flatnonzero(done))
+            if echo is not None and done.any():
+                echo.reset(len(done), rows=np.flatnonzero(done))
             report = self.basal_ganglia.learn(reward, done, self.stimulus(following), bootstrap)
         except Exception:
             if memory is not None:
@@ -1292,6 +1378,9 @@ class Brain:
             if trace is not None:
                 for name, value in trace_values.items():
                     setattr(trace, name, value)
+            if echo is not None:
+                for name, value in echo_values.items():
+                    setattr(echo, name, value)
             raise
         self._moment = None
         self._prepared = following.copy()
@@ -1327,6 +1416,8 @@ class Brain:
         self.basal_ganglia.reset()
         if self.working_memory is not None:
             self.working_memory.reset(0)
+        if self.efference is not None:
+            self.efference.reset(0)
         self._moment = None
         self._prepared = None
         self.last_learning = {}
@@ -1388,6 +1479,11 @@ class Brain:
                     "own": bool(lived[5]),
                     "recorded": None if lived[6] is None else float(lived[6]),
                 }
+        if self.efference is not None:
+            # The copy is part of the continuation; earlier formats cannot carry it. A brain
+            # without one writes the metadata of the earlier formats unchanged.
+            metadata["format"] = "cadence-generic/4"
+            metadata["efference"] = self.efference.to_dict()
         if agent._pending is not None:
             kind, plus, minus, value = agent._pending
             if kind != "states":
@@ -1416,6 +1512,9 @@ class Brain:
         if self.working_memory is not None:
             for name in ("trace", "last", "cold"):
                 data["working/" + name] = getattr(self.working_memory, name)
+        if self.efference is not None:
+            for name in ("trace", "last", "cold"):
+                data["efference/" + name] = getattr(self.efference, name)
         if self.hippocampus is not None:
             for name in ("pre", "post", "strength", "mass"):
                 data["episodic/" + name] = getattr(self.hippocampus, name)
@@ -1451,9 +1550,13 @@ class Brain:
                 "cadence-generic/1",
                 "cadence-generic/2",
                 "cadence-generic/3",
+                "cadence-generic/4",
             ):
                 raise ValueError("unsupported Brain checkpoint format")
-            if ("arousal" in meta) != (meta["format"] == "cadence-generic/3"):
+            if meta["format"] == "cadence-generic/4":
+                if meta.get("efference") is None:
+                    raise ValueError("format cadence-generic/4 carries an efference copy")
+            elif ("arousal" in meta) != (meta["format"] == "cadence-generic/3"):
                 raise ValueError("arousal state belongs to checkpoint format cadence-generic/3")
             arousal = Arousal.from_dict(meta["arousal"]) if "arousal" in meta else None
             if "hippocampus" not in meta:
@@ -1526,6 +1629,15 @@ class Brain:
                 )
                 for name in ("trace", "last", "cold"):
                     setattr(result.working_memory, name, data["working/" + name].copy())
+            echo = meta.get("efference")
+            result.efference = None
+            if echo is not None:
+                result.efference = Efference(
+                    result.connectome,
+                    **{name: echo[name] for name in ("decay", "amplitude", "source", "target")},
+                )
+                for name in ("trace", "last", "cold"):
+                    setattr(result.efference, name, data["efference/" + name].copy())
             result.hippocampus = memory
             result.arousal = arousal
             if "lived" in meta:
