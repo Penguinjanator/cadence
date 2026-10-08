@@ -121,3 +121,79 @@ These fixtures and their deterministic tests construct no brain and perform no
 learning or solve. They provide protocol and preservation checks, not a measured
 recall horizon. A finite-horizon worker/launcher is not shipped, and #84 remains
 open. The existing `vanished_cue.py` instrument above retains its separate scope.
+
+## The finite continuing recall chamber, 2026-10-08
+
+[`finite_horizon.py`](finite_horizon.py) is the worker for the
+[reviewed finite-horizon protocol](FINITE_HORIZON_PROTOCOL.md), with its
+[frozen inputs](finite_horizon_inputs.py) and [`protocol-finite.json`](protocol-finite.json)
+declaring every setting, the founders, the caps and the gates. One continuing
+`Brain.compose` life per arm and founder: `vanished`, the declared recipe (working
+trace decay 0.8, amplitude 1, learned at the QUERY lessons only, never a history
+coordinate); `default`, the same brain with the composed working-trace defaults
+(amplitude 3, decay 0.2), the simpler setting kept as the control of that gene;
+`history`, the external-history comparator with byte-equal initial arrays, the same
+lessons and the actual observed payloads of the last four WRITE events appended at
+QUERY; `random`, the frozen uniform-random actions. 192 training episodes, then 24
+evaluation episodes of each of the 13 conditions, every QUERY forked into intact,
+erased trace, shuffled trace (transplanted from the paired row with the opposite
+value) and full reset; the first episode of every condition saved after the first
+cue, before a replacement and before QUERY with a clone resuming each seam; private
+imagination and a refused act at an impossible tolerance leaving the pre-query
+checkpoint unchanged; clean-2 replayed under two timestamp schedules; the trace
+audited at every act against its literal recurrence; a 900-second wall and a 160 MiB
+output cap per founder. The horizon is the largest contiguous passed prefix over 0,
+1 and 2 intervening events under the prewritten gates; closure needs horizon 1 and
+the nuisance, replacement, order, continuation, purity and resource gates.
+
+```sh
+python benchmarks/recall/finite_horizon.py --out /tmp/recall-finite
+python benchmarks/recall/finite_horizon.py --verify /tmp/recall-finite
+python -m pytest -q benchmarks/recall/test_finite_horizon.py
+```
+
+### recall/1 on fresh founders 301, 302 and 303: closure failed
+
+Receipt `results/finite-1-2026-10-08.json.gz`, verified: every founder complete within
+its caps (135 to 185 seconds), no refused act, two refused lessons in one history
+arm, the trace audit at 1.1e-16 on 1,750 audited acts per brain arm, every seam,
+imagination, refusal and timing check equal. Intact accuracy over planned rows,
+with the paired-both-correct share, the erased fork, the shuffled fork against the
+transplanted value, the default-trace control, the history control and the frozen
+uniform-random policy:
+
+| founder | condition | intact | paired | erased | shuffled→transplanted | default | history | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 301 | clean-0 | 0.52 | 0.04 | 0.50 | 0.52 | 0.57 | 1.00 | 0.46 |
+| 301 | clean-1 | **1.00** | 1.00 | 0.50 | 1.00 | 0.51 | 1.00 | 0.43 |
+| 301 | clean-2 | **1.00** | 1.00 | 0.50 | 1.00 | 0.52 | 1.00 | 0.55 |
+| 301 | distractor-1 / -2 | 0.50 / 0.50 | 0.00 | 0.50 | 0.50 | 0.56 / 0.50 | 1.00 | 0.51 / 0.47 |
+| 301 | noise-1 | **1.00** | 1.00 | 0.50 | 1.00 | 0.47 | 1.00 | 0.47 |
+| 301 | replacement-1 | 0.87 | 0.74 | 0.50 | 0.87 | 0.54 | 1.00 | 0.52 |
+| 301 | partial-1 / order-latest-1 | 0.66 / 0.50 | 0.31 / 0.00 | 0.50 | 0.66 / 0.50 | 0.50 / 0.53 | 0.86 / 1.00 | 0.48 / 0.44 |
+| 302 | every condition | 0.50 | 0.00 | 0.50 | 0.50 | 0.43 to 0.55 | 1.00 | 0.43 to 0.56 |
+| 303 | clean-0 | **0.99** | 0.99 | 0.50 | 0.99 | 0.50 | 1.00 | 0.43 |
+| 303 | clean-1 | 0.85 | 0.71 | 0.50 | 0.85 | 0.50 | 1.00 | 0.51 |
+| 303 | clean-2 | 0.62 | 0.24 | 0.50 | 0.62 | 0.50 | 1.00 | 0.54 |
+| 303 | replacement-1 | 0.92 | 0.83 | 0.50 | 0.92 | 0.50 | 1.00 | 0.49 |
+| 303 | distractor-1 / noise-1 / partial-1 / order-latest-1 | 0.69 / 0.66 / 0.50 / 0.50 | 0.38 / 0.31 / 0 / 0 | 0.50 | 0.69 / 0.66 / 0.50 / 0.50 | 0.50 | 1.00 / 1.00 / 0.96 / 1.00 | 0.48 to 0.56 |
+
+Horizons: 301 none (clean-0 fails while delays 1 and 2 pass, so the contiguous-prefix
+rule credits nothing), 302 none, 303 zero. Nuisance gates fail on every founder.
+Capacity 2/4 and delays 4/8 are at 0.46 to 0.75 and never pass. Closure fails as
+declared and #84 stays open.
+
+What the receipt does establish. Where the declared recipe recalls, it recalls through
+the trace exactly as the protocol demanded: founder 301 answers delays 1 and 2 and
+the noisy cue at 1.00 while its erased and reset forks sit at 0.50, and every shuffled
+fork answers the transplanted history's value at the same accuracy and the original's
+at its complement, so the transplanted trace alone determines the answer. The external
+history control reads 1.00 on nearly every condition, so the lessons teach the mapping
+when the cue is present. The composed default trace (amplitude 3, decay 0.2) recalls
+nothing on any founder or condition, the finding of the 2026-10-03 exploration now on
+a frozen protocol with source-bound receipts. The declared recipe is founder-bound:
+one founder learns nothing at all with the same lessons that teach its history twin,
+one recalls at delays 1 and 2 but not at 0, one at 0 and partly at 1. The distractor
+and order conditions fail everywhere. The next freeze selects the trace amplitude and
+the lesson budget on development founders and runs new fresh founders; the current
+`--repeats` override marks such development runs as not frozen.
