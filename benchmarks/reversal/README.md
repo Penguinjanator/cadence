@@ -772,7 +772,8 @@ python benchmarks/reversal/odour_nursery.py --arms live --seeds 2 3 4 --exposure
 The combined repair at `6fae103` adds two separate changes to the income repair:
 actor eligibility now uses the policy that actually sampled the action, and
 extra arousal heat applies to one uniformly chosen motor slot while other slots
-sample the base policy. No genes or defaults change. The local actor nudge uses
+sample the base policy. No new genes or configured default values are introduced.
+The local actor nudge uses
 the actual temperature and a bounded mask gain, so every output contributes to
 the same scaled joint policy score. Finite phases retain their approximation
 error. The independent derivative and action-independent-baseline checks are

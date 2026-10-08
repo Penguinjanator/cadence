@@ -7,7 +7,8 @@
   the learned base policy. Preserve the one-slot sampling law and existing genes.
   Report actual per-slot temperatures and the heated slot, and preserve random state
   across refused answers and saved continuation.
-- Credit the policy that actually sampled a reward-bearing action. Scalar or
+- Credit the policy that actually sampled a reward-bearing action
+  ([#160](https://github.com/muellerberndt/cadence/issues/160)). Scalar or
   per-slot behavior temperatures now reach the local actor nudges, with one common
   score scale and bounded gains. Preserve the base-temperature update, actual-action
   custody and pending saved continuation; explicit hot exploration no longer
