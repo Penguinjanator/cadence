@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- Add key-door/3's third, returning rule, longer corridor, variable delays and
+  recurrent control for [#111](https://github.com/muellerberndt/cadence/issues/111).
+  The original 300 lives failed the declared acceptance gate. Return performance
+  includes renewed learning, so it measures reacquisition rather than preservation
+  without learning. The pouch-blind arm is a development lead, not evidence that
+  the working trace retained the key. Original protocols and receipts remain intact.
+- Correct the recurrent control's feedback/gradient ordering and clip its complete
+  actor and critic gradients. Independently verify recorded trip statistics, probe
+  probabilities and work, and require a complete census and the same lives to meet
+  all acceptance criteria. Distinguish historical results from corrected audits.
+  Add a separate development assay of the stable door skill before and after
+  competing experience, on saved copies with learning disabled. Library behavior,
+  public interfaces and composed defaults are unchanged.
+
 ## 0.77.0 — 2026-10-08
 
 - Correct the reward-rhythm instrument's saved world boundaries, refusal retries
