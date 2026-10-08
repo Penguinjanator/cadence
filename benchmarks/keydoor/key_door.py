@@ -22,16 +22,27 @@ chamber's model; this is the delayed key-door reward nursery of
 
 Arms, all on the same corridor sequence per seed:
 
-- ``live``        ``Brain.compose`` with ``ArousalConfig`` at the protocol's operating point;
+- ``live``        ``Brain.compose`` with ``ArousalConfig`` at the protocol's operating point,
+                  the simplest existing System 1;
+- ``copy``        the ``live`` brain carrying the efference copy of its own last command at
+                  the protocol's ``copy`` genes (0.76.0), a declared variant whose founder
+                  value, zero, is the ``live`` arm;
 - ``step``        the same brain without arousal, learning at every moment (the simpler control);
 - ``lambda-zero`` the ``live`` brain with the eligibility decay ``lam`` at zero;
 - ``yoked``       the ``live`` brain whose door outcome is paid at a random cell of the next
                   trip instead of at the door: its own earned rewards, with credit retimed;
 - ``frozen``      the ``live`` brain after rule A, answering greedily without outcomes;
 - ``blind``       the ``live`` brain without the pouch sense;
+- ``recurrent``   an online recurrent actor-critic with the same information: the cell kind
+                  and the pouch bit enter an Elman hidden layer carried across moments, read
+                  by a softmax policy and a linear value, learned with eligibility traces;
 - ``tabular``     epsilon-greedy Q(lambda) over (cell, pouch): the matched-information
                   conventional online learner, its settings selected on the development seeds;
 - ``random``      uniform random actions.
+
+``key-door/3`` lives through the protocol's ``rules`` in order, chest, lamp and the chest
+again, so the return of the first contingency reads the retained skill; its lever count
+varies by ``jitter`` cells from trip to trip, the irregular event time of the acceptance.
 
 Readings per rule, over the trips that reached the door: the share of episodes that ended
 with food, the share in which the key was taken, the wrong interactions per episode and the
@@ -41,8 +52,9 @@ choice and the probability of interacting, per cell and pouch state, of a saved 
 reloaded copy every 25 episodes; the probability of interacting under the behaviour that
 acted and under the base policy, per cell and pouch state, read from the living brain;
 the share of aroused moments; and the work of the life. Receipts are ``cadence.Receipt``s
-bound to this file and every module of the library. New receipts use ``key-door/2``;
-historical ``key-door/1`` receipts retain their original scheduling and metric limitations.
+bound to this file and every module of the library. New receipts use ``key-door/3``;
+``key-door/2`` receipts are the corrected two-rule instrument, and historical
+``key-door/1`` receipts retain their original scheduling and metric limitations.
 Run
 ``python benchmarks/keydoor/key_door.py --help``.
 """
@@ -69,13 +81,28 @@ import numpy as np
 import cadence as cd
 from cadence.receipts import Receipt, canonical_json, canonical_sha256, source_manifest
 
-SCHEMA = "key-door/2"
+SCHEMA = "key-door/3"
 LEGACY_SCHEMA = "key-door/1"
+LEGACY_SCHEMAS = ("key-door/1", "key-door/2")
+DEFAULT_RULES = ["chest", "lamp"]
 PASS, INTERACT = 0, 1
 FLOOR, CHEST, LAMP, LEVER, DOOR = range(5)
 KINDS = ("floor", "chest", "lamp", "lever", "door")
-ARMS = ("live", "step", "lambda-zero", "yoked", "frozen", "blind", "tabular", "random")
-PROTOCOL = Path(__file__).with_name("protocol.json")
+ARMS = (
+    "live",
+    "copy",
+    "step",
+    "lambda-zero",
+    "yoked",
+    "frozen",
+    "blind",
+    "recurrent",
+    "tabular",
+    "random",
+)
+BRAINLESS = ("recurrent", "tabular", "random")
+PROTOCOL = Path(__file__).with_name("protocol-3.json")
+PROTOCOL_1 = Path(__file__).with_name("protocol.json")
 
 
 def corridor(delay: int, length: int, jitter: int, rng: np.random.Generator) -> list[int]:
@@ -127,6 +154,11 @@ def make_brain(
         options["working_memory_decay"] = point["trace_decay"]
     if "consolidation" in point:
         options["consolidation"] = point["consolidation"]
+    if point.get("efference_amplitude"):
+        # the efference copy of the last command (0.76.0), the ``copy`` arm's genes; absent,
+        # the brain is byte-identical to the key-door/2 brain
+        options["efference_amplitude"] = point["efference_amplitude"]
+        options["efference_decay"] = point.get("efference_decay", 0.0)
     if genes is not None:
         options["arousal"] = cd.ArousalConfig(**genes)
     brain = cd.Brain.compose(
@@ -285,6 +317,146 @@ class BrainLife:
         return {**self.work, "memory_writes": 0 if memory is None else int(memory.writes)}
 
 
+class Recurrent:
+    """An online recurrent actor-critic with the same information as the brain: the one-hot
+    cell kind and the pouch bit enter an Elman hidden layer whose state carries across the
+    moments of a trip and clears at the door, as the brain's working trace does; a softmax
+    policy and a linear value read it. Learning is online at every moment, TD(lambda)
+    eligibility traces over every weight with the gradient taken through the current
+    moment's hidden state only, so nothing is stored or replayed. Its settings are selected
+    on the development seeds like the tabular learner's. ``probe`` reads the policy from a
+    cleared hidden state, so it is stateless and reported as such."""
+
+    def __init__(
+        self,
+        seed: int,
+        *,
+        hidden: int = 16,
+        alpha: float = 0.05,
+        alpha_value: float = 0.1,
+        gamma: float = 0.95,
+        lam: float = 0.9,
+        temperature: float = 1.0,
+        clip: float = 5.0,
+    ) -> None:
+        rng = np.random.default_rng(seed)
+        self.rng = rng
+        self.alpha, self.alpha_value, self.gamma, self.lam = alpha, alpha_value, gamma, lam
+        self.temperature = temperature
+        self.clip = clip  # the largest norm of one moment's gradient; a declared guard
+        self.clipped = 0
+        self.Wx = rng.normal(0.0, 0.3, (hidden, 6))
+        self.Wh = rng.normal(0.0, 0.3, (hidden, hidden)) / np.sqrt(hidden)
+        self.b = np.zeros(hidden)
+        self.Wa = np.zeros((2, hidden))
+        self.ba = np.zeros(2)
+        self.wv = np.zeros(hidden)
+        self.bv = 0.0
+        self.h = np.zeros(hidden)
+        self.frozen = False
+        self.last = (0.5, 0.5, 0.5)
+        self.memo: dict[str, Any] | None = None
+        self.actor_trace = {k: np.zeros_like(v) for k, v in self._actor().items()}
+        self.value_trace = {k: np.zeros_like(v) for k, v in self._value().items()}
+
+    def _actor(self) -> dict[str, np.ndarray]:
+        return {"Wa": self.Wa, "ba": self.ba, "Wx": self.Wx, "Wh": self.Wh, "b": self.b}
+
+    def _value(self) -> dict[str, np.ndarray]:
+        return {
+            "wv": self.wv,
+            "bv": np.atleast_1d(self.bv),
+            "Wx": self.Wx,
+            "Wh": self.Wh,
+            "b": self.b,
+        }
+
+    @staticmethod
+    def _features(kind: int, holding: bool) -> np.ndarray:
+        x = np.zeros(6)
+        x[kind] = 1.0
+        x[5] = float(holding)
+        return x
+
+    def _forward(self, x: np.ndarray, h_prev: np.ndarray) -> tuple[np.ndarray, np.ndarray, float]:
+        h = np.tanh(self.Wx @ x + self.Wh @ h_prev + self.b)
+        logits = (self.Wa @ h + self.ba) / self.temperature
+        logits -= logits.max()
+        probs = np.exp(logits)
+        probs /= probs.sum()
+        return h, probs, float(self.wv @ h + self.bv)
+
+    def act(self, kind: int, holding: bool, reward: float | None, done: bool) -> tuple[int, bool]:
+        x = self._features(kind, holding)
+        h_prev = self.h
+        h, probs, value = self._forward(x, h_prev)
+        if reward is not None and self.memo is not None and not self.frozen:
+            target = reward + (0.0 if done else self.gamma * value)
+            delta = float(np.clip(target - self.memo["value"], -self.clip, self.clip))
+            self.Wa += self.alpha * delta * self.actor_trace["Wa"]
+            self.ba += self.alpha * delta * self.actor_trace["ba"]
+            self.wv += self.alpha_value * delta * self.value_trace["wv"]
+            self.bv += self.alpha_value * delta * float(self.value_trace["bv"][0])
+            for name in ("Wx", "Wh", "b"):
+                shared = getattr(self, name)
+                shared += self.alpha * delta * self.actor_trace[name]
+                shared += self.alpha_value * delta * self.value_trace[name]
+            if done:
+                for trace in (self.actor_trace, self.value_trace):
+                    for v in trace.values():
+                        v[:] = 0.0
+                h_prev = np.zeros_like(self.h)
+                h, probs, value = self._forward(x, h_prev)
+        if self.frozen:
+            action = int(np.argmax(probs))
+        else:
+            action = int(self.rng.random() < probs[INTERACT])
+        # the eligibility of this decision: decayed traces plus the gradients through h,
+        # each moment's gradient bounded in norm so a large step cannot run the weights away
+        onehot = np.zeros(2)
+        onehot[action] = 1.0
+        dlogits = (onehot - probs) / self.temperature
+        gz_actor = (self.Wa.T @ dlogits) * (1.0 - h * h)
+        gz_value = self.wv * (1.0 - h * h)
+        norm = float(
+            np.sqrt(np.sum(dlogits**2) + np.sum(gz_actor**2) * (1.0 + x @ x + h_prev @ h_prev))
+        )
+        if norm > self.clip:
+            dlogits, gz_actor = dlogits * (self.clip / norm), gz_actor * (self.clip / norm)
+            self.clipped += 1
+        decay = self.gamma * self.lam
+        for trace in (self.actor_trace, self.value_trace):
+            for v in trace.values():
+                v *= decay
+        self.actor_trace["Wa"] += np.outer(dlogits, h)
+        self.actor_trace["ba"] += dlogits
+        self.actor_trace["Wx"] += np.outer(gz_actor, x)
+        self.actor_trace["Wh"] += np.outer(gz_actor, h_prev)
+        self.actor_trace["b"] += gz_actor
+        self.value_trace["wv"] += h
+        self.value_trace["bv"] += 1.0
+        self.value_trace["Wx"] += np.outer(gz_value, x)
+        self.value_trace["Wh"] += np.outer(gz_value, h_prev)
+        self.value_trace["b"] += gz_value
+        self.h = h
+        self.memo = {"value": value}
+        p = float(probs[INTERACT])
+        self.last = (p, p, p if action == INTERACT else 1.0 - p)
+        return action, True
+
+    def probe(self) -> tuple[list[list[int]], list[list[float]]]:
+        choices, probs = [], []
+        for holding in (False, True):
+            row_c, row_p = [], []
+            for kind in range(5):
+                _, pi, _ = self._forward(self._features(kind, holding), np.zeros_like(self.h))
+                row_c.append(int(np.argmax(pi)))
+                row_p.append(round(float(pi[INTERACT]), 4))
+            choices.append(row_c)
+            probs.append(row_p)
+        return choices, probs
+
+
 class Tabular:
     """Epsilon-greedy Q(lambda) over (cell, pouch) with the same information as the brain:
     accumulating eligibility over the episode, decayed by gamma * lam at every step."""
@@ -342,10 +514,16 @@ def make_life(arm: str, protocol: dict[str, Any], seed: int, genes: dict[str, An
     point = protocol["operating_point"]
     if arm in ("live", "yoked", "frozen"):
         return BrainLife(make_brain(point, seed, genes, True), use_live=True, pouch=True)
+    if arm == "copy":
+        carried = {**point, **{k: v for k, v in protocol["copy"].items() if k != "note"}}
+        return BrainLife(make_brain(carried, seed, genes, True), use_live=True, pouch=True)
     if arm == "lambda-zero":
         return BrainLife(
             make_brain({**point, "lam": 0.0}, seed, genes, True), use_live=True, pouch=True
         )
+    if arm == "recurrent":
+        settings = {k: v for k, v in protocol["recurrent"].items() if k != "note"}
+        return Recurrent(seed, **settings)
     if arm == "blind":
         return BrainLife(make_brain(point, seed, genes, False), use_live=True, pouch=False)
     if arm == "step":
@@ -409,8 +587,9 @@ def run_life(
 
     pending: tuple[float, bool] | None = None  # the preceding action's outcome
     bank = 0.0  # the yoked control's door outcome, paid at a random cell of the next episode
+    rules = [KINDS.index(name) for name in protocol.get("rules", DEFAULT_RULES)]
     try:
-        for index, keyed in enumerate((CHEST, LAMP)):
+        for index, keyed in enumerate(rules):
             if index and arm == "frozen":
                 life.frozen = True
             fed, took, wrong, opened, modes = [], [], [], [], []
@@ -580,6 +759,15 @@ def gates(rows: list[dict[str, Any]], protocol: dict[str, Any]) -> dict[str, Any
         ),
         "calm": lambda r: all(p["aroused_late"] <= g["aroused_late"] for p in r["phases"]),
     }
+    if len(protocol.get("rules", DEFAULT_RULES)) > 2:
+        # the first contingency returns: fed again, and found within the declared lag
+        tests["retained"] = lambda r: (
+            len(r["phases"]) > 2
+            and r["phases"][2]["fed"] is not None
+            and r["phases"][2]["fed"] >= g["fed"]
+            and r["phases"][2]["lag"] is not None
+            and r["phases"][2]["lag"] <= g["retained_lag"]
+        )
 
     def shares(lives: list[dict[str, Any]]) -> dict[str, Any]:
         out: dict[str, Any] = {"lives": len(lives), "crashed": sum("error" in r for r in lives)}
@@ -613,7 +801,8 @@ def summarize(rows: list[dict[str, Any]]) -> str:
             )
             continue
         parts = []
-        for index, name in enumerate(("A", "B")):
+        names = ("A", "B", "A'")[: len(good[0]["phases"])]
+        for index, name in enumerate(names):
             fed = [r["phases"][index]["fed"] for r in good]
             took = [r["phases"][index]["took"] for r in good]
             wrong = [r["phases"][index]["wrong"] for r in good]
@@ -721,6 +910,22 @@ def markdown(report: dict[str, Any]) -> str:
             behaviour(1, 1, LEVER),
         ),
     ]
+    if any(len(r["phases"]) > 2 for r in rows if "error" not in r):
+        out += [
+            *table(
+                "Rule A again, the key back in the chest: episodes fed in the last 50, "
+                "mean (minimum)",
+                share(2, "fed"),
+            ),
+            *table(
+                "Rule A again: first 20-episode window 90% fed, median episode (lives / lives)",
+                lag(2),
+            ),
+            *table(
+                "Rule A again: wrong interactions per episode in the last 50, mean (minimum)",
+                share(2, "wrong"),
+            ),
+        ]
     head = (
         "| Delay | aroused, whole life | aroused, second half of rule A | sweeps per routine "
         "moment | per aroused moment | learning sweeps | probe sweeps | memory reads | "
@@ -825,11 +1030,10 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
     protocol text against its hash; ``current`` also requires the present sources."""
 
     def check(body: dict[str, Any]) -> str | None:
-        if stored["kind"] not in (SCHEMA, LEGACY_SCHEMA) or body["protocol"]["schema"] not in (
-            SCHEMA,
-            LEGACY_SCHEMA,
-        ):
+        kinds = (SCHEMA, *LEGACY_SCHEMAS)
+        if stored["kind"] not in kinds or body["protocol"]["schema"] not in kinds:
             return "the receipt has the wrong kind"
+        rules = body["protocol"].get("rules", DEFAULT_RULES)
         source = stored["source"]
         files = source["files"]
         if source["manifest_sha256"] != canonical_sha256(files):
@@ -857,7 +1061,7 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
             if work is not None:
                 new_counters = {"probe_memory_reads", "aborted_forecast_sweeps"}
                 counters = set(fresh_work()) - new_counters
-                if stored["kind"] == SCHEMA:
+                if stored["kind"] != LEGACY_SCHEMA:
                     counters.update(new_counters)
                 if any(type(work[k]) is not int or work[k] < 0 for k in counters):
                     return "work counters must be nonnegative integers"
@@ -867,11 +1071,11 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                     ):
                         return "the sweeps per moment do not follow from the work counters"
             if "error" in row:
-                if not row["error"] or row["completed_phases"] not in (0, 1):
+                if not row["error"] or row["completed_phases"] not in range(len(rules)):
                     return "a crashed life has invalid completion accounting"
                 continue
-            if len(row["phases"]) != 2 or [p["keyed"] for p in row["phases"]] != ["chest", "lamp"]:
-                return "a completed life must contain rule A and rule B, once and in order"
+            if [p["keyed"] for p in row["phases"]] != rules:
+                return "a completed life must contain the protocol's rules, once and in order"
             for phase in row["phases"]:
                 for k in ("episodes", "cut", "moments"):
                     if type(phase[k]) is not int or phase[k] < 0:
@@ -922,13 +1126,13 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                     or not 0 <= phase["lag"] <= phase["episodes"] - body["protocol"]["window"]
                 ):
                     return "the lag is not a completed-trip window index"
-            if work is None or work["brains"] != int(row["arm"] not in ("random", "tabular")):
+            if work is None or work["brains"] != int(row["arm"] not in BRAINLESS):
                 return "the work does not identify the arm's brain"
             if work["brains"] and work["routine"] + work["aroused"] != sum(
                 p["moments"] for p in row["phases"]
             ):
                 return "the work moments do not agree with the phases"
-            if stored["kind"] == SCHEMA:
+            if stored["kind"] != LEGACY_SCHEMA:
                 pending = row["pending_outcome"]
                 if (
                     type(pending["done"]) is not bool
@@ -969,6 +1173,8 @@ def verify(path: Path, *, current: bool = False, protocol: Path = PROTOCOL) -> t
                 reason += (
                     "; legacy key-door/1: policy-dependent schedules and historical metric limits"
                 )
+            elif valid and stored["kind"] != SCHEMA:
+                reason += "; key-door/2: the corrected two-rule instrument"
             return valid, reason
     except (
         OSError,
@@ -1023,8 +1229,10 @@ def main(argv: list[str] | None = None) -> int:
     manifest = source_manifest(sources())
     frozen = args.protocol.read_bytes()
     protocol = json.loads(frozen)
-    if protocol.get("schema") not in (SCHEMA, LEGACY_SCHEMA):
-        parser.error(f"the protocol's schema is not {SCHEMA} or {LEGACY_SCHEMA}")
+    if protocol.get("schema") not in (SCHEMA, *LEGACY_SCHEMAS):
+        parser.error(f"the protocol's schema is not {SCHEMA} or one of {LEGACY_SCHEMAS}")
+    if protocol.get("schema") == SCHEMA and "recurrent" not in protocol:
+        parser.error("a key-door/3 protocol declares the recurrent learner's settings")
     overridden = False
     for name in ("cost", "food", "episodes"):
         if getattr(args, name) is not None:

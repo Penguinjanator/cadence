@@ -18,8 +18,16 @@ keydoor = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(keydoor)
 
 
+LEGACY_ARMS = ("live", "step", "lambda-zero", "yoked", "frozen", "blind", "tabular", "random")
+
+
 @pytest.fixture(scope="module")
 def protocol():
+    return json.loads((HERE / "protocol-3.json").read_text())
+
+
+@pytest.fixture(scope="module")
+def protocol_1():
     return json.loads((HERE / "protocol.json").read_text())
 
 
@@ -29,30 +37,33 @@ def quick(protocol):
     return {**protocol, "episodes": 60, "probe_every": 20}
 
 
-def test_the_protocol_is_the_frozen_one(protocol):
-    assert protocol["schema"] == keydoor.LEGACY_SCHEMA == "key-door/1"
-    assert keydoor.SCHEMA == "key-door/2"
+def test_the_protocol_is_the_frozen_one(protocol, protocol_1):
+    assert protocol_1["schema"] == keydoor.LEGACY_SCHEMA == "key-door/1"
+    assert protocol["schema"] == keydoor.SCHEMA == "key-door/3"
+    assert keydoor.LEGACY_SCHEMAS == ("key-door/1", "key-door/2")
+    assert protocol["rules"] == ["chest", "lamp", "chest"]
     assert protocol["delays"] == [2, 5, 10] and protocol["episodes"] == 500
-    assert (protocol["length"], protocol["jitter"]) == (14, 1)
+    assert (protocol["length"], protocol["jitter"]) == (15, 2)
+    assert (protocol_1["length"], protocol_1["jitter"]) == (14, 1)
     assert (protocol["cost"], protocol["food"], protocol["truncation"]) == (0.25, 1.0, 0.05)
     seeds = protocol["seeds"]
-    assert seeds["development"] == list(range(24))
-    assert seeds["spent"] == list(range(700, 710))  # the first freeze's confirmation seeds
-    assert seeds["confirmation"] == list(range(800, 810))
+    assert seeds["development"] == list(range(8))
+    assert seeds["spent"] == list(range(700, 710)) + list(range(800, 810))  # both freezes
+    assert seeds["confirmation"] == list(range(900, 910))
     sets = [set(seeds[name]) for name in ("development", "spent", "confirmation")]
     assert all(not a & b for i, a in enumerate(sets) for b in sets[i + 1 :])
     assert protocol["tabular"] == {"alpha": 0.5, "epsilon": 0.1, "gamma": 0.9, "lam": 0.8}
+    assert {"hidden", "alpha", "alpha_value", "gamma", "lam", "temperature"} <= set(
+        protocol["recurrent"]
+    )
     founders = cd.ArousalConfig()
     assert cd.ArousalConfig(**protocol["arousal"]) == replace(founders, need=0.03)
-    assert protocol["operating_point"] == {
-        "modules": [32],
-        "trace_amplitude": 0.3,
-        "consolidation": 0.25,
-        "eta": 0.1,
-        "lam": 0.95,
-        "gamma": 0.95,
-        "eta_critic": 5.0,
-    }
+    point = {k: v for k, v in protocol["operating_point"].items() if k != "note"}
+    assert point == protocol_1["operating_point"]  # the simplest existing System 1 stays
+    copy = {k: v for k, v in protocol["copy"].items() if k != "note"}
+    assert (
+        set(copy) == {"efference_amplitude", "efference_decay"} and copy["efference_decay"] == 0.0
+    )
     gates = protocol["gates"]
     assert (gates["fed"], gates["wrong"], gates["aroused_late"], gates["share"]) == (
         0.9,
@@ -60,7 +71,7 @@ def test_the_protocol_is_the_frozen_one(protocol):
         0.35,
         0.9,
     )
-    assert gates["delays"] == [2, 5]
+    assert gates["delays"] == [2, 5] and gates["retained_lag"] == 50
 
 
 def test_every_trip_has_the_same_length_and_the_declared_order(protocol):
@@ -107,11 +118,11 @@ def test_the_world_pays_the_door_with_the_key_and_a_cut_trip_ends_with_done_clea
         assert phase["cut"] > 0 and phase["episodes"] + phase["cut"] == 40
         assert sum(map(sum, phase["visits"])) == phase["moments"] < 40 * quick["length"]
         assert phase["wrong"] >= 0.0
-    assert row["phases"][0]["keyed"] == "chest" and row["phases"][1]["keyed"] == "lamp"
+    assert [p["keyed"] for p in row["phases"]] == ["chest", "lamp", "chest"]
     assert handed[0][1:] == (None, False) and all(r is not None for _, r, _ in handed[1:])
     for (kind, _, _), (_, _, done) in zip(handed, handed[1:], strict=False):
         assert done == (kind == keydoor.DOOR)
-    assert sum(k == keydoor.DOOR for k, _, _ in handed) == 2 * 40 - sum(
+    assert sum(k == keydoor.DOOR for k, _, _ in handed) == 3 * 40 - sum(
         p["cut"] for p in row["phases"]
     )
 
@@ -134,13 +145,23 @@ def test_the_operating_point_reaches_the_brain(protocol):
     assert keydoor.make_life("blind", protocol, 0, genes).pouch is False
     assert keydoor.make_life("lambda-zero", protocol, 0, genes).brain.basal_ganglia.config.lam == 0
     assert keydoor.make_life("step", protocol, 0, genes).brain.arousal is None
+    assert life.brain.efference is None  # the live arm is the simplest existing System 1
+    carried = keydoor.make_life("copy", protocol, 0, genes)
+    assert carried.brain.efference is not None and carried.brain.arousal is not None
+    assert carried.brain.efference.amplitude == protocol["copy"]["efference_amplitude"]
+    assert carried.brain.basal_ganglia.config == life.brain.basal_ganglia.config
+    recurrent = keydoor.make_life("recurrent", protocol, 0, genes)
+    assert recurrent.alpha == protocol["recurrent"]["alpha"] and recurrent.h.shape == (16,)
 
 
 def test_the_controls_bracket_the_task(quick):
-    arms = ("random", "frozen", "step", "tabular", "yoked", "lambda-zero", "blind")
+    arms = ("random", "frozen", "step", "tabular", "yoked", "lambda-zero", "blind", "recurrent")
     rows = {arm: keydoor.run_life(arm, 0, 2, quick) for arm in arms}
     for arm, row in rows.items():
-        assert "error" not in row and len(row["phases"]) == 2, arm
+        assert "error" not in row and len(row["phases"]) == 3, arm
+    recurrent = rows["recurrent"]
+    assert recurrent["work"]["brains"] == 0 and recurrent["phases"][0]["aroused"] == 1.0
+    assert 0.0 < recurrent["phases"][0]["executed_probability"] < 1.0  # it samples its policy
     for phase in rows["random"]["phases"]:
         assert 0.05 < phase["fed"] < 0.6 and phase["executed_probability"] == 0.5
     frozen = rows["frozen"]
@@ -234,37 +255,43 @@ def test_a_refused_answer_is_charged_and_the_crashed_life_keeps_its_ledger(quick
 
 
 def test_gates_pool_the_gated_delays_and_count_a_crash_as_a_failure(protocol):
-    def life(delay, fed, wrong=0.0, late=0.0):
-        phases = [{"fed": f, "wrong": wrong, "aroused_late": late} for f in fed]
+    def life(delay, fed, wrong=0.0, late=0.0, lag=0):
+        phases = [{"fed": f, "wrong": wrong, "aroused_late": late, "lag": lag} for f in fed]
         return {"arm": "live", "seed": 0, "delay": delay, "phases": phases}
 
-    good = [life(d, (1.0, 0.95)) for d in protocol["gates"]["delays"] for _ in range(5)]
+    good = [life(d, (1.0, 0.95, 1.0)) for d in protocol["gates"]["delays"] for _ in range(5)]
     report = keydoor.gates(good, protocol)
     assert report["passed"] and report["pooled"]["lives"] == 10
-    wasteful = good[:-2] + [life(2, (1.0, 1.0), wrong=2.0)] * 2  # above the 1.5 of the gate
+    wasteful = good[:-2] + [life(2, (1.0, 1.0, 1.0), wrong=2.0)] * 2  # above the 1.5 of the gate
     report = keydoor.gates(wasteful, protocol)
     assert not report["passed"] and report["pooled"]["frugal"] == pytest.approx(0.8)
-    one_restless = good[:-1] + [life(2, (1.0, 1.0), late=1.0)]
+    one_restless = good[:-1] + [life(2, (1.0, 1.0, 1.0), late=1.0)]
     assert keydoor.gates(one_restless, protocol)["passed"]  # one life in ten is within the share
+    slow_return = good[:-2] + [life(2, (1.0, 1.0, 1.0), lag=51)] * 2  # found later than the gate
+    report = keydoor.gates(slow_return, protocol)
+    assert not report["passed"] and report["pooled"]["retained"] == pytest.approx(0.8)
     crashed = good + [{"arm": "live", "seed": 9, "delay": 2, "error": "RuntimeError"}]
     report = keydoor.gates(crashed, protocol)
     assert not report["passed"] and report["pooled"]["crashed"] == 1
-    ungated = [life(10, (0.5, 0.5))]
+    ungated = [life(10, (0.5, 0.5, 0.5))]
     assert "passed" not in keydoor.gates(ungated, protocol)  # delay 10 carries no gate
 
 
-def test_the_confirmation_receipt_is_the_frozen_protocols_and_carries_its_gates(protocol):
+def test_the_second_freezes_receipt_is_its_frozen_protocols_and_carries_its_gates(protocol_1):
     path = HERE / "results" / "confirmation-2026-10-06.json.gz"
     valid, reason = keydoor.verify(path)
     assert valid, reason
+    assert "legacy key-door/1" in reason
     body = keydoor.read_receipt(path)
     assert body["frozen_protocol"] and body["genes_override"] is None
     frozen = keydoor.hashlib.sha256((HERE / "protocol.json").read_bytes()).hexdigest()
     assert body["protocol_sha256"] == frozen
-    assert body["seeds"] == protocol["seeds"]["confirmation"] and body["arms"] == list(keydoor.ARMS)
-    assert body["delays"] == protocol["delays"]
-    assert body["gates"] == keydoor.gates(body["rows"], protocol)
-    assert len(body["rows"]) == len(keydoor.ARMS) * len(protocol["delays"]) * 10
+    assert body["seeds"] == protocol_1["seeds"]["confirmation"] and body["arms"] == list(
+        LEGACY_ARMS
+    )
+    assert body["delays"] == protocol_1["delays"]
+    assert body["gates"] == keydoor.gates(body["rows"], protocol_1)
+    assert len(body["rows"]) == len(LEGACY_ARMS) * len(protocol_1["delays"]) * 10
 
 
 def test_the_first_freezes_receipts_verify_by_their_own_kind():
@@ -362,7 +389,7 @@ def test_door_reading_uses_the_last_fifty_completed_trips_and_probes_the_end(qui
     monkeypatch.setattr(keydoor, "make_life", lambda *args: life)
     row = keydoor.run_life("random", 0, 2, {**quick, "truncation": 0})
     assert row["phases"][0]["opened"] is None  # early key visits are outside the window
-    assert life.probes == [0, 20, 40, 60, 60, 80, 100, 120]
+    assert life.probes == [0, 20, 40, 60, 60, 80, 100, 120, 120, 140, 160, 180]
     assert row["pending_outcome"] == {"reward": 0.0, "done": True}
     assert row["yoked_bank"] == 0.0
 
@@ -443,8 +470,9 @@ def test_each_delivered_reward_belongs_to_the_preceding_executed_action(quick, m
     monkeypatch.setattr(keydoor, "make_life", lambda *args: Scripted(11))
     row = keydoor.run_life("random", 0, 2, {**quick, "episodes": 5, "truncation": 0})
     expected = []
+    rules = [keydoor.KINDS.index(name) for name in quick["rules"]]
     for i, (kind, holding, _reward, _done, action) in enumerate(recorded):
-        keyed = keydoor.CHEST if i < 5 * quick["length"] else keydoor.LAMP
+        keyed = rules[min(len(rules) - 1, i // (5 * quick["length"]))]
         outcome = 0.0
         if action == keydoor.INTERACT:
             if kind == keydoor.DOOR:
@@ -494,7 +522,12 @@ def test_receipt_rejects_self_signed_inconsistent_manifest_phases_and_work(tmp_p
         assert keydoor.main(["--report", str(path)]) == 1
 
     check_edit(lambda s: s["source"].update(manifest_sha256="0" * 64), "source manifest digest")
-    check_edit(lambda s: s["body"]["rows"][0]["phases"].reverse(), "rule A and rule B")
+
+    def swap_rules(s):
+        phases = s["body"]["rows"][0]["phases"]
+        phases[0], phases[1] = phases[1], phases[0]
+
+    check_edit(swap_rules, "the protocol's rules")
     check_edit(lambda s: s["body"]["rows"][0]["work"].update(learning_sweeps=-1), "work counters")
     check_edit(lambda s: s["body"].update(arms=[], rows=[], gates={}), "nonempty and unique")
     capsys.readouterr()
@@ -545,14 +578,18 @@ def test_a_completed_routine_forecast_is_charged_if_the_woken_answer_refuses(
         original = brain.act
 
         def refuse(*args, brain=brain, original=original, **kwargs):
+            # one sweep from rest at an impossible tolerance: the woken answer must refuse
+            # (a cached forecast state can sit at an exact fixed point and would pass)
             brain.learner.config = replace(brain.learner.config, free_steps=1, tolerance=1e-15)
+            brain.basal_ganglia._free = None
             return original(*args, **kwargs)
 
         monkeypatch.setattr(brain, "act", refuse)
+    # a punishment no calm forecast allowed for wakes either brain for certain
     with pytest.raises(RuntimeError, match="did not settle"):
-        life.act(keydoor.CHEST, False, 0.0, False)
+        life.act(keydoor.CHEST, False, -1.0, False)
     with pytest.raises(RuntimeError, match="did not settle"):
-        twin.live(keydoor.observe(keydoor.CHEST, False, True), reward=[0.0], done=[False])
+        twin.live(keydoor.observe(keydoor.CHEST, False, True), reward=[-1.0], done=[False])
     assert life.brain.arousal.aroused and life.brain.hippocampus.writes == 1
     assert len(forecast_steps) == 1 and forecast_steps[0] > 0
     assert life.work["aborted_forecast_sweeps"] == sum(forecast_steps)
