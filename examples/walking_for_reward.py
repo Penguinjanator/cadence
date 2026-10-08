@@ -80,6 +80,7 @@ def pay(previous: int | None, action: int) -> float:
 def live(brain: Brain, moments: int, *, probe_at: int | None = None) -> dict:
     steps: list[int] = []
     aroused: list[bool] = []
+    earned: list[float] = []
     work = {"routine": 0, "aroused": 0, "sweeps_routine": 0, "sweeps_aroused": 0, "learning": 0}
     previous: int | None = None
     reward: float | None = None
@@ -88,49 +89,54 @@ def live(brain: Brain, moments: int, *, probe_at: int | None = None) -> dict:
     twin = None
     twin_previous: int | None = None
     twin_reward: float | None = None
-    for t in range(moments):
-        if t == probe_at:
-            probe = brain.save(Path(tempfile.mkdtemp()) / "mid-stride.npz")
-            twin, twin_previous, twin_reward = Brain.load(probe), previous, reward
-        if twin is not None and len(twin_steps) < 64:
-            feedback = {} if twin_reward is None else {"reward": [twin_reward], "done": [False]}
-            b = int(twin.live(DRIVE, **feedback)[0])
-            twin_reward, twin_previous = pay(twin_previous, b), b
-            twin_steps.append(b)
-        feedback = {} if reward is None else {"reward": [reward], "done": [False]}
-        action = int(brain.live(DRIVE, **feedback)[0])
-        reading = brain.last_arousal
-        mode = reading["mode"]
-        work[mode] += 1
-        work["sweeps_" + mode] += int(reading["sweeps"])
-        work["learning"] += int(reading["learning_sweeps"])
-        aroused.append(mode == "aroused")
-        reward, previous = pay(previous, action), action
-        steps.append(action)
-    changed = [float(a != b) for a, b in zip(steps, steps[1:], strict=False)]
-    out = {
-        "changed_foot_by_block": [
-            round(float(np.mean(changed[i : i + 100])), 2) for i in range(0, len(changed), 100)
-        ],
-        "aroused_by_block": [
-            round(float(np.mean(aroused[i : i + 100])), 2) for i in range(0, len(aroused), 100)
-        ],
-        "income_by_block": [
-            round(float(np.mean(changed[i : i + 100])), 2) for i in range(0, len(changed), 100)
-        ],
-        "last_64_beat": round(float(np.mean(changed[-64:])), 2),
-        "last_64_aroused": round(float(np.mean(aroused[-64:])), 2),
-        "last_32_steps": "".join(FEET[s] for s in steps[-32:]),
-        "work": work,
-    }
-    if probe is not None:
-        copy = Brain.load(probe)
-        greedy = [int(copy.act(DRIVE, greedy=True)[0]) for _ in range(32)]
-        out["greedy_twin_beat"] = round(
-            float(np.mean([a != b for a, b in zip(greedy, greedy[1:], strict=False)])), 2
-        )
-        out["twin_continued_identically"] = twin_steps == steps[probe_at : probe_at + 64]
-    return out
+    with tempfile.TemporaryDirectory() as temporary:
+        for t in range(moments):
+            if t == probe_at:
+                probe = brain.save(Path(temporary) / "mid-stride.npz")
+                twin, twin_previous, twin_reward = Brain.load(probe), previous, reward
+            if twin is not None and len(twin_steps) < 64:
+                feedback = {} if twin_reward is None else {"reward": [twin_reward], "done": [False]}
+                b = int(twin.live(DRIVE, **feedback)[0])
+                twin_reward, twin_previous = pay(twin_previous, b), b
+                twin_steps.append(b)
+            feedback = {} if reward is None else {"reward": [reward], "done": [False]}
+            action = int(brain.live(DRIVE, **feedback)[0])
+            reading = brain.last_arousal
+            mode = reading["mode"]
+            work[mode] += 1
+            work["sweeps_" + mode] += int(reading["sweeps"])
+            work["learning"] += int(reading["learning_sweeps"])
+            aroused.append(mode == "aroused")
+            reward, previous = pay(previous, action), action
+            steps.append(action)
+            earned.append(reward)
+        # Keep all block metrics on the same event boundaries, including the unpaid
+        # first step. The final-window beat measures adjacent actions inside that window.
+        window = steps[-64:]
+        changed = [float(a != b) for a, b in zip(window, window[1:], strict=False)]
+        out = {
+            "changed_foot_by_block": [
+                round(float(np.mean(earned[i : i + 100])), 2) for i in range(0, len(earned), 100)
+            ],
+            "aroused_by_block": [
+                round(float(np.mean(aroused[i : i + 100])), 2) for i in range(0, len(aroused), 100)
+            ],
+            "income_by_block": [
+                round(float(np.mean(earned[i : i + 100])), 2) for i in range(0, len(earned), 100)
+            ],
+            "last_64_beat": round(float(np.mean(changed)), 2) if changed else 0.0,
+            "last_64_aroused": round(float(np.mean(aroused[-64:])), 2),
+            "last_32_steps": "".join(FEET[s] for s in steps[-32:]),
+            "work": work,
+        }
+        if probe is not None:
+            copy = Brain.load(probe)
+            greedy = [int(copy.act(DRIVE, greedy=True)[0]) for _ in range(32)]
+            out["greedy_twin_beat"] = round(
+                float(np.mean([a != b for a, b in zip(greedy, greedy[1:], strict=False)])), 2
+            )
+            out["twin_continued_identically"] = twin_steps == steps[probe_at : probe_at + 64]
+        return out
 
 
 def run() -> dict:

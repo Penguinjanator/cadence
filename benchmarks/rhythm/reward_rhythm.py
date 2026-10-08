@@ -47,6 +47,7 @@ import cadence as cd  # noqa: E402
 from cadence import Brain, Receipt  # noqa: E402
 
 SCHEMA = "steady-rhythm-reward/1"
+INSTRUMENT_REVISION = 2
 PROTOCOL_PATH = Path(__file__).with_name("protocol-reward.json")
 ARMS = ("live", "nocopy", "defaults", "step", "lambda_control", "frozen", "tabular", "random")
 BRAIN_ARMS = ("live", "nocopy", "defaults", "step", "lambda_control", "frozen")
@@ -63,8 +64,22 @@ def load_protocol(path: Path = PROTOCOL_PATH) -> tuple[dict, str]:
     missing = [key for key in REQUIRED if key not in protocol]
     if missing:
         raise ValueError(f"protocol lacks {missing}")
+    if protocol["schema"] not in {f"steady-rhythm-reward/{i}" for i in (1, 2, 3)}:
+        raise ValueError("unsupported reward protocol schema")
     if set(protocol["seeds"]["development"]) & set(protocol["seeds"]["confirmation"]):
         raise ValueError("confirmation seeds must be fresh")
+    for seeds in protocol["seeds"].values():
+        if not seeds or len(set(seeds)) != len(seeds) or any(seed < 0 for seed in seeds):
+            raise ValueError("protocol seeds must be nonempty, unique and nonnegative")
+    life = protocol["life"]
+    if (
+        any(
+            life[key] <= 0
+            for key in ("moments", "block", "window", "probe_at", "greedy_probe", "continuation")
+        )
+        or life["probe_at"] + max(life["window"], life["continuation"]) > life["moments"]
+    ):
+        raise ValueError("life must include the complete scored window and continuation")
     return protocol, hashlib.sha256(raw).hexdigest()
 
 
@@ -133,9 +148,12 @@ class Work:
 def moment(brain: Brain, arm: str, x: np.ndarray, reward: float | None, work: Work) -> dict:
     """One moment of a brain arm: the executed action, its mode, the base policy's belief in
     alternating (the probability of the action opposite to the last executed one) and the
-    work. A refused answer is a missed step: the world counts it as a repeat."""
+    work. A refused answer is a missed step: the world counts it as a repeat, while
+    ``retry_reward`` retains only feedback still owed to a previously issued action."""
     start = time.perf_counter()
     agent = brain.basal_ganglia
+    previous_settlement = brain.last_settlement
+    sampled_before = agent._pending is not None
     try:
         if arm == "frozen":
             action = int(brain.act(x, greedy=True)[0])
@@ -169,15 +187,32 @@ def moment(brain: Brain, arm: str, x: np.ndarray, reward: float | None, work: Wo
             temperature = reading["temperature"]
     except RuntimeError:
         settlement = brain.last_settlement
-        if settlement is not None and not settlement["qualified"]:
+        if (
+            settlement is not None
+            and settlement is not previous_settlement
+            and not settlement["qualified"]
+        ):
             work.counts["refusals"] += 1
             work.counts["refused_sweeps"] += int(settlement["steps"])
-            work.seconds += time.perf_counter() - start
-            return {"action": None, "aroused": None, "belief": None}
+            lived = brain._lived
+            pending = agent._pending is not None or (
+                arm not in ("step", "frozen")
+                and lived is not None
+                and not lived[3]
+                and lived[4] is agent.state
+            )
+            if sampled_before and not pending:
+                # Feedback may have succeeded before the following answer refused.
+                work.counts["learning_sweeps"] += int(brain.last_learning.get("free_steps", 0))
+            return {
+                "action": None,
+                "aroused": None,
+                "belief": None,
+                "retry_reward": reward if pending else None,
+            }
         raise
     finally:
-        pass
-    work.seconds += time.perf_counter() - start
+        work.seconds += time.perf_counter() - start
     state = agent.state
     assert state is not None
     policy = np.asarray(agent.probabilities(state))[0]
@@ -276,9 +311,11 @@ def live_life(
     actions: list[int | None] = []
     records: list[dict] = []
     rewards: list[float] = []
+    feedback: list[float | None] = []
     previous: int | None = None
     reward: float | None = None
     probe: Path | None = None
+    probe_boundary: dict | None = None
     twin: Brain | None = None
     twin_actions: list[int | None] = []
     twin_previous: int | None = None
@@ -287,6 +324,7 @@ def live_life(
     for t in range(moments):
         if t == probe_at and brain is not None:
             probe = brain.save(directory / "probe.npz")
+            probe_boundary = {"previous_action": previous, "pending_reward": reward}
             twin = Brain.load(probe)
             work.counts["checkpoints"] += 2
             twin_previous, twin_reward = previous, reward
@@ -294,17 +332,20 @@ def live_life(
             # the twin meets the same world state the original meets at this moment
             record_twin = moment(twin, arm, x, twin_reward, twin_work)
             b = record_twin["action"]
-            executed_twin = twin_previous if b is None else b
             twin_reward = (
-                pay(twin_previous, executed_twin, rule) if b is not None else float(rule["repeat"])
+                pay(twin_previous, b, rule) if b is not None else record_twin["retry_reward"]
             )
             twin_actions.append(b)
             if b is not None:
                 twin_previous = b
+        feedback.append(reward)
+        control_started = None
         if arm == "random":
+            control_started = time.perf_counter()
             action: int | None = int(rng.integers(0, inputs.ACTIONS))
             record = {"action": action, "aroused": None}
         elif arm == "tabular":
+            control_started = time.perf_counter()
             assert table is not None
             action = table.act(reward)
             record = {"action": action, "aroused": None}
@@ -312,13 +353,17 @@ def live_life(
             assert brain is not None
             record = moment(brain, arm, x, reward, work)
             action = record["action"]
-        executed = previous if action is None else action
-        reward = pay(previous, executed, rule) if action is not None else float(rule["repeat"])
+        earned = pay(previous, action, rule) if action is not None else float(rule["repeat"])
+        # A missed step has no issued action to credit. Its world score cannot replace
+        # an earlier action's pending outcome, nor become feedback for no action.
+        reward = earned if action is not None else record["retry_reward"]
         if table is not None:
-            table.outcome(reward)
+            table.outcome(earned)
+        if control_started is not None:
+            work.seconds += time.perf_counter() - control_started
         actions.append(action)
         records.append(record)
-        rewards.append(reward)
+        rewards.append(earned)
         if action is not None:
             previous = action
         if twin is not None and len(twin_actions) == continuation:
@@ -350,6 +395,7 @@ def live_life(
         "seed": seed,
         "actions": actions,
         "rewards": rewards,
+        "feedback": feedback,
         "aroused": aroused,
         "belief": belief,
         "alternation": alternation(actions),
@@ -371,6 +417,8 @@ def live_life(
         "refusals": work.counts["refusals"],
         "work": {**work.counts, "calls_seconds": work.seconds},
         "probe": None if probe is None else probe.name,
+        "probe_boundary": probe_boundary,
+        "final_boundary": {"previous_action": previous, "pending_reward": reward},
         "continuation": custody,
     }
     return result
@@ -383,14 +431,18 @@ def greedy_probe(probe: Path, protocol: dict, work: Work) -> dict:
     x = observation(inputs.KIND_DRIVE)
     actions: list[int | None] = []
     for _ in range(protocol["life"]["greedy_probe"]):
+        start = time.perf_counter()
+        previous_settlement = copy.last_settlement
         try:
             actions.append(int(copy.act(x, greedy=True)[0]))
         except RuntimeError:
             settlement = copy.last_settlement
-            if settlement is None or settlement["qualified"]:
+            if settlement is None or settlement is previous_settlement or settlement["qualified"]:
                 raise
             work.counts["refusals"] += 1
             actions.append(None)
+        finally:
+            work.seconds += time.perf_counter() - start
         settlement = copy.last_settlement
         assert settlement is not None
         work.counts["probe_acts"] += 1
@@ -398,7 +450,9 @@ def greedy_probe(probe: Path, protocol: dict, work: Work) -> dict:
     return {"actions": actions, "alternation": alternation(actions)}
 
 
-def disturb(probe: Path, arm: str, name: str, protocol: dict, work: Work) -> dict:
+def disturb(
+    probe: Path, arm: str, name: str, protocol: dict, work: Work, *, boundary: dict
+) -> dict:
     """A fork of the probe lives through ``pre`` drive events, the disturbance (``k`` silent
     events or one distractor), then ``post`` drive events, paid under the same rule
     throughout; recovery is alternation over the post events."""
@@ -413,19 +467,25 @@ def disturb(probe: Path, arm: str, name: str, protocol: dict, work: Work) -> dic
         kinds += [inputs.KIND_DISTRACTOR]
     kinds += [inputs.KIND_DRIVE] * spec["post"]
     actions: list[int | None] = []
-    previous: int | None = None
-    reward: float | None = None
+    rewards: list[float] = []
+    feedback: list[float | None] = []
+    previous: int | None = boundary["previous_action"]
+    reward: float | None = boundary["pending_reward"]
     for kind in kinds:
+        feedback.append(reward)
         record = moment(fork, arm, observation(kind), reward, work)
         action = record["action"]
-        executed = previous if action is None else action
-        reward = pay(previous, executed, rule) if action is not None else float(rule["repeat"])
+        earned = pay(previous, action, rule) if action is not None else float(rule["repeat"])
+        reward = earned if action is not None else record["retry_reward"]
         actions.append(action)
+        rewards.append(earned)
         if action is not None:
             previous = action
     post = actions[-spec["post"] :]
     return {
         "actions": actions,
+        "rewards": rewards,
+        "feedback": feedback,
         "pre_alternation": alternation(actions[: spec["pre"]]),
         "post_alternation": alternation(post),
         "recovered": alternation(post) == 1.0,
@@ -443,15 +503,17 @@ def run_founder(seed: int, arm: str, protocol: dict, directory: Path, forks: boo
     )
     if brain is not None:
         probe = directory / "probe.npz"
+        result["work"]["checkpoints"] += 1  # the initial save above
         work = Work()
         result["greedy_probe"] = greedy_probe(probe, protocol, work)
         if forks:
             result["disturbances"] = {
-                name: disturb(probe, arm, name, protocol, work)
+                name: disturb(probe, arm, name, protocol, work, boundary=result["probe_boundary"])
                 for name in [f"pause{k}" for k in life["disturbances"]["pauses"]] + ["distractor"]
             }
         result["probe_work"] = {**work.counts, "calls_seconds": work.seconds}
         brain.save(directory / "final.npz")
+        result["work"]["checkpoints"] += 1
     return result
 
 
@@ -460,9 +522,13 @@ def _mean(values: list[float | None]) -> float | None:
     return float(np.mean(present)) if present else None
 
 
-def aggregate(runs: list[dict], protocol: dict) -> dict:
+def aggregate(runs: list[dict], protocol: dict, *, admissible: bool = True) -> dict:
     out: dict = {}
     gates = protocol["gates"]
+    expected = {(seed, arm) for seed in protocol["seeds"]["confirmation"] for arm in ARMS}
+    observed = [(run["seed"], run["arm"]) for run in runs]
+    admitted = admissible and len(observed) == len(expected) and set(observed) == expected
+    learned_gate = protocol["schema"] != "steady-rhythm-reward/1"
     for arm in sorted({run["arm"] for run in runs}):
         selected = [run for run in runs if run["arm"] == arm]
         founders = len(selected)
@@ -520,7 +586,8 @@ def aggregate(runs: list[dict], protocol: dict) -> dict:
                 "learned": int(
                     sum(
                         r["window_alternation"] >= gates["window_alternation"]
-                        and frozen.get(r["seed"], 0.0) < gates["window_alternation"]
+                        and r["seed"] in frozen
+                        and frozen[r["seed"]] < gates["window_alternation"]
                         for r in selected
                     )
                 ),
@@ -539,18 +606,182 @@ def aggregate(runs: list[dict], protocol: dict) -> dict:
                 ),
                 "continued": entry["continuation_equal"],
                 "required": gates["share"],
+                "expected_founders": len(protocol["seeds"]["confirmation"]),
+                "admissible": admitted,
             }
-            # reward/1 gated acquisition; reward/2 gates learning (frozen arm required)
-            first = "learned" if any(run["arm"] == "frozen" for run in runs) else "acquired"
-            entry["gates"]["passed"] = all(
-                entry["gates"][name] >= gates["share"]
-                for name in (first, "greedy", "calm", "continued")
+            # The same founders must satisfy every clause of the frozen statement.
+            # Missing controls and unfinished/custom censuses cannot earn a pass.
+            entry["gates"]["jointly_qualified"] = sum(
+                r["window_alternation"] >= gates["window_alternation"]
+                and (
+                    not learned_gate
+                    or (r["seed"] in frozen and frozen[r["seed"]] < gates["window_alternation"])
+                )
+                and r["greedy_probe"]["alternation"] >= gates["greedy_alternation"]
+                and r["window_aroused"] is not None
+                and r["window_aroused"] <= gates["window_aroused"]
+                and r["continuation"]["actions_equal"]
+                and r["continuation"]["saved_arrays_equal"]
+                for r in selected
+            )
+            entry["gates"]["passed"] = (
+                admitted and entry["gates"]["jointly_qualified"] >= gates["share"]
             )
         out[arm] = entry
     return out
 
 
 # -- custody
+
+
+def _check_equal(actual: Any, expected: Any, label: str) -> None:
+    if actual != expected:
+        raise ValueError(f"{label} differs from the recorded events or declaration")
+
+
+def _audit_events(
+    run: dict, length: int, rule: dict, *, previous: int | None = None, pending: float | None = None
+) -> None:
+    actions, rewards, feedback = run["actions"], run["rewards"], run["feedback"]
+    if len(actions) != length or len(rewards) != length or len(feedback) != length:
+        raise ValueError("event census differs from the protocol")
+    for index, action in enumerate(actions):
+        if action not in (None, 0, 1):
+            raise ValueError("invalid recorded action")
+        earned = pay(previous, action, rule) if action is not None else float(rule["repeat"])
+        _check_equal(rewards[index], earned, "reward")
+        # A refusal may consume feedback or leave it pending. It may never invent
+        # another outcome; the live refusal tests establish which branch applies.
+        if index == 0:
+            _check_equal(feedback[index], pending, "initial feedback")
+        elif actions[index - 1] is not None:
+            _check_equal(feedback[index], rewards[index - 1], "feedback")
+        elif feedback[index] not in (None, feedback[index - 1]):
+            raise ValueError("refused event invented feedback")
+        if action is not None:
+            previous = action
+
+
+def _audit_run(run: dict, protocol: dict, forks: bool) -> None:
+    life, rule = protocol["life"], protocol["world"]["reward"]
+    _audit_events(run, life["moments"], rule)
+    actions, rewards = run["actions"], run["rewards"]
+    aroused, belief = run["aroused"], run["belief"]
+    if len(aroused) != len(actions) or len(belief) != len(actions):
+        raise ValueError("diagnostic census differs from the events")
+    brain = run["arm"] in BRAIN_ARMS
+    window, block = life["window"], life["block"]
+    expected = {
+        "alternation": alternation(actions),
+        "alternation_blocks": blocks(
+            [
+                float(a is not None and b is not None and a != b)
+                for a, b in zip(actions, actions[1:], strict=False)
+            ],
+            block,
+        ),
+        "aroused_blocks": blocks(aroused, block) if brain else None,
+        "income_blocks": blocks(rewards, block),
+        "belief_blocks": blocks(belief, block) if brain else None,
+        "window_alternation": alternation(actions[-window:]),
+        "window_aroused": _mean(aroused[-window:]) if brain else None,
+        "window_income": float(np.mean(rewards[-window:])),
+        "refusals": actions.count(None),
+    }
+    for key, value in expected.items():
+        _check_equal(run[key], value, key)
+    if not brain:
+        return
+    _check_equal(run["work"]["refusals"], actions.count(None), "refused work")
+    _check_equal(run["work"]["routine"], aroused.count(False), "routine work")
+    _check_equal(run["work"]["aroused"], aroused.count(True), "aroused work")
+    probe_at = life["probe_at"]
+    previous = next((a for a in reversed(actions[:probe_at]) if a is not None), None)
+    boundary = {"previous_action": previous, "pending_reward": run["feedback"][probe_at]}
+    _check_equal(run["probe_boundary"], boundary, "probe boundary")
+    final = run["final_boundary"]
+    _check_equal(
+        final["previous_action"],
+        next((a for a in reversed(actions) if a is not None), None),
+        "final world boundary",
+    )
+    if actions[-1] is not None:
+        _check_equal(final["pending_reward"], rewards[-1], "final pending reward")
+    elif final["pending_reward"] not in (None, run["feedback"][-1]):
+        raise ValueError("final refusal invented feedback")
+    greedy = run["greedy_probe"]
+    if len(greedy["actions"]) != life["greedy_probe"]:
+        raise ValueError("greedy probe census differs")
+    _check_equal(greedy["alternation"], alternation(greedy["actions"]), "greedy alternation")
+    custody = run["continuation"]
+    if not all(type(custody[key]) is bool for key in ("actions_equal", "saved_arrays_equal")):
+        raise ValueError("continuation claims must be boolean")
+    if custody["actions_equal"]:
+        _check_equal(
+            custody["alternation"],
+            alternation(actions[probe_at : probe_at + life["continuation"]]),
+            "continuation alternation",
+        )
+    spec = life["disturbances"]
+    names = [f"pause{k}" for k in spec["pauses"]] + ["distractor"] if forks else []
+    _check_equal(sorted(run.get("disturbances", {})), sorted(names), "disturbance census")
+    for name in names:
+        disturbed = run["disturbances"][name]
+        length = spec["pre"] + spec["post"] + (int(name[5:]) if name.startswith("pause") else 1)
+        _audit_events(
+            disturbed, length, rule, previous=previous, pending=boundary["pending_reward"]
+        )
+        post = alternation(disturbed["actions"][-spec["post"] :])
+        _check_equal(
+            disturbed["pre_alternation"],
+            alternation(disturbed["actions"][: spec["pre"]]),
+            "disturbance pre alternation",
+        )
+        _check_equal(disturbed["post_alternation"], post, "disturbance post alternation")
+        _check_equal(disturbed["recovered"], post == 1.0, "disturbance recovery")
+
+
+def _audit_body(body: dict, frozen: dict, declaration: dict) -> None:
+    """Check revision-2 arithmetic and admission without rerunning the brain.
+
+    Continuation equality remains a source-bound runtime observation, not a fact
+    derivable from the compressed receipt alone.
+    """
+    _check_equal(body["declaration"], declaration, "declaration copy")
+    _check_equal(declaration["instrument_revision"], INSTRUMENT_REVISION, "instrument revision")
+    overrides = declaration["overrides"]
+    if set(overrides) - {"moments", "forks", "seeds", "arms"}:
+        raise ValueError("unknown protocol override")
+    effective = json.loads(json.dumps(frozen))
+    if "moments" in overrides:
+        effective["life"]["moments"] = overrides["moments"]
+    _check_equal(body["protocol"], effective, "effective protocol")
+    seeds = overrides.get("seeds", frozen["seeds"]["confirmation"])
+    arms = overrides.get("arms", list(ARMS))
+    if (
+        not seeds
+        or len(set(seeds)) != len(seeds)
+        or any(seed < 0 for seed in seeds)
+        or not arms
+        or len(set(arms)) != len(arms)
+        or any(arm not in ARMS for arm in arms)
+    ):
+        raise ValueError("invalid declared census")
+    _check_equal(declaration["seeds"], seeds, "declared seeds")
+    _check_equal(declaration["arms"], arms, "declared arms")
+    _check_equal(declaration["frozen_protocol"], not overrides, "frozen declaration")
+    _check_equal(body["frozen_protocol"], not overrides, "frozen protocol")
+    _check_equal(declaration["protocol_sha256"], body["protocol_sha256"], "declared protocol hash")
+    planned = [[seed, arm] for seed in seeds for arm in arms]
+    completed = [[run["seed"], run["arm"]] for run in body["runs"]]
+    _check_equal(body["planned_founders"], planned, "planned census")
+    _check_equal(body["completed_founders"], completed, "completed census")
+    _check_equal(completed, planned[: len(completed)], "run census")
+    _check_equal(body["capped"], len(completed) < len(planned), "capped census")
+    for run in body["runs"]:
+        _audit_run(run, effective, overrides.get("forks", True))
+    expected = aggregate(body["runs"], effective, admissible=not overrides and not body["capped"])
+    _check_equal(body["aggregate"], expected, "aggregate and gates")
 
 
 def verify(directory: Path) -> tuple[bool, str]:
@@ -565,13 +796,26 @@ def verify(directory: Path) -> tuple[bool, str]:
                     return f"artifact differs: {name}"
             if body["protocol_sha256"] != sha256(directory / "protocol.json"):
                 return "protocol copy differs from the recorded hash"
+            revision = body["declaration"].get("instrument_revision")
+            if revision is not None:
+                if revision != INSTRUMENT_REVISION:
+                    return "unsupported instrument revision"
+                frozen, _ = load_protocol(directory / "protocol.json")
+                _audit_body(body, frozen, json.loads((directory / "declaration.json").read_text()))
             return None
 
         valid, reason = Receipt.verify(path, sources=sources, check=check)
-        return valid, (
-            "canonical form, digest, sources and artifact hashes agree" if valid else reason
+        if not valid:
+            return False, reason
+        legacy = raw["body"]["declaration"].get("instrument_revision") is None
+        return True, (
+            "legacy receipt: canonical form, digest, sources and artifact custody agree; "
+            "historical scores and gates retained, not validated by the corrected instrument"
+            if legacy
+            else "canonical form, digest, sources, artifact custody, event arithmetic, "
+            "census and gates agree"
         )
-    except (OSError, ValueError, KeyError) as error:
+    except (OSError, ValueError, KeyError, TypeError, IndexError) as error:
         return False, f"cannot verify artifact: {error}"
 
 
@@ -594,7 +838,9 @@ def main(argv: list[str] | None = None) -> int:
     protocol, protocol_sha = load_protocol(args.protocol)
     overrides: dict[str, Any] = {}
     if args.moments is not None:
-        if args.moments <= protocol["life"]["probe_at"] + protocol["life"]["window"]:
+        if args.moments <= protocol["life"]["probe_at"] + max(
+            protocol["life"]["window"], protocol["life"]["continuation"]
+        ):
             parser.error("moments must leave the probe before the scored window")
         protocol["life"]["moments"] = args.moments
         overrides["moments"] = args.moments
@@ -608,11 +854,20 @@ def main(argv: list[str] | None = None) -> int:
         or len(args.arms) != len(set(args.arms))
     ):
         parser.error("invalid seeds or arms")
+    if args.time_cap is not None and (not np.isfinite(args.time_cap) or args.time_cap <= 0):
+        parser.error("time-cap must be finite and positive")
+    if seeds != protocol["seeds"]["confirmation"]:
+        overrides["seeds"] = seeds
+    if list(args.arms) != list(ARMS):
+        overrides["arms"] = list(args.arms)
     args.out.mkdir(parents=True, exist_ok=False)
     (args.out / "protocol.json").write_bytes(Path(args.protocol).read_bytes())
     began = time.perf_counter()
     declaration = {
         "schema": SCHEMA,
+        "instrument_revision": INSTRUMENT_REVISION,
+        "evidence_scope": "Instrument revision 2; reruns on previously used confirmation "
+        "seeds are audits, not fresh confirmation.",
         "protocol_sha256": protocol_sha,
         "frozen_protocol": not overrides,
         "overrides": overrides,
@@ -623,6 +878,7 @@ def main(argv: list[str] | None = None) -> int:
         "cadence_version": cd.__version__,
         "cadence_import": str(Path(cd.__file__).resolve()),
         "cpu_count": os.cpu_count(),
+        "time_cap": args.time_cap,
     }
     (args.out / "declaration.json").write_text(json.dumps(declaration, indent=2) + "\n")
     sources, origins = [], []
@@ -685,7 +941,7 @@ def main(argv: list[str] | None = None) -> int:
         "completed_founders": [[run["seed"], run["arm"]] for run in runs],
         "capped": capped,
         "seconds": time.perf_counter() - began,
-        "aggregate": aggregate(runs, protocol) if runs else {},
+        "aggregate": aggregate(runs, protocol, admissible=not overrides and not capped),
         "artifacts": artifacts,
         "work_scope": "Every moment of every arm, every learning phase, probe, twin, "
         "disturbance fork and checkpoint is charged; a refused answer is a missed step. "

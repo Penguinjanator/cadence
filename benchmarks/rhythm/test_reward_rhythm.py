@@ -6,6 +6,8 @@ import hashlib
 import importlib.util
 import json
 import sys
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -123,16 +125,39 @@ def test_smoke_run_charges_every_arm_and_verifies(protocol, tmp_path):
     valid, reason = chamber.verify(out)
     assert valid, reason
     body = json.loads((out / "summary.json").read_text())["body"]
-    assert body["frozen_protocol"] is False and body["declaration"]["overrides"] == {"moments": 472}
+    assert body["frozen_protocol"] is False
+    assert body["declaration"]["overrides"] == {
+        "moments": 472,
+        "seeds": [0],
+        "arms": ["live", "nocopy", "frozen", "tabular", "random"],
+    }
     assert body["completed_founders"] == body["planned_founders"]
     runs = {run["arm"]: run for run in body["runs"]}
     assert set(runs) == {"live", "nocopy", "frozen", "tabular", "random"}
+    for run in runs.values():
+        assert run["final_boundary"] == {
+            "previous_action": run["actions"][-1],
+            "pending_reward": run["rewards"][-1],
+        }
+        assert run["work"]["calls_seconds"] > 0
     for arm in ("live", "nocopy", "frozen"):
         run = runs[arm]
         assert len(run["actions"]) == 472 and run["refusals"] == 0
         assert run["continuation"]["actions_equal"] and run["continuation"]["saved_arrays_equal"]
         assert set(run["disturbances"]) == {"pause1", "pause2", "pause4", "distractor"}
         assert run["work"]["routine"] + run["work"]["aroused"] == 472
+        assert run["work"]["checkpoints"] == 6  # initial, probe/load, comparison pair, final
+        assert run["probe_work"]["calls_seconds"] > 0
+        boundary = run["probe_boundary"]
+        assert boundary == {
+            "previous_action": run["actions"][399],
+            "pending_reward": run["rewards"][399],
+        }
+        for fork in run["disturbances"].values():
+            assert fork["feedback"][0] == boundary["pending_reward"]
+            assert fork["rewards"][0] == chamber.pay(
+                boundary["previous_action"], fork["actions"][0], protocol[0]["world"]["reward"]
+            )
         assert (out / f"seed0-{arm}" / "probe.npz").exists()
     assert runs["frozen"]["work"]["aroused"] == 0 and runs["frozen"]["work"]["learning_sweeps"] == 0
     assert runs["frozen"]["alternation"] == 0.0  # a greedy founder holds one action
@@ -144,11 +169,137 @@ def test_smoke_run_charges_every_arm_and_verifies(protocol, tmp_path):
         "greedy",
         "calm",
         "continued",
+        "jointly_qualified",
+        "admissible",
+        "expected_founders",
         "required",
         "passed",
     }
     assert gates["learned"] <= gates["acquired"]
     assert body["aggregate"]["live"]["continuation_equal"] == 1
+
+
+def test_disturbance_fork_consumes_the_actual_pending_outcome(protocol, tmp_path):
+    declared = deepcopy(protocol[0])
+    # Nonzero repeat pay makes dropping even a repeated action's outcome observable.
+    declared["world"]["reward"] = {"repeat": 0.25, "alternate": 1.0}
+    declared["life"]["disturbances"] = {"pre": 2, "post": 3, "pauses": [1]}
+    brain = chamber.make_brain(3, declared, "live")
+    x = chamber.observation(inputs.KIND_DRIVE)
+    previous = int(brain.live(x)[0])
+    pending_reward = chamber.pay(None, previous, declared["world"]["reward"])
+    probe = brain.save(tmp_path / "pending.npz")
+    boundary = {"previous_action": previous, "pending_reward": pending_reward}
+    actual = chamber.disturb(probe, "live", "pause1", declared, chamber.Work(), boundary=boundary)
+    expected_brain = chamber.Brain.load(probe)
+    expected_actions, expected_rewards, expected_feedback = [], [], []
+    kinds = [inputs.KIND_DRIVE] * 2 + [inputs.KIND_PAUSE] + [inputs.KIND_DRIVE] * 3
+    for kind in kinds:
+        expected_feedback.append(pending_reward)
+        action = int(expected_brain.live(chamber.observation(kind), reward=[pending_reward])[0])
+        pending_reward = chamber.pay(previous, action, declared["world"]["reward"])
+        previous = action
+        expected_actions.append(action)
+        expected_rewards.append(pending_reward)
+    assert actual["actions"] == expected_actions
+    assert actual["rewards"] == expected_rewards
+    assert actual["feedback"] == expected_feedback
+
+
+@pytest.mark.parametrize("arm", ["live", "step"])
+def test_refused_answer_after_feedback_retries_without_crediting_it_twice(
+    protocol, monkeypatch, arm
+):
+    brain = chamber.make_brain(3, protocol[0], arm)
+    work = chamber.Work()
+    x = chamber.observation(inputs.KIND_DRIVE)
+    chamber.moment(brain, arm, x, None, work)
+    updates, counted = brain.basal_ganglia.updates, work.counts["learning_sweeps"]
+    act = brain.act
+
+    def refuse_after_feedback(*args, **kwargs):
+        config = brain.learner.config
+        brain.learner.config = replace(config, free_steps=0, tolerance=0.0)
+        try:
+            return act(*args, **kwargs)
+        finally:
+            brain.learner.config = config
+
+    monkeypatch.setattr(brain, "act", refuse_after_feedback)
+    refused = chamber.moment(brain, arm, x, 1.0, work)
+    assert refused["action"] is None and refused["retry_reward"] is None
+    assert brain.basal_ganglia.updates == updates + 1
+    assert work.counts["learning_sweeps"] == counted + brain.last_learning["free_steps"]
+    monkeypatch.setattr(brain, "act", act)
+    retried = chamber.moment(brain, arm, x, refused["retry_reward"], work)
+    assert retried["action"] is not None and work.counts["refusals"] == 1
+    assert brain.basal_ganglia.updates == updates + 1
+
+
+def test_refused_routine_forecast_keeps_the_actual_reward(protocol):
+    declared = deepcopy(protocol[0])
+    declared["arousal"]["youth"] = 0
+    brain = chamber.make_brain(3, declared, "live")
+    work = chamber.Work()
+    chamber.moment(brain, "live", chamber.observation(inputs.KIND_DRIVE), None, work)
+    lived, mood = brain._lived, brain.arousal.to_dict()
+    config = brain.learner.config
+    brain.learner.config = replace(config, free_steps=0, tolerance=0.0)
+    x = chamber.observation(inputs.KIND_DISTRACTOR)
+    refused = chamber.moment(brain, "live", x, 1.0, work)
+    assert refused["action"] is None and refused["retry_reward"] == 1.0
+    assert brain._lived is lived and brain.arousal.to_dict() == mood
+    brain.learner.config = config
+    retried = chamber.moment(brain, "live", x, refused["retry_reward"], work)
+    assert retried["action"] is not None and work.counts["refusals"] == 1
+
+
+def test_unrelated_error_is_not_hidden_by_a_stale_refusal(protocol):
+    brain = chamber.make_brain(3, protocol[0], "live")
+    brain.learner.config = replace(brain.learner.config, free_steps=0)
+    work = chamber.Work()
+    x = chamber.observation(inputs.KIND_DRIVE)
+    refused = chamber.moment(brain, "live", x, None, work)
+    assert refused["action"] is None and refused["retry_reward"] is None
+    with pytest.raises(RuntimeError, match="preceding action"):
+        chamber.moment(brain, "live", x, 0.0, work)
+    assert work.counts["refusals"] == 1
+
+
+def test_missed_world_steps_preserve_pending_feedback_without_inventing_credit(
+    protocol, monkeypatch, tmp_path
+):
+    replies = iter([
+        {"action": 0, "aroused": True},
+        {"action": None, "aroused": None, "retry_reward": 0.0},
+        {"action": 1, "aroused": True},
+        {"action": None, "aroused": None, "retry_reward": None},
+        {"action": 0, "aroused": True},
+    ])
+    received = []
+
+    def attempt(brain, arm, x, reward, work):
+        received.append(reward)
+        return next(replies)
+
+    monkeypatch.setattr(chamber, "moment", attempt)
+    life = chamber.live_life(
+        object(), "live", protocol[0], 0, tmp_path, moments=5, probe_at=6
+    )
+    assert received == life["feedback"] == [None, 0.0, 0.0, 1.0, None]
+    assert life["rewards"] == [0.0, 0.0, 1.0, 0.0, 1.0]
+    assert life["final_boundary"] == {"previous_action": 0, "pending_reward": 1.0}
+
+
+def test_greedy_probe_charges_its_elapsed_calls(protocol, tmp_path, monkeypatch):
+    brain = chamber.make_brain(3, protocol[0], "live")
+    brain.live(chamber.observation(inputs.KIND_DRIVE))
+    path = brain.save(tmp_path / "probe.npz")
+    ticks = iter(range(2 * protocol[0]["life"]["greedy_probe"]))
+    monkeypatch.setattr(chamber.time, "perf_counter", lambda: next(ticks))
+    work = chamber.Work()
+    chamber.greedy_probe(path, protocol[0], work)
+    assert work.seconds == work.counts["probe_acts"] == protocol[0]["life"]["greedy_probe"]
 
 
 @pytest.mark.parametrize(

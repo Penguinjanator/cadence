@@ -1,6 +1,6 @@
 # Numerical and learning contracts
 
-This page describes Cadence 0.76.0 numerical, learning and feedback contracts.
+This page describes Cadence 0.77.0 numerical, learning and feedback contracts.
 
 Cadence exposes several implementations of state, repair and learning. Choose
 an API by its equations, stopping rule and update contract. Sharing the word

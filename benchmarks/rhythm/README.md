@@ -433,7 +433,7 @@ fresh seeds and the timing envelope is confirmed at budgets of 64 sweeps and abo
 The copy is the declared mechanism of this result, selected on the development
 seeds and confirmed once on fresh seeds; no default changes.
 
-## The beat paid by the world: reward/1 and reward/2, 2026-10-08
+## The beat paid by the world: reward/1, reward/2 and reward/3, 2026-10-08
 
 rhythm/1 and rhythm/2 teach the beat with a label at every event. The manifesto's
 creature learns from one reward channel over its own actions, and the world supplies
@@ -442,8 +442,8 @@ task: one continuing `Brain.live` life, the same drive at every moment, no label
 clock; a step on the other foot than the last one earns one unit, paid at the next
 moment as the outcome of that step, and a repeated step earns nothing. Nothing in the
 observation says which foot moved last; no associative memory can key on a cue that
-never changes; the only state that can carry the beat is the copy of the walker's own
-last command, and the graph's own reward learning has to use it. The walker is aroused
+never changes; the efference copy carries the walker's own last command, alongside its working trace.
+The copyless arm tests whether that command boundary helps the graph's reward learning. The walker is aroused
 and learning through a youth of 100 moments, then routine while outcomes match its
 forecasts and aroused again when they do not or when its need goes unmet.
 
@@ -468,6 +468,16 @@ python benchmarks/rhythm/reward_rhythm.py --out /tmp/reward-2 \
 python benchmarks/rhythm/reward_rhythm.py --verify /tmp/reward-2
 ```
 
+The original receipts and tables below are preserved as historical measurements
+from chamber source `639bc83` and Cadence 0.76.0. The maintainer review found that
+disturbance forks discarded the pending reward and previous action at their saved
+boundary, refusal retries could lose or repeat feedback, and work accounting omitted
+some checkpoint and probe costs. Historical disturbance and work figures therefore
+describe that instrument. Successful main-life action sequences remain useful bounded
+evidence; the recorded confirmations contain no refusals. Corrected runs carry an
+explicit instrument revision and separate receipts. Gate checks also require the
+declared control and the same founders to satisfy all criteria.
+
 ### Development, seeds 0 to 5
 
 The operating point is the key-door nursery's declared point (`benchmarks/keydoor`:
@@ -488,8 +498,8 @@ aroused for the brain arms:
 At the declared point all six founders learn the beat from reward alone within their
 youth, walk it for the remaining 500 moments without a single aroused moment, and their
 greedy probes walk it too; the frozen founders hold one foot, so the beat was learned.
-Without the copy the walker never earns and stays restless (need 0.5) or calms into
-holding one foot (need 0): an internally coherent equilibrium that is wrong about the
+Without the copy the walker alternates at 0.46 and stays restless (need 0.5), or
+calms into mostly holding one foot (0.02 alternation at need 0): an internally coherent equilibrium that is wrong about the
 world, and calm about it. Born calm, three founders settle into a limp of two changed
 steps in three, which pays more than the need and so never rouses them. The supervised
 chamber's strong working trace degrades every learning arm: where the previous
@@ -555,8 +565,9 @@ second block of 100 moments, 0.03 of the third, none afterwards), walk it for th
 of the life at routine cost, and their greedy probes walk it. Seed 403 limps, calm, at
 0.67. The control at the old eligibility decay also learns in 4/5 and limps on a
 different founder (404), so the decay is not shown to be the cause of the limp; the
-composed reward defaults learn in 3/5; the walker without the copy never earns and stays
-restless on every founder (0.37 to 0.49, aroused 0.72 to 0.89 of the window); the
+composed reward defaults learn in 3/5; the walker without the copy earns occasional
+rewards and stays restless on every founder (0.37 to 0.49 alternation, aroused 0.72 to
+0.89 of the window); the
 always-learning loop reaches 0.96 while aroused at every moment; the tabular learner
 given the same one bit reaches 0.90 to 0.97; uniform random 0.43 to 0.57.
 
@@ -588,13 +599,13 @@ gates. Receipt `results/confirmation-reward-3-2026-10-08.json.gz`, verified.
 
 All five live walkers alternate at 1.00, calm, with their greedy probes at 1.00 and their twins
 identical, and no founder limps; the copyless walker is aroused at every moment of the window,
-as a need of 0.9 keeps a walker that does not earn restless. Two founders, 501 and 505, had the
+as its income remains below the need of 0.9. Two founders, 501 and 505, had the
 beat from birth (frozen 1.00), so the gate on learned beats credits 3 of 5 and fails as declared.
 The need above the limp's income removes the limp on these seeds; a rule that screens founders
 by their frozen arm before the gate, declared up front, would be the next protocol. The
 eligibility control at need 0.9 is restless on seed 505 (0.59) and the composed defaults on two.
 
-### Receipts on the released library
+### Historical receipts on Cadence 0.76.0
 
 The three reward receipts in `results/` were regenerated on the released `cadence-net` 0.76.0
 (the efference copy as merged, with the audit's checkpoint validation and boundary bias
@@ -604,11 +615,12 @@ before the release.
 ### Reading the reward chambers
 
 The frozen arm is the zero of learning: a greedy founder under identical drive holds one
-foot unless the copy's random projection happens to make a two-cycle, which it did on two
-of ten fresh founders and none of six development founders; a founder with the beat from
+foot unless the copy's random projection happens to make a two-cycle, which it did on four
+of fifteen fresh founders and none of six development founders; a founder with the beat from
 birth is reported and not credited. The walker without the copy is the control for the
-mechanism: on every founder of both freezes it never earns and stays restless (need 0.5)
-or calms into holding one foot (need 0). The always-learning `step` loop shows that the
+mechanism: it earns occasional rewards while exploring but its greedy probe holds one
+foot. It stays restless at need 0.5 or 0.9, or calms into mostly holding one foot at
+need 0 in development. The always-learning `step` loop shows that the
 beat can be learned by sampling every moment; `live` shows that it can be learned in
 youth and then walked as routine, with learning sweeps a third of the restless control's
 and no aroused moment in the window. The tabular learner is what the one bit the copy
@@ -617,9 +629,10 @@ carries is worth to a learner that reads it directly.
 The limp is the residual failure: a period-three attractor, `RLL`, that pays two steps in
 three, above a need of 0.5, so the walker is calm in it and routine learns nothing. It is
 the manifesto's internally coherent equilibrium that is wrong about the world, measured:
-one founder in five in reward/2, two in five in reward/1. A need above the limp's income
-(0.9) rouses a limping walker on the development seeds, where it does not separate from
-the declared point; it is the next hypothesis, untested on fresh seeds.
+one founder in five in reward/2, two in five in reward/1. With need 0.9, reward/3
+has no limp on its five fresh founders, but two already had the beat from birth.
+Its learned-credit gate therefore still fails; these results do not establish a
+generally better default.
 
 ### Failures and limits of the reward chambers
 
@@ -631,7 +644,7 @@ the declared point; it is the next hypothesis, untested on fresh seeds.
 - The task is one bit of history at a delay of one. Longer delays, more actions and a
   pause the walker should wait through are not measured; after a pause it steps on.
 - The operating point is the key-door nursery's, not the composed defaults, which reach
-  3/5 and 4/5 on the two freezes with the copy. No default changes.
+  4/5, 3/5 and 3/5 acquisitions in reward/1, reward/2 and reward/3 with the copy. No default changes.
 - A life is 600 moments on one founder with one stream; recovery after disturbances is
   3/5 for the walker and 4/5 for the control, with the limping founder never recovering.
 - The paced and host-load variants of the supervised chamber are not repeated here.
