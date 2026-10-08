@@ -39,6 +39,28 @@ unchanged confirmation census; development, selected arms, selected delays and o
 cannot pass. Historical marginal gate labels remain historical. An audit of already spent
 seeds is not a fresh confirmation, and issue 111 remains open.
 
+## Corrected recurrent-control audit, 2026-10-08
+
+The [corrected receipt](results/audit-recurrent-maintainer-2026-10-08.json.gz) and
+[verification counts](results/verification-recurrent-maintainer-2026-10-08.json) use
+source `abbe9adb`, the unchanged declared recurrent settings, and all 30 recurrent lives
+on already spent seeds 900–909. No Cadence runtime or default changed. This control-only
+audit is ineligible for the full confirmation gate and does not replace the historical freeze.
+
+| Delay | A feeding, historical → corrected | B feeding, historical → corrected | Return feeding, historical → corrected | Corrected first-window counts A/B/return |
+| --- | --- | --- | --- | --- |
+| 2 | 0.960 → 0.956 | 0.886 → 0.884 | 0.994 → 0.996 | 10/10, 9/10, 10/10 |
+| 5 | 0.960 → 0.956 | 0.684 → 0.684 | 0.986 → 0.988 | 10/10, 7/10, 10/10 |
+| 10 | 0.762 → 0.956 | 0.380 → 0.484 | 0.890 → 0.982 | 10/10, 5/10, 10/10 |
+
+The corrected control acquires at every delay; re-adaptation remains incomplete. In
+particular, the old delay-10 acquisition failures were not reliable evidence about a
+correctly differentiated control. The run completed without errors: 657,333 decisions,
+657,303 feedback updates, 1,890 probe calls, 9,018 actor-gradient clips and no critic-gradient
+clips, with 419 learned scalars per founder. Summed founder elapsed time was 162.90 seconds;
+this is not a matched compute or energy comparison. The original source-bound verifier
+accepted the complete receipt and recomputed its trip, moment and gate arithmetic.
+
 ## Maintainer development: stable skill and joint census, 2026-10-08
 
 The original 20 gated founders meet all five predicates jointly in **11/20 live** and
@@ -80,13 +102,31 @@ python benchmarks/keydoor/retention_audit.py --out /tmp/keydoor-retention/receip
 python benchmarks/keydoor/retention_audit.py --verify /tmp/keydoor-retention/receipt.json --current --artifacts
 ```
 
-One bounded follow-up is declared in
-[`protocol-eligibility-development.json`](protocol-eligibility-development.json): blind-body
-founders 2 and 3 at delay 5, comparing the existing eligibility gene `lam=0.95` with `0.98`,
-all three 500-trip phases and every original gate unchanged. The
-[`eligibility_development.py`](eligibility_development.py) helper stops after those four lives.
-This targets the observed late acquisition; it also changes penalty credit and normalized
-critic updates, so improvement is not assumed. No result from that comparison is claimed here.
+The bounded follow-up in
+[`protocol-eligibility-development.json`](protocol-eligibility-development.json) compared
+blind-body founders 2 and 3 at delay 5 with the existing eligibility gene `lam=0.95` and
+`0.98`. It ran from source `7487a031`, with all three 500-trip phases and every original
+gate unchanged.
+The [`eligibility_development.py`](eligibility_development.py) helper stopped after those
+four lives. Both [control](results/development-eligibility-control-maintainer-2026-10-08.json.gz)
+and [candidate](results/development-eligibility-candidate-maintainer-2026-10-08.json.gz)
+receipts passed source and arithmetic verification; the
+[verification record](results/verification-eligibility-maintainer-2026-10-08.json) preserves
+the declaration, paired readings and work counts.
+
+| Founder | A lag, 0.95 → 0.98 | B lag, 0.95 → 0.98 | Return lag, 0.95 → 0.98 | A late arousal, 0.95 → 0.98 |
+| --- | --- | --- | --- | --- |
+| 2 | 254 → 346 | 23 → 55 | 9 → 2 | 0.103 → 0.392 |
+| 3 | 68 → 76 | 54 → 117 | 3 → 17 | 0.002 → 0.060 |
+
+**The candidate is rejected.** Both founders acquired and adapted later; founder 2 missed
+the unchanged calm bound of 0.35, and founder 3 returned later. Feeding stayed at 1.00 and
+wrong interactions at 0.00 in every phase. All-five-predicate development counts fell from
+2/2 to 1/2. Each setting used 43,750 decisions and 126 probes, without failures. Learning
+sweeps rose from 69,774 to 107,832, while total charged action, learning and probe sweeps
+were nearly equal (1,432,910 and 1,432,888). Founder elapsed time totalled 57.50 seconds
+across both settings. This development changes no runtime or default, admits no confirmation
+claim, and does not close issue 111.
 
 The early `development-3-copy-amp3` receipt used another instrument: its arms were
 `live` (with the copy), `nocopy` and `tabular`, with chamber hash `d1fd408a4600…`.
