@@ -1,12 +1,14 @@
 # API reference
 
 Start with [Brain.compose](#brain-cadence) for a continuing brain with memory
-and optional observers. [NeuralGraph](#neuralgraph-cadence) is the lower-level
+and optional observers, then use `brain.live(...)` for one continuing stream
+with `arousal=ArousalConfig()`. [NeuralGraph](#neuralgraph-cadence) is the lower-level
 graph API. The [quickstart](quickstart.md) runs the main interaction loop;
 sections below describe specialist operations. Pass optional arguments by keyword.
 
-This reference describes Cadence 0.75.0, including `Brain.last_settlement`
-diagnostics. Install it with `python -m pip install cadence-net==0.75.0`.
+This reference describes Cadence 0.76.0. Install it with
+`python -m pip install cadence-net==0.76.0`. `Brain.last_settlement` is an optional
+diagnostic report, independent of the interaction loop you use.
 
 The temporal patch: [TemporalPatchNet](#temporalpatchnet-cadencetemporal),
 [TemporalPlan](#temporalplan-cadenceplanning), [TemporalMemory](#temporalmemory-cadencetemporal_memory),

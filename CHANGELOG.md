@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.76.0 — 2026-10-08
+
+- Give the introductory guides one recommended continuing-life loop:
+  `Brain.compose(..., arousal=ArousalConfig())` followed by `brain.live(...)`.
+  Use the composed defaults in the starting example, explain diagnostic reports
+  separately, and keep explicit teaching/batching in the `step` reference.
+  Executable examples check arousal and saved continuation. Runtime defaults
+  and supported operations are unchanged.
 - Harden the opt-in efference copy at episode and checkpoint boundaries: routine
   terminal forecasts clear both traces before choosing the next action and restore
   them on refusal; `resting_bias` leaves command neurons silent until a command;

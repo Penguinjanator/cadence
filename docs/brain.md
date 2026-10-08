@@ -15,17 +15,18 @@ controls for those mechanisms.
 
 ```python
 import numpy as np
-from cadence import Brain
+from cadence import ArousalConfig, Brain
 
-brain = Brain.compose(inputs=4, actions=2, modules=(16, 8), seed=7)
+brain = Brain.compose(inputs=4, actions=2, arousal=ArousalConfig())
 observation = np.array([[1.0, 0.0, 0.0, 0.0]])
-action = brain.step(observation)
+action = brain.live(observation)
 assert action.shape == (1,)
 ```
 
-Inputs have shape `(streams, inputs)`; each output is an action index.
-`modules=(16, 8)` creates two reciprocally connected processing regions. The
-last is the association region. Sensory input reaches the first, the association
+`live` follows one stream: inputs have shape `(1, inputs)` and the output is one
+action index. The default has one 64-neuron processing region. For more regions,
+`modules=(16, 8)` creates two; the last is the association region.
+Sensory input reaches the first, the association
 region exchanges signals with motor neurons, and its working trace enters through
 context neurons. `SynapticMemory` records the actually chosen action's reward;
 its fast and persistent associations influence later choices.
@@ -50,8 +51,9 @@ The base can already be deep. Add recursive readback separately:
 ```python
 recursive = Brain.compose(
     inputs=4, actions=2, modules=(16, 8), observers=(8, 4), seed=7,
+    arousal=ArousalConfig(),
 )
-assert recursive.step(observation).shape == (1,)
+assert recursive.live(observation).shape == (1,)
 ```
 
 Each observer exchanges activity with the base, motor regions and earlier

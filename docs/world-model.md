@@ -50,7 +50,7 @@ over reciprocal synapses, with no layers, no order and no controller](assets/pat
    when its chosen model supplies one, a saved prediction with the observed
    outcome before correction. A false expectation or missed goal supplies task
    evidence; a large equation residual instead means the numerical solve has
-   not qualified. `Brain.step` receives that measured reward; it does not make
+   not qualified. `Brain.live` receives that measured reward; it does not make
    an environmental transition prediction or compare a corrected utterance.
 4. **Resume the same life.** Retain acquired parameters, relevant memories and
    pending feedback through correction. Measure recovery and old capabilities
@@ -75,35 +75,35 @@ unique stable interpretation.
 
 The current `Brain` supports a continuing equilibrium interpretation, action and
 memory. This realizes part of the world-model hypothesis; it does not yet
-integrate a learned model of environmental transitions. Its
-`step` consumes the preceding action's measured outcome, optionally teaches the
-current observation, then settles and selects another action. This small loop
-keeps one stream and both memory pathways active:
+integrate a learned model of environmental transitions. For one creature, compose
+a brain with arousal and use `live` throughout its life. It receives the preceding
+action's measured outcome and chooses the next action, with arousal deciding
+when to explore and learn. This small loop keeps one stream and both memory
+pathways active:
 
 ```python
 import numpy as np
-from cadence import Brain
+from cadence import ArousalConfig, Brain
 
-brain = Brain.compose(2, 2, modules=(8,), seed=7)
+brain = Brain.compose(inputs=2, actions=2, arousal=ArousalConfig())
 observations = np.eye(2)
 cue = 0
-action = brain.step(observations[[cue]], teacher=np.array([1 - cue]))
+action = brain.live(observations[[cue]])
 
 for transition in range(8):
     # The toy body's rule changes halfway through this continuing life.
     target = 1 - cue if transition < 4 else cue
     reward = (action == target).astype(float)  # actual executed action
     cue = 1 - cue
-    action = brain.step(
-        observations[[cue]], reward=reward, done=np.array([False]),
-    )
+    action = brain.live(observations[[cue]], reward=reward)
 
 assert brain.learner.updates > 0
 assert brain.hippocampus is not None and brain.hippocampus.writes > 0
 ```
 
 This exercises continuing feedback through a changed environment; eight outcomes
-do not establish acquisition or recovery. The [runnable lifecycle example](../examples/continuing_brain.py)
+do not establish acquisition or recovery. For batches, supplied teachers or
+learning from every outcome, use `step`. The [runnable lifecycle example](../examples/continuing_brain.py)
 separates bootstrap, unchanged conditions and changed conditions, records actual
 outcomes, and verifies identical continuation from a saved pending action.
 [Continuous interaction](continuous.md) specifies event order, refusal/retry,
