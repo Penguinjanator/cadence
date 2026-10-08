@@ -15,7 +15,19 @@
   `imagine` (a private copy issued the imagined response's own best guess), `save` and
   `load` carry it; a checkpoint with the copy is `cadence-generic/4`, and checkpoints
   without one keep their formats. `predict` and `accuracy` ignore it as they ignore the
-  working trace.
+  working trace. The steady-rhythm chamber gains `protocol-2.json` (rhythm/2): the copy at
+  amplitude 3.0 and decay 0.0 on the rhythm/1 selected recipe, against that recipe as its
+  control, on fresh seeds 201 to 205, with the erased, shuffled, static and reset controls
+  acting on the trace and the copy. Confirmation (`results/confirmation-2-2026-10-08.json.gz`,
+  verified): mean intact alternation 0.97 (`every`) and 0.93 (`mismatch`) against 0.50 and
+  0.40 for the control, 1.00 for the flip-flop and 0.50 for uniform random; four of five
+  founders at 1.00 in the `every` arm, recovery after disturbances in 16 of 20 rows
+  against 0 to 1; per-event actions identical across cadences, budgets of 64 and above,
+  tolerances and host load in 20 of 20 founders; 128 refusals at a 16-sweep budget and
+  more teaching sweeps with the copy. The development grid (seeds 0 to 5, every cell
+  kept in `results/development-efference.json`) gives 1.00 on all six founders in the
+  `every` arm against 0.78 without the copy. `examples/walking_rhythm.py` shows one
+  founder with and without it. The copy is a gene with zero as its control, not a default.
 - `Brain.predict` and `Brain.accuracy` now honor slotted motor readouts (`slots > 1`):
   predictions are one choice per slot, shaped `(batch, slots)` like `act` and `step`,
   instead of a single argmax over the whole motor menu, and slotted `accuracy`/`fit`
