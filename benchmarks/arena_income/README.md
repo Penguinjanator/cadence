@@ -22,7 +22,7 @@ with the same runtime change as `9c2ac1f`. The JSON retains source identities,
 the arousal module hash, every checkpoint hash, per-fighter readings and work.
 All checkpoint hashes are unchanged after each arm.
 
-| Measured quantity | Released-source control | Income repair | Uniform random |
+| Measured quantity | Source control | Income repair | Uniform random |
 | --- | ---: | ---: | ---: |
 | Total lived moments | 9,322 | 9,966 | 10,800 |
 | Aroused share, weighted by lived moments | 93.4% | 66.2% | n/a |
@@ -42,6 +42,13 @@ these existing brains to greedy operation exposes their already documented weak
 greedy policies; that is consistent with #160, but this comparison does not prove
 the cause. No learning rule, temperature, heat, sensory gain or acceptance gate
 is tuned to improve these results.
+
+The arena's unchanged `scripts/arousal_readings.py league-evolved 600` also
+reproduces the positive-need report on seed 77: all six control lives are aroused
+100% of their moments; the candidate lives are aroused 81–88%. The retained
+`*-positive-need.txt` readings use the same sources and no stage changes, reset
+or saving. Sustained want remains legitimate when income falls below need;
+this check does not show improved fighting either.
 
 The [law regression](../../tests/test_arousal_income.py) isolates the actual bug:
 after a reward drop, 1,500 non-greedy sampled outcomes leave the old income
