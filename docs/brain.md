@@ -83,7 +83,7 @@ within a slot, the unset `lateral` follows the largest slot, and `save`/`load` c
 the grouping (issue 142).
 
 `Brain.compose(..., resting_bias=0.5)` initializes the modules, association region
-and any observers with that bias. Sensory, working-memory and motor biases start
+and any observers with that bias. Sensory, working-memory, efference and motor biases start
 at zero. The value must be a finite nonnegative real scalar; booleans and arrays
 are rejected. The default remains zero. This is a selectable operating-point
 candidate: it can reduce silence under some random drives, but positive bias
@@ -103,7 +103,7 @@ All these biases remain plastic. `brain.resting_bias` records the initialization
 choice; `brain.brain.bias` holds the current learned values. Checkpoints preserve
 both, and loading restores the learned vector without reapplying initialization.
 For custom connectomes, named populations outside the `sensory`, `visual`,
-`prefrontal` and `motor` families are eligible. A neuron in any excluded family
+`prefrontal`, `efference` and `motor` families are eligible. A neuron in any excluded family
 keeps zero initial bias even if another population aliases it. Image builders
 therefore leave the entire visual region at zero, including its processing cells.
 

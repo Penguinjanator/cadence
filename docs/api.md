@@ -729,8 +729,8 @@ that recursive benefit or automatic reflective behavior has been learned.
   on; left unset the brain has none and `live` raises. `compose` and `build` pass it
   through their options.
   `resting_bias` is a finite nonnegative real scalar; booleans and arrays are rejected.
-  It initializes named populations outside the `sensory`, `visual`, `prefrontal`
-  and `motor` families (the part of the name before `/`). Excluded family membership
+  It initializes named populations outside the `sensory`, `visual`, `prefrontal`,
+  `efference` and `motor` families (the part of the name before `/`). Excluded family membership
   takes precedence over overlapping aliases; unnamed neurons also start at zero.
   In `compose`, modules, association and observers receive the value. In an image
   builder the whole visual region stays at zero. Biases remain plastic, and a
