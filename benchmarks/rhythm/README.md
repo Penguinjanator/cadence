@@ -571,6 +571,36 @@ brain arm. Work per moment over a life: about 33 sweeps for the walker with the 
 life against 2,674 to 3,481 for the restless walker without the copy, whose moments are
 cheaper, 12 to 18 sweeps, because a held state settles fast).
 
+### reward/3: need 0.9 on fresh seeds 501 to 505, gate failed on learned credit
+
+[`protocol-reward-3.json`](protocol-reward-3.json), SHA-256
+`7fc1bc9b5bf9d09a14b0b1b518c088499733296161fc1596977332d732f43967`: reward/2's point with
+the need at 0.9, above the limp's income of 0.67, so a limping walker stays roused; reward/2's
+gates. Receipt `results/confirmation-reward-3-2026-10-08.json.gz`, verified.
+
+| seed | live | eligibility 0.95 (control) | defaults | frozen | nocopy | step | tabular | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 501 | 1.00 / 1.00 / 0.00 | 1.00 / 1.00 / 0.00 | 1.00 / 1.00 / 0.00 | **1.00** / 1.00 / 0.00 | 0.54 / 0.00 / 1.00 | 0.98 / 1.00 / 1.00 | 0.97 | 0.57 |
+| 502 | **1.00** / 1.00 / 0.00 | 1.00 / 1.00 / 0.00 | 0.60 / 0.00 / 1.00 | 0.00 / 0.00 / 0.00 | 0.54 / 0.00 / 1.00 | 0.98 / 1.00 / 1.00 | 0.95 | 0.46 |
+| 503 | **1.00** / 1.00 / 0.00 | 1.00 / 1.00 / 0.00 | 1.00 / 1.00 / 0.00 | 0.00 / 0.00 / 0.00 | 0.48 / 0.00 / 1.00 | 0.98 / 1.00 / 1.00 | 0.98 | 0.49 |
+| 504 | **1.00** / 1.00 / 0.00 | 1.00 / 1.00 / 0.00 | 0.56 / 0.00 / 1.00 | 0.00 / 0.00 / 0.00 | 0.56 / 0.00 / 1.00 | 1.00 / 1.00 / 1.00 | 0.94 | 0.54 |
+| 505 | 1.00 / 1.00 / 0.00 | 0.59 / 0.00 / 1.00 | 1.00 / 1.00 / 0.00 | **1.00** / 1.00 / 0.00 | 0.49 / 0.00 / 1.00 | 0.98 / 1.00 / 1.00 | 0.95 | 0.43 |
+
+All five live walkers alternate at 1.00, calm, with their greedy probes at 1.00 and their twins
+identical, and no founder limps; the copyless walker is aroused at every moment of the window,
+as a need of 0.9 keeps a walker that does not earn restless. Two founders, 501 and 505, had the
+beat from birth (frozen 1.00), so the gate on learned beats credits 3 of 5 and fails as declared.
+The need above the limp's income removes the limp on these seeds; a rule that screens founders
+by their frozen arm before the gate, declared up front, would be the next protocol. The
+eligibility control at need 0.9 is restless on seed 505 (0.59) and the composed defaults on two.
+
+### Receipts on the released library
+
+The three reward receipts in `results/` were regenerated on the released `cadence-net` 0.76.0
+(the efference copy as merged, with the audit's checkpoint validation and boundary bias
+exclusion); every founder's action sequence is identical to the receipt taken on the branch
+before the release.
+
 ### Reading the reward chambers
 
 The frozen arm is the zero of learning: a greedy founder under identical drive holds one
@@ -596,6 +626,8 @@ the declared point; it is the next hypothesis, untested on fresh seeds.
 - reward/1 failed its declared gate (3/5 acquired, one from birth, two limps) and stands.
   reward/2 passed with 4/5 learned, one limp; the eligibility hypothesis it declared is
   not confirmed as the cause of the limp, since the control limps on another founder.
+  reward/3 (need 0.9) has no limp and 5/5 at 1.00 but fails its learned-credit gate on two
+  founders with the beat from birth; it stands as declared.
 - The task is one bit of history at a delay of one. Longer delays, more actions and a
   pause the walker should wait through are not measured; after a pause it steps on.
 - The operating point is the key-door nursery's, not the composed defaults, which reach
