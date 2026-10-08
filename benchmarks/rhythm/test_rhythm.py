@@ -23,6 +23,7 @@ def load_script(name: str):
 
 
 inputs = load_script("rhythm_inputs")
+load_script("timing_acceptance")
 chamber = load_script("steady_rhythm")
 
 

@@ -119,5 +119,264 @@ including refusal of skipped or extra events.
 
 These fixtures and their deterministic tests construct no brain and perform no
 learning or solve. They provide protocol and preservation checks, not a measured
-recall horizon. A finite-horizon worker/launcher is not shipped, and #84 remains
-open. The existing `vanished_cue.py` instrument above retains its separate scope.
+recall horizon. That was the fixture-only scope on 2026-10-04; the bounded worker
+added below has separate results and remaining obligations. #84 remains open.
+The existing `vanished_cue.py` instrument above retains its separate scope.
+
+## The finite continuing recall chamber, 2026-10-08
+
+[`finite_horizon.py`](finite_horizon.py) is the worker for the
+[reviewed finite-horizon protocol](FINITE_HORIZON_PROTOCOL.md), with its
+[frozen inputs](finite_horizon_inputs.py) and [`protocol-finite.json`](protocol-finite.json)
+declaring every setting, the founders, the caps and the gates. One continuing
+`Brain.compose` life per arm and founder: `vanished`, the declared recipe (working
+trace decay 0.8, amplitude 1, learned at the QUERY lessons only, never a history
+coordinate); `default`, the same brain with the composed working-trace defaults
+(amplitude 3, decay 0.2), the simpler setting kept as the control of that gene;
+`history`, the external-history comparator with byte-equal initial arrays, the same
+lessons and the actual observed payloads of the last four WRITE events appended at
+QUERY; `random`, the frozen uniform-random actions. Protocol 1 declares 192 training
+episodes; protocols 2 and 3 declare 384. Each has 24
+evaluation episodes of each of the 13 conditions, every QUERY forked into intact,
+erased trace, shuffled trace (transplanted from the paired row with the opposite
+value) and full reset; the first episode of every condition saved after the first
+cue, before a replacement and before QUERY with a clone resuming each seam; private
+imagination and a refused act at an impossible tolerance leaving the pre-query
+checkpoint unchanged; clean-2 replayed from its saved cue under two timestamp
+schedules, and with one versus two events at matched elapsed time. Every admitted
+real act retains trace/last/cold before and after, source activation and decay in
+compressed chunks for independent recurrence replay. The declared caps are 900
+seconds and 160 MiB per founder. Revision 3 kills and reaps a founder's child process
+at the wall deadline; it checks retained bytes between operations. A capped or
+failed worker retains its completed journals and partial progress, records unknown
+unfinished work explicitly, and leaves all unrun rows in the denominator. The horizon
+is the largest contiguous passed prefix over 0,
+1 and 2 intervening events under the prewritten gates; closure needs horizon 1 and
+the nuisance, replacement, order, continuation, purity and resource gates.
+
+**Maintainer audit.** The original worker silently used the fixture's fixed 16
+training repeats even when protocols 2 and 3 declared 32. Their archived runs
+therefore contain **192 training episodes, not the declared 384**. Those receipts,
+their failed outcomes and their original source manifests remain unchanged; they
+are protocol-deviating historical measurements, not conforming confirmations of
+the selected budget. All 15 finite receipts have intact canonical digests and
+source-manifest self-consistency, and their stored scores reproduce from their
+raw trials. That does not repair the wrong schedule or omitted work.
+
+Instrument revision 3 uses the declared repeat counts, retains completed-call
+journals and raw recurrence arrays, charges seam/timing/imagination/refusal and
+checkpoint work, and verifies the frozen inputs, trial census, selected teaching
+rows, scores, raw trace replay, diagnostic arithmetic and gates. Each query reports
+paired trace, neural activation and potential distances and labeled motor margins.
+The history comparator separately records its 1088-byte buffer, input copying,
+payload reads/writes and query-coordinate transport. Saved seam checkpoints remain
+available for independent array comparisons. Its `every` rule preserves teaching
+before the query act; `surprise` is an application policy that teaches only rows
+answered incorrectly. It is **not `Brain.live`'s arousal law**. Full closure still
+requires the original behavioral, custody and resource gates on every founder;
+instrument completion does not establish that those gates pass. A rerun on
+previously used seeds is an audit, not fresh confirmation.
+
+```sh
+python benchmarks/recall/finite_horizon.py --out /tmp/recall-finite
+python benchmarks/recall/finite_horizon.py --verify /tmp/recall-finite
+python -m pytest -q benchmarks/recall/test_finite_horizon.py
+```
+
+### recall/1 on fresh founders 301, 302 and 303: closure failed
+
+Receipt `results/finite-1-2026-10-08.json.gz`, verified: every founder complete within
+its caps (135 to 185 seconds), no refused act, two refused lessons in one history
+arm, the trace audit at 1.1e-16 on 1,750 audited acts per brain arm, every seam,
+imagination, refusal and timing check equal. Intact accuracy over planned rows,
+with the paired-both-correct share, the erased fork, the shuffled fork against the
+transplanted value, the default-trace control, the history control and the frozen
+uniform-random policy:
+
+| founder | condition | intact | paired | erased | shuffled→transplanted | default | history | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 301 | clean-0 | 0.52 | 0.04 | 0.50 | 0.52 | 0.57 | 1.00 | 0.46 |
+| 301 | clean-1 | **1.00** | 1.00 | 0.50 | 1.00 | 0.51 | 1.00 | 0.43 |
+| 301 | clean-2 | **1.00** | 1.00 | 0.50 | 1.00 | 0.52 | 1.00 | 0.55 |
+| 301 | distractor-1 / -2 | 0.50 / 0.50 | 0.00 | 0.50 | 0.50 | 0.56 / 0.50 | 1.00 | 0.51 / 0.47 |
+| 301 | noise-1 | **1.00** | 1.00 | 0.50 | 1.00 | 0.47 | 1.00 | 0.47 |
+| 301 | replacement-1 | 0.87 | 0.74 | 0.50 | 0.87 | 0.54 | 1.00 | 0.52 |
+| 301 | partial-1 / order-latest-1 | 0.66 / 0.50 | 0.31 / 0.00 | 0.50 | 0.66 / 0.50 | 0.50 / 0.53 | 0.86 / 1.00 | 0.48 / 0.44 |
+| 302 | every condition | 0.50 | 0.00 | 0.50 | 0.50 | 0.43 to 0.55 | 1.00 | 0.43 to 0.56 |
+| 303 | clean-0 | **0.99** | 0.99 | 0.50 | 0.99 | 0.50 | 1.00 | 0.43 |
+| 303 | clean-1 | 0.85 | 0.71 | 0.50 | 0.85 | 0.50 | 1.00 | 0.51 |
+| 303 | clean-2 | 0.62 | 0.24 | 0.50 | 0.62 | 0.50 | 1.00 | 0.54 |
+| 303 | replacement-1 | 0.92 | 0.83 | 0.50 | 0.92 | 0.50 | 1.00 | 0.49 |
+| 303 | distractor-1 / noise-1 / partial-1 / order-latest-1 | 0.69 / 0.66 / 0.50 / 0.50 | 0.38 / 0.31 / 0 / 0 | 0.50 | 0.69 / 0.66 / 0.50 / 0.50 | 0.50 | 1.00 / 1.00 / 0.96 / 1.00 | 0.48 to 0.56 |
+
+Horizons: 301 none (clean-0 fails while delays 1 and 2 pass, so the contiguous-prefix
+rule credits nothing), 302 none, 303 zero. Nuisance gates fail on every founder.
+Capacity 2/4 and delays 4/8 are at 0.46 to 0.75 and never pass. Closure fails as
+declared and #84 stays open.
+
+What the receipt does establish. Where the declared recipe recalls, it recalls through
+the trace exactly as the protocol demanded: founder 301 answers delays 1 and 2 and
+the noisy cue at 1.00 while its erased and reset forks sit at 0.50, and every shuffled
+fork answers the transplanted history's value at the same accuracy and the original's
+at its complement, so the transplanted trace alone determines the answer. The external
+history control reads 1.00 on nearly every condition, so the lessons teach the mapping
+when the cue is present. The composed default trace (amplitude 3, decay 0.2) recalls
+nothing on any founder or condition, the finding of the 2026-10-03 exploration now on
+a frozen protocol with source-bound receipts. The declared recipe is founder-bound:
+one founder learns nothing at all with the same lessons that teach its history twin,
+one recalls at delays 1 and 2 but not at 0, one at 0 and partly at 1. The distractor
+and order conditions fail everywhere. The subsequent development below selected trace amplitude and lesson budget before
+freezes 2 and 3; the `--repeats` override marks those development runs as not frozen.
+
+### Development founders 0 and 1: the amplitude, the decay and the lesson budget
+
+Receipts `results/development-finite-*-2026-10-08.json.gz`, every one verified, 32 training
+repeats (384 lessons) and 24 evaluation repeats unless marked. Horizon per founder, and the
+intact accuracy of the declared recipe on the clean delays, the one-event distractor, the
+replacement and the latest-of-two order condition (founder 0 / founder 1):
+
+| amplitude | decay | repeats | horizon | clean-0 | clean-1 | clean-2 | distractor-1 | replacement-1 | order-latest-1 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0.1 | 0.5 | 32 | none / none | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.1 | 0.8 | 32 | 0 / none | 1.00 / 0.50 | 0.76 / 0.50 | 0.74 / 0.50 | 1.00 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.3 | 0.5 | 32 | 0 / none | 1.00 / 0.50 | 0.50 / 0.77 | 0.50 / 0.62 | 0.93 / 0.71 | 0.50 / 0.53 | 0.50 / 0.50 |
+| **0.3** | **0.8** | **32** | **1 / 0** | 1.00 / 0.99 | 0.98 / 0.80 | 0.94 / 0.88 | 0.92 / 0.94 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.3 | 0.8 | 64 | none / none | 0.58 / 0.50 | 0.76 / 0.50 | 0.80 / 0.50 | 0.50 / 0.50 | 0.72 / 0.50 | 0.70 / 0.50 |
+| 0.3 | 0.9 | 32 | none / none | 0.52 / 0.50 | 0.67 / 0.50 | 0.55 / 0.50 | 0.70 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.5 | 0.8 | 32 | none / none | 0.50 / 0.81 | 0.50 / 0.90 | 0.50 / 1.00 | 0.50 / 0.79 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 1.0 (recall/1) | 0.8 | 32 | none / none | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 3.0 (composed default) | 0.8 | 32 | none / none | 0.50 / 0.49 | 0.50 / 0.51 | 0.50 / 0.49 | 0.50 / 0.50 | 0.50 / 0.66 | 0.50 / 0.52 |
+| 0.3 | 0.8 | 32, surprise rule | none / 2 | 0.77 / 0.99 | 0.76 / 1.00 | 0.61 / 1.00 | 0.74 / 1.00 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 1.0 | 0.8 | 32, surprise rule | none / none | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 | 0.50 / 0.50 |
+| 0.3 | 0.8 | 64, surprise rule | 0 / none | 1.00 / 0.50 | 0.79 / 0.50 | 0.79 / 0.50 | 0.92 / 0.50 | 0.97 / 0.50 | 0.67 / 0.50 |
+
+Amplitude is the knob: at 1.0 and 3.0 both founders recall nothing at any delay, at 0.3 with
+decay 0.8 one founder has horizon 1 and the other horizon 0 (clean-1 at 0.80 with a paired
+share of 0.59). Doubling the lesson budget to 64 repeats takes the recall away again on
+founder 0 (clean-0 from 1.00 to 0.58, while clean-8 rises to 0.94) and founder 1 learns
+nothing: more lessons on a mapping already learned move it. Replacement and the order of two
+cues are at chance at every point but one; the external history control reads 1.00 on them
+throughout. The selected point, amplitude 0.3, decay 0.8, 32 repeats, was declared in
+[`protocol-finite-2.json`](protocol-finite-2.json) with recall/1's gates, caps, conditions
+and controls unchanged before founders 304 to 306 ran.
+
+### recall/2 historical run on founders 304, 305 and 306: wrong budget, closure failed
+
+Protocol SHA-256 `a91ddb6755ed476b1408ecc1c07c362fb9b8d8969ac5df3d665bad4d885237bb`; receipt
+`results/finite-2-2026-10-08.json.gz`: every founder completed the instrument's
+192-episode schedule, half the declared training budget, within its recorded caps
+(185 seconds for the three), no refused act or lesson, the trace audit at 1.1e-16 on 1,750
+audited acts per brain arm, every seam, imagination, refusal and timing check equal.
+
+| founder | condition | intact | paired | erased | shuffled→transplanted | default | history | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 304 | every condition | 0.50 | 0.00 | 0.50 | 0.50 | 0.50 | 0.78 to 1.00 | 0.45 to 0.57 |
+| 305 | every condition | 0.36 to 0.50 | 0.00 | 0.50 | 0.36 to 0.50 | 0.50 | 0.50 to 1.00 | 0.44 to 0.55 |
+| 306 | clean-0 / clean-1 / clean-2 | **1.00 / 1.00 / 1.00** | 1.00 | 0.50 | 1.00 | 0.50 | 1.00 | 0.48 to 0.53 |
+| 306 | distractor-1 / distractor-2 | 0.72 / 0.50 | 0.45 / 0.00 | 0.50 | 0.72 / 0.50 | 0.50 | 1.00 | 0.45 / 0.54 |
+| 306 | replacement-1 / order-latest-1 | 0.79 / 0.56 | 0.58 / 0.11 | 0.50 | 0.79 / 0.56 | 0.50 | 1.00 | 0.43 / 0.52 |
+| 306 | partial-1 / noise-1 / clean-4 / clean-8 | 0.50 / 0.65 / 0.72 / 0.50 | 0.00 / 0.29 / 0.45 / 0.00 | 0.50 | same as intact | 0.50 | 1.00 | 0.46 to 0.55 |
+
+Horizons: 304 none, 305 none, 306 zero (delays 1 and 2 clean at 1.00 through the trace, with
+the erased and reset forks at 0.50, but the one-event distractor at 0.72 fails the prefix).
+Closure fails and #84 stays open. These results do not test the selected
+32-repeat recipe: two founders learn nothing from the same 192 lessons that teach their
+history twins to 1.00, one recalls a vanished cue across two fillers and loses it to a
+distractor. The composed default trace again recalls nothing on any founder.
+
+### recall/3 historical run on founders 307, 308 and 309: wrong budget, closure failed
+
+The loop chamber of issue #140 (`benchmarks/rhythm/loop_rhythm.py`) found that a lesson on
+every row makes a learned pattern come and go from pass to pass, and the 64-repeat row above
+is the same finding here. The third freeze declares the worker's application-level
+`surprise` teaching rule: at every QUERY the free greedy act
+first, then one lesson on the rows it answered wrong, on the drive that act read, as the
+steady-rhythm chamber's `mismatch` arm teaches; a right answer teaches nothing. On the
+development founders the rule gave horizons 2 and none against 1 and 0 under the every rule
+at the same trace and budget, nothing at amplitude 1.0 under either rule, and the recall lost
+again at 64 repeats under either rule. [`protocol-finite-3.json`](protocol-finite-3.json),
+SHA-256 `957a66fbf60f077c1ffa40d4bbc91bed05e9ff270a9a8a16d108df6061e172a1`, keeps recall/2's
+trace, budget, gates, caps, conditions and controls; receipt
+`results/finite-3-2026-10-08.json.gz`: every founder completed the instrument's
+192-episode schedule, half the declared training budget, within its recorded caps (186
+seconds for the three), no refused act or lesson, the trace audit at 2.8e-17 on 1,750 audited
+acts per brain arm, every seam, imagination, refusal and timing check equal. The rule gave 167
+to 184 lessons on 557 to 722 rows per founder, from 192 query opportunities.
+The historical every-rule runs used 192 lessons on 1,536 rows; the selected
+32-repeat budget would instead offer 384 queries. The history twins needed 29 to 35
+lessons. These different founder sets do not isolate the teaching-rule effect.
+
+| founder | condition | intact | paired | erased | shuffled→transplanted | default | history | random |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 307 | clean-0 / clean-1 / clean-2 / clean-4 | 0.50 / 0.50 / 0.50 / 0.56 | 0.00 to 0.12 | 0.50 | same as intact | 0.44 to 0.51 | 1.00 | 0.50 to 0.55 |
+| 307 | clean-8 / capacity-2 / capacity-4 | 0.93 / 0.74 / 0.62 | 0.85 / 0.49 / 0.25 | 0.50 | same as intact | 0.46 to 0.52 | 1.00 | 0.52 to 0.56 |
+| 307 | every other condition | 0.50 to 0.52 | 0.00 to 0.03 | 0.50 | same as intact | 0.45 to 0.52 | 1.00 | 0.41 to 0.55 |
+| 308 | clean-0 / clean-1 / clean-2 / clean-4 / clean-8 | 0.50 / 0.52 / 0.66 / 0.85 / 0.62 | 0.00 / 0.03 / 0.31 / 0.70 / 0.25 | 0.50 | same as intact | 0.50 | 1.00 | 0.47 to 0.56 |
+| 308 | partial-1 / noise-1 | 0.59 / 0.68 | 0.19 / 0.35 | 0.50 | same as intact | 0.50 | 1.00 | 0.46 / 0.54 |
+| 308 | every other condition | 0.50 to 0.62 | 0.00 to 0.24 | 0.50 | same as intact | 0.50 | 1.00 | 0.47 to 0.57 |
+| 309 | clean-0 / clean-1 | **0.99 / 0.89** | 0.99 / 0.78 | 0.50 | 0.99 / 0.89 | 0.50 / 0.49 | 1.00 | 0.49 / 0.47 |
+| 309 | clean-2 / clean-4 / clean-8 | 0.86 / 0.85 / 0.50 | 0.73 / 0.71 / 0.00 | 0.50 | same as intact | 0.59 / 0.67 / 0.49 | 1.00 | 0.45 to 0.52 |
+| 309 | distractor-1 / distractor-2 / noise-1 / partial-1 | **0.99** / 0.84 / **1.00** / 0.83 | 0.98 / 0.68 / 1.00 / 0.73 | 0.50 | same as intact | 0.46 to 0.54 | 1.00 | 0.44 to 0.55 |
+| 309 | replacement-1 / order-latest-1 | 0.50 / 0.79 | 0.00 / 0.58 | 0.50 | same as intact | 0.57 / 0.53 | 1.00 | 0.53 / 0.46 |
+
+Horizons: 307 none (its only passing condition is the eight-event delay, with no prefix
+under it), 308 none, 309 one (delay 2 reads 0.86 with a paired share of 0.73, under the
+gate's 0.75). Closure fails as declared and #84 stays open. Where founder 309 recalls, it
+recalls through the trace: its erased and reset forks sit at 0.50 and every shuffled fork
+answers the transplanted history's value; the default trace fails the declared recall gates.
+
+These historical runs measure a founder-dependent recall limit at their actual
+budgets. Founders 303, 306 and 309 have nonnegative contiguous horizons among the
+nine historical founders; other founders sometimes recall particular longer
+delays without passing the shorter prefix. Erasure, reset and transplantation
+support a causal role for the trace in the successful conditions. The composed
+trace control fails the declared recall gates. Replacement and ordered recall
+remain weak, while the supplied-history comparator is often competent. These
+results do not establish a necessary new memory mechanism or the outcome of the
+then-unexecuted 384-episode protocol. The corrected audits below now test that budget.
+
+### Corrected 384-episode audits: closure still fails
+
+The separately retained [protocol 2 audit](results/audit-finite-2-maintainer-2026-10-08.json.gz)
+and [protocol 3 audit](results/audit-finite-3-maintainer-2026-10-08.json.gz) were produced
+by instrument revision 3 at
+[`94bb365`](https://github.com/muellerberndt/cadence/commit/94bb36561c90bdd871293b2893bf3e882f4b138d),
+with the recorded Cadence 0.77.0 source. These are correction audits on the six
+previously used founders, **not fresh confirmation**. They use the original frozen
+protocols, genes, thresholds and caps without overrides. Each brain arm completed
+all **384 training and 312 evaluation episodes**, with batch size 8.
+
+| Protocol | Founder | Vanished-cue lesson attempts / row presentations | Contiguous horizon | Qualified teacher refusals, all arms | Closure |
+| --- | --- | --- | --- | --- | --- |
+| 2, every | 304 | 384 / 3072 | none | 5 | failed |
+| 2, every | 305 | 384 / 3072 | 0 | 3 | failed |
+| 2, every | 306 | 384 / 3072 | 0 | 14 | failed |
+| 3, selective | 307 | 346 / 1237 | none | 0 | failed |
+| 3, selective | 308 | 364 / 1351 | none | 0 | failed |
+| 3, selective | 309 | 334 / 1112 | none | 0 | failed |
+
+Lesson/row counts include refused teaching attempts; all 22 refusals remain in the
+work and acceptance records. There were no unexpected free-action refusals or unrun
+evaluation rows. Every founder fails the required nuisance gate. The two protocols
+use different founders, so this table is not a paired causal comparison of teaching rules.
+
+The verifier independently replayed **78,264 admitted trace transitions**, with
+maximum discrepancy at most 1.12e-16. Saved continuation, private/refused purity,
+timestamp invariance, event-count diagnostics and query diagnostic arithmetic all
+passed. Each history arm transported 393,216 training and 319,488 evaluation bytes
+through its query-history coordinates, in addition to its separately recorded
+buffer, copying and payload work. Worker time including replay was 97.4–196.3 seconds;
+retained storage including the shared sources and complete receipt was 136.4–149.4 MiB
+per founder, within the unchanged 900-second/160-MiB caps.
+
+An earlier revision-2 audit exceeded the output cap because raw query vectors were
+duplicated across progress and receipt JSON. That capped/interrupted attempt and
+its completed journals remain local; no protocol-3 run used that encoding. Revision 3
+losslessly stacks raw trace arrays and stores raw query vectors once in compressed
+artifacts. Round-trip and re-signed tamper tests verify the encoding; the completed
+founder-304 lives shared with the earlier attempt have identical training answers,
+evaluation answers, scores and final checkpoint arrays.
+
+These completed audits establish the failure at the declared budget, rather than
+guessing from the earlier half-budget runs. They provide no promotion of a recall
+horizon across all founders, and **#84 remains open under its original gates**.

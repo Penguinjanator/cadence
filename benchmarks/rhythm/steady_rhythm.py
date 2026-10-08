@@ -1,9 +1,9 @@
 """Steady-rhythm chamber: alternate two learned actions under constant drive.
 
 One continuing ``Brain.compose`` life is taught to alternate A, B, A, B while every
-observation after an onset cue is identical. The working trace is the only carrier
-of phase inside the brain. Controls are forked from the same complete checkpoint and
-scored with the same instrument. Event time is one accepted observation; the
+observation after an onset cue is identical. The working trace and optional native
+own-command efference carry phase inside the brain. Controls fork the same complete
+checkpoint and use the same instrument. Event time is one accepted observation; the
 real-time runs declare a physical cadence per event and vary solver budget and
 host load at the same event schedule. Use --verify RUN_DIRECTORY to check a
 completed run's source and artifact custody.
@@ -13,7 +13,16 @@ from __future__ import annotations
 
 import os
 
-for _name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+THREAD_VARIABLES = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+# NumPy wheels on macOS use Accelerate, whose thread limit is separate from OpenBLAS.
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+for _name in THREAD_VARIABLES:
     os.environ.setdefault(_name, "1")
 
 import argparse  # noqa: E402
@@ -29,6 +38,7 @@ from pathlib import Path  # noqa: E402
 
 import numpy as np  # noqa: E402
 import rhythm_inputs as inputs  # noqa: E402
+import timing_acceptance  # noqa: E402
 
 import cadence  # noqa: E402
 from cadence import Brain, LearnerConfig  # noqa: E402
@@ -48,6 +58,77 @@ CONTROLS = (
     "random",
 )
 REFUSED = -1
+
+
+@dataclass
+class CheckpointIO:
+    """Every checkpoint read/write/comparison, including conventional controls."""
+
+    operations: list[dict] = field(default_factory=list)
+
+    def save(self, model, path: Path) -> Path:
+        began = time.perf_counter()
+        model.save(path)
+        self.operations.append(
+            {
+                "operation": "write",
+                "file": path.name,
+                "bytes": path.stat().st_size,
+                "seconds": time.perf_counter() - began,
+            }
+        )
+        return path
+
+    def load(self, kind, path: Path):
+        began = time.perf_counter()
+        model = kind.load(path)
+        self.operations.append(
+            {
+                "operation": "read",
+                "file": path.name,
+                "bytes": path.stat().st_size,
+                "seconds": time.perf_counter() - began,
+            }
+        )
+        return model
+
+    def equal(self, first: Path, second: Path) -> bool:
+        began = time.perf_counter()
+        same = same_saved_arrays(first, second)
+        self.operations.append(
+            {
+                "operation": "compare",
+                "files": [first.name, second.name],
+                "bytes": first.stat().st_size + second.stat().st_size,
+                "seconds": time.perf_counter() - began,
+            }
+        )
+        return same
+
+    def save_world(self, value: dict, path: Path) -> None:
+        began = time.perf_counter()
+        path.write_text(json.dumps(value, indent=2) + "\n")
+        self.operations.append(
+            {
+                "operation": "write",
+                "file": path.name,
+                "bytes": path.stat().st_size,
+                "seconds": time.perf_counter() - began,
+            }
+        )
+
+    def load_world(self, path: Path) -> dict:
+        began = time.perf_counter()
+        value = json.loads(path.read_text())
+        self.operations.append(
+            {
+                "operation": "read",
+                "file": path.name,
+                "bytes": path.stat().st_size,
+                "seconds": time.perf_counter() - began,
+            }
+        )
+        return value
 
 
 def sha256(path: Path) -> str:
@@ -83,6 +164,7 @@ class Work:
     action_row_sweeps: int = 0
     action_residual_checks: int = 0
     action_damping_halvings: int = 0
+    action_cpu_seconds: float = 0.0
     teacher_attempts: int = 0
     teacher_refusals: int = 0
     teacher_presentations: int = 0
@@ -101,6 +183,7 @@ class Work:
     def act(self, brain: Brain, x: np.ndarray) -> np.ndarray | None:
         """A refused act is a missed action: state, trace and the clock's event are preserved."""
         start = time.perf_counter()
+        cpu_start = time.process_time()
         self.action_attempts += 1
         prior = brain.last_settlement
         try:
@@ -112,9 +195,21 @@ class Work:
             self.action_refusals += 1
             answer = None
         finally:
-            self.calls_seconds += time.perf_counter() - start
+            elapsed = time.perf_counter() - start
+            self.calls_seconds += elapsed
+        cpu_seconds = time.process_time() - cpu_start
+        self.action_cpu_seconds += cpu_seconds
         report = dict(brain.last_settlement)
-        self.reports.append({"operation": "act", **report})
+        self.reports.append(
+            {
+                "operation": "act",
+                "answer": None if answer is None else answer.tolist(),
+                "call_seconds": elapsed,
+                "process_cpu_seconds": cpu_seconds,
+                "rows": len(x),
+                **report,
+            }
+        )
         self.action_sweeps += int(report["steps"])
         self.action_row_sweeps += len(x) * int(report["steps"])
         self.action_residual_checks += int(report["residual_checks"])
@@ -137,8 +232,11 @@ class Work:
             report = error.report
             accepted = False
         finally:
-            self.calls_seconds += time.perf_counter() - start
-        self.reports.append({"operation": "teach", **report})
+            elapsed = time.perf_counter() - start
+            self.calls_seconds += elapsed
+        self.reports.append(
+            {"operation": "teach", "accepted": accepted, "call_seconds": elapsed, **report}
+        )
         self.teacher_presentations += int(report["attempted_presentations"])
         self.teacher_sweeps += int(report["total_steps"])
         self.teacher_row_sweeps += int(report["total_row_sweeps"])
@@ -384,10 +482,17 @@ def transplant_trace(brain: Brain, permutation: np.ndarray) -> None:
 
 
 def window_stage(
-    brain: Brain, flip: FlipFlop, frozen: dict, protocol: dict, directory: Path, ledger: list
+    brain: Brain,
+    flip: FlipFlop,
+    frozen: dict,
+    protocol: dict,
+    directory: Path,
+    ledger: list,
+    io: CheckpointIO | None = None,
 ) -> dict:
     """Cue, lead events, a probe checkpoint between two actions, then every control."""
     window = protocol["window"]
+    io = CheckpointIO() if io is None else io
     block = window["block"]
     observations = frozen["window/observations"]
     lead_count = 1 + window["lead"]
@@ -395,18 +500,35 @@ def window_stage(
     lead_actions = run_events(brain, observations[:lead_count], lead_work)
     flip_lead = np.stack([flip.act(x) for x in observations[:lead_count]])
     anchor = last_executed(lead_actions, frozen["window/cues"])
-    probe = brain.save(directory / "probe.npz")
-    flip_probe = flip.save(directory / "probe-flipflop.npz")
+    probe = io.save(brain, directory / "probe.npz")
+    flip_probe = io.save(flip, directory / "probe-flipflop.npz")
     rest = observations[lead_count:]
+    if "timing_acceptance" in protocol:
+        io.save_world(
+            {
+                "next_event": lead_count,
+                "anchor": anchor.tolist(),
+                "input_key": "window/observations",
+                "clock": "event index; paced forks reanchor physical time",
+            },
+            directory / "probe-world.json",
+        )
     permutation = frozen["shuffle/permutation"]
     branches: dict[str, dict] = {}
+    restored_after = None
 
     def fork(name: str, prepare=None, before=None) -> np.ndarray:
-        branch = Brain.load(probe)
+        nonlocal restored_after
+        branch = io.load(Brain, probe)
         if prepare is not None:
             prepare(branch)
         work = Work()
-        actions = run_events(branch, rest, work, before=before)
+        continuation = rest
+        if name == "restored" and "timing_acceptance" in protocol:
+            world = io.load_world(directory / "probe-world.json")
+            assert world["anchor"] == anchor.tolist()
+            continuation = observations[world["next_event"] :]
+        actions = run_events(branch, continuation, work, before=before)
         ledger.extend({"stage": "window", "branch": name, **r} for r in work.reports)
         branches[name] = {
             "actions": actions.tolist(),
@@ -414,12 +536,11 @@ def window_stage(
             "work": work.summary(),
             "score": score_window(actions, anchor, block),
         }
+        if name == "restored":
+            restored_after = branch
         return actions
 
     restored_actions = fork("restored")
-    restored_after = Brain.load(probe)
-    restored_work = Work()
-    run_events(restored_after, rest, restored_work)
     fork("erased", prepare=erase_trace)
     fork("shuffled", prepare=lambda b: transplant_trace(b, permutation))
     fork("reset", prepare=lambda b: b.reset())
@@ -435,13 +556,14 @@ def window_stage(
         "work": intact_work.summary(),
         "score": score_window(intact_actions, anchor, block),
     }
-    intact_after = brain.save(directory / "intact-after.npz")
-    second = restored_after.save(directory / "restored-after.npz")
+    assert restored_after is not None
+    intact_after = io.save(brain, directory / "intact-after.npz")
+    second = io.save(restored_after, directory / "restored-after.npz")
     continuation = {
         "actions_equal": bool(np.array_equal(intact_actions, restored_actions)),
-        "saved_arrays_equal": same_saved_arrays(intact_after, second),
+        "saved_arrays_equal": io.equal(intact_after, second),
     }
-    flip_branch = FlipFlop.load(flip_probe)
+    flip_branch = io.load(FlipFlop, flip_probe)
     flip_actions = np.stack([flip_branch.act(x) for x in rest])
     flip_anchor = last_executed(flip_lead, anchor)
     branches["flipflop"] = {
@@ -457,6 +579,20 @@ def window_stage(
         "work": None,
         "score": score_window(random_actions, anchor, block),
     }
+    if "timing_acceptance" in protocol:
+        untaught = io.load(Brain, directory / "initial.npz")
+        work = Work()
+        lead = run_events(untaught, observations[:lead_count], work)
+        untaught_anchor = last_executed(lead, frozen["window/cues"])
+        actions = run_events(untaught, rest, work)
+        ledger.extend({"stage": "window", "branch": "untaught", **r} for r in work.reports)
+        branches["untaught"] = {
+            "lead_actions": lead.tolist(),
+            "actions": actions.tolist(),
+            "anchor": untaught_anchor.tolist(),
+            "work": work.summary(),
+            "score": score_window(actions, untaught_anchor, block),
+        }
     donor_anchor = anchor[permutation]
     branches["shuffled"]["donor_score"] = score_window(
         np.asarray(branches["shuffled"]["actions"]), donor_anchor, block
@@ -501,30 +637,44 @@ def disturbance_stage(
     protocol: dict,
     directory: Path,
     ledger: list,
+    io: CheckpointIO | None = None,
 ) -> dict:
     """From the probe: pre events, the disturbance, post events; recovery and retention."""
     disturbances = protocol["disturbances"]
+    io = CheckpointIO() if io is None else io
     pre, post = disturbances["pre"], disturbances["post"]
     observations = frozen[f"disturbance/{name}/observations"]
     kinds = frozen[f"disturbance/{name}/kinds"]
     middle = len(observations) - pre - post
-    brain = Brain.load(probe)
+    brain = io.load(Brain, probe)
     work = Work()
     pre_actions = run_events(brain, observations[:pre], work)
     custody = None
     if name == "pause2":
         first = run_events(brain, observations[pre : pre + 1], work)
-        saved = brain.save(directory / f"{name}-mid.npz")
-        twin = Brain.load(saved)
+        saved = io.save(brain, directory / f"{name}-mid.npz")
+        twin = io.load(Brain, saved)
         twin_work = Work()
         remaining = observations[pre + 1 :]
+        if "timing_acceptance" in protocol:
+            io.save_world(
+                {
+                    "next_event": pre + 1,
+                    "input_key": f"disturbance/{name}/observations",
+                    "remaining_kinds": kinds[pre + 1 :].tolist(),
+                },
+                directory / f"{name}-world.json",
+            )
+            world = io.load_world(directory / f"{name}-world.json")
+            assert world["remaining_kinds"] == kinds[world["next_event"] :].tolist()
+            remaining = observations[world["next_event"] :]
         twin_actions = run_events(twin, remaining, twin_work)
         own_actions = run_events(brain, remaining, work)
         custody = {
             "actions_equal": bool(np.array_equal(own_actions, twin_actions)),
-            "saved_arrays_equal": same_saved_arrays(
-                brain.save(directory / f"{name}-after.npz"),
-                twin.save(directory / f"{name}-twin-after.npz"),
+            "saved_arrays_equal": io.equal(
+                io.save(brain, directory / f"{name}-after.npz"),
+                io.save(twin, directory / f"{name}-twin-after.npz"),
             ),
             "twin_work": twin_work.summary(),
         }
@@ -535,7 +685,7 @@ def disturbance_stage(
         during = run_events(brain, observations[pre : pre + middle], work)
         post_actions = run_events(brain, observations[pre + middle :], work)
     ledger.extend({"stage": name, "branch": "brain", **r} for r in work.reports)
-    flip = FlipFlop.load(flip_probe)
+    flip = io.load(FlipFlop, flip_probe)
     flip_actions = np.stack([flip.act(x) for x in observations])
     random_actions = frozen[f"random/disturbance/{name}"]
     block = protocol["window"]["block"]
@@ -579,7 +729,7 @@ def real_time_run(brain: Brain, observations: np.ndarray, due_ms: np.ndarray, wo
     if len(observations) != len(due_ms):
         raise ValueError("one declared due time per event")
     start = time.perf_counter()
-    actions, lateness, solve = [], [], []
+    actions, lateness, solve, starts, finishes = [], [], [], [], []
     for x, due in zip(observations, due_ms, strict=True):
         target = start + float(due) / 1000.0
         now = time.perf_counter()
@@ -591,6 +741,8 @@ def real_time_run(brain: Brain, observations: np.ndarray, due_ms: np.ndarray, wo
         actions.append(np.full(inputs.ROWS, REFUSED) if answer is None else answer)
         lateness.append((began - target) * 1000.0)
         solve.append((finished - began) * 1000.0)
+        starts.append((began - start) * 1000.0)
+        finishes.append((finished - start) * 1000.0)
     distinct = np.unique(due_ms)
     interval = distinct[-1] - distinct[-2] if len(distinct) > 1 else 0
     # The deadline of an event is the next distinct due time; a doubled slot shares one.
@@ -600,31 +752,46 @@ def real_time_run(brain: Brain, observations: np.ndarray, due_ms: np.ndarray, wo
             for due in due_ms
         ]
     )
-    finished_ms = np.asarray(due_ms, dtype=float) + np.asarray(lateness) + np.asarray(solve)
-    missed = (finished_ms > next_due).tolist()
+    missed = (np.asarray(finishes) > next_due).tolist()
     return {
         "actions": np.stack(actions).tolist(),
         "lateness_ms": [round(v, 3) for v in lateness],
         "solve_ms": [round(v, 3) for v in solve],
         "missed_deadlines": int(sum(missed)),
+        "timing": {
+            "due_ms": np.asarray(due_ms).tolist(),
+            "begin_ms": starts,
+            "end_ms": finishes,
+            "deadline_ms": next_due.tolist(),
+        },
         "wall_seconds": time.perf_counter() - start,
     }
 
 
 def cadence_stage(
-    probe: Path, anchor: np.ndarray, frozen: dict, protocol: dict, ledger: list, burners: int
+    probe: Path,
+    anchor: np.ndarray,
+    frozen: dict,
+    protocol: dict,
+    ledger: list,
+    burners: int,
+    io: CheckpointIO | None = None,
 ) -> dict:
     """The same events under different physical cadences, slot disturbances, solver budgets,
     tolerances and host load; per-event actions are compared with an unpaced reference."""
     cadence = protocol["cadence"]
+    io = CheckpointIO() if io is None else io
     events = cadence["events"]
     observations = frozen["window/observations"][1 + protocol["window"]["lead"] :][:events]
     if len(observations) < events:
         raise ValueError("the window must supply the cadence events")
     block = protocol["window"]["block"]
-    reference_brain = Brain.load(probe)
+    reference_brain = io.load(Brain, probe)
     reference_work = Work()
-    reference = run_events(reference_brain, observations, reference_work)
+    reference_observations = observations
+    if "timing_acceptance" in protocol:
+        reference_observations = observations[0][None].repeat(events + 1, axis=0)
+    reference = run_events(reference_brain, reference_observations, reference_work)
     ledger.extend({"stage": "cadence", "branch": "reference", **r} for r in reference_work.reports)
     variants: dict[str, dict] = {
         "reference": {
@@ -648,7 +815,7 @@ def cadence_stage(
         slots = frozen[f"cadence/{schedule}/slot"]
         due = frozen[f"cadence/{schedule}/due_ms"]
         obs = observations[0][None].repeat(len(due), axis=0)
-        branch = Brain.load(probe)
+        branch = io.load(Brain, probe)
         work = Work()
         processes = []
         stop = None
@@ -690,32 +857,48 @@ def cadence_stage(
     paced("paced_extra", "extra")
     paced("paced_skipped", "skipped")
     paced("paced_regular_load", "regular", load=True)
+    if "intervals_ms" in cadence:
+        paced("paced_ordered", "ordered")
+        paced("paced_shuffled_time", "shuffled_time")
+
+    def numerical(branch: Brain, work: Work) -> dict:
+        if "timing_acceptance" not in protocol:
+            return {"actions": run_events(branch, observations, work).tolist(), "paced": False}
+        due = frozen["cadence/regular/due_ms"]
+        return {
+            **real_time_run(branch, observations, due, work),
+            "paced": True,
+            "schedule": "regular",
+            "slots": frozen["cadence/regular/slot"].tolist(),
+            "burners": 0,
+        }
+
     for budget in cadence["budgets"]:
-        branch = Brain.load(probe)
+        branch = io.load(Brain, probe)
         branch.learner.config = replace(branch.learner.config, free_steps=int(budget))
         work = Work()
-        actions = run_events(branch, observations, work)
+        measured = numerical(branch, work)
+        actions = np.asarray(measured["actions"])
         ledger.extend({"stage": "cadence", "branch": f"budget_{budget}", **r} for r in work.reports)
         variants[f"budget_{budget}"] = {
-            "actions": actions.tolist(),
+            **measured,
             "work": work.summary(),
-            "paced": False,
             "free_steps": int(budget),
             "score": score_window(actions, anchor, block),
             **compare(actions),
         }
     for tolerance in cadence["tolerances"]:
-        branch = Brain.load(probe)
+        branch = io.load(Brain, probe)
         branch.learner.config = replace(branch.learner.config, tolerance=float(tolerance))
         work = Work()
-        actions = run_events(branch, observations, work)
+        measured = numerical(branch, work)
+        actions = np.asarray(measured["actions"])
         ledger.extend(
             {"stage": "cadence", "branch": f"tolerance_{tolerance}", **r} for r in work.reports
         )
         variants[f"tolerance_{tolerance}"] = {
-            "actions": actions.tolist(),
+            **measured,
             "work": work.summary(),
-            "paced": False,
             "tolerance": float(tolerance),
             "score": score_window(actions, anchor, block),
             **compare(actions),
@@ -738,20 +921,23 @@ def run_founder(
     cadence: bool,
     burners: int,
 ) -> dict:
+    began = time.perf_counter()
+    ledger_start = len(ledger)
+    io = CheckpointIO()
     directory.mkdir(parents=True)
     brain = make_brain(seed, protocol, recipe)
     flip = FlipFlop(protocol["controls_config"]["flipflop_rate"])
-    brain.save(directory / "initial.npz")
+    io.save(brain, directory / "initial.npz")
     teaching_work = Work()
     teaching = teach_life(brain, flip, frozen, arm, teaching_work)
     ledger.extend({"stage": "teaching", "branch": "brain", **r} for r in teaching_work.reports)
-    brain.save(directory / "taught.npz")
-    window = window_stage(brain, flip, frozen, protocol, directory, ledger)
+    io.save(brain, directory / "taught.npz")
+    window = window_stage(brain, flip, frozen, protocol, directory, ledger, io)
     probe, flip_probe = directory / "probe.npz", directory / "probe-flipflop.npz"
     anchor = np.asarray(window["anchor"], dtype=np.int64)
     disturbances = {
         name: disturbance_stage(
-            name, probe, flip_probe, anchor, frozen, protocol, directory, ledger
+            name, probe, flip_probe, anchor, frozen, protocol, directory, ledger, io
         )
         for name in [f"pause{k}" for k in protocol["disturbances"]["pauses"]] + ["distractor"]
     }
@@ -765,7 +951,26 @@ def run_founder(
         "cadence": None,
     }
     if cadence:
-        result["cadence"] = cadence_stage(probe, anchor, frozen, protocol, ledger, burners)
+        result["cadence"] = cadence_stage(probe, anchor, frozen, protocol, ledger, burners, io)
+    for report in ledger[ledger_start:]:
+        report.update(seed=seed, recipe=recipe, arm=arm)
+    result["checkpoint_io"] = io.operations
+    result["elapsed_seconds"] = time.perf_counter() - began
+    result["control_work"] = {
+        "flipflop_teacher_rows": flip.lessons,
+        "flipflop_action_rows": inputs.ROWS
+        * (
+            len(teaching["flipflop_actions"])
+            + len(window["lead_actions"])
+            + len(window["branches"]["flipflop"]["actions"])
+            + sum(len(d["flipflop"]["actions"]) for d in disturbances.values())
+        ),
+        "random_action_rows": inputs.ROWS
+        * (
+            len(window["branches"]["random"]["actions"])
+            + sum(len(d["random"]["actions"]) for d in disturbances.values())
+        ),
+    }
     return result
 
 
@@ -900,6 +1105,8 @@ def _verify(directory: Path) -> tuple[bool, str]:
                 return f"artifact differs: {name}"
         if body["protocol_sha256"] != sha256(directory / "protocol.json"):
             return "protocol copy differs from the recorded hash"
+        if "timing_acceptance" in body["protocol"]:
+            timing_acceptance.verify_body(body, directory)
         return None
 
     valid, reason = Receipt.verify(path, sources=sources, check=check)
@@ -909,7 +1116,7 @@ def _verify(directory: Path) -> tuple[bool, str]:
 def verify(directory: Path) -> tuple[bool, str]:
     try:
         return _verify(directory)
-    except (OSError, ValueError, KeyError) as error:
+    except (OSError, ValueError, KeyError, AssertionError, TypeError, IndexError) as error:
         return False, f"cannot verify artifact: {error}"
 
 
@@ -965,8 +1172,8 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="default: the protocol's confirmation seeds",
     )
-    parser.add_argument("--arms", nargs="+", default=["every", "mismatch"])
-    parser.add_argument("--recipes", nargs="+", default=["selected", "compose_default"])
+    parser.add_argument("--arms", nargs="+", default=None)
+    parser.add_argument("--recipes", nargs="+", default=None)
     parser.add_argument("--no-cadence", action="store_true")
     parser.add_argument("--burners", type=int, default=max(1, (os.cpu_count() or 2)))
     parser.add_argument("--time-cap", type=float, default=None)
@@ -985,6 +1192,8 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"valid": valid, "reason": reason}))
         return 0 if valid else 1
     protocol, protocol_sha = inputs.load_protocol(args.protocol)
+    args.arms = args.arms or protocol.get("run_arms", ["every", "mismatch"])
+    args.recipes = args.recipes or protocol.get("run_recipes", ["selected", "compose_default"])
     overrides = apply_overrides(protocol, args)
     seeds = list(protocol["seeds"]["confirmation"]) if args.seeds is None else list(args.seeds)
     if (
@@ -1017,6 +1226,16 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("invalid seeds, arms, burners or overrides")
     if not args.no_cadence and protocol["cadence"]["events"] > protocol["window"]["events"]:
         parser.error("cadence events must fit inside the window")
+    if "timing_acceptance" in protocol:
+        for name, actual, expected in (
+            ("seeds", seeds, protocol["seeds"]["confirmation"]),
+            ("recipes", args.recipes, protocol["run_recipes"]),
+            ("arms", args.arms, protocol["run_arms"]),
+            ("cadence_runs", not args.no_cadence, True),
+            ("burners", args.burners, max(1, os.cpu_count() or 2)),
+        ):
+            if actual != expected:
+                overrides[name] = actual
     cap = float(protocol["caps"]["seconds"] if args.time_cap is None else args.time_cap)
     args.out.mkdir(parents=True, exist_ok=False)
     began = time.perf_counter()
@@ -1024,6 +1243,7 @@ def main(argv: list[str] | None = None) -> int:
     protocol_copy.write_bytes(Path(args.protocol).read_bytes())
     declaration = {
         "schema": SCHEMA,
+        "instrument_revision": 2,
         "protocol_sha256": protocol_sha,
         "frozen_protocol": not overrides,
         "overrides": overrides,
@@ -1038,21 +1258,17 @@ def main(argv: list[str] | None = None) -> int:
         "python": platform.python_version(),
         "platform": platform.platform(),
         "cpu_count": os.cpu_count(),
-        "threads": {
-            name: os.environ.get(name)
-            for name in (
-                "OMP_NUM_THREADS",
-                "OPENBLAS_NUM_THREADS",
-                "MKL_NUM_THREADS",
-                "NUMEXPR_NUM_THREADS",
-            )
-        },
+        "threads": {name: os.environ.get(name) for name in THREAD_VARIABLES},
         "cadence_import": str(Path(cadence.__file__).resolve()),
     }
     (args.out / "declaration.json").write_text(json.dumps(declaration, indent=2) + "\n")
     sources, origins = [], []
     package = Path(cadence.__file__).resolve().parent
-    own = [Path(__file__).resolve(), Path(inputs.__file__).resolve()]
+    own = [
+        Path(__file__).resolve(),
+        Path(inputs.__file__).resolve(),
+        Path(timing_acceptance.__file__).resolve(),
+    ]
     for source in [*own, *sorted(package.rglob("*.py"))]:
         relative = (
             "source/" + source.name
@@ -1089,7 +1305,14 @@ def main(argv: list[str] | None = None) -> int:
             protocol,
             directory,
             ledger,
-            cadence=not args.no_cadence,
+            cadence=not args.no_cadence
+            and (
+                "timing_acceptance" not in protocol
+                or (
+                    recipe == protocol["timing_acceptance"]["primary_recipe"]
+                    and arm == protocol["timing_acceptance"]["primary_arm"]
+                )
+            ),
             burners=args.burners,
         )
         runs.append(result)
@@ -1141,6 +1364,10 @@ def main(argv: list[str] | None = None) -> int:
         "run seconds include IO. No reward, eligibility or associative writes "
         "occur. Sweeps are not joules.",
     }
+    if "timing_acceptance" in protocol:
+        summary["timing_acceptance"] = timing_acceptance.evaluate(
+            runs, protocol, declaration, capped
+        )
     Receipt.build(SCHEMA, summary, sources).write(args.out / "summary.json")
     valid, reason = verify(args.out)
     assert valid, reason
