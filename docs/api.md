@@ -504,9 +504,11 @@ and a complete runnable example.
   `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`,
   `batched`.
 - `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None)`: extra drive
-  `beta · (target − s)` on the masked neurons, or `beta · (target − softmax(s/T))` over the
+  `beta · mask · (target − s)`, or `beta · mask · (target − softmax(s/T))` over each
   masked group with a temperature; `weight` scales rows. `groups` assigns a separate
-  softmax group per neuron (`-1` excludes a neuron). `drive(s)`.
+  softmax group per neuron (`-1` excludes a neuron). The temperature is a finite positive
+  scalar or one value per neuron, constant within each active group. Fractional masks
+  scale the local drive in both modes. `drive(s)`.
 - `available_backends()`: `{"cpu": "numpy float64", "torch": "mps float32" | "cuda float64" | "cpu float64", "mlx": "gpu float32"}`, for what is installed.
 
 ## Blocks (`cadence.blocks`)
@@ -837,8 +839,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     `arousal` holds the stream's `Arousal`, or `None`.
   - `act(observations, *, greedy=False, temperature=None) -> actions`: one row per continuing stream.
     `temperature` samples the settled motor state at another softmax temperature than
-    `learning.temperature`; the eligibility kept for the sampled action stays the score
-    of the learner's own policy, and a greedy read ignores it.
+    `learning.temperature`, or takes one finite positive temperature per motor slot.
+    Eligibility credits the policy that actually sampled the action; a greedy read
+    ignores the supplied temperatures.
     The bounded free solve checks complete potential/adaptation equations, including
     observers, under `learning.free_steps` and `learning.tolerance`. Its numerical
     fallback changes neither the live model nor teaching phases. Cached states are
@@ -1196,10 +1199,14 @@ founder genes for a small share of moments; the
   - `act(drive, greedy=False, temperature=None) -> action`: one free phase, then a draw from the softmax
     over the output neurons (with `Bins`, one draw per dimension), or the most probable.
     `temperature` draws from the same settled outputs at another softmax temperature,
-    a behaviour that explores more above the learner's and less below it; it must be
-    finite and positive and is checked before any state changes. The eligibility kept
-    for the sampled action stays the score of the learner's own policy, so credit for an
-    explored action is an on-policy estimate only at the learner's temperature.
+    or supplies one temperature per motor slot (per dimension with `Bins`). Values
+    must be finite and positive and are checked before any state changes. Eligibility
+    uses the same temperatures: its boundary drive is `c/T` times the categorical
+    nudge, where `c` is the minimum of the base temperature and all supplied
+    temperatures. The contrast therefore estimates `c * grad(log policy)` for the
+    actual joint draw under the equilibrium assumptions. This keeps the original
+    scale at the base temperature and bounds each mask gain by one, even for tiny
+    temperatures. The supplied temperature is held fixed during the local phases.
     Cache reuse requires the same drive and unchanged brain parameters; caller buffers
     are copied. After learning, the next action refreshes its warm state. A greedy action clears
     pending eligibility and cannot be followed by `learn`. Repeated `act` replaces the
@@ -1237,7 +1244,7 @@ founder genes for a small share of moments; the
     parameters and optimizer history retained), `probabilities(state, temperature=None)` (shape `(batch, actions)`
     or `(batch, slots, max_size)` for categorical slots, with exact zero padding;
     `(batch, dims, size)` with `Bins`; `temperature` reads the settled outputs at
-    another softmax temperature than the learner's), `settle(drive)`,
+    another softmax temperature than the learner's, or one per motor slot), `settle(drive)`,
     `value(state)`, `value_of(drive)`, `parameters()`, `to_dict()`; the attributes `valence`,
     `salience`, `delta_mean`, `delta_var`.
 - `ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=None, eta_critic=0.05, normalize=0.0, momentum=0.0, dopamine_cap=1.0, dopamine_center=0.0, dopamine_floor=0.0, center_scale=True, critic_normalize=True, critic_signal="auto", eligibility_steps=None)`:

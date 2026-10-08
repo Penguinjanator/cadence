@@ -1258,7 +1258,11 @@ class Brain:
         return tuple(phases)
 
     def act(
-        self, observations: Any, *, greedy: bool = False, temperature: float | None = None
+        self,
+        observations: Any,
+        *,
+        greedy: bool = False,
+        temperature: float | Sequence[float] | np.ndarray | None = None,
     ) -> np.ndarray:
         """Qualify the whole graph and choose an action for each continuing stream.
 
@@ -1268,8 +1272,8 @@ class Brain:
         random state or pending feedback. A cached state is always checked anew.
         Reward eligibility retains its separate finite nudged-phase contract.
         ``temperature`` samples the settled motor state at another softmax
-        temperature than the learner's; the eligibility kept for the sampled
-        action remains the score of the learner's own policy.
+        temperature than the learner's, or one per motor slot. Eligibility credits
+        the policy that actually sampled the action at those temperatures.
         """
         x = self._observations(observations)
         current = self.basal_ganglia.state
@@ -1293,7 +1297,7 @@ class Brain:
         free: BrainState,
         *,
         greedy: bool,
-        temperature: float | None = None,
+        temperature: float | Sequence[float] | np.ndarray | None = None,
     ) -> np.ndarray:
         """Issue the action of a qualified free state: the stream advances to it."""
         self.basal_ganglia._free = free

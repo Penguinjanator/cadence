@@ -18,9 +18,16 @@ continuous dimension). Unequal categorical slots use the existing `Learner(slots
 layout; every slot participates in the same settlement. Two nudged phases, toward and away from the
 action taken, give every synapse its per-row contrast, an estimate of that action's score
 under the [equilibrium assumptions](learning.md). The actor always uses a softmax
-nudge, even when the learner uses quadratic imitation. For a fixed temperature `T`,
-the contrast estimates `T * grad(log policy)`. Its common scale is absorbed in the
-actor learning rate; several slots estimate the sum of their log probabilities. Each synapse keeps an eligibility trace
+nudge, even when the learner uses quadratic imitation. Sampling and eligibility
+use the same temperature, including explicit temperatures and per-slot exploration.
+For slot temperatures `T_i`, the local mask is scaled by `c/T_i`, where `c` is the
+minimum of the base temperature and the supplied temperatures. The contrast estimates
+`c * grad(log policy)`; several slots estimate the sum of their log probabilities.
+At the base temperature the mask remains one and the existing scale is unchanged.
+The bounded mask also permits very small temperatures without an overflowing gain.
+This removes the systematic score bias caused by sampling a hot policy while
+differentiating a sharper one. Finite phases retain their approximation error and
+do not guarantee acquisition. Each synapse keeps an eligibility trace
 of those contrasts:
 
 ```

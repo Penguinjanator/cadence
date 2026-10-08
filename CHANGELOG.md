@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Credit the policy that actually sampled a reward-bearing action. Scalar or
+  per-slot behavior temperatures now reach the local actor nudges, with one common
+  score scale and bounded gains. Preserve the base-temperature update, actual-action
+  custody and pending saved continuation; explicit hot exploration no longer
+  differentiates a different, sharper policy.
 - Fix income freezing during exploration in multi-slot `Brain.live` lives
   ([#158](https://github.com/muellerberndt/cadence/issues/158)). Every actual reward
   updates recent and long-run income; surprise and its usual error remain limited
