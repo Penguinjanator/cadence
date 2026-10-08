@@ -809,6 +809,27 @@ made 571); `copy` used 32 sweeps per act (214,112 sweeps total for
 `copy`, 153,408 to 164,032 for `nocopy`, whose brain is smaller); the `copy` lessons cost
 122 to 1,306 sweeps against 17,000 to 30,000 for the arms that never learned.
 
+### Corrected audit and native-memory development
+
+The separate [revision-2 audit](results/audit-loop-revision2-2026-10-08.json.gz),
+source `8e508141`, repeats all 35 original cells on the already used seeds.
+Every adapter founder still meets the gate at every prime; all 20 brain lives
+have identical saved continuations and no refused act. Raw event arithmetic,
+complete controls, work and artifact custody verify. This is a corrected audit,
+not another fresh confirmation, and the adapter's information remains explicit.
+
+A bounded native comparison then changed only working-trace amplitude/decay:
+historical `(0.1, 0.95)`, shorter `(0.3, 0.8)`, and composed `(3.0, 0.2)`, each
+with native own-command copying or no copy, on development seeds 0 and 1.
+All 12 taught lives and their 12 matched untaught lives are retained under
+`results/development-native-*.json.gz`; no external sensory-history writes occur.
+The no-copy brain on seed 0 plays every prime perfectly at both alternative
+trace settings and beats its untaught twin. Seed 1 fails at both settings;
+the historical trace and every own-command variant fail the complete behavior
+screen. There are no refused acts. This demonstrates native learned generation
+on one development founder, while reliability, fresh confirmation and the C64
+corpus remain unestablished. **Issue 140 remains open; no default is promoted.**
+
 ### Reading the loop controls
 
 - `own`, the copy written only by the brain's own commands, is the contract's control: while
@@ -872,6 +893,21 @@ work, checks every saved continuation array and checkpoint-I/O record, and recom
 the joint gate from raw actions and timestamps. The saved restored fork is reused,
 removing the old instrument's duplicate uncharged replay.
 
-Development and confirmation have not yet been reported here. The older rhythm/1,
-rhythm/2 and reward receipts above retain their original bytes and measured scope;
+[Development on seeds 0–1](results/development-timing-1.json.gz) completed all eight
+declared recipe/teacher cases. Both
+primary founders learned perfect alternation, beat their untaught and random
+controls, and passed history, recovery and continuation checks. **Joint timing
+passes: 0/2.** They missed 52 and 26 deadlines across accepted cases; maximum issued
+period errors were 348.67ms and 312.36ms. The 50ms schedule accumulated start delay
+up to 526.60ms. Even the regular 100ms case had a 79.60ms act on seed 0, while seed 1
+passed that case with a maximum act of 11.06ms. This is a failed host-run envelope,
+not a successful timing claim.
+
+The first attempt used NumPy's Apple Accelerate backend without declaring its
+separate thread limit. The instrument now sets `VECLIB_MAXIMUM_THREADS=1` before
+NumPy import and records per-act process CPU time beside wall time. A same-seed,
+same-gate rerun can test this resource configuration; the omission is not proven
+to have caused the failure. Other user workloads were present and were left alone.
+No fresh confirmation has run, and no numerical gate was relaxed. The older
+rhythm/1, rhythm/2 and reward receipts above retain their original bytes and scope;
 this new verifier does not retroactively certify their timing or work accounting.

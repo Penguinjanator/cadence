@@ -240,6 +240,14 @@ def verify_work(work: dict, records: list[dict]) -> None:
         assert np.isfinite(seconds) and seconds >= 0
         expected["calls_seconds"] += seconds
         if record["operation"] == "act":
+            if "action_cpu_seconds" in work:
+                cpu_seconds = record["process_cpu_seconds"]
+                assert (
+                    isinstance(cpu_seconds, (int, float))
+                    and np.isfinite(cpu_seconds)
+                    and cpu_seconds >= 0
+                )
+                expected["action_cpu_seconds"] += cpu_seconds
             accepted = record["answer"] is not None
             assert accepted == bool(record["qualified"])
             expected["action_attempts"] += 1
@@ -265,6 +273,10 @@ def verify_body(body: dict, directory) -> None:
     import json
 
     protocol, declaration, runs = body["protocol"], body["declaration"], body["runs"]
+    revision = declaration.get("instrument_revision", 1)
+    assert revision in (1, 2)
+    if revision == 2:
+        assert declaration["threads"]["VECLIB_MAXIMUM_THREADS"] == "1"
     assert json.loads((directory / "declaration.json").read_text()) == declaration
     assert (
         declaration["frozen_protocol"] == body["frozen_protocol"] == (not declaration["overrides"])
@@ -299,6 +311,8 @@ def verify_body(body: dict, directory) -> None:
         def branch(stage, name, value, actions=None, records=records, consumed=consumed):
             chosen = [r for r in records if (r["stage"], r["branch"]) == (stage, name)]
             consumed.extend(chosen)
+            if revision == 2:
+                assert "action_cpu_seconds" in value["work"]
             verify_work(value["work"], chosen)
             issued = [
                 r["answer"] if r["answer"] is not None else [-1] * 4

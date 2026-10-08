@@ -147,6 +147,7 @@ def test_short_native_run_charges_restored_fork_untaught_and_custody(tmp_path):
     raw = json.loads((out / "summary.json").read_text())
     body = raw["body"]
     assert not body["timing_acceptance"]["passed"]
+    assert body["declaration"]["threads"]["VECLIB_MAXIMUM_THREADS"] == "1"
     run = body["runs"][0]
     assert run["window"]["branches"]["restored"]["work"]["action_attempts"] == 8
     assert run["window"]["branches"]["untaught"]["work"]["action_attempts"] == 13
@@ -171,3 +172,19 @@ def test_actuator_period_and_drift_include_variable_solve_latency():
         reading["periods"][0]["max_error_ms"]
         > protocol["timing_acceptance"]["bounds"]["period_error_ms"]
     )
+
+
+def test_accelerate_thread_limit_is_set_before_numpy_import_and_declared():
+    assert "VECLIB_MAXIMUM_THREADS" in chamber.THREAD_VARIABLES
+    assert chamber.os.environ["VECLIB_MAXIMUM_THREADS"] == "1"
+    source = (ROOT / "steady_rhythm.py").read_text()
+    assert source.index('os.environ["VECLIB_MAXIMUM_THREADS"] = "1"') < source.index(
+        "import numpy as np"
+    )
+
+
+@pytest.mark.parametrize("bad", [-1, float("nan"), [0.1]])
+def test_process_cpu_time_requires_finite_nonnegative_scalar(bad):
+    report = {"operation": "act", "call_seconds": 1, "process_cpu_seconds": bad}
+    with pytest.raises(AssertionError):
+        acceptance.verify_work(chamber.Work().summary(), [report])

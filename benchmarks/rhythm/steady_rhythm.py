@@ -13,7 +13,16 @@ from __future__ import annotations
 
 import os
 
-for _name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+THREAD_VARIABLES = (
+    "OMP_NUM_THREADS",
+    "OPENBLAS_NUM_THREADS",
+    "MKL_NUM_THREADS",
+    "NUMEXPR_NUM_THREADS",
+    "VECLIB_MAXIMUM_THREADS",
+)
+# NumPy wheels on macOS use Accelerate, whose thread limit is separate from OpenBLAS.
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+for _name in THREAD_VARIABLES:
     os.environ.setdefault(_name, "1")
 
 import argparse  # noqa: E402
@@ -155,6 +164,7 @@ class Work:
     action_row_sweeps: int = 0
     action_residual_checks: int = 0
     action_damping_halvings: int = 0
+    action_cpu_seconds: float = 0.0
     teacher_attempts: int = 0
     teacher_refusals: int = 0
     teacher_presentations: int = 0
@@ -173,6 +183,7 @@ class Work:
     def act(self, brain: Brain, x: np.ndarray) -> np.ndarray | None:
         """A refused act is a missed action: state, trace and the clock's event are preserved."""
         start = time.perf_counter()
+        cpu_start = time.process_time()
         self.action_attempts += 1
         prior = brain.last_settlement
         try:
@@ -186,12 +197,15 @@ class Work:
         finally:
             elapsed = time.perf_counter() - start
             self.calls_seconds += elapsed
+        cpu_seconds = time.process_time() - cpu_start
+        self.action_cpu_seconds += cpu_seconds
         report = dict(brain.last_settlement)
         self.reports.append(
             {
                 "operation": "act",
                 "answer": None if answer is None else answer.tolist(),
                 "call_seconds": elapsed,
+                "process_cpu_seconds": cpu_seconds,
                 "rows": len(x),
                 **report,
             }
@@ -1229,6 +1243,7 @@ def main(argv: list[str] | None = None) -> int:
     protocol_copy.write_bytes(Path(args.protocol).read_bytes())
     declaration = {
         "schema": SCHEMA,
+        "instrument_revision": 2,
         "protocol_sha256": protocol_sha,
         "frozen_protocol": not overrides,
         "overrides": overrides,
@@ -1243,15 +1258,7 @@ def main(argv: list[str] | None = None) -> int:
         "python": platform.python_version(),
         "platform": platform.platform(),
         "cpu_count": os.cpu_count(),
-        "threads": {
-            name: os.environ.get(name)
-            for name in (
-                "OMP_NUM_THREADS",
-                "OPENBLAS_NUM_THREADS",
-                "MKL_NUM_THREADS",
-                "NUMEXPR_NUM_THREADS",
-            )
-        },
+        "threads": {name: os.environ.get(name) for name in THREAD_VARIABLES},
         "cadence_import": str(Path(cadence.__file__).resolve()),
     }
     (args.out / "declaration.json").write_text(json.dumps(declaration, indent=2) + "\n")
