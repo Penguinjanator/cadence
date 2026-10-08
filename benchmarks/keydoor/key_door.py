@@ -10,9 +10,9 @@ pay nothing. Taking the key pays nothing by itself: its worth
 arrives ``D + 2`` cells later from the chest or ``D + 1`` from the lamp, after irrelevant
 choices at the levers, so credit cannot
 follow the last action blindly. The creature sees the kind of cell it faces and, with the
-pouch sense, whether it holds the key. The number of levers varies by the protocol's jitter from episode to
-episode: the delay varies in decision counts, with no physical-time interface. The outcome
-of the door is delivered with the first
+pouch sense, whether it holds the key. The number of levers varies by the protocol's jitter
+from episode to episode: the delay varies in decision counts, with no physical-time
+interface. The outcome of the door is delivered with the first
 observation of the next episode, ``done`` set, as ``step`` and ``live`` define it. A share
 ``truncation`` of the trips is cut short before the door, the key lost with them; such a
 trip ends with ``done`` clear, so the forecast carries over into the next trip (a truncated
