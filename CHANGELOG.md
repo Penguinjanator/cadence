@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+- The key-door nursery's third freeze, `key-door/3` (`benchmarks/keydoor/protocol-3.json`), for
+  [#111](https://github.com/muellerberndt/cadence/issues/111), roadmap row 07: a third rule
+  returns the key to the chest and reads the retained skill; lever counts vary by two in a
+  15-cell corridor; a `recurrent` arm, an online Elman actor-critic with eligibility traces and
+  a gradient guard, is the competent recurrent online learner with the same information; a
+  `copy` arm carries the efference copy at a development-selected dose and is reported, not
+  gated, because every dose harmed the creature on the development seeds; the live arm stays
+  key-door/2's point, the copy's founder value. On fresh seeds 900 to 909 (300 lives, none
+  crashed) the pooled gates failed: acquired 0.80, frugal 0.80 and calm 0.65 against 0.90,
+  while adaptation and the retained return both pass at 0.90; the frozen rule-A policy
+  confirms rule B cost the creature nothing of rule A. The blind arm, without the pouch sense,
+  is the best arm at every delay (fed 1.00 at delay 2 under all three rules), a measured lead
+  for the next freeze. `key-door/1` and `key-door/2` receipts stay verifiable.
 ## 0.77.0 — 2026-10-08
 
 - Correct the reward-rhythm instrument's saved world boundaries, refusal retries

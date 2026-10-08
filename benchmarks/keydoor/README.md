@@ -33,6 +33,332 @@ current run is marked `frozen_protocol: false`. No corrected confirmation campai
 passing gate is supplied here. A new source-bound protocol and fresh confirmation would be
 needed to promote the corrected comparison.
 
+## key-door/3: the third rule, the copy as a variant, the recurrent control, 2026-10-08
+
+The third freeze, [`protocol-3.json`](protocol-3.json), SHA-256
+`f8bf4d7698c72905fca4e1384a4c07389ba87360b899177e19cc765208bf56c9`, committed before its
+confirmation seeds 900 to 909 were run. It keeps key-door/2's corrected instrument and
+operating point and adds, as roadmap row 07 asked: a third rule, the key back in the chest
+after the lamp, so the return of the first contingency reads the retained skill (gate:
+at least 90% of the gated lives end that rule fed and find their first 20-trip window at
+90% fed within 50 completed trips); lever counts varying by two from trip to trip in a
+15-cell corridor, the irregular event time of the acceptance (physical time stays
+unmodelled, as the rhythm chamber established per-event determinism for this library);
+a `recurrent` arm, an online Elman actor-critic with eligibility traces and a gradient
+guard, the competent recurrent online learner with the same information, its rate 0.02
+and decay 0.8 selected on the development seeds; and a `copy` arm, the live brain carrying
+the efference copy of its own last command (0.76.0) at a dose of 0.3 selected on the
+development seeds, reported and not gated, because every dose harmed the creature there
+(amplitude 3.0, the reward-rhythm chamber's, left every development life unfed and
+restless; 1.0 fed 0.51 and 0.14 under rule A at delays 2 and 5; 0.3 fed 0.82 and 0.65
+against the live brain's 0.90 and 0.99). The live arm therefore stays the simplest existing
+System 1 at key-door/2's point, and the copy's founder value, zero, is that arm. The
+development receipts are in `results/development-3-*`; the live arm on development seeds
+0 to 7 acquired on 8 of 8 at both gated delays, re-adapted on 15 of 16 and took the
+returned key back within a median of 6 and 13 completed trips against 23 and 125 at first
+acquisition.
+
+Receipt `results/confirmation-3-2026-10-08.json.gz`, verified against the present
+sources: 300 lives, none crashed, no refused answer. **The declared gates failed**, pooled
+over delays 2 and 5: acquired 0.80, adapted 0.90, frugal 0.80, calm 0.65 and retained 0.90
+against 0.90 required. Two lives per gated delay end rule A below 90% fed (minima 0.58
+and 0.46), three lives at delay 2 waste more than 1.5 interactions per trip, and seven of
+twenty spend more than 35% of a rule's second half aroused. Re-adaptation and the return
+of the first rule pass: the live brain ends the third rule fed in 0.99 of its last 50 trips
+at both delays, the same as the frozen rule-A policy's 1.00 and 0.98, so rule B did not
+cost it rule A, and finds its window at a median of 17 and 12 completed trips. Delay 10
+stays unsolved by the brain (0.49 fed) and solved by the tabular learner (0.83 to 0.90).
+
+The controls say where the creature's credit comes from. The yoked arm, its own door
+outcome paid at a random cell of the next trip, never acquires (0.15 to 0.22); the
+eligibility-zero arm acquires at delay 2 (0.94) and fails from delay 5 (0.53); the
+always-learning `step` loop acquires (0.93, 0.88) and re-adapts poorly (0.69, 0.51) at
+every moment aroused. The copy arm is worse than the live arm at every delay except rule B
+at delay 5 (0.93 against 0.92), and its calm is 0.47 and 0.33. The recurrent learner
+acquires on every life at delays 2 and 5 (0.96, lags 171 and 187 against the brain's 21
+and 15), re-adapts in 9 and 7 of 10 (0.89, 0.68) and returns on every life (0.99). The
+tabular learner stays at 0.80 to 0.92 with its epsilon. The uniform-random policy feeds
+0.23 to 0.30.
+
+**The blind arm is the best arm.** Without the pouch sense, the creature ends every rule
+fed at 1.00, 1.00 and 1.00 at delay 2 and 1.00, 0.97 and 0.99 at delay 5, with 0.00 to
+0.23 wrong interactions per trip and 3% to 8% of its late moments aroused; it even feeds
+0.82 at delay 10 under rule A. The pouch bit tells the creature whether it holds the key;
+the blind creature carries that fact in its working trace from the chest or the lamp, and
+its policy over the cell kinds alone is simpler. This is a measured lead, not a result: a
+key-door/4 that declares the pouch-less body as its live arm, with the pouch arm as the
+control, on fresh seeds, is the next freeze. It would be a change of the world's body, an
+adapter choice, not of the brain.
+
+#### Rule A, chest holds the key: episodes fed in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.92 (0.58) | 0.92 (0.46) | 0.49 (0.00) |
+| `copy` | 0.70 (0.50) | 0.66 (0.18) | 0.15 (0.02) |
+| `step` | 0.93 (0.84) | 0.88 (0.62) | 0.58 (0.00) |
+| `lambda-zero` | 0.94 (0.62) | 0.53 (0.00) | 0.03 (0.00) |
+| `yoked` | 0.22 (0.14) | 0.15 (0.02) | 0.18 (0.04) |
+| `frozen` | 0.92 (0.58) | 0.92 (0.46) | 0.49 (0.00) |
+| `blind` | 1.00 (1.00) | 1.00 (0.96) | 0.82 (0.20) |
+| `recurrent` | 0.96 (0.90) | 0.96 (0.90) | 0.76 (0.00) |
+| `tabular` | 0.90 (0.86) | 0.80 (0.00) | 0.83 (0.00) |
+| `random` | 0.26 (0.16) | 0.23 (0.10) | 0.23 (0.16) |
+
+#### Rule B, lamp holds the key: episodes fed in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.97 (0.68) | 0.92 (0.24) | 0.41 (0.02) |
+| `copy` | 0.73 (0.46) | 0.93 (0.58) | 0.17 (0.00) |
+| `step` | 0.69 (0.00) | 0.51 (0.00) | 0.14 (0.00) |
+| `lambda-zero` | 0.65 (0.02) | 0.13 (0.00) | 0.02 (0.00) |
+| `yoked` | 0.12 (0.04) | 0.04 (0.00) | 0.05 (0.00) |
+| `frozen` | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) |
+| `blind` | 1.00 (1.00) | 0.97 (0.66) | 0.55 (0.02) |
+| `recurrent` | 0.89 (0.00) | 0.68 (0.00) | 0.38 (0.00) |
+| `tabular` | 0.92 (0.82) | 0.90 (0.84) | 0.90 (0.82) |
+| `random` | 0.23 (0.10) | 0.25 (0.20) | 0.23 (0.14) |
+
+#### Rule A: key taken in the last 50 episodes, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.95 (0.72) | 0.94 (0.64) | 0.58 (0.14) |
+| `copy` | 0.82 (0.66) | 0.77 (0.34) | 0.35 (0.12) |
+| `step` | 0.95 (0.86) | 0.90 (0.68) | 0.59 (0.00) |
+| `lambda-zero` | 0.97 (0.78) | 0.59 (0.04) | 0.14 (0.10) |
+| `yoked` | 0.43 (0.32) | 0.39 (0.08) | 0.37 (0.14) |
+| `frozen` | 0.95 (0.72) | 0.94 (0.64) | 0.58 (0.14) |
+| `blind` | 1.00 (1.00) | 1.00 (0.96) | 0.85 (0.30) |
+| `recurrent` | 0.98 (0.92) | 0.98 (0.92) | 0.80 (0.10) |
+| `tabular` | 0.95 (0.92) | 0.85 (0.04) | 0.87 (0.02) |
+| `random` | 0.51 (0.40) | 0.50 (0.34) | 0.48 (0.44) |
+
+#### Rule B: key taken in the last 50 episodes, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.98 (0.84) | 0.93 (0.36) | 0.47 (0.10) |
+| `copy` | 0.80 (0.56) | 0.95 (0.64) | 0.30 (0.10) |
+| `step` | 0.70 (0.00) | 0.51 (0.00) | 0.15 (0.00) |
+| `lambda-zero` | 0.68 (0.08) | 0.28 (0.16) | 0.15 (0.10) |
+| `yoked` | 0.35 (0.20) | 0.21 (0.12) | 0.20 (0.06) |
+| `frozen` | 0.00 (0.00) | 0.00 (0.00) | 0.00 (0.00) |
+| `blind` | 1.00 (1.00) | 0.97 (0.74) | 0.61 (0.16) |
+| `recurrent` | 0.90 (0.00) | 0.69 (0.00) | 0.39 (0.00) |
+| `tabular` | 0.97 (0.94) | 0.95 (0.90) | 0.95 (0.92) |
+| `random` | 0.52 (0.42) | 0.52 (0.44) | 0.48 (0.36) |
+
+#### Rule A: wrong interactions per episode in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.37 (0.00) | 0.40 (0.00) | 1.73 (0.00) |
+| `copy` | 1.30 (0.00) | 1.64 (0.00) | 3.80 (1.36) |
+| `step` | 0.94 (0.14) | 1.00 (0.10) | 0.79 (0.12) |
+| `lambda-zero` | 0.54 (0.00) | 0.56 (0.00) | 1.66 (1.24) |
+| `yoked` | 1.17 (0.72) | 1.84 (1.16) | 2.48 (1.02) |
+| `frozen` | 0.37 (0.00) | 0.40 (0.00) | 1.73 (0.00) |
+| `blind` | 0.19 (0.00) | 0.13 (0.00) | 0.59 (0.00) |
+| `recurrent` | 0.09 (0.04) | 0.08 (0.02) | 0.14 (0.02) |
+| `tabular` | 0.15 (0.04) | 0.70 (0.34) | 1.54 (0.46) |
+| `random` | 1.52 (1.28) | 3.00 (2.68) | 5.57 (5.10) |
+
+#### Rule B: wrong interactions per episode in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.43 (0.00) | 0.19 (0.00) | 1.27 (0.00) |
+| `copy` | 1.28 (0.00) | 0.73 (0.00) | 3.19 (1.44) |
+| `step` | 1.55 (0.12) | 0.77 (0.02) | 0.28 (0.06) |
+| `lambda-zero` | 0.29 (0.00) | 0.81 (0.00) | 1.60 (1.32) |
+| `yoked` | 0.94 (0.64) | 1.10 (0.76) | 2.14 (1.36) |
+| `frozen` | 1.00 (1.00) | 1.00 (1.00) | 0.36 (0.00) |
+| `blind` | 0.00 (0.00) | 0.06 (0.00) | 1.03 (0.00) |
+| `recurrent` | 0.93 (0.04) | 0.83 (0.04) | 0.24 (0.00) |
+| `tabular` | 0.16 (0.08) | 0.69 (0.46) | 1.74 (1.24) |
+| `random` | 1.43 (1.26) | 2.94 (2.70) | 5.41 (5.14) |
+
+#### Rule A: first 20-episode window 90% fed, median episode (lives / lives)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 21 (10/10) | 15 (9/10) | 298 (4/10) |
+| `copy` | 126 (9/10) | 152 (5/10) | 305 (1/10) |
+| `step` | 162 (10/10) | 170 (9/10) | 288 (8/10) |
+| `lambda-zero` | 43 (10/10) | 32 (6/10) | 10 (2/10) |
+| `yoked` | 16 (2/10) | 39 (2/10) | 195 (1/10) |
+| `frozen` | 21 (10/10) | 15 (9/10) | 298 (4/10) |
+| `blind` | 6 (10/10) | 9 (10/10) | 126 (8/10) |
+| `recurrent` | 171 (10/10) | 187 (10/10) | 241 (8/10) |
+| `tabular` | 16 (10/10) | 25 (9/10) | 28 (9/10) |
+| `random` | none (0/10) | none (0/10) | none (0/10) |
+
+#### Rule B: first 20-episode window 90% fed, median episode (lives / lives)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 42 (10/10) | 64 (9/10) | 147 (3/10) |
+| `copy` | 125 (9/10) | 93 (9/10) | none (0/10) |
+| `step` | 63 (7/10) | 80 (5/10) | 187 (2/10) |
+| `lambda-zero` | 42 (6/10) | 44 (1/10) | none (0/10) |
+| `yoked` | none (0/10) | none (0/10) | none (0/10) |
+| `frozen` | none (0/10) | none (0/10) | none (0/10) |
+| `blind` | 9 (10/10) | 30 (10/10) | 15 (6/10) |
+| `recurrent` | 82 (9/10) | 125 (7/10) | 229 (4/10) |
+| `tabular` | 16 (10/10) | 17 (10/10) | 29 (10/10) |
+| `random` | none (0/10) | none (0/10) | none (0/10) |
+
+#### Rule A behaviour: probability of taking at the chest without the key, median (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.961 (0.565) | 0.908 (0.447) | 0.403 (0.311) |
+| `copy` | 0.728 (0.619) | 0.613 (0.414) | 0.420 (0.258) |
+| `step` | 0.824 (0.587) | 0.792 (0.559) | 0.516 (0.219) |
+| `lambda-zero` | 0.959 (0.533) | 0.643 (0.242) | 0.206 (0.186) |
+| `yoked` | 0.486 (0.434) | 0.445 (0.400) | 0.408 (0.302) |
+| `frozen` | 0.961 (0.565) | 0.908 (0.447) | 0.403 (0.311) |
+| `blind` | 0.991 (0.813) | 0.986 (0.432) | 0.695 (0.353) |
+| `recurrent` | 0.839 (0.815) | 0.796 (0.718) | 0.562 (0.149) |
+| `tabular` | 0.932 (0.283) | 0.929 (0.087) | 0.892 (0.059) |
+| `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
+
+#### Rule B behaviour: probability of taking at the lamp without the key, median (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.937 (0.764) | 0.868 (0.356) | 0.334 (0.153) |
+| `copy` | 0.771 (0.477) | 0.852 (0.578) | 0.385 (0.148) |
+| `step` | 0.743 (0.029) | 0.177 (0.013) | 0.017 (0.011) |
+| `lambda-zero` | 0.772 (0.146) | 0.159 (0.148) | 0.144 (0.142) |
+| `yoked` | 0.391 (0.244) | 0.273 (0.160) | 0.189 (0.149) |
+| `frozen` | 0.000 (0.000) | 0.000 (0.000) | 0.000 (0.000) |
+| `blind` | 0.976 (0.892) | 0.948 (0.518) | 0.570 (0.184) |
+| `recurrent` | 0.789 (0.009) | 0.711 (0.005) | 0.014 (0.003) |
+| `tabular` | 0.925 (0.873) | 0.920 (0.778) | 0.901 (0.170) |
+| `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
+
+#### Rule B behaviour: probability of interacting at a lever with the key, median (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.084 (0.008) | 0.048 (0.009) | 0.176 (0.041) |
+| `copy` | 0.554 (0.130) | 0.150 (0.014) | 0.378 (0.147) |
+| `step` | 0.292 (0.112) | 0.035 (0.015) | 0.016 (0.011) |
+| `lambda-zero` | 0.235 (0.006) | 0.157 (0.145) | 0.142 (0.141) |
+| `yoked` | 0.333 (0.250) | 0.219 (0.157) | 0.182 (0.147) |
+| `frozen` | none | none | none |
+| `blind` | 0.009 (0.002) | 0.011 (0.002) | 0.088 (0.002) |
+| `recurrent` | 0.020 (0.011) | 0.005 (0.004) | 0.004 (0.002) |
+| `tabular` | 0.059 (0.056) | 0.127 (0.108) | 0.155 (0.115) |
+| `random` | 0.500 (0.500) | 0.500 (0.500) | 0.500 (0.500) |
+
+#### Rule A again, the key back in the chest: episodes fed in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.99 (0.90) | 0.99 (0.94) | 0.36 (0.00) |
+| `copy` | 0.91 (0.60) | 0.84 (0.04) | 0.22 (0.00) |
+| `step` | 0.98 (0.94) | 0.49 (0.00) | 0.29 (0.00) |
+| `lambda-zero` | 0.71 (0.00) | 0.02 (0.00) | 0.02 (0.00) |
+| `yoked` | 0.09 (0.02) | 0.03 (0.00) | 0.03 (0.00) |
+| `frozen` | 1.00 (1.00) | 0.98 (0.82) | 0.38 (0.00) |
+| `blind` | 1.00 (0.98) | 0.99 (0.90) | 0.65 (0.02) |
+| `recurrent` | 0.99 (0.96) | 0.99 (0.96) | 0.89 (0.10) |
+| `tabular` | 0.89 (0.86) | 0.90 (0.82) | 0.90 (0.84) |
+| `random` | 0.30 (0.22) | 0.26 (0.14) | 0.28 (0.10) |
+
+#### Rule A again: first 20-episode window 90% fed, median episode (lives / lives)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 17 (10/10) | 12 (10/10) | 25 (3/10) |
+| `copy` | 8 (10/10) | 30 (8/10) | 241 (2/10) |
+| `step` | 0 (10/10) | 0 (5/10) | 74 (4/10) |
+| `lambda-zero` | 50 (7/10) | 24 (1/10) | none (0/10) |
+| `yoked` | none (0/10) | none (0/10) | none (0/10) |
+| `frozen` | 0 (10/10) | 0 (10/10) | 0 (4/10) |
+| `blind` | 11 (10/10) | 9 (10/10) | 38 (6/10) |
+| `recurrent` | 0 (10/10) | 0 (10/10) | 161 (9/10) |
+| `tabular` | 2 (10/10) | 0 (10/10) | 2 (10/10) |
+| `random` | none (0/10) | none (0/10) | none (0/10) |
+
+#### Rule A again: wrong interactions per episode in the last 50, mean (minimum)
+
+| Arm | D=2 | D=5 | D=10 |
+| --- | --- | --- | --- |
+| `live` | 0.50 (0.00) | 0.13 (0.00) | 1.22 (0.00) |
+| `copy` | 0.92 (0.00) | 0.54 (0.00) | 2.20 (1.32) |
+| `step` | 0.82 (0.04) | 0.50 (0.02) | 0.11 (0.04) |
+| `lambda-zero` | 0.24 (0.00) | 0.83 (0.74) | 1.56 (1.22) |
+| `yoked` | 0.68 (0.42) | 0.82 (0.66) | 1.67 (1.30) |
+| `frozen` | 0.36 (0.00) | 0.58 (0.00) | 0.00 (0.00) |
+| `blind` | 0.21 (0.00) | 0.23 (0.00) | 0.74 (0.00) |
+| `recurrent` | 0.32 (0.00) | 0.21 (0.00) | 0.17 (0.02) |
+| `tabular` | 0.20 (0.06) | 0.90 (0.46) | 1.74 (1.58) |
+| `random` | 1.51 (1.32) | 3.00 (2.68) | 5.47 (5.14) |
+
+#### The live arm: arousal and work, medians over lives
+
+| Delay | aroused, whole life | aroused, second half of rule A | sweeps per routine moment | per aroused moment | learning sweeps | probe sweeps | memory reads | memory writes | routine ms (median, p90) | aroused ms (median, p90) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | 0.167 | 0.037 | 22.5 | 21.3 | 44622 | 20128 | 47712 | 3944 | 0.66, 2.49 | 2.07, 13.35 |
+| 5 | 0.171 | 0.026 | 29.0 | 22.0 | 49653 | 20160 | 47857 | 3895 | 0.64, 1.47 | 1.75, 6.92 |
+| 10 | 0.861 | 0.807 | 23.8 | 22.3 | 149403 | 20128 | 62704 | 18980 | 0.64, 1.40 | 1.79, 3.94 |
+
+#### Gates
+
+```json
+{
+ "10": {
+  "acquired": 0.2,
+  "adapted": 0.3,
+  "calm": 0.1,
+  "crashed": 0,
+  "frugal": 0.1,
+  "lives": 10,
+  "retained": 0.2
+ },
+ "2": {
+  "acquired": 0.8,
+  "adapted": 0.9,
+  "calm": 0.7,
+  "crashed": 0,
+  "frugal": 0.7,
+  "lives": 10,
+  "retained": 0.9
+ },
+ "5": {
+  "acquired": 0.8,
+  "adapted": 0.9,
+  "calm": 0.6,
+  "crashed": 0,
+  "frugal": 0.9,
+  "lives": 10,
+  "retained": 0.9
+ },
+ "passed": false,
+ "pooled": {
+  "acquired": 0.8,
+  "adapted": 0.9,
+  "calm": 0.65,
+  "crashed": 0,
+  "frugal": 0.8,
+  "lives": 20,
+  "retained": 0.9
+ }
+}
+```
+
+
+The failures of the third freeze stand with the first two. The misses are the known
+mechanism gaps of this row: a fed and calm creature keeps a cheap habit because routine
+learns nothing, two lives per delay acquire slowly or latch, and the calm bound is missed
+after cut trips. The retained-skill reading is new and positive, the recurrent control is
+competent at acquisition and weak at re-adaptation, and the copy is not the repair here.
+
 ## What runs
 
 A creature walks a corridor once per trip: empty floor, a chest, a lamp, `D` levers and a
