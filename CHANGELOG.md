@@ -18,9 +18,10 @@
   pending. Add read-only `pending_feedback` for outcome-safe retries and
   JSON-safe `describe()` for layout, effective settings and saved initialization
   provenance. These are interface changes, with no new learning law.
-- Normalize valid NumPy integer metadata when saving composed checkpoints and
-  validate the boolean `centered` teaching setting. Preserve accepted settings
-  and saved continuation while rejecting malformed configuration values.
+- Normalize NumPy integer and floating configuration scalars so arithmetic stays
+  consistent across save/load, and serialize scalar checkpoint metadata. Validate
+  the boolean `centered` teaching setting, including when loading a checkpoint.
+  Preserve accepted settings and continuation while rejecting malformed values.
 - Lead guides with `compose` and `live`, centralize composed defaults and rate
   ownership, and use public overrides for expert recipes. Address
   [#171](https://github.com/muellerberndt/cadence/issues/171) through the documented
