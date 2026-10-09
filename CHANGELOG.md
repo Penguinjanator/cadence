@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Add `MANIFESTO.md`, the design points in one page, with the dedicated language goal:
+  whole consistent sentences formulated from the settled state, tracked in
+  [#173](https://github.com/muellerberndt/cadence/issues/173).
+
 ## 0.79.0 — 2026-10-09
 
 - Apply extra arousal heat to one uniformly chosen motor slot per moment
