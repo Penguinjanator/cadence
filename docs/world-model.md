@@ -83,9 +83,9 @@ pathways active:
 
 ```python
 import numpy as np
-from cadence import ArousalConfig, Brain
+from cadence import Brain
 
-brain = Brain.compose(inputs=2, actions=2, arousal=ArousalConfig())
+brain = Brain.compose(inputs=2, actions=2, arousal=True)
 observations = np.eye(2)
 cue = 0
 action = brain.live(observations[[cue]])

@@ -13,7 +13,9 @@ shared synapses and fading per-stream residuals. `Brain.compose` includes this
 consolidation rule; `episodic=False` omits that pathway. The `FastSynapses` API below
 provides independent stream records and an immediate residual-write rule.
 
-## Three kinds of memory in Brain
+<a id="three-kinds-of-memory-in-brain"></a>
+
+## Memory in the composed brain
 
 | Mechanism | What it retains | What changes it | What survives `brain.reset()` |
 | --- | --- | --- | --- |
@@ -30,8 +32,8 @@ Test the mechanism that was used to acquire the response.
 
 `predict` and `accuracy` ignore the working trace, the efference copy and the
 associative store.
-They qualify the current learned graph's independent response. `act` reads both
-memory pathways before qualifying the full graph state. To test consolidated
+They qualify the current learned graph's independent response. `act` reads the
+available memory pathways before qualifying the full graph state. To test consolidated
 recall, reset live state and clear only fast residuals before each free query:
 
 ```python

@@ -8,8 +8,8 @@ relationships and retained memories support a family of such interpretations
 across situations. Start with [the world-model guide](world-model.md), then run
 the [quickstart](quickstart.md) and [continuing example](../examples/continuing_brain.py).
 
-These guides use Cadence 0.79.0. Install it with
-`python -m pip install cadence-net==0.79.0`; contributors can install the checkout
+These guides use Cadence 0.80.0. Install it with
+`python -m pip install cadence-net==0.80.0`; contributors can install the checkout
 with `python -m pip install -e .` from the repository root.
 The [index](index.md) is the catalogue; this page gives a reading order.
 
@@ -35,7 +35,8 @@ exact signatures, defaults, mutation and refusal behavior.
 
 | You want to… | Start with | Read next |
 | --- | --- | --- |
-| Run one memory-using brain through real observations and actions | `Brain.compose(..., arousal=ArousalConfig())`, then `brain.live(...)` | [Quickstart](quickstart.md), [continuous interaction](continuous.md), [memory](memory.md) |
+| Run one memory-using brain through real observations and actions | `Brain.compose(..., arousal=True)`, then `brain.live(...)` | [Quickstart](quickstart.md), [continuous interaction](continuous.md), [memory](memory.md) |
+| Adjust a continuing brain's settings without replacing its state | `brain.retune(...)`, `brain.describe()` | [Defaults, rate ownership and application choices](brain.md#defaults-and-expert-overrides) |
 | Declare custom neural regions and reciprocal projections | `Genome`, `develop`, `NeuralGraph`; optional `Brain` wrapper | [Composition](brain.md), [cortices](cortex.md), [connectomes](connectomes.md) |
 | Study explicit reciprocal patches and optional recursive observation | `PatchNet` | [PatchNet](patchnet.md), [recursive settlement](recursive-settlement.md), [recursive training](recursive-training.md) |
 | Learn environmental transitions and plan actions through them | `TemporalPatchNet`, `TemporalMemory` | [Interaction](interaction.md), [planning](planning.md), [response protection](temporal-memory.md) |

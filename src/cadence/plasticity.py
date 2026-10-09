@@ -199,6 +199,13 @@ class ActorCriticConfig:
     def __post_init__(self) -> None:
         if self.critic_signal not in ("modulated", "td", "auto"):
             raise ValueError("critic_signal must be modulated, td or auto")
+        # Use the same scalar arithmetic before and after JSON checkpointing.
+        for name in self.__slots__:
+            value = getattr(self, name)
+            if isinstance(value, np.integer):
+                object.__setattr__(self, name, int(value))
+            elif isinstance(value, np.floating):
+                object.__setattr__(self, name, float(value))
         if self.eligibility_steps is not None and (
             isinstance(self.eligibility_steps, (bool, np.bool_))
             or not isinstance(self.eligibility_steps, (int, np.integer))

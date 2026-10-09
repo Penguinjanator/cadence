@@ -105,6 +105,13 @@ class ArousalConfig:
     need: float = 0.0  # the reward per moment the body requires; the unmet share is a want
 
     def __post_init__(self) -> None:
+        # A scalar's Python/NumPy origin must not change continuation arithmetic.
+        for name in self.__slots__:
+            value = getattr(self, name)
+            if isinstance(value, np.integer):
+                object.__setattr__(self, name, int(value))
+            elif isinstance(value, np.floating):
+                object.__setattr__(self, name, float(value))
         _real("threshold", self.threshold, low=0.0)
         if not 0 <= _real("decay", self.decay, low=0.0) < 1:
             raise ValueError("decay must lie in [0, 1)")

@@ -33,6 +33,7 @@ from typing import Any
 
 import numpy as np
 
+from ._configuration import arousal_config, configured, plain, real, split_genes
 from .arousal import Arousal, ArousalConfig
 from .brain import Backend, BrainState, Equilibrium
 from .brain import Brain as NeuralGraph
@@ -120,6 +121,50 @@ def _validate_efference_amplitude(value: Any) -> float:
     ):
         raise ValueError("efference_amplitude must be a finite nonnegative real scalar")
     return float(value)
+
+
+def _region_widths(populations: Mapping[str, Any], prefix: str) -> list[int]:
+    """Numbered regions in topology order, independent of serialized mapping order."""
+    names = [name for name in populations
+             if name.startswith(prefix) and name[len(prefix):].isdigit()]
+    return [len(populations[name]) for name in sorted(names, key=lambda n: int(n[len(prefix):]))]
+
+
+def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
+    """Validate optional construction provenance without rebuilding learned wiring."""
+    if value is None:
+        return None
+    expected = {"inputs", "actions", "modules", "observers", "slots", "lateral",
+                "sensory_scale", "seed"}
+    if not isinstance(value, dict) or set(value) != expected:
+        raise ValueError("invalid saved composition provenance")
+    for name in ("inputs", "actions", "seed"):
+        number = value[name]
+        if isinstance(number, bool) or not isinstance(number, int) or number < (name != "seed"):
+            raise ValueError(f"invalid saved composition {name}")
+    for name in ("modules", "observers", "slots"):
+        numbers = value[name]
+        if not isinstance(numbers, list) or any(
+            isinstance(number, bool) or not isinstance(number, int) or number < 1
+            for number in numbers
+        ):
+            raise ValueError(f"invalid saved composition {name}")
+        if not numbers and name != "observers":
+            raise ValueError(f"invalid saved composition {name}")
+    real("saved sensory_scale", value["sensory_scale"], low=0)
+    real("saved lateral", value["lateral"])
+    populations = learner.brain.connectome.populations
+    modules = _region_widths(populations, "module_") + [len(populations.get("association", ()))]
+    observers = _region_widths(populations, "observer_")
+    if (
+        value["inputs"] != len(populations.get("sensory", ()))
+        or value["actions"] != len(learner.output_index)
+        or value["modules"] != modules
+        or value["observers"] != observers
+        or value["slots"] != list(learner.slot_sizes)
+    ):
+        raise ValueError("saved composition provenance disagrees with the actual layout")
+    return dict(plain(value))
 
 
 def _load_memory(metadata: Any, data: Mapping[str, Any], neurons: int) -> FastSynapses | None:
@@ -384,24 +429,44 @@ class Brain:
         *,
         episodic: bool = True,
         consolidation: float = 0.05,
+        memory_decay: float = 0.9,
+        memory_rate: float = 1.0,
+        memory_amplitude: float = 1.0,
         working_memory_decay: float = 0.2,
         working_memory_amplitude: float = 3.0,
+        working_memory_focus: float = 0.0,
         efference_decay: float = 0.2,
         efference_amplitude: float = 0.0,
         learning: LearnerConfig | None = None,
         reward: ActorCriticConfig | None = None,
         resting_bias: float = 0.0,
         slots: int | Sequence[int] = 1,
-        arousal: ArousalConfig | None = None,
+        arousal: ArousalConfig | Mapping[str, Any] | bool | None = None,
         seed: int = 0,
         backend: Backend = "cpu",
         device: str | None = None,
+        **genes: Any,
     ) -> None:
+        learning_genes, actor_genes, arousal_genes = split_genes(genes)
+        learning = configured(_learning() if learning is None else learning, learning_genes,
+                              "learning")
+        reward = configured(_reward() if reward is None else reward, actor_genes, "actor")
+        arousal = arousal_config(arousal, arousal_genes)
+        if not isinstance(episodic, bool):
+            raise ValueError("episodic must be boolean")
+        consolidation = real("consolidation", consolidation, low=0, high=1)
+        memory_decay = real("memory_decay", memory_decay, low=0, high=1)
+        memory_rate = real("memory_rate", memory_rate, low=0, high=1)
+        memory_amplitude = real("memory_amplitude", memory_amplitude)
+        working_memory_decay = real("working_memory_decay", working_memory_decay, low=0)
+        efference_decay = real("efference_decay", efference_decay, low=0)
+        if working_memory_decay >= 1 or efference_decay >= 1:
+            raise ValueError("working_memory_decay and efference_decay must lie in [0, 1)")
+        working_memory_amplitude = real("working_memory_amplitude", working_memory_amplitude)
+        working_memory_focus = real("working_memory_focus", working_memory_focus, low=0)
         populations = connectome.populations
         resting_bias = _validate_resting_bias(resting_bias)
         efference_amplitude = _validate_efference_amplitude(efference_amplitude)
-        if arousal is not None and not isinstance(arousal, ArousalConfig):
-            raise ValueError("arousal must be an ArousalConfig, or None")
         for name in ("association", "motor"):
             if name not in populations:
                 raise ValueError(f"a generic brain needs a population named {name!r}")
@@ -430,9 +495,10 @@ class Brain:
             connectome, learning_neuron_model(dt=1.0), backend=backend, device=device, bias=bias
         )
         self.resting_bias = resting_bias
-        self.learner = Learner(brain, list(self.motor_index), learning or _learning(), slots=slots)
+        self._composition: dict[str, Any] | None = None  # construction provenance, not parameters
+        self.learner = Learner(brain, list(self.motor_index), learning, slots=slots)
         self.basal_ganglia = ActorCritic(
-            self.learner, list(self.association_index), reward or _reward(), seed=seed
+            self.learner, list(self.association_index), reward, seed=seed
         )
         self.working_memory: Trace | None = None
         if "prefrontal" in populations:
@@ -440,6 +506,7 @@ class Brain:
                 connectome,
                 decay=working_memory_decay,
                 amplitude=working_memory_amplitude,
+                focus=working_memory_focus,
                 source="association",
                 target="prefrontal",
             )
@@ -457,7 +524,8 @@ class Brain:
         self.hippocampus: FastSynapses | None = None
         if episodic:
             self.hippocampus = SynapticMemory(
-                self.sensory_index, self.motor_index, consolidation=consolidation
+                self.sensory_index, self.motor_index, consolidation=consolidation,
+                decay=memory_decay, rate=memory_rate, amplitude=memory_amplitude,
             )
         self.rng = np.random.default_rng(seed)
         self._moment: tuple[np.ndarray, np.ndarray] | None = None
@@ -477,6 +545,20 @@ class Brain:
     def brain(self) -> NeuralGraph:
         """The current learned dynamics; learning can replace this NeuralGraph instance."""
         return self.learner.brain
+
+    @property
+    def pending_feedback(self) -> bool:
+        """Whether an issued action still owns the next real outcome.
+
+        Includes greedy routine actions issued by ``live``, which have no
+        sampled eligibility. A later operation that replaces that action also
+        replaces its feedback ownership. Inspect this after a refusal to decide
+        whether to retry feedback or only the following action.
+        """
+        return self.basal_ganglia._pending is not None or (
+            self._lived is not None and not self._lived[3]
+            and self._lived[4] is self.basal_ganglia.state
+        )
 
     @property
     def last_settlement(self) -> Mapping[str, Any] | None:
@@ -627,6 +709,7 @@ class Brain:
         modules: Sequence[int] = (64,),
         observers: Sequence[int] = (),
         lateral: float | None = None,
+        sensory_scale: float = 1.0,
         seed: int = 0,
         slots: int | Sequence[int] = 1,
         **options: Any,
@@ -658,7 +741,14 @@ class Brain:
         This reuses the existing trace, synaptic memory and learning mechanisms.
         Observer wiring is an experiment, not evidence of learned self-reflection.
         Inputs are fixed external drives; their neural representations can vary.
-        ``options`` configures the existing constructor's learning and memory;
+        ``sensory_scale`` sets the initial sensory projection's magnitude;
+        its founder value 1.0 preserves the existing wiring. It is a construction
+        setting, not a gain that can be retuned after learning.
+        ``options`` accepts the constructor's memory settings and every existing
+        configuration field as ``learning_<field>``, ``actor_<field>`` or
+        ``arousal_<field>``. ``temperature`` aliases ``learning_temperature``.
+        ``arousal=True`` enables the founder arousal config; a mapping patches
+        those founders. Supplied config objects remain full replacements.
         ``resting_bias`` initializes processing-region biases to a selected nonnegative
         value; it does not guarantee responsive activity or successful acquisition.
         A positive ``efference_amplitude`` adds the efference copy: one ``efference``
@@ -678,6 +768,7 @@ class Brain:
             return int(value)
 
         inputs, actions = size(inputs), size(actions)
+        sensory_scale = real("sensory_scale", sensory_scale, low=0)
         if lateral is None:
             lateral = _default_lateral(max(slot_sizes(actions, slots)))
         if (
@@ -712,7 +803,7 @@ class Brain:
         regions.extend(
             (prefrontal_cortex(widths[-1]), motor_cortex(actions, lateral=lateral, slots=slots))
         )
-        projections = [Projection("sensory", names[0], reciprocal=False)]
+        projections = [Projection("sensory", names[0], scale=sensory_scale, reciprocal=False)]
         projections.extend(
             Projection(left, right) for left, right in zip(names, names[1:], strict=False)
         )
@@ -735,7 +826,173 @@ class Brain:
             regions.append(Region("efference", actions))
             projections.append(Projection("efference", "association", scale=12.0, reciprocal=False))
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
-        return cls(develop(genome, seed=seed), seed=seed, slots=slots, **options)
+        result = cls(develop(genome, seed=seed), seed=seed, slots=slots, **options)
+        result._composition = {
+            "inputs": inputs,
+            "actions": actions,
+            "modules": list(widths),
+            "observers": list(observer_widths),
+            "slots": [int(width) for width in result.learner.slot_sizes],
+            "lateral": lateral,
+            "sensory_scale": sensory_scale,
+            "seed": int(seed),
+        }
+        return result
+
+    def retune(self, *, reset_arousal: bool = False, **genes: Any) -> Brain:
+        """Change named settings together, preserving the acquired continuing brain.
+
+        Uses the same ``learning_``, ``actor_`` and ``arousal_`` names as
+        ``compose``, its ``temperature`` alias and the existing memory/trace
+        settings. ``arousal={...}`` patches the current arousal config; config
+        objects supplied as ``learning``, ``reward`` or ``arousal`` replace their
+        whole config before named overrides. Unspecified settings are retained,
+        including bias rates; pass a bias rate of None to derive it from eta.
+
+        Every value is validated before installation. Parameters, optimizer
+        history, memories, traces, random state and pending feedback are kept.
+        New settings apply to subsequent operations, including the next reward
+        for an already issued action. Changing ``learning_beta`` with sampled
+        feedback pending is refused: its saved contrast belongs to the old beta.
+        Submit that outcome before changing beta; do not discard it to retune.
+
+        Wiring, initialization and enabling/disabling components are construction
+        choices. ``reset_arousal=True`` explicitly resets the arousal level and
+        reward references, retaining its age and work counters; no other state
+        is reset. Returns this same brain.
+        """
+        if not isinstance(reset_arousal, bool):
+            raise ValueError("reset_arousal must be boolean")
+        options = dict(genes)
+        construction = {
+            "inputs", "actions", "modules", "observers", "lateral", "sensory_scale",
+            "resting_bias", "slots", "seed", "episodic", "backend", "device", "connectome",
+        }
+        for name in options:
+            if name in construction:
+                raise ValueError(f"{name} is a construction setting; retune preserves the brain")
+        learning = options.pop("learning", self.learner.config)
+        reward = options.pop("reward", self.basal_ganglia.config)
+        current_arousal = None if self.arousal is None else self.arousal.config
+        arousal = options.pop("arousal", current_arousal)
+        if "arousal" in genes and (self.arousal is None or arousal is None):
+            raise ValueError("retune cannot enable or disable arousal; compose it at construction")
+        if reset_arousal and self.arousal is None:
+            raise ValueError("reset_arousal requires an existing arousal component")
+
+        memory_fields = {
+            "working_memory_decay": (self.working_memory, "decay"),
+            "working_memory_amplitude": (self.working_memory, "amplitude"),
+            "working_memory_focus": (self.working_memory, "focus"),
+            "efference_decay": (self.efference, "decay"),
+            "efference_amplitude": (self.efference, "amplitude"),
+            "memory_decay": (self.hippocampus, "decay"),
+            "memory_rate": (self.hippocampus, "rate"),
+            "memory_amplitude": (self.hippocampus, "amplitude"),
+            "consolidation": (self.hippocampus, "consolidation"),
+        }
+        memory_changes: list[tuple[Any, str, float]] = []
+        for name, (component, field) in memory_fields.items():
+            if name not in options:
+                continue
+            if component is None or (field == "consolidation" and not isinstance(
+                component, SynapticMemory
+            )):
+                raise ValueError(f"{name} requires its existing memory component")
+            value = options.pop(name)
+            if field == "decay":
+                value = real(name, value, low=0, high=1)
+                if isinstance(component, Trace) and value == 1:
+                    raise ValueError(f"{name} must lie in [0, 1)")
+            elif field == "rate":
+                assert isinstance(component, FastSynapses)
+                value = real(name, value, low=0, high=1 if component.rule == "delta" else np.inf)
+            elif field == "consolidation":
+                value = real(name, value, low=0, high=1)
+            elif field == "focus" or name == "efference_amplitude":
+                value = real(name, value, low=0)
+            else:
+                value = real(name, value)
+            memory_changes.append((component, field, value))
+
+        learning_genes, actor_genes, arousal_genes = split_genes(options)
+        learning = configured(learning, learning_genes, "learning")
+        reward = configured(reward, actor_genes, "actor")
+        arousal = arousal_config(
+            arousal, arousal_genes, current=current_arousal, retuning=True
+        )
+        if self.basal_ganglia._pending is not None and learning.beta != self.learner.config.beta:
+            raise ValueError("learning_beta cannot change while sampled feedback is pending")
+
+        # Publication begins only after all validation. Never reconstruct a live
+        # memory or optimizer to change its scalar settings.
+        self.learner.config = learning
+        agent = self.basal_ganglia
+        agent.config = reward
+        if agent._valence is not None:
+            agent._valence.level = reward.dopamine_center
+            agent._valence.floor = reward.dopamine_floor
+            agent._valence.units = not reward.center_scale
+        if self.arousal is not None:
+            assert arousal is not None
+            self.arousal.config = arousal
+            if reset_arousal:
+                self.arousal.reset()
+        for component, field, value in memory_changes:
+            setattr(component, field, value)
+        return self
+
+    def describe(self) -> dict[str, Any]:
+        """Describe effective settings and layout without changing live state.
+
+        ``genes`` contains the named runtime settings of existing components.
+        ``initialization`` records the original resting bias and, for composed
+        brains, wiring choices including sensory scale. These initial choices
+        are provenance, not a description of subsequently learned weights.
+        Config and memory sections report the objects currently in use; the
+        returned mapping is detached and JSON serializable. No lazy state is
+        initialized, no random values are drawn and no settlement is performed.
+        """
+        learning = self.learner.config.to_dict()
+        actor = self.basal_ganglia.config.to_dict()
+        arousal = None if self.arousal is None else self.arousal.config.to_dict()
+        genes = {f"learning_{name}": value for name, value in learning.items()}
+        genes.update({f"actor_{name}": value for name, value in actor.items()})
+        if arousal is not None:
+            genes.update({f"arousal_{name}": value for name, value in arousal.items()})
+        for prefix, component, fields in (
+            ("working_memory", self.working_memory, ("decay", "amplitude", "focus")),
+            ("efference", self.efference, ("decay", "amplitude")),
+            ("memory", self.hippocampus, ("decay", "rate", "amplitude")),
+        ):
+            if component is not None:
+                genes.update({f"{prefix}_{field}": getattr(component, field) for field in fields})
+        if isinstance(self.hippocampus, SynapticMemory):
+            genes["consolidation"] = self.hippocampus.consolidation
+        populations = self.connectome.populations
+        result = {
+            "layout": {
+                "inputs": len(self.sensory_index),
+                "actions": len(self.motor_index),
+                "modules": _region_widths(populations, "module_") + [len(self.association_index)],
+                "observers": _region_widths(populations, "observer_"),
+                "slots": self.learner.slot_sizes,
+                "neurons": self.connectome.n,
+                "synapses": self.connectome.synapses,
+                "populations": {name: len(members) for name, members in populations.items()},
+            },
+            "genes": genes,
+            "learning": learning,
+            "actor": actor,
+            "arousal": arousal,
+            "working_memory": None if self.working_memory is None
+            else self.working_memory.to_dict(),
+            "efference": None if self.efference is None else self.efference.to_dict(),
+            "memory": None if self.hippocampus is None else self.hippocampus.to_dict(),
+            "initialization": {"resting_bias": self.resting_bias, "composition": self._composition},
+            "pending_feedback": self.pending_feedback,
+        }
+        return dict(plain(result))
 
     # -- stimulus
 
@@ -1032,7 +1289,7 @@ class Brain:
         arousal = self.arousal
         if arousal is None:
             raise ValueError(
-                "live needs arousal genes; construct the brain with arousal=ArousalConfig()"
+                "live needs arousal genes; construct the brain with arousal=True"
             )
         x = self._observations(observations)
         agent = self.basal_ganglia
@@ -1499,6 +1756,8 @@ class Brain:
             "pending": agent._pending is not None,
             "last_learning": self.last_learning,
         }
+        if self._composition is not None:
+            metadata["composition"] = plain(self._composition)
         if self.arousal is not None:
             # Arousal is part of the continuation; earlier formats cannot carry it.
             metadata["format"] = "cadence-generic/3"
@@ -1598,6 +1857,7 @@ class Brain:
                 raise ValueError("missing hippocampus metadata")
             resting_bias = _validate_resting_bias(meta.get("resting_bias", 0.0))
             learner = Learner.load(path, backend=backend, device=device, precision=precision)
+            composition = _load_composition(meta.get("composition"), learner)
             try:
                 _validate_life_state(meta, data, learner)
             except (KeyError, TypeError, OverflowError) as exc:
@@ -1612,6 +1872,7 @@ class Brain:
             result.learner = learner
             # Initialization provenance is separate from the saved, possibly learned bias.
             result.resting_bias = resting_bias
+            result._composition = composition
             agent = result.basal_ganglia
             agent.learner = learner
             for name in _REWARD_ARRAYS:

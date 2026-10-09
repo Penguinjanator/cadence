@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+## 0.80.0 — 2026-10-09
+
+- Simplify the continuing-brain interface for
+  [#170](https://github.com/muellerberndt/cadence/issues/170) and
+  [#176](https://github.com/muellerberndt/cadence/issues/176): `arousal=True`
+  selects the founder controller, `sensory_scale` exposes the initial sensory
+  projection, and `learning_*`, `actor_*`, `arousal_*` plus named memory settings
+  override individual genes without replacing unrelated configuration values.
+  Preserve all numerical founders and the composition when no options are passed.
+- Add atomic `Brain.retune(...)` for changes within an acquired life, preserving
+  parameters, optimizer history, traces, records, randomness and pending
+  feedback. A reset of arousal is explicit; topology and initialization remain
+  construction choices. Refuse a nudge-scale change while sampled feedback is
+  pending. Add read-only `pending_feedback` for outcome-safe retries and
+  JSON-safe `describe()` for layout, effective settings and saved initialization
+  provenance. These are interface changes, with no new learning law.
+- Normalize valid NumPy integer metadata when saving composed checkpoints and
+  validate the boolean `centered` teaching setting. Preserve accepted settings
+  and saved continuation while rejecting malformed configuration values.
+- Lead guides with `compose` and `live`, centralize composed defaults and rate
+  ownership, and use public overrides for expert recipes. Address
+  [#171](https://github.com/muellerberndt/cadence/issues/171) through the documented
+  founder/control distinction: the current efference default is zero and the
+  actor rate is 1.0; historical arena settings do not define those defaults.
+  Keep arena, C64, Atari and Amen model/experience choices distinct. Smaller arena
+  rates remain bounded application measurements, not general default improvements.
+
 - Add the native sensory-history rhythm instrument with matched controls, continuation
   checks and source-bound receipts. The period-four component passes; the C64 transfer
   remains a failure under [#140](https://github.com/muellerberndt/cadence/issues/140).

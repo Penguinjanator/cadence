@@ -6,7 +6,7 @@ number can be wrong.
 
 ## Install and run
 
-**`pip install cadence-net==0.79.0` and then `import cadence`.** The distribution is `cadence-net`;
+**`pip install cadence-net==0.80.0` and then `import cadence`.** The distribution is `cadence-net`;
 the import is `cadence`. Python 3.11 or newer and NumPy are the only requirements.
 
 **Do I need a GPU?** No. Everything runs on NumPy float64. `[fast]` adds Numba and SciPy
@@ -14,7 +14,7 @@ for the settling brain's transport, `[accel]` adds torch and `[apple]` adds MLX 
 settling brain on a device; the temporal and record patches are NumPy, and the belief
 patch's slow half has a torch twin ([backends](backends.md)).
 
-**Which interface do I want?** Start with `Brain.compose(..., arousal=ArousalConfig())`
+**Which interface do I want?** Start with `Brain.compose(..., arousal=True)`
 and `brain.live(...)` for one continuing stream. Use `step` for explicit teaching,
 batches or learning from every outcome. The
 [specialist guides](quickstart.md#specialist-guides) cover other model contracts;
@@ -63,7 +63,9 @@ nudged budget is below the free one. Under `qualified=True` both budgets are set
 budgets, and `Brain.compose`'s finite teaching default `nudged_steps=12` cannot settle
 realistic input to tolerance. Opt in with a nudged budget comparable to the free one
 ([qualified teaching budgets](learning.md#qualified-teaching-budgets)); the constructor
-warns about such configurations, including through `dataclasses.replace`.
+warns about such configurations, including through named overrides. Use
+`learning_qualified=True, learning_nudged_steps=1024` on a composed brain
+with its default free budget; preserve other settings with `retune`.
 
 **Is the answer an equilibrium?** `cd.certificate(brain)` says whether settling is a
 contraction and bounds the remaining distance; when the row mass is above the limit,
@@ -158,8 +160,11 @@ repository's `verify.py` scripts are the pattern.
   replay of the brain's own day: read `report["capped"]` (outcomes beyond `dopamine_cap`
   teach their sign alone) and `report["saturation"]`, compare `predict` with the greedy
   `act`, and measure the per-observation policy of a frozen copy
-  ([replaying a life](reward.md#replaying-a-life-through-step)). On a single stream the
-  composed actor rate of 1.0 and the default working trace are the measured causes.
+  ([replaying a life](reward.md#replaying-a-life-through-step)). In that chamber,
+  the composed actor rate of 1.0 and the default working trace contributed to
+  failure; they are not a diagnosis of every single-stream task.
+  Use the [rate ownership table](brain.md#defaults-and-expert-overrides) to tune
+  the affected mechanism, then measure behavior again.
 - Before any of the below: `preflight(brain, outputs, plastic, drives)` reads the readouts'
   slope, the plastic senders' shared code and the seam's eligibility under the task's drives and
   names the remedy for each finding.

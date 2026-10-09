@@ -310,8 +310,8 @@ def test_live_needs_arousal_one_stream_and_a_preceding_action():
     plain = cd.Brain.compose(4, 2, modules=(8,), seed=0)
     with pytest.raises(ValueError, match="arousal"):
         plain.live(np.eye(4)[[0]])
-    with pytest.raises(ValueError, match="ArousalConfig"):
-        cd.Brain.compose(4, 2, modules=(8,), arousal={"threshold": 0.2})
+    with pytest.raises(ValueError, match="threshold"):
+        cd.Brain.compose(4, 2, modules=(8,), arousal={"threshold": -0.2})
     brain = calm_brain()
     with pytest.raises(ValueError, match="one continuing stream"):
         brain.live(np.eye(4)[:2])

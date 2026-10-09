@@ -1,6 +1,14 @@
 # Start a continuing brain
 
 Build one **System 1** brain with `Brain.compose`, then run it with `brain.live`.
+
+```python
+from cadence import Brain
+
+brain = Brain.compose(inputs=4, actions=2, arousal=True)
+action = brain.live([[1.0, 0.0, 0.0, 0.0]])
+```
+
 It includes connected processing regions, motor choices, a working trace and
 fast/persistent associative memory. Regions
 carry local state, exchange signals and repair disagreement in one neural
@@ -12,21 +20,18 @@ bootstrap a useful interpretation, use it, repair witnessed failures and continu
 the same brain. This quickstart exercises equilibrium action and memory;
 it does not yet integrate learned environmental transitions.
 
-Python 3.11+ and NumPy are required. Install Cadence 0.79.0:
+Python 3.11+ and NumPy are required. Install Cadence 0.80.0:
 
 ```bash
-python -m pip install cadence-net==0.79.0
+python -m pip install cadence-net==0.80.0
 ```
 
 ## Observe, act and learn
 
 ```python
 import numpy as np
-from cadence import ArousalConfig, Brain
 
-brain = Brain.compose(inputs=4, actions=2, arousal=ArousalConfig())
 observation = np.array([[1.0, 0.0, 0.0, 0.0]])
-action = brain.live(observation)
 
 # Execute the choice in a tiny environment: action 0 earns one unit.
 reward = (action == 0).astype(float)
@@ -44,6 +49,10 @@ before requesting the next action. Use `reset()` to start a different stream.
 
 For batches, supplied teaching labels or learning from every outcome, use
 [`step`](continuous.md). It is the explicit learning loop for those tasks.
+Use named overrides such as `actor_eta=0.1, actor_eta_bias=0.01` only after
+checking the task; `brain.retune(...)` changes selected settings without losing
+acquired state. [`brain.describe()` and the defaults table](brain.md#defaults-and-expert-overrides)
+show what is running and which operation uses each rate.
 
 This short example exercises a feedback update, not a learned policy benchmark.
 Memory and learned associations can affect later choices; capacity is finite
@@ -108,7 +117,7 @@ Optional System 2 extends a two-module System 1 with observers:
 ```python
 recursive = Brain.compose(
     inputs=4, actions=2, modules=(16, 8), observers=(8,), seed=7,
-    arousal=ArousalConfig(),
+    arousal=True,
 )
 assert recursive.live(observation).shape == (1,)
 ```
