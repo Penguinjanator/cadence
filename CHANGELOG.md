@@ -2,14 +2,19 @@
 
 ## Unreleased
 
-- Document the measured persistence of an acquired policy under continued learning: the
-  actor step is the only protection, a higher arousal threshold switches learning off, and a
-  saved brain's greedy behaviour is identical across machines. In the arousal law, the reward
-  guide's traps and the checkpoint guide; the mechanism is tracked in
-  [#169](https://github.com/muellerberndt/cadence/issues/169).
+- Add the native sensory-history rhythm instrument with matched controls, continuation
+  checks and source-bound receipts. The period-four component passes; the C64 transfer
+  remains a failure under [#140](https://github.com/muellerberndt/cadence/issues/140).
+  Runtime laws and composed defaults are unchanged.
+- Clarify that arousal gates learning without guaranteeing retention of earlier skills.
+  Keep the bounded arena measurements and candidate mechanisms in
+  [#169](https://github.com/muellerberndt/cadence/issues/169), with smaller actor steps as a
+  measured control. Distinguish learner checkpoints from a complete composed life and
+  require workload parity checks when changing machine, backend or precision.
 - Add `MANIFESTO.md`, the design points in one page, with the dedicated language goal:
   whole consistent sentences formulated from the settled state, tracked in
   [#173](https://github.com/muellerberndt/cadence/issues/173).
+  Include it in source distributions and the documentation link checks.
 
 ## 0.79.0 — 2026-10-09
 
