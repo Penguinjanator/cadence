@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Document the measured persistence of an acquired policy under continued learning: the
+  actor step is the only protection, a higher arousal threshold switches learning off, and a
+  saved brain's greedy behaviour is identical across machines. In the arousal law, the reward
+  guide's traps and the checkpoint guide; the mechanism is tracked in
+  [#169](https://github.com/muellerberndt/cadence/issues/169).
 - Add `MANIFESTO.md`, the design points in one page, with the dedicated language goal:
   whole consistent sentences formulated from the settled state, tracked in
   [#173](https://github.com/muellerberndt/cadence/issues/173).
