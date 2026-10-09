@@ -40,16 +40,11 @@ rewards, errors and the need are multiplied by one positive number, away from it
 every outcome establishes the reward reference before its spread forms. A need is a
 level of reward, and shifting the rewards changes what is unmet.
 
-Two consequences of the law, measured on a continuing robot life (two modules, 22 senses,
-six-robot fights, cadence 0.79.0). The law habituates to a chaotic world, because surprise is
-read against the usual error: with need and heat at zero the brains were aroused 16 % to 50 %
-of the moments at the threshold founder of 0.2, and calm for twenty fights at 0.3 or 0.5 while
-being hit, so a higher threshold switches learning off; it does not make learning selective.
-And arousal gates learning without protecting what was learned: while aroused, the full actor
-step lands on the shared readout, and a greedy policy acquired over 100,000 nursery moments
-was gone within 20,000 aroused moments at an actor step of 0.03 (its driving-test score
-uncorrelated across one generation, r = 0.03) and held over twenty fights at 0.003 while the
-brain kept learning. The step of a stage is chosen for persistence (the reward guide's traps).
+Arousal gates learning; it does not protect particular acquired responses during an update.
+Continued learning can interfere with earlier behaviour. Raising ``threshold`` can reduce
+learning opportunities after youth, but youth and a level at or above the threshold still
+rouse the brain. A smaller actor step is a control to measure for retention and adaptation,
+not a guarantee of either. The reward guide links the bounded arena evidence in issue #169.
 
 Every constant of the law is a gene of ``ArousalConfig``. The values here are hand-set
 founders and stay as the control; ``ArousalConfig.space()`` declares the space for

@@ -1,5 +1,12 @@
 Describe the concrete problem and resulting behavior, then give relevant validation.
 
+Every change must meet [the manifesto](https://github.com/muellerberndt/cadence/blob/main/MANIFESTO.md)
+and [the contribution checks](https://github.com/muellerberndt/cadence/blob/main/CONTRIBUTING.md).
+Keep them in sync if a requirement changes. Declare bounded component,
+integrated-behavior or infrastructure scope, applicable boundaries, simpler
+controls and preservation checks. State current evidence and remaining goals
+separately; next-event accuracy alone does not establish coherent sequence behavior.
+
 For a mechanism, learning, memory or resolved-default change, follow
 [the preservation review](https://github.com/muellerberndt/cadence/blob/main/CONTRIBUTING.md#preserve-the-capable-foundation)
 and include:

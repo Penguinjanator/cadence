@@ -234,27 +234,23 @@ see which of the graph, the trace and the memory holds the choice.
 
 ## Traps, with their measurements
 
-Each of these cost a day on a real brain (the fruit fly of
+The first warning concerns retention in a continuing composed brain. The remaining
+traps cost a day on a real brain (the fruit fly of
 [cadence-examples](https://github.com/muellerberndt/cadence-examples), 150,802 neurons, an
 actor-critic on the Kenyon-cell-to-MBON synapses; the worm met the second one first). They are
-properties of the rule and the readout, and each has a reading in the `learn` report. The last
+properties of the rule and the readout, with readings in the `learn` report. The last
 three are read before any lesson by `preflight(brain, outputs, plastic, drives)`, which names
 the remedy for each; run it first.
 
-- **The step that raised a brain overwrites it in a new world.** A composed life raised for
-  100,000 nursery moments to a competent greedy policy (the robot arena's driving test:
-  approach, escape, the closing ring, engagement, chase, facing, spin, stall; deterministic,
-  identical to the digit across machines) loses it under continued learning at the same actor
-  step. Across one generation of 64 veterans (a 20,000-moment refresher and sixteen six-robot
-  fights at eta 0.03) the scores are uncorrelated, r = 0.03, the mean fell from 0.30 to 0.03,
-  and 57 of 64 were worse; three fights took one brain from 0.47 to -0.01 and into spinning in
-  place. Brains that stayed calm did not move at all. The remedy is a stage step a tenth of the
-  nursery's: at eta 0.003 the scores held over twenty fights (mean change 0.04, largest -0.11)
-  while the brains stayed aroused a fifth of the moments, damage dealt per fight rose from 65
-  to 80 and burn moments fell from 116 to 92. A higher arousal threshold is no remedy: at 0.3
-  or 0.5 the brains were calm throughout and nothing changed. The library has no consolidation
-  of an acquired behaviour (`consolidation` is the associative memory's write rate), so the
-  step is the only protection; #169 tracks a mechanism.
+- **Continued learning can interfere with acquired behaviour.** Arousal gates updates but
+  does not protect particular earlier responses while the brain learns. The robot-arena
+  measurements and candidate mechanisms are retained in
+  [#169](https://github.com/muellerberndt/cadence/issues/169): a smaller actor step reduced
+  interference in a six-brain, twenty-fight comparison. That setting is a bounded control,
+  not a general retention remedy or a new default. Compare retained skills and adaptation
+  in the same continuing brains. Raising the arousal threshold can reduce learning
+  opportunities after youth; it does not make updates selective for the skills to preserve.
+  Associative-memory `consolidation` controls record writes, not protection of actor weights.
 - **The temperature is relative to the activation range.** The action is a softmax over the
   output neurons' activations divided by `temperature`. Activations lie in [0, 1], so at the
   worm's 0.05 two outputs that differ by 0.3 make a choice with probability 0.998, the nudge's

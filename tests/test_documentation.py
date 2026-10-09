@@ -138,7 +138,13 @@ def test_every_python_block_is_run_or_marked_illustrative():
 
 def test_local_documentation_links_resolve():
     problems = []
-    for page in [ROOT / "README.md", ROOT / "AGENTS.md", *sorted((ROOT / "docs").rglob("*.md"))]:
+    for page in [
+        ROOT / "README.md",
+        ROOT / "MANIFESTO.md",
+        ROOT / "CONTRIBUTING.md",
+        ROOT / "AGENTS.md",
+        *sorted((ROOT / "docs").rglob("*.md")),
+    ]:
         for target in re.findall(r"\[[^\]\n]*\]\(([^\s)]+)\)", page.read_text()):
             if re.match(r"[a-z]+:", target):
                 continue

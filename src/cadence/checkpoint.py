@@ -6,9 +6,9 @@ the neuron model, the learner's configuration, plasticity masks, tie groups, mom
 normalisation state, and the update count, plus the library version that wrote it. ``load``
 rebuilds a ``Learner`` on any backend, so a brain trained on an accelerator runs on a CPU in a
 body and keeps learning where it left off. Checkpoints in the first format load as well.
-A saved brain's greedy behaviour is reproducible across machines: the robot arena's
-deterministic driving test of six brains matched to the digit between an x86 Linux box and an
-arm64 Mac, and over repeated runs on each.
+These are learner checkpoints; a complete composed life uses ``Brain.save/load`` instead.
+When changing machine, backend or precision, check numerical and behavioural parity on the
+intended workload. Checkpoint portability does not guarantee identical cross-machine results.
 """
 
 from __future__ import annotations
