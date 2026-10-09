@@ -234,10 +234,11 @@ see which of the graph, the trace and the memory holds the choice.
 
 ## Traps, with their measurements
 
-Each of these cost a day on a real brain (the fruit fly of
+The first warning concerns retention in a continuing composed brain. The remaining
+traps cost a day on a real brain (the fruit fly of
 [cadence-examples](https://github.com/muellerberndt/cadence-examples), 150,802 neurons, an
 actor-critic on the Kenyon-cell-to-MBON synapses; the worm met the second one first). They are
-properties of the rule and the readout, and each has a reading in the `learn` report. The last
+properties of the rule and the readout, with readings in the `learn` report. The last
 three are read before any lesson by `preflight(brain, outputs, plastic, drives)`, which names
 the remedy for each; run it first.
 

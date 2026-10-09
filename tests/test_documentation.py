@@ -141,6 +141,7 @@ def test_local_documentation_links_resolve():
     for page in [
         ROOT / "README.md",
         ROOT / "MANIFESTO.md",
+        ROOT / "CONTRIBUTING.md",
         ROOT / "AGENTS.md",
         *sorted((ROOT / "docs").rglob("*.md")),
     ]:

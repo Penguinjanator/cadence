@@ -15,6 +15,9 @@
   whole consistent sentences formulated from the settled state, tracked in
   [#173](https://github.com/muellerberndt/cadence/issues/173).
   Include it in source distributions and the documentation link checks.
+- Require every change to meet the manifesto through `CONTRIBUTING.md`, agent
+  guidance and the PR template. Keep design requirements and review checks in sync,
+  distinguish goals from implemented capabilities, and check contribution-guide links.
 
 ## 0.79.0 — 2026-10-09
 

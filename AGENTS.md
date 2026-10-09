@@ -1,5 +1,9 @@
 # Building on Cadence
 
+Every change must meet [the manifesto](MANIFESTO.md) and its
+[contribution checks](CONTRIBUTING.md). Keep those documents in sync when a
+requirement changes, and distinguish design goals from implemented capabilities.
+
 Start with [the guided documentation README](docs/README.md), then read the
 [continuing-world-model guide](docs/world-model.md) before designing an application,
 tutorial or experiment. Use [the catalogue](docs/index.md) to find individual

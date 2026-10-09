@@ -4,6 +4,14 @@ Issues and pull requests are welcome in this repository and in
 [cadence-demos](https://github.com/muellerberndt/cadence-demos). This page says
 how to set up, what the checks are, and what a change needs.
 
+**Every change must meet [the manifesto](MANIFESTO.md).** It defines what we are
+building and the design and evidence bars for code, defaults, documentation,
+benchmarks and infrastructure. This guide turns those bars into review checks;
+keep both documents in sync when changing a requirement. The manifesto's goals
+are not claims that every capability is already implemented. Declare what a
+change establishes, its limits and the applicable checks; infrastructure need
+not demonstrate a whole-brain capability to ship.
+
 ## Preserve the capable foundation
 
 **Required design rule.** Local agreement repair between patches into one
@@ -79,6 +87,35 @@ A proposal for cheap stable use or automatic mismatch repair needs an explicit
 contract and evidence before a guide advertises it. Do not change defaults or
 invent success thresholds to make an example read as a completed capability.
 
+## Scope and evidence for behavior over time
+
+Every issue, plan and pull request must declare bounded component,
+integrated-behavior or infrastructure scope. Name the applicable equilibrium
+boundaries, the simpler control and preservation gates. Keep one acquired brain
+through use, interference and recovery; a fresh brain per observation or an
+external trained answer path is a control, not the intended continuing life.
+Designed brain settings remain genes, with the composed founder as the control.
+
+The manifesto's sequence and language goals concern coherent activity governed
+by retained context and learned relationships. Next-event accuracy or a
+self-feeding rollout alone is component evidence. Integrated claims need earlier
+contexts against identical recent events, persistence through rests or familiar
+missing feedback, and recovery after disturbance, with matched information and
+exposure. Disclose supplied timing, phase, goals and arrangements. Today's
+`Brain.act` settles a present state with held trace and memory input; it does
+not jointly solve a future phrase or trajectory. No particular new module is
+required: start with the existing System 1 state and memory.
+
+Compare behavioral claims with uniform-random, frozen-copy and conventional
+online learners where applicable, at matched information and work. Count
+teaching, settling, replay and refused work, including routine and repair costs.
+Keep numerical residuals, meaningful surprise, task success and physical energy
+separate. Preserve original failed comparisons and useful earlier skills while
+testing adaptation; neither a better reward average nor a smaller residual
+establishes retention or understanding. Link the relevant capability owner under
+[#109](https://github.com/muellerberndt/cadence/issues/109), rather than creating
+a competing roadmap or silently waiving an unmet gate.
+
 ## Set up
 
 ```bash
@@ -102,12 +139,14 @@ pytest -q
 ```
 
 The test suite includes `tests/test_documentation.py`, which executes every Python block
-of the listed guides in order and checks that every local link and anchor in `README.md`
-and `docs/` resolves. Default pytest collection also includes the acquisition, recall, rhythm, reversal
+of the listed guides in order and checks that every local link and anchor in `README.md`,
+`MANIFESTO.md`, `CONTRIBUTING.md`, `AGENTS.md` and `docs/` resolves. Default pytest
+collection also includes the acquisition, recall, rhythm, reversal
 and key-door instruments, including their provenance, refusal, source-admission,
 archive and confirmation-audit tests.
 A change to a guide's code is a change to a test. The
-[minimal-install job](.github/workflows/ci.yml) builds the wheel with NumPy alone
+[minimal-install job](https://github.com/muellerberndt/cadence/blob/main/.github/workflows/ci.yml)
+builds the wheel with NumPy alone
 and runs 20 pages without optional backends: `README.md` and, under `docs/`,
 `world-model.md`, `patchnet.md`, `quickstart.md`, `temporal.md`,
 `temporal-memory.md`, `architecture.md`, `planning.md`, `interaction.md`,
