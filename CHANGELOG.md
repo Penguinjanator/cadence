@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 0.79.0 — 2026-10-08
+## 0.79.0 — 2026-10-09
 
 - Apply extra arousal heat to one uniformly chosen motor slot per moment
   ([#159](https://github.com/muellerberndt/cadence/issues/159)); other slots sample
@@ -29,6 +29,16 @@
   also has weaker closing and damage. These checks establish neither general
   combat improvement nor recovery of every previously acquired policy. Publish
   the receipts, source identities and limitations with the mechanisms they test.
+- Preserve the completed nine-life arena confirmation: seven lives improve
+  progress against eight required, seven pass the attack requirement, and six
+  pass both. All nine preserve actual-outcome custody and exact saved continuation.
+  The original physics and failed readiness result remain identified in the
+  [confirmation archive](benchmarks/arena_confirmation/README.md).
+- Retain the later [memory](benchmarks/arena_memory/README.md) and
+  [reward-phase](benchmarks/arena_phase_budget/README.md) comparisons, including
+  their losses of acquired attack performance. Those experimental changes are
+  excluded from this release. Longer arena training remains an experiment;
+  the fixes do not establish reliable fighting across founders.
 
 ## 0.78.0 — 2026-10-08
 
