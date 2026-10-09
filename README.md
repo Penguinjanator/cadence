@@ -187,6 +187,9 @@ equations. It does not change the teaching rule. See [contracts](https://github.
 
 ## Go further
 
+The design points in one page: [MANIFESTO.md](https://github.com/muellerberndt/cadence/blob/main/MANIFESTO.md),
+including the dedicated language goal, whole consistent sentences from the settled state.
+
 [Build a brain](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md)
 for custom wiring, [memory](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md)
 for traces and associations, and [the memory/planning example](https://github.com/muellerberndt/cadence/blob/main/examples/memory_imagination.py)
