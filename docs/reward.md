@@ -5,10 +5,19 @@ error without a backward computation graph. Each synapse keeps its own eligibili
 trace, and one broadcast dopamine signal gates every trace into a weight change.
 This page describes those components and the tests that check them.
 
-For application code, [`Brain.step`](continuous.md) receives this moment's
-observation and the preceding action's reward, updates plasticity, and returns the next
-action. There is no separate training mode. The phase-level API below exposes the same
-mechanism for custom architectures and measurement.
+For one continuing stream, compose with `arousal=True` and use
+[`Brain.live`](continuous.md#routine-and-repair-live); use `step` to learn from
+every actual outcome or to supply a current teaching label. Both receive the
+preceding action's reward and return the next action. There is no separate
+training mode. The phase-level API below exposes the same mechanism for custom
+architectures and measurement.
+
+Reward learning reads `actor_eta`, `actor_eta_bias` and `actor_eta_critic`;
+`learning_eta` and `learning_eta_bias` govern demonstrations and do not change
+`live` reward updates. `temperature` is shared by the teaching softmax and actor
+policy. Set these names in `Brain.compose` or `brain.retune`, with explicit
+paired actor rates when needed. The [composed defaults table](brain.md#defaults-and-expert-overrides)
+records their ownership and the remaining genes.
 
 ## Eligibility traces and dopamine
 
@@ -333,9 +342,11 @@ pilots that motivated the warning.
 
 A consistent signal above the floor gives a parameter increment near its
 rate before masks, tying, decay and clipping. The rate is not a fixed increment
-or an upper bound. `eta_bias` left unset derives `eta / 10` at construction, so
-a smaller `eta` lowers the bias step with it; an explicit `eta_bias` is used as
-given, and construction warns when it exceeds a positive `eta`. Under RMS
+or an upper bound. A fresh `ActorCriticConfig` derives an unset `eta_bias` as
+`eta / 10`; an explicit value is kept. Composed named overrides and `retune`
+preserve the current bias rate unless it too is named: use
+`actor_eta_bias=None` to derive it again, or supply an explicit paired rate.
+Construction warns when the bias rate exceeds a positive `eta`. Under RMS
 normalization both rates are absolute per-parameter steps: a bias step 25 times
 the synapse step rewrites the policy into a bias policy whose greedy action does
 not depend on the observation (issue 143, measured on Patch World v2 creatures

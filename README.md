@@ -11,6 +11,19 @@
 
 **One continuing equilibrium brain: learn a world, act in it, repair what fails.**
 
+```python
+from cadence import Brain
+
+brain = Brain.compose(inputs=4, actions=2, arousal=True)
+action = brain.live([[1.0, 0.0, 0.0, 0.0]])
+```
+
+Execute the returned action, then pass its measured reward with the next
+observation: `brain.live(next_observation, reward=reward)`. Tune named settings
+with `compose` or `brain.retune(...)`; inspect them with `brain.describe()`.
+The [composition guide](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md#defaults-and-expert-overrides)
+explains defaults and which learning rates each operation uses.
+
 Cadence is not a feed-forward deep neural network. Its primary application is
 one acquired brain continuing through experience.
 
@@ -41,10 +54,10 @@ adds a first routine-and-repair loop for one stream, measured on one bounded
 chamber. Integrated learned world prediction, repair localized to what failed
 and cheap stable operation remain development goals. Cadence is alpha research software.
 
-**One way to start:** create a brain with `Brain.compose(..., arousal=ArousalConfig())`,
-then call `brain.live(...)` for each observation and actual outcome. `compose`
-constructs the brain; `live` runs its life. `brain.last_settlement` is an optional
-diagnostic report. Release history belongs in the [changelog](CHANGELOG.md).
+`compose` constructs the brain; `live` runs its life. The explicit `arousal=True`
+uses the founder arousal settings; omitting it preserves the lower-level
+composition for `step`, teaching and batched streams. `brain.last_settlement`
+is an optional diagnostic report. Release history belongs in the [changelog](CHANGELOG.md).
 
 Start with the simplest existing System 1: proposed additions must remain local
 repair within the same equilibrium and demonstrate benefit without losing
@@ -94,17 +107,17 @@ Python 3.11+ and NumPy are required.
 Install the published release for this basic example:
 
 ```sh
-python -m pip install cadence-net==0.79.0
+python -m pip install cadence-net==0.80.0
 ```
 
-Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.79.0/docs/README.md)
+Its [released documentation](https://github.com/muellerberndt/cadence/blob/v0.80.0/docs/README.md)
 describes the APIs included in that package.
 
 ```python
 import numpy as np
-from cadence import ArousalConfig, Brain
+from cadence import Brain
 
-brain = Brain.compose(inputs=4, actions=2, arousal=ArousalConfig())
+brain = Brain.compose(inputs=4, actions=2, arousal=True)
 observation = np.array([[1.0, 0.0, 0.0, 0.0]])
 action = brain.live(observation)
 
@@ -169,7 +182,7 @@ not inferred from a small residual.
 ```python
 recursive = Brain.compose(
     inputs=4, actions=2, modules=(16, 8), observers=(8,), seed=7,
-    arousal=ArousalConfig(),
+    arousal=True,
 )
 ```
 

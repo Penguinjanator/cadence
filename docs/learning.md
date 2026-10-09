@@ -201,7 +201,7 @@ free behavior.
 This component example supplies a fresh `LearnerConfig`, including its
 `eta=0.2` and `momentum=0.0` defaults. To change qualification while preserving
 the composition's learning rates and momentum, use the
-[`dataclasses.replace` recipe](brain.md#settle-and-check).
+[named-override recipe](brain.md#settle-and-check).
 
 ```python
 brain = cd.Brain.compose(
@@ -246,11 +246,11 @@ input, with the data playing no part.
 
 Constructing a `LearnerConfig` with `qualified=True` and
 `nudged_steps < free_steps` therefore warns, including through
-`dataclasses.replace` on a composed configuration, and a refused nudged or
+named overrides or `dataclasses.replace`, and a refused nudged or
 opposite phase under such a configuration names the budget mismatch in its
 `LearningPhaseError` message and `hint`. Set `nudged_steps` comparable to
 `free_steps` when opting in, as in the
-[`dataclasses.replace` recipe](brain.md#settle-and-check); a deliberately
+[named-override recipe](brain.md#settle-and-check); a deliberately
 small settle budget remains allowed, and the warning can be filtered. The
 finite default and the reward-eligibility contract above are unchanged.
 
@@ -331,7 +331,12 @@ helps one acquisition task is not a universal default. Across-brain selection
 may treat these hyperparameters as genes; that does not make them learned
 within a life.
 
-`LearnerConfig` is frozen. To change the learning rate between completed updates:
+For a composed brain, use `brain.retune(learning_eta=..., learning_eta_bias=...)`
+to change teaching rates while preserving its other settings. Reward learning
+has independent `actor_*` rates; see the [ownership table](brain.md#defaults-and-expert-overrides).
+
+For a standalone `Learner`, `LearnerConfig` is frozen. To change the learning
+rate between completed updates:
 
 ```python
 from dataclasses import replace
@@ -437,16 +442,9 @@ separately from teaching, and test acquired free behavior afterward.
 
 ## 7. Every knob
 
-`LearnerConfig()` has standalone defaults. `Brain.compose(learning=None)` creates
-its own configuration for a continuing brain:
-
-| setting | `LearnerConfig()` | `Brain.compose` without `learning` |
-| --- | --- | --- |
-| `free_steps`, `nudged_steps` | 100, 50 | 1024, 12 |
-| `tolerance` | `1e-4` | `3e-3` |
-| `eta`, `eta_bias` | 0.2, `eta / 10` = 0.02 | 0.5, `eta / 10` = 0.05 |
-| `momentum` | 0 | 0.9 |
-| `temperature` | 0.2 | 0.2 |
+`LearnerConfig()` has standalone defaults. `Brain.compose(learning=None)` uses
+the [composed founders](brain.md#defaults-and-expert-overrides); that table is
+also the guide to each `learning_*` and `actor_*` setting's operation.
 
 Passing `learning=LearnerConfig(...)` uses that configuration; it does not merge
 its defaults with the implicit `Brain.compose` settings. Both contexts use
@@ -454,9 +452,9 @@ finite teaching by default. The `qualified` and `damping` options below
 select full-equation teaching and its numerical strategy. Rates and temperature can be selected
 on development data and frozen before confirmation; recommendations are not
 constructor defaults. `eta_bias` left unset derives `eta / 10` at construction;
-once resolved it is an ordinary explicit value, so lowering `eta` through
-`dataclasses.replace` keeps the old bias rate unless `eta_bias` is set too or
-passed as `None` to re-derive it. A bias rate above the synapse rate warns:
+once resolved it is an ordinary explicit value. Both named overrides and
+`dataclasses.replace` keep the old bias rate unless it is set too or passed as
+`None` to re-derive it. A bias rate above the synapse rate warns:
 at `eta=0.0015` the former fixed default of 0.02 made the bias step thirteen
 times the synapse step (issue 126).
 
@@ -539,9 +537,9 @@ synaptic drive or a promise that every synapse moves.
 The composed teaching default `eta=0.5` and actor default `eta=1.0` use
 `normalize=0`. Enabling RMS normalization can make their updates much larger
 relative to a small raw signal and can saturate outputs. Retune both `eta` and
-`eta_bias`; a resolved configuration keeps its bias rate when `eta` changes
-through `dataclasses.replace`, so set `eta_bias` alongside `eta` or pass
-`eta_bias=None` to re-derive `eta / 10`. A starting development sweep
+`eta_bias`; a resolved configuration keeps its bias rate when `eta` changes.
+For a composed brain, set paired `learning_*` or `actor_*` rates with `retune`,
+or pass the respective bias override as `None` to re-derive `eta / 10`. A starting development sweep
 of `eta=0.001` to `0.003` is motivated by the reported pilots below, but is not a
 universal safe range or a replacement for task measurements. Select the bias
 rate independently and check acquisition, retention and actual update sizes.

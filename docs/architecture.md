@@ -22,9 +22,9 @@ controller. A graph can be deep and modular without observers.
 
 ```python
 import numpy as np
-from cadence import ArousalConfig, Brain
+from cadence import Brain
 
-brain = Brain.compose(inputs=4, actions=2, arousal=ArousalConfig())
+brain = Brain.compose(inputs=4, actions=2, arousal=True)
 reading = np.array([[1.0, 0.0, 0.0, 0.0]])
 action = brain.live(reading)
 assert action.shape == (1,)

@@ -2,12 +2,12 @@
 
 Start with [Brain.compose](#brain-cadence) for a continuing brain with memory
 and optional observers, then use `brain.live(...)` for one continuing stream
-with `arousal=ArousalConfig()`. [NeuralGraph](#neuralgraph-cadence) is the lower-level
+with `arousal=True`. [NeuralGraph](#neuralgraph-cadence) is the lower-level
 graph API. The [quickstart](quickstart.md) runs the main interaction loop;
 sections below describe specialist operations. Pass optional arguments by keyword.
 
-This reference describes Cadence 0.79.0. Install it with
-`python -m pip install cadence-net==0.79.0`. `Brain.last_settlement` is an optional
+This reference describes Cadence 0.80.0. Install it with
+`python -m pip install cadence-net==0.80.0`. `Brain.last_settlement` is an optional
 diagnostic report, independent of the interaction loop you use.
 
 The temporal patch: [TemporalPatchNet](#temporalpatchnet-cadencetemporal),
@@ -691,7 +691,7 @@ to positive region widths to add optional System 2 state feedback within the
 same neural-graph settlement. This is an implemented interface, not a claim
 that recursive benefit or automatic reflective behavior has been learned.
 
-- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, seed=0, slots=1, **options) -> Brain`:
+- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, sensory_scale=1.0, seed=0, slots=1, **options) -> Brain`:
   the direct vector-input constructor. `slots` groups the motor neurons into several
   softmax readouts that settle together, a count of equal groups or one size per group
   covering `actions`: `act` and `step` return one index per slot, lateral inhibition
@@ -702,9 +702,19 @@ that recursive benefit or automatic reflective behavior has been learned.
   to every processing and motor region and earlier observers. The sensory, prefrontal
   and motor regions belong to that same graph; observers do not settle
   as separate controllers. Trace and consolidating SynapticMemory are enabled by
-  default. Constructor `options` can select the documented learning, reward, memory
-  and backend settings. This state feedback is distinct from exact error readback
-  in `cadence.experimental.equilibrium`.
+  default. `sensory_scale` is a finite nonnegative initial sensory-projection
+  scale; it preserves the existing wiring at `1.0` and is construction-only.
+  Constructor `options` accept memory/backend settings and every config field
+  through `learning_<field>`, `actor_<field>` or `arousal_<field>`.
+  `temperature` aliases `learning_temperature`, shared by teaching and the
+  actor policy. Named overrides change only those fields; complete config
+  objects remain full replacements. Unknown names, ambiguous bare rates such
+  as `eta`, and duplicate aliases are rejected. A rate-only override keeps the
+  resolved bias rate; pass `actor_eta_bias=None` or `learning_eta_bias=None`
+  explicitly to derive one tenth of the respective rate. See the
+  [composed defaults and rate ownership](brain.md#defaults-and-expert-overrides).
+  This state feedback is distinct from exact error readback in
+  `cadence.experimental.equilibrium`.
   The `lateral` option is the finite signed weight between each pair
   of distinct motor neurons; zero removes those connections while preserving
   reciprocal association/motor feedback. Left unset it resolves to -0.5 up to
@@ -728,10 +738,15 @@ that recursive benefit or automatic reflective behavior has been learned.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `Brain(connectome, *, episodic=True, consolidation=0.05, working_memory_decay=0.2, working_memory_amplitude=3.0, efference_decay=0.2, efference_amplitude=0.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None)`:
-  `arousal` takes an `ArousalConfig` and gives the brain the arousal that `live` runs
-  on; left unset the brain has none and `live` raises. `compose` and `build` pass it
-  through their options.
+- `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, working_memory_decay=0.2, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, **genes)`:
+  `arousal=True` enables the founder `ArousalConfig`; a mapping patches its
+  fields, and an `ArousalConfig` supplies an explicit configuration. Omitting
+  arousal preserves the brain without that controller, and `live` raises.
+  `compose` and `build` pass these options through. Memory settings configure
+  the existing trace/associative components; they do not add a missing population.
+  At construction, settings for disabled or absent components have no runtime
+  effect and are omitted from `describe()["genes"]`. `retune` rejects those
+  settings when the component is absent.
   `resting_bias` is a finite nonnegative real scalar; booleans and arrays are rejected.
   It initializes named populations outside the `sensory`, `visual`, `prefrontal`,
   `efference` and `motor` families (the part of the name before `/`). Excluded family membership
@@ -763,6 +778,31 @@ that recursive benefit or automatic reflective behavior has been learned.
   `None`), `hippocampus` (`SynapticMemory`
   from sensory to motor neurons, or `None`), `sensory_index`, `association_index`,
   `motor_index`.
+  - `retune(*, reset_arousal=False, **genes) -> Brain`: change selected
+    mutable genes in the same life. Accepts `learning_*`, `actor_*`, `arousal_*`,
+    `temperature`, working-trace/efference settings and
+    `memory_decay`, `memory_rate`, `memory_amplitude`, `consolidation`.
+    `arousal={...}` changes only its named fields. Full `learning`, `reward`
+    and `arousal` configuration objects replace that config before named
+    overrides. Duplicate alias/mapping fields are rejected. Validation is
+    atomic: an invalid request changes nothing. Successful calls preserve
+    acquired parameters, optimizer history, activity, traces, records, random
+    state and pending feedback. `reset_arousal=True` resets arousal's level
+    and reward references, preserving its age and work counters. Retuning cannot
+    alter topology, `sensory_scale`, backend or `resting_bias`, nor add a missing
+    component. Actor rates apply to
+    the next learned outcome, including one already pending; its eligibility
+    and actual sampling temperature are retained. Changing `learning_beta`
+    with pending sampled feedback is refused until the outcome is consumed.
+    See [retuning a life](brain.md#retune-the-same-life).
+  - `describe()`: detached, JSON-safe `layout`, effective flat `genes`, resolved
+    `learning`/`actor`/`arousal` configurations, memory settings, `initialization`
+    provenance and `pending_feedback`. Save/load preserves the metadata without
+    reapplying initialization to learned weights. Older files with no composed
+    layout provenance report `initialization["composition"]` as `None`.
+  - `pending_feedback`: read-only boolean; the current issued action awaits
+    its actual outcome, including a routine `live` choice. Use this when
+    handling a refusal to avoid submitting an already consumed outcome twice.
   - `stimulus(observations, *, memory=True)`: the drive of a batch; with `memory`, the
     working memory, the efference copy and the hippocampal recall are added.
   - `step(observations, *, reward=None, done=None, teacher=None, salience=None, bootstrap=None)`:

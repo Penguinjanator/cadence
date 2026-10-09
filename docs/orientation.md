@@ -5,6 +5,12 @@ corresponds to which model you know, where the learning signal comes from in eac
 what the arrays look like, and what the words mean. Read it once; then the
 [quickstarts](quickstart.md) and [build your own brain](build.md) are short.
 
+The primary application interface is `Brain.compose(..., arousal=True)`, then
+`brain.live(observation, reward=...)` for each real outcome. Use `step` for
+explicit teaching or batched streams and `retune` for selected settings in the
+same life. The families below distinguish the numerical mechanisms; the
+[composition guide](brain.md) keeps the common entry point small.
+
 ## The picture
 
 A Cadence brain is a set of patches joined by ports. A patch holds a bounded local
@@ -14,10 +20,11 @@ temporal models can qualify a settled state and learn from detuned phases.
 Record models use a causal scan, while belief models use finite repair
 iterations; both train slow weights by an adjoint backward scan through the
 observed window. The [contract guide](contracts.md) distinguishes these cases.
-Beside the slow weights a patch can hold a record store: a fixed sparse code of the
-reading addresses a table that takes an outcome in one write and reads it back at
-the same reading, so a fact is kept without a gradient. A night of sleep moves what
-the store holds into the slow weights.
+The record-patch family also holds a record store: a fixed sparse code of the
+reading addresses a table that takes an outcome in one write and reads it back
+at the same reading. Its `sleep` cycle teaches stored completions to slow
+weights. The composed brain instead has a working trace and online associative
+consolidation; it does not expose that record-patch sleep cycle.
 
 ![Idealized equilibrium contrast under a symmetric energy model](assets/learning-cycle.svg)
 
@@ -106,7 +113,8 @@ a receipt and a check for its numbers.
 
 | Model | Inputs | Targets | State between calls | Checkpoint |
 | --- | --- | --- | --- | --- |
-| Settling brain | a drive of shape `(batch, n)`, one column per neuron; put features on the input neurons | integer labels `(batch,)` for `Learner.step`, or a target pattern `(batch, n)` for the phase calls | `BrainState` per row; pass `warm=` to continue | `Learner.save` / `Learner.load`, one `.npz` |
+| Composed `Brain` | `(batch, inputs)` observations; one row for `live` | `step(teacher=...)` labels the current observation; reward labels the preceding executed action | Neural activity, working trace, optional efference, associative memory and pending outcomes | `Brain.save` / `Brain.load` preserve the complete brain continuation |
+| Neural graph / `Learner` | a drive of shape `(batch, n)`, one column per neuron; put features on the input neurons | integer labels `(batch,)` for `Learner.step`, or a target pattern `(batch, n)` for the phase calls | `BrainState` per row; pass `warm=` to continue | `Learner.save` / `Learner.load`, one `.npz` |
 | Temporal patch | `(batch, time, inputs)` | `(batch, time, outputs)` | the hidden boundary `(batch, hidden)`; `reset()` clears it | `save` / `load`, `snapshot` / `restore` |
 | Record patch | `(batch, time, inputs)` | `(batch, time, outputs)`, one-hot per group for categorical ports | the context `(batch, hidden)` plus the record tables | `save` / `load`, `snapshot` / `restore` |
 | Belief patch | observations `(batch, time, inputs)` and actions `(batch, time, actions)` | `(batch, time, outputs)` | the belief `(batch, belief)` plus the record tables | `save` / `load`, `snapshot` / `restore` |

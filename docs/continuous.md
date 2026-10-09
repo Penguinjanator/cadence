@@ -3,7 +3,7 @@
 `Brain.compose` creates a continuing **System 1** brain with working
 trace, plastic connections and fast/persistent associative memory. Optional
 observer regions add **System 2** feedback in the same neural graph. For one
-creature, construct it with `arousal=ArousalConfig()` and use `brain.live(...)`:
+creature, construct it with `arousal=True` and use `brain.live(...)`:
 observe, report the preceding action's actual outcome, then act again. There is
 no training/inference mode switch. The [quickstart](quickstart.md) is the small
 starting example.
@@ -249,19 +249,16 @@ remain aroused by an old shortfall. The brain can habituate to a poorer life whi
 sampling; a positive unmet `need` still keeps it wanting.
 
 ```python
-from dataclasses import replace
-
 import numpy as np
-from cadence import ArousalConfig, Brain
+from cadence import Brain
 
 brain = Brain.compose(
     4, 2, modules=(16,), seed=0,
     working_memory_amplitude=0.3,   # the trace informs; the present input leads
     consolidation=0.25,             # lasting memory takes half of a witnessed unit outcome
-    arousal=ArousalConfig(youth=30),
+    arousal=True, arousal_youth=30,
+    actor_eta=0.1, actor_eta_bias=0.01,  # this chamber's measured rates
 )
-actor = brain.basal_ganglia         # one stream: a tenth of the composed actor rate
-actor.config = replace(actor.config, eta=0.1, eta_bias=0.01)
 
 cues = np.eye(4)
 rng = np.random.default_rng(0)
@@ -289,7 +286,9 @@ mode; [the API](api.md#arousal-cadencearousal) gives the law. A brain taught
 through `step` continues through `live` without a reset: the action `step`
 sampled is adopted. If the forecast settle refuses, nothing has changed and the
 same call can be retried. If the answer refuses after the outcome was taken, the
-outcome stays learned: retry with `live(observations)` alone.
+outcome stays learned: retry with `live(observations)` alone. The read-only
+`brain.pending_feedback` reports whether the current action still awaits its
+outcome, including a routine choice.
 
 When an action awaits feedback, omitting `reward` supplies zero, as in `step`;
 it does not represent a missing or delayed outcome. Wait for the body's actual
@@ -319,6 +318,11 @@ moved reward. A routine moment still pays one full settle. A settled routine
 answer satisfies the neural equations and can still be wrong about the world; the
 next outcome is what tells.
 
+Change a measured operating point with [`brain.retune(...)`](brain.md#retune-the-same-life),
+using `actor_*` for reward rates and `learning_*` for teaching rates. It preserves
+acquired state and pending outcomes; arousal resets are explicit. Inspect effective
+settings with `brain.describe()` and keep the environment's stage in its own save.
+
 ## Reset and save
 
 `brain.reset()` clears live neural/eligibility state and the working trace,
@@ -345,7 +349,7 @@ saved too. Shapes, finite values and continuation state are validated on load.
 | Neural activity | Retained | Actual interaction |
 | Working trace | Included | Each admitted action's free state |
 | Reward plasticity and demonstrations | Available through `step` | Actual outcomes and supplied current labels |
-| Arousal | None unless `arousal=` is given | Each outcome `live` receives |
+| Arousal | Absent unless enabled, e.g. `arousal=True` | Each outcome `live` receives |
 | Fast/persistent associations | Included | Observed chosen-action outcomes |
 | Recursive observers | Empty unless requested | The same neural solve when included |
 | Private imagination | Explicit call | Supplied hypothetical observations |

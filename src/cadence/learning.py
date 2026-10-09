@@ -95,6 +95,14 @@ class LearnerConfig:
     damping: int = 3  # candidate numerical strategy: at most this many dt halvings
 
     def __post_init__(self) -> None:
+        # Config fields have host scalar semantics, including before a save/load.
+        # NumPy float32 arithmetic must not silently differ from restored floats.
+        for name in self.__slots__:
+            value = getattr(self, name)
+            if isinstance(value, np.integer):
+                object.__setattr__(self, name, int(value))
+            elif isinstance(value, np.floating):
+                object.__setattr__(self, name, float(value))
         if self.eta_bias is None:
             # The bias rate follows the synapse rate unless chosen: issue 126.
             if not np.isfinite(self.eta) or self.eta < 0:
@@ -129,6 +137,8 @@ class LearnerConfig:
             raise ValueError("normalize_floor must be finite and positive")
         if self.tolerance is not None and (not np.isfinite(self.tolerance) or self.tolerance < 0):
             raise ValueError("tolerance must be finite and nonnegative, or None")
+        if not isinstance(self.centered, bool):
+            raise ValueError("centered must be boolean")
         if not isinstance(self.qualified, bool):
             raise ValueError("qualified must be boolean")
         if self.qualified and self.tolerance is None:

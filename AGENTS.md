@@ -97,7 +97,7 @@ or weaken qualification to manufacture a whole-brain answer.
    feed-forward. Add depth or optional observers for a task requirement, not as a
    substitute for testing the lifecycle.
 3. Keep that brain alive during interaction. For one creature, construct it with
-   `arousal=ArousalConfig()` and use `live` to read memory, execute its action and
+   `arousal=True` and use `live` to read memory, execute its action and
    report the actual outcome exactly once. Use `step` for explicit teaching,
    batched streams or learning from every outcome; targets label the current
    observation, while rewards describe the preceding executed action.
@@ -112,7 +112,7 @@ or weaken qualification to manufacture a whole-brain answer.
 
 ## Keep the main interface simple
 
-Lead user guides with `Brain.compose(..., arousal=ArousalConfig())` and `brain.live(...)`
+Lead user guides with `Brain.compose(..., arousal=True)` and `brain.live(...)`
 for one continuing brain. Keep `step` and separate `act`/`learn` as explicit controls,
 and `last_settlement` as diagnostics. Use `NeuralGraph` for the lower-level
 neural graph. `modules` selects region sizes; adjacent regions and the
@@ -120,10 +120,14 @@ association/motor pair exchange signals, while sensory inputs supply a held
 drive. Optional `observers` read and return to that same graph. Working trace
 and consolidating associative memory are included. Add a new abstraction only
 for a demonstrated general need; changing an interface must preserve the
-behavior it serves. When changing selected learner or actor settings, use
-`dataclasses.replace` on the composition's existing config: a fresh config has
-its own defaults and replaces more than the fields named in the call. Consult
-the defaults table in [the composition guide](docs/brain.md).
+behavior it serves. Set individual genes with `learning_*`, `actor_*`, `arousal_*`
+and the named memory options in `compose`; use `brain.retune(...)` to change them
+in the same acquired life. `brain.describe()` reports the effective settings.
+Keep rate ownership explicit: actor rates govern reward learning, learner rates
+govern teaching, and temperature is shared. A fresh configuration dataclass is
+still a complete replacement, while named overrides preserve unspecified values.
+Consult the [defaults and tuning guide](docs/brain.md#defaults-and-expert-overrides).
+Application recipes are measured choices, not generally optimal defaults.
 
 `resting_bias` is an optional initialization setting, not evidence of improved
 acquisition or retention. Keep its default and the working-trace defaults as

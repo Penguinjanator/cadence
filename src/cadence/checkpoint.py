@@ -26,6 +26,7 @@ from .brain import Backend, Brain
 from .connectome import Connectome
 from .learning import Learner, LearnerConfig
 from .neuron import Adaptation, NeuronModel
+from .receipts import canonical_json
 
 FORMAT = "cadence-checkpoint/2"
 FIRST_FORMAT = "cadence-checkpoint/1"
@@ -65,7 +66,7 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
     }
     assert learner.plastic_synapses is not None and learner.plastic_neurons is not None
     return dict(
-        meta=np.array(json.dumps(meta, sort_keys=True)),
+        meta=np.array(canonical_json(meta)),
         pre=c.pre,
         post=c.post,
         count=c.count,
