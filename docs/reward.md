@@ -241,6 +241,20 @@ properties of the rule and the readout, and each has a reading in the `learn` re
 three are read before any lesson by `preflight(brain, outputs, plastic, drives)`, which names
 the remedy for each; run it first.
 
+- **The step that raised a brain overwrites it in a new world.** A composed life raised for
+  100,000 nursery moments to a competent greedy policy (the robot arena's driving test:
+  approach, escape, the closing ring, engagement, chase, facing, spin, stall; deterministic,
+  identical to the digit across machines) loses it under continued learning at the same actor
+  step. Across one generation of 64 veterans (a 20,000-moment refresher and sixteen six-robot
+  fights at eta 0.03) the scores are uncorrelated, r = 0.03, the mean fell from 0.30 to 0.03,
+  and 57 of 64 were worse; three fights took one brain from 0.47 to -0.01 and into spinning in
+  place. Brains that stayed calm did not move at all. The remedy is a stage step a tenth of the
+  nursery's: at eta 0.003 the scores held over twenty fights (mean change 0.04, largest -0.11)
+  while the brains stayed aroused a fifth of the moments, damage dealt per fight rose from 65
+  to 80 and burn moments fell from 116 to 92. A higher arousal threshold is no remedy: at 0.3
+  or 0.5 the brains were calm throughout and nothing changed. The library has no consolidation
+  of an acquired behaviour (`consolidation` is the associative memory's write rate), so the
+  step is the only protection; #169 tracks a mechanism.
 - **The temperature is relative to the activation range.** The action is a softmax over the
   output neurons' activations divided by `temperature`. Activations lie in [0, 1], so at the
   worm's 0.05 two outputs that differ by 0.3 make a choice with probability 0.998, the nudge's
