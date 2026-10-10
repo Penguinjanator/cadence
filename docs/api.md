@@ -88,11 +88,8 @@ fields are described in the [planning guide](planning.md).
 
 ## The quickstart demos
 
-The [current quickstart](quickstart.md) runs `Brain.compose`; application demos
-live in [cadence-demos](https://github.com/muellerberndt/cadence-demos).
-[cadence-examples/quickstart](https://github.com/muellerberndt/cadence-examples/tree/main/quickstart)
-retains three archived browser quickstarts. Follow their declared library pin
-and environment when reproducing them.
+The [quickstart](quickstart.md) runs `Brain.compose`; application demos live in
+[cadence-demos](https://github.com/muellerberndt/cadence-demos).
 
 ## RecordPatchNet (`cadence.record_patch`)
 
@@ -361,7 +358,7 @@ Restore with the subclass's `restore`/`load` to preserve mask enforcement.
 
 ## PatchNet (`cadence.patch`)
 
-Since 0.18.0, `PatchNet.recursive(inputs, layers, outputs, *, seed=0,
+`PatchNet.recursive(inputs, layers, outputs, *, seed=0,
 coupling=1.0, config=None, backend="cpu", device=None, **runtime_options)` builds
 one reciprocal graph. `layers[0]` is the base hidden population; later widths
 add observers connected in both directions to all previous neurons. The output
@@ -379,7 +376,7 @@ and a complete runnable example.
   graph with declared input, hidden and output ports. Configure learning with
   `config=LearnerConfig(...)`, phase budgets with `steps` and `tolerance`, and
   optional temporal overlap with `context_strength` and `context_mask`.
-- Since 0.19.0, `solver="hybrid"` optionally follows the local budget with up to
+- `solver="hybrid"` optionally follows the local budget with up to
   `refinement_steps=64` accepted Newton steps per unresolved row. The default
   `solver="local"` preserves the existing local-only contract. Hybrid requires
   the CPU smooth `tanh(v/2)` rule, reciprocal effective weights, no adaptation,
@@ -1364,11 +1361,8 @@ founder genes for a small share of moments; the
 
 ## Atlas
 
-The archived viewer, connectome atlas and replay page live in
-[cadence-examples/viewer](https://github.com/muellerberndt/cadence-examples/tree/main/viewer)
-with their own library pin and environment. The current library supplies
-`record_settlements` for capturing actual graph iterations; the application owns
-their display. Current application demos live in
+The library supplies `record_settlements` for capturing actual graph iterations;
+the application owns their display ([pages](pages.md)). Application demos live in
 [cadence-demos](https://github.com/muellerberndt/cadence-demos).
 
 ## Receipts (`cadence.receipts`)

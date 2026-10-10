@@ -1,9 +1,7 @@
 # Numerical and learning contracts
 
-This page describes Cadence 0.80.0 numerical, learning and feedback contracts.
-
 Cadence exposes several implementations of state, repair and learning. Choose
-an API by its equations, stopping rule and update contract. Sharing the word
+an API by its equations, stopping rule and update contract: sharing the word
 "patch" does not make their solvers or learning guarantees interchangeable.
 
 ## Choose the computation
@@ -147,8 +145,6 @@ writes, nonlinearities, optimizer bookkeeping, application callbacks and memory
 traffic. Governor steps reported as moment equivalents are a declared cost model,
 not measured hardware work. Use complete profiling for a training-efficiency claim.
 
-The production goal is an efficient, reliable library for these computations.
-Current component checks do not establish replacement of a general-purpose
-learning framework. Compare total training work, elapsed time, peak memory,
-inference cost, generalization and retention; include failed solves, nudged
-phases and admission replays in the cost.
+For a performance claim, compare total training work, elapsed time, peak
+memory, inference cost, generalization and retention, and include failed
+solves, nudged phases and admission replays in the cost.

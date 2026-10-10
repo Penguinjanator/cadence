@@ -1,19 +1,19 @@
 # Continuous interaction with Brain
 
-`Brain.compose` creates a continuing **System 1** brain with working
-trace, plastic connections and fast/persistent associative memory. Optional
-observer regions add **System 2** feedback in the same neural graph. For one
-creature, construct it with `arousal=True` and use `brain.live(...)`:
-observe, report the preceding action's actual outcome, then act again. There is
-no training/inference mode switch. The [quickstart](quickstart.md) is the small
-starting example.
+`Brain.compose` creates a continuing **System 1** brain with working trace,
+plastic connections and fast/persistent associative memory; optional observer
+regions add **System 2** feedback in the same neural graph. For one creature,
+construct it with `arousal=True` and use `brain.live(...)`: observe, report the
+preceding action's actual outcome, then act again. There is no
+training/inference mode switch, and bootstrap, unchanged conditions and
+witnessed disruption belong to the same life.
 
-This is the runtime loop for [one continuing equilibrium brain](world-model.md).
-Bootstrap, unchanged conditions and witnessed disruption belong to the same
-life. [`live`](#routine-and-repair-live) lets arousal decide when to explore and
-learn and when to answer greedily without learning. The explicit `step` loop
-below is for batched streams, teacher labels or learning from every outcome.
-Keep a task error separate from a numerical failure to settle.
+[`live`](#routine-and-repair-live) lets arousal decide when to explore and learn
+and when to answer greedily without learning. The explicit `step` loop below is
+for batched streams, teacher labels or learning from every outcome. Keep a task
+error separate from a numerical failure to settle. The
+[quickstart](quickstart.md) is the small starting example, and
+[one continuing equilibrium brain](world-model.md) the design.
 
 <a id="observations-actions-and-reward"></a>
 
@@ -225,27 +225,30 @@ weights does not require growing new anatomical connections.
 `step` samples an action, keeps its eligibility and learns from its outcome at
 every moment. `live` lets the brain's arousal decide. A calm brain answers with
 the greedy choice of one qualified settle and learns nothing: no eligibility
-phases, no parameter change, no memory write; the eligibility of its earlier
-sampled actions fades with each moment. Two things rouse it. An outcome that
-contradicts the forecast it made before acting is a surprise; the brain forecasts
-with the critic's value of the situation and, through a gene that the founders
-weigh at zero, with the record it holds for the action it chose. A reward that
-stays below what its life usually pays is a want, which also covers a failure it
-predicts correctly; so is a reward below the body's `need`, a gene the founders set
-at zero, measured as the share of the need left unmet, which a rare reward's small
-mean cannot dilute and which never habituates. An aroused brain samples its policy,
-keeps eligibility, learns from every outcome and writes memory. Want raises the
-temperature of one uniformly chosen motor slot per moment; the other slots keep
-the base policy temperature, so extra exploration does not flatten every motor
-choice at once. A one-slot brain retains its existing sampling law. Eligibility
-credits the actual temperatures used, and `last_arousal["temperatures"]` records
-them alongside `heated_slot` (or `None` when no extra heat was applied).
-The outcome that
-woke it is written to its memory at once. Only outcomes of its own greedy choices
-can surprise it or change its usual forecast error. Every actual reward updates
-its recent and long-run income, including sampled, non-greedy choices. Otherwise a
-brain exploring with many motor slots can stop noticing its changed income and
-remain aroused by an old shortfall. The brain can habituate to a poorer life while
+phases, no parameter change, no memory write, and the eligibility of its earlier
+sampled actions fades with each moment.
+
+Two things rouse it:
+
+- **Surprise**: an outcome that contradicts the forecast it made before acting.
+  The forecast is the critic's value of the situation and, through a gene the
+  founders weigh at zero, the record it holds for the action it chose. Only
+  outcomes of its own greedy choices can surprise it or move its usual forecast
+  error.
+- **Want**: a reward below what its life usually pays, which also covers a
+  failure it predicts correctly, or a reward below the body's `need` — a gene
+  the founders set at zero, measured as the share of the need left unmet, which
+  a rare reward's small mean cannot dilute and which never habituates.
+
+An aroused brain samples its policy, keeps eligibility, learns from every
+outcome and writes the outcome that woke it to memory at once. Want raises the
+temperature of one uniformly chosen motor slot per moment, so extra exploration
+does not flatten every motor choice at once; a one-slot brain keeps its existing
+sampling law. Eligibility credits the actual temperatures used, and
+`last_arousal["temperatures"]` records them beside `heated_slot` (`None` when no
+extra heat was applied). Every actual reward updates the recent and long-run
+income, including sampled choices, so a brain exploring with many slots does not
+stay aroused by an old shortfall. It can habituate to a poorer life while
 sampling; a positive unmet `need` still keeps it wanting.
 
 ```python
@@ -302,21 +305,19 @@ The constants of the law are genes, `ArousalConfig`, and the values above are
 hand-set founders. The three other settings are the operating point of one
 continuing stream measured on the
 [odour nursery](../benchmarks/reversal/README.md): at the composed defaults the
-working trace outweighs the present input of a continuing life and the actor
-rate, selected on batches of streams, locks one stream's policy. They are
-development settings of that chamber, to be selected again for another task.
+working trace outweighs the present input of a continuing life, and the actor
+rate, selected on batches of streams, locks one stream's policy. They are that
+chamber's development settings, to be selected again for another task.
 
-What this establishes is bounded. With the founder `need=0`, arousal responds to change:
-a brain whose life has always paid poorly, and whose youth has ended, is not roused by it,
-so a long bootstrap belongs to `step` or to a longer `youth`. A positive `need` can keep
-an unmet want active, but its behavioral benefit must be measured for the task.
-In the nursery the
-associative memory carries the adaptation; the graph's reward learning alone
-does not acquire the task in one stream. The repair is not certain: 3 of the 40
-gated confirmation lives missed a reading, and one of them never searched for the
-moved reward. A routine moment still pays one full settle. A settled routine
-answer satisfies the neural equations and can still be wrong about the world; the
-next outcome is what tells.
+What this establishes is bounded. With the founder `need=0`, arousal responds to
+change, so a brain whose life has always paid poorly and whose youth has ended is
+not roused by it: a long bootstrap belongs to `step` or to a longer `youth`. A
+positive `need` keeps an unmet want active, with its benefit to be measured. In
+the nursery the associative memory carries the adaptation; the graph's reward
+learning alone does not acquire the task in one stream, and a minority of gated
+lives never find the moved reward. A routine moment still pays one full settle,
+and a settled routine answer satisfies the neural equations while it can still
+be wrong about the world; the next outcome is what tells.
 
 Change a measured operating point with [`brain.retune(...)`](brain.md#retune-the-same-life),
 using `actor_*` for reward rates and `learning_*` for teaching rates. It preserves
