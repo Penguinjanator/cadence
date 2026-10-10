@@ -181,7 +181,7 @@ experience protocols.
 
 | Application | Interface and decisions |
 | --- | --- |
-| Vector senses, several motors | `compose` with multiple motor `slots`, then `live` and `retune`; keep real action/outcome custody across stage changes. |
+| Vector senses, several motors | The [Robot Arena demo](https://github.com/muellerberndt/cadence-demos/tree/main/robot-arena) composes one motor `slot` per motor, then uses `live` and `retune`; keep real action/outcome custody across stage changes. |
 | Pixels and a teacher | The [Atari demo](https://github.com/muellerberndt/cadence-demos/tree/main/atari-arcade) uses pixel observations, teaching and `step`; select teaching rates with `learning_*` and reward rates with `actor_*`. |
 | Retained events | The [Amen demo](https://github.com/muellerberndt/cadence-demos/tree/main/amen) uses the separate `RecordPatchNet` model. Its rates and guarantees are those of [record patches](record-patch.md), not the composed actor. |
 
