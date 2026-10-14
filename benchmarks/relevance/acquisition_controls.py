@@ -53,9 +53,11 @@ def targets(task: str, rows: np.ndarray, queries: np.ndarray) -> np.ndarray:
 
 
 def train(
-    brain: Any, task: str, order: np.ndarray, work: sr.Work, teaching: str = "every"
+    brain: Any, task: str, order: np.ndarray, work: sr.Work, teaching: str = "every",
+    exposed: bool = True,
 ) -> dict[str, Any]:
-    """The instrument's training loop with the task's targets; both facts exposed at the query.
+    """The instrument's training loop with the task's targets; both facts exposed at the query
+    (``exposed``), or absent, the instrument's trace arm.
 
     ``teaching`` ``every`` is the instrument's: one lesson on every case of the round, then the
     free action. ``surprise`` acts first and teaches only the rows whose answer was wrong (the
@@ -66,7 +68,7 @@ def train(
     lessons = 0
     for permutation in order:
         rows = sr.CASES[permutation]
-        prefix, query, _ = sr.inputs(rows[:, :3], rows[:, 3], NEUTRAL_EVENTS, exposed=True)
+        prefix, query, _ = sr.inputs(rows[:, :3], rows[:, 3], NEUTRAL_EVENTS, exposed=exposed)
         target = targets(task, rows, rows[:, 3])
         brain.reset()
         for observation in prefix:
@@ -94,7 +96,7 @@ def train(
     return {"completed": rounds == len(order), "rounds": rounds, "stop": stop, "lessons": lessons}
 
 
-def evaluate(brain: Any, task: str, work: sr.Work) -> dict[str, Any]:
+def evaluate(brain: Any, task: str, work: sr.Work, exposed: bool = True) -> dict[str, Any]:
     """The instrument's forked evaluation: every history to the pre-query state, both queries."""
     answers = np.full((8, 2), -1, dtype=np.int64)
     expected = np.stack(
@@ -117,7 +119,7 @@ def evaluate(brain: Any, task: str, work: sr.Work) -> dict[str, Any]:
             for q in range(2):
                 branch = Brain.load(state)
                 _, query, _ = sr.inputs(
-                    sr.FACTS, np.full(8, q, dtype=np.int64), NEUTRAL_EVENTS, exposed=True
+                    sr.FACTS, np.full(8, q, dtype=np.int64), NEUTRAL_EVENTS, exposed=exposed
                 )
                 answer = work.act(branch, query)
                 if answer is None:
@@ -138,8 +140,8 @@ def evaluate(brain: Any, task: str, work: sr.Work) -> dict[str, Any]:
     }
 
 
-def job(spec: tuple[str, str, int, int, str, float | None]) -> dict[str, Any]:
-    task, brain_name, rounds, seed, teaching, eta = spec
+def job(spec: tuple[str, str, int, int, str, float | None, bool]) -> dict[str, Any]:
+    task, brain_name, rounds, seed, teaching, eta, exposed = spec
     from cadence import Brain  # noqa: PLC0415
 
     began = time.monotonic()
@@ -153,11 +155,11 @@ def job(spec: tuple[str, str, int, int, str, float | None]) -> dict[str, Any]:
         sr.INPUTS, 2, seed=seed, modules=BRAINS[brain_name], episodic=False, **options
     )
     work = sr.Work()
-    trained = train(brain, task, order, work, teaching)
-    evaluation = evaluate(brain, task, work)
+    trained = train(brain, task, order, work, teaching, exposed)
+    evaluation = evaluate(brain, task, work, exposed)
     return {
         "task": task, "brain": brain_name, "modules": BRAINS[brain_name], "rounds": rounds,
-        "seed": seed, "neutral_events": NEUTRAL_EVENTS, "teaching": teaching,
+        "seed": seed, "neutral_events": NEUTRAL_EVENTS, "teaching": teaching, "exposed": exposed,
         "learning_eta": eta, "resolved_learning": {
             k: v for k, v in brain.describe()["learning"].items() if k in ("eta", "eta_bias")
         },
@@ -206,9 +208,11 @@ def main(argv: list[str] | None = None) -> int:
         "--learning-eta", type=float, default=None,
         help="the teaching contrast's step; the composed founder when omitted",
     )
+    parser.add_argument("--query", choices=("exposed", "trace"), default="exposed",
+                        help="both facts exposed at the query, or absent (the trace arm)")
     args = parser.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
-    specs = [(t, b, r, s, args.teaching, args.learning_eta)
+    specs = [(t, b, r, s, args.teaching, args.learning_eta, args.query == "exposed")
              for t, b, r, s in itertools.product(args.tasks, args.brains, args.rounds, args.seeds)]
     done = {p.stem for p in args.out.glob("*.json") if p.stem != "summary"}
     todo = [s for s in specs if f"{s[0]}-{s[1]}-{s[2]}-{s[3]}" not in done]
@@ -228,7 +232,7 @@ def main(argv: list[str] | None = None) -> int:
     rows = [json.loads(p.read_text()) for p in args.out.glob("*.json") if p.stem != "summary"]
     summary = {"cadence_version": cadence.__version__, "numpy_version": np.__version__,
                "sources": digests(), "runs": len(rows), "teaching": args.teaching,
-               "learning_eta": args.learning_eta, "table": table(rows)}
+               "learning_eta": args.learning_eta, "query": args.query, "table": table(rows)}
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1))
     print(summary["table"])
     return 0
