@@ -215,7 +215,9 @@ def test_replacement_reading_counts_follow_and_stay(
     reading = ac.replacement(Spy(memory), "mux", work, forks=nullcontext(lambda: Spy(memory)))
     assert reading["completed"] and reading["intact_accuracy"] == 1.0
     assert reading["relevant"] == relevant and reading["irrelevant"] == irrelevant
-    assert work.actions == 4 + 2 * (2 * (ac.NEUTRAL_EVENTS + 2) + 1) and work.lessons == 0
+    assert reading["identical"] == {"follow": 1.0, "stay": 1.0}
+    assert not any(name.endswith("_transplant") for name in reading)  # no working trace
+    assert work.actions == 4 + 3 * (2 * (ac.NEUTRAL_EVENTS + 2) + 1) and work.lessons == 0
 
 
 def test_replacement_reading_forks_the_trained_brain_and_leaves_it_unchanged() -> None:
@@ -229,7 +231,13 @@ def test_replacement_reading_forks_the_trained_brain_and_leaves_it_unchanged() -
     reading = ac.replacement(brain, "mux", work)  # raises if the checkpoint changed
     assert reading["completed"] and brain.learner.updates == before
     assert np.array(reading["answers"]["intact"]).reshape(8, 2).tolist() == evaluation["answers"]
-    assert set(reading) == {"completed", "answers", "intact_accuracy", "relevant", "irrelevant"}
+    conditions = {"relevant", "irrelevant", "identical"}
+    assert set(reading) == {"completed", "answers", "intact_accuracy"} | conditions | {
+        c + "_transplant" for c in conditions
+    }
+    # the trace of the same prefix from a fresh fork, put into the host, is the intact read
+    assert reading["answers"]["identical_transplant"] == reading["answers"]["intact"]
+    assert reading["identical_transplant"]["stay"] == 1.0
 
 
 def test_readings_off_keep_the_row_and_on_add_their_keys() -> None:

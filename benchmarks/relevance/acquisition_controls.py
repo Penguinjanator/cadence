@@ -226,16 +226,39 @@ def checkpoint_forks(brain: Any) -> Iterator[Callable[[], Any]]:
             raise AssertionError("the reading changed the acquired brain")
 
 
-def present(
-    brain: Any, work: sr.Work, prefixes: list[list[np.ndarray]], query: np.ndarray,
-) -> np.ndarray | None:
-    """Fresh streams through one or more prefixes in turn, then the query; None on a refusal."""
+def walk(brain: Any, work: sr.Work, prefixes: list[list[np.ndarray]]) -> bool:
+    """Fresh streams through one or more prefixes in turn; False on a refusal."""
     brain.reset()
     for prefix in prefixes:
         for observation in prefix:
             if work.act(brain, observation) is None:
-                return None
+                return False
+    return True
+
+
+def present(
+    brain: Any, work: sr.Work, prefixes: list[list[np.ndarray]], query: np.ndarray,
+) -> np.ndarray | None:
+    """``walk``, then the query; None on a refusal."""
+    if not walk(brain, work, prefixes):
+        return None
     answer = work.act(brain, query)
+    return None if answer is None else np.asarray(answer).reshape(-1)
+
+
+def transplant(
+    load: Callable[[], Any], work: sr.Work, prefix: list[np.ndarray], second: list[np.ndarray],
+    query: np.ndarray,
+) -> np.ndarray | None:
+    """The host walks the prefix; a donor fork walks the second prefix from its own reset;
+    the donor's working trace replaces the host's before the query. The replacement reaches
+    the trace content alone, under the host's warm state from its own prefix."""
+    host, donor = load(), load()
+    if not walk(host, work, [prefix]) or not walk(donor, work, [second]):
+        return None
+    for name in ("trace", "last", "cold"):
+        setattr(host.working_memory, name, getattr(donor.working_memory, name).copy())
+    answer = work.act(host, query)
     return None if answer is None else np.asarray(answer).reshape(-1)
 
 
@@ -246,20 +269,29 @@ def replacement(
     reset a second prefix with the queried fact flipped (relevant; the correct answer changes)
     or the other fact flipped (irrelevant; it does not), then the query, each on a fork of the
     trained brain; no lesson. ``follow`` counts answers equal to the correct answer of the
-    replaced facts, ``stay`` answers equal to the intact answer of the same case."""
+    replaced facts, ``stay`` answers equal to the intact answer of the same case.
+
+    Two controls, added after the declared runs of the reading: ``identical`` presents the
+    same prefix twice (a second episode without a boundary, the content unchanged), and the
+    ``_transplant`` conditions put the trace a fresh fork builds from the second prefix alone
+    into the host before the query (brains with a working trace only).
+    """
     rows = sr.CASES
     queries = rows[:, 3]
     index = np.arange(len(rows))
-    replaced = {"relevant": rows.copy(), "irrelevant": rows.copy()}
+    replaced = {"relevant": rows.copy(), "irrelevant": rows.copy(), "identical": rows.copy()}
     replaced["relevant"][index, queries] ^= 1
     replaced["irrelevant"][index, 1 - queries] ^= 1
     prefix, query, _ = sr.inputs(rows[:, :3], queries, NEUTRAL_EVENTS)
+    traced = getattr(brain, "working_memory", None) is not None
     answers: dict[str, np.ndarray | None] = {}
     with (checkpoint_forks(brain) if forks is None else forks) as load:
         answers["intact"] = present(load(), work, [prefix], query)
         for name, other in replaced.items():
             second, _, _ = sr.inputs(other[:, :3], queries, NEUTRAL_EVENTS)
             answers[name] = present(load(), work, [prefix, second], query)
+            if traced:
+                answers[name + "_transplant"] = transplant(load, work, prefix, second, query)
     out: dict[str, Any] = {
         "completed": all(a is not None for a in answers.values()),
         "answers": {k: None if a is None else a.tolist() for k, a in answers.items()},
@@ -267,11 +299,13 @@ def replacement(
     if out["completed"]:
         intact = answers["intact"]
         out["intact_accuracy"] = float(np.mean(intact == targets(task, rows, queries)))
-        for name, other in replaced.items():
-            out[name] = {
-                "follow": float(np.mean(answers[name] == targets(task, other, queries))),
-                "stay": float(np.mean(answers[name] == intact)),
-            }
+        for name, answer in answers.items():
+            if name != "intact":
+                other = replaced[name.removesuffix("_transplant")]
+                out[name] = {
+                    "follow": float(np.mean(answer == targets(task, other, queries))),
+                    "stay": float(np.mean(answer == intact)),
+                }
     return out
 
 
@@ -385,16 +419,21 @@ def holdout_table(rows: list[dict[str, Any]]) -> str:
 
 
 def replacement_table(rows: list[dict[str, Any]]) -> str:
+    columns = (("relevant", "follow"), ("irrelevant", "stay"), ("irrelevant", "follow"),
+               ("identical", "stay"), ("relevant_transplant", "follow"),
+               ("irrelevant_transplant", "stay"), ("identical_transplant", "stay"))
     lines = ["| task | brain | rounds | founder | accuracy | unequal-fact | erased "
-             "| relevant follow | irrelevant stay | irrelevant correct "
-             "| acquires through the trace |",
-             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+             "| relevant follow | irrelevant stay | irrelevant correct | identical stay "
+             "| transplant relevant follow | transplant irrelevant stay "
+             "| transplant identical stay | acquires through the trace |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+             "| --- | --- |"]
     for (task, brain_name, rounds), cell in cells(rows):
         for r in cell:
             e, p = r["evaluation"], r["replacement"]
-            counts = (
-                f"{p['relevant']['follow']:.2f} | {p['irrelevant']['stay']:.2f} "
-                f"| {p['irrelevant']['follow']:.2f}" if p["completed"] else "refused | | "
+            counts = " | ".join(
+                f"{p[name][count]:.2f}" if p["completed"] and name in p else ""
+                for name, count in columns
             )
             lines.append(
                 f"| {task} | {brain_name} | {rounds} | {r['seed']} | {e['accuracy']:.2f} "
