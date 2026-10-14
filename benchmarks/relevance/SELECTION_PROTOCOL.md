@@ -117,3 +117,99 @@ They read a bounded component on reset trials with a supplied query, under lesso
 query alone. A passing reading shows selection of a remembered named fact by the existing
 graph and trace on the founders named; it establishes no continuing-life capability, no
 sentence understanding and no runtime default.
+
+## Results, 14 October 2026
+
+The commands above, founders 0 to 11, the surprise rule, one BLAS thread and three workers; the
+per-run rows are retained outside the repository. The two controls of reading 2 (`identical` and
+the `_transplant` conditions, described with the `--replace` option) were added after its declared
+runs; the re-run reproduces the declared conditions on every run.
+
+| set | runs | wall (s) |
+| --- | --- | --- |
+| founders-512 | 24 | 71 |
+| founders-2048 | 24 | 316 |
+| replace-512 | 24 | 95 |
+| replace-2048 | 24 | 328 |
+| holdout-trace | 96 | 1038 |
+| holdout-exposed | 96 | 813 |
+
+#### Reading 3: founders and budget (trace arm, m64)
+
+| task | rounds | founders | accuracy, mean | erased, mean | at or above 0.95 | acquire through the trace |
+| --- | --- | --- | --- | --- | --- | --- |
+| mux | 512 | 0 to 5 | 0.729 | 0.500 | 2/6 | 2/6 |
+| mux | 512 | 6 to 11 | 0.823 | 0.500 | 2/6 | 2/6 |
+| mux | 512 | 0 to 11 | 0.776 | 0.500 | 4/12 | 4/12 |
+| xor | 512 | 0 to 5 | 0.719 | 0.500 | 1/6 | 2/6 |
+| xor | 512 | 6 to 11 | 0.635 | 0.500 | 0/6 | 1/6 |
+| xor | 512 | 0 to 11 | 0.677 | 0.500 | 1/12 | 3/12 |
+| mux | 2048 | 0 to 5 | 1.000 | 0.500 | 6/6 | 6/6 |
+| mux | 2048 | 6 to 11 | 1.000 | 0.500 | 6/6 | 6/6 |
+| mux | 2048 | 0 to 11 | 1.000 | 0.500 | 12/12 | 12/12 |
+| xor | 2048 | 0 to 5 | 0.958 | 0.500 | 5/6 | 5/6 |
+| xor | 2048 | 6 to 11 | 0.823 | 0.500 | 3/6 | 3/6 |
+| xor | 2048 | 0 to 11 | 0.891 | 0.500 | 8/12 | 8/12 |
+
+#### Reading 2: replacement intervention (trace arm, m64, mux, founders that acquire through the trace; cases pooled)
+
+| rounds | founders | relevant follow | irrelevant stay | identical stay | transplant relevant follow | transplant irrelevant stay | declared gate passed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 512 | 4 | 34/64 | 42/64 | 43/64 | 64/64 | 64/64 | 0/4 |
+| 2048 | 12 | 122/192 | 134/192 | 133/192 | 192/192 | 192/192 | 0/12 |
+
+#### Reading 1: held-out panel (founders 0 to 11; 12 training and 4 held-out cases per founder)
+
+| arm | task | brain | rounds | training intact, mean | held-out intact, mean | held-out erased, mean | held-out unequal-fact, mean | pooled held-out intact | founders at the gate |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| trace | mux | m32 | 512 | 0.736 | 0.479 | 0.458 | 0.417 | 23/48 | 0/12 |
+| trace | mux | m32 | 2048 | 0.938 | 0.542 | 0.375 | 0.458 | 26/48 | 0/12 |
+| trace | mux | m64 | 512 | 0.931 | 0.458 | 0.417 | 0.250 | 22/48 | 0/12 |
+| trace | mux | m64 | 2048 | 1.000 | 0.458 | 0.417 | 0.250 | 22/48 | 0/12 |
+| trace | xor | m32 | 512 | 0.569 | 0.292 | 0.500 | 0.208 | 14/48 | 0/12 |
+| trace | xor | m32 | 2048 | 0.743 | 0.292 | 0.500 | 0.292 | 14/48 | 0/12 |
+| trace | xor | m64 | 512 | 0.715 | 0.417 | 0.500 | 0.458 | 20/48 | 1/12 |
+| trace | xor | m64 | 2048 | 0.944 | 0.396 | 0.500 | 0.417 | 19/48 | 1/12 |
+| exposed | mux | m32 | 512 | 1.000 | 0.688 | 0.708 | 0.500 | 33/48 | 0/12 |
+| exposed | mux | m32 | 2048 | 1.000 | 0.688 | 0.708 | 0.500 | 33/48 | 0/12 |
+| exposed | mux | m64 | 512 | 1.000 | 0.771 | 0.708 | 0.542 | 37/48 | 0/12 |
+| exposed | mux | m64 | 2048 | 1.000 | 0.771 | 0.708 | 0.542 | 37/48 | 0/12 |
+| exposed | xor | m32 | 512 | 0.951 | 0.583 | 0.521 | 0.583 | 28/48 | 0/12 |
+| exposed | xor | m32 | 2048 | 1.000 | 0.583 | 0.542 | 0.583 | 28/48 | 0/12 |
+| exposed | xor | m64 | 512 | 1.000 | 0.667 | 0.625 | 0.583 | 32/48 | 0/12 |
+| exposed | xor | m64 | 2048 | 1.000 | 0.667 | 0.625 | 0.583 | 32/48 | 0/12 |
+
+Chance reference: 48 held-out cases at 0.50 give 36 or more right with probability 1.1e-04; one founder at 4 of 4 has probability 0.0625.
+
+#### How the missing pair of a cell is answered (selection task)
+
+The symmetric function consistent with a cell's three training pairs gives the held-out unequal
+pair the wrong answer, so the first column counts wrong answers on those cases; chance is half.
+
+| arm | task | brain | rounds | held-out unequal-fact cases answered with the symmetric function of the cell's training pairs | held-out cases answered as the same facts and query in the other order (a training case) | held-out cases answered as the same facts and order under the other query (a training case) |
+| --- | --- | --- | --- | --- | --- | --- |
+| trace | mux | m32 | 512 | 14/24 | 21/48 | 27/48 |
+| trace | mux | m32 | 2048 | 13/24 | 25/48 | 29/48 |
+| trace | mux | m64 | 512 | 18/24 | 23/48 | 35/48 |
+| trace | mux | m64 | 2048 | 18/24 | 22/48 | 34/48 |
+| exposed | mux | m32 | 512 | 12/24 | 33/48 | 33/48 |
+| exposed | mux | m32 | 2048 | 12/24 | 33/48 | 33/48 |
+| exposed | mux | m64 | 512 | 11/24 | 37/48 | 35/48 |
+| exposed | mux | m64 | 2048 | 11/24 | 37/48 | 35/48 |
+
+#### Reading
+
+1. Reading 3 passes as a reliability result on the finite panel: at the longer budget every founder
+   acquires the selection through the trace, and the trace is necessary.
+2. Reading 1 fails: the held-out conjunctions are read at chance on the trace arm, and the missing
+   unequal pair of a cell is answered with the symmetric function of the cell's training pairs, so
+   the acquired answer is a table over trained trace patterns rather than selection of the named
+   fact.
+3. Reading 2's declared gate fails on every acquiring founder; the identical control shows the
+   failure is the second episode itself (a second prefix without a reset lies outside what the trial
+   structure taught, whatever its content), and the transplant control shows the trace content alone
+   decides the answer on every case.
+4. What is located: the facts survive the neutral event in the trace and the readout is a function
+   of the trace content, which acts as selection on the trained panel alone; the held-out panel is
+   the gate the next change on the existing graph has to pass, and the second-episode reading needs
+   a trial structure that contains such episodes before it can be read.
