@@ -52,10 +52,18 @@ def targets(task: str, rows: np.ndarray, queries: np.ndarray) -> np.ndarray:
     raise ValueError(task)
 
 
-def train(brain: Any, task: str, order: np.ndarray, work: sr.Work) -> dict[str, Any]:
-    """The instrument's training loop with the task's targets; both facts exposed at the query."""
+def train(
+    brain: Any, task: str, order: np.ndarray, work: sr.Work, teaching: str = "every"
+) -> dict[str, Any]:
+    """The instrument's training loop with the task's targets; both facts exposed at the query.
+
+    ``teaching`` ``every`` is the instrument's: one lesson on every case of the round, then the
+    free action. ``surprise`` acts first and teaches only the rows whose answer was wrong (the
+    recall chamber's surprise rule), then acts again; a round without a wrong row has no lesson.
+    """
     rounds = 0
     stop = None
+    lessons = 0
     for permutation in order:
         rows = sr.CASES[permutation]
         prefix, query, _ = sr.inputs(rows[:, :3], rows[:, 3], NEUTRAL_EVENTS, exposed=True)
@@ -67,12 +75,23 @@ def train(brain: Any, task: str, order: np.ndarray, work: sr.Work) -> dict[str, 
                 break
         if stop is not None:
             break
-        work.teach(brain, query, target)
+        if teaching == "surprise":
+            answer = work.act(brain, query)
+            if answer is None:
+                stop = "refused_query"
+                break
+            wrong = np.flatnonzero(np.asarray(answer).reshape(-1) != target)
+            if len(wrong):
+                work.teach(brain, query[wrong], target[wrong])
+                lessons += 1
+        else:
+            work.teach(brain, query, target)
+            lessons += 1
         if work.act(brain, query) is None:
             stop = "refused_query"
             break
         rounds += 1
-    return {"completed": rounds == len(order), "rounds": rounds, "stop": stop}
+    return {"completed": rounds == len(order), "rounds": rounds, "stop": stop, "lessons": lessons}
 
 
 def evaluate(brain: Any, task: str, work: sr.Work) -> dict[str, Any]:
@@ -119,21 +138,30 @@ def evaluate(brain: Any, task: str, work: sr.Work) -> dict[str, Any]:
     }
 
 
-def job(spec: tuple[str, str, int, int]) -> dict[str, Any]:
-    task, brain_name, rounds, seed = spec
+def job(spec: tuple[str, str, int, int, str, float | None]) -> dict[str, Any]:
+    task, brain_name, rounds, seed, teaching, eta = spec
     from cadence import Brain  # noqa: PLC0415
 
     began = time.monotonic()
     rng = np.random.default_rng(np.random.SeedSequence([31014, seed]))
     order = np.stack([rng.permutation(len(sr.CASES)) for _ in range(rounds)])
-    brain = Brain.compose(sr.INPUTS, 2, seed=seed, modules=BRAINS[brain_name], episodic=False)
+    options: dict[str, Any] = {}
+    if eta is not None:
+        # the teaching contrast's step and its bias step at the founder's ratio of one tenth
+        options["learning_eta"], options["learning_eta_bias"] = eta, eta / 10
+    brain = Brain.compose(
+        sr.INPUTS, 2, seed=seed, modules=BRAINS[brain_name], episodic=False, **options
+    )
     work = sr.Work()
-    trained = train(brain, task, order, work)
+    trained = train(brain, task, order, work, teaching)
     evaluation = evaluate(brain, task, work)
     return {
         "task": task, "brain": brain_name, "modules": BRAINS[brain_name], "rounds": rounds,
-        "seed": seed, "neutral_events": NEUTRAL_EVENTS, "training": trained,
-        "evaluation": evaluation, "work": asdict(work),
+        "seed": seed, "neutral_events": NEUTRAL_EVENTS, "teaching": teaching,
+        "learning_eta": eta, "resolved_learning": {
+            k: v for k, v in brain.describe()["learning"].items() if k in ("eta", "eta_bias")
+        },
+        "training": trained, "evaluation": evaluation, "work": asdict(work),
         "elapsed_seconds": round(time.monotonic() - began, 3),
     }
 
@@ -151,8 +179,10 @@ def table(rows: list[dict[str, Any]]) -> str:
     keys = sorted({(r["task"], r["brain"], r["rounds"]) for r in rows},
                   key=lambda k: (TASKS.index(k[0]), list(BRAINS).index(k[1]), k[2]))
     for task, brain_name, rounds in keys:
-        cell = sorted((r for r in rows if (r["task"], r["brain"], r["rounds"]) == (task, brain_name, rounds)),
-                      key=lambda r: r["seed"])
+        cell = sorted(
+            (r for r in rows if (r["task"], r["brain"], r["rounds"]) == (task, brain_name, rounds)),
+            key=lambda r: r["seed"],
+        )
         acc = [r["evaluation"]["accuracy"] for r in cell]
         une = [r["evaluation"]["unequal_fact_accuracy"] for r in cell]
         lines.append(
@@ -171,9 +201,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--brains", nargs="*", default=list(BRAINS), choices=list(BRAINS))
     parser.add_argument("--rounds", nargs="*", type=int, default=list(ROUNDS))
     parser.add_argument("--seeds", nargs="*", type=int, default=list(FOUNDERS))
+    parser.add_argument("--teaching", choices=("every", "surprise"), default="every")
+    parser.add_argument(
+        "--learning-eta", type=float, default=None,
+        help="the teaching contrast's step; the composed founder when omitted",
+    )
     args = parser.parse_args(argv)
     args.out.mkdir(parents=True, exist_ok=True)
-    specs = list(itertools.product(args.tasks, args.brains, args.rounds, args.seeds))
+    specs = [(t, b, r, s, args.teaching, args.learning_eta)
+             for t, b, r, s in itertools.product(args.tasks, args.brains, args.rounds, args.seeds)]
     done = {p.stem for p in args.out.glob("*.json") if p.stem != "summary"}
     todo = [s for s in specs if f"{s[0]}-{s[1]}-{s[2]}-{s[3]}" not in done]
     print(f"{len(todo)} runs to go, {len(done)} done", flush=True)
@@ -184,11 +220,15 @@ def main(argv: list[str] | None = None) -> int:
             name = f"{row['task']}-{row['brain']}-{row['rounds']}-{row['seed']}"
             (args.out / f"{name}.json").write_text(json.dumps(row, indent=1))
             e = row["evaluation"]
-            print(f"  {name}: accuracy {e['accuracy']:.3f} unequal {e['unequal_fact_accuracy']:.3f} "
-                  f"answers {e['answers']} ({row['elapsed_seconds']}s)", flush=True)
+            print(
+                f"  {name}: accuracy {e['accuracy']:.3f} unequal {e['unequal_fact_accuracy']:.3f} "
+                f"answers {e['answers']} ({row['elapsed_seconds']}s)",
+                flush=True,
+            )
     rows = [json.loads(p.read_text()) for p in args.out.glob("*.json") if p.stem != "summary"]
     summary = {"cadence_version": cadence.__version__, "numpy_version": np.__version__,
-               "sources": digests(), "runs": len(rows), "table": table(rows)}
+               "sources": digests(), "runs": len(rows), "teaching": args.teaching,
+               "learning_eta": args.learning_eta, "table": table(rows)}
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1))
     print(summary["table"])
     return 0
