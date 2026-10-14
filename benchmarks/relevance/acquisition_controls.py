@@ -123,8 +123,10 @@ def teach_drive(work: sr.Work, brain: Any, drive: np.ndarray, target: np.ndarray
 
 
 def evaluate(brain: Any, task: str, work: sr.Work, exposed: bool = True) -> dict[str, Any]:
-    """The instrument's forked evaluation: every history to the pre-query state, both queries."""
+    """The instrument's forked evaluation: every history to the pre-query state, both queries,
+    intact and with the working trace erased before the query (the instrument's lesion)."""
     answers = np.full((8, 2), -1, dtype=np.int64)
+    erased = np.full((8, 2), -1, dtype=np.int64)
     expected = np.stack(
         [targets(task, sr.FACTS, np.full(8, q, dtype=np.int64)) for q in range(2)], axis=1
     )
@@ -142,19 +144,23 @@ def evaluate(brain: Any, task: str, work: sr.Work, exposed: bool = True) -> dict
                 break
         state = prefix_brain.save(directory / "prequery.npz")
         if complete:
-            for q in range(2):
-                branch = Brain.load(state)
-                _, query, _ = sr.inputs(
-                    sr.FACTS, np.full(8, q, dtype=np.int64), NEUTRAL_EVENTS, exposed=exposed
-                )
-                answer = work.act(branch, query)
-                if answer is None:
-                    complete = False
-                else:
-                    answers[:, q] = answer
+            for lesion, store in (("intact", answers), ("erased", erased)):
+                for q in range(2):
+                    branch = Brain.load(state)
+                    if lesion == "erased":
+                        branch.working_memory.reset(len(sr.FACTS))
+                    _, query, _ = sr.inputs(
+                        sr.FACTS, np.full(8, q, dtype=np.int64), NEUTRAL_EVENTS, exposed=exposed
+                    )
+                    answer = work.act(branch, query)
+                    if answer is None:
+                        complete = False
+                    else:
+                        store[:, q] = answer
     valid = answers >= 0
     correct = (answers == expected) & valid
     unequal = sr.FACTS[:, 0] != sr.FACTS[:, 1]
+    erased_correct = (erased == expected) & (erased >= 0)
     return {
         "completed": complete,
         "answers": answers.tolist(),
@@ -163,6 +169,8 @@ def evaluate(brain: Any, task: str, work: sr.Work, exposed: bool = True) -> dict
         "unequal_fact_accuracy": float(correct[unequal].mean()),
         "per_query_accuracy": correct.mean(axis=0).tolist(),
         "unanswered": int((~valid).sum()),
+        "erased": {"answers": erased.tolist(), "accuracy": float(erased_correct.mean()),
+                   "unequal_fact_accuracy": float(erased_correct[unequal].mean())},
     }
 
 
