@@ -60,8 +60,11 @@ def train(
     (``exposed``), or absent, the instrument's trace arm.
 
     ``teaching`` ``every`` is the instrument's: one lesson on every case of the round, then the
-    free action. ``surprise`` acts first and teaches only the rows whose answer was wrong (the
-    recall chamber's surprise rule), then acts again; a round without a wrong row has no lesson.
+    free action. ``surprise`` is the recall chamber's rule: the complete pre-query stimulus of
+    every row is taken first, with the trace the prefix built; the brain acts; the rows whose
+    answer was wrong are taught from their rows of that stimulus, so a lesson never reads zero
+    context from a smaller batch and never the trace the query's own settle advanced; a round
+    without a wrong row has no lesson.
     """
     rounds = 0
     stop = None
@@ -78,22 +81,45 @@ def train(
         if stop is not None:
             break
         if teaching == "surprise":
+            drive = brain.stimulus(query)  # every row's complete pre-query stimulus
             answer = work.act(brain, query)
             if answer is None:
                 stop = "refused_query"
                 break
             wrong = np.flatnonzero(np.asarray(answer).reshape(-1) != target)
             if len(wrong):
-                work.teach(brain, query[wrong], target[wrong])
+                teach_drive(work, brain, drive[wrong], target[wrong])
                 lessons += 1
         else:
             work.teach(brain, query, target)
             lessons += 1
-        if work.act(brain, query) is None:
-            stop = "refused_query"
-            break
+            if work.act(brain, query) is None:
+                stop = "refused_query"
+                break
         rounds += 1
     return {"completed": rounds == len(order), "rounds": rounds, "stop": stop, "lessons": lessons}
+
+
+def teach_drive(work: sr.Work, brain: Any, drive: np.ndarray, target: np.ndarray) -> None:
+    """The instrument's lesson accounting for a drive taken before the query's act (the recall
+    chamber's ``teach(..., drive=)``): the rows of the complete stimulus, never a new one."""
+    from cadence.learning import LearningPhaseError  # noqa: PLC0415
+
+    work.lessons += 1
+    try:
+        _, report = brain.learner.step(drive, target)
+    except LearningPhaseError as error:
+        work.lesson_refusals += 1
+        report = error.report
+    for field, reported in (
+        ("presentations", "attempted_presentations"),
+        ("accepted_presentations", "accepted_presentations"),
+        ("teaching_sweeps", "total_steps"),
+        ("teaching_row_sweeps", "total_row_sweeps"),
+        ("teaching_residual_checks", "total_residual_checks"),
+        ("teaching_row_residual_checks", "total_row_residual_checks"),
+    ):
+        setattr(work, field, getattr(work, field) + int(report[reported]))
 
 
 def evaluate(brain: Any, task: str, work: sr.Work, exposed: bool = True) -> dict[str, Any]:
