@@ -19,6 +19,8 @@ import json
 import sys
 import tempfile
 import time
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from dataclasses import asdict
 from multiprocessing import get_context
 from pathlib import Path
@@ -36,6 +38,7 @@ BRAINS = {"m32": [32], "m64": [64], "m32x16": [32, 16], "m64x32": [64, 32]}
 ROUNDS = (128, 512, 2048)
 FOUNDERS = (0, 1, 2, 3, 4, 5)
 NEUTRAL_EVENTS = 1
+HOLDOUT_SEED = 31016  # the held-out panel's draw, beside the schedule's 31014
 
 
 def targets(task: str, rows: np.ndarray, queries: np.ndarray) -> np.ndarray:
@@ -54,7 +57,7 @@ def targets(task: str, rows: np.ndarray, queries: np.ndarray) -> np.ndarray:
 
 def train(
     brain: Any, task: str, order: np.ndarray, work: sr.Work, teaching: str = "every",
-    exposed: bool = True,
+    exposed: bool = True, cases: np.ndarray | None = None,
 ) -> dict[str, Any]:
     """The instrument's training loop with the task's targets; both facts exposed at the query
     (``exposed``), or absent, the instrument's trace arm.
@@ -64,13 +67,15 @@ def train(
     every row is taken first, with the trace the prefix built; the brain acts; the rows whose
     answer was wrong are taught from their rows of that stimulus, so a lesson never reads zero
     context from a smaller batch and never the trace the query's own settle advanced; a round
-    without a wrong row has no lesson.
+    without a wrong row has no lesson. ``cases`` are the training cases each round permutes,
+    all sixteen when omitted (the held-out panel passes the twelve it trains on).
     """
     rounds = 0
     stop = None
     lessons = 0
+    training = sr.CASES if cases is None else cases
     for permutation in order:
-        rows = sr.CASES[permutation]
+        rows = training[permutation]
         prefix, query, _ = sr.inputs(rows[:, :3], rows[:, 3], NEUTRAL_EVENTS, exposed=exposed)
         target = targets(task, rows, rows[:, 3])
         brain.reset()
@@ -174,15 +179,115 @@ def evaluate(brain: Any, task: str, work: sr.Work, exposed: bool = True) -> dict
     }
 
 
-def job(
-    spec: tuple[str, str, int, int, str, float | None, bool, dict[str, float]],
+def holdout_split(seed: int) -> np.ndarray:
+    """The founder's held-out panel: four case indices, one per (order, query) cell, each a
+    different fact pair, assigned by a permutation drawn from the founder seed. Every training
+    cell keeps three fact pairs, so both values of each fact occur with every order and query
+    in training; only the four conjunctions are new. Case ``(A, B, order, query)`` has the
+    index ``8A + 4B + 2 order + query`` in ``CASES``."""
+    rng = np.random.default_rng(np.random.SeedSequence([HOLDOUT_SEED, seed]))
+    pairs = rng.permutation(4)  # the fact pair 2A + B held out of each cell 2 order + query
+    return np.sort(4 * pairs + np.arange(4))
+
+
+def split_scores(evaluation: dict[str, Any], held_out: np.ndarray) -> dict[str, Any]:
+    """The evaluation's intact and erased accuracy on the training and the held-out cases;
+    case ``8A + 4B + 2 order + query`` is the answer row ``4A + 2B + order``, column ``query``.
+    """
+    expected = np.asarray(evaluation["expected"])
+    mask = np.zeros(expected.shape, dtype=bool)
+    mask[held_out // 2, held_out % 2] = True
+    unequal = (sr.FACTS[:, 0] != sr.FACTS[:, 1])[:, None] & mask
+    out: dict[str, Any] = {
+        "held_out_index": held_out.tolist(), "held_out_cases": sr.CASES[held_out].tolist(),
+    }
+    for name, answers in (("intact", evaluation["answers"]),
+                          ("erased", evaluation["erased"]["answers"])):
+        answers = np.asarray(answers)
+        correct = (answers == expected) & (answers >= 0)
+        out[name] = {
+            "training": float(correct[~mask].mean()), "held_out": float(correct[mask].mean()),
+            "held_out_unequal_fact": float(correct[unequal].mean()),
+        }
+    return out
+
+
+@contextmanager
+def checkpoint_forks(brain: Any) -> Iterator[Callable[[], Any]]:
+    """Fresh copies of the brain from one saved checkpoint, the instrument's own snapshot;
+    the brain's checkpoint must read the same after the forks were used."""
+    from cadence import Brain  # noqa: PLC0415
+
+    with tempfile.TemporaryDirectory(prefix="cadence-relevance-controls-") as directory:
+        initial = brain.save(Path(directory) / "initial.npz")
+        original = sr.checkpoint_digest(initial)
+        yield lambda: Brain.load(initial)
+        if sr.checkpoint_digest(brain.save(Path(directory) / "after.npz")) != original:
+            raise AssertionError("the reading changed the acquired brain")
+
+
+def present(
+    brain: Any, work: sr.Work, prefixes: list[list[np.ndarray]], query: np.ndarray,
+) -> np.ndarray | None:
+    """Fresh streams through one or more prefixes in turn, then the query; None on a refusal."""
+    brain.reset()
+    for prefix in prefixes:
+        for observation in prefix:
+            if work.act(brain, observation) is None:
+                return None
+    answer = work.act(brain, query)
+    return None if answer is None else np.asarray(answer).reshape(-1)
+
+
+def replacement(
+    brain: Any, task: str, work: sr.Work, forks: Any = None,
 ) -> dict[str, Any]:
-    task, brain_name, rounds, seed, teaching, eta, exposed, trace = spec
+    """The replacement intervention on the trace arm: every case's prefix, then without a
+    reset a second prefix with the queried fact flipped (relevant; the correct answer changes)
+    or the other fact flipped (irrelevant; it does not), then the query, each on a fork of the
+    trained brain; no lesson. ``follow`` counts answers equal to the correct answer of the
+    replaced facts, ``stay`` answers equal to the intact answer of the same case."""
+    rows = sr.CASES
+    queries = rows[:, 3]
+    index = np.arange(len(rows))
+    replaced = {"relevant": rows.copy(), "irrelevant": rows.copy()}
+    replaced["relevant"][index, queries] ^= 1
+    replaced["irrelevant"][index, 1 - queries] ^= 1
+    prefix, query, _ = sr.inputs(rows[:, :3], queries, NEUTRAL_EVENTS)
+    answers: dict[str, np.ndarray | None] = {}
+    with (checkpoint_forks(brain) if forks is None else forks) as load:
+        answers["intact"] = present(load(), work, [prefix], query)
+        for name, other in replaced.items():
+            second, _, _ = sr.inputs(other[:, :3], queries, NEUTRAL_EVENTS)
+            answers[name] = present(load(), work, [prefix, second], query)
+    out: dict[str, Any] = {
+        "completed": all(a is not None for a in answers.values()),
+        "answers": {k: None if a is None else a.tolist() for k, a in answers.items()},
+    }
+    if out["completed"]:
+        intact = answers["intact"]
+        out["intact_accuracy"] = float(np.mean(intact == targets(task, rows, queries)))
+        for name, other in replaced.items():
+            out[name] = {
+                "follow": float(np.mean(answers[name] == targets(task, other, queries))),
+                "stay": float(np.mean(answers[name] == intact)),
+            }
+    return out
+
+
+def job(
+    spec: tuple[str, str, int, int, str, float | None, bool, dict[str, float]]
+    | tuple[str, str, int, int, str, float | None, bool, dict[str, float], bool, bool],
+) -> dict[str, Any]:
+    task, brain_name, rounds, seed, teaching, eta, exposed, trace, *readings = spec
+    holdout, replace = (list(readings) + [False, False])[:2]
     from cadence import Brain  # noqa: PLC0415
 
     began = time.monotonic()
+    held = holdout_split(seed) if holdout else None
+    cases = sr.CASES if held is None else np.delete(sr.CASES, held, axis=0)
     rng = np.random.default_rng(np.random.SeedSequence([31014, seed]))
-    order = np.stack([rng.permutation(len(sr.CASES)) for _ in range(rounds)])
+    order = np.stack([rng.permutation(len(cases)) for _ in range(rounds)])
     options: dict[str, Any] = {}
     if eta is not None:
         # the teaching contrast's step and its bias step at the founder's ratio of one tenth
@@ -192,9 +297,9 @@ def job(
         sr.INPUTS, 2, seed=seed, modules=BRAINS[brain_name], episodic=False, **options
     )
     work = sr.Work()
-    trained = train(brain, task, order, work, teaching, exposed)
+    trained = train(brain, task, order, work, teaching, exposed, cases=cases)
     evaluation = evaluate(brain, task, work, exposed)
-    return {
+    row = {
         "task": task, "brain": brain_name, "modules": BRAINS[brain_name], "rounds": rounds,
         "seed": seed, "neutral_events": NEUTRAL_EVENTS, "teaching": teaching, "exposed": exposed,
         "learning_eta": eta, "trace_genes": trace, "resolved_working_memory": {
@@ -203,9 +308,15 @@ def job(
         }, "resolved_learning": {
             k: v for k, v in brain.describe()["learning"].items() if k in ("eta", "eta_bias")
         },
-        "training": trained, "evaluation": evaluation, "work": asdict(work),
-        "elapsed_seconds": round(time.monotonic() - began, 3),
+        "training": trained, "evaluation": evaluation,
     }
+    if held is not None:
+        row["holdout"] = split_scores(evaluation, held)
+    if replace:
+        row["replacement"] = replacement(brain, task, work)
+    row["work"] = asdict(work)
+    row["elapsed_seconds"] = round(time.monotonic() - began, 3)
+    return row
 
 
 def digests() -> dict[str, str]:
@@ -235,6 +346,64 @@ def table(rows: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
+def cells(rows: list[dict[str, Any]]) -> list[tuple[tuple[str, str, int], list[dict[str, Any]]]]:
+    """The runs grouped by task, brain and rounds in the tables' order, founders ascending."""
+    keys = sorted({(r["task"], r["brain"], r["rounds"]) for r in rows},
+                  key=lambda k: (TASKS.index(k[0]), list(BRAINS).index(k[1]), k[2]))
+    return [(key, sorted((r for r in rows if (r["task"], r["brain"], r["rounds"]) == key),
+                         key=lambda r: r["seed"])) for key in keys]
+
+
+def acquires_through_trace(row: dict[str, Any]) -> bool:
+    """The trace-acquisition reading: right on every unequal-fact case, chance once erased."""
+    e = row["evaluation"]
+    return bool(e["unequal_fact_accuracy"] == 1.0 and e["erased"]["accuracy"] == 0.5)
+
+
+def holdout_table(rows: list[dict[str, Any]]) -> str:
+    lines = ["| task | brain | rounds | training intact, mean [per founder] | training erased "
+             "| held-out intact, mean [per founder] | held-out erased, mean [per founder] "
+             "| held-out unequal-fact | founders at held-out 1.00 with erased at most 0.50 |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for (task, brain_name, rounds), cell in cells(rows):
+        parts = {name: [r["holdout"][lesion][part] for r in cell]
+                 for name, lesion, part in (("ti", "intact", "training"),
+                                            ("te", "erased", "training"),
+                                            ("hi", "intact", "held_out"),
+                                            ("he", "erased", "held_out"),
+                                            ("hu", "intact", "held_out_unequal_fact"))}
+        passed = sum(hi > 0.75 and he <= 0.5 for hi, he in zip(parts["hi"], parts["he"],
+                                                                strict=True))
+        lines.append(
+            f"| {task} | {brain_name} | {rounds} | {np.mean(parts['ti']):.3f} "
+            f"[{' '.join(f'{v:.2f}' for v in parts['ti'])}] | {np.mean(parts['te']):.3f} "
+            f"| {np.mean(parts['hi']):.3f} [{' '.join(f'{v:.2f}' for v in parts['hi'])}] "
+            f"| {np.mean(parts['he']):.3f} [{' '.join(f'{v:.2f}' for v in parts['he'])}] "
+            f"| {np.mean(parts['hu']):.3f} | {passed}/{len(cell)} |"
+        )
+    return "\n".join(lines)
+
+
+def replacement_table(rows: list[dict[str, Any]]) -> str:
+    lines = ["| task | brain | rounds | founder | accuracy | unequal-fact | erased "
+             "| relevant follow | irrelevant stay | irrelevant correct "
+             "| acquires through the trace |",
+             "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"]
+    for (task, brain_name, rounds), cell in cells(rows):
+        for r in cell:
+            e, p = r["evaluation"], r["replacement"]
+            counts = (
+                f"{p['relevant']['follow']:.2f} | {p['irrelevant']['stay']:.2f} "
+                f"| {p['irrelevant']['follow']:.2f}" if p["completed"] else "refused | | "
+            )
+            lines.append(
+                f"| {task} | {brain_name} | {rounds} | {r['seed']} | {e['accuracy']:.2f} "
+                f"| {e['unequal_fact_accuracy']:.2f} | {e['erased']['accuracy']:.2f} | {counts} "
+                f"| {'yes' if acquires_through_trace(r) else 'no'} |"
+            )
+    return "\n".join(lines)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
@@ -253,11 +422,18 @@ def main(argv: list[str] | None = None) -> int:
     for gene in ("decay", "amplitude", "scale"):
         parser.add_argument(f"--trace-{gene}", type=float, default=None,
                             help=f"working_memory_{gene}; the composed founder when omitted")
+    parser.add_argument("--holdout", action="store_true",
+                        help="train on twelve cases and read the founder's four held-out ones")
+    parser.add_argument("--replace", action="store_true",
+                        help="the replacement intervention after training (trace arm only)")
     args = parser.parse_args(argv)
+    if args.replace and args.query != "trace":
+        parser.error("--replace reads the trace arm; use --query trace")
     args.out.mkdir(parents=True, exist_ok=True)
     trace = {g: v for g, v in (("decay", args.trace_decay), ("amplitude", args.trace_amplitude),
                                ("scale", args.trace_scale)) if v is not None}
-    specs = [(t, b, r, s, args.teaching, args.learning_eta, args.query == "exposed", trace)
+    specs = [(t, b, r, s, args.teaching, args.learning_eta, args.query == "exposed", trace,
+              args.holdout, args.replace)
              for t, b, r, s in itertools.product(args.tasks, args.brains, args.rounds, args.seeds)]
     done = {p.stem for p in args.out.glob("*.json") if p.stem != "summary"}
     todo = [s for s in specs if f"{s[0]}-{s[1]}-{s[2]}-{s[3]}" not in done]
@@ -269,9 +445,18 @@ def main(argv: list[str] | None = None) -> int:
             name = f"{row['task']}-{row['brain']}-{row['rounds']}-{row['seed']}"
             (args.out / f"{name}.json").write_text(json.dumps(row, indent=1))
             e = row["evaluation"]
+            readings = ""
+            if "holdout" in row:
+                h = row["holdout"]
+                readings += (f" held-out {h['intact']['held_out']:.2f}"
+                             f"/{h['erased']['held_out']:.2f}")
+            if row.get("replacement", {}).get("completed"):
+                p = row["replacement"]
+                readings += (f" follow {p['relevant']['follow']:.2f}"
+                             f" stay {p['irrelevant']['stay']:.2f}")
             print(
                 f"  {name}: accuracy {e['accuracy']:.3f} unequal {e['unequal_fact_accuracy']:.3f} "
-                f"answers {e['answers']} ({row['elapsed_seconds']}s)",
+                f"answers {e['answers']}{readings} ({row['elapsed_seconds']}s)",
                 flush=True,
             )
     rows = [json.loads(p.read_text()) for p in args.out.glob("*.json") if p.stem != "summary"]
@@ -279,8 +464,17 @@ def main(argv: list[str] | None = None) -> int:
                "sources": digests(), "runs": len(rows), "teaching": args.teaching,
                "learning_eta": args.learning_eta, "query": args.query, "trace_genes": trace,
                "table": table(rows)}
+    if args.holdout:
+        summary["holdout"] = True
+        summary["holdout_table"] = holdout_table([r for r in rows if "holdout" in r])
+    if args.replace:
+        summary["replace"] = True
+        summary["replacement_table"] = replacement_table([r for r in rows if "replacement" in r])
     (args.out / "summary.json").write_text(json.dumps(summary, indent=1))
     print(summary["table"])
+    for extra in ("holdout_table", "replacement_table"):
+        if extra in summary:
+            print(summary[extra])
     return 0
 
 
