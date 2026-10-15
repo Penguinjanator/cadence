@@ -114,6 +114,18 @@ The results and the decision note are kept with the run records outside the repo
 The GRU through the query uses the same rate without a selection of its own. No founder 0 to 11
 was run before this note was committed.
 
+## Amendment before the control runs
+
+| item | declared |
+| --- | --- |
+| gated arm (trace, `act`) and GRU | 512, 2048 and 8192 rounds, as above |
+| controls (`every` on both arms, `act` on the exposed arm) | 512 and 2048 rounds (lives to 2048) |
+| why | a life of the composed brain to 8192 rounds takes 17 to more than 36 minutes on the shared machine (about 134 solver sweeps per act after training against 32 at the start); the 72 control lives at 8192 rounds would take about 12 hours on two workers |
+| when | after the first two lives of the gated arm and before any control run |
+
+The control comparisons are paired at 512 and 2048 rounds; at 8192 rounds the gated arm stands
+beside the GRU alone.
+
 ## Commands
 
 From the repository root, with Cadence on the Python path, one BLAS thread and at most two
@@ -122,10 +134,16 @@ rules, GRU settings and bits.
 
 ```sh
 PYTHONPATH=src python benchmarks/relevance/bindings.py --out DIR/declared --learners gru --workers 2
-PYTHONPATH=src python benchmarks/relevance/bindings.py --out DIR/declared --learners graph \
-  --brains m64 --workers 2
-PYTHONPATH=src python benchmarks/relevance/bindings.py --out DIR/declared --learners graph \
-  --brains m32 --workers 2
+for brain in m64 m32; do
+  PYTHONPATH=src python benchmarks/relevance/bindings.py --out DIR/declared --learners graph \
+    --brains $brain --arms trace --rules act --workers 2
+done
+for brain in m64 m32; do  # the controls, as amended
+  PYTHONPATH=src python benchmarks/relevance/bindings.py --out DIR/declared --learners graph \
+    --brains $brain --arms trace --rules every --budgets 512 2048 --workers 2
+  PYTHONPATH=src python benchmarks/relevance/bindings.py --out DIR/declared --learners graph \
+    --brains $brain --arms exposed --budgets 512 2048 --workers 2
+done
 ```
 
 Each life writes one JSON row (`graph-<brain>-<arm>-<rule>-<founder>.json`,
