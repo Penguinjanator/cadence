@@ -96,3 +96,9 @@ python benchmarks/keydoor/key_door.py --verify <receipt>.json.gz --current
 
 A run past its cap is stopped and reported as capped; failed and capped runs are kept and
 reported as measured.
+
+Addendum, 2026-10-15 09:41Z, after the first two points and before any run reached a cap:
+other work raised the machine's load until each process of this re-selection received about a
+third of a core, so the caps above apply from this time to the CPU time of each run's process
+(each run is one process at `--workers 1`), with the same minutes. Points, seeds, delays, the
+selection rule and the gate are unchanged.
