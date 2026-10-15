@@ -47,6 +47,16 @@ population out, so the copy is a gene selected against that control. The
 [steady-rhythm chamber](../benchmarks/rhythm/README.md) measures it on the task
 the trace alone did not carry: alternate two actions under identical drive.
 
+`Brain.compose(..., history_decays=(0.2, 0.8, 0.95))` adds the heard history: a
+`history` region of one block of sensory width per decay, each block a fading
+trace of the observations as heard, the values the sensory neurons were
+stimulated with before settling. After each act the blocks take in the
+observation the brain acted on, so at a decision the history holds the past and
+the sensory drive the present. The association region reads it through a plastic
+projection that starts like the working trace's. The founder `history_decays=()`
+leaves the region out, so the history is a gene selected against that control
+([context](context.md#hear-the-past-at-several-timescales) explains when to add it).
+
 The base can already be deep. Add recursive readback separately:
 
 ```python
@@ -127,6 +137,8 @@ retain their own defaults, listed in the [API reference](api.md).
 | `actor_center_scale`, `actor_critic_normalize`, `actor_critic_signal` | `True`, `True`, `"auto"` | Dopamine units and critic update law |
 | `working_memory_decay`, `working_memory_amplitude`, `working_memory_focus` | `0.0`, `3.0`, `0.0` | Continuing working trace: the carried interpretation ([context](context.md)) |
 | `efference_decay`, `efference_amplitude` | `0.2`, `0.0` | Issued-command trace; a positive amplitude at construction adds its population |
+| `history_decays` | `()` | Heard history: a nonempty sequence adds one block of sensory width per decay; construction only ([context](context.md#hear-the-past-at-several-timescales)) |
+| `history_amplitude`, `history_scale` | `3.0`, `1.2` | How clearly the heard history is held, and its projection's initial magnitude (construction only) |
 | `memory_decay`, `memory_rate`, `memory_amplitude`, `consolidation` | `0.9`, `1.0` (`0.5` with `memory_choice=True`), `1.0`, `0.05` | Associative retention, actual-outcome writes, recall and consolidation |
 | `memory_choice` | `False` | `True` builds the episodic memory and its settings below ([episodic memory](episodic.md)); construction only |
 | `memory_context`, `memory_replay`, `memory_demonstrations` | `0.5`, `8`, `1.0` with `memory_choice=True` | The share of the past in the context key, replay of the path to a reward, remembered demonstrations; construction only |
@@ -180,9 +192,10 @@ A pending sampled action retains its actual eligibility and behavior temperature
 Rate changes apply when its next real outcome is learned. A change of
 `learning_beta` is refused while that action awaits feedback, because the pending
 contrast was formed at the earlier nudge scale; consume its outcome before
-changing the scale. Construction choices such as `sensory_scale`, `working_memory_scale`, topology,
-backend and `resting_bias` cannot be retuned, nor can a retune add a missing
-memory, efference or arousal component. Create those components when composing.
+changing the scale. Construction choices such as `sensory_scale`, `working_memory_scale`,
+`history_decays`, `history_scale`, topology, backend and `resting_bias` cannot be retuned, nor
+can a retune add a missing memory, efference, history or arousal component. Create those
+components when composing.
 
 ## Choose settings for the application
 

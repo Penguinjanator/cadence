@@ -548,6 +548,14 @@ and a complete runnable example.
   the executed action (`update(state)` raises). One `target` neuron per motor neuron; the
   association region reads it through a plastic projection. `Brain.compose(...,
   efference_amplitude=...)` adds it; `Brain.efference` holds it.
+- `History(connectome, decays, amplitude=3.0, source="sensory", target="history")`: the
+  observations as heard, per stream, at one or more timescales. The `target` range holds one
+  block of `source` width per decay; `hear(observations)` moves the block of decay `d` toward
+  the `(batch, source)` observations, `h <- d h + (1 - d) x`, and `stimulate(drive)` writes
+  `amplitude * h` into the block's drive (another batch size reads silence). `reset(batch,
+  rows=None)`, `keep(rows)`, `trace` (`(batch, blocks * source)`), `to_dict()`.
+  `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
+  observation of every act after the act.
 - `FastSynapses(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb", separator=None, writes=0)`:
   one mutable `(pre, post)` matrix per stream; `writes` counts the rows written. `separator`
   is a `PatternSeparator` applied to keys and queries, which makes the matrix
@@ -688,7 +696,7 @@ to positive region widths to add optional System 2 state feedback within the
 same neural-graph settlement. This is an implemented interface, not a claim
 that recursive benefit or automatic reflective behavior has been learned.
 
-- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, sensory_scale=1.0, working_memory_scale=1.2, seed=0, slots=1, **options) -> Brain`:
+- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, sensory_scale=1.0, working_memory_scale=1.2, history_scale=1.2, seed=0, slots=1, **options) -> Brain`:
   the direct vector-input constructor. `slots` groups the motor neurons into several
   softmax readouts that settle together, a count of equal groups or one size per group
   covering `actions`: `act` and `step` return one index per slot, lateral inhibition
@@ -731,6 +739,14 @@ that recursive benefit or automatic reflective behavior has been learned.
   (default 0.2) sets how the copy of the issued command fades. Every earlier region and
   projection is developed from the same random draws, so the brain with the copy is the
   brain without it plus those neurons and that projection. It is a gene; zero is its control.
+  A nonempty `history_decays` (default `()`, the composition without it, byte-identical)
+  appends a `history` population of one block of `inputs` neurons per decay and a plastic
+  `history` to `association` projection at `history_scale` (default 1.2, the working trace's
+  founder scale; construction only), after any efference copy. Each block is a fading trace
+  of the observations as heard, the values the sensory neurons were stimulated with before
+  settling, held at `history_amplitude` (default 3.0). After each act, and after each moment
+  `wait` senses, the blocks take in that observation, so at a decision the history holds
+  the past and the sensory drive the present. It is a gene; `()` is its control.
 - `Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, slots=1, **options)`:
   develops `Brain.genome(...)` and wraps it. `inputs` is a vector length, or an image
   shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
@@ -740,7 +756,7 @@ that recursive benefit or automatic reflective behavior has been learned.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, working_memory_decay=0.0, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, **genes)`:
+- `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, working_memory_decay=0.0, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, history_decays=(), history_amplitude=3.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, **genes)`:
   `arousal=True` enables the founder `ArousalConfig`; a mapping patches its
   fields, and an `ArousalConfig` supplies an explicit configuration. Omitting
   arousal preserves the brain without that controller, and `live` raises.
@@ -751,7 +767,7 @@ that recursive benefit or automatic reflective behavior has been learned.
   settings when the component is absent.
   `resting_bias` is a finite nonnegative real scalar; booleans and arrays are rejected.
   It initializes named populations outside the `sensory`, `visual`, `prefrontal`,
-  `efference` and `motor` families (the part of the name before `/`). Excluded family membership
+  `efference`, `history` and `motor` families (the part of the name before `/`). Excluded family membership
   takes precedence over overlapping aliases; unnamed neurons also start at zero.
   In `compose`, modules, association and observers receive the value. In an image
   builder the whole visual region stays at zero. Biases remain plastic, and a
@@ -761,8 +777,10 @@ that recursive benefit or automatic reflective behavior has been learned.
   metadata retain their stored bias vector and use `resting_bias=0.0`.
   The connectome needs populations `sensory` or `visual/input`, `association` and `motor`, and uses
   `prefrontal` for a working memory and `efference` (one neuron per motor neuron) for an
-  efference copy when present. `efference_amplitude` is the read gain of that copy, a finite
-  nonnegative real scalar; `efference_decay` its decay across moments. `learning` defaults to
+  efference copy when present, and `history` (one block of sensory width per entry of
+  `history_decays`, which it then requires) for a heard history. `efference_amplitude` is the
+  read gain of that copy, a finite nonnegative real scalar; `efference_decay` its decay across
+  moments; `history_amplitude` the heard history's, a finite nonnegative real scalar. `learning` defaults to
   `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, free_steps=1024, nudged_steps=12, momentum=0.9)` (whose unset `eta_bias` derives `eta / 10` = 0.05),
   `reward` to `ActorCriticConfig(gamma=0.9, lam=0.8, eta=1.0, eta_bias=0.05, eta_critic=0.3, eligibility_steps=12)`,
   the measured composed bias rate; a bare `ActorCriticConfig` derives `eta / 10`.
@@ -777,12 +795,12 @@ that recursive benefit or automatic reflective behavior has been learned.
   eligibility mechanism retains its finite-phase contract.
   Attributes `connectome`, `brain`, `learner`, `basal_ganglia` (`ActorCritic` reading the
   association cortex), `working_memory` (`Trace` or `None`), `efference` (`Efference` or
-  `None`), `hippocampus` (`SynapticMemory`
+  `None`), `history` (`History` or `None`), `hippocampus` (`SynapticMemory`
   from sensory to motor neurons, or `None`), `sensory_index`, `association_index`,
   `motor_index`.
   - `retune(*, reset_arousal=False, **genes) -> Brain`: change selected
     mutable genes in the same life. Accepts `learning_*`, `actor_*`, `arousal_*`,
-    `temperature`, working-trace/efference settings and
+    `temperature`, working-trace/efference settings, `history_amplitude` and
     `memory_decay`, `memory_rate`, `memory_amplitude`, `consolidation`.
     `arousal={...}` changes only its named fields. Full `learning`, `reward`
     and `arousal` configuration objects replace that config before named
@@ -977,6 +995,8 @@ that recursive benefit or automatic reflective behavior has been learned.
     earlier format name. A stream saved during `wait` stores the state it sensed under
     `cadence-generic/5`, with or without an efference copy; a stream that is not waiting
     keeps the earlier format names, and `load` refuses sensed state under another name.
+    A brain with a heard history saves as `cadence-generic/7`, with any of the earlier
+    components; `load` refuses a history under another format name and that name without one.
     The archive is replaced atomically. A learner-only checkpoint
     is rejected by `Brain.load`; `Learner.load` can extract a learner from either.
   Observations must be a nonempty finite batch, with image dimensions flattened per row.

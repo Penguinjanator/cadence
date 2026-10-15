@@ -32,6 +32,18 @@
   composed founder keeps every-row lessons; the
   [learning guide](docs/learning.md#lessons-only-where-the-answer-differs) says when to
   select the rule.
+- The heard history, opt-in ([issue 199](https://github.com/muellerberndt/cadence/issues/199)):
+  `Brain.compose(..., history_decays=(0.2, 0.8, 0.95))` adds a `history` region of one block
+  of sensory width per decay, each block a fading trace of the observations as heard (the
+  values the sensory neurons were stimulated with, before settling), held at
+  `history_amplitude` (3.0) and read by the association region through a plastic projection
+  that starts like the working trace's (`history_scale`, 1.2). After each act the blocks take
+  in the observation the brain acted on, so at a decision the history holds the past and the
+  drive the present. `History` keeps it per stream; `reset`, the end of an episode,
+  imagination, `wait`, `describe()` and `retune(history_amplitude=...)` treat it as they
+  treat the working trace, and a brain with one saves as `cadence-generic/7` and continues
+  exactly. The founder `history_decays=()` builds the brain without it, byte-identical; the
+  [context guide](docs/context.md#hear-the-past-at-several-timescales) says when to add it.
 
 ## 0.83.0 — 2026-10-13
 
