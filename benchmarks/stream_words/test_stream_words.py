@@ -266,3 +266,18 @@ def test_a_smoke_life_writes_a_receipt_that_verifies_and_reports(tmp_path, capsy
         "probe_every": 20,
         "evaluation_words": 20,
     }
+
+
+def test_the_history_amendment_adds_one_arm_and_changes_nothing_else(protocol):
+    amended = chamber.load_protocol(HERE / "protocol-history.json")
+    assert set(amended["arms"]) == set(protocol["arms"]) | {"history"}
+    genes = amended["arms"]["history"]["genes"]
+    assert genes["learning_surprise"] is True and genes["history_decays"] == [0.2, 0.8, 0.95]
+    assert (genes["history_amplitude"], genes["history_scale"]) == (3.0, 1.2)
+    for key, value in protocol.items():
+        if key == "arms":
+            assert all(amended["arms"][arm] == spec for arm, spec in value.items())
+        elif key != "conditional_arm":
+            assert amended[key] == value, key
+    digest = __import__("hashlib").sha256((HERE / "protocol.json").read_bytes()).hexdigest()
+    assert digest in amended["amendment"]["amends"]
