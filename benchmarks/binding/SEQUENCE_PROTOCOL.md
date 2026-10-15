@@ -67,3 +67,23 @@ than one-hot tokens.
 PYTHONPATH=src python benchmarks/binding/sequence_binding.py --out OUT.json --workers 2 \
   --seeds 0 1 2 3 4 5 --budgets 64 256 1024
 ```
+
+## Amendment 1, after the development run (15 October 2026)
+
+The development run passes the declared gate: the `successor` arm under lessons judged by the
+act answers held-out transitions at 1.00 on 6 of 6 founders at 1024 rounds (and at 64 rounds),
+with the memory erased at .14 against chance .125. Declared before the confirmation run:
+
+- Founders 100 to 111, unopened; 1024 rounds; panels, conditions and the gate as above.
+- Arms: `successor` under `act` and `every`; `graph` under both rules; `gru`.
+- The confirmation passes for a lesson rule when at least 10 of the 12 founders pass with the
+  successor memory; the rules are read separately. A pass licenses the successor read as part of
+  the witnessed-content library candidate, declared with its preservation witnesses before any
+  library change; it says nothing yet about graded events (the C64 row loop, the spoken-word
+  stream).
+
+```sh
+PYTHONPATH=src python benchmarks/binding/sequence_binding.py --out OUT.json --workers 2 \
+  --learners successor graph gru --rules act every \
+  --seeds 100 101 102 103 104 105 106 107 108 109 110 111 --budgets 1024
+```
