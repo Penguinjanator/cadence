@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+- The episodic and sequential-task guides state the founder dependence of the continuation
+  after teaching: the readings in which `step` eroded a taught chain where `live` kept it
+  belong to the five fresh founders of the chain instrument, and on other founders both paths
+  kept it or the drift came through `live`; the remedy is to read the greedy policy stage by
+  stage beside whole-chain success after the caregiver leaves, and continue through `live` or
+  lower the actor step. No runtime change.
+- Competitor arms for the comparison thread of
+  [issue 183](https://github.com/muellerberndt/cadence/issues/183) and
+  [issue 184](https://github.com/muellerberndt/cadence/issues/184):
+  `benchmarks/competitors.py` holds an online recurrent actor-critic in NumPy with an Elman
+  cell (`elman`, the key-door chamber's `recurrent` arm) or a gated recurrent unit (`gru`,
+  its gradients written by hand and checked against finite differences), one update per
+  moment, TD(lambda) eligibility traces with a gradient guard, no replay or batching, and
+  counted work (parameter updates, forward passes, multiply-accumulates, guard activations,
+  parameter count). The prerequisite-chain nursery runs both as arms in its observed and
+  hidden modes, with their settings declared in its `protocol.json`; the odour nursery runs
+  them on request (`--arms elman gru`) with settings declared in the chamber, outside its
+  frozen plan, and records them in the receipt. The existing arms, receipts, gates and
+  tests are unchanged.
+- Lessons only where the answer differs, opt-in: `LearnerConfig(surprise=True)`
+  (`Brain.compose(..., learning_surprise=True)`) teaches only the rows whose free answer
+  differs from the label; agreeing rows get no nudged phase and no update, and a batch the
+  net answers as shown ends after the free phase. The composed brain judges that difference
+  from the settle its act reads (`step(teacher=...)` passes it as `answer`), a learner on its
+  own from its free phase. The teaching report counts
+  `accepted_presentations` and `agreed_presentations`, `LearnedState.taught` marks the rows,
+  and an episodic memory that records demonstrations records the taught rows only. The
+  composed founder keeps every-row lessons; the
+  [learning guide](docs/learning.md#lessons-only-where-the-answer-differs) says when to
+  select the rule.
+
 ## 0.83.0 — 2026-10-13
 
 - An episodic memory for the composed brain, opt-in: `Brain.compose(..., memory_choice=True)`
