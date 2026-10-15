@@ -45,8 +45,12 @@ weights.
 The world pays nothing. The brain arms set the reward learner's rates to zero, so the
 zero-reward feedback that `step` applies to its previous sampled act changes nothing; the
 remaining genes are the composed founder's. The GRU's settings were chosen before any run,
-none selected on this chamber's seeds. An arm with an opt-in heard history of the observations
-joins only through a separate amendment declared before its run.
+none selected on this chamber's seeds. [`protocol-history.json`](protocol-history.json), an
+amendment declared before its run, adds the arm `history`: the `surprise` arm composed with the
+opt-in heard history (`history_decays` 0.2, 0.8 and 0.95, amplitude 3, scale 1.2, the settings of
+the option's first declared protocol), a 48-neuron region of the frames as heard at three decays
+read by the association region. Run it with `--protocol
+benchmarks/stream_words/protocol-history.json --arm history`.
 
 ## Readings and gate
 
