@@ -99,3 +99,34 @@ PYTHONPATH=src python benchmarks/binding/token_binding.py --out OUT.json --worke
   --seeds 0 1 2 3 4 5 --budgets 64 256 1024
 python -m pytest -q benchmarks/binding
 ```
+
+## Amendment 1, after the development run (15 October 2026)
+
+The development run is retained as measured: the gated arm (Hebbian store, lessons judged by
+the act) passes all three criteria on 4 of 6 founders against the declared 5, so the declared
+development gate is not met and its confirmation does not follow. The code's gate read the first
+two criteria; it reads all three from commit d09a1ac on, and every verdict is recomputed from the
+receipt.
+
+Development selects a candidate for a separate confirmation: the **delta store**
+(`content_delta`), which passed 5 of 6 under lessons judged by the act and 6 of 6 under every-row
+lessons, and which favours a restated name's later value (.76 to .79, where the Hebbian store
+ties). Declared before the confirmation run:
+
+- Founders 100 to 111, unopened; 1024 rounds; the panels, conditions and three criteria as
+  above.
+- Arms: `content_delta` under `act` and under `every`; `graph` under `act`; `gru`.
+- The confirmation passes for a lesson rule when at least 10 of the 12 founders pass all three
+  criteria at 1024 rounds with the delta store; the rules are read separately.
+- A pass licenses an opt-in library candidate (a content memory written as each event is heard
+  and read by the present observation into a recall region), declared with its preservation
+  witnesses before any library change. A failure is retained and nothing follows for the
+  library.
+
+```sh
+PYTHONPATH=src python benchmarks/binding/token_binding.py --out OUT.json --workers 2 \
+  --learners content_delta graph gru --rules act every \
+  --seeds 100 101 102 103 104 105 106 107 108 109 110 111 --budgets 1024
+```
+
+The command runs `graph` under both rules; its `every` arm is read as an extra control.
