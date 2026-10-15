@@ -131,7 +131,7 @@ brain is born with, so it is a construction setting.
 | `efference_amplitude` | the next action depends on what the brain just did | (default 0 has no copy) |
 | `history_decays` | the answer depends on earlier observations that the carried interpretation merges | (default `()` has no heard history) |
 | `history_amplitude` | the heard history should weigh more in learning and in the settle | the heard history should fade out (0 silences it) |
-| `history_scale` | the heard past must matter from the first moment, before learning | the brain answers from its history and ignores what it sees now |
+| `history_scale` | the heard past must matter from the first moment, before learning | the brain answers from its history and ignores the present observation |
 
 Saved brains keep their own settings and wiring: a brain saved with an older release loads
 with the trace and the synapses it was built with. To rebuild the composition of releases
