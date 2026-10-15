@@ -12,6 +12,8 @@
   dopamine prediction error moves every plastic synapse through its eligibility trace;
 * optionally a ``prefrontal_cortex`` driven by a ``Trace`` of the association cortex, a
   working memory of the moments before;
+* optionally a ``history`` region driven by a ``History`` of the observations as heard, at
+  one or more timescales;
 * a default hippocampal-memory analogue, ``SynapticMemory`` from sensory to motor
   neurons, recording outcomes quickly and consolidating them through repetition/salience.
   With ``memory_choice=True`` (opt-in) it is an episodic memory: its
@@ -48,7 +50,7 @@ from .learning import Learner, LearnerConfig, learning_neuron_model
 from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
 from .regions import Region, motor_cortex, prefrontal_cortex, slot_sizes, visual_cortex
-from .stream import Efference, FastSynapses, PatternSeparator, Trace
+from .stream import Efference, FastSynapses, History, PatternSeparator, Trace
 
 __all__ = ["Brain"]
 
@@ -128,6 +130,17 @@ def _validate_efference_amplitude(value: Any) -> float:
     return float(value)
 
 
+def _history_decays(value: Any) -> tuple[float, ...]:
+    """The decays of a heard history, one block of the region each: reals in [0, 1). The empty
+    sequence is the brain without a history."""
+    if isinstance(value, (str, bytes, Mapping)) or not isinstance(value, (Sequence, np.ndarray)):
+        raise ValueError("history_decays must be a sequence of reals in [0, 1)")
+    decays = tuple(real("history_decays", decay, low=0) for decay in value)
+    if any(decay >= 1 for decay in decays):
+        raise ValueError("history_decays must lie in [0, 1)")
+    return decays
+
+
 def _count(name: str, value: Any, low: int = 0) -> int:
     """A Python or NumPy integer of at least ``low``; booleans are refused."""
     if (
@@ -173,7 +186,9 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
     if isinstance(value, dict) and set(value) == expected:
         # saved before 0.82.0, whose composition read the trace at the fixed scale 12
         value = {**value, "working_memory_scale": 12.0}
-    if not isinstance(value, dict) or set(value) != expected | {"working_memory_scale"}:
+    if not isinstance(value, dict) or set(value) - {"history_scale"} != expected | {
+        "working_memory_scale"
+    }:
         raise ValueError("invalid saved composition provenance")
     for name in ("inputs", "actions", "seed"):
         number = value[name]
@@ -192,6 +207,10 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
     real("saved working_memory_scale", value["working_memory_scale"], low=0)
     real("saved lateral", value["lateral"])
     populations = learner.brain.connectome.populations
+    if ("history_scale" in value) != ("history" in populations):
+        raise ValueError("a composed history's scale is saved with its population, and only then")
+    if "history_scale" in value:
+        real("saved history_scale", value["history_scale"], low=0)
     modules = _region_widths(populations, "module_") + [len(populations.get("association", ()))]
     observers = _region_widths(populations, "observer_")
     if (
@@ -422,9 +441,11 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
     awaiting = meta.get("awaiting")
     if meta.get("format") == "cadence-generic/5" and "awaiting" not in meta:
         raise ValueError("format cadence-generic/5 carries a sensed state awaiting an outcome")
-    if "awaiting" in meta and meta.get("format") not in ("cadence-generic/5", "cadence-generic/6"):
+    if "awaiting" in meta and meta.get("format") not in (
+        "cadence-generic/5", "cadence-generic/6", "cadence-generic/7"
+    ):
         raise ValueError(
-            "a sensed state awaiting an outcome belongs to formats cadence-generic/5 and /6"
+            "a sensed state awaiting an outcome belongs to formats cadence-generic/5 to /7"
         )
     if "awaiting" not in meta:
         if any(name.startswith("awaiting/") for name in data):
@@ -456,10 +477,10 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
         raise ValueError("saved efference neurons and state require efference metadata")
     if efference is not None:
         if meta.get("format") not in (
-            "cadence-generic/4", "cadence-generic/5", "cadence-generic/6"
+            "cadence-generic/4", "cadence-generic/5", "cadence-generic/6", "cadence-generic/7"
         ):
             raise ValueError(
-                "an efference copy belongs to checkpoint formats cadence-generic/4 to /6"
+                "an efference copy belongs to checkpoint formats cadence-generic/4 to /7"
             )
         source, target = efference["source"], efference["target"]
         if (
@@ -475,6 +496,28 @@ def _validate_life_state(meta: dict[str, Any], data: Mapping[str, Any], learner:
         array("efference/last", (batch, width))
         if array("efference/cold", (batch,)).dtype != np.bool_:
             raise ValueError("invalid saved efference cold flags")
+    heard = meta.get("history")
+    if heard is None and (
+        "history" in populations or any(name.startswith("history/") for name in data)
+    ):
+        raise ValueError("saved history neurons and state require history metadata")
+    if heard is not None:
+        if (
+            not isinstance(heard, dict)
+            or set(heard) != {"decays", "amplitude", "source", "target", "neurons"}
+            or not isinstance(heard["decays"], list)
+            or heard["source"] not in ("sensory", "visual/input")
+            or heard["source"] not in populations
+            or heard["target"] != "history"
+            or "history" not in populations
+        ):
+            raise ValueError("invalid saved history ports")
+        decays = _history_decays(heard["decays"])
+        real("saved history_amplitude", heard["amplitude"], low=0)
+        width = len(populations["history"])
+        if not decays or width != len(decays) * sensory or heard["neurons"] != width:
+            raise ValueError("a saved history needs one block of sensory width per decay")
+        array("history/trace", (batch, width))
     _validate_episodic_state(meta, data, learner, sensory)
 
 
@@ -580,9 +623,10 @@ class Brain:
     """Senses, an association cortex, a motor cortex, basal ganglia and consolidating memory.
 
     ``connectome`` needs populations ``sensory`` (or ``visual/input`` for an image),
-    ``association`` and ``motor``, ``prefrontal`` for a working memory and ``efference``
-    (one neuron per motor neuron) for a copy of the issued command; ``genome`` builds
-    one. Use ``Brain.compose`` for the default brain with working memory.
+    ``association`` and ``motor``, ``prefrontal`` for a working memory, ``efference``
+    (one neuron per motor neuron) for a copy of the issued command and ``history`` (one
+    block of sensory width per entry of ``history_decays``) for the observations as heard;
+    ``genome`` builds one. Use ``Brain.compose`` for the default brain with working memory.
     """
 
     def __init__(
@@ -605,6 +649,8 @@ class Brain:
         working_memory_focus: float = 0.0,
         efference_decay: float = 0.2,
         efference_amplitude: float = 0.0,
+        history_decays: Sequence[float] = (),
+        history_amplitude: float = 3.0,
         learning: LearnerConfig | None = None,
         reward: ActorCriticConfig | None = None,
         resting_bias: float = 0.0,
@@ -653,6 +699,8 @@ class Brain:
         populations = connectome.populations
         resting_bias = _validate_resting_bias(resting_bias)
         efference_amplitude = _validate_efference_amplitude(efference_amplitude)
+        history_decays = _history_decays(history_decays)
+        history_amplitude = real("history_amplitude", history_amplitude, low=0)
         for name in ("association", "motor"):
             if name not in populations:
                 raise ValueError(f"a generic brain needs a population named {name!r}")
@@ -673,7 +721,9 @@ class Brain:
             excluded = np.zeros(connectome.n, dtype=bool)
             for name, members in populations.items():
                 head = name.split("/", 1)[0]
-                boundary = head in ("sensory", "visual", "prefrontal", "motor", "efference")
+                boundary = head in (
+                    "sensory", "visual", "prefrontal", "motor", "efference", "history"
+                )
                 target = excluded if boundary else selected
                 target[np.asarray(members, dtype=np.int64)] = True
             bias[selected & ~excluded] = resting_bias
@@ -707,6 +757,23 @@ class Brain:
                 source="motor",
                 target="efference",
             )
+        self.history: History | None = None
+        if "history" in populations:
+            if not history_decays or len(populations["history"]) != len(history_decays) * len(
+                self.sensory_index
+            ):
+                raise ValueError(
+                    "a history population needs one block of sensory width per history decay"
+                )
+            self.history = History(
+                connectome,
+                decays=history_decays,
+                amplitude=history_amplitude,
+                source=sensory,
+                target="history",
+            )
+        elif history_decays:
+            raise ValueError("history_decays need a history population; Brain.compose adds it")
         self.hippocampus: FastSynapses | None = None
         # ``memory_choice`` with a temporal context: the same records keyed by the stream's
         # temporal context, the fading activity of the sensory and the motor neurons
@@ -950,6 +1017,7 @@ class Brain:
         lateral: float | None = None,
         sensory_scale: float = 1.0,
         working_memory_scale: float = 1.2,
+        history_scale: float = 1.2,
         seed: int = 0,
         slots: int | Sequence[int] = 1,
         **options: Any,
@@ -1005,6 +1073,16 @@ class Brain:
         through a plastic projection of founder scale 12. The founder
         value zero builds the brain without it, byte-identical to the released
         composition; the copy is a gene to select against that control.
+        A nonempty ``history_decays`` adds the heard history: a ``history`` region of one
+        block of ``inputs`` neurons per decay, each block a fading trace of the observations
+        as heard (the values the sensory neurons were stimulated with, before settling) at
+        its own decay, held at ``history_amplitude`` (3.0) and read by the association
+        region through a plastic projection of initial magnitude ``history_scale`` (1.2),
+        initialized like the working trace's. After each act the blocks take in the
+        observation the brain acted on, so at a decision the history holds the past and the
+        sensory drive the present. The founder ``history_decays=()`` builds the brain
+        without it, byte-identical to the composition before the option; the history is a
+        gene to select against that control. ``history_scale`` is a construction setting.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -1046,6 +1124,8 @@ class Brain:
         inputs, actions = size(inputs), size(actions)
         sensory_scale = real("sensory_scale", sensory_scale, low=0)
         working_memory_scale = real("working_memory_scale", working_memory_scale, low=0)
+        history_scale = real("history_scale", history_scale, low=0)
+        heard = _history_decays(options.get("history_decays", ()))
         if lateral is None:
             lateral = _default_lateral(max(slot_sizes(actions, slots)))
         if (
@@ -1107,6 +1187,13 @@ class Brain:
             # efference neurons and their one projection.
             regions.append(Region("efference", actions))
             projections.append(Projection("efference", "association", scale=12.0, reciprocal=False))
+        if heard:
+            # Appended last, after any efference copy: the brain with the history is the brain
+            # without it plus one block of sensory width per decay and their one projection.
+            regions.append(Region("history", len(heard) * inputs))
+            projections.append(
+                Projection("history", "association", scale=history_scale, reciprocal=False)
+            )
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
         result = cls(develop(genome, seed=seed), seed=seed, slots=slots, **options)
         result._composition = {
@@ -1120,6 +1207,8 @@ class Brain:
             "working_memory_scale": working_memory_scale,
             "seed": int(seed),
         }
+        if heard:
+            result._composition["history_scale"] = history_scale
         return result
 
     def retune(self, *, reset_arousal: bool = False, **genes: Any) -> Brain:
@@ -1150,7 +1239,7 @@ class Brain:
         construction = {
             "inputs", "actions", "modules", "observers", "lateral", "sensory_scale",
             "working_memory_scale", "resting_bias", "slots", "seed", "episodic", "backend",
-            "device", "connectome", *_EPISODIC_SETTINGS,
+            "device", "connectome", "history_decays", "history_scale", *_EPISODIC_SETTINGS,
         }
         for name in options:
             if name in construction:
@@ -1170,6 +1259,7 @@ class Brain:
             "working_memory_focus": (self.working_memory, "focus"),
             "efference_decay": (self.efference, "decay"),
             "efference_amplitude": (self.efference, "amplitude"),
+            "history_amplitude": (self.history, "amplitude"),
             "memory_decay": (self.hippocampus, "decay"),
             "memory_rate": (self.hippocampus, "rate"),
             "memory_amplitude": (self.hippocampus, "amplitude"),
@@ -1193,7 +1283,7 @@ class Brain:
                 value = real(name, value, low=0, high=1 if component.rule == "delta" else np.inf)
             elif field == "consolidation":
                 value = real(name, value, low=0, high=1)
-            elif field == "focus" or name == "efference_amplitude":
+            elif field == "focus" or name in ("efference_amplitude", "history_amplitude"):
                 value = real(name, value, low=0)
             else:
                 value = real(name, value)
@@ -1249,6 +1339,7 @@ class Brain:
         for prefix, component, fields in (
             ("working_memory", self.working_memory, ("decay", "amplitude", "focus")),
             ("efference", self.efference, ("decay", "amplitude")),
+            ("history", self.history, ("decays", "amplitude")),
             ("memory", self.hippocampus, ("decay", "rate", "amplitude")),
         ):
             if component is not None:
@@ -1274,6 +1365,7 @@ class Brain:
             "working_memory": None if self.working_memory is None
             else self.working_memory.to_dict(),
             "efference": None if self.efference is None else self.efference.to_dict(),
+            "history": None if self.history is None else self.history.to_dict(),
             "memory": None if self.hippocampus is None else self.hippocampus.to_dict(),
             # construction settings of an episodic memory whose records vote in the choice
             "episodic": None
@@ -1309,8 +1401,9 @@ class Brain:
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
         """The drive of a batch of observations: the sensory neurons stimulated, plus the
-        working memory and the hippocampal recall when ``memory`` is set. An episodic memory
-        that votes in the choice (``memory_choice``) is not read into the drive."""
+        working memory, the efference copy, the heard history and the hippocampal recall when
+        ``memory`` is set. An episodic memory that votes in the choice (``memory_choice``) is
+        not read into the drive."""
         x = self._observations(observations)
         drive = np.zeros((len(x), self.connectome.n))
         drive[:, self.sensory_index] = x * self.brain.neuron_model.stimulus_amplitude
@@ -1318,6 +1411,8 @@ class Brain:
             drive = self.working_memory.stimulate(drive)
         if memory and self.efference is not None:
             drive = self.efference.stimulate(drive)
+        if memory and self.history is not None:
+            drive = self.history.stimulate(drive)
         if memory and self.hippocampus is not None and not self.memory_choice:
             drive = self.hippocampus.stimulate(drive)
         return drive
@@ -1677,6 +1772,8 @@ class Brain:
                     self.working_memory.reset(1, rows=np.array([0]))
                 if ended[0] and self.efference is not None:
                     self.efference.reset(1, rows=np.array([0]))
+                if ended[0] and self.history is not None:
+                    self.history.reset(1, rows=np.array([0]))
                 # a moment without eligibility has passed: the credit of earlier sampled
                 # actions fades as it does between two outcomes that are learned from
                 agent.fade(ended)
@@ -1771,8 +1868,9 @@ class Brain:
         """One moment of the stream while its issued action's outcome is still to come.
 
         The brain settles the present observation from its current activity, reading its
-        working trace, the copy of its last command and its associative memory, and its
-        working trace advances to that state. It issues no action and takes no outcome:
+        working trace, the copy of its last command, its heard history and its associative
+        memory; its working trace advances to that state and its heard history takes in the
+        observation. It issues no action and takes no outcome:
         the awaited action keeps the forecasts made before it, its eligibility and the
         situation it was chosen in, and ``live`` later credits its actual outcome to it
         once. Parameters, the critic, eligibility traces, associative memory, random
@@ -1807,6 +1905,8 @@ class Brain:
         state = self._qualified(drive, self._activity(), operation="wait")
         if self.working_memory is not None:
             self.working_memory.update(state)
+        if self.history is not None:
+            self.history.hear(x)  # what was sensed joins the heard past
         if self.context_memory is not None:
             self._context = self._episode_key(x)  # what was sensed enters the temporal context
         self._awaiting = (current, state)
@@ -1870,11 +1970,13 @@ class Brain:
         if not ended:
             return self._settled(x)
         kept = (agent._free, agent._free_brain, agent._drive)
-        traces = [
+        traces: list[tuple[Any, dict[str, np.ndarray]]] = [
             (trace, {name: getattr(trace, name).copy() for name in ("trace", "last", "cold")})
             for trace in (self.working_memory, self.efference)
             if trace is not None
         ]
+        if self.history is not None:
+            traces.append((self.history, {"trace": self.history.trace.copy()}))
         try:
             for trace, _ in traces:
                 trace.reset(1, rows=np.array([0]))
@@ -1942,6 +2044,9 @@ class Brain:
         if echo is not None:
             for name in ("trace", "last", "cold"):
                 setattr(echo, name, getattr(echo, name).copy())
+        heard = copy(self.history)
+        if heard is not None:
+            heard.trace = heard.trace.copy()
         phases = []
         for value in sequence:
             drive = self.stimulus(value, memory=False)
@@ -1949,6 +2054,8 @@ class Brain:
                 drive = trace.stimulate(drive)
             if echo is not None:
                 drive = echo.stimulate(drive)
+            if heard is not None:
+                drive = heard.stimulate(drive)
             if self.hippocampus is not None and not self.memory_choice:
                 drive = self.hippocampus.stimulate(drive)
             phase = self._equilibrate(drive, current, budget=budget, tolerance=tolerance)
@@ -1961,6 +2068,8 @@ class Brain:
             if echo is not None:
                 # the imagined branch issues the response's own best guess, privately
                 echo.issue(self._command(self._choices(phase.state)))
+            if heard is not None:
+                heard.hear(value)  # the imagined observation joins the private history
         return tuple(phases)
 
     def act(
@@ -2021,6 +2130,9 @@ class Brain:
             self.working_memory.update(state)
         if self.efference is not None:
             self.efference.issue(self._command(action))
+        if self.history is not None:
+            # the observation acted on joins the heard past; the next drive holds the present
+            self.history.hear(x)
         if bias is not None:
             if key is not None:
                 # what the stream did joins its temporal context after what it saw
@@ -2317,6 +2429,8 @@ class Brain:
             if echo is None or not done.any()
             else {name: getattr(echo, name).copy() for name in ("trace", "last", "cold")}
         )
+        heard = self.history
+        heard_trace = None if heard is None or not done.any() else heard.trace.copy()
         episode_values = (
             None
             if not self.memory_choice
@@ -2342,6 +2456,8 @@ class Brain:
                 trace.reset(len(done), rows=np.flatnonzero(done))
             if echo is not None and done.any():
                 echo.reset(len(done), rows=np.flatnonzero(done))
+            if heard is not None and done.any():
+                heard.reset(len(done), rows=np.flatnonzero(done))
             report = self.basal_ganglia.learn(
                 reward, done, self.stimulus(following), bootstrap, warm=self._awaited()
             )
@@ -2357,6 +2473,8 @@ class Brain:
             if echo is not None:
                 for name, value in echo_values.items():
                     setattr(echo, name, value)
+            if heard is not None and heard_trace is not None:
+                heard.trace = heard_trace
             if temporal is not None:
                 for name, value in temporal_values.items():
                     setattr(temporal, name, value)
@@ -2430,6 +2548,8 @@ class Brain:
             self.working_memory.reset(0)
         if self.efference is not None:
             self.efference.reset(0)
+        if self.history is not None:
+            self.history.reset(0)
         self._moment = None
         self._prepared = None
         self.last_learning = {}
@@ -2458,9 +2578,9 @@ class Brain:
     def save(self, path: str | Path) -> Path:
         """Save the complete composition, including an action awaiting its real outcome.
 
-        Includes critic, optimizer, random generators, working and episodic memories,
-        eligibility, the current free phase, any pending action's nudged states and the
-        state ``wait`` sensed since that action was chosen.
+        Includes critic, optimizer, random generators, working and episodic memories, the
+        heard history, eligibility, the current free phase, any pending action's nudged
+        states and the state ``wait`` sensed since that action was chosen.
         ``Learner.save`` remains available for the slow learned response alone.
         """
         from .checkpoint import _learner_data, _write
@@ -2540,6 +2660,12 @@ class Brain:
                     data["episode/decision"] = self._decision
             if self._paths and any(self._paths):
                 data.update(self._saved_paths())
+        if self.history is not None:
+            # The heard history is part of the continuation; earlier formats cannot carry it.
+            # A brain without one writes the metadata of the earlier formats unchanged.
+            metadata["format"] = "cadence-generic/7"
+            metadata["history"] = self.history.to_dict()
+            data["history/trace"] = self.history.trace
         if agent._pending is not None:
             kind, plus, minus, value = agent._pending
             if kind != "states":
@@ -2639,13 +2765,19 @@ class Brain:
                 "cadence-generic/4",
                 "cadence-generic/5",
                 "cadence-generic/6",
+                "cadence-generic/7",
             ):
                 raise ValueError("unsupported Brain checkpoint format")
-            if (meta["format"] == "cadence-generic/6") != ("episodic" in meta):
+            if (meta["format"] == "cadence-generic/7") != (meta.get("history") is not None):
+                raise ValueError("a heard history belongs to checkpoint format cadence-generic/7")
+            if meta["format"] != "cadence-generic/7" and (
+                meta["format"] == "cadence-generic/6"
+            ) != ("episodic" in meta):
                 raise ValueError(
-                    "an episodic memory's choice belongs to checkpoint format cadence-generic/6"
+                    "an episodic memory's choice belongs to checkpoint formats cadence-generic/6 "
+                    "and /7"
                 )
-            if meta["format"] == "cadence-generic/6":
+            if meta["format"] in ("cadence-generic/6", "cadence-generic/7"):
                 pass  # arousal, an efference copy and a sensed state are each optional here
             elif meta["format"] == "cadence-generic/5":
                 if "arousal" not in meta:
@@ -2666,12 +2798,24 @@ class Brain:
             except (KeyError, TypeError, OverflowError) as exc:
                 raise ValueError("invalid or incomplete saved continuation state") from exc
             memory = _load_memory(meta["hippocampus"], data, learner.brain.connectome.n)
+            heard = meta.get("history")
             result = cls(
                 learner.brain.connectome,
                 episodic=False,
                 reward=ActorCriticConfig(**meta["reward"]),
                 slots=[int(k) for k in learner.slot_sizes],
+                **(
+                    {}
+                    if heard is None
+                    else {
+                        "history_decays": heard["decays"],
+                        "history_amplitude": heard["amplitude"],
+                    }
+                ),
             )
+            if heard is not None:
+                assert result.history is not None  # validated above: the population is there
+                result.history.trace = data["history/trace"].astype(float)
             result.learner = learner
             # Initialization provenance is separate from the saved, possibly learned bias.
             result.resting_bias = resting_bias
