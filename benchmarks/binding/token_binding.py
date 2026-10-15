@@ -72,7 +72,7 @@ LEARNERS = ("graph", "content", "content_delta", "gru")
 RULES = ("act", "every")
 CONDITIONS = ("intact", "content_erased", "trace_erased", "content_transplant")
 PANELS = ("train", "held_out", "three_facts", "long_delay", "new_name", "restated")
-GATE = {"held_out": 0.75, "erased_margin": 0.15, "founders": 5}
+GATE = {"held_out": 0.75, "erased_margin": 0.15, "follows_donor": 0.75, "founders": 5}
 
 
 # -- the task
@@ -519,12 +519,19 @@ def life(spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def gate(row: dict[str, Any]) -> bool:
-    """The declared per-founder gate on one reading: held-out accuracy at least the floor, and
-    erasing the carrier of the facts brings it within the margin of chance."""
+    """The declared per-founder gate on one reading: held-out accuracy at least the floor;
+    erasing the carrier of the facts brings it within the margin of chance; and, for a content
+    memory, the answers follow a transplanted donor memory on at least the floor's share."""
     held = row["panels"]["held_out"]
     chance = 1.0 / VALUES
     erased = held.get("content_erased", held.get("trace_erased", 0.0))
-    return bool(held["intact"] >= GATE["held_out"] and erased <= chance + GATE["erased_margin"])
+    follows = held.get("follows_donor")
+    transplant = follows is None or follows >= GATE["follows_donor"]
+    return bool(
+        held["intact"] >= GATE["held_out"]
+        and erased <= chance + GATE["erased_margin"]
+        and transplant
+    )
 
 
 def digests() -> dict[str, str]:

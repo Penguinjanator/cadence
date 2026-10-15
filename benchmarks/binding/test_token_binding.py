@@ -161,3 +161,17 @@ def test_the_delta_store_favours_the_later_statement() -> None:
             assert clean.sum() >= 6
             assert (recalled[rows, later] > recalled[rows, earlier])[clean].all()
 
+
+def test_the_gate_reads_all_three_declared_criteria() -> None:
+    def reading(intact: float, erased: float, follows: float | None) -> dict:
+        held = {"intact": intact, "content_erased": erased}
+        if follows is not None:
+            held["follows_donor"] = follows
+        return {"panels": {"held_out": held}}
+
+    assert tb.gate(reading(0.9, 0.1, 0.9))
+    assert not tb.gate(reading(0.7, 0.1, 0.9))
+    assert not tb.gate(reading(0.9, 0.3, 0.9))
+    assert not tb.gate(reading(0.9, 0.1, 0.7))
+    assert tb.gate({"panels": {"held_out": {"intact": 0.9, "trace_erased": 0.1}}})
+
