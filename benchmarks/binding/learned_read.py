@@ -52,6 +52,7 @@ def _sibling(name: str) -> Any:
 tb = _sibling("token_binding")
 
 ALPHA = 3.0  # the coupling's amplitude, both directions
+HEARD = 0.0  # the present observation's drive on the query neurons; 0: the query is the cortex's
 QUERY_SCALE = 1.0  # initial magnitude of the association-query projection
 RECALL_SCALE = 1.0  # initial magnitude of the recall-association projection
 
@@ -178,13 +179,26 @@ class ReadBrain(tb.ContentBrain):
             query = np.asarray(populations["query"], dtype=np.int64)
             recall = np.asarray(populations["recall"], dtype=np.int64)
             memory = FastSynapses(brain.sensory_index, recall, decay=1.0, rate=1.0,
-                                  amplitude=1.0, rule="hebb")
+                                  amplitude=1.0, rule=read.get("rule", "hebb"))
             coupled(brain.learner.brain, Coupling(query, recall, memory, read.get("alpha", ALPHA)))
+            brain.heard = float(read.get("heard", HEARD))
         return brain
+
+    heard: float = 0.0
 
     @property
     def coupling(self) -> Coupling | None:
         return getattr(self.learner.brain, "coupling", None)
+
+    def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
+        """With ``heard``, the present observation also drives the query neurons: the query
+        starts as the event heard now, and the cortex learns to move it."""
+        drive = super().stimulus(observations, memory=memory)
+        coupling = self.coupling
+        if self.heard and coupling is not None:
+            x = np.asarray(self._observations(observations), dtype=float)
+            drive[:, coupling.query] += self.heard * x
+        return drive
 
     def _choose(self, x: np.ndarray, drive: np.ndarray, free: Any, **kwargs: Any) -> np.ndarray:
         action = super()._choose(x, drive, free, **kwargs)
@@ -258,7 +272,7 @@ def lesson(brain: ReadBrain, x: np.ndarray, target: np.ndarray, work: dict[str, 
 
     drive = brain.stimulus(x)
     answer = None
-    coupling = brain.coupling
+    coupling = getattr(brain, "coupling", None)
     if brain.learner.config.surprise:
         answer = brain._choices(brain._qualified(drive, brain._activity(), operation="act"))
         if coupling is not None:

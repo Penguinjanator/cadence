@@ -140,3 +140,26 @@ def test_forks_carry_their_own_memory() -> None:
     before = brain.coupling.memory.strength.copy()
     twin.act(tb.events(trials)[1], greedy=True)
     np.testing.assert_array_equal(brain.coupling.memory.strength, before)
+
+
+def test_a_heard_query_starts_as_the_present_event_and_recalls_its_fact() -> None:
+    brain = lr.ReadBrain.build(6, read={"alpha": 0.5, "rule": "delta", "heard": 3.0})
+    plain = lr.ReadBrain.build(6, read={"alpha": 0.5, "rule": "delta"})
+    trials = tb.draw(np.random.default_rng(6), 6, tb.holdout(6))
+    seq = tb.events(trials)
+    for b in (brain, plain):
+        b.reset()
+        for x in seq[:-1]:
+            b.act(x, greedy=True)
+    drive = brain.stimulus(seq[-1])
+    np.testing.assert_allclose(drive[:, brain.coupling.query], 3.0 * seq[-1])
+    assert not plain.stimulus(seq[-1])[:, plain.coupling.query].any()
+    state = brain._qualified(drive, brain._activity(), operation="act")
+    recall = state.activation[:, brain.coupling.recall]
+    rows = np.arange(6)
+    asked = tb.coordinate("value") + tb.answers(trials)
+    other = trials["values"][rows, 1 - trials["query"]]
+    differs = other != tb.answers(trials)
+    gap = recall[rows, asked] - recall[rows, tb.coordinate("value") + other]
+    # a weak coupling discriminates; a strong one saturates on every stored fact
+    assert np.mean(gap[differs] > 0) >= 0.75
