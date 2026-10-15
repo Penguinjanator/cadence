@@ -74,8 +74,10 @@ queried fact differs from the host's. Reported per founder and budget: exact-mat
 accuracy on the training pairs (192 cases) and the held-out pairs (64 cases), per query, on pairs
 with unequal facts, the share of unequal-fact cases answered with the fact not asked, and for the
 transplant the share following the donor's queried fact and the share staying with the host's
-intact answer. The training log holds the rows taught and the act's accuracy on its own training
-trials per 256 rounds. A refused solve leaves its cases unanswered (counted wrong) and the reading
+intact answer. The training log holds, per 256 rounds, the rows taught, the act's accuracy on its
+own training trials, and the lessons whose free phase from rest used its whole budget of 1024
+steps (the learner's `free_budget_exhausted`; finite teaching learns from the state reached). A
+refused solve leaves its cases unanswered (counted wrong) and the reading
 incomplete; a refusal during training ends the life, and its later budgets are unread.
 
 ## Gate

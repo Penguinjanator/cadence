@@ -360,3 +360,6 @@ def test_a_reading_along_a_life_equals_a_life_of_that_budget(
     assert along["readings"]["2"]["answers"] == alone["readings"]["2"]["answers"]
     assert along["training"]["completed"] and set(along["readings"]) == {"1", "2"}
     assert along["held_out_pairs"] == np.argwhere(bd.holdout(4, 3)).tolist()
+    log = along["training"]["log"]
+    assert len(log["taught_rows"]) == len(log["lessons_exhausted"]) == 1  # one partial window
+    assert 0 <= log["lessons_exhausted"][0] <= 2 and 0 <= log["taught_rows"][0] <= 2 * bd.BATCH

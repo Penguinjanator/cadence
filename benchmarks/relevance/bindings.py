@@ -30,6 +30,7 @@ import json
 import sys
 import tempfile
 import time
+import warnings
 from collections.abc import Iterator
 from dataclasses import asdict
 from multiprocessing import get_context
@@ -529,7 +530,17 @@ def job(spec: dict[str, Any]) -> dict[str, Any]:
         "budgets": budgets,
         "held_out_pairs": np.argwhere(held).tolist(),
     }
-    log = {"window": WINDOW, "taught_rows": [], "act_exact": [], "act_per_bit": []}
+    # per WINDOW rounds: rows taught, the act's exact and per-bit accuracy on its own training
+    # trials, and lessons whose free phase used its whole budget (the learner's report)
+    log = {
+        "window": WINDOW,
+        "taught_rows": [],
+        "act_exact": [],
+        "act_per_bit": [],
+        "lessons_exhausted": [],
+    }
+    # counted in the log instead of printed once per worker
+    warnings.filterwarnings("ignore", "finite teaching free phase", RuntimeWarning)
     readings: dict[str, Any] = {}
     reading_seconds: dict[str, float] = {}
     rounds, stop = 0, None
@@ -543,7 +554,7 @@ def job(spec: dict[str, Any]) -> dict[str, Any]:
     else:
         model = Supervised(bits, seed, through=spec["rule"], **spec.get("gru", {}))
         row["gru"] = model.describe()
-    window = np.zeros(3)
+    window = np.zeros(4)
     for rows in trials(seed, bits, budgets[-1], held):
         if learner == "graph":
             answer, report, stop = graph_round(
@@ -553,15 +564,17 @@ def job(spec: dict[str, Any]) -> dict[str, Any]:
                 break
             assert answer is not None and report is not None
             taught = float(report.get("accepted_presentations", 0.0))
+            exhausted = float(report.get("free_budget_exhausted", 0.0))
         else:
             prefix, query, target = inputs(rows, bits, exposed=exposed)
             _, answer = model.lesson([*prefix, query], target)
-            taught = float(len(rows))
+            taught, exhausted = float(len(rows)), 0.0
         target = inputs(rows, bits)[2]
         window += (
             taught,
             float((answer == target).all(axis=1).sum()),
             float((answer == target).mean() * len(rows)),
+            exhausted,
         )
         rounds += 1
         if rounds % WINDOW == 0 or rounds == budgets[-1]:
@@ -569,6 +582,7 @@ def job(spec: dict[str, Any]) -> dict[str, Any]:
             log["taught_rows"].append(int(window[0]))
             log["act_exact"].append(round(window[1] / (size * BATCH), 4))
             log["act_per_bit"].append(round(window[2] / (size * BATCH), 4))
+            log["lessons_exhausted"].append(int(window[3]))
             window[:] = 0
         if rounds in budgets:
             start = time.monotonic()
