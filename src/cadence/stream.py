@@ -28,7 +28,7 @@ from .brain import BrainState
 from .connectome import Connectome
 from .learning import embedded
 
-__all__ = ["Trace", "Afterglow", "stateful", "Echo", "FastSynapses", "columns"]
+__all__ = ["Trace", "Afterglow", "stateful", "Echo", "FastSynapses", "History", "columns"]
 
 
 def stateful(
@@ -280,6 +280,98 @@ class Efference(Trace):
         self.trace = self.decay * self.trace + (1.0 - self.decay) * command
         self.last = command.copy()
         self.cold[:] = False
+
+
+@dataclass
+class History:
+    """The observations as heard, carried at several timescales in a region of their own.
+
+    One block of ``target`` neurons per decay, each block one neuron per ``source`` neuron.
+    After each act the block of decay ``d`` moves toward the observation the brain acted on,
+    ``h <- d * h + (1 - d) * x``: the values the ``source`` neurons were stimulated with,
+    before any settling. The next moment reads ``amplitude * h`` as the stimulus of the
+    block's own neurons, so at a decision the history holds the past and the sensory drive
+    holds the present. A fast block keeps the last moments apart, a slow one keeps an
+    average of many. The write is fixed, as the working trace's is; the association region
+    reads the blocks through a plastic projection, so what the past means is learned. This
+    is the pattern of the efference copy applied to the senses: in a closed loop the brain
+    hears its own output as its next observation.
+    """
+
+    connectome: Connectome
+    decays: tuple[float, ...]
+    amplitude: float = 3.0
+    source: str = "sensory"  # the range heard
+    target: str = "history"  # one block of source width per decay
+    trace: np.ndarray = field(init=False)
+
+    def __post_init__(self) -> None:
+        decays = tuple(self.decays)
+        if not decays or any(
+            isinstance(d, (bool, np.bool_))
+            or not isinstance(d, (int, float, np.integer, np.floating))
+            or not 0 <= d < 1
+            for d in decays
+        ):
+            raise ValueError("decays are one or more real values in [0, 1)")
+        self.decays = tuple(float(d) for d in decays)
+        if (
+            isinstance(self.amplitude, (bool, np.bool_))
+            or not isinstance(self.amplitude, (int, float, np.integer, np.floating))
+            or not np.isfinite(self.amplitude)
+            or self.amplitude < 0
+        ):
+            raise ValueError("amplitude must be a finite nonnegative real scalar")
+        self.amplitude = float(self.amplitude)
+        self.glow = np.asarray(self.connectome.populations[self.target], dtype=np.int64)
+        self.width = len(self.connectome.populations[self.source])
+        if len(self.glow) != len(self.decays) * self.width:
+            raise ValueError(f"one block of {self.source} width per decay in {self.target}")
+        self._glow_columns = columns(self.glow)
+        # the decay of every history neuron: block by block
+        self._decay = np.repeat(np.asarray(self.decays), self.width)
+        self.reset(0)
+
+    def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
+        """Silence for every stream, or for ``rows`` only (streams that begin again)."""
+        if rows is None or len(self.trace) != batch:
+            self.trace = np.zeros((batch, len(self.glow)))
+        else:
+            self.trace[rows] = 0.0
+
+    def keep(self, rows: np.ndarray) -> None:
+        """Keep the histories of ``rows`` only (streams that ended are dropped)."""
+        self.trace = self.trace[rows]
+
+    def stimulate(self, drive: np.ndarray) -> np.ndarray:
+        """Read the history into a drive copy; another batch size reads silence."""
+        out = np.array(drive, dtype=float)
+        out[:, self._glow_columns] = (
+            self.amplitude * self.trace if len(self.trace) == len(out) else 0.0
+        )
+        return out
+
+    def hear(self, observations: np.ndarray) -> None:
+        """After the act: every block decays toward the ``(batch, source)`` observations the
+        streams acted on; another batch size begins the streams in silence first."""
+        x = np.asarray(observations, dtype=float)
+        if x.ndim != 2 or x.shape[1] != self.width:
+            raise ValueError(f"observations are one row of {self.width} values per stream")
+        if not np.isfinite(x).all():
+            raise ValueError("observations must be finite")
+        if len(self.trace) != len(x):
+            self.reset(len(x))
+        heard = np.tile(x, (1, len(self.decays)))
+        self.trace = self._decay * self.trace + (1.0 - self._decay) * heard
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "decays": list(self.decays),
+            "amplitude": self.amplitude,
+            "source": self.source,
+            "target": self.target,
+            "neurons": int(len(self.glow)),
+        }
 
 
 @dataclass
