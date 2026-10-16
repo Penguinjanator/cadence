@@ -84,6 +84,7 @@ from .stream import (
     FastSynapses,
     History,
     PatternSeparator,
+    Recall,
     Trace,
     stateful,
 )
@@ -157,6 +158,7 @@ __all__ = [
     "Trace",
     "Efference",
     "History",
+    "Recall",
     "FastSynapses",
     "SynapticMemory",
     "NeuronModel",
