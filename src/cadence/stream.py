@@ -401,9 +401,10 @@ class Recall:
     that followed it, zero until that moment comes. Before each settle the present moment's
     address
 
-        q = heard * x + x W_x + c W_c + b
+        q = heard * x + context * h + x W_x + c W_c + b
 
-    (``c`` the settled association activity of the moment before) weighs the stream's
+    (``h`` the fading history of the events before, ``c`` the settled association activity
+    of the moment before) weighs the stream's
     slots, ``p_i = softmax_i(q . K_i / temperature - recency * age_i)``, and ``stimulate``
     drives the ``target`` region at ``amplitude * sum_i p_i V_i`` and, with ``next``, the
     ``next`` region at ``amplitude * sum_i p_i N_i``. Both regions are sources whose one-way

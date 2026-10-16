@@ -1174,8 +1174,8 @@ class Brain:
             list[tuple[np.ndarray | None, np.ndarray, np.ndarray, float, bool, float]]
         ] = []
         self.rng = np.random.default_rng(seed)
-        # the observations a settle is being prepared for and their code, computed once per
-        # moment: ``stimulus`` reads it during that settle, ``_choose`` takes it
+        # the validated observations a settle is being prepared for and their code, computed
+        # once per moment: ``stimulus`` given that same array reads it, ``_choose`` takes it
         self._coded_moment: tuple[np.ndarray, np.ndarray] | None = None
         self._moment: tuple[np.ndarray, np.ndarray] | None = None
         self._prepared: np.ndarray | None = None  # the observations ``learn`` settled
@@ -1912,10 +1912,11 @@ class Brain:
         choice (``memory_choice``) is not read into the drive. The recall memory addresses
         the moment here and keeps the address for the moment's write and lesson. Both
         memories read the observation code."""
+        coded = self._coded_moment  # the moment's code, when this is its settle
+        if coded is not None and coded[0] is observations:
+            return self._stimulus(coded[0], coded[1], memory=memory)
         x = self._observations(observations)
-        coded = self._coded_moment
-        code = coded[1] if coded is not None and coded[0] is x else self._code(x)
-        return self._stimulus(x, code, memory=memory)
+        return self._stimulus(x, self._code(x), memory=memory)
 
     def _stimulus(self, x: np.ndarray, code: np.ndarray, *, memory: bool = True) -> np.ndarray:
         """The drive of validated observations and their code."""
@@ -3573,12 +3574,16 @@ class Brain:
                     if result.sparse_code is not None
                     else result.sensory_index
                 )
-                if not np.array_equal(memory.pre, expected):
+                if len(memory.pre) != result.code_width:
                     raise ValueError(
                         f"the saved place records are keyed on {len(memory.pre)} coordinates "
-                        f"where the brain's observation code has {result.code_width}; a coded "
-                        "brain numbers them from zero and an uncoded one keys on its sensory "
-                        "neurons"
+                        f"where the brain's observation code has {result.code_width}"
+                    )
+                if not np.array_equal(memory.pre, expected):
+                    raise ValueError(
+                        "the saved place records are keyed on other coordinates than the "
+                        f"brain's {result.code_width}: a coded brain numbers them from zero "
+                        "and an uncoded one keys on its sensory neurons"
                     )
             result.hippocampus = memory
             episodic = meta.get("episodic")

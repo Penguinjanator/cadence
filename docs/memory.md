@@ -62,9 +62,9 @@ code of 1,024 units:
 | Part | On the observation (the founder) | On the code (`code=1024`) |
 | --- | --- | --- |
 | Key width | 12,824 values | 1,024 units |
-| Episodic separators, place and context | 105.1 MB and 105.1 MB, dense (0.53 MB each with `memory_fan_in=32`) | none: the code is the separation |
+| Episodic separators, place and context | 105.1 MB and 105.1 MB, dense (0.63 MB each with `memory_fan_in=32`) | none: the code is the separation |
 | The code's tables, indices and weights | | 0.52 MB |
-| Recall address map `W_x`, `W_c`, `b` | 1,322 MB (`W_x` 1,315 MB) | 8.9 MB |
+| Recall address map `W_x`, `W_c`, `b` | 1,322 MB (`W_x` 1,316 MB) | 8.9 MB |
 | Together | 1,532 MB | 9.4 MB |
 | Sensory synapses into a module of 64 | 820,736 | 65,536 |
 

@@ -16,9 +16,9 @@
   `describe()` reports `observation_code`; a brain with a code saves as `cadence-generic/9`
   with the code's settings and tables, and `load` checks the records' key widths against
   the code's and refuses a mismatch naming both widths, as it refuses place records keyed
-  on other coordinates than the brain's. Every brain without `code` is byte-identical, its
-  checkpoint included, at 4, 256 and 2,000 inputs and on an image shape
-  ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
+  on other coordinates than the brain's. Every brain without `code` is byte-identical at
+  4, 256 and 2,000 inputs and on an image shape, the checkpoint included at 4 and 2,000
+  inputs and on the image ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
 - `Brain.compose(inputs, actions, code=units)` makes the sensory region the code: every
   observation is coded before the drive, so 12,824 inputs reach the cortex as 1,024 units
   through 1,024 x 64 sensory synapses in place of 12,824 x 64, and the memories key on the
@@ -30,18 +30,11 @@
   `field`), whose feature maps project to the first module at `sensory_scale`; everything
   else is as for a vector length, and `compose(inputs=int)` is unchanged.
 - The recommended settings for wide observations, with the founder unchanged at every
-  width: `memory_fan_in=32` above 256 key values (the episodic separators 0.53 MB each in
+  width: `memory_fan_in=32` above 256 key values (the episodic separators 0.63 MB each in
   place of 105 MB at 12,824 inputs) and `code=1024` above 1,024 inputs, where the two
   episodic separators and the recall address map go from 2 x 105 MB and 1,322 MB on the
   observation to none and 8.9 MB on the code, the code's tables 0.52 MB
   ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
-- The recall memory's `recall_address_prior` is retired, the attention prior fixed at
-  weight 1 as the posterior rule, and its own code (`recall_code`,
-  `recall_code_fan_in`, `recall_code_winners`) gives way to the brain's code above. The
-  genes: `recall_amplitude`, `recall_temperature`, `recall_heard`, `recall_recency`,
-  `recall_address`, `recall_address_temperature`, `recall_context`, `recall_context_decay`,
-  `recall_capacity`, `recall_value`, `recall_next` and `recall_scale`; `Recall` draws
-  nothing and takes no seed. A checkpoint written with the retired genes is refused.
 - The episodic and sequential-task guides state the founder dependence of the continuation
   after teaching: the readings in which `step` eroded a taught chain where `live` kept it
   belong to the five fresh founders of the chain instrument, and on other founders both paths
@@ -106,8 +99,9 @@
   `parameters()` counts, and a brain with the memory saves as `cadence-generic/8` and
   continues exactly. The founder `recall=False` builds the brain without it, byte-identical;
   the [memory guide](docs/memory.md#recall-the-streams-own-moments) explains it, with its
-  storage at camera width (14.2 MB with a code of 1,024 neurons, against 105 MB for one
-  dense separator). The option reproduces the binding instrument
+  storage at camera width (14.2 MB with a code of 1,024 neurons, cortex values and an
+  association region of 512 neurons, against 105 MB for one dense separator). The option
+  reproduces the binding instrument
   `benchmarks/binding/index_read.py` moment for moment (`tests/test_recall_memory.py`).
 - A sparse pattern separator, opt-in: `PatternSeparator(..., fan_in=k)` lets each code
   neuron read `k` distinct inputs chosen at random from its seed, with random weights, held

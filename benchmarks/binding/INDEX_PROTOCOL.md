@@ -143,14 +143,16 @@ PYTHONPATH=src python benchmarks/binding/index_runs.py --task camera --out DIR/c
 The camera task's retina is a stage of the task's world. The library carries a generic code
 only: a fixed sparse code of the whole observation with no spatial assumption (1,024 code
 neurons, each reading 32 random inputs with fixed weights, the largest positive sums kept,
-unit length). The sizing selected 96 winners; the development on founders 0 to 5 selected
-the arm, and its confirmation on founders 400 to 411 is declared with the same gate.
-Declared before its first run:
+unit length). Declared before its first run:
 
 | Item | `camera` with the generic code |
 | --- | --- |
 | observation | the generic code of the frame (1,024 units, fan-in 32, 96 winners) plus the 24 body inputs: 1,048 units, the cortex's observation and the memory's key alike (`--generic 96`) |
 | everything else | amendment 1's: the `index` arm, budgets, panels, gate; development 5 of 6 on founders 0 to 5 |
+
+The sizing selected 96 winners; the development on founders 0 to 5 selected the arm, and its
+confirmation on founders 400 to 411 is declared with the same gate. The readings are retained
+outside the repository.
 
 ```sh
 PYTHONPATH=src python benchmarks/binding/index_runs.py --task camera --out DIR/camera-generic \

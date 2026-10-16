@@ -101,6 +101,24 @@ def instrument(name):
 # -- the founder: the composition before the option
 
 
+def _checkpoint_digest(path):
+    """SHA-256 over every array of a checkpoint, by name: dtype, shape and bytes, the
+    metadata JSON entries read back without the library version that wrote them."""
+    h = hashlib.sha256()
+    with np.load(path, allow_pickle=False) as data:
+        for name in sorted(data.files):
+            value = data[name]
+            h.update(name.encode())
+            if name in ("meta", "generic"):
+                meta = json.loads(str(value))
+                meta.pop("version", None)
+                h.update(json.dumps(meta, sort_keys=True).encode())
+                continue
+            h.update(str(value.dtype).encode() + str(value.shape).encode())
+            h.update(np.ascontiguousarray(value).tobytes())
+    return h.hexdigest()
+
+
 def _digest(brain):
     connectome, graph = brain.connectome, brain.brain
     h = hashlib.sha256()
@@ -165,7 +183,7 @@ FOUNDERS = {
         "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1],
         "format": "cadence-generic/2",
-        "names": "5a728760433a9dea87769077dd838133cd49a8637125759627166a31d5cf16a8",
+        "checkpoint": "4232fd81a58cace3cc1e76bbc7141a02c2599bfab0679cc9bfae1dfee891a76e",
     },
     "lived": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True,
@@ -175,7 +193,7 @@ FOUNDERS = {
         "digest": "b66e821b4d3c975000dc59663c7ce2babaf0473d232af438a689f12b9fbbee67",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1],
         "format": "cadence-generic/7",
-        "names": "3bd868a50c41cec95565033bf2e031622c05d08536e236a036a5b09278273eaf",
+        "checkpoint": "d47dbfd3384183656d14ff93db5b188d93977f8aed24312996a4550f2e2cd88d",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -184,7 +202,7 @@ FOUNDERS = {
         "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
-        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
+        "checkpoint": "8dc684beb8322e013c9002414bdf6d2b053cde7cff51ffd6ccaec9b54944386a",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -195,7 +213,7 @@ FOUNDERS = {
                  0, 1, 0, 0, 0, 0, 2, 2, 6, 3, 0, 0, 4, 4, 0, 0, 0, 0, 7, 4, 0, 4, 1, 3, 0, 0,
                  4, 0, 6, 4, 4, 0, 0, 4],
         "format": "cadence-generic/2",
-        "names": "49432123dd7f5680292be4549853a2b548d82f2ad5b13ea765b047db8720a407",
+        "checkpoint": "24dbfcae5f2fe0bf4be6622ddd082c62fa0584ca326b04a350391b0b95b0c44e",
     },
 }
 
@@ -208,11 +226,11 @@ def test_the_founder_lives_as_the_composition_before_the_option(tmp_path, name):
     assert brain.recall is None and "recall" not in brain.connectome.populations
     assert _digest(brain) == spec["digest"]
     assert spec["life"](brain) == spec["acts"]
-    with np.load(brain.save(tmp_path / "founder"), allow_pickle=False) as data:
+    path = brain.save(tmp_path / "founder")
+    with np.load(path, allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
-        names = json.dumps([sorted(meta), sorted(data.files)])
     assert meta["format"] == spec["format"]
-    assert hashlib.sha256(names.encode()).hexdigest() == spec["names"]
+    assert _checkpoint_digest(path) == spec["checkpoint"]
 
 
 @pytest.mark.parametrize(

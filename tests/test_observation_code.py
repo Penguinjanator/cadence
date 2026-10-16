@@ -93,9 +93,9 @@ def lived(brain: cd.Brain) -> list[int]:
 
 
 # Recorded on the composition before the observation code: each founder's connectome and
-# parameters, the acts of a short life and the complete contents of its checkpoint. A brain
-# with the recall memory saves without the memory's retired genes since, so its checkpoint
-# contents are compared with those of the same life lived again instead.
+# parameters, the acts of a short life and the complete contents of its checkpoint. The
+# recall memory's checkpoint metadata changed since, so a brain with it has its checkpoint
+# contents compared with those of the same life lived again instead.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
@@ -556,12 +556,34 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
         ("no_table", no_table, "missing saved code table"),
         ("fewer_units", fewer_units, "sensory region of 1024 neurons is not the saved code of "
                                      "512 units"),
-        ("other_coordinates", other_coordinates, "keyed on 1024 coordinates where the brain's "
-                                                 "observation code has 1024; a coded brain "
-                                                 "numbers them from zero"),
+        ("other_coordinates", other_coordinates, "keyed on other coordinates than the brain's "
+                                                 "1024: a coded brain numbers them from zero"),
     ):
         with pytest.raises(ValueError, match=message):
             cd.Brain.load(tampered(name, mutate))
+
+
+def test_place_records_of_another_width_are_refused_by_the_loader(tmp_path):
+    """The hippocampus of earlier releases on a coded brain: its saved records, consistent
+    among themselves at another width, are refused against the brain's code."""
+    brain = cd.Brain.compose(2_000, 3, modules=(8,), seed=3, code=1024, recall=True)
+    x = frames(2_000, 1, 6, density=0.1)
+    brain.step(x)
+    brain.step(x, reward=[1.0])
+    path = brain.save(tmp_path / "coded.npz")
+    with np.load(path, allow_pickle=False) as data:
+        arrays = {name: data[name].copy() for name in data.files}
+    meta = json.loads(str(arrays["generic"]))
+    meta["hippocampus"]["pre"] = 512
+    meta["hippocampus"]["persistent_parameters"] = 512 * 3
+    arrays["episodic/pre"] = np.arange(512)
+    arrays["episodic/strength"] = np.zeros((1, 512, 3))
+    arrays["episodic/consolidated"] = np.zeros((512, 3))
+    arrays["generic"] = np.array(json.dumps(meta))
+    np.savez(tmp_path / "narrow.npz", **arrays)
+    with pytest.raises(ValueError, match="keyed on 512 coordinates where the brain's "
+                                         "observation code has 1024"):
+        cd.Brain.load(tmp_path / "narrow.npz")
 
 
 def test_a_wide_brain_keyed_on_its_observation_saves_and_loads_as_before(tmp_path):

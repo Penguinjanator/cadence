@@ -976,8 +976,10 @@ that recursive benefit or automatic reflective behavior has been learned.
     continuing life on one stream, for a brain constructed with `arousal`. Reward and
     done concern the preceding action, as in `step`; omitted reward consumes a
     pending action as a zero-reward transition, not a missing outcome. A calm brain answers with the
-    greedy choice of one qualified settle and changes no parameter, memory record or
-    optimizer state; the eligibility of earlier sampled actions fades by one step
+    greedy choice of one qualified settle and changes no parameter, associative record or
+    optimizer state (the working trace advances, and with the recall memory on its slots
+    advance at every accepted moment while its address map changes in lessons alone); the
+    eligibility of earlier sampled actions fades by one step
     (`ActorCritic.fade`), as it does between two outcomes that are learned from. Its
     forecasts for the preceding action are the critic's value when it acted and, when it
     has an associative memory, the record it held for that action in that situation
