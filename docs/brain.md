@@ -153,7 +153,7 @@ retain their own defaults, listed in the [API reference](api.md).
 | `history_amplitude`, `history_scale` | `3.0`, `1.2` | How clearly the heard history is held, and its projection's initial magnitude (construction only) |
 | `recall` | `False` | Recall memory: `True` adds the `recall` and `next` regions and the index of the stream's moments; construction only ([memory](memory.md#recall-the-streams-own-moments)) |
 | `recall_amplitude`, `recall_temperature`, `recall_heard`, `recall_recency` | `3.0`, `0.25`, `1.0`, `0.25` with `recall=True` | How strongly a recalled moment drives its regions, the softmax over the slots, the event's weight in its address, the cost per moment of a slot's age |
-| `recall_address`, `recall_address_temperature`, `recall_address_prior` | `0.01`, `0.1`, `1.0` with `recall=True` | The address lesson: its rate, how sharply it names the slots that would have answered, and the weight of the address's own attention among them |
+| `recall_address`, `recall_address_temperature` | `0.01`, `0.1` with `recall=True` | The address lesson: its rate, and how sharply it names the slots that would have answered among those the address attended to |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` with `recall=True` | The fading history of earlier events in a key |
 | `recall_capacity`, `recall_value`, `recall_next`, `recall_scale` | `64`, `"event"`, `True`, `1.2` | Slots per stream, what a slot stores, the next region, and the projections' initial magnitude; construction only |
 | `recall_code`, `recall_code_fan_in`, `recall_code_winners` | `0`, `32`, `24` | A sparse code of the observation as the key space for wide inputs; construction only |

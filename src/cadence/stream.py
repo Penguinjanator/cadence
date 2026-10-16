@@ -416,12 +416,12 @@ class Recall:
     nudged phases, read back through each source region's synapses, is the direction in
     which a recall would have moved the cortex the way the answer needs; each slot scores
     its value and next against it, the moments the address attended to that would have
-    answered are named by ``softmax(score / address_temperature + address_prior * log p)``,
-    and the map takes the least-mean-squares step ``address * (K* - q)`` on ``[x, c, 1]`` at
-    the taught rows, ``K*`` the named moments' keys. ``capacity`` bounds the slots per
-    stream, the oldest dropped first. ``reset`` empties streams, and an empty stream reads
-    silence. The address of a moment cannot depend on what that moment recalls: a second
-    recall takes a second moment.
+    answered are named by ``softmax(score / address_temperature + log p)`` (the attention
+    ``p`` is the prior), and the map takes the least-mean-squares step ``address * (K* - q)``
+    on ``[x, c, 1]`` at the taught rows, ``K*`` the named moments' keys. ``capacity`` bounds
+    the slots per stream, the oldest dropped first. ``reset`` empties streams, and an empty
+    stream reads silence. The address of a moment cannot depend on what that moment recalls:
+    a second recall takes a second moment.
     """
 
     connectome: Connectome
@@ -434,7 +434,6 @@ class Recall:
     next: bool = True
     address: float = 0.01
     address_temperature: float = 0.1
-    address_prior: float = 1.0
     context: float = 0.0
     context_decay: float = 0.5
     code: int = 0
@@ -458,7 +457,7 @@ class Recall:
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
     RUNTIME = (
         "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
-        "address_prior", "context", "context_decay",
+        "context", "context_decay",
     )
     CONSTRUCTION = ("capacity", "value", "next", "code", "code_fan_in", "code_winners")
 
@@ -471,7 +470,7 @@ class Recall:
     @staticmethod
     def setting(name: str, value: Any) -> Any:
         """One setting, validated and converted; ``name`` is a field of the memory."""
-        if name in ("amplitude", "recency", "address", "address_prior", "context"):
+        if name in ("amplitude", "recency", "address", "context"):
             return real(name, value, low=0)
         if name in ("temperature", "address_temperature"):
             number = real(name, value, low=0)
@@ -872,17 +871,16 @@ class Recall:
         logits = score[moving] / norm[moving, None] / self.address_temperature
         if masked:
             logits = np.where(held[moving], logits, -np.inf)
-        if self.address_prior:
-            # among the moments the address attended to: the attention is the prior
-            q_ = moment.address[rows][moving]
-            attention = np.einsum("bk,bmk->bm", q_, keys[moving]) / self.temperature
-            if self.recency:
-                attention = attention - self.recency * self.ages()[None, :]
-            if masked:
-                attention = np.where(held[moving], attention, -np.inf)
-            attention -= attention.max(axis=1, keepdims=True)
-            attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
-            logits = logits + self.address_prior * attention
+        # among the moments the address attended to: the attention is the prior
+        q_ = moment.address[rows][moving]
+        attention = np.einsum("bk,bmk->bm", q_, keys[moving]) / self.temperature
+        if self.recency:
+            attention = attention - self.recency * self.ages()[None, :]
+        if masked:
+            attention = np.where(held[moving], attention, -np.inf)
+        attention -= attention.max(axis=1, keepdims=True)
+        attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
+        logits = logits + attention
         p = np.exp(logits - logits.max(axis=1, keepdims=True))
         p /= p.sum(axis=1, keepdims=True)
         target = np.einsum("bm,bmk->bk", p, keys[moving])

@@ -556,7 +556,7 @@ and a complete runnable example.
   rows=None)`, `keep(rows)`, `trace` (`(batch, blocks * source)`), `to_dict()`.
   `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
   observation of every act after the act.
-- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, address_prior=1.0, context=0.0, context_decay=0.5, code=0, code_fan_in=32, code_winners=24, seed=0, source="sensory", target="recall", writes=0)`:
+- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, code=0, code_fan_in=32, code_winners=24, seed=0, source="sensory", target="recall", writes=0)`:
   the index memory of each stream's recent moments
   ([memory](memory.md#recall-the-streams-own-moments)). `stimulate(drive, observations)`
   computes each stream's address `q = heard * x + x @ w_x + c @ w_c + b` (`x` the
@@ -571,8 +571,10 @@ and a complete runnable example.
   `value="cortex"`, the association activity of `state`, and the next of the slot before;
   beyond `capacity` the oldest slot is dropped. `learn(graph, learned)` is the address
   lesson after a lesson whose `LearnedState` is `learned`, through the synapses of `graph`
-  (`readback(graph, region, movement)`), at the taught rows and rate `address`; it returns
-  `address_rows` and `address_error`. Arrays: `keys`, `values` and `nexts`
+  (`readback(graph, region, movement)`), at the taught rows and rate `address`, the slots
+  that would have answered named by `softmax(score / address_temperature + log p)` with the
+  address's attention `p` as the prior; it returns `address_rows` and `address_error`.
+  Arrays: `keys`, `values` and `nexts`
   (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a slot written before
   its stream began again), `previous`, `history`, the map `w_x`, `w_c` and `b`, and with
   `code` the fixed tables `code_index` and `code_weight` drawn from `seed`.
@@ -1087,8 +1089,7 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_heard` | `1.0` | The weight of the present event in its key and its address |
 | `recall_recency` | `0.25` | The logit cost per moment of a slot's age |
 | `recall_address` | `0.01` | The address lesson's rate; `0.0` leaves the map as it is, the founder's address being the event heard |
-| `recall_address_temperature` | `0.1` | The softmax temperature that names the slots that would have answered |
-| `recall_address_prior` | `1.0` | The weight of the address's own attention in naming them |
+| `recall_address_temperature` | `0.1` | The softmax temperature that names the slots that would have answered, among those the address attended to |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` | The fading history of earlier events in a key, and its retention per moment |
 | `recall_capacity` | `64` | Slots per stream, the oldest dropped first (construction) |
 | `recall_value` | `"event"` | `"cortex"` stores the settled association activity as the value (construction) |

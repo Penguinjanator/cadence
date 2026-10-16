@@ -119,9 +119,9 @@ moment t:  observation x -> address q -> weights over the slots -> recall and ne
   movement of the association region between the nudged phases, read back through the
   recall and next synapses, gives that direction, and each slot scores its value and next
   against it. Among the moments the address attended to, those that would have answered are
-  named (`recall_address_temperature` 0.1, the address's own attention a prior at weight
-  `recall_address_prior` 1.0), and the map takes a least-mean-squares step
-  (`recall_address` 0.01) toward their keys, at the rows the lesson taught. The keys hold the
+  named (`recall_address_temperature` 0.1; the address's own attention is their prior), and
+  the map takes a least-mean-squares step (`recall_address` 0.01) toward their keys, at the
+  rows the lesson taught. The keys hold the
   fixed part of the address (the event heard, and with `recall_context` the history before
   it), so a target never contains the map's own output.
 - **Streams and episodes.** Each stream has its own slots. `reset` empties them, an ended

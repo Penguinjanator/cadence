@@ -237,9 +237,9 @@ def test_recall_false_builds_the_brain_without_the_option_byte_identically(tmp_p
 def test_the_founders_are_the_declared_genes():
     assert cd.Recall.founders() == {
         "amplitude": 3.0, "temperature": 0.25, "heard": 1.0, "recency": 0.25,
-        "address": 0.01, "address_temperature": 0.1, "address_prior": 1.0, "context": 0.0,
-        "context_decay": 0.5, "capacity": 64, "value": "event", "next": True, "code": 0,
-        "code_fan_in": 32, "code_winners": 24,
+        "address": 0.01, "address_temperature": 0.1, "context": 0.0, "context_decay": 0.5,
+        "capacity": 64, "value": "event", "next": True, "code": 0, "code_fan_in": 32,
+        "code_winners": 24,
     }
     assert inspect.signature(cd.Brain.compose).parameters["recall_scale"].default == 1.2
     assert inspect.signature(cd.Brain).parameters["recall"].default is False
@@ -515,24 +515,24 @@ def test_the_address_lesson_moves_toward_the_slot_the_movement_names():
 
 def test_the_answers_address_is_named_among_the_moments_attended_to():
     """A moment whose own value is the answer does not displace the moment the address found:
-    with the attention as the prior the step toward it is a fraction of the step without."""
+    the attention is the prior, so the step toward the answer's slot is a fraction of the
+    step a lesson at rate 1 could take."""
     layout = (Region("sensory", 3), Region("association", 2), motor_cortex(2),
               Region("recall", 2), Region("next", 2))
     projections = (Projection("sensory", "association", reciprocal=False),
                    Projection("association", "motor"))
     connectome = develop(Genome(layout, projections))
-
-    def toward_second(prior):
-        recall = cd.Recall(connectome, value="cortex", temperature=0.25, recency=0.0,
-                           address=1.0, address_temperature=0.5, address_prior=prior)
-        recall._observe(np.array([[1.0, 0, 0]]), np.array([[1.0, 0]]))  # the moment found
-        recall._observe(np.array([[0, 1.0, 0]]), np.array([[0, 1.0]]))  # its value: the answer
-        before = recall._moment(np.array([[1.0, 0, 0]]))
-        recall._step(before, np.array([0]), np.array([[0.0, 1.0]]), None)
-        after = recall._moment(np.array([[1.0, 0, 0]]))
-        return float((after.address - before.address)[0] @ recall.keys[0, 1])
-
-    assert 0 < toward_second(1.0) < 0.2 * toward_second(0.0)
+    recall = cd.Recall(connectome, value="cortex", temperature=0.25, recency=0.0,
+                       address=1.0, address_temperature=0.5)
+    recall._observe(np.array([[1.0, 0, 0]]), np.array([[1.0, 0]]))  # the moment found
+    recall._observe(np.array([[0, 1.0, 0]]), np.array([[0, 1.0]]))  # its value: the answer
+    before = recall._moment(np.array([[1.0, 0, 0]]))
+    recall._step(before, np.array([0]), np.array([[0.0, 1.0]]), None)
+    after = recall._moment(np.array([[1.0, 0, 0]]))
+    toward_second = float((after.address - before.address)[0] @ recall.keys[0, 1])
+    # the map and the bias each take the step: twice the second slot's weight among the named
+    # moments, 0.12 under the prior where the answer's score alone would weigh it 0.88
+    assert 0 < toward_second < 0.3
 
 
 def test_the_address_lesson_reads_the_lessons_phases_at_the_taught_rows():

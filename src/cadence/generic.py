@@ -574,6 +574,14 @@ def _validate_recall_state(
             raise ValueError("saved recall state requires recall metadata")
         return
     names = {*Recall.RUNTIME, *Recall.CONSTRUCTION}
+    if isinstance(recalled, dict) and recalled.get("address_prior", 1.0) == 1.0:
+        # a memory saved with the retired prior, at the weight every memory has since
+        recalled = {name: value for name, value in recalled.items() if name != "address_prior"}
+    if isinstance(recalled, dict) and "address_prior" in recalled:
+        raise ValueError(
+            "the recall memory's address_prior was retired; this checkpoint used "
+            f"{recalled['address_prior']!r}"
+        )
     if (
         not isinstance(recalled, dict)
         or set(recalled) != names | {"seed", "source", "target", "neurons", "writes"}
@@ -1241,8 +1249,8 @@ class Brain:
         softmax (``recall_temperature`` 0.25, ``recall_recency`` 0.25 per moment of age), and
         the recalled value and next drive the two regions at ``recall_amplitude`` (3.0).
         After each lesson the address lesson moves the map toward the slots that would have
-        answered (``recall_address`` 0.01, ``recall_address_temperature`` 0.1,
-        ``recall_address_prior`` 1.0). ``recall_capacity`` (64) bounds the slots per stream.
+        answered (``recall_address`` 0.01, ``recall_address_temperature`` 0.1), the address's
+        own attention their prior. ``recall_capacity`` (64) bounds the slots per stream.
         The founder ``recall=False`` builds the brain without it, byte-identical to the
         composition before the option; the memory is a gene to select against that control.
         ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next`` and the code

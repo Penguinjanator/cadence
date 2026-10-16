@@ -57,8 +57,8 @@
   slots by a softmax (`recall_temperature` 0.25, `recall_recency` 0.25 per moment of age), and
   the recalled value and next drive the two regions at `recall_amplitude` (3.0). After each
   lesson the address lesson moves the map a least-mean-squares step toward the slots that
-  would have answered (`recall_address` 0.01, `recall_address_temperature` 0.1,
-  `recall_address_prior` 1.0), at the taught rows. `recall_capacity` (64) bounds the slots
+  would have answered (`recall_address` 0.01, `recall_address_temperature` 0.1; the
+  address's own attention is their prior), at the taught rows. `recall_capacity` (64) bounds the slots
   per stream. `Brain.lesson(observations, labels)` gives the lesson of
   `step(..., teacher=...)` without its act. `reset`, ended episodes, imagination (reads, no
   writes), `wait`, `describe()` and `retune` of the read and lesson genes treat the memory as
