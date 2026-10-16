@@ -64,10 +64,7 @@ def test_the_query_repeats_the_name_token_of_its_fact() -> None:
 
 def test_without_the_recall_region_the_brain_is_the_composed_one() -> None:
     built = tb.ContentBrain.build(4)
-    # recall=False: the composed founder has the recall memory since; the instrument
-    # builds its own memory on the composition without it
-    composed = Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL,
-                             seed=4, recall=False)
+    composed = Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=4)
     a, b = built.connectome, composed.connectome
     assert a.n == b.n and a.populations.keys() == b.populations.keys()
     np.testing.assert_array_equal(a.pre, b.pre)

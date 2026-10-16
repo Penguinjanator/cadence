@@ -65,8 +65,8 @@ by the event heard; the slot before it learns it as its next. Before each settle
 the moment's address, the event heard plus a learned map of the event and of the
 cortex of the moment before, weighs the slots, and the recalled value and next
 drive the two regions. After each lesson the address lesson moves the map toward
-the slots that would have answered. The memory is the founder; `recall=False` leaves
-the regions out, byte-identical to the composition before it, and is the control
+the slots that would have answered. The founder `recall=False` leaves the regions
+out, so the memory is a gene selected against that control
 ([memory](memory.md#recall-the-streams-own-moments) explains it).
 
 The base can already be deep. Add recursive readback separately:
@@ -152,7 +152,7 @@ retain their own defaults, listed in the [API reference](api.md).
 | `efference_decay`, `efference_amplitude` | `0.2`, `0.0` | Issued-command trace; a positive amplitude at construction adds its population |
 | `history_decays` | `()` | Heard history: a nonempty sequence adds one block of sensory width per decay; construction only ([context](context.md#hear-the-past-at-several-timescales)) |
 | `history_amplitude`, `history_scale` | `3.0`, `1.2` | How clearly the heard history is held, and its projection's initial magnitude (construction only) |
-| `recall` | `True` | Recall memory: the `recall` and `next` regions and the index of the stream's moments; `False` builds the control without them; construction only ([memory](memory.md#recall-the-streams-own-moments)) |
+| `recall` | `False` | Recall memory: `True` adds the `recall` and `next` regions and the index of the stream's moments; construction only ([memory](memory.md#recall-the-streams-own-moments)) |
 | `recall_amplitude`, `recall_temperature`, `recall_heard`, `recall_recency` | `3.0`, `0.25`, `1.0`, `0.25` with `recall=True` | How strongly a recalled moment drives its regions, the softmax over the slots, the event's weight in its address, the cost per moment of a slot's age |
 | `recall_address`, `recall_address_temperature` | `0.01`, `0.1` with `recall=True` | The address lesson: its rate, and how sharply it names the slots that would have answered among those the address attended to |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` with `recall=True` | The fading history of earlier events in a key |

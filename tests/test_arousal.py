@@ -646,15 +646,14 @@ def test_brains_without_arousal_keep_their_checkpoint_format(tmp_path):
     plain.step(np.eye(4)[[0]])
     with np.load(plain.save(tmp_path / "plain.npz")) as data:
         meta = json.loads(str(data["generic"]))
-        # cadence-generic/8 since the recall memory became the composed founder
-        assert meta["format"] == "cadence-generic/8" and "arousal" not in meta
+        assert meta["format"] == "cadence-generic/2" and "arousal" not in meta
         assert not any(key.startswith("lived/") for key in data.files)
     roused = calm_brain()
     roused.live(np.eye(4)[[0]])
     path = roused.save(tmp_path / "roused.npz")
     with np.load(path) as data:
         meta = json.loads(str(data["generic"]))
-        assert meta["format"] == "cadence-generic/8" and meta["lived"]["sampled"] is False
+        assert meta["format"] == "cadence-generic/3" and meta["lived"]["sampled"] is False
     loaded = cd.Brain.load(path)
     assert loaded.arousal is not None and loaded._lived is not None
     assert loaded._lived[4] is loaded.basal_ganglia.state

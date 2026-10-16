@@ -327,7 +327,7 @@ def test_a_saved_episodic_brain_continues_exactly(tmp_path):
             getattr(copy, name).consolidated, getattr(brain, name).consolidated
         )
     meta = json.loads(str(np.load(path)["generic"]))
-    assert meta["format"] == "cadence-generic/8"  # the recall memory, the composed founder
+    assert meta["format"] == "cadence-generic/6"
     places = episodic(3, 2, seed=10, memory_context=0.0)
     places.step(one_hot(0, 3))
     resumed = cd.Brain.load(places.save(tmp_path / "places.npz"))
@@ -335,7 +335,7 @@ def test_a_saved_episodic_brain_continues_exactly(tmp_path):
     released = cd.Brain.compose(3, 2, seed=10)
     released.act(one_hot(0, 3))
     meta = json.loads(str(np.load(released.save(tmp_path / "released.npz"))["generic"]))
-    assert meta["format"] == "cadence-generic/8" and "episodic" not in meta
+    assert meta["format"] == "cadence-generic/2" and "episodic" not in meta
 
 
 def test_a_calm_brain_records_the_outcome_that_woke_it():

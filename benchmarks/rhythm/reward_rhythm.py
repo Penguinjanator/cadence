@@ -117,11 +117,8 @@ def make_brain(seed: int, protocol: dict, arm: str) -> Brain:
     if arm not in ("step", "frozen"):
         genes = {k: v for k, v in protocol["arousal"].items() if k != "note"}
         options["arousal"] = cd.ArousalConfig(**genes)
-    # the chamber's recipe is the composed founder before the recall memory became it; its
-    # receipts were recorded on that composition, and the copy's region stays the last addition
     brain = Brain.compose(
-        inputs.INPUTS, inputs.ACTIONS, modules=tuple(point["modules"]), seed=seed, recall=False,
-        **options,
+        inputs.INPUTS, inputs.ACTIONS, modules=tuple(point["modules"]), seed=seed, **options
     )
     if arm != "defaults":
         actor = {k: point[k] for k in ("eta", "lam", "gamma", "eta_critic") if k in point}

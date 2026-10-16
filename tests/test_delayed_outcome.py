@@ -464,8 +464,7 @@ def check_a_life_saved_while_waiting_continues_identically(tmp_path) -> None:
         path = brain.save(tmp_path / f"waiting-{case}.npz")
         with np.load(path) as saved:
             meta = json.loads(str(saved["generic"]))
-            # cadence-generic/8 since the recall memory became the composed founder
-            assert meta["format"] == "cadence-generic/8" and "awaiting" in meta
+            assert meta["format"] == "cadence-generic/5" and "awaiting" in meta
             assert {"awaiting/v", "awaiting/activation", "awaiting/adaptation"} <= set(saved.files)
         twin = cd.Brain.load(path)
         assert twin.decision_id == brain.decision_id and twin.pending_feedback
@@ -583,8 +582,7 @@ def test_naming_the_decision_changes_nothing_in_a_life():
 
 
 def test_a_life_that_never_waits_keeps_its_checkpoint_format(tmp_path):
-    # cadence-generic/8 since the recall memory became the composed founder
-    for efference, expected in ((0.0, "cadence-generic/8"), (0.3, "cadence-generic/8")):
+    for efference, expected in ((0.0, "cadence-generic/3"), (0.3, "cadence-generic/4")):
         brain = _owing(youth=40, efference=efference)
         with np.load(brain.save(tmp_path / f"format-{efference}.npz")) as saved:
             meta = json.loads(str(saved["generic"]))

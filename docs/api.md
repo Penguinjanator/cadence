@@ -797,18 +797,17 @@ that recursive benefit or automatic reflective behavior has been learned.
   settling, held at `history_amplitude` (default 3.0). After each act, and after each moment
   `wait` senses, the blocks take in that observation, so at a decision the history holds
   the past and the sensory drive the present. It is a gene; `()` is its control.
-  `recall=True` (the founder) appends a `recall` and a `next` population of one neuron per
-  value coordinate (the observation code's width; with `recall_value="cortex"`, the
-  association width) and a plastic projection from each into the association region at
-  `recall_scale` (default 1.2; construction only), after any history. Its genes,
-  `recall_<gene>`, are listed [below](#recall-memory-genes). `recall=False` builds the
-  composition without the two regions, byte-identical to the composition before the
-  memory, and is the control.
+  `recall=True` (default `False`, the composition without it, byte-identical) appends a
+  `recall` and a `next` population of one neuron per value coordinate (the observation
+  code's width; with `recall_value="cortex"`, the association width) and a plastic
+  projection from each into the association region at `recall_scale` (default 1.2;
+  construction only), after any history. Its genes, `recall_<gene>` beside `recall=True`,
+  are listed [below](#recall-memory-genes). It is a gene; `False` is its control.
 - `Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, slots=1, **options)`:
   develops `Brain.genome(...)` and wraps it. `inputs` is a vector length, or an image
   shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
   to the constructor; its memories key on the observation code (`options["code"]` as the
-  constructor takes it), and `recall` stays off unless asked.
+  constructor takes it).
 - `Brain.observation_width(inputs, code=None) -> int`: the width of the observation code of
   a brain with these `inputs` (a vector length or an image shape) and this `code` (as the
   constructor takes it; `None` for the rule of the defaults), before it is built: with
@@ -830,9 +829,7 @@ that recursive benefit or automatic reflective behavior has been learned.
   the region's width. A memory keyed on the code numbers its key coordinates from zero
   (`pre`) and is never read from the drive; a coded brain's episodic stores take no
   separator, the code being their separation. `memory_fan_in` left `None` is 0 for an
-  uncoded key of at most 256 values and 32 above. `recall` stays `False` here: a connectome
-  the library did not build opts in with `recall=True` and its own `recall` and `next`
-  populations.
+  uncoded key of at most 256 values and 32 above.
   `arousal=True` enables the founder `ArousalConfig`; a mapping patches its
   fields, and an `ArousalConfig` supplies an explicit configuration. Omitting
   arousal preserves the brain without that controller, and `live` raises.
@@ -1126,9 +1123,9 @@ that recursive benefit or automatic reflective behavior has been learned.
 
 ### Recall memory genes
 
-`Brain.compose` builds the recall memory, its founder, from these genes; each is passed as
-`recall_<gene>`, and a `recall_` name beside `recall=False` is refused. `retune` changes the
-read and lesson genes in a life; the others are construction settings.
+`Brain.compose(..., recall=True)` builds the recall memory from these genes; each is passed
+as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refused.
+`retune` changes the read and lesson genes in a life; the others are construction settings.
 
 | Gene | Founder | What it sets |
 | --- | --- | --- |

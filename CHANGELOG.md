@@ -2,22 +2,6 @@
 
 ## Unreleased
 
-- The recall memory is the founder of `Brain.compose`: the composed brain has the `recall`
-  and `next` regions and the index of its moments, at the declared genes, with the sparse
-  separator rule and the code rule below. `recall=False` builds the composition without the
-  two regions, byte-identical to the founder before this change, and is the control; the
-  tests that pinned the earlier founder (checkpoint formats and names, recorded acts,
-  `describe()` output) were refreshed for the new one, and the byte-identity test of
-  `recall=False` keeps the values recorded from `main`. `Brain(connectome, ...)` keeps the
-  memory off unless asked: a custom anatomy opts in with `recall=True` and its own `recall`
-  and `next` populations, one neuron per value coordinate each. The cost: the two regions
-  add one neuron per observation coordinate each, so a brain of 250 inputs and 64
-  association neurons grows from about 320 to about 820 neurons, which a world that
-  charges per neuron feels; above 1,024 inputs the brain's code bounds the regions at its
-  width. The founder stores events: `recall_value="cortex"` sizes the regions by the
-  association width, but the settled association activity does not carry a moment's
-  content in a form the next settle can read back, and it fails every binding task (token
-  binding held-out .06, succession .07, fresh bindings .55, the camera task .00).
 - Memories key on the observation code: `Brain.observation_code(x)` is what the episodic
   memory (place and context records), the hippocampus of earlier releases and the recall
   memory key on. It is the observation itself up to 1,024 values and, above, the brain's
@@ -120,8 +104,7 @@
   writes), `wait`, `describe()` and `retune` of the read and lesson genes treat the memory as
   they treat the heard history; the address map is a learned parameter that resets keep and
   `parameters()` counts, and a brain with the memory saves as `cadence-generic/8` and
-  continues exactly. `recall=False` builds the brain without it, byte-identical to the
-  composition before the memory (the founder until the memory became it, above);
+  continues exactly. The founder `recall=False` builds the brain without it, byte-identical;
   the [memory guide](docs/memory.md#recall-the-streams-own-moments) explains it, with its
   storage at camera width (14.2 MB with a code of 1,024 neurons, against 105 MB for one
   dense separator). The option reproduces the binding instrument

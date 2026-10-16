@@ -185,7 +185,7 @@ reached 0.94, 1.00 and 1.00 over three seeds; `Brain.compose(4, 4)` at its defau
 
 | Working trace (amplitude, decay) | Actor rate 1.0: hit rate per seed | Actor rate 0.1: hit rate per seed |
 | --- | --- | --- |
-| 3.0, 0.2 (compose default before the recall memory became the founder; `recall=False` since, not rerun) | 0.24, 0.22, 0.30 | 0.60, 0.66, 0.72 |
+| 3.0, 0.2 (compose default) | 0.24, 0.22, 0.30 | 0.60, 0.66, 0.72 |
 | 1.0, 0.2 | 0.23, 0.21, 0.26 | 1.00, 0.95, 0.70 |
 | 1.0, 0.8 | 0.27, 0.23, 0.32 | 0.96, 0.85, 0.98 |
 | 0.5, 0.8 | 0.67, 0.33, 0.48 | 1.00, 1.00, 1.00 |

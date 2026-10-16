@@ -34,10 +34,7 @@ def test_resting_bias_does_not_invent_a_command_before_the_first_action():
     ],
 )
 def test_saved_efference_cannot_change_ports_or_silently_lose_its_state(tmp_path, tamper):
-    # without the recall memory, the founder's since: a downgraded format is then refused for
-    # the copy, and the refusal names it
-    brain = cd.Brain.compose(4, 2, modules=(8,), episodic=False, efference_amplitude=1.0,
-                             recall=False)
+    brain = cd.Brain.compose(4, 2, modules=(8,), episodic=False, efference_amplitude=1.0)
     brain.act(DRIVE, greedy=True)
     path = brain.save(tmp_path / "original")
     with np.load(path, allow_pickle=False) as data:

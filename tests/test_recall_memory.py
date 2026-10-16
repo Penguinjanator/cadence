@@ -156,9 +156,8 @@ def _taught(brain):
     return acts
 
 
-# Recorded with the composition before the option, the control recall=False since the memory
-# became the founder: each control's connectome and parameters, the acts of a short life and
-# the format and contents of its checkpoint.
+# Recorded with the composition before the option: each founder's connectome and parameters,
+# the acts of a short life and the format and contents of its checkpoint.
 FOUNDERS = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
@@ -202,7 +201,7 @@ FOUNDERS = {
 
 
 @pytest.mark.parametrize("name", sorted(FOUNDERS))
-def test_the_control_lives_as_the_composition_before_the_option(tmp_path, name):
+def test_the_founder_lives_as_the_composition_before_the_option(tmp_path, name):
     spec = FOUNDERS[name]
     inputs, actions, options = spec["build"]
     brain = cd.Brain.compose(inputs, actions, **options)
@@ -220,25 +219,21 @@ def test_the_control_lives_as_the_composition_before_the_option(tmp_path, name):
     "options",
     [{}, {"arousal": True}, {"efference_amplitude": 1.0}, {"history_decays": (0.2, 0.8)}],
 )
-def test_the_memory_is_the_founder_and_recall_false_builds_the_control(tmp_path, options):
-    founder = cd.Brain.compose(4, 2, modules=(8,), seed=3, episodic=False, **options)
-    control = composed(recall=False, **options)
-    assert isinstance(founder.recall, cd.Recall) and "recall" in founder.connectome.populations
-    assert control.recall is None and "recall" not in control.connectome.populations
-    for brain in (founder, control):
+def test_recall_false_builds_the_brain_without_the_option_byte_identically(tmp_path, options):
+    control = cd.Brain.compose(4, 2, modules=(8,), seed=3, episodic=False, **options)
+    founder = composed(recall=False, **options)
+    assert founder.recall is None and "recall" not in founder.connectome.populations
+    for brain in (control, founder):
         brain.act(CUE, greedy=True)
-    with np.load(founder.save(tmp_path / "founder"), allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
-        assert meta["format"] == "cadence-generic/8" and meta["recall"] == founder.recall.to_dict()
-        assert meta["composition"]["recall_scale"] == 1.2
-    with np.load(control.save(tmp_path / "control"), allow_pickle=False) as data:
+    assert_same_checkpoint(control.save(tmp_path / "control"), founder.save(tmp_path / "founder"))
+    with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
     assert meta["format"] != "cadence-generic/8" and "recall" not in meta
     assert "recall_scale" not in meta["composition"]
-    described = control.describe()
+    described = founder.describe()
     assert described["recall"] is None
     assert not any(name.startswith("recall_") for name in described["genes"])
-    assert inspect.signature(cd.Brain).parameters["recall"].default is False  # custom anatomies
+    assert described == control.describe()
 
 
 def test_the_founders_are_the_declared_genes():

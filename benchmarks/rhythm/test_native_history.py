@@ -33,9 +33,7 @@ def test_source_configuration_keeps_the_original_graph_and_parameters():
     sensory = native.make_brain(0, "sensory")
     for key, expected in native.initial_arrays(association).items():
         np.testing.assert_array_equal(native.initial_arrays(sensory)[key], expected)
-    # 75 since the recall memory became the composed founder: 69 and its two regions of
-    # one neuron per input
-    assert association.connectome.n == sensory.connectome.n == 75
+    assert association.connectome.n == sensory.connectome.n == 69
     assert association.working_memory.source == "association"
     assert len(association.working_memory.glow) == 32
     assert sensory.working_memory.source == "sensory"
