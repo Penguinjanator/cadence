@@ -28,6 +28,7 @@ from typing import Any
 
 import numpy as np
 
+from cadence import brain as cadence_brain
 from cadence.brain import Brain as NeuralGraph
 from cadence.brain import Equilibrium, Nudge
 from cadence.genome import Genome, Projection, develop
@@ -134,7 +135,14 @@ class CoupledGraph(NeuralGraph):
 
 
 def coupled(graph: NeuralGraph, coupling: Coupling) -> NeuralGraph:
-    """Install the coupling in a graph by class; parameter updates copy both."""
+    """Install the coupling in a graph by class; parameter updates copy both. The coupling
+    enters the settle through the nudge's drive, which the NumPy solver calls at every step
+    and the compiled dense kernel never does, so under the kernel it is refused."""
+    if cadence_brain._FUSED:
+        raise RuntimeError(
+            "the learned read enters the settle through the nudge's drive; "
+            "run with CADENCE_FUSED=0"
+        )
     graph.__class__ = CoupledGraph
     graph.coupling = coupling  # type: ignore[attr-defined]
     return graph

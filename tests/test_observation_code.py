@@ -11,10 +11,20 @@ import numpy as np
 import pytest
 
 import cadence as cd
+from cadence import brain as cadence_brain
 from cadence.genome import Genome, Projection, develop
 from cadence.regions import Region, motor_cortex
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "observation_code"
+# The acts and the array contents below were recorded on the NumPy solver; the compiled dense
+# kernel (numba) orders the arithmetic otherwise and gives other bits, so those pins are read
+# on the NumPy solver alone (CADENCE_FUSED=0 selects it). The connectome, the parameters and
+# the checkpoint's members and metadata keys are read on every backend.
+NUMPY_SOLVER = not cadence_brain._FUSED
+BYTES_REASON = (
+    "acts and array contents were recorded on the NumPy solver; this run uses the compiled "
+    "dense kernel (CADENCE_FUSED=0 selects the NumPy loop)"
+)
 CUE = np.array([[1.0, 0.0, 0.5, 0.0]])
 GO = np.array([[0.0, 0.0, 0.0, 1.0]])
 FACT = np.array([[1.0, 0.0, 0.0, 1.0]])
@@ -42,6 +52,14 @@ def checkpoint_digest(path: Path) -> str:
             h.update(str(value.dtype).encode() + str(value.shape).encode())
             h.update(np.ascontiguousarray(value).tobytes())
     return h.hexdigest()
+
+
+def names_digest(path: Path) -> str:
+    """The checkpoint's metadata keys and member names, which no backend changes."""
+    with np.load(path, allow_pickle=False) as data:
+        meta = json.loads(str(data["generic"]))
+        names = json.dumps([sorted(meta), sorted(data.files)])
+    return hashlib.sha256(names.encode()).hexdigest()
 
 
 def parameter_digest(brain: cd.Brain) -> str:
@@ -93,15 +111,18 @@ def lived(brain: cd.Brain) -> list[int]:
 
 
 # Recorded on the composition before the observation code: each founder's connectome and
-# parameters, the acts of a short life and the complete contents of its checkpoint. The
-# recall memory's checkpoint metadata changed since, so a brain with it has its checkpoint
-# contents compared with those of the same life lived again instead.
+# parameters, the acts of a short life, and the format, the member and metadata names
+# (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
+# The recall memory's checkpoint metadata changed since, so a brain with it has its
+# checkpoint contents compared with those of the same life lived again instead.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
         "life": stepped,
         "parameters": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
+        "format": "cadence-generic/2",
+        "names": "5a728760433a9dea87769077dd838133cd49a8637125759627166a31d5cf16a8",
         "checkpoint": "03067e0fea6cf3e6a70d853e26355f17469035d66c097f42f1286b411a4ea5aa",
     },
     "episodic": {
@@ -110,6 +131,8 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        "format": "cadence-generic/6",
+        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
         "checkpoint": "2a2bdcd2f204f66b80c2c67d1af5d1c84dad39220a13caefc2a08bdc42986ac0",
     },
     "recalled": {
@@ -119,6 +142,8 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
+        "format": "cadence-generic/8",
+        "names": "17b2b7a61fa822e150659b765cef59befb6219db6791a720d7ff79b32498636c",
         "checkpoint": None,
     },
     "boundary": {
@@ -129,6 +154,8 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "938905bbc2dc39c354f2f53443948e0bc4b5f06dfe132306fa4d31062ada966a",
         "acts": [2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        "format": "cadence-generic/8",
+        "names": "d8e0435357330cc7f0deadff49bf70738665fd3a042b9d82969d7945a3094bc0",
         "checkpoint": None,
     },
     "wide": {
@@ -139,6 +166,8 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "63de06ff41d1403e4e706fbf3095c48d555682191afc24b659c5e7e90d28acf3",
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
+        "format": "cadence-generic/6",
+        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
         "checkpoint": "7b8bf9c566606464d87941f321b4aac2421a7c07b882959ae3bc160512efa90e",
     },
     "image": {
@@ -149,6 +178,8 @@ FOUNDERS: dict[str, dict] = {
         "life": stepped,
         "parameters": "aecb598d8fbf5218c210bd2ad264206e9aae0e706105a6e1255a5c44316abe54",
         "acts": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
+        "format": "cadence-generic/2",
+        "names": "40c128b7c0aa3d9ca90623833c68cb73986f93215449e1c55a380fdbb7996665",
         "checkpoint": "67e3b55da910940341f121de5333d74efc9acf135ae4db11e1e5d1e0802b91f8",
     },
 }
@@ -170,27 +201,32 @@ def founder_record(tmp_path: Path) -> dict[str, dict]:
     return out
 
 
-@pytest.mark.parametrize("name", sorted(FOUNDERS))
-def test_a_vector_or_image_brain_is_the_composition_before_the_observation_code(tmp_path, name):
-    spec = FOUNDERS[name]
+def founder(spec: dict) -> tuple[cd.Brain, int]:
     inputs, actions, options = spec["build"]
     builder = cd.Brain.build if spec.get("builder") == "build" else cd.Brain.compose
-    brain = builder(inputs, actions, **options)
-    inputs = int(np.prod(inputs))
+    return builder(inputs, actions, **options), int(np.prod(inputs))
+
+
+@pytest.mark.parametrize("name", sorted(FOUNDERS))
+def test_a_vector_or_image_brain_is_the_composition_before_the_observation_code(tmp_path, name):
+    """On every backend: the connectome and parameters, what the brain keys on, and the
+    checkpoint's format, members and metadata keys after the life."""
+    spec = FOUNDERS[name]
+    brain, inputs = founder(spec)
+    options = spec["build"][2]
     assert brain.sparse_code is None and brain.code_width == brain.inputs == inputs
     assert not brain.coded_cortex
     np.testing.assert_array_equal(brain.hippocampus.pre, brain.sensory_index)
     x = (np.random.default_rng(1).random((2, inputs)) < 0.3).astype(float)
     np.testing.assert_array_equal(brain.observation_code(x), x)
     assert parameter_digest(brain) == spec["parameters"]
-    assert spec["life"](brain) == spec["acts"]
+    spec["life"](brain)
     path = brain.save(tmp_path / "founder.npz")
-    if spec["checkpoint"] is not None:
-        assert checkpoint_digest(path) == spec["checkpoint"]
+    assert names_digest(path) == spec["names"]
     with np.load(path, allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
         assert not any(name.startswith("code/") for name in data.files)
-    assert meta["format"] != "cadence-generic/9" and "code" not in meta
+    assert meta["format"] == spec["format"] and "code" not in meta
     described = brain.describe()["observation_code"]
     assert described == {
         "kind": "observation", "inputs": inputs, "width": inputs, "units": 0, "fan_in": 0,
@@ -200,22 +236,40 @@ def test_a_vector_or_image_brain_is_the_composition_before_the_observation_code(
     assert brain.hippocampus.separator is None or brain.hippocampus.separator.fan_in == 0
 
 
+@pytest.mark.skipif(not NUMPY_SOLVER, reason=BYTES_REASON)
+@pytest.mark.parametrize("name", sorted(FOUNDERS))
+def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, name):
+    spec = FOUNDERS[name]
+    brain, _ = founder(spec)
+    assert spec["life"](brain) == spec["acts"]
+    if spec["checkpoint"] is not None:
+        assert checkpoint_digest(brain.save(tmp_path / "founder.npz")) == spec["checkpoint"]
+
+
 def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
-    """The fixture, the recall founder after its life at the final format: it loads,
-    continues as recorded, saves again with the same arrays and metadata, and the same life
-    lived again saves the same."""
+    """The fixture, the recall founder after its life at the final format: it loads and saves
+    again with the same arrays and metadata, continues, and the continued life's checkpoint
+    reloads and saves the same; on the NumPy solver the continuation is the recorded one and
+    the same life lived again saves the fixture's bytes."""
     fixture = FIXTURES / "recalled.npz"
     provenance = json.loads((FIXTURES / "provenance.json").read_text())
     brain = cd.Brain.load(fixture)
     assert brain.sparse_code is None and brain.recall is not None and brain.memory_choice
     assert checkpoint_digest(brain.save(tmp_path / "again.npz")) == checkpoint_digest(fixture)
-    inputs, actions, options = FOUNDERS["recalled"]["build"]
-    relived = cd.Brain.compose(inputs, actions, **options)
-    FOUNDERS["recalled"]["life"](relived)
-    assert checkpoint_digest(relived.save(tmp_path / "relived.npz")) == checkpoint_digest(fixture)
     acts = [int(np.asarray(brain.live(STREAM[(t + 1) % 4], reward=[float(t % 2)]))[0])
             for t in range(6)]
-    assert acts == provenance["continuation"]["recalled"]["acts"]
+    continued = brain.save(tmp_path / "continued.npz")
+    assert checkpoint_digest(cd.Brain.load(continued).save(tmp_path / "reloaded.npz")) == (
+        checkpoint_digest(continued)
+    )
+    if NUMPY_SOLVER:
+        assert acts == provenance["continuation"]["recalled"]["acts"]
+        inputs, actions, options = FOUNDERS["recalled"]["build"]
+        relived = cd.Brain.compose(inputs, actions, **options)
+        FOUNDERS["recalled"]["life"](relived)
+        assert checkpoint_digest(relived.save(tmp_path / "relived.npz")) == (
+            checkpoint_digest(fixture)
+        )
     with np.load(fixture, allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
     assert "seed" not in meta["recall"] and "address_prior" not in meta["recall"]

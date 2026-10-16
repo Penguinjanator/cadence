@@ -14,10 +14,20 @@ import numpy as np
 import pytest
 
 import cadence as cd
+from cadence import brain as cadence_brain
 from cadence.genome import Genome, Projection, develop
 from cadence.regions import Region, motor_cortex
 
 BINDING = Path(__file__).resolve().parents[1] / "benchmarks" / "binding"
+# The acts and the array contents below were recorded on the NumPy solver; the compiled dense
+# kernel (numba) orders the arithmetic otherwise and gives other bits, so those pins are read
+# on the NumPy solver alone (CADENCE_FUSED=0 selects it). The connectome, the parameters and
+# the checkpoint's members and metadata keys are read on every backend.
+NUMPY_SOLVER = not cadence_brain._FUSED
+BYTES_REASON = (
+    "acts and array contents were recorded on the NumPy solver; this run uses the compiled "
+    "dense kernel (CADENCE_FUSED=0 selects the NumPy loop)"
+)
 CUE = np.array([[1.0, 0.0, 0.5, 0.0]])
 GO = np.array([[0.0, 0.0, 0.0, 1.0]])
 FACT = np.array([[1.0, 0.0, 0.0, 1.0]])  # a name (coordinate 0) stated with a value (3)
@@ -175,7 +185,8 @@ def _taught(brain):
 
 
 # Recorded with the composition before the option: each founder's connectome and parameters,
-# the acts of a short life and the format and contents of its checkpoint.
+# the acts of a short life, and the format, the member and metadata names (``names``) and
+# the contents of every array (``checkpoint``) of the checkpoint it saves.
 FOUNDERS = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
@@ -183,6 +194,7 @@ FOUNDERS = {
         "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1],
         "format": "cadence-generic/2",
+        "names": "5a728760433a9dea87769077dd838133cd49a8637125759627166a31d5cf16a8",
         "checkpoint": "4232fd81a58cace3cc1e76bbc7141a02c2599bfab0679cc9bfae1dfee891a76e",
     },
     "lived": {
@@ -193,6 +205,7 @@ FOUNDERS = {
         "digest": "b66e821b4d3c975000dc59663c7ce2babaf0473d232af438a689f12b9fbbee67",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1],
         "format": "cadence-generic/7",
+        "names": "3bd868a50c41cec95565033bf2e031622c05d08536e236a036a5b09278273eaf",
         "checkpoint": "d47dbfd3384183656d14ff93db5b188d93977f8aed24312996a4550f2e2cd88d",
     },
     "episodic": {
@@ -202,6 +215,7 @@ FOUNDERS = {
         "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
+        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
         "checkpoint": "8dc684beb8322e013c9002414bdf6d2b053cde7cff51ffd6ccaec9b54944386a",
     },
     "taught": {
@@ -213,24 +227,41 @@ FOUNDERS = {
                  0, 1, 0, 0, 0, 0, 2, 2, 6, 3, 0, 0, 4, 4, 0, 0, 0, 0, 7, 4, 0, 4, 1, 3, 0, 0,
                  4, 0, 6, 4, 4, 0, 0, 4],
         "format": "cadence-generic/2",
+        "names": "49432123dd7f5680292be4549853a2b548d82f2ad5b13ea765b047db8720a407",
         "checkpoint": "24dbfcae5f2fe0bf4be6622ddd082c62fa0584ca326b04a350391b0b95b0c44e",
     },
 }
 
 
+def _names(path):
+    """The checkpoint's metadata keys and member names, which no backend changes."""
+    with np.load(path, allow_pickle=False) as data:
+        meta = json.loads(str(data["generic"]))
+        names = json.dumps([sorted(meta), sorted(data.files)])
+    return meta["format"], hashlib.sha256(names.encode()).hexdigest()
+
+
 @pytest.mark.parametrize("name", sorted(FOUNDERS))
 def test_the_founder_lives_as_the_composition_before_the_option(tmp_path, name):
+    """On every backend: the connectome and parameters, and the checkpoint's format, members
+    and metadata keys after the life."""
     spec = FOUNDERS[name]
     inputs, actions, options = spec["build"]
     brain = cd.Brain.compose(inputs, actions, **options)
     assert brain.recall is None and "recall" not in brain.connectome.populations
     assert _digest(brain) == spec["digest"]
+    spec["life"](brain)
+    assert _names(brain.save(tmp_path / "founder")) == (spec["format"], spec["names"])
+
+
+@pytest.mark.skipif(not NUMPY_SOLVER, reason=BYTES_REASON)
+@pytest.mark.parametrize("name", sorted(FOUNDERS))
+def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, name):
+    spec = FOUNDERS[name]
+    inputs, actions, options = spec["build"]
+    brain = cd.Brain.compose(inputs, actions, **options)
     assert spec["life"](brain) == spec["acts"]
-    path = brain.save(tmp_path / "founder")
-    with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
-    assert meta["format"] == spec["format"]
-    assert _checkpoint_digest(path) == spec["checkpoint"]
+    assert _checkpoint_digest(brain.save(tmp_path / "founder")) == spec["checkpoint"]
 
 
 @pytest.mark.parametrize(

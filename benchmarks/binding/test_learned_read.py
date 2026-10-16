@@ -7,11 +7,20 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from cadence import Brain
+from cadence import brain as cadence_brain
 from cadence.brain import Brain as NeuralGraph
 
 HERE = Path(__file__).resolve().parent
+# the learned read enters the settle through the nudge's drive, which the NumPy solver calls
+# at every step and the compiled dense kernel never does
+pytestmark = pytest.mark.skipif(
+    cadence_brain._FUSED,
+    reason="the learned read enters the settle through the nudge's drive, which the compiled "
+    "dense kernel never calls; run with CADENCE_FUSED=0",
+)
 
 
 def _load(name: str):
