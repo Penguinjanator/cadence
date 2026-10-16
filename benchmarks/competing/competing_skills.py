@@ -198,6 +198,9 @@ def make_brain(point: dict[str, Any], seed: int) -> cd.Brain:
         actor_gamma=float(point["gamma"]),
         actor_eta_critic=float(point["eta_critic"]),
         arousal=dict(point["arousal"]),
+        # the arena's recipe is the composed founder before the recall memory became it; its
+        # receipts were recorded on that composition, whose neurons the regions above partition
+        recall=False,
         seed=seed,
         **learning,
     )

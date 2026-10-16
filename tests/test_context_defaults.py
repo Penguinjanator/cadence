@@ -141,7 +141,9 @@ def test_a_saved_brain_keeps_the_trace_it_was_built_with(tmp_path):
 
 
 def test_provenance_saved_before_0_82_reads_as_the_fixed_scale_12(tmp_path):
-    brain = cd.Brain.compose(inputs=3, actions=2, seed=7, working_memory_scale=12.0)
+    # the composition before 0.82.0 had no recall memory: its provenance names no recall_scale
+    brain = cd.Brain.compose(inputs=3, actions=2, seed=7, working_memory_scale=12.0,
+                             recall=False)
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
         arrays = {name: data[name] for name in data.files}

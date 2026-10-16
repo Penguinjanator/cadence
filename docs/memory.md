@@ -77,7 +77,7 @@ The recall memory with cortex values (`recall_value="cortex"`) and an associatio
 | --- | --- | --- | --- |
 | Working `Trace` | Recent association-region activity used as context | Each admitted live action | Nothing; the trace is cleared |
 | `Efference` copy (opt-in gene) | The fading one-hot of the commands the stream issued | Each admitted live action | Nothing; the copy is cleared |
-| `Recall` memory (opt-in gene) | The stream's recent moments as slots, each addressed before its settle ([below](#recall-the-streams-own-moments)) | Each admitted live action and each moment `wait` senses; the address map by each lesson | The address map; the slots are emptied |
+| `Recall` memory (the composed founder; `recall=False` is the control) | The stream's recent moments as slots, each addressed before its settle ([below](#recall-the-streams-own-moments)) | Each admitted live action and each moment `wait` senses; the address map by each lesson | The address map; the slots are emptied |
 | Graph plasticity | Learned synaptic parameters and biases | Supervised contrasts and reward-modulated eligibility | Learned parameters |
 | `SynapticMemory` | Cue-to-outcome associations, with fast per-stream `F` and shared persistent `C` | Observed chosen-action outcomes | Both `F` and `C` |
 | Episodic memory (`memory_choice=True`) | The same store keyed by the observation, and a second keyed by the temporal context; their mean votes in the choice | Known outcomes, demonstrations, replay of the path to a reward | The records; the temporal context and replay path are cleared |
@@ -144,8 +144,12 @@ use the [supervised-only stream](continuous.md#a-supervised-only-stream).
 The working trace keeps what the brain made of the moment before, and the
 [heard history](context.md#hear-the-past-at-several-timescales) keeps the observations at a
 few fixed timescales. Neither gives back one earlier moment when the present asks for it.
-The recall memory, `Brain.compose(..., recall=True)`, keeps each stream's recent moments as
-slots and addresses them before each settle:
+The recall memory, the founder of `Brain.compose` since this release (`recall=False` builds
+the control without it), keeps each stream's recent moments as slots and addresses them
+before each settle. Its two regions add one neuron per observation coordinate each: a brain
+of 250 inputs and 64 association neurons grows from about 320 to about 820 neurons, which a
+world that charges per neuron feels; above 1,024 inputs the brain's code bounds the regions
+at its width ([from pixels to keys](#from-pixels-to-keys)).
 
 ```text
 moment t:  observation x -> address q -> weights over the slots -> recall and next regions -> settle -> act
@@ -233,10 +237,10 @@ indexed.reset()  # a new stream begins with no slots; the address map is kept
 assert indexed.recall.slots == 0 and indexed.recall.w_x.any()
 ```
 
-The founder `recall=False` builds the brain without the two regions, byte-identical to the
-brain before the option, and is the control. A custom anatomy (`Brain(connectome, ...)`)
-opts in with `recall=True` and its own `recall` and `next` regions, one neuron per value
-coordinate each, the width of the observation code with event values or of the
+`recall=False` builds the brain without the two regions, byte-identical to the composition
+before the memory, and is the control. A custom anatomy (`Brain(connectome, ...)`) keeps the
+memory off unless asked: `recall=True` needs its own `recall` and `next` regions, one neuron
+per value coordinate each, the width of the observation code with event values or of the
 association region with cortex values. The read and lesson genes can be retuned; the
 capacity, the value, the next region and the scale are construction settings
 ([genes](api.md#recall-memory-genes)). A saved brain keeps its slots and its address map

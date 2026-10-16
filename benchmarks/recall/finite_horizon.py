@@ -148,6 +148,8 @@ def make_brain(
         seed=seed,
         learning=learning,
         episodic=False,
+        # the frozen protocols ran the composed founder before the recall memory became it
+        recall=False,
         working_memory_decay=decay,
         working_memory_amplitude=amplitude,
         # frozen protocols ran the composition of releases before 0.82.0 (scale 12)

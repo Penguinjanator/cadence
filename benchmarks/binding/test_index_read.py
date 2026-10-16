@@ -40,7 +40,10 @@ def _walk(brain, seed: int, rows: int = 4, cut: int = 1):
 
 def test_without_read_regions_the_brain_is_the_composed_one() -> None:
     built = ir.IndexBrain.build(3)
-    composed = Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=3)
+    # recall=False: the composed founder has the recall memory since; the instrument
+    # builds its own memory on the composition without it
+    composed = Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL,
+                             seed=3, recall=False)
     np.testing.assert_array_equal(built.brain.efficacy, composed.brain.efficacy)
     assert built.index is None
 

@@ -67,7 +67,9 @@ def test_matching_and_restored_cache_cannot_hide_observer_residual(tmp_path, res
 
 
 def test_one_unqualified_stream_refuses_the_entire_action_batch(tmp_path):
-    brain = composed(episodic=False, working_memory_amplitude=0)
+    # without the recall memory, the founder's since: it re-addresses a repeated observation
+    # after the act, and this check holds the drive fixed
+    brain = composed(episodic=False, working_memory_amplitude=0, recall=False)
     observation = np.array([[0.2, -0.1], [0.1, -0.2]])
     brain.act(observation)
     brain.learner.config = replace(brain.learner.config, free_steps=0)
@@ -81,7 +83,9 @@ def test_one_unqualified_stream_refuses_the_entire_action_batch(tmp_path):
 
 
 def test_zero_budget_admits_a_freshly_checked_existing_equilibrium(monkeypatch):
-    brain = composed(episodic=False, working_memory_amplitude=0)
+    # without the recall memory, the founder's since: it re-addresses a repeated observation
+    # after the act, and this check holds the drive fixed
+    brain = composed(episodic=False, working_memory_amplitude=0, recall=False)
     observation = [[0.2, -0.1]]
     brain.act(observation, greedy=True)
     brain.learner.config = replace(brain.learner.config, free_steps=0)

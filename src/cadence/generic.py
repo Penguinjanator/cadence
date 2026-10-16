@@ -1506,8 +1506,8 @@ class Brain:
         After each lesson the address lesson moves the map toward the slots that would have
         answered (``recall_address`` 0.01, ``recall_address_temperature`` 0.1), the address's
         own attention their prior. ``recall_capacity`` (64) bounds the slots per stream.
-        The founder ``recall=False`` builds the brain without it, byte-identical to the
-        composition before the option; the memory is a gene to select against that control.
+        The memory is the founder of the composition; ``recall=False`` builds the brain
+        without it, byte-identical to the composition before the memory, and is the control.
         ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next`` and the code
         settings are construction settings. Without an explicit ``recall_code`` a memory on an
         observation code wider than 1,024 keys on a sparse code of 1,024 neurons.
@@ -1566,8 +1566,10 @@ class Brain:
         history_scale = real("history_scale", history_scale, low=0)
         heard = _history_decays(options.get("history_decays", ()))
         recall_scale = real("recall_scale", recall_scale, low=0)
+        # the recall memory is the founder of the composition; recall=False is its control
+        options.setdefault("recall", True)
         recalled = _recall_genes(
-            options.get("recall", False),
+            options["recall"],
             {name: value for name, value in options.items() if name.startswith("recall_")},
         )
         if lateral is None:

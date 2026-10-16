@@ -84,6 +84,9 @@ tables below are printed by `report.py` from the stored per-event actions.
 
 ### Founders
 
+The `compose_default` rows are readings of the composed founder before the recall memory
+became it (`Brain.compose(..., recall=False)` since); they were not rerun.
+
 | Recipe | Arm | Seed | intact alternation | intact agreement | blocks of 8 | erased | reset | static | flipflop | random |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | compose_default | every | 101 | 0.67 | 0.51 | 0.54 0.71 0.68 0.75 0.64 0.64 0.71 0.71 | 0.62 | 0.62 | 0.00 | 1.00 | 0.54 |

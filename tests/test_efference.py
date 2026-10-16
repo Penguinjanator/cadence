@@ -50,11 +50,14 @@ def test_the_founder_value_builds_the_released_composition_byte_identically(tmp_
     assert_same_checkpoint(control.save(tmp_path / "control"), founder.save(tmp_path / "founder"))
     with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
-    assert meta["format"] == "cadence-generic/2" and "efference" not in meta
+    # cadence-generic/8 since the recall memory became the composed founder
+    assert meta["format"] == "cadence-generic/8" and "efference" not in meta
 
 
 def test_the_copy_adds_only_its_neurons_and_their_projection():
-    control, candidate = composed(echo=None), composed(echo=1.0)
+    # on the composition without the recall memory (the founder since appends the memory's
+    # regions after the copy, so the copy is no longer the last addition)
+    control, candidate = composed(echo=None, recall=False), composed(echo=1.0, recall=False)
     assert candidate.efference is not None
     populations = dict(candidate.connectome.populations)
     efference = list(populations.pop("efference"))
@@ -256,7 +259,7 @@ def test_a_saved_copy_continues_identically_and_marks_its_format(tmp_path):
     path = brain.save(tmp_path / "copy")
     with np.load(path, allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
-        assert meta["format"] == "cadence-generic/4"
+        assert meta["format"] == "cadence-generic/8"  # the recall memory's, the founder's
         assert meta["efference"] == brain.efference.to_dict()
         assert {"efference/trace", "efference/last", "efference/cold"} <= set(data.files)
     twin = cd.Brain.load(path)
@@ -285,7 +288,7 @@ def test_a_life_with_the_copy_and_arousal_saves_its_pending_moment(tmp_path):
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
-    assert meta["format"] == "cadence-generic/4" and "arousal" in meta and "lived" in meta
+    assert meta["format"] == "cadence-generic/8" and "arousal" in meta and "lived" in meta
     twin = cd.Brain.load(path)
     for moment in range(8):
         reward = [float(moment % 2)]

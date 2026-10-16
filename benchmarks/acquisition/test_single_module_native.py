@@ -38,9 +38,12 @@ def test_exact_first_projection_external_ports_and_original_learning(single):
     proof = single.construction_proof(candidate, original)
     assert proof["first_projection_byte_identical"]
     assert proof["external_ports_byte_identical"]
-    assert proof["candidate"]["neurons"] == proof["original"]["neurons"] == 750
-    assert proof["candidate"]["free_neurons"] == 68
-    assert proof["original"]["free_neurons"] == 84
+    # 2050 since the recall memory became the composed founder: 750 and its two regions of
+    # one neuron per input
+    assert proof["candidate"]["neurons"] == proof["original"]["neurons"] == 2050
+    # the recall and next neurons (one per input each) are free of the external ports
+    assert proof["candidate"]["free_neurons"] == 68 + 1300
+    assert proof["original"]["free_neurons"] == 84 + 1300
     assert candidate.learner.config.to_dict() == original.learner.config.to_dict()
     assert candidate.brain.neuron_model.to_dict() == original.brain.neuron_model.to_dict()
     assert candidate.learner.contrast_updates == original.learner.contrast_updates == 0
@@ -51,6 +54,8 @@ def test_exact_first_projection_external_ports_and_original_learning(single):
         "prefrontal",
         "motor",
         "motor/actions",
+        "recall",  # the recall memory's two regions, the composed founder's since
+        "next",
     }
 
 

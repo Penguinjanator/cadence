@@ -70,7 +70,10 @@ def test_the_founder_builds_the_composition_without_a_history_byte_identically(t
 
 
 def test_the_history_adds_only_its_blocks_and_their_projection():
-    control, candidate = composed(decays=None), composed(decays=(0.2, 0.8, 0.95))
+    # on the composition without the recall memory (the founder since appends the memory's
+    # regions after the history, so the history is no longer the last addition)
+    control = composed(decays=None, recall=False)
+    candidate = composed(decays=(0.2, 0.8, 0.95), recall=False)
     populations = dict(candidate.connectome.populations)
     history = list(populations.pop("history"))
     assert {k: list(v) for k, v in populations.items()} == {
@@ -218,7 +221,7 @@ def test_a_saved_history_continues_identically_and_marks_its_format(tmp_path, ep
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))
-        assert meta["format"] == "cadence-generic/7"
+        assert meta["format"] == "cadence-generic/8"  # the recall memory's, the founder's
         assert meta["history"] == brain.history.to_dict()
         assert ("episodic" in meta) == episodic and "efference" in meta and "arousal" in meta
         assert "history/trace" in data.files

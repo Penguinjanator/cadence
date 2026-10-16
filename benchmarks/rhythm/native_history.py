@@ -78,6 +78,9 @@ def make_brain(seed, source="sensory", protocol=None):
         connectome,
         episodic=False,
         seed=seed,
+        # the composed founder carries the recall memory; the rebuilt brain keeps it, at the
+        # same genes, so the two source configurations share one graph and one bias
+        recall=original.recall is not None,
         resting_bias=original.resting_bias,
         learning=original.learner.config,
         reward=original.basal_ganglia.config,

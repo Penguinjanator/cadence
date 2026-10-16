@@ -40,7 +40,7 @@ Every arm of a seed lives the same odour sequence:
 | --- | --- |
 | `live` | `Brain.compose(4, 2, modules=(32,))` at the protocol's operating point, with `ArousalConfig()` at its founders, through `Brain.live` |
 | `step` | the same brain and operating point without arousal, through `step`: it samples and learns at every moment (the simpler control) |
-| `defaults` | `Brain.compose(4, 2, modules=(32,))` at the released defaults, through `step` |
+| `defaults` | `Brain.compose(4, 2, modules=(32,))` at the released defaults, through `step`; a reading of the composed founder before the recall memory became it (`recall=False` since), not rerun |
 | `memory-only` | the `live` brain with its actor's rates at zero: associative memory and critic learn, the graph's policy does not |
 | `graph-only` | the `live` brain without its associative memory: the graph's reward learning alone |
 | `frozen` | the `live` brain after rule A, answering greedily and receiving no outcome |
