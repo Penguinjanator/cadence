@@ -330,8 +330,9 @@ def test_the_resting_bias_leaves_the_memory_neurons_at_rest():
 
 
 def _declared(ir):
-    """The instrument's genes for the library's founders: the declared index arm, with the
-    library's slot bound (the instrument leaves it unbounded in a reset-per-trial task)."""
+    """The instrument's genes for the library's founders: the declared index arm and code
+    fan-in, with the library's slot bound (the instrument leaves the slots unbounded in a
+    reset-per-trial task)."""
     return dict(ir.GENES, recency=0.25, address=0.01, capacity=64, code_fan_in=32)
 
 
@@ -712,6 +713,7 @@ def test_a_fork_carries_its_own_memory():
         {},
         {"recall_code": 16, "recall_code_fan_in": 2, "recall_code_winners": 3,
          "recall_value": "cortex", "recall_context": 0.5, "recall_capacity": 3},
+        {"memory_choice": True},
     ],
 )
 def test_a_saved_memory_continues_identically_and_marks_its_format(tmp_path, options):
@@ -730,7 +732,8 @@ def test_a_saved_memory_continues_identically_and_marks_its_format(tmp_path, opt
         assert meta["format"] == "cadence-generic/8"
         assert meta["recall"] == brain.recall.to_dict()
         assert "history" in meta and "efference" in meta and "arousal" in meta
-        assert ("recall/code_index" in data.files) == bool(options)
+        assert ("episodic" in meta) == ("memory_choice" in options)
+        assert ("recall/code_index" in data.files) == ("recall_code" in options)
         assert meta["composition"]["recall_scale"] == 1.2
     twin = cd.Brain.load(path)
     assert isinstance(twin.recall, cd.Recall)
