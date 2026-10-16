@@ -2,8 +2,8 @@
 
 The fixed read of ``token_binding`` recalls the stored event that shares a token with the
 present one and generalizes to bindings never trained; it cannot find a moment the present
-shares nothing with. The competing reads inside the settle (``attention_read``, and this
-module's first form at commit 32d12e3) start their query and recall at rest and complete on a
+shares nothing with. A read inside the settle, a learned query and a recall competing for the
+stored moments through one energy, starts its query and recall at rest and completes on a
 stored moment nearly at random (sizing: 55 of 100 held-out queries on the asked fact although
 the heard event favoured it by two logits). Here the address of each moment is computed before
 its settle, from what the brain has at that point, and the recall enters the settle as a
