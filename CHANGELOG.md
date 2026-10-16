@@ -44,6 +44,31 @@
   treat the working trace, and a brain with one saves as `cadence-generic/7` and continues
   exactly. The founder `history_decays=()` builds the brain without it, byte-identical; the
   [context guide](docs/context.md#hear-the-past-at-several-timescales) says when to add it.
+- The recall memory, opt-in ([issue 199](https://github.com/muellerberndt/cadence/issues/199),
+  [issue 201](https://github.com/muellerberndt/cadence/issues/201)): `Brain.compose(...,
+  recall=True)` adds an index of the stream's own recent moments, a `recall` and a `next`
+  region read by the association region through plastic projections that start like the
+  working trace's (`recall_scale`, 1.2). Each moment the brain acts on, and each moment
+  `wait` senses, is written as one slot per stream (`Recall`): its key the event heard
+  (`recall_heard` 1.0 times the observation, or its sparse code with `recall_code` neurons),
+  its value the event (`recall_value="event"`) or the settled association activity, and the
+  slot before learns it as its next. Before each settle the moment's address, the key plus a
+  learned map of the event and of the association activity of the moment before, weighs the
+  slots by a softmax (`recall_temperature` 0.25, `recall_recency` 0.25 per moment of age), and
+  the recalled value and next drive the two regions at `recall_amplitude` (3.0). After each
+  lesson the address lesson moves the map a least-mean-squares step toward the slots that
+  would have answered (`recall_address` 0.01, `recall_address_temperature` 0.1,
+  `recall_address_prior` 1.0), at the taught rows. `recall_capacity` (64) bounds the slots
+  per stream. `Brain.lesson(observations, labels)` gives the lesson of
+  `step(..., teacher=...)` without its act. `reset`, ended episodes, imagination (reads, no
+  writes), `wait`, `describe()` and `retune` of the read and lesson genes treat the memory as
+  they treat the heard history; the address map is a learned parameter that resets keep and
+  `parameters()` counts, and a brain with the memory saves as `cadence-generic/8` and
+  continues exactly. The founder `recall=False` builds the brain without it, byte-identical;
+  the [memory guide](docs/memory.md#recall-the-streams-own-moments) explains it, with its
+  storage at camera width (14.2 MB with a code of 1,024 neurons, against 105 MB for one
+  dense separator). The option reproduces the binding instrument
+  `benchmarks/binding/index_read.py` moment for moment (`tests/test_recall_memory.py`).
 
 ## 0.83.0 — 2026-10-13
 

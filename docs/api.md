@@ -556,6 +556,32 @@ and a complete runnable example.
   rows=None)`, `keep(rows)`, `trace` (`(batch, blocks * source)`), `to_dict()`.
   `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
   observation of every act after the act.
+- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, address_prior=1.0, context=0.0, context_decay=0.5, code=0, code_fan_in=32, code_winners=24, seed=0, source="sensory", target="recall", writes=0)`:
+  the index memory of each stream's recent moments
+  ([memory](memory.md#recall-the-streams-own-moments)). `stimulate(drive, observations)`
+  computes each stream's address `q = heard * x + x @ w_x + c @ w_c + b` (`x` the
+  `(batch, source)` observations, or their sparse code `coded(observations)` with `code`
+  above zero; `c` the `previous` settled association activity), keeps the moment as `last`,
+  and writes `amplitude * p @ values` into the `target` region and, with `next`,
+  `amplitude * p @ nexts` into the `next` region, where `p = weights(q)` is the softmax
+  over the stream's slots at `temperature` less `recency` per moment of age (another batch
+  size, or a stream without slots, reads silence). `witness(observations, state)` writes
+  the moment after its settle: one slot per stream with key `heard * x` (plus `context`
+  times the fading `history`, kept at `context_decay`), value `x` or, with
+  `value="cortex"`, the association activity of `state`, and the next of the slot before;
+  beyond `capacity` the oldest slot is dropped. `learn(graph, learned)` is the address
+  lesson after a lesson whose `LearnedState` is `learned`, through the synapses of `graph`
+  (`readback(graph, region, movement)`), at the taught rows and rate `address`; it returns
+  `address_rows` and `address_error`. Arrays: `keys`, `values` and `nexts`
+  (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a slot written before
+  its stream began again), `previous`, `history`, the map `w_x`, `w_c` and `b`, and with
+  `code` the fixed tables `code_index` and `code_weight` drawn from `seed`.
+  `reset(batch, rows=None)`, `keep(rows)`, `snapshot()` and `restore(snapshot)`,
+  `imagined()` (a copy that reads the live slots and writes none), `founders()`,
+  `setting(name, value)`, `neurons`, `streams`, `slots`, `ages()`, `to_dict()`.
+  `Brain.compose(..., recall=True)` adds it; `Brain.recall` holds it, reads it before every
+  settle, writes the moment of every act and of every moment `wait` senses, and runs its
+  address lesson after every lesson.
 - `FastSynapses(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb", separator=None, writes=0)`:
   one mutable `(pre, post)` matrix per stream; `writes` counts the rows written. `separator`
   is a `PatternSeparator` applied to keys and queries, which makes the matrix
@@ -696,7 +722,7 @@ to positive region widths to add optional System 2 state feedback within the
 same neural-graph settlement. This is an implemented interface, not a claim
 that recursive benefit or automatic reflective behavior has been learned.
 
-- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, sensory_scale=1.0, working_memory_scale=1.2, history_scale=1.2, seed=0, slots=1, **options) -> Brain`:
+- `Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None, sensory_scale=1.0, working_memory_scale=1.2, history_scale=1.2, recall_scale=1.2, seed=0, slots=1, **options) -> Brain`:
   the direct vector-input constructor. `slots` groups the motor neurons into several
   softmax readouts that settle together, a count of equal groups or one size per group
   covering `actions`: `act` and `step` return one index per slot, lateral inhibition
@@ -747,6 +773,12 @@ that recursive benefit or automatic reflective behavior has been learned.
   settling, held at `history_amplitude` (default 3.0). After each act, and after each moment
   `wait` senses, the blocks take in that observation, so at a decision the history holds
   the past and the sensory drive the present. It is a gene; `()` is its control.
+  `recall=True` (default `False`, the composition without it, byte-identical) appends a
+  `recall` and a `next` population of one neuron per value coordinate (`inputs`; with a
+  code, `recall_code`; with `recall_value="cortex"`, the association width) and a plastic
+  projection from each into the association region at `recall_scale` (default 1.2;
+  construction only), after any history. Its genes, `recall_<gene>` beside `recall=True`,
+  are listed [below](#recall-memory-genes). It is a gene; `False` is its control.
 - `Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, slots=1, **options)`:
   develops `Brain.genome(...)` and wraps it. `inputs` is a vector length, or an image
   shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
@@ -756,7 +788,7 @@ that recursive benefit or automatic reflective behavior has been learned.
   with `working_memory`, `prefrontal`; projections sensory to association (reciprocal for a
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
-- `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, working_memory_decay=0.0, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, history_decays=(), history_amplitude=3.0, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, **genes)`:
+- `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, working_memory_decay=0.0, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, history_decays=(), history_amplitude=3.0, recall=False, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, **genes)`:
   `arousal=True` enables the founder `ArousalConfig`; a mapping patches its
   fields, and an `ArousalConfig` supplies an explicit configuration. Omitting
   arousal preserves the brain without that controller, and `live` raises.
@@ -767,7 +799,8 @@ that recursive benefit or automatic reflective behavior has been learned.
   settings when the component is absent.
   `resting_bias` is a finite nonnegative real scalar; booleans and arrays are rejected.
   It initializes named populations outside the `sensory`, `visual`, `prefrontal`,
-  `efference`, `history` and `motor` families (the part of the name before `/`). Excluded family membership
+  `efference`, `history` and `motor` families, and with `recall=True` the `recall` and
+  `next` families (the part of the name before `/`). Excluded family membership
   takes precedence over overlapping aliases; unnamed neurons also start at zero.
   In `compose`, modules, association and observers receive the value. In an image
   builder the whole visual region stays at zero. Biases remain plastic, and a
@@ -778,7 +811,11 @@ that recursive benefit or automatic reflective behavior has been learned.
   The connectome needs populations `sensory` or `visual/input`, `association` and `motor`, and uses
   `prefrontal` for a working memory and `efference` (one neuron per motor neuron) for an
   efference copy when present, and `history` (one block of sensory width per entry of
-  `history_decays`, which it then requires) for a heard history. `efference_amplitude` is the
+  `history_decays`, which it then requires) for a heard history and, with `recall=True`,
+  `recall` and `next` (one neuron per value coordinate each; `recall_next=False` needs
+  `recall` alone) for a recall memory, whose `recall_<gene>` settings `**genes` carries and
+  whose code is drawn from `seed`; without `recall=True` populations of those names are
+  ordinary ones. `efference_amplitude` is the
   read gain of that copy, a finite nonnegative real scalar; `efference_decay` its decay across
   moments; `history_amplitude` the heard history's, a finite nonnegative real scalar. `learning` defaults to
   `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, free_steps=1024, nudged_steps=12, momentum=0.9)` (whose unset `eta_bias` derives `eta / 10` = 0.05),
@@ -795,13 +832,14 @@ that recursive benefit or automatic reflective behavior has been learned.
   eligibility mechanism retains its finite-phase contract.
   Attributes `connectome`, `brain`, `learner`, `basal_ganglia` (`ActorCritic` reading the
   association cortex), `working_memory` (`Trace` or `None`), `efference` (`Efference` or
-  `None`), `history` (`History` or `None`), `hippocampus` (`SynapticMemory`
-  from sensory to motor neurons, or `None`), `sensory_index`, `association_index`,
-  `motor_index`.
+  `None`), `history` (`History` or `None`), `recall` (`Recall` or `None`), `hippocampus`
+  (`SynapticMemory` from sensory to motor neurons, or `None`), `sensory_index`,
+  `association_index`, `motor_index`.
   - `retune(*, reset_arousal=False, **genes) -> Brain`: change selected
     mutable genes in the same life. Accepts `learning_*`, `actor_*`, `arousal_*`,
-    `temperature`, working-trace/efference settings, `history_amplitude` and
-    `memory_decay`, `memory_rate`, `memory_amplitude`, `consolidation`.
+    `temperature`, working-trace/efference settings, `history_amplitude`, the recall
+    memory's read and lesson genes and `memory_decay`, `memory_rate`, `memory_amplitude`,
+    `consolidation`.
     `arousal={...}` changes only its named fields. Full `learning`, `reward`
     and `arousal` configuration objects replace that config before named
     overrides. Duplicate alias/mapping fields are rejected. Validation is
@@ -834,7 +872,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     naming the decision is optional, a repeated outcome raises instead of being
     acknowledged again, and the executed action is not reported.
   - `stimulus(observations, *, memory=True)`: the drive of a batch; with `memory`, the
-    working memory, the efference copy and the hippocampal recall are added.
+    working memory, the efference copy, the heard history, the recall memory and the
+    hippocampal recall are added. The recall memory addresses the moment here and keeps
+    the address for the moment's write and lesson.
   - `step(observations, *, reward=None, done=None, teacher=None, salience=None, bootstrap=None)`:
     the ongoing interaction API, returning the next sampled actions. Reward/done concern
     the preceding action; teacher labels concern the current observation. Omitted reward
@@ -848,6 +888,18 @@ that recursive benefit or automatic reflective behavior has been learned.
     Supplied salience controls memory consolidation; by default it is absolute reward.
     If real feedback is learned but the next action refuses, that learning remains.
     Retry `act(observations)`; do not submit the same reward again.
+    With a recall memory the lesson ends with its address lesson, reported as
+    `demonstration_address_rows` and `demonstration_address_error`.
+  - `lesson(observations, labels) -> report`: the lesson `step(..., teacher=labels)` gives
+    before its act, without the act: the drive reads every memory the act reads, the
+    surprise rule judges the rows by the settle the act reads, an episodic memory records
+    the demonstration, and a recall memory runs its address lesson at the taught rows. The
+    teaching report is returned (with `address_rows` and `address_error` for a recall
+    memory) and kept in `last_learning` under `demonstration_*` keys. The batch must be
+    the live streams; a sampled action awaiting its outcome is refused with
+    `RuntimeError`, since its eligibility belongs to the parameters before the lesson.
+    A refused phase raises `LearningPhaseError` and leaves parameters and memories as they
+    were. Follow it with `act(observations, greedy=True)` to write the moment.
   - `fit(observations, labels, *, epochs=30, batch=32) -> list[float]` (training accuracy per
     epoch), `predict(observations)`, `accuracy(observations, labels)`: independent samples,
     without trace or associative recall. All three score through qualified independent
@@ -862,7 +914,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     `observations` is a sequence of finite, nonempty batches with the same stream
     identities. Each possible observation uses its own bounded free solve, including
     the same numerical damping fallback, with a private trace
-    carried through the branch and durable memory read without writes. Inspect each
+    carried through the branch and durable memory read without writes. A recall memory's
+    live slots are read and none is written; the cortex of the moment before and the
+    history follow the branch privately. Inspect each
     phase's `qualified` field; a refused phase ends the branch and remains in the
     tuple. The empty sequence returns `()`. Live activity, parameters, records, random
     state and pending actual outcomes remain unchanged. This predicts brain responses
@@ -905,8 +959,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     See [routine and repair](continuous.md#routine-and-repair-live).
   - `wait(observations) -> None`: one moment of a `live` stream whose issued action
     still awaits its outcome. It settles the observation from the current activity,
-    reading the working trace, the efference copy and associative recall, and
-    advances the working trace to that state. No action is issued and no outcome is
+    reading the working trace, the efference copy, the recall memory and associative
+    recall, advances the working trace to that state and writes the moment to the recall
+    memory. No action is issued and no outcome is
     taken: the awaited action keeps its forecasts, eligibility and situation, and the
     outcome later given to `live` is credited to it as an immediate outcome would be,
     with the next state settled from the state sensed last; a routine forecast, `act`,
@@ -971,8 +1026,8 @@ that recursive benefit or automatic reflective behavior has been learned.
     [settlement records](#record-every-settling-step) for additional work; neither
     residual nor sweep count is physical energy or environmental prediction error.
   - `learn(reward, done, next_observations, *, bootstrap=None, salience=None) -> report`: the hippocampus records the
-    reward of the chosen action for its situation, `done` rows reset their working memory,
-    and the basal ganglia learn from dopamine. For truncated episodes `bootstrap` supplies
+    reward of the chosen action for its situation, `done` rows reset their working memory
+    and empty their recall memory's slots, and the basal ganglia learn from dopamine. For truncated episodes `bootstrap` supplies
     the value of the old episode's final observation; `next_observations` holds the reset
     observation for ended rows. Reward and bootstrap are finite batch vectors; done is boolean.
     If the feedback solve refuses, hippocampal writes, terminal trace resets and actor
@@ -981,10 +1036,11 @@ that recursive benefit or automatic reflective behavior has been learned.
     After `wait`, the next state settles from the state the stream sensed last; the
     critic's eligibility still uses the state in which the action was chosen.
   - `reset()` clears working state, action cache, eligibility and reward centering; hippocampal
-    records and slow parameters are kept. A brain with arousal begins the next stream calm,
+    records and slow parameters are kept. A recall memory's slots are emptied and its
+    address map is kept. A brain with arousal begins the next stream calm,
     with what it was used to cleared and its age and work counts kept.
-    `parameters()` counts actor/critic parameters
-    and the shared consolidated memory matrix; per-stream state is additional storage.
+    `parameters()` counts actor/critic parameters, the shared consolidated memory matrix
+    and a recall memory's address map; per-stream state is additional storage.
   - `save(path) -> Path`, `Brain.load(path, *, backend="cpu", device=None, precision=None)`:
     complete composition checkpoints, including both optimizers, critic, random state,
     stream traces, prepared state, both memory timescales and any action awaiting feedback.
@@ -997,12 +1053,38 @@ that recursive benefit or automatic reflective behavior has been learned.
     keeps the earlier format names, and `load` refuses sensed state under another name.
     A brain with a heard history saves as `cadence-generic/7`, with any of the earlier
     components; `load` refuses a history under another format name and that name without one.
+    A brain with a recall memory saves as `cadence-generic/8`, with any of the earlier
+    components, the heard history among them: its slots, `held`, `previous`, `history`,
+    the address map and the code tables, which `load` reads back as saved; `load` refuses
+    a recall memory under another format name and that name without one.
     The archive is replaced atomically. A learner-only checkpoint
     is rejected by `Brain.load`; `Learner.load` can extract a learner from either.
   Observations must be a nonempty finite batch, with image dimensions flattened per row.
   `fit` rejects noninteger labels and mismatched batches before updating. It resets current
   action/working state but keeps episodic records. `brain` always returns the current
   `learner.brain`, including after learning. See [compose a brain](brain.md#brain).
+
+### Recall memory genes
+
+`Brain.compose(..., recall=True)` builds the recall memory from these genes; each is passed
+as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refused.
+`retune` changes the read and lesson genes in a life; the others are construction settings.
+
+| Gene | Founder | What it sets |
+| --- | --- | --- |
+| `recall_amplitude` | `3.0` | The drive of a slot that holds the whole weight |
+| `recall_temperature` | `0.25` | The softmax temperature over a stream's slots |
+| `recall_heard` | `1.0` | The weight of the present event in its key and its address |
+| `recall_recency` | `0.25` | The logit cost per moment of a slot's age |
+| `recall_address` | `0.01` | The address lesson's rate; `0.0` leaves the map as it is, the founder's address being the event heard |
+| `recall_address_temperature` | `0.1` | The softmax temperature that names the slots that would have answered |
+| `recall_address_prior` | `1.0` | The weight of the address's own attention in naming them |
+| `recall_context`, `recall_context_decay` | `0.0`, `0.5` | The fading history of earlier events in a key, and its retention per moment |
+| `recall_capacity` | `64` | Slots per stream, the oldest dropped first (construction) |
+| `recall_value` | `"event"` | `"cortex"` stores the settled association activity as the value (construction) |
+| `recall_next` | `True` | The `next` region and each slot's next (construction) |
+| `recall_code`, `recall_code_fan_in`, `recall_code_winners` | `0`, `32`, `24` | A sparse code of that many neurons as the key space, for wide inputs (construction) |
+| `recall_scale` | `1.2` | The initial magnitude of the two projections into the association region (a `compose` argument; construction) |
 
 ## Arousal (`cadence.arousal`)
 

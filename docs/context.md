@@ -160,8 +160,10 @@ never differ, it answers from the present observation alone.
 
 - It is not a recording of past inputs. Two different histories that lead to the same
   interpretation are the same context. The heard history above keeps the observations
-  themselves at a few fixed timescales, and the [episodic memory](episodic.md) keys its
-  records by a fixed fading trace of what was seen and done; both tell such histories apart.
+  themselves at a few fixed timescales, the [recall memory](memory.md#recall-the-streams-own-moments)
+  keeps the stream's recent moments as slots the present moment addresses, and the
+  [episodic memory](episodic.md) keys its records by a fixed fading trace of what was seen
+  and done; each tells such histories apart.
 - There is no separate gate deciding what to store. A distractor that looks like real evidence
   can overwrite the context of a small brain; a wider association region resists it better.
 - `act` settles the present moment with the carried context; it does not plan a whole future

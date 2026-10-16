@@ -57,6 +57,18 @@ projection that starts like the working trace's. The founder `history_decays=()`
 leaves the region out, so the history is a gene selected against that control
 ([context](context.md#hear-the-past-at-several-timescales) explains when to add it).
 
+`Brain.compose(..., recall=True)` adds the recall memory, an index of the
+stream's own recent moments: a `recall` and a `next` region, read by the
+association region through plastic projections that start like the working
+trace's. Each moment the brain acts on is written as one slot per stream, keyed
+by the event heard; the slot before it learns it as its next. Before each settle
+the moment's address, the event heard plus a learned map of the event and of the
+cortex of the moment before, weighs the slots, and the recalled value and next
+drive the two regions. After each lesson the address lesson moves the map toward
+the slots that would have answered. The founder `recall=False` leaves the regions
+out, so the memory is a gene selected against that control
+([memory](memory.md#recall-the-streams-own-moments) explains it).
+
 The base can already be deep. Add recursive readback separately:
 
 ```python
@@ -139,6 +151,12 @@ retain their own defaults, listed in the [API reference](api.md).
 | `efference_decay`, `efference_amplitude` | `0.2`, `0.0` | Issued-command trace; a positive amplitude at construction adds its population |
 | `history_decays` | `()` | Heard history: a nonempty sequence adds one block of sensory width per decay; construction only ([context](context.md#hear-the-past-at-several-timescales)) |
 | `history_amplitude`, `history_scale` | `3.0`, `1.2` | How clearly the heard history is held, and its projection's initial magnitude (construction only) |
+| `recall` | `False` | Recall memory: `True` adds the `recall` and `next` regions and the index of the stream's moments; construction only ([memory](memory.md#recall-the-streams-own-moments)) |
+| `recall_amplitude`, `recall_temperature`, `recall_heard`, `recall_recency` | `3.0`, `0.25`, `1.0`, `0.25` with `recall=True` | How strongly a recalled moment drives its regions, the softmax over the slots, the event's weight in its address, the cost per moment of a slot's age |
+| `recall_address`, `recall_address_temperature`, `recall_address_prior` | `0.01`, `0.1`, `1.0` with `recall=True` | The address lesson: its rate, how sharply it names the slots that would have answered, and the weight of the address's own attention among them |
+| `recall_context`, `recall_context_decay` | `0.0`, `0.5` with `recall=True` | The fading history of earlier events in a key |
+| `recall_capacity`, `recall_value`, `recall_next`, `recall_scale` | `64`, `"event"`, `True`, `1.2` | Slots per stream, what a slot stores, the next region, and the projections' initial magnitude; construction only |
+| `recall_code`, `recall_code_fan_in`, `recall_code_winners` | `0`, `32`, `24` | A sparse code of the observation as the key space for wide inputs; construction only |
 | `memory_decay`, `memory_rate`, `memory_amplitude`, `consolidation` | `0.9`, `1.0` (`0.5` with `memory_choice=True`), `1.0`, `0.05` | Associative retention, actual-outcome writes, recall and consolidation |
 | `memory_choice` | `False` | `True` builds the episodic memory and its settings below ([episodic memory](episodic.md)); construction only |
 | `memory_context`, `memory_replay`, `memory_demonstrations` | `0.5`, `8`, `1.0` with `memory_choice=True` | The share of the past in the context key, replay of the path to a reward, remembered demonstrations; construction only |
@@ -193,9 +211,10 @@ Rate changes apply when its next real outcome is learned. A change of
 `learning_beta` is refused while that action awaits feedback, because the pending
 contrast was formed at the earlier nudge scale; consume its outcome before
 changing the scale. Construction choices such as `sensory_scale`, `working_memory_scale`,
-`history_decays`, `history_scale`, topology, backend and `resting_bias` cannot be retuned, nor
-can a retune add a missing memory, efference, history or arousal component. Create those
-components when composing.
+`history_decays`, `history_scale`, `recall` with its capacity, value, next region, code and
+scale, topology, backend and `resting_bias` cannot be retuned, nor can a retune add a missing
+memory, efference, history, recall or arousal component. Create those components when
+composing.
 
 ## Choose settings for the application
 
