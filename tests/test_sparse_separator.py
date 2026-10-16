@@ -156,7 +156,9 @@ def test_a_sensory_key_with_a_fan_in_holds_the_same_bytes_at_any_width():
         return [sum(value.nbytes for name, value in m.separator.arrays().items() if name != "mean")
                 for m in (brain.hippocampus, brain.context_memory)]
 
-    wide = cd.Brain.compose(4096, 3, seed=33, memory_choice=True, memory_fan_in=16)
+    # code=0 keys the wide brain's memories on the observation itself (above 1,024 values the
+    # brain's code would key them, and the stores would take no separator)
+    wide = cd.Brain.compose(4096, 3, seed=33, memory_choice=True, memory_fan_in=16, code=0)
     narrow = cd.Brain.compose(20, 3, seed=33, memory_choice=True, memory_fan_in=16)
     assert held(wide) == held(narrow) == [1024 * 16 * 16, 1024 * 16 * 16]
 
@@ -167,7 +169,7 @@ def test_the_fan_in_is_validated():
             cd.PatternSeparator(4, 8, 2, fan_in=value)
     with pytest.raises(ValueError, match="fan_in must not exceed the inputs"):
         cd.PatternSeparator(4, 8, 2, fan_in=5)
-    with pytest.raises(ValueError, match="must not exceed the 3 neurons of the place key"):
+    with pytest.raises(ValueError, match="must not exceed the 3 coordinates of the place key"):
         cd.Brain.compose(3, 2, memory_choice=True, memory_fan_in=16)
     with pytest.raises(ValueError, match="memory_fan_in needs memory_expansion"):
         cd.Brain.compose(3, 2, memory_choice=True, memory_expansion=0, memory_fan_in=2)

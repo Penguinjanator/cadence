@@ -1,0 +1,36 @@
+{
+  "written_by": "the composition before the observation code (cadence-net 0.83.0 line), tests/test_observation_code.py FOUNDERS['recalled'] after its life",
+  "founders": {
+    "recalled": [
+      4,
+      2,
+      {
+        "modules": [
+          8
+        ],
+        "seed": 5,
+        "arousal": true,
+        "recall": true,
+        "history_decays": [
+          0.2,
+          0.9
+        ],
+        "efference_amplitude": 1.0,
+        "memory_choice": true
+      }
+    ]
+  },
+  "continuation": {
+    "recalled": {
+      "digest": "b7c9b47537152f79831878cb9035af85676060459ddb47e4e207a97971d98fe8",
+      "acts": [
+        1,
+        1,
+        0,
+        0,
+        1,
+        1
+      ]
+    }
+  }
+}

@@ -383,7 +383,7 @@ class _Moment(NamedTuple):
     """The present moment of every stream as the recall memory addresses it."""
 
     observed: np.ndarray  # the observations as given, to recognise the moment at its write
-    event: np.ndarray  # the observations as the memory keys them: themselves, or their code
+    event: np.ndarray  # the observations as the memory keys them
     cortex: np.ndarray  # the settled association activity of the moment before
     address: np.ndarray  # the address q, computed before the settle
     key: np.ndarray  # the fixed part of the address, the slot's key once it is written
@@ -395,8 +395,8 @@ class Recall:
 
     Each moment the brain accepts (an act, a moment ``wait`` senses) is written after its
     settle as one slot per stream (``witness``). The slot's key is ``heard * x``: ``x`` is
-    the observation as heard or, with ``code`` above zero, its sparse code, and with
-    ``context`` the fading history of the events before it is added. The slot's value is
+    the observation as given (a brain gives its observation code), and with ``context`` the
+    fading history of the events before it is added. The slot's value is
     the event ``x`` (``value="event"``) or the settled activity of the association region
     (``value="cortex"``), and the slot before it learns its next: the value of the moment
     that followed it, zero until that moment comes. Before each settle the present moment's
@@ -436,12 +436,12 @@ class Recall:
     address_temperature: float = 0.1
     context: float = 0.0
     context_decay: float = 0.5
-    code: int = 0
-    code_fan_in: int = 32
-    code_winners: int = 24
     seed: int = 0
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
+    # the width of the observations the memory is given, when it is not the source range's: a
+    # brain whose memories key on a code of the observation passes the code
+    inputs: int = 0
     writes: int = 0  # slots written over the memory's life, one per stream and moment
     keys: np.ndarray = field(init=False, repr=False)
     values: np.ndarray = field(init=False, repr=False)
@@ -459,7 +459,7 @@ class Recall:
         "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
         "context", "context_decay",
     )
-    CONSTRUCTION = ("capacity", "value", "next", "code", "code_fan_in", "code_winners")
+    CONSTRUCTION = ("capacity", "value", "next")
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -484,8 +484,8 @@ class Recall:
             if number >= 1:
                 raise ValueError("context_decay must lie in [0, 1)")
             return number
-        if name in ("capacity", "code", "code_fan_in", "code_winners", "seed"):
-            low = 0 if name in ("code", "seed") else 1
+        if name in ("capacity", "seed"):
+            low = 0 if name == "seed" else 1
             if (
                 isinstance(value, (bool, np.bool_))
                 or not isinstance(value, (int, np.integer))
@@ -517,10 +517,16 @@ class Recall:
         self.next_neurons: np.ndarray = (
             np.asarray(populations["next"], dtype=np.int64) if self.next else np.zeros(0, np.int64)
         )
-        inputs = len(self.observed)
-        if self.code and (self.code_fan_in > inputs or self.code_winners > self.code):
-            raise ValueError("a code needs code_fan_in <= inputs and code_winners <= code")
-        self.key_width = self.code or inputs
+        if (
+            isinstance(self.inputs, (bool, np.bool_))
+            or not isinstance(self.inputs, (int, np.integer))
+            or self.inputs < 0
+        ):
+            raise ValueError("inputs must be a nonnegative integer; 0 reads the source range")
+        self.inputs = int(self.inputs)
+        inputs = self.inputs or len(self.observed)
+        self.observed_width = inputs
+        self.key_width = inputs
         self.value_width = self.key_width if self.value == "event" else len(self.association)
         if len(self.recall_neurons) != self.value_width or (
             self.next and len(self.next_neurons) != self.value_width
@@ -528,17 +534,6 @@ class Recall:
             raise ValueError(
                 f"the {self.target} and next regions need one neuron per value coordinate "
                 f"({self.value_width})"
-            )
-        self.code_index: np.ndarray = np.zeros((0, self.code_fan_in), dtype=np.int64)
-        self.code_weight: np.ndarray = np.zeros((0, self.code_fan_in))
-        if self.code:
-            rng = np.random.default_rng(np.random.SeedSequence([self.seed, 7103]))
-            self.code_index = np.stack(
-                [np.sort(rng.choice(inputs, self.code_fan_in, replace=False))
-                 for _ in range(self.code)]
-            ).astype(np.int64)
-            self.code_weight = rng.standard_normal((self.code, self.code_fan_in)) / np.sqrt(
-                self.code_fan_in
             )
         width = self.key_width
         self.w_x = np.zeros((width, width))
@@ -651,33 +646,16 @@ class Recall:
 
     def _port(self, observations: np.ndarray) -> np.ndarray:
         x = np.asarray(observations, dtype=float)
-        if x.ndim != 2 or x.shape[1] != len(self.observed):
-            raise ValueError(f"observations are one row of {len(self.observed)} values per stream")
+        if x.ndim != 2 or x.shape[1] != self.observed_width:
+            raise ValueError(f"observations are one row of {self.observed_width} values per stream")
         if not np.isfinite(x).all():
             raise ValueError("observations must be finite")
         return x
 
-    def coded(self, observations: np.ndarray) -> np.ndarray:
-        """The ``(batch, inputs)`` observations as the memory keys them: themselves, or with
-        ``code`` their sparse code, ``code`` neurons each reading ``code_fan_in`` inputs with
-        fixed random weights of variance ``1 / code_fan_in``, the ``code_winners`` largest
-        positive sums kept and the code scaled to unit length. The code's storage and work
-        follow its neurons and fan-in, whatever the number of inputs."""
-        x = np.asarray(observations, dtype=float)
-        if not self.code:
-            return x
-        drive = np.einsum("buf,uf->bu", x[:, self.code_index], self.code_weight)
-        top = np.argpartition(-drive, self.code_winners - 1, axis=1)[:, : self.code_winners]
-        rows = np.arange(len(x))[:, None]
-        out = np.zeros_like(drive)
-        out[rows, top] = np.maximum(drive[rows, top], 0.0)
-        norm = np.linalg.norm(out, axis=1, keepdims=True)
-        return np.asarray(out / np.maximum(norm, 1e-12))
-
     def _moment(self, observed: np.ndarray) -> _Moment:
         """The address of the present moment of each stream, from the cortex of the moment
         before and, with ``context``, the history of the events before it."""
-        x = self.coded(observed)
+        x = np.asarray(observed, dtype=float)
         n = len(x)
         c = (
             self.previous
@@ -713,8 +691,9 @@ class Recall:
     def stimulate(self, drive: np.ndarray, observations: np.ndarray) -> np.ndarray:
         """Address the present moment of every stream and read its slots into a drive copy:
         ``amplitude * sum_i p_i V_i`` on the recall region and, with ``next``,
-        ``amplitude * sum_i p_i N_i`` on the next region. Streams without slots, or of
-        another batch, read silence. The moment is kept for its write and its lesson."""
+        ``amplitude * sum_i p_i N_i`` on the next region. ``observations`` are ``(batch,
+        inputs)``. Streams without slots, or of another batch, read silence. The moment is
+        kept for its write and its lesson."""
         moment = self._moment(self._port(observations))
         self.last = moment
         out = np.array(drive, dtype=float)
@@ -748,7 +727,7 @@ class Recall:
         return np.asarray(settled[:, cols], dtype=float).copy()
 
     def witness(self, observations: np.ndarray, state: BrainState) -> None:
-        """After the settle: the ``(batch, source)`` observations the streams acted on join
+        """After the settle: the ``(batch, inputs)`` observations the streams acted on join
         their slots under the moment's key, the slot before learns them as its next, and the
         settled cortex of ``state`` and the history move on to this moment. Another batch
         size begins the streams with empty memories first. An imagined branch moves the
@@ -894,7 +873,7 @@ class Recall:
         return {"address_rows": float(n), "address_error": float(np.abs(error).mean())}
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        out = {
             **{name: getattr(self, name) for name in (*self.RUNTIME, *self.CONSTRUCTION)},
             "seed": self.seed,
             "source": self.source,
@@ -902,6 +881,9 @@ class Recall:
             "neurons": self.neurons,
             "writes": int(self.writes),
         }
+        if self.inputs:  # a memory on the source range's observations describes itself as before
+            out["inputs"] = self.inputs
+        return out
 
 
 @dataclass
@@ -1219,10 +1201,14 @@ class FastSynapses:
         """
         return self.recall(drive[:, self._pre_columns])
 
-    def stimulate(self, drive: np.ndarray, inplace: bool = False) -> np.ndarray:
-        """Add the read to the post columns of ``drive`` (a copy, unless ``inplace``)."""
+    def stimulate(
+        self, drive: np.ndarray, inplace: bool = False, key: np.ndarray | None = None
+    ) -> np.ndarray:
+        """Add the read to the post columns of ``drive`` (a copy, unless ``inplace``): the read
+        of the pre columns of ``drive``, or with ``key`` the read of that ``(batch, pre)``
+        key, for a memory keyed on a code of the observation rather than on neurons."""
         out = drive if inplace else np.array(drive, dtype=float)
-        out[:, self._post_columns] += self.read(out)
+        out[:, self._post_columns] += self.read(out) if key is None else self.recall(key)
         return out
 
     def update(
