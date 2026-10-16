@@ -77,6 +77,14 @@
   memory_fan_in=16)` gives both episodic stores such a separator (1,024 x 16 indices and
   weights each); the founder `memory_fan_in=0` keeps the dense one, byte-identical with its
   checkpoint, and a sparse separator saves its arrays and its fan-in.
+- One holder of the current graph for several learners: `Learner.brain` reads the graph from
+  the learner's `holder`, a `GraphHolder`, and an update replaces the holder's graph in one
+  assignment after every check, so a refused update changes nothing. `Learner.sharing(first,
+  outputs, ...)` builds a second learner on the first one's holder: each one's updates reach
+  the other, where a learner built from `first.brain` keeps the graph it was given, as before.
+  The composed brain, the actor-critic and checkpoints (which hold the graph, not the sharing)
+  read the graph through it; the [learning guide](docs/learning.md#two-learners-on-one-graph)
+  shows the use.
 
 ## 0.83.0 — 2026-10-13
 

@@ -28,6 +28,7 @@ from .generic import Brain
 from .genome import Genome, Projection, develop, evolve, genes
 from .instruments import dishabituation, orienting
 from .learning import (
+    GraphHolder,
     Learner,
     LearnerConfig,
     LearningPhaseError,
@@ -162,6 +163,7 @@ __all__ = [
     "FastSynapses",
     "SynapticMemory",
     "NeuronModel",
+    "GraphHolder",
     "Learner",
     "LearnerConfig",
     "LearningPhaseError",

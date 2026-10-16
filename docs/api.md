@@ -1307,6 +1307,15 @@ founder genes for a small share of moments; the
   `slots` splits the outputs into softmax groups (a count of equal groups, or one size per
   group); `updates` counts all applied updates, while `contrast_updates` counts only
   this learner's own optimizer history, excluding external reward/direct updates.
+  `brain` reads the graph from the learner's `holder`, a `GraphHolder`; an update replaces
+  the holder's graph once every check has passed, and assigning `brain` replaces it for every
+  learner on that holder. A learner built from a graph has a holder of its own.
+  - `Learner.sharing(other, outputs, **options) -> Learner`: a learner on `other`'s holder,
+    `options` being the constructor's fields after `outputs`; each one's updates replace the
+    graph both settle and teach ([two learners on one graph](learning.md#two-learners-on-one-graph)).
+  - `holder`: the `GraphHolder(brain)` of the current graph; its `brain` is the graph every
+    learner built on it reads. Checkpoints hold the graph, not the sharing; a shallow
+    `copy.copy` shares the holder, and `dataclasses.replace` builds a learner with its own.
   - `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)`,
     `targets(labels)`, `nudge_for(target, beta, weight=None)`;
   - `contrast(free, nudged, opposite=None) -> (per_synapse, per_neuron)`,
