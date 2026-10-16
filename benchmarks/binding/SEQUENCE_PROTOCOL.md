@@ -70,9 +70,8 @@ PYTHONPATH=src python benchmarks/binding/sequence_binding.py --out OUT.json --wo
 
 ## Amendment 1, after the development run (15 October 2026)
 
-The development run passes the declared gate: the `successor` arm under lessons judged by the
-act answers held-out transitions at 1.00 on 6 of 6 founders at 1024 rounds (and at 64 rounds),
-with the memory erased at .14 against chance .125. Declared before the confirmation run:
+The development run meets the declared gate on the `successor` arm under lessons judged by the
+act (the readings are retained outside this repository). Declared before the confirmation run:
 
 - Founders 100 to 111, unopened; 1024 rounds; panels, conditions and the gate as above.
 - Arms: `successor` under `act` and `every`; `graph` under both rules; `gru`.

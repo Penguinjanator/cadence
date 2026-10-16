@@ -102,16 +102,14 @@ python -m pytest -q benchmarks/binding
 
 ## Amendment 1, after the development run (15 October 2026)
 
-The development run is retained as measured: the gated arm (Hebbian store, lessons judged by
-the act) passes all three criteria on 4 of 6 founders against the declared 5, so the declared
-development gate is not met and its confirmation does not follow. The code's gate read the first
-two criteria; it reads all three from commit d09a1ac on, and every verdict is recomputed from the
-receipt.
+The development run is retained as measured, outside this repository. The gated arm (the
+Hebbian store under lessons judged by the act) does not meet the declared development gate, so
+its confirmation does not follow. The code's gate read the first two criteria; it reads all
+three from commit d09a1ac on, and every verdict is recomputed from the receipt.
 
 Development selects a candidate for a separate confirmation: the **delta store**
-(`content_delta`), which passed 5 of 6 under lessons judged by the act and 6 of 6 under every-row
-lessons, and which favours a restated name's later value (.76 to .79, where the Hebbian store
-ties). Declared before the confirmation run:
+(`content_delta`), which met the development criterion under both lesson rules and favours a
+restated name's later value where the Hebbian store ties. Declared before the confirmation run:
 
 - Founders 100 to 111, unopened; 1024 rounds; the panels, conditions and three criteria as
   above.
