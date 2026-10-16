@@ -556,13 +556,14 @@ and a complete runnable example.
   rows=None)`, `keep(rows)`, `trace` (`(batch, blocks * source)`), `to_dict()`.
   `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
   observation of every act after the act.
-- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, seed=0, source="sensory", target="recall", inputs=0, writes=0)`:
+- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, source="sensory", target="recall", inputs=0, writes=0)`:
   the index memory of each stream's recent moments
   ([memory](memory.md#recall-the-streams-own-moments)). `inputs` is the width of the
   observations the memory is given when it is not the `source` range's (a brain whose
   memories key on its sparse code gives the code); 0 reads the range. `stimulate(drive,
-  observations)` computes each stream's address `q = heard * x + x @ w_x + c @ w_c + b`
-  (`x` the `(batch, inputs)` observations; `c` the `previous` settled association
+  observations)` computes each stream's address `q = heard * x + context * h + x @ w_x + c
+  @ w_c + b` (`x` the `(batch, inputs)` observations, `h` the fading `history` of the
+  earlier events, kept at `context_decay`; `c` the `previous` settled association
   activity), keeps the moment as `last`,
   and writes `amplitude * p @ values` into the `target` region and, with `next`,
   `amplitude * p @ nexts` into the `next` region, where `p = weights(q)` is the softmax
@@ -743,11 +744,11 @@ that recursive benefit or automatic reflective behavior has been learned.
   observation) and `visual/output` take the place of `sensory`, the heard history holds
   one block of pixels per decay, and the composition records the image as
   `composition["image"]`. The memories key on the observation code
-  ([from pixels to keys](memory.md#from-pixels-to-keys)): the observation itself up to
-  1,024 values, the brain's sparse code of 1,024 units above. `code=units` makes a vector
-  brain's sensory region that code (every observation is coded before the drive; the
-  composition records `composition["code"]`), `code=0` keys the memories on the observation
-  whatever its width, and left unset (the founder) the cortex reads the observation. `slots` groups the motor neurons into several
+  ([from pixels to keys](memory.md#from-pixels-to-keys)): the observation itself, or with
+  `code=units` the brain's sparse code of it, the recommended setting above 1,024 inputs.
+  `code=units` makes a vector brain's sensory region that code (every observation is coded
+  before the drive; the composition records `composition["code"]`); left unset (the
+  founder) the cortex and the memories read the observation. `slots` groups the motor neurons into several
   softmax readouts that settle together, a count of equal groups or one size per group
   covering `actions`: `act` and `step` return one index per slot, lateral inhibition
   stays within a slot, the unset `lateral` follows the largest slot, and `save`/`load`
@@ -806,11 +807,11 @@ that recursive benefit or automatic reflective behavior has been learned.
 - `Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None, working_memory=False, memory_scale=12.0, episodic=True, features=8, field=3, seed=0, slots=1, **options)`:
   develops `Brain.genome(...)` and wraps it. `inputs` is a vector length, or an image
   shape `(height, width)` or `(height, width, channels)` for a `visual_cortex`. `options` go
-  to the constructor; its memories key on the observation code (`options["code"]` as the
-  constructor takes it).
+  to the constructor; its memories key on the observation itself, or with
+  `options["code"]` on the brain's sparse code of it.
 - `Brain.observation_width(inputs, code=None) -> int`: the width of the observation code of
   a brain with these `inputs` (a vector length or an image shape) and this `code` (as the
-  constructor takes it; `None` for the rule of the defaults), before it is built: with
+  constructor takes it), before it is built: with
   `recall=True` and event values a custom anatomy's `recall` and `next` regions hold that
   many neurons (the association width with `recall_value="cortex"`).
 - `Brain.genome(inputs, actions, ...) -> Genome`: regions `sensory` (or `visual`),
@@ -819,17 +820,19 @@ that recursive benefit or automatic reflective behavior has been learned.
   visual cortex), association to motor (reciprocal), and prefrontal to association at
   `memory_scale`.
 - `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, memory_fan_in=None, working_memory_decay=0.0, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, history_decays=(), history_amplitude=3.0, recall=False, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, inputs=None, code=None, **genes)`:
-  the memories key on the observation code: the observation itself, or the brain's own
-  sparse code of it, `code` units each reading 32 inputs chosen at random from `seed` with
-  random weights, the largest positive sums of one unit in ten kept (at least 24) and the
-  code scaled to unit length; left `None`, `code` is none up to 1,024 inputs and 1,024
-  units above, and 0 keys on the observation whatever its width. `inputs` names the width
+  the memories key on the observation code: the observation itself, or with `code=units`
+  the brain's own sparse code of it, `units` code neurons each reading 32 inputs chosen at
+  random from `seed` with random weights, the largest positive sums of one unit in ten kept
+  (at least 24) and the code scaled to unit length; left unset or 0, the memories key on
+  the observation whatever its width, a code of 1,024 units being the recommended setting
+  above 1,024 inputs. `inputs` names the width
   of the observations when the sensory region is their code (`compose(..., code=units)`
   builds such a region; a custom anatomy names both), and must then come with a `code` of
   the region's width. A memory keyed on the code numbers its key coordinates from zero
   (`pre`) and is never read from the drive; a coded brain's episodic stores take no
-  separator, the code being their separation. `memory_fan_in` left `None` is 0 for an
-  uncoded key of at most 256 values and 32 above.
+  separator, the code being their separation, and refuse `memory_expansion` and
+  `memory_fan_in`. `memory_fan_in` left unset is 0 (dense); 32 is the recommended setting
+  above 256 key values.
   `arousal=True` enables the founder `ArousalConfig`; a mapping patches its
   fields, and an `ArousalConfig` supplies an explicit configuration. Omitting
   arousal preserves the brain without that controller, and `live` raises.
@@ -854,9 +857,8 @@ that recursive benefit or automatic reflective behavior has been learned.
   efference copy when present, and `history` (one block of sensory width per entry of
   `history_decays`, which it then requires) for a heard history and, with `recall=True`,
   `recall` and `next` (one neuron per value coordinate each; `recall_next=False` needs
-  `recall` alone) for a recall memory, whose `recall_<gene>` settings `**genes` carries and
-  whose code is drawn from `seed`; without `recall=True` populations of those names are
-  ordinary ones. `efference_amplitude` is the
+  `recall` alone) for a recall memory, whose `recall_<gene>` settings `**genes` carries;
+  without `recall=True` populations of those names are ordinary ones. `efference_amplitude` is the
   read gain of that copy, a finite nonnegative real scalar; `efference_decay` its decay across
   moments; `history_amplitude` the heard history's, a finite nonnegative real scalar. `learning` defaults to
   `LearnerConfig(beta=0.1, eta=0.5, temperature=0.2, tolerance=3e-3, free_steps=1024, nudged_steps=12, momentum=0.9)` (whose unset `eta_bias` derives `eta / 10` = 0.05),
@@ -1007,9 +1009,10 @@ that recursive benefit or automatic reflective behavior has been learned.
     See [routine and repair](continuous.md#routine-and-repair-live).
   - `wait(observations) -> None`: one moment of a `live` stream whose issued action
     still awaits its outcome. It settles the observation from the current activity,
-    reading the working trace, the efference copy, the recall memory and associative
-    recall, advances the working trace to that state and writes the moment to the recall
-    memory. No action is issued and no outcome is
+    reading the working trace, the efference copy, the heard history, the recall memory
+    and associative recall, advances the working trace to that state, takes the
+    observation into the heard history and writes the moment to the recall memory (the
+    address map changes in lessons alone). No action is issued and no outcome is
     taken: the awaited action keeps its forecasts, eligibility and situation, and the
     outcome later given to `live` is credited to it as an immediate outcome would be,
     with the next state settled from the state sensed last; a routine forecast, `act`,
@@ -1137,7 +1140,7 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_address_temperature` | `0.1` | The softmax temperature that names the slots that would have answered, among those the address attended to |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` | The fading history of earlier events in a key, and its retention per moment |
 | `recall_capacity` | `64` | Slots per stream, the oldest dropped first (construction) |
-| `recall_value` | `"event"` | `"cortex"` stores the settled association activity as the value and sizes the regions by the association width; it does not carry a moment's content in a form the next settle can read back and fails every binding task (held-out .06 on token binding), so the founder stores events (construction) |
+| `recall_value` | `"event"` | `"cortex"` stores the settled association activity as the value and sizes the regions by the association width; it does not carry a moment's content in a form the next settle can read back, so the founder stores events (construction) |
 | `recall_next` | `True` | The `next` region and each slot's next (construction) |
 | `recall_scale` | `1.2` | The initial magnitude of the two projections into the association region (a `compose` argument; construction) |
 

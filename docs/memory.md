@@ -21,13 +21,14 @@ application or to the anatomy that builds the brain; `Brain.build((height, width
 and `Brain.compose((height, width), actions)` give the cortex the pixels through a
 `visual_cortex`, feature maps with local receptive fields that learning shapes. The
 library's generic compression is the brain's sparse code. `brain.observation_code(x)` is
-what both memories key on: the observation itself up to 1,024 values, and above that the
-brain's own code of it, 1,024 units each reading 32 inputs chosen at random from the seed
-with random weights, the largest positive sums of one unit in ten kept (102 of 1,024) and
-the code scaled to unit length (a `PatternSeparator` with a fan-in, owned by the brain and
+what both memories key on: the observation itself, or with `code=units` the brain's own
+code of it, `units` code neurons each reading 32 inputs chosen at random from the seed with
+random weights, the largest positive sums of one unit in ten kept (102 of 1,024) and the
+code scaled to unit length (a `PatternSeparator` with a fan-in, owned by the brain and
 saved with it). Too sparse a code leaves the cortex and the memory too little overlap
-between a question and the moment it asks for: on the camera binding task 96 active units
-of 1,024 pass the gate where 24 fail.
+between a question and the moment it asks for. Left unset, every brain keys on its
+observation, whatever its width; a code of 1,024 units is the recommended setting above
+1,024 inputs.
 
 ```text
 observation ─► sensory region ─► association cortex ─► motor readout
@@ -39,32 +40,33 @@ observation ─► sensory region ─► association cortex ─► motor readout
 - **What keys on it.** The episodic memory's place records key on the code and its context
   records on the code with the issued command; the recall memory's slots and address key on
   it. A coded brain's stores take no separator of their own: the code is the separation. An
-  uncoded key (the observation itself) keeps the stores' separators, dense up to 256 values
-  (`memory_fan_in` 0) and sparse above, each of the 1,024 cells reading 32 values
-  (`memory_fan_in` 32), with 24 cells active as before.
+  uncoded key (the observation itself) keeps the stores' separators, dense by default
+  (`memory_fan_in` 0); above 256 key values the recommended setting is sparse, each of the
+  1,024 cells reading 32 values (`memory_fan_in` 32), with 24 cells active as before.
 - **The cortex's input.** `Brain.compose(inputs, actions, code=1024)` makes the sensory
   region the code: every observation is coded before the drive, so 12,824 inputs reach the
   cortex as 1,024 units through 1,024 x 64 sensory synapses in place of 12,824 x 64, and the
-  memories key on the same code. The founder leaves the cortex on the observation; `code=0`
-  keys the memories on the observation whatever its width, and `code=units` sets the units.
-- **Custom anatomies.** `Brain(connectome, ...)` codes wide observations by the same rule,
-  and names a coded sensory region with `inputs=` (the observation width) beside `code=`
-  (the region's width). A recall memory, opt-in there, needs `recall` and `next` regions of
-  the code's width (`Brain.observation_width(inputs, code)`); the heard history holds
-  blocks of the sensory region's width.
+  memories key on the same code. The founder leaves the cortex and the memories on the
+  observation; `code=units` is opt-in.
+- **Custom anatomies.** `Brain(connectome, ..., code=units)` keys the memories on the code
+  with the cortex on the observation, and names a coded sensory region with `inputs=` (the
+  observation width) beside `code=` (the region's width). A recall memory, opt-in there,
+  needs `recall` and `next` regions of the code's width (`Brain.observation_width(inputs,
+  code)`); the heard history holds blocks of the sensory region's width.
 
 At 12,824 inputs (a 128 by 100 camera and 24 body senses, an association region of 64
 neurons, three actions), the episodic memory's separators and the recall memory's address
-map, keyed on the observation itself as every brain was before this release, and on the code:
+map, keyed on the observation itself (the founder at every width) and on the recommended
+code of 1,024 units:
 
-| Part | On the observation (0.83.0) | On the code |
+| Part | On the observation (the founder) | On the code (`code=1024`) |
 | --- | --- | --- |
 | Key width | 12,824 values | 1,024 units |
-| Episodic separators, place and context | 105.1 MB and 105.1 MB, dense | none: the code is the separation |
+| Episodic separators, place and context | 105.1 MB and 105.1 MB, dense (0.53 MB each with `memory_fan_in=32`) | none: the code is the separation |
 | The code's tables, indices and weights | | 0.52 MB |
-| Recall address map `W_x`, `W_c`, `b` | 1,315 MB | 8.9 MB |
-| Together | 1,525 MB | 9.4 MB |
-| Sensory synapses into a module of 64 | 820,736 | 65,536 with `code=1024`; 820,736 without |
+| Recall address map `W_x`, `W_c`, `b` | 1,322 MB (`W_x` 1,315 MB) | 8.9 MB |
+| Together | 1,532 MB | 9.4 MB |
+| Sensory synapses into a module of 64 | 820,736 | 65,536 |
 
 The recall memory with cortex values (`recall_value="cortex"`) and an association region of
 512 neurons holds 14.2 MB at that width, [below](#recall-the-streams-own-moments).
@@ -145,7 +147,9 @@ The working trace keeps what the brain made of the moment before, and the
 [heard history](context.md#hear-the-past-at-several-timescales) keeps the observations at a
 few fixed timescales. Neither gives back one earlier moment when the present asks for it.
 The recall memory, `Brain.compose(..., recall=True)`, keeps each stream's recent moments as
-slots and addresses them before each settle:
+slots and addresses them before each settle. Its two regions add one neuron per observation
+coordinate each: `compose(250, 2)` grows from 380 to 880 neurons, which a world that charges
+per neuron feels; a brain's `code` bounds the regions at the code's width.
 
 ```text
 moment t:  observation x -> address q -> weights over the slots -> recall and next regions -> settle -> act
@@ -159,8 +163,10 @@ moment t:  observation x -> address q -> weights over the slots -> recall and ne
   (`"cortex"`), and its next, the value of the moment that follows, written when that moment
   comes. `recall_capacity` (64) bounds a stream's slots; the oldest is dropped first.
 - **The address comes before the settle.** Before each settle the moment's address is
-  `q = heard * x + x W_x + c W_c + b`, with `c` the settled association activity of the
-  moment before and `W_x`, `W_c`, `b` a learned map that starts at zero. The slots are
+  `q = heard * x + context * h + x W_x + c W_c + b`, with `h` the fading history of the
+  earlier events (`recall_context` 0.0, kept at `recall_context_decay` 0.5 per moment), `c`
+  the settled association activity of the moment before and `W_x`, `W_c`, `b` a learned
+  map that starts at zero. The slots are
   weighed by `p = softmax(q . K / 0.25 - 0.25 * age)` (`recall_temperature`,
   `recall_recency`). With the map at zero the address is the event heard: a name finds the
   moment it was stated in before any lesson.
@@ -185,14 +191,13 @@ moment t:  observation x -> address q -> weights over the slots -> recall and ne
   The address map is learned: a reset keeps it, `parameters()` counts it and a checkpoint
   saves it.
 - **Wide inputs.** The memory keys on the [observation code](#from-pixels-to-keys): the
-  observation itself up to 1,024 values, the brain's sparse code of 1,024 units above. The
-  keys, the event values and the address map follow that width, whatever the number of
-  inputs. `code=0` keys on the observation itself whatever its width; the address map is
-  then inputs by inputs, 1.3 GB at 12,824. `recall_value="cortex"` stores the settled
+  observation itself, or with `code=units` the brain's sparse code of it. The keys, the
+  event values and the address map follow that width; on the observation itself the address
+  map is inputs by inputs, 1,322 MB at 12,824 values, and a code of 1,024 units is the
+  recommended setting above 1,024 inputs. `recall_value="cortex"` stores the settled
   association activity in place of the event and sizes the two regions by the association
-  width, but the settled association activity does not carry a moment's content in a form
-  the next settle can read back: it fails every binding task (token binding held-out .06,
-  succession .07, fresh bindings .55, the camera task .00), so the founder stores events.
+  width; the settled association activity does not carry a moment's content in a form the
+  next settle can read back, so the founder stores events.
 
 At camera width, with 12,824 inputs, an association region of 512 neurons, 64 slots, the
 brain's code of 1,024 units and cortex values, one stream:
@@ -204,14 +209,6 @@ brain's code of 1,024 units and cortex values, one stream:
 | Code tables | 0.52 MB |
 | The memory in all | 14.2 MB |
 | One dense `PatternSeparator` of the same inputs into 1,024 cells, for comparison | 105 MB |
-
-| Seconds per moment, one stream, NumPy loop | Without the memory | With the memory |
-| --- | --- | --- |
-| 72 moments each, the two brains alternating in blocks of 12 | 0.53 | 0.56 |
-
-The memory adds 5 percent to the moment: its own read and write take 2.2 ms, and the rest is
-the settle's transport over the 524,288 synapses of its two regions. Timings vary with the
-machine and its load; compare them in one run.
 
 ```python
 import numpy as np

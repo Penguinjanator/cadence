@@ -4,44 +4,44 @@
 
 - Memories key on the observation code: `Brain.observation_code(x)` is what the episodic
   memory (place and context records), the hippocampus of earlier releases and the recall
-  memory key on. It is the observation itself up to 1,024 values and, above, the brain's
-  own sparse code of it: 1,024 units each reading 32 inputs chosen at random from the seed
-  with random weights, the largest positive sums of one unit in ten kept (102 of 1,024;
-  too sparse a code leaves the cortex and the memory too little overlap between a question
-  and the moment it asks for: 24 active units fail the camera binding gate where 96 pass), the
-  code scaled to unit length; a `PatternSeparator` with a fan-in, owned by the brain
-  (`brain.sparse_code`, `code_width`, `inputs`) and saved with it. `code=units` sets the units,
-  `code=0` keeps the memories on the observation whatever its width, and a coded brain's
-  episodic stores take no separator of their own. A sense organ's own code (a retina, a
+  memory key on. It is the observation itself, or with `code=units` (opt-in) the brain's
+  own sparse code of it: `units` code neurons each reading 32 inputs chosen at random from
+  the seed with random weights, the largest positive sums of one unit in ten kept (102 of
+  1,024; too sparse a code leaves the cortex and the memory too little overlap between a
+  question and the moment it asks for), the code scaled to unit length; a
+  `PatternSeparator` with a fan-in, owned by the brain (`brain.sparse_code`, `code_width`,
+  `inputs`) and saved with it. A coded brain's episodic stores take no separator of their
+  own and refuse `memory_expansion` and `memory_fan_in`. A sense organ's own code (a retina, a
   cochlea, a V1 region) belongs to the application or the anatomy, not to the library.
   `describe()` reports `observation_code`; a brain with a code saves as `cadence-generic/9`
   with the code's settings and tables, and `load` checks the records' key widths against
-  the code's and refuses a mismatch naming both widths. A vector brain of at most 1,024
-  inputs is byte-identical, its checkpoint included
+  the code's and refuses a mismatch naming both widths, as it refuses place records keyed
+  on other coordinates than the brain's. Every brain without `code` is byte-identical, its
+  checkpoint included, at 4, 256 and 2,000 inputs and on an image shape
   ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
 - `Brain.compose(inputs, actions, code=units)` makes the sensory region the code: every
   observation is coded before the drive, so 12,824 inputs reach the cortex as 1,024 units
   through 1,024 x 64 sensory synapses in place of 12,824 x 64, and the memories key on the
   same code; the heard history then holds blocks of the code. The founder leaves the cortex
-  on the observation. A custom anatomy names a coded sensory region with `inputs=` beside
-  `code=`; `Brain.observation_width(inputs, code)` sizes its recall regions.
+  and the memories on the observation. A custom anatomy names a coded sensory region with
+  `inputs=` beside `code=`; `Brain.observation_width(inputs, code)` sizes its recall regions.
 - `Brain.compose` accepts image shapes like `Brain.genome`: `inputs=(height, width)` or
   `(height, width, channels)` makes the sensory region a `visual_cortex` (`features`,
   `field`), whose feature maps project to the first module at `sensory_scale`; everything
   else is as for a vector length, and `compose(inputs=int)` is unchanged.
-- The defaults of the keys follow the width of the observation code: `memory_fan_in` left
-  unset is 0 (dense separators, unchanged) for an uncoded key of at most 256 values and 32
-  above. At 12,824 inputs the two episodic separators and the recall address map go from
-  2 x 105 MB and 1.3 GB on the observation to none and 8.9 MB on the code, the code's
-  tables 0.52 MB.
+- The recommended settings for wide observations, with the founder unchanged at every
+  width: `memory_fan_in=32` above 256 key values (the episodic separators 0.53 MB each in
+  place of 105 MB at 12,824 inputs) and `code=1024` above 1,024 inputs, where the two
+  episodic separators and the recall address map go from 2 x 105 MB and 1,322 MB on the
+  observation to none and 8.9 MB on the code, the code's tables 0.52 MB
+  ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
 - The recall memory's `recall_address_prior` is retired, the attention prior fixed at
   weight 1 as the posterior rule, and its own code (`recall_code`,
   `recall_code_fan_in`, `recall_code_winners`) gives way to the brain's code above. The
   genes: `recall_amplitude`, `recall_temperature`, `recall_heard`, `recall_recency`,
   `recall_address`, `recall_address_temperature`, `recall_context`, `recall_context_decay`,
-  `recall_capacity`, `recall_value`, `recall_next` and `recall_scale`. A checkpoint written
-  with the retired genes at their founders loads; at other values it is refused, naming the
-  gene.
+  `recall_capacity`, `recall_value`, `recall_next` and `recall_scale`; `Recall` draws
+  nothing and takes no seed. A checkpoint written with the retired genes is refused.
 - The episodic and sequential-task guides state the founder dependence of the continuation
   after teaching: the readings in which `step` eroded a taught chain where `live` kept it
   belong to the five fresh founders of the chain instrument, and on other founders both paths
@@ -123,8 +123,9 @@
   outputs, ...)` builds a second learner on the first one's holder: each one's updates reach
   the other, where a learner built from `first.brain` keeps the graph it was given, as before.
   The composed brain, the actor-critic and checkpoints (which hold the graph, not the sharing)
-  read the graph through it; the [learning guide](docs/learning.md#two-learners-on-one-graph)
-  shows the use.
+  read the graph through it; a shallow `copy.copy` of a learner shares its holder, and
+  `dataclasses.replace` builds a learner with a holder of its own. The
+  [learning guide](docs/learning.md#two-learners-on-one-graph) shows the use.
 
 ## 0.83.0 — 2026-10-13
 

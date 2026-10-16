@@ -128,7 +128,7 @@ retain their own defaults, listed in the [API reference](api.md).
 | Named setting | Composed founder | Used by |
 | --- | --- | --- |
 | `sensory_scale` | `1.0` | Initial sensory projection; construction only |
-| `code` | unset: the observation itself up to 1,024 inputs, the brain's sparse code of 1,024 units above | What the memories key on, and with `code=units` what the sensory region is ([from pixels to keys](memory.md#from-pixels-to-keys)); 0 keys on the observation; construction only |
+| `code` | unset: the observation itself | `code=units` keys the memories on the brain's sparse code of the observation and makes the sensory region that code, the recommended setting above 1,024 inputs ([from pixels to keys](memory.md#from-pixels-to-keys)); construction only |
 | `working_memory_scale` | `1.2` | Initial projection that reads the carried interpretation back; construction only ([context](context.md)) |
 | `learning_eta`, `learning_eta_bias` | `0.5`, `0.05` | Teaching with `step(teacher=...)`, `fit` or the learner; `live` does not read these rates |
 | `actor_eta`, `actor_eta_bias` | `1.0`, `0.05` | Reward plasticity in `step`/`learn`, and aroused `live` |
@@ -161,7 +161,7 @@ retain their own defaults, listed in the [API reference](api.md).
 | `memory_choice` | `False` | `True` builds the episodic memory and its settings below ([episodic memory](episodic.md)); construction only |
 | `memory_context`, `memory_replay`, `memory_demonstrations` | `0.5`, `8`, `1.0` with `memory_choice=True` | The share of the past in the context key, replay of the path to a reward, remembered demonstrations; construction only |
 | `memory_expansion`, `memory_winners` | `1024`, `24` with `memory_choice=True` | Separation of the episodic memory's keys; construction only |
-| `memory_fan_in` | `0` up to 256 key values, `32` above | How many of the key's values each cell of the episodic memory's separation reads; 0 reads them all; a coded brain has no separation; construction only |
+| `memory_fan_in` | `0` | How many of the key's values each cell of the episodic memory's separation reads; 0 reads them all, and 32 is the recommended setting above 256 key values; a coded brain has no separation; construction only |
 | `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor` | `0.2`, `0.9`, `2.0`, `0.1` | Routine/aroused decision in `live`, when arousal is enabled |
 | `arousal_fast`, `arousal_slow` | `0.05`, `0.005` | Recent and long-run outcome statistics in `live` |
 | `arousal_heat`, `arousal_youth` | `2.0`, `100` | Exploration and initial aroused moments in `live` |

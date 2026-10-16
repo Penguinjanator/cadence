@@ -130,8 +130,9 @@ assert action.shape == (1,)
 
 `live` takes the **preceding action's** measured reward, then chooses the next
 action for one continuing stream. Supply one observation row per call. A calm
-brain acts greedily without learning; youth or arousal enables exploration,
-learning and memory writes. There is no training/inference mode switch.
+brain acts greedily without learning (its working trace and recall slots advance
+at every moment); youth or arousal enables exploration, learning and writes to
+the associative memory. There is no training/inference mode switch.
 [Continuous interaction](https://github.com/muellerberndt/cadence/blob/main/docs/continuous.md)
 covers arousal, resets and saved continuation.
 
