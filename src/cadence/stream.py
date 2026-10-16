@@ -382,8 +382,7 @@ class History:
 class _Moment(NamedTuple):
     """The present moment of every stream as the recall memory addresses it."""
 
-    observed: np.ndarray  # the observations as given, to recognise the moment at its write
-    event: np.ndarray  # the observations as the memory keys them
+    event: np.ndarray  # the observations as given, to recognise the moment at its write
     cortex: np.ndarray  # the settled association activity of the moment before
     address: np.ndarray  # the address q, computed before the settle
     key: np.ndarray  # the fixed part of the address, the slot's key once it is written
@@ -436,7 +435,6 @@ class Recall:
     address_temperature: float = 0.1
     context: float = 0.0
     context_decay: float = 0.5
-    seed: int = 0
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
     # the width of the observations the memory is given, when it is not the source range's: a
@@ -484,14 +482,13 @@ class Recall:
             if number >= 1:
                 raise ValueError("context_decay must lie in [0, 1)")
             return number
-        if name in ("capacity", "seed"):
-            low = 0 if name == "seed" else 1
+        if name == "capacity":
             if (
                 isinstance(value, (bool, np.bool_))
                 or not isinstance(value, (int, np.integer))
-                or value < low
+                or value < 1
             ):
-                raise ValueError(f"{name} must be an integer of at least {low}")
+                raise ValueError("capacity must be an integer of at least 1")
             return int(value)
         if name == "value":
             if not isinstance(value, str) or value not in Recall.VALUES:
@@ -504,7 +501,7 @@ class Recall:
         raise TypeError(f"unknown recall setting: {name!r}")
 
     def __post_init__(self) -> None:
-        for name in (*self.RUNTIME, *self.CONSTRUCTION, "seed"):
+        for name in (*self.RUNTIME, *self.CONSTRUCTION):
             setattr(self, name, self.setting(name, getattr(self, name)))
         populations = self.connectome.populations
         regions = (self.source, "association", self.target, *(("next",) if self.next else ()))
@@ -524,9 +521,7 @@ class Recall:
         ):
             raise ValueError("inputs must be a nonnegative integer; 0 reads the source range")
         self.inputs = int(self.inputs)
-        inputs = self.inputs or len(self.observed)
-        self.observed_width = inputs
-        self.key_width = inputs
+        self.key_width = self.inputs or len(self.observed)
         self.value_width = self.key_width if self.value == "event" else len(self.association)
         if len(self.recall_neurons) != self.value_width or (
             self.next and len(self.next_neurons) != self.value_width
@@ -646,16 +641,16 @@ class Recall:
 
     def _port(self, observations: np.ndarray) -> np.ndarray:
         x = np.asarray(observations, dtype=float)
-        if x.ndim != 2 or x.shape[1] != self.observed_width:
-            raise ValueError(f"observations are one row of {self.observed_width} values per stream")
+        if x.ndim != 2 or x.shape[1] != self.key_width:
+            raise ValueError(f"observations are one row of {self.key_width} values per stream")
         if not np.isfinite(x).all():
             raise ValueError("observations must be finite")
         return x
 
-    def _moment(self, observed: np.ndarray) -> _Moment:
+    def _moment(self, event: np.ndarray) -> _Moment:
         """The address of the present moment of each stream, from the cortex of the moment
         before and, with ``context``, the history of the events before it."""
-        x = np.asarray(observed, dtype=float)
+        x = np.asarray(event, dtype=float)
         n = len(x)
         c = (
             self.previous
@@ -667,21 +662,29 @@ class Recall:
             h = self.history if len(self.history) == n else np.zeros_like(x)
             key = key + self.context * h
         q = key + x @ self.w_x + c @ self.w_c + self.b
-        return _Moment(observed, x, c, q, key)
+        return _Moment(x, c, q, key)
+
+    def _attention(
+        self, address: np.ndarray, keys: np.ndarray, held: np.ndarray | None
+    ) -> np.ndarray:
+        """The logits of the attention over slots: ``address . key / temperature`` less the
+        recency charge per moment of age, ``-inf`` at a slot its stream does not hold."""
+        logits = np.einsum("bk,bmk->bm", address, keys) / self.temperature
+        if self.recency:
+            logits = logits - self.recency * self.ages()[None, :]
+        return logits if held is None else np.where(held, logits, -np.inf)
 
     def weights(self, address: np.ndarray) -> np.ndarray | None:
         """``p`` over each stream's slots for the ``(batch, key)`` addresses, or None when the
         streams hold no slot or are another batch."""
         if not self.slots or self.streams != len(address):
             return None
-        logits = np.einsum("bk,bmk->bm", address, self.keys) / self.temperature
-        if self.recency:
-            logits = logits - self.recency * self.ages()[None, :]
         if self.held.all():
+            logits = self._attention(address, self.keys, None)
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
             return np.asarray(p / p.sum(axis=1, keepdims=True))
         # a stream that began since holds fewer slots; one that holds none reads silence
-        logits = np.where(self.held, logits, -np.inf)
+        logits = self._attention(address, self.keys, self.held)
         empty = ~self.held.any(axis=1)
         top = np.where(empty, 0.0, logits.max(axis=1))
         p = np.exp(logits - top[:, None])
@@ -734,9 +737,7 @@ class Recall:
         cortex and the history only."""
         x = self._port(observations)
         moment = self.last
-        if moment is None or moment.observed.shape != x.shape or not np.array_equal(
-            moment.observed, x
-        ):
+        if moment is None or moment.event.shape != x.shape or not np.array_equal(moment.event, x):
             moment = self._moment(x)
         cortex = self.activity(state)
         if len(cortex) != len(x):
@@ -851,12 +852,9 @@ class Recall:
         if masked:
             logits = np.where(held[moving], logits, -np.inf)
         # among the moments the address attended to: the attention is the prior
-        q_ = moment.address[rows][moving]
-        attention = np.einsum("bk,bmk->bm", q_, keys[moving]) / self.temperature
-        if self.recency:
-            attention = attention - self.recency * self.ages()[None, :]
-        if masked:
-            attention = np.where(held[moving], attention, -np.inf)
+        attention = self._attention(
+            moment.address[rows][moving], keys[moving], held[moving] if masked else None
+        )
         attention -= attention.max(axis=1, keepdims=True)
         attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
         logits = logits + attention
@@ -875,7 +873,6 @@ class Recall:
     def to_dict(self) -> dict[str, Any]:
         out = {
             **{name: getattr(self, name) for name in (*self.RUNTIME, *self.CONSTRUCTION)},
-            "seed": self.seed,
             "source": self.source,
             "target": self.target,
             "neurons": self.neurons,
