@@ -4,8 +4,7 @@ The fixed read of ``token_binding`` recalls the stored event that shares a token
 present one and generalizes to bindings never trained; it cannot find a moment the present
 shares nothing with. A read inside the settle, a learned query and a recall competing for the
 stored moments through one energy, starts its query and recall at rest and completes on a
-stored moment nearly at random (sizing: 55 of 100 held-out queries on the asked fact although
-the heard event favoured it by two logits). Here the address of each moment is computed before
+stored moment nearly at random. Here the address of each moment is computed before
 its settle, from what the brain has at that point, and the recall enters the settle as a
 drive, as the fixed read's does:
 
@@ -38,8 +37,7 @@ attention as the prior, a moment whose own content happens to be the answer does
 the moment the address found by its relation (a fresh successor is the value of the moment
 after the cued one). Keys hold the fixed part of the address: a key written with the learned
 map carries the map's own output, and the lesson then moves the map toward targets that
-contain it (sizing, a continuing life: the map's norm grew from 0.96 to 3.35 over 1024 rounds
-while the share of right answers fell from .96 to .46). Nothing outside the brain names the
+contain it. Nothing outside the brain names the
 moment; the world supplies only the answer it already supplies.
 
 Instrument level; nothing here changes the library.

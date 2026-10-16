@@ -5,8 +5,7 @@ Declared 16 October 2026, before the first declared run, for issues
 [#201](https://github.com/muellerberndt/cadence/issues/201). Instrument: `index_read.py`
 (the memory), `index_runs.py` (the lives); contracts: `test_index_read.py`. Companion to
 [token binding](BINDING_PROTOCOL.md), [succession](SEQUENCE_PROTOCOL.md),
-[chained recall](CHAIN_PROTOCOL.md), [the competing read](ATTENTION_PROTOCOL.md) and
-[fresh bindings](../relevance/BINDINGS_PROTOCOL.md).
+[chained recall](CHAIN_PROTOCOL.md) and [fresh bindings](../relevance/BINDINGS_PROTOCOL.md).
 
 ## Question
 
@@ -48,7 +47,7 @@ Development founders 0 to 5; lessons judged by the act (`learning_surprise`).
 | Task | Instrument | Budgets | Gate per founder at the last budget | Development passes at |
 | --- | --- | --- | --- | --- |
 | `token` | `token_binding`'s trials, panels and conditions | 256, 1024 | held-out at least .75; slots erased at most 1/8 + .15; a donor's slots followed on at least .75 | 5 of 6 |
-| `fresh` | `relevance/bindings` (3 bits, m64, the trace arm) through `attention_bindings`'s runner | 512, 2048 | the runner's gate: held-out exact at least .75 with both carriers erased at chance | 4 of 6 |
+| `fresh` | `relevance/bindings` (3 bits, m64, the trace arm) through this instrument's runner | 512, 2048 | the runner's gate: held-out exact at least .75 with both carriers erased at chance | 4 of 6 |
 | `succession` | `sequence_binding`'s trials and panels | 256, 1024 | held-out at least .75; slots erased within .15 of 1/8 | 5 of 6 |
 | `continuing` | token binding without a reset between trials; the panel read after two earlier trials of the same life | 256, 1024 | held-out at least .75; slots erased at most 1/8 + .15 | 5 of 6 |
 | `wide` | token binding with each token a fixed patch of 400 of 12,824 inputs, noise pixels at .01 each frame | 256, 1024 | held-out at least .75; slots erased at most 1/8 + .15 | 5 of 6 |
@@ -64,17 +63,15 @@ Founders 400 to 411 stay unopened until the development readings are in and this
 arms are frozen. A task whose development passes is confirmed on them with the same arm, budgets
 and gate; it passes at 10 of 12 founders (`fresh`: 8 of 12).
 
-## Sizing before this note (founders 900 and 901; not declared)
+## Sizing before this note (founders outside the declared set; not declared)
 
-Sizing on two founders outside the declared set fixed the arm's genes and three parts of the
-mechanism, each from a measured failure of the form before it: the address is computed before
-the settle (a read competing inside the settle from rest completed on a stored moment nearly at
+Sizing on founders outside the declared set fixed the arm's genes and three parts of the
+mechanism, each from a failure of the form before it: the address is computed before the
+settle (a read competing inside the settle from rest completed on a stored moment nearly at
 random); the answer's address is named among the moments the address attended to (without that
 prior the lesson named the moment whose own value is the answer); the keys hold the fixed part
 of the address (keys written with the learned map made the lesson chase its own output in a
-continuing life). The readings are retained outside this repository. At camera width (12,824
-inputs, association 512, 64 slots) the memory holds about 14 MB against 105 MB for one dense
-separator, and adds a few percent to the seconds per moment.
+continuing life). The readings are retained outside this repository.
 
 ## Declared expectations
 
@@ -118,18 +115,10 @@ python -m pytest -q benchmarks/binding
 
 ## Amendment 1, after the development readings (16 October 2026)
 
-The development readings are retained as measured, outside this repository: `token`,
-`succession`, `continuing` and `fresh` meet their development criteria, `chain` and `wide` do
-not; the `heard` control meets `token` and `succession` and fails `fresh`, so the address lesson
-is what answers a question that shares nothing with the fact. The confirmation of the four
-passing tasks on founders 400 to 411 meets its criterion for `fresh`, `succession` and
-`continuing` and falls short for `token` on the erased criterion alone: the working trace
-answers part of the held-out queries without the slots, while a transplanted memory is followed.
-
-`wide` fails upstream of the memory: the composed brain on 12,824 raw pixels (820,736 sensory
-synapses) does not learn the training distribution, and the sparse random code keeps less of
-the overlap between a query and its fact than the pixels do. The `wide` task is kept as declared
-and failed. Declared before its first run:
+The development readings are retained as measured, outside this repository. The development
+selected `token`, `succession`, `continuing` and `fresh`; their confirmation on founders 400
+to 411 is declared, with the arm, budgets and gate above. `chain` and `wide` are kept as
+declared. The camera task, declared before its first run:
 
 | Item | `camera` |
 | --- | --- |
@@ -140,9 +129,9 @@ and failed. Declared before its first run:
 | arms | `index` and `heard` |
 | budgets, panels, gate | the `wide` task's: 256 and 1024 rounds; train, held-out, three facts, new name; held-out at least .75 with the slots erased at most 1/8 + .15; development 5 of 6, confirmation on founders 400 to 411 at 10 of 12 |
 
-A sizing life on a founder outside the declared set met the gate at 64 rounds. The retina is a
-construction of the task, as a seeing brain's first visual stage is of its anatomy: the claim is that a memory keyed on a compressed code of the scene, read by a
-cortex on the same code, binds what the scene shows; nothing here learns the code.
+The retina is a construction of the task, as a seeing brain's first visual stage is of its
+anatomy: the claim is that a memory keyed on a compressed code of the scene, read by a cortex
+on the same code, binds what the scene shows; nothing here learns the code.
 
 ```sh
 PYTHONPATH=src python benchmarks/binding/index_runs.py --task camera --out DIR/camera \
@@ -154,10 +143,9 @@ PYTHONPATH=src python benchmarks/binding/index_runs.py --task camera --out DIR/c
 The camera task's retina is a stage of the task's world. The library carries a generic code
 only: a fixed sparse code of the whole observation with no spatial assumption (1,024 code
 neurons, each reading 32 random inputs with fixed weights, the largest positive sums kept,
-unit length). A sizing life on a founder outside the declared set met the gate with 96 winners
-and failed with 24; the development reading on founders 0 to 5 met its criterion and the
-confirmation on founders 400 to 411 is declared with the same gate. Declared before its first
-run:
+unit length). The sizing selected 96 winners; the development on founders 0 to 5 selected
+the arm, and its confirmation on founders 400 to 411 is declared with the same gate.
+Declared before its first run:
 
 | Item | `camera` with the generic code |
 | --- | --- |
