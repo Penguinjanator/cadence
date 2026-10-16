@@ -188,7 +188,7 @@ _EPISODIC_FOUNDERS: dict[str, Any] = {
 }
 _EPISODIC_SETTINGS = (
     "memory_choice", "memory_context", "memory_replay", "memory_demonstrations",
-    "memory_expansion", "memory_winners",
+    "memory_expansion", "memory_winners", "memory_fan_in",
 )
 
 
@@ -296,20 +296,31 @@ def _load_memory(
         else:
             if not isinstance(spec, dict):
                 raise ValueError("invalid separator metadata")
-            if set(spec) != {"inputs", "expansion", "winners", "seed", "center"}:
+            # a sparse separator names its fan-in; the dense one's metadata is as it was
+            if set(spec) - {"fan_in"} != {"inputs", "expansion", "winners", "seed", "center"}:
                 raise ValueError("incomplete or unsupported separator metadata")
-            for name in ("inputs", "expansion", "winners", "seed"):
-                value = spec[name]
+            for name in ("inputs", "expansion", "winners", "seed", "fan_in"):
+                value = spec.get(name, 0)
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                     raise ValueError(f"saved separator {name} must be a nonnegative integer")
             if spec["inputs"] != len(pre):
                 raise ValueError("saved separator inputs must match memory pre neurons")
             # Do not regenerate these arrays from the seed: projections can be customized,
             # and the running center of FastSynapses can have changed after observations.
-            projection = array("separator/projection", (spec["inputs"], spec["expansion"]))
             mean = array("separator/mean", (spec["inputs"],))
             separator = PatternSeparator(**spec)
-            separator.projection, separator.mean = projection, mean
+            if separator.fan_in:
+                shape = (spec["expansion"], spec["fan_in"])
+                index, weight = array("separator/index", shape), array("separator/weight", shape)
+                if index.dtype.kind not in "iu" or (index >= spec["inputs"]).any() or any(
+                    len(np.unique(row)) != len(row) for row in index
+                ):
+                    raise ValueError("a sparse separator reads distinct inputs of its key")
+                separator.index, separator.weight = index.astype(np.int64), weight
+            else:
+                projection = array("separator/projection", (spec["inputs"], spec["expansion"]))
+                separator.projection = projection
+            separator.mean = mean
         options = {
             name: metadata[name]
             for name in ("decay", "rate", "amplitude", "normalize", "replace", "rule", "writes")
@@ -755,6 +766,7 @@ class Brain:
         memory_demonstrations: float = 0.0,
         memory_expansion: int = 0,
         memory_winners: int = 32,
+        memory_fan_in: int = 0,
         working_memory_decay: float = 0.0,
         working_memory_amplitude: float = 3.0,
         working_memory_focus: float = 0.0,
@@ -794,6 +806,7 @@ class Brain:
         memory_demonstrations = real("memory_demonstrations", memory_demonstrations, low=0)
         memory_expansion = _count("memory_expansion", memory_expansion)
         memory_winners = _count("memory_winners", memory_winners, low=1)
+        memory_fan_in = _count("memory_fan_in", memory_fan_in)
         if memory_choice and not episodic:
             raise ValueError("memory_choice needs the episodic memory")
         if not memory_choice and (
@@ -803,6 +816,8 @@ class Brain:
                 "memory_context, memory_replay, memory_demonstrations and memory_expansion "
                 "need memory_choice"
             )
+        if memory_fan_in and not memory_expansion:
+            raise ValueError("memory_fan_in needs memory_expansion")
         working_memory_decay = real("working_memory_decay", working_memory_decay, low=0)
         efference_decay = real("efference_decay", efference_decay, low=0)
         if working_memory_decay >= 1 or efference_decay >= 1:
@@ -901,6 +916,11 @@ class Brain:
         # ``memory_choice`` with a temporal context: the same records keyed by the stream's
         # temporal context, the fading activity of the sensory and the motor neurons
         self.context_memory: SynapticMemory | None = None
+        if memory_fan_in > len(self.sensory_index):
+            raise ValueError(
+                f"memory_fan_in must not exceed the {len(self.sensory_index)} neurons of the "
+                "place key"
+            )
         if episodic:
 
             def store(keys: np.ndarray, offset: int) -> SynapticMemory:
@@ -908,7 +928,8 @@ class Brain:
                     keys, self.motor_index, consolidation=consolidation,
                     decay=memory_decay, rate=memory_rate, amplitude=memory_amplitude,
                     separator=PatternSeparator(
-                        len(keys), memory_expansion, memory_winners, seed=seed + offset
+                        len(keys), memory_expansion, memory_winners, seed=seed + offset,
+                        fan_in=memory_fan_in,
                     )
                     if memory_expansion
                     else None,
@@ -1249,7 +1270,10 @@ class Brain:
         reward less what the memory expected of the paid decision: into each decision's
         context record, and into its place record as far as it was an exploration rather than
         the brain's best guess. Nothing has to mark the end of an attempt. Keys are separated
-        (``memory_expansion`` 1,024 cells, ``memory_winners`` 24). Each setting can be passed
+        (``memory_expansion`` 1,024 cells, ``memory_winners`` 24). ``memory_fan_in`` above
+        zero makes the separation sparse: each of its cells reads that many of the key's
+        neurons, chosen at random, so its size follows the cells and the fan-in alone; the
+        founder 0 keeps it dense. Each setting can be passed
         beside ``memory_choice=True``. The founder ``memory_choice=False`` keeps the
         hippocampus of earlier releases, keyed by the senses and read into the motor drive;
         ``episodic=False`` builds none. On fresh seeds the episodic memory scored below the
@@ -2908,8 +2932,8 @@ class Brain:
                 for name in ("pre", "post", "strength", "mass", "consolidated"):
                     data["temporal/" + name] = getattr(temporal, name)
                 if temporal.separator is not None:
-                    for name in ("projection", "mean"):
-                        data["temporal/separator/" + name] = getattr(temporal.separator, name)
+                    for name, value in temporal.separator.arrays().items():
+                        data["temporal/separator/" + name] = value
                 if self._context is not None:
                     data["episode/context"] = self._context
                 if self._decision is not None:
@@ -2969,8 +2993,8 @@ class Brain:
             for name in ("pre", "post", "strength", "mass"):
                 data["episodic/" + name] = getattr(self.hippocampus, name)
             if self.hippocampus.separator is not None:
-                for name in ("projection", "mean"):
-                    data["episodic/separator/" + name] = getattr(self.hippocampus.separator, name)
+                for name, value in self.hippocampus.separator.arrays().items():
+                    data["episodic/separator/" + name] = value
             if isinstance(self.hippocampus, SynapticMemory):
                 data["episodic/consolidated"] = self.hippocampus.consolidated
         data["generic"] = np.array(canonical_json(metadata))

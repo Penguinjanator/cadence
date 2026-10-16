@@ -598,17 +598,24 @@ and a complete runnable example.
   identity, representation alignment, key interference, and checkpoint boundaries.
 - `cadence.stream.columns(index)`: a slice when the neurons are one contiguous range,
   else the index array. Slices can avoid the copies required by advanced indexing.
-- `PatternSeparator(inputs, expansion, winners, seed=0, center=0.0)`: pattern separation of
-  the keys of a `FastSynapses` or `SynapticMemory`. `projection` is a fixed
+- `PatternSeparator(inputs, expansion, winners, seed=0, center=0.0, fan_in=0)`: pattern
+  separation of the keys of a `FastSynapses` or `SynapticMemory`. `projection` is a fixed
   `(inputs, expansion)` Gaussian matrix from `numpy.random.default_rng(seed)`, divided by
-  `sqrt(inputs)`; `mean` is the running key mean. `code(key, learn=False) -> (batch, expansion)`:
+  `sqrt(inputs)`; `mean` is the running key mean. With `fan_in` above zero the projection is
+  sparse: each code neuron reads `fan_in` distinct inputs drawn from the same generator, with
+  Gaussian weights divided by `sqrt(fan_in)`, held in `index` (int64) and `weight`, both
+  `(expansion, fan_in)`, in place of `projection` (then `None`; `index` and `weight` are
+  `None` for the dense founder), so storage and work do not grow with `inputs`. `arrays()`
+  returns the state a checkpoint holds by name. `code(key, learn=False) -> (batch, expansion)`:
   with `center` above zero, `mean` is subtracted first, and `learn=True` first moves `mean`
   by the forgetting factor `center` toward the batch mean of the keys (writes learn, reads
   do not); the code keeps the `winners` largest entries of the rectified `key @ projection`
   and sets the rest to zero. `habituate(keys)` sets `mean` to the mean of a nonempty sample
-  of keys. `to_dict()`; attributes `inputs`, `expansion`, `winners`, `seed`, `center`,
-  `projection` and `mean`. Raises `ValueError` for nonpositive sizes, `winners` above
-  `expansion`, `center` outside `[0, 1)`, and keys whose code overflows.
+  of keys. `to_dict()` (it names `fan_in` only when above zero); attributes `inputs`,
+  `expansion`, `winners`, `seed`, `center`, `fan_in`, `projection`, `index`, `weight` and
+  `mean`. Raises `ValueError` for nonpositive sizes, `winners` above `expansion`, a
+  `fan_in` that is negative or above `inputs`, `center` outside `[0, 1)`, and keys whose
+  code overflows.
 - `SynapticMemory(pre, post, decay=0.9, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="delta", separator=None, writes=0, consolidation=0.05)`:
   normalized delta synapses with a shared persistent `consolidated` matrix and per-stream
   effective `strength` matrices. `observe(key, value, write=None, *, salience=None,
@@ -833,8 +840,11 @@ that recursive benefit or automatic reflective behavior has been learned.
   Attributes `connectome`, `brain`, `learner`, `basal_ganglia` (`ActorCritic` reading the
   association cortex), `working_memory` (`Trace` or `None`), `efference` (`Efference` or
   `None`), `history` (`History` or `None`), `recall` (`Recall` or `None`), `hippocampus`
-  (`SynapticMemory` from sensory to motor neurons, or `None`), `sensory_index`,
-  `association_index`, `motor_index`.
+  (`SynapticMemory` from sensory to motor neurons, or `None`), `context_memory` (with
+  `memory_choice=True` and a positive `memory_context`, the episodic memory's context
+  records, else `None`), `sensory_index`, `association_index`, `motor_index`.
+  `memory_fan_in` above zero gives both stores a sparse
+  `PatternSeparator(..., fan_in=memory_fan_in)`; the founder 0 keeps it dense.
   - `retune(*, reset_arousal=False, **genes) -> Brain`: change selected
     mutable genes in the same life. Accepts `learning_*`, `actor_*`, `arousal_*`,
     `temperature`, working-trace/efference settings, `history_amplitude`, the recall

@@ -88,6 +88,7 @@ action = brain.live([[1.0, 0.0, 0.0]])                      # the record votes f
 | `memory_demonstrations` | `1.0` | The value at which a shown action is recorded; 0 records none |
 | `memory_rate` | `0.5` | How far one write moves the stream's record at once; 1.0 lets the last outcome replace it |
 | `memory_expansion`, `memory_winners` | `1024`, `24` | Separation of the keys; 0 cells use the key as it is |
+| `memory_fan_in` | `0` | How many of the key's neurons each cell of the separation reads; 0 reads them all |
 
 These are construction settings: pass them to `Brain.compose(...)`; `retune` refuses them,
 except `memory_rate`, a store setting like `memory_decay`, `memory_amplitude` and
@@ -153,6 +154,15 @@ Where the world has attempts (a chain completed, a trial over, a game lost), `do
 the outcome of the last decision known and starts the next attempt with a fresh context and
 path. The memory needs no such mark to learn a sequence: rewards and punishments bound what a
 reward replays.
+
+## A sparse separation
+
+`memory_fan_in` above zero makes the separation sparse: each of its 1,024 cells reads that
+many of the key's neurons, chosen at random, so a store's separation holds
+`1,024 x memory_fan_in` indices and weights at any width (0.26 MB at a fan-in of 16) beside
+a running mean of one float per key neuron, where the dense separation holds `width x
+1,024` floats (105 MB at 12,824 inputs). Pairs of keys share about as many winners under a
+fan-in of 16 as under the dense separation, from unrelated keys to identical ones.
 
 ## Check that the memory does the work
 

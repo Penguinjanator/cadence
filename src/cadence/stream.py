@@ -917,6 +917,14 @@ class PatternSeparator:
     in proportion to their dot product. ``center`` > 0 keeps a running mean of the keys
     seen by ``observe`` (forgetting factor ``center``) and subtracts it first. Updating that
     mean can move the code of a previously stored key.
+
+    ``fan_in`` above zero makes the projection sparse: each code neuron reads ``fan_in``
+    distinct inputs chosen at random from the seed, with random weights of variance
+    ``1 / fan_in``. ``index`` and ``weight``, ``(expansion, fan_in)`` each, hold them in place
+    of ``projection``, so the separator's storage and work follow the expansion and the
+    fan-in, whatever the number of inputs. The founder ``fan_in=0`` keeps the dense
+    ``projection``; ``index`` and ``weight`` are then None, and ``projection`` is None for a
+    sparse separator.
     """
 
     inputs: int
@@ -924,7 +932,10 @@ class PatternSeparator:
     winners: int
     seed: int = 0
     center: float = 0.0
-    projection: np.ndarray = field(init=False, repr=False)
+    fan_in: int = 0
+    projection: np.ndarray | None = field(init=False, repr=False)
+    index: np.ndarray | None = field(init=False, repr=False)
+    weight: np.ndarray | None = field(init=False, repr=False)
     mean: np.ndarray = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -932,12 +943,29 @@ class PatternSeparator:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
+        fan_in = self.fan_in
+        if isinstance(fan_in, bool) or not isinstance(fan_in, (int, np.integer)) or fan_in < 0:
+            raise ValueError("fan_in must be a nonnegative integer")
+        if fan_in > self.inputs:
+            raise ValueError("fan_in must not exceed the inputs")
         if self.winners > self.expansion:
             raise ValueError("winners must not exceed the expansion")
         if not 0 <= self.center < 1:
             raise ValueError("center lies in [0, 1)")
         rng = np.random.default_rng(self.seed)
-        self.projection = rng.standard_normal((self.inputs, self.expansion)) / np.sqrt(self.inputs)
+        self.projection = self.index = self.weight = None
+        if fan_in:
+            # each code neuron's inputs, distinct and in order, then their weights
+            self.index = np.sort(
+                np.stack([rng.choice(self.inputs, fan_in, replace=False)
+                          for _ in range(self.expansion)]),
+                axis=1,
+            ).astype(np.int64)
+            self.weight = rng.standard_normal((self.expansion, fan_in)) / np.sqrt(fan_in)
+        else:
+            self.projection = (
+                rng.standard_normal((self.inputs, self.expansion)) / np.sqrt(self.inputs)
+            )
         self.mean = np.zeros(self.inputs)
 
     def habituate(self, keys: np.ndarray) -> None:
@@ -964,7 +992,12 @@ class PatternSeparator:
             with np.errstate(over="ignore", invalid="ignore"):
                 x = x - mean
         with np.errstate(over="ignore", invalid="ignore"):
-            drive = np.maximum(x @ self.projection, 0.0)
+            if self.fan_in:
+                assert self.index is not None and self.weight is not None
+                drive = np.maximum(np.einsum("bek,ek->be", x[:, self.index], self.weight), 0.0)
+            else:
+                assert self.projection is not None
+                drive = np.maximum(x @ self.projection, 0.0)
         if not np.isfinite(mean).all() or not np.isfinite(drive).all():
             raise ValueError("pattern separation overflowed; scale the input keys")
         if learn:
@@ -976,14 +1009,26 @@ class PatternSeparator:
         np.put_along_axis(out, keep, np.take_along_axis(drive, keep, axis=1), axis=1)
         return np.asarray(out)
 
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The separator's state by name, as a checkpoint holds it: ``projection`` and ``mean``,
+        or with a fan-in ``index``, ``weight`` and ``mean``."""
+        if self.fan_in:
+            assert self.index is not None and self.weight is not None
+            return {"index": self.index, "weight": self.weight, "mean": self.mean}
+        assert self.projection is not None
+        return {"projection": self.projection, "mean": self.mean}
+
     def to_dict(self) -> dict[str, float | int]:
-        return {
+        out: dict[str, float | int] = {
             "inputs": self.inputs,
             "expansion": self.expansion,
             "winners": self.winners,
             "seed": self.seed,
             "center": self.center,
         }
+        if self.fan_in:  # the dense founder's description is as it was
+            out["fan_in"] = int(self.fan_in)
+        return out
 
 
 @dataclass

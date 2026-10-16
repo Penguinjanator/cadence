@@ -161,6 +161,7 @@ retain their own defaults, listed in the [API reference](api.md).
 | `memory_choice` | `False` | `True` builds the episodic memory and its settings below ([episodic memory](episodic.md)); construction only |
 | `memory_context`, `memory_replay`, `memory_demonstrations` | `0.5`, `8`, `1.0` with `memory_choice=True` | The share of the past in the context key, replay of the path to a reward, remembered demonstrations; construction only |
 | `memory_expansion`, `memory_winners` | `1024`, `24` with `memory_choice=True` | Separation of the episodic memory's keys; construction only |
+| `memory_fan_in` | `0` | How many of the key's neurons each cell of the episodic memory's separation reads; 0 reads them all; construction only |
 | `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor` | `0.2`, `0.9`, `2.0`, `0.1` | Routine/aroused decision in `live`, when arousal is enabled |
 | `arousal_fast`, `arousal_slow` | `0.05`, `0.005` | Recent and long-run outcome statistics in `live` |
 | `arousal_heat`, `arousal_youth` | `2.0`, `100` | Exploration and initial aroused moments in `live` |

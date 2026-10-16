@@ -69,6 +69,14 @@
   storage at camera width (14.2 MB with a code of 1,024 neurons, against 105 MB for one
   dense separator). The option reproduces the binding instrument
   `benchmarks/binding/index_read.py` moment for moment (`tests/test_recall_memory.py`).
+- A sparse pattern separator, opt-in: `PatternSeparator(..., fan_in=k)` lets each code
+  neuron read `k` distinct inputs chosen at random from its seed, with random weights, held
+  as `index` and `weight` arrays of shape `(expansion, k)` in place of the dense
+  `projection`; the rectification and the winners are as before, so storage and work follow
+  the expansion and the fan-in at any input width. `Brain.compose(..., memory_choice=True,
+  memory_fan_in=16)` gives both episodic stores such a separator (1,024 x 16 indices and
+  weights each); the founder `memory_fan_in=0` keeps the dense one, byte-identical with its
+  checkpoint, and a sparse separator saves its arrays and its fan-in.
 
 ## 0.83.0 — 2026-10-13
 
