@@ -417,8 +417,9 @@ class Recall:
     which a recall would have moved the cortex the way the answer needs; each slot scores
     its value and next against it, the moments the address attended to that would have
     answered are named by ``softmax(score / address_temperature + log p)`` (the attention
-    ``p`` is the prior), and the map takes the least-mean-squares step ``address * (K* - q)``
-    on ``[x, c, 1]`` at the taught rows, ``K*`` the named moments' keys. ``capacity`` bounds
+    ``p`` is the prior), and the map takes the least-mean-squares step toward ``K*``, the
+    named moments' keys, on ``z = [x, c, 1]`` at the taught rows, each row at the rate
+    ``min(address, 1 / |z|^2)``; a step whose result is not finite is refused. ``capacity`` bounds
     the slots per stream, the oldest dropped first. ``reset`` empties streams, and an empty
     stream reads silence. The address of a moment cannot depend on what that moment recalls:
     a second recall takes a second moment.
@@ -802,8 +803,9 @@ class Recall:
         """The address lesson after a lesson whose phases are ``learned``, at its taught rows,
         through the synapses of ``graph`` (the learner's brain after the lesson's update).
         Reads the moment the lesson's drive addressed (``stimulate``); returns how many rows
-        moved and the mean absolute error of their addresses."""
-        quiet = {"address_rows": 0.0, "address_error": 0.0}
+        moved, the mean absolute error of their addresses before the step, and how many rows
+        a refused step left as they were (``address_refused``)."""
+        quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         moment = self.last
         if (
             not self.address
@@ -833,8 +835,14 @@ class Recall:
     def _step(
         self, moment: _Moment, rows: np.ndarray, d_value: np.ndarray, d_next: np.ndarray | None
     ) -> dict[str, float]:
-        """The least-mean-squares step of the address map toward the slots ``d`` names."""
-        quiet = {"address_rows": 0.0, "address_error": 0.0}
+        """The least-mean-squares step of the address map toward the keys of the slots the
+        scores name, on each row's inputs ``z = [x, c, 1]``. A row's rate is ``address``
+        bounded by the row's own energy, ``min(address, 1 / |z|^2)``: the step moves the row's
+        own address at most onto its target, never past it. The rows' steps are averaged.
+        The candidate map and the candidate addresses of the rows are checked before the
+        step is kept; one that is not finite refuses the step, the map stays as it was and
+        the report counts the refused rows."""
+        quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         values, nexts, keys = self.values[rows], self.nexts[rows], self.keys[rows]
         held = self.held[rows]
         masked = not held.all()
@@ -849,27 +857,48 @@ class Recall:
             moving &= held.any(axis=1)  # a stream that began since and holds no slot
         if not moving.any():
             return quiet
-        logits = score[moving] / norm[moving, None] / self.address_temperature
-        if masked:
-            logits = np.where(held[moving], logits, -np.inf)
-        # among the moments the address attended to: the attention is the prior
-        attention = self._attention(
-            moment.address[rows][moving], keys[moving], held[moving] if masked else None
+        x, c, q, key = (
+            a[rows][moving] for a in (moment.event, moment.cortex, moment.address, moment.key)
         )
-        attention -= attention.max(axis=1, keepdims=True)
-        attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
-        logits = logits + attention
-        p = np.exp(logits - logits.max(axis=1, keepdims=True))
-        p /= p.sum(axis=1, keepdims=True)
-        target = np.einsum("bm,bmk->bk", p, keys[moving])
-        x, c, q = (a[rows][moving] for a in (moment.event, moment.cortex, moment.address))
-        error = target - q
-        n = len(error)
+        n = len(q)
         rate = self.address
-        self.w_x += rate * x.T @ error / n
-        self.w_c += rate * c.T @ error / n
-        self.b += rate * error.mean(axis=0)
-        return {"address_rows": float(n), "address_error": float(np.abs(error).mean())}
+        # finite inputs can still overflow the arithmetic below: the check before the step is
+        # kept refuses what is not finite
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            logits = score[moving] / norm[moving, None] / self.address_temperature
+            if masked:
+                logits = np.where(held[moving], logits, -np.inf)
+            # among the moments the address attended to: the attention is the prior
+            attention = self._attention(q, keys[moving], held[moving] if masked else None)
+            attention -= attention.max(axis=1, keepdims=True)
+            attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
+            logits = logits + attention
+            p = np.exp(logits - logits.max(axis=1, keepdims=True))
+            p /= p.sum(axis=1, keepdims=True)
+            target = np.einsum("bm,bmk->bk", p, keys[moving])
+            error = target - q
+            # each row's gain on its own address, rate * |z|^2, is at most one: the row lands
+            # on its target at most, and a row within the bound keeps the rate as it is. The
+            # averaged step's gain over the batch has its eigenvalues in [0, 1] (its trace is
+            # the mean of the rows' gains), so repeated steps stay bounded.
+            energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
+            step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
+            w_x = rate * x.T @ step
+            w_x /= n
+            w_x += self.w_x
+            w_c = rate * c.T @ step
+            w_c /= n
+            w_c += self.w_c
+            b = self.b + rate * step.mean(axis=0)
+            address = key + x @ w_x + c @ w_c + b
+        if not all(np.isfinite(a).all() for a in (w_x, w_c, b, address)):
+            return {**quiet, "address_refused": float(n)}
+        self.w_x, self.w_c, self.b = w_x, w_c, b
+        return {
+            "address_rows": float(n),
+            "address_error": float(np.abs(error).mean()),
+            "address_refused": 0.0,
+        }
 
     def to_dict(self) -> dict[str, Any]:
         out = {

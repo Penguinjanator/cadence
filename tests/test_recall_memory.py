@@ -445,6 +445,33 @@ def test_the_memory_is_the_instrument_index_memory_moment_for_moment(
     assert lib.recall.slots <= lib.recall.capacity
 
 
+def test_the_bounded_address_step_is_the_instruments_bit_for_bit():
+    """Beyond the bound as within it: on the same slots, moment and movement, rows of either
+    side of the bound, the library's address step and the instrument's report the same and
+    leave the same map."""
+    ir = instrument("index_read")
+    lib = composed(seed=4, recall_address=0.5).recall
+    inst = ir.IndexMemory(4, 8, 4, dict(_declared(ir), address=0.5))
+    rng = np.random.default_rng(14)
+    for _ in range(3):
+        stored = (rng.random((2, 4)) < 0.6).astype(float)
+        lib._observe(stored, stored)
+        inst.slots.observe(stored, stored)
+    cortex = 0.3 * rng.random((2, 8))
+    lib.previous, inst.previous = cortex.copy(), cortex.copy()
+    events = np.array([[1.0, 1, 1, 1], [0.5, 0, 0, 0]])
+    moment = lib._moment(events)
+    np.testing.assert_array_equal(inst.address(events), moment.address)
+    gains = 0.5 * ((events**2).sum(axis=1) + (cortex**2).sum(axis=1) + 1.0)
+    assert gains[0] > 1 > gains[1]
+    d_value, d_next = rng.normal(size=(2, 4)), rng.normal(size=(2, 4))
+    report = lib._step(moment, np.arange(2), d_value, d_next)
+    assert report == inst.learn(np.arange(2), d_value, d_next, 0.5, lib.address_temperature)
+    assert report["address_rows"] == 2.0
+    for name in ("w_x", "w_c", "b"):
+        np.testing.assert_array_equal(getattr(lib, name), getattr(inst, name), err_msg=name)
+
+
 # -- addressing and reading
 
 
@@ -575,9 +602,10 @@ def test_the_answers_address_is_named_among_the_moments_attended_to():
     recall._step(before, np.array([0]), np.array([[0.0, 1.0]]), None)
     after = recall._moment(np.array([[1.0, 0, 0]]))
     toward_second = float((after.address - before.address)[0] @ recall.keys[0, 1])
-    # the map and the bias each take the step: twice the second slot's weight among the named
-    # moments, 0.12 under the prior where the answer's score alone would weigh it 0.88
-    assert 0 < toward_second < 0.3
+    # rate 1 on |z|^2 = 2 is bounded to a gain of one: the address lands on the named moments'
+    # key, the second slot's weight among them, 0.12 under the prior where the answer's score
+    # alone would weigh it 0.88
+    assert 0.1 < toward_second < 0.13
 
 
 def test_the_address_lesson_reads_the_lessons_phases_at_the_taught_rows():
@@ -600,6 +628,173 @@ def test_the_address_lesson_reads_the_lessons_phases_at_the_taught_rows():
     assert brain.recall.learn(brain.learner.brain, agreed)["address_rows"] == 0
     brain.recall.address = 0.0
     assert brain.recall.learn(brain.learner.brain, learned)["address_rows"] == 0
+
+
+def _gain(recall, moment, rows):
+    """Each row's gain on its own address, ``address * |z|^2`` on ``z = [x, c, 1]``."""
+    x, c = moment.event[rows], moment.cortex[rows]
+    return recall.address * ((x * x).sum(axis=1) + (c * c).sum(axis=1) + 1.0)
+
+
+@pytest.mark.parametrize("width", [256, 512, 2_000])
+def test_a_repeated_dense_query_does_not_grow_the_address_error(width):
+    """One stored one-hot moment, then the same lesson on a dense observation of ones, the
+    target key fixed. The founder rate on |z|^2 above two would scale the error by
+    ``1 - address * |z|^2`` at every lesson; each row's rate is bounded by its own energy,
+    so the first step lands the address on its target and none grows the error."""
+    brain = cd.Brain.compose(width, 2, modules=(8,), episodic=False, recall=True, seed=2)
+    brain.act(np.eye(width)[[0]], greedy=True)
+    x = np.ones((1, width))
+    brain.stimulus(x)
+    assert _gain(brain.recall, brain.recall.last, [0])[0] > 2.0  # beyond the unbounded range
+    errors = []
+    for _ in range(6):
+        report = brain.lesson(x, [1])
+        assert report["address_refused"] == 0.0
+        if report["address_rows"]:
+            errors.append(report["address_error"])
+    assert errors and errors[0] > 0.9  # the graph's own lessons can stop the movement after
+    assert all(
+        later <= earlier + 1e-12 for earlier, later in zip(errors, errors[1:], strict=False)
+    )
+    recall = brain.recall
+    np.testing.assert_allclose(recall._moment(x).address, recall.keys[:, 0], atol=1e-9)
+
+
+def test_two_thousand_dense_lessons_keep_the_map_finite_and_the_brain_acting():
+    """The address learner alone, the graph's plasticity off: 2,000 lessons on the dense
+    observation are all taken, the map and the address stay finite, and the brain acts and
+    learns after them."""
+    brain = cd.Brain.compose(512, 2, modules=(8,), episodic=False, recall=True, seed=2,
+                             learning_eta=0, learning_eta_bias=0)
+    brain.act(np.eye(512)[[0]], greedy=True)
+    x = np.ones((1, 512))
+    efficacy = brain.brain.efficacy.copy()
+    moved = refused = 0.0
+    for _ in range(2_000):
+        report = brain.lesson(x, [1])
+        moved += report["address_rows"]
+        refused += report["address_refused"]
+    assert (moved, refused) == (2_000.0, 0.0)
+    np.testing.assert_array_equal(brain.brain.efficacy, efficacy)  # the graph stood still
+    recall = brain.recall
+    assert all(np.isfinite(a).all() for a in (recall.w_x, recall.w_c, recall.b))
+    np.testing.assert_allclose(recall._moment(x).address, recall.keys[:, 0], atol=1e-9)
+    assert brain.act(x, greedy=True).shape == (1,)
+    report = brain.lesson(x, [0])
+    assert report["address_rows"] == 1.0 and report["address_refused"] == 0.0
+
+
+def test_finite_inputs_that_overflow_the_step_leave_the_map_as_it_was():
+    """An event whose energy overflows takes a step of rate zero, and the map stays finite; an
+    event whose attention overflows names no finite target, and its step is refused: the map
+    is kept and the report counts the row. The memory goes on learning from ordinary
+    moments."""
+    brain = composed(seed=4, recall_address=0.5)
+    recall = brain.recall
+    for x in (FACT, GO):
+        brain.act(x, greedy=True)
+    brain.lesson(NAME, [1])
+    kept = [a.copy() for a in (recall.w_x, recall.w_c, recall.b)]
+    loud = np.array([[1e200, 1e200, 0.0, 0.0]])  # finite; its |z|^2 is not
+    report = recall._step(recall._moment(loud), np.array([0]), np.ones((1, 4)), None)
+    assert report["address_rows"] == 1.0 and report["address_refused"] == 0.0
+    for before, after in zip(kept, (recall.w_x, recall.w_c, recall.b), strict=True):
+        np.testing.assert_array_equal(after, before)
+    louder = np.array([[1e300, 1e300, 0.0, 0.0]])
+    recall._observe(louder, louder)  # a slot whose logit against the event overflows
+    with np.errstate(over="ignore", invalid="ignore"):
+        report = recall._step(recall._moment(louder), np.array([0]), np.ones((1, 4)), None)
+    assert report == {"address_rows": 0.0, "address_error": 0.0, "address_refused": 1.0}
+    for before, after in zip(kept, (recall.w_x, recall.w_c, recall.b), strict=True):
+        np.testing.assert_array_equal(after, before)
+    brain.reset()
+    for x in (FACT, GO):
+        brain.act(x, greedy=True)
+    report = brain.lesson(NAME, [0])
+    assert report["address_rows"] == 1.0 and report["address_refused"] == 0.0
+    assert not np.array_equal(recall.w_x, kept[0])
+    assert all(np.isfinite(a).all() for a in (recall.w_x, recall.w_c, recall.b))
+
+
+def test_a_rows_step_is_its_own_whatever_the_batch():
+    """Each row's rate is bounded by its own energy and the rows' steps are averaged: a row
+    taught alone moves its own address by ``min(address * |z|^2, 1)`` times its error, four
+    copies of the row taught together step the map as the row alone does, and four distinct
+    rows taught together step it by the mean of their steps alone."""
+    rng = np.random.default_rng(13)
+    events = np.array([[1.0, 1, 1, 1], [1.0, 0, 0, 0], [0.5, 0, 0, 0], [1.0, 1, 0, 0]])
+    cortex = 0.1 * rng.normal(size=(4, 8))
+    d_value = rng.normal(size=(4, 4))
+    stored = [(rng.random((4, 4)) < 0.5).astype(float) for _ in range(2)]
+
+    def step(order):
+        """The streams ``order`` names, each with its slots, cortex, event and movement."""
+        recall = composed(seed=4, recall_address=0.5).recall
+        for slot in stored:
+            recall._observe(slot[order], slot[order])
+        recall.previous = cortex[order].copy()
+        moment = recall._moment(events[order])
+        before = [a.copy() for a in (recall.w_x, recall.w_c, recall.b)]
+        report = recall._step(moment, np.arange(len(order)), d_value[order], None)
+        assert report["address_rows"] == len(order) and report["address_refused"] == 0.0
+        moved = [a - b for a, b in zip((recall.w_x, recall.w_c, recall.b), before, strict=True)]
+        shift = recall._moment(events[order]).address - moment.address
+        return moved, report, shift, _gain(recall, moment, np.arange(len(order)))
+
+    alone = []
+    gains = []
+    for row in range(4):
+        moved, report, shift, gain = step([row])
+        alone.append(moved)
+        gains.append(gain[0])
+        np.testing.assert_allclose(
+            np.abs(shift[0]).mean(), min(gain[0], 1.0) * report["address_error"], rtol=1e-12
+        )
+        copies, _, _, _ = step([row] * 4)
+        for part, single in zip(copies, moved, strict=True):
+            np.testing.assert_allclose(part, single, rtol=1e-12, atol=1e-15)
+    assert max(gains) > 1 > min(gains)  # rows within the bound and beyond it
+    batch, _, _, _ = step([0, 1, 2, 3])
+    for part, single in zip(batch, zip(*alone, strict=True), strict=True):
+        np.testing.assert_allclose(part, np.mean(single, axis=0), rtol=1e-12, atol=1e-15)
+
+
+def test_the_bound_leaves_the_token_task_as_it_was(monkeypatch):
+    """At the widths of the declared readings no row reaches the bound, so the step there is
+    the step before it, bit for bit. On the token-binding task (16 inputs, an association
+    region of 64) a 256-round life of founder 0 reaches at most ``address * |z|^2`` = 0.055
+    (founders 0 to 5: 0.052 to 0.059); no state of the task can reach 1, since an event lights
+    at most three inputs and an activation lies in (-0.1, 1): 0.01 * (3 + 64 + 1) = 0.68."""
+    ir = instrument("index_read")
+    tb = ir.tb
+    brain = cd.Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL,
+                             seed=0, learning_surprise=True, recall=True)
+    model = brain.brain.neuron_model
+    reach = np.abs(model.activation(np.array([-50.0, 50.0]))).max()
+    assert reach <= 1.0
+    width = len(brain.association_index)
+    assert brain.recall.address * (3 + width * reach**2 + 1) < 0.7
+    gains = []
+    original = cd.Recall._step
+
+    def recorded(self, moment, rows, d_value, d_next):
+        gains.extend(_gain(self, moment, rows).tolist())
+        return original(self, moment, rows, d_value, d_next)
+
+    monkeypatch.setattr(cd.Recall, "_step", recorded)
+    held = tb.holdout(0)
+    rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, 0]))
+    for _ in range(256):
+        trials = tb.draw(rng, tb.BATCH, held)
+        seq = tb.events(trials)
+        brain.reset()
+        for x in seq[:-1]:
+            brain.act(x, greedy=True)
+        brain.lesson(seq[-1], tb.answers(trials))
+        brain.act(seq[-1], greedy=True)
+    assert len(gains) > 100
+    assert max(gains) < 0.1
 
 
 def test_lessons_teach_the_address_and_step_gives_the_same_lesson():

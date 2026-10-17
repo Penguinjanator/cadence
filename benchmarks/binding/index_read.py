@@ -32,7 +32,9 @@ synapses it is the contrast's own sensitivity). Each slot scores ``(d_r . V_i + 
 |d|``. Among the moments the address attended to (its own weights ``p``), those that would
 have answered are named by ``p* = softmax(score / address_temperature + address_prior * log
 p)``; ``K* = sum_i p*_i K_i`` is their address, and the map takes the least-mean-squares step
-``address * (K* - q_t)`` on its inputs ``[x_t, c_{t-1}, 1]`` at the taught rows. With the
+toward ``K*`` on its inputs ``z = [x_t, c_{t-1}, 1]`` at the taught rows, each row at the rate
+``min(address, 1 / |z|^2)`` so that no row's own address moves past its target; a step whose
+result is not finite is refused. With the
 attention as the prior, a moment whose own content happens to be the answer does not displace
 the moment the address found by its relation (a fresh successor is the value of the moment
 after the cued one). Keys hold the fixed part of the address: a key written with the learned
@@ -259,11 +261,15 @@ class IndexMemory:
 
     def learn(self, rows: np.ndarray, d_value: np.ndarray, d_next: np.ndarray | None,
               rate: float, temperature: float) -> dict[str, float]:
-        """The address lesson at ``rows``: toward the slots the answer's movement names."""
+        """The address lesson at ``rows``: toward the keys of the slots the scores name, each
+        row's rate bounded by its own energy, ``min(rate, 1 / |z|^2)`` on ``z = [x, c, 1]``,
+        the rows' steps averaged. A candidate map or address that is not finite refuses the
+        step: the map stays and ``address_refused`` counts the rows."""
         assert self.last is not None
+        quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         memory = self.slots
         if not memory.slots or not len(rows):
-            return {"address_rows": 0.0, "address_error": 0.0}
+            return quiet
         values, nexts, keys = memory.values[rows], memory.nexts[rows], memory.keys[rows]
         score = np.einsum("bc,bmc->bm", d_value, values)
         norm = np.sum(d_value * d_value, axis=1)
@@ -273,28 +279,40 @@ class IndexMemory:
         norm = np.sqrt(norm)
         moving = norm > 1e-12
         if not moving.any():
-            return {"address_rows": 0.0, "address_error": 0.0}
-        logits = score[moving] / norm[moving, None] / temperature
-        prior = float(self.genes["address_prior"])
-        if prior:
-            # among the moments the address attended to: the attention is the prior
-            q_ = self.last[2][rows][moving]
-            attention = np.einsum("bk,bmk->bm", q_, keys[moving]) / self.temperature
-            if self.recency:
-                attention = attention - self.recency * memory.ages()[None, :]
-            attention -= attention.max(axis=1, keepdims=True)
-            attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
-            logits = logits + prior * attention
-        p = np.exp(logits - logits.max(axis=1, keepdims=True))
-        p /= p.sum(axis=1, keepdims=True)
-        target = np.einsum("bm,bmk->bk", p, keys[moving])
-        x, c, q = (a[rows][moving] for a in self.last[:3])
-        error = target - q
-        n = len(error)
-        self.w_x += rate * x.T @ error / n
-        self.w_c += rate * c.T @ error / n
-        self.b += rate * error.mean(axis=0)
-        return {"address_rows": float(n), "address_error": float(np.abs(error).mean())}
+            return quiet
+        x, c, q, key = (a[rows][moving] for a in self.last)
+        n = len(q)
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            logits = score[moving] / norm[moving, None] / temperature
+            prior = float(self.genes["address_prior"])
+            if prior:
+                # among the moments the address attended to: the attention is the prior
+                attention = np.einsum("bk,bmk->bm", q, keys[moving]) / self.temperature
+                if self.recency:
+                    attention = attention - self.recency * memory.ages()[None, :]
+                attention -= attention.max(axis=1, keepdims=True)
+                attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
+                logits = logits + prior * attention
+            p = np.exp(logits - logits.max(axis=1, keepdims=True))
+            p /= p.sum(axis=1, keepdims=True)
+            target = np.einsum("bm,bmk->bk", p, keys[moving])
+            error = target - q
+            # each row's gain on its own address, rate * |z|^2, at most one
+            energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
+            step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
+            w_x = rate * x.T @ step
+            w_x /= n
+            w_x += self.w_x
+            w_c = rate * c.T @ step
+            w_c /= n
+            w_c += self.w_c
+            b = self.b + rate * step.mean(axis=0)
+            address = key + x @ w_x + c @ w_c + b
+        if not all(np.isfinite(a).all() for a in (w_x, w_c, b, address)):
+            return {**quiet, "address_refused": float(n)}
+        self.w_x, self.w_c, self.b = w_x, w_c, b
+        return {"address_rows": float(n), "address_error": float(np.abs(error).mean()),
+                "address_refused": 0.0}
 
 
 class IndexBrain(tb.ContentBrain):
@@ -416,7 +434,7 @@ def address_lesson(brain: IndexBrain, learned: Any, rows: np.ndarray) -> dict[st
     genes, index = brain.genes, brain.index
     assert genes is not None and index is not None and brain.association_index is not None
     if learned is None or learned.nudged is None or learned.nudged is learned.free:
-        return {"address_rows": 0.0, "address_error": 0.0}
+        return {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
     plus = np.atleast_2d(learned.nudged.activation)
     minus = np.atleast_2d(
         learned.free.activation if learned.opposite is None else learned.opposite.activation
@@ -455,4 +473,5 @@ def lesson(brain: Any, x: np.ndarray, target: np.ndarray, work: dict[str, Any]) 
                 else np.flatnonzero(np.asarray(taught, dtype=bool)))
         step = address_lesson(brain, learned, rows)
         work["address_rows"] = work.get("address_rows", 0) + int(step["address_rows"])
+        work["address_refused"] = work.get("address_refused", 0) + int(step["address_refused"])
     return np.asarray(answer)

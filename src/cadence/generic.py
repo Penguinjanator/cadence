@@ -2169,14 +2169,13 @@ class Brain:
         every memory the act reads, under ``learning_surprise`` the rows are judged by the
         settle the act reads, and with a recall memory the address lesson follows at the
         taught rows. An episodic memory that remembers demonstrations records the taught
-        rows. Returns the teaching report (with a recall memory, ``address_rows`` and
-        ``address_error`` too), which ``last_learning`` holds with the ``demonstration_``
-        prefix; a refused phase raises ``LearningPhaseError`` and leaves the parameters and
-        memories as they were. The next ``act`` settles afresh under the changed parameters
-        and writes the moment. The
-        streams are the live ones; an action whose sampled outcome is pending is refused,
-        since its eligibility belongs to the parameters before the lesson: report the
-        outcome first (``step`` or ``learn``).
+        rows. Returns the teaching report (with a recall memory, ``address_rows``,
+        ``address_error`` and ``address_refused`` too), which ``last_learning`` holds with the
+        ``demonstration_`` prefix; a refused phase raises ``LearningPhaseError`` and leaves the
+        parameters and memories as they were. The next ``act`` settles afresh under the
+        changed parameters and writes the moment. The streams are the live ones; an action
+        whose sampled outcome is pending is refused, since its eligibility belongs to the
+        parameters before the lesson: report the outcome first (``step`` or ``learn``).
         """
         x = self._observations(observations)
         labels = self.learner._labels(np.asarray(labels))
