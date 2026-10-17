@@ -9,7 +9,7 @@ from types import SimpleNamespace
 
 import numpy as np
 
-from cadence import Brain
+from cadence import Brain, PatternSeparator
 
 HERE = Path(__file__).resolve().parent
 
@@ -191,6 +191,21 @@ def test_the_sparse_code_keeps_its_winners_at_unit_length_whatever_the_width() -
     np.testing.assert_array_equal(code, ir.SparseCode(12_824, 128, 8, 6, seed=3)(x))
     # a negative input reaches the code through its OFF channel
     assert wide(-np.eye(12_824)[:64]).any(axis=1).all()
+
+
+def test_the_sparse_code_is_the_librarys_on_a_stream_of_its_own() -> None:
+    """The code's seed is drawn from the founder's on a stream of its own, as the library
+    draws the brain's code: at the same inputs, units and fan-in the tables are the library
+    brain's, and they are not the tables of the founder's own stream."""
+    code = ir.SparseCode(12_824, 1024, 32, 24, seed=3)
+    own = int(np.random.SeedSequence([3, 7103]).generate_state(1)[0])
+    assert code.separator.seed == own != 3
+    brain = Brain.compose(12_824, 2, modules=(8,), code=1024, seed=3, episodic=False)
+    assert brain.sparse_code.seed == own and brain.sparse_code.fan_in == code.index.shape[1]
+    np.testing.assert_array_equal(code.index, brain.sparse_code.index)
+    np.testing.assert_array_equal(code.separator.weight, brain.sparse_code.weight)
+    raw = PatternSeparator(12_824, 1024, 24, seed=3, fan_in=51, cover=2)  # the founder's stream
+    assert not np.array_equal(code.index, raw.index)
 
 
 def test_a_coded_brain_keys_and_values_its_moments_in_the_code() -> None:

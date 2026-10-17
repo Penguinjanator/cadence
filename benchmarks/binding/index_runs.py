@@ -659,9 +659,10 @@ class Retina:
 
 class GenericCode:
     """A fixed sparse code of the whole frame with no spatial assumption (``index_read``'s
-    ``SparseCode``: ``units`` code neurons each reading ``fan_in`` random inputs, ``winners``
-    kept, unit length), the body inputs passed through: the generic stage in place of the
-    retina, for the comparison."""
+    ``SparseCode``, the library's covering code: each pixel read through an ON and an OFF
+    channel, every channel by two of the ``units`` code neurons at least, each reading
+    ``fan_in`` channels or more, ``winners`` kept, unit length), the body inputs passed
+    through: the generic stage in place of the retina, for the comparison."""
 
     def __init__(self, inputs: int, pixels: int, units: int, fan_in: int, winners: int,
                  seed: int) -> None:

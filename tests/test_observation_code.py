@@ -364,7 +364,7 @@ def test_every_input_reaches_the_code_in_both_signs_and_no_two_code_alike():
     is dealt two code units before the units' fan-ins are filled at random, and the weights
     are positive, so a single input of either sign drives the readers of its channel and
     reaches the code. At 12,824 inputs and 1,024 units (seed 1) no one-hot input of either
-    sign codes to zero and no two of the 25,648 code alike; 1,122 of them read the same units
+    sign codes to zero and no two of the 25,648 code alike; 1,169 of them read the same units
     as another and are told apart by the weights alone. The episodic separator's independent
     signed draw over the inputs is unchanged, byte for byte."""
     brain = cd.Brain.compose(12_824, 2, modules=(8,), code=1024, seed=1, episodic=False)
@@ -386,7 +386,7 @@ def test_every_input_reaches_the_code_in_both_signs_and_no_two_code_alike():
                 units[active.tobytes()] = units.get(active.tobytes(), 0) + 1
     assert zero == {1.0: 0, -1.0: 0}
     assert len(codes) == 25_648  # every one-hot input of either sign has a code of its own
-    assert sum(n for n in units.values() if n > 1) <= 1_400  # 1,122 read the same units
+    assert sum(n for n in units.values() if n > 1) <= 1_400  # 1,169 read the same units
     # a narrow code reads more channels per unit, as many as two readers per channel take
     narrow = cd.Brain.compose(12_824, 2, modules=(8,), code=128, seed=1, episodic=False)
     assert narrow.sparse_code.fan_in == 401  # ceil(2 * 2 * 12,824 / 128)
@@ -862,13 +862,16 @@ def test_a_coded_round_trip_keeps_the_codes_seed_and_every_saved_setting(tmp_pat
     seed other than the default saves, loads and saves again with the same parsed metadata
     and the same arrays, and the continued lives save the same."""
     brain = cd.Brain.compose(32, 2, modules=(8,), code=24, seed=11, recall=True)
-    assert brain.sparse_code.seed == 13  # the brain's seed plus two
+    # the code's seed: the brain's on a stream of its own, apart from the streams a brain
+    # develops, acts and separates from (its seed and the next one)
+    seed = int(np.random.SeedSequence([11, 7103]).generate_state(1)[0])
+    assert brain.sparse_code.seed == seed and seed not in range(64)
     brain.act(np.eye(32)[:1], greedy=True)
     first = brain.save(tmp_path / "first.npz")
     twin = cd.Brain.load(first)
     assert twin.sparse_code.to_dict() == brain.sparse_code.to_dict()
     second = twin.save(tmp_path / "second.npz")
-    assert parsed(second)[0]["generic"]["code"]["seed"] == 13
+    assert parsed(second)[0]["generic"]["code"]["seed"] == seed
     assert_same_saved(first, second)
     for i in (3, 5, 2):
         x = np.eye(32)[[i]]

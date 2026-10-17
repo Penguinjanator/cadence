@@ -16,16 +16,19 @@
   it. A single input of either sign always reaches the code, a signed observation reaches
   the code (and the cortex, when the sensory region is the code) in both signs, and a
   nonnegative observation leaves the OFF channels silent; channels read by the same units
-  are told apart by their weights. A coded brain's episodic stores take no separator of
-  their own and refuse `memory_expansion` and `memory_fan_in`. A sense organ's own code (a
-  retina, a cochlea, a V1 region) belongs to the application or the anatomy, not to the
-  library. `describe()` reports `observation_code`; a brain with a code saves as
-  `cadence-generic/9` with the code's settings, seed and tables, which `load` installs as
-  saved; `load` checks the records' key widths against the code's and refuses a mismatch
-  naming both widths, as it refuses place and context records keyed on other coordinates
-  than the brain's, bounds a memory's key coordinates by the code's width (which can exceed
-  the graph's neurons) and its outputs by the graph, and refuses code tables that do not
-  read every channel twice with positive weights. Every brain without `code` is
+  are told apart by their weights. The code's seed is drawn from the brain's seed on a
+  stream of its own, `SeedSequence([seed, 7103])`; the earlier `seed + 2` was the stream a
+  brain of seed `seed + 2` develops and acts from, so the code of one founder and the
+  connectome of another were drawn from the same stream. A coded brain's episodic stores
+  take no separator of their own and refuse `memory_expansion` and `memory_fan_in`. A sense
+  organ's own code (a retina, a cochlea, a V1 region) belongs to the application or the
+  anatomy, not to the library. `describe()` reports `observation_code`; a brain with a code
+  saves as `cadence-generic/9` with the code's settings, seed and tables, which `load`
+  installs as saved; `load` checks the records' key widths against the code's and refuses a
+  mismatch naming both widths, as it refuses place and context records keyed on other
+  coordinates than the brain's, bounds a memory's key coordinates by the code's width (which
+  can exceed the graph's neurons) and its outputs by the graph, and refuses code tables that
+  do not read every channel twice with positive weights. Every brain without `code` is
   byte-identical at 4, 256 and 2,000 inputs and on an image shape, the checkpoint included
   at 4 and 2,000 inputs and on the image
   ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).

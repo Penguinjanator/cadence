@@ -174,3 +174,20 @@ The readings taken before this amendment are kept as measured. In them the readi
 saw different noise and the training after a reading followed that reading's draws; and the
 fresh-bindings `p_asked` and `decided` omit the recency charge. `wide` and `camera` are read
 again under this schedule before their gates are cited.
+
+## Amendment 4, the sparse code (17 October 2026)
+
+The instrument's sparse code is the library's covering code; no gene, panel, budget or gate
+changes. It replaces the sparse code of the mechanism table and amendment 2's generic code
+(each code neuron reading random inputs with signed weights) for every reading taken after
+this amendment.
+
+| Item | Change |
+| --- | --- |
+| construction | `PatternSeparator(..., cover=2)`, as `Brain.compose(code=...)` builds it: each input is read through two rectified channels, ON `max(x, 0)` and OFF `max(-x, 0)`; each channel is dealt two distinct code neurons first, each code neuron's remaining fan-in is then filled with distinct channels at random, and the weights are positive, uniform in `(0, 1]` over the square root of the fan-in; the `code_winners` largest sums stay (24 in `wide`, 96 in the camera task's generic code) and the code is scaled to unit length |
+| cover | 2: every channel is read by two code neurons at least |
+| fan-in rule | `max(fan_in, ceil(2 * 2 * inputs / units))` channels per code neuron, at most `2 * inputs`: 51 in `wide` (12,824 inputs, 1,024 units, fan-in 32) and 50 in the camera task's generic code (12,800 pixels, 1,024 units, fan-in 32) |
+| seed | `SeedSequence([founder, 7103]).generate_state(1)[0]`, a stream of its own, as the library draws the brain's code; the founder's own seed is the stream `develop` builds the brain from and the brain acts with |
+| readings | `wide` and the camera task with the generic code (`--generic 96`) are read again on this code before their gates are cited; the camera task's retina does not read the code |
+
+The readings taken before this amendment are kept as measured.

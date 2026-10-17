@@ -843,10 +843,11 @@ that recursive benefit or automatic reflective behavior has been learned.
   the memories key on the observation code: the observation itself, or with `code=units`
   the brain's own sparse code of it, `units` code neurons with positive weights reading
   each input through an ON channel `max(x, 0)` and an OFF channel `max(-x, 0)`, every
-  channel at least twice (a `PatternSeparator` with `cover=2`, drawn from `seed + 2`; each
-  unit reads 32 channels, or `ceil(2 * 2 * inputs / units)` where that is more), the largest
-  sums of one unit in ten kept (at least 24) and the code scaled to unit length; left unset
-  or 0, the memories key on the observation whatever its width, a code of 1,024 units being
+  channel at least twice (a `PatternSeparator` with `cover=2`, its seed drawn from `seed`
+  on a stream of its own, `SeedSequence([seed, 7103])`; each unit reads 32 channels, or
+  `ceil(2 * 2 * inputs / units)` where that is more), the largest sums of one unit in ten
+  kept (at least 24) and the code scaled to unit length; left unset or 0, the memories key
+  on the observation whatever its width, a code of 1,024 units being
   the recommended setting above 1,024 inputs. `inputs` names the width of the observations
   when the sensory region is their code (`compose(..., code=units)` builds such a region; a
   custom anatomy names both), and must then come with a `code` of the region's width. A

@@ -159,9 +159,13 @@ class SparseCode:
     ``fan_in`` channels (more where ``fan_in`` cannot read every channel twice); the
     ``winners`` largest sums stay, the code scaled to unit length. Storage and work follow
     the units and the fan-in, whatever the number of inputs. The construction is
-    ``PatternSeparator`` with ``cover=2``, as ``Brain.compose(code=...)`` builds it."""
+    ``PatternSeparator`` with ``cover=2``, as ``Brain.compose(code=...)`` builds it, and its
+    seed is drawn from the founder's on a stream of its own, ``SeedSequence([seed, 7103])``,
+    as the library draws the brain's: the founder's seed itself is the stream ``develop``
+    builds the brain from and the brain acts with."""
 
     COVER = 2
+    STREAM = 7103
 
     def __init__(self, inputs: int, units: int, fan_in: int, winners: int, seed: int) -> None:
         if not 0 < fan_in <= inputs or not 0 < winners <= units:
@@ -170,7 +174,8 @@ class SparseCode:
 
         channels = 2 * inputs  # an ON and an OFF channel per input
         fan_in = min(channels, max(int(fan_in), -(-self.COVER * channels // units)))
-        self.separator = PatternSeparator(inputs, units, winners, seed=seed, fan_in=fan_in,
+        own = int(np.random.SeedSequence([seed, self.STREAM]).generate_state(1)[0])
+        self.separator = PatternSeparator(inputs, units, winners, seed=own, fan_in=fan_in,
                                           cover=self.COVER)
         self.units, self.winners = int(units), int(winners)
 

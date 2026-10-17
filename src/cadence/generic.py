@@ -88,6 +88,10 @@ _CODE_FAN_IN = 32
 _CODE_COVER = 2
 _CODE_WINNERS_SHARE = 10
 _CODE_WINNERS_FLOOR = 24
+# The code's own stream of the brain's seed. A brain develops, acts and draws its episodic
+# separators from its seed and the next one, so a code drawn from an offset of the seed would
+# share its stream with a brain of a nearby seed.
+_CODE_STREAM = 7103
 
 
 def _default_lateral(actions: int) -> float:
@@ -221,6 +225,12 @@ def _code_fan_in(inputs: int, units: int) -> int:
     ``units`` units to read each of the ``2 * inputs`` channels (an ON and an OFF channel per
     input) twice."""
     return max(_CODE_FAN_IN, -(-_CODE_COVER * 2 * inputs // units))
+
+
+def _code_seed(seed: int) -> int:
+    """The seed of the code of a brain of ``seed``: drawn from it on a stream of its own,
+    ``SeedSequence([seed, 7103])``."""
+    return int(np.random.SeedSequence([seed, _CODE_STREAM]).generate_state(1)[0])
 
 
 def _sparse_code(inputs: int, units: int, seed: int) -> PatternSeparator:
@@ -973,11 +983,13 @@ class Brain:
     kept (at least 24: too sparse a code leaves the cortex and the memory too little overlap
     between a question and the moment it asks for) and the code scaled to unit length. A
     signed observation reaches the code in both signs; a nonnegative one leaves the OFF
-    channels silent. Left unset, the memories key on the observation whatever its width; a
-    code of 1,024 units is the recommended setting above 1,024 inputs, with the episodic
-    memory's ``memory_fan_in`` 32 above 256 uncoded key values. With ``inputs`` (the width
-    of the observations) the sensory region is the code: every observation is coded before
-    the drive, and ``inputs`` must then be named beside a ``code`` of the region's width.
+    channels silent. The code's seed is drawn from ``seed`` on a stream of its own
+    (``SeedSequence([seed, 7103])``). Left unset, the memories key on the observation
+    whatever its width; a code of 1,024 units is the recommended setting above 1,024 inputs,
+    with the episodic memory's ``memory_fan_in`` 32 above 256 uncoded key values. With
+    ``inputs`` (the width of the observations) the sensory region is the code: every
+    observation is coded before the drive, and ``inputs`` must then be named beside a
+    ``code`` of the region's width.
     ``sparse_code`` holds the ``PatternSeparator``, ``code_width`` the key width
     (``observation_width`` gives it before the brain is built, to size the ``recall`` and
     ``next`` regions of a custom anatomy). A memory keyed on the code numbers its key
@@ -1045,7 +1057,7 @@ class Brain:
                 f"neurons for a code of {units} units"
             )
         self.sparse_code: PatternSeparator | None = (
-            _sparse_code(self.inputs, units, seed + 2) if units else None
+            _sparse_code(self.inputs, units, _code_seed(seed)) if units else None
         )
         self.code_width = units or self.inputs
         recalled = _recall_genes(recall, genes)  # the recall_* genes leave ``genes`` here
