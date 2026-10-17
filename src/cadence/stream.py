@@ -422,9 +422,10 @@ class Recall:
     finds it before any lesson.
 
     ``learn`` is the address lesson, a rule of its own beside the graph's contrast, which the
-    brain runs after teacher lessons alone (rewards leave the map as it is). After a lesson
-    it reads the association's movement between the nudged phases back through the recall
-    and next synapses, ``d``, scores each slot's value and next against it,
+    brain runs after teacher lessons (at the founder ``address_reward=0`` rewards leave the
+    map as it is). After a lesson it reads the association's movement between the nudged
+    phases back through the recall and next synapses, ``d``, scores each slot's value and
+    next against it,
     ``(d_r . V_i + d_n . N_i) / |d|`` (the stored values themselves, not their effect
     through the source neurons), weighs the scores with the attention the address gave the
     slots, ``p* = softmax(score / address_temperature + log p)``, and takes the
@@ -436,6 +437,12 @@ class Recall:
     logits of the slots the scores name against those the address attended to, whatever the
     keys' norms. ``capacity`` bounds the slots per stream, the oldest dropped first.
     ``reset`` empties streams, and an empty stream reads silence.
+
+    With ``address_reward`` above zero reward trains the map as well: at each sampled act
+    the step the address lesson would take at each row, were the act's action the lesson's
+    label, is that row's eligibility (``contrast_rows``), which the actor keeps in a trace
+    of its own beside the synapses' and steps by ``address_reward`` times the dopamine
+    (``propose`` and ``accept``).
     """
 
     connectome: Connectome
@@ -454,6 +461,7 @@ class Recall:
     address_step: str = "lms"
     write: str = "always"
     null: float | None = None
+    address_reward: float = 0.0
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
     # the width of the observations the memory is given, when it is not the source range's: a
@@ -481,7 +489,7 @@ class Recall:
     CONSTRUCTION = ("capacity", "value", "next")
     # options beside the founder memory, each one runtime: a memory at their founders
     # describes and saves itself as before, and a saved memory without one takes its founder
-    OPTIONS = ("address_step", "write", "null")
+    OPTIONS = ("address_step", "write", "null", "address_reward")
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -543,6 +551,8 @@ class Recall:
             return value
         if name == "null":
             return None if value is None else real(name, value)
+        if name == "address_reward":
+            return real(name, value, low=0)
         raise TypeError(f"unknown recall setting: {name!r}")
 
     def __post_init__(self) -> None:
@@ -1036,6 +1046,63 @@ class Recall:
             energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
             step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
         return moving, x, c, key, error, step
+
+    # -- reward trains the address map
+
+    def contrast_rows(
+        self, graph: NeuralGraph, plus: BrainState, minus: BrainState
+    ) -> np.ndarray | None:
+        """The address map's eligibility from a sampled act, one ``(inputs + association + 1,
+        inputs)`` array per row (the rows of ``w_x``, ``w_c`` and ``b`` in that order), or
+        None at ``address_reward=0``: the step the address lesson would take at each row,
+        were the act's action a lesson's label, before the average over rows. The
+        association's movement between the act's two nudged phases, ``plus`` less ``minus``,
+        is read back through the recall and next synapses of ``graph`` and scored against the
+        slots of the moment the act read (``last``, before its write); a row contributes
+        ``min(address, 1 / |z|^2)`` times the outer product of ``z = [x, c, 1]`` and its
+        error, of the form ``address_step`` names. A row that does not move, or whose
+        contribution is not finite, keeps none."""
+        if not self.address_reward:
+            return None
+        movement = self.activity(plus) - self.activity(minus)
+        batch, width = len(movement), self.key_width
+        out = np.zeros((batch, width + len(self.association) + 1, width))
+        moment = self.last
+        if moment is None or not self.slots or self.streams != batch or len(moment.key) != batch:
+            return out
+        d_value = self.readback(graph, "recall", movement)
+        d_next = self.readback(graph, "next", movement) if self.next else None
+        found = self._row_steps(moment, np.arange(batch), d_value, d_next)
+        if found is None:
+            return out
+        moving, x, c, _, _, step = found
+        z = np.concatenate([x, c, np.ones((len(x), 1))], axis=1)
+        with np.errstate(over="ignore", invalid="ignore"):
+            rows = self.address * np.einsum("bi,bk->bik", z, step)
+        kept = np.isfinite(rows).all(axis=(1, 2))
+        out[np.flatnonzero(moving)[kept]] = rows[kept]
+        return out
+
+    def propose(self, step: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+        """The address map after a reward's step, not installed: ``step`` is the rows'
+        eligibility weighted by the dopamine and averaged (``contrast_rows``' shape), taken at
+        ``address_reward``. Returns ``w_x``, ``w_c``, ``b`` and the norm of the step; a step
+        whose map is not finite is refused (``ValueError``)."""
+        step = np.asarray(step, dtype=float)
+        width = self.key_width
+        shape = (width + len(self.association) + 1, width)
+        if step.shape != shape:
+            raise ValueError(f"an address map's step is a {shape} array")
+        with np.errstate(over="ignore", invalid="ignore"):
+            moved = self.address_reward * step
+            w_x, w_c, b = self.w_x + moved[:width], self.w_c + moved[width:-1], self.b + moved[-1]
+        if not all(np.isfinite(a).all() for a in (moved, w_x, w_c, b)):
+            raise ValueError("the address map's reward step must be finite")
+        return w_x, w_c, b, float(np.linalg.norm(moved))
+
+    def accept(self, proposal: tuple[np.ndarray, np.ndarray, np.ndarray, float]) -> None:
+        """Install a step ``propose`` made."""
+        self.w_x, self.w_c, self.b = proposal[0], proposal[1], proposal[2]
 
     def to_dict(self) -> dict[str, Any]:
         out = {

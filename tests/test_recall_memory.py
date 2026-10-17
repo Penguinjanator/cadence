@@ -1178,7 +1178,9 @@ def _founder_life(brain):
 def test_the_options_at_their_founders_build_the_founder_memory(tmp_path):
     """Each option passed at its founder builds the founder memory: the same life, the same
     checkpoint bytes and the same description, which leaves the options out."""
-    assert cd.Recall.options() == {"address_step": "lms", "write": "always", "null": None}
+    assert cd.Recall.options() == {
+        "address_step": "lms", "write": "always", "null": None, "address_reward": 0.0,
+    }
     founder = composed(seed=5, arousal=True, learning_surprise=True)
     explicit = composed(
         seed=5, arousal=True, learning_surprise=True,
@@ -1706,3 +1708,180 @@ def test_the_options_survive_a_checkpoint_and_a_saved_memory_without_one_takes_i
         brain.retune(recall_null=float("inf"))
     brain.retune(recall_write="always", recall_null=None)
     assert "write" not in brain.recall.to_dict() and "null" not in brain.recall.to_dict()
+
+
+# -- reward trains the address map
+
+
+def _map(recall):
+    return [a.copy() for a in (recall.w_x, recall.w_c, recall.b)]
+
+
+def _split(step, width):
+    """``(w_x, w_c, b)`` parts of a step on the stacked map, ``(width + association + 1,
+    width)``."""
+    return step[:width], step[width:-1], step[-1]
+
+
+@pytest.mark.parametrize("form", ["lms", "toward"])
+def test_a_sampled_act_keeps_the_step_its_lesson_would_take_as_the_maps_eligibility(form):
+    """At a sampled act, before the moment is written, each row's eligibility of the address
+    map is the step the address lesson would take at that row were the act's action the
+    lesson's label: the association's movement between the act's two nudged phases read back
+    through the recall and next synapses, scored against the slots the act read."""
+    brain = composed(seed=6, recall_address_reward=0.5, recall_address_step=form)
+    for x in (FACT, GO, CUE):
+        brain.act(x, greedy=True)
+    recall, agent = brain.recall, brain.basal_ganglia
+    assert agent.memory is recall and agent._pending_memory is None
+    before = recall.snapshot()
+    brain.act(NAME)  # sampled
+    contrast = agent._pending_memory
+    assert contrast.shape == (1, 4 + 8 + 1, 4) and np.abs(contrast).max() > 0
+    after = recall.snapshot()
+    _, plus, minus, _ = agent._pending
+    movement = (plus.activation - minus.activation)[:, brain.association_index]
+    recall.restore(before)  # the slots the act read, before its moment was written
+    start = _map(recall)
+    report = recall._step(recall._moment(NAME), np.array([0]),
+                          recall.readback(brain.learner.brain, "recall", movement),
+                          recall.readback(brain.learner.brain, "next", movement))
+    assert report["address_rows"] == 1.0
+    lesson = [a - b for a, b in zip(_map(recall), start, strict=True)]
+    for moved, part in zip(lesson, _split(contrast[0], 4), strict=True):
+        np.testing.assert_allclose(part, moved, rtol=1e-12, atol=1e-15)
+    recall.w_x, recall.w_c, recall.b = start
+    recall.restore(after)
+
+
+def test_an_outcome_steps_the_address_map_by_its_trace_and_the_dopamine():
+    """A sampled act's outcome adds its contrast to the map's trace and steps the map by
+    ``address_reward`` times the dopamine times the trace, as every synapse steps; a calm
+    moment decays the trace as it decays the synapses', an ended stream forgets it and a reset
+    clears it. The report names the step."""
+    brain = composed(seed=6, arousal=cd.ArousalConfig(youth=0, threshold=10.0),
+                     recall_address_reward=0.5)
+    for x in (FACT, GO):
+        brain.act(x, greedy=True)
+    recall, agent = brain.recall, brain.basal_ganglia
+    brain.act(NAME)  # sampled
+    contrast = agent._pending_memory.copy()
+    start = _map(recall)
+    brain.live(CUE, reward=[1.0])  # the act's outcome, learned; the brain answers calm
+    report = brain.last_learning
+    np.testing.assert_array_equal(agent.trace_memory, contrast)  # the first trace
+    step = 0.5 * report["dopamine"] * contrast[0]
+    for now, then, part in zip(_map(recall), start, _split(step, 4), strict=True):
+        np.testing.assert_allclose(now - then, part, rtol=1e-12, atol=1e-15)
+    assert report["address_step"] == pytest.approx(np.linalg.norm(step))
+    assert brain.last_arousal["mode"] == "routine" and agent._pending_memory is None
+    trace, moved = agent.trace_memory.copy(), _map(recall)
+    brain.live(GO, reward=[0.0])  # a calm moment: nothing is learned and the traces fade
+    config = agent.config
+    np.testing.assert_allclose(agent.trace_memory, config.gamma * config.lam * trace)
+    for now, then in zip(_map(recall), moved, strict=True):
+        np.testing.assert_array_equal(now, then)
+    # a sampled act and an ending outcome: the ended stream forgets the map's trace
+    brain.act(FACT)
+    brain.learn(np.zeros(1), np.ones(1, bool), GO)
+    assert not agent.trace_memory.any()
+    brain.reset()
+    assert agent.trace_memory is None and agent._pending_memory is None
+
+
+def test_the_maps_trace_follows_the_streams_and_a_refused_outcome_moves_nothing(monkeypatch):
+    brain = composed(seed=7, recall_address_reward=0.5)
+    x = np.eye(4)[:3]
+    for _ in range(2):
+        brain.act(x, greedy=True)
+    brain.act(x)
+    agent, recall = brain.basal_ganglia, brain.recall
+    assert agent._pending_memory.shape == (3, 13, 4)
+    brain.learn(np.array([1.0, 0.0, -1.0]), np.array([False, True, False]), x)
+    assert agent.trace_memory.shape == (3, 13, 4) and not agent.trace_memory[1].any()
+    assert agent.trace_memory[[0, 2]].any()
+    brain.act(x)
+    assert not agent._pending_memory[1].any()  # the ended stream holds no slot it read
+    pending, trace, start = agent._pending_memory, agent.trace_memory.copy(), _map(recall)
+
+    def refused(*args, **kwargs):
+        raise ValueError("the graph's update refused")
+
+    monkeypatch.setattr(brain.learner, "apply", refused)
+    with pytest.raises(ValueError, match="refused"):
+        brain.learn(np.ones(3), np.zeros(3, bool), x)
+    np.testing.assert_array_equal(agent.trace_memory, trace)
+    for now, then in zip(_map(recall), start, strict=True):
+        np.testing.assert_array_equal(now, then)
+    assert agent._pending_memory is pending  # the outcome can be reported again
+    monkeypatch.undo()
+
+    def overflow(step):
+        raise ValueError("the address map's reward step must be finite")
+
+    monkeypatch.setattr(recall, "propose", overflow)
+    efficacy = brain.brain.efficacy.copy()
+    with pytest.raises(ValueError, match="finite"):
+        brain.learn(np.ones(3), np.zeros(3, bool), x)
+    np.testing.assert_array_equal(brain.brain.efficacy, efficacy)  # checked before the graph's
+    np.testing.assert_array_equal(agent.trace_memory, trace)
+    monkeypatch.undo()
+    report = brain.learn(np.ones(3), np.zeros(3, bool), x)
+    assert report["address_step"] > 0.0
+
+
+def test_the_maps_trace_survives_a_checkpoint_and_the_life_continues_identically(tmp_path):
+    brain = composed(seed=5, arousal=cd.ArousalConfig(youth=6, threshold=10.0),
+                     recall_address_reward=0.5, recall_address_step="toward")
+    for t in range(5):
+        brain.live(STREAM[t % 4], reward=None if t == 0 else [float(t % 2)])
+    brain.wait(GO)  # the awaited act's contrast was taken before its moment and this one
+    agent = brain.basal_ganglia
+    assert agent.trace_memory is not None and agent._pending_memory is not None
+    assert np.abs(brain.recall.w_x).sum() > 0  # no lesson: the outcomes moved it
+    path = brain.save(tmp_path / "trace")
+    with np.load(path, allow_pickle=False) as data:
+        assert {"recall/trace", "recall/pending"} <= set(data.files)
+    twin = cd.Brain.load(path)
+    np.testing.assert_array_equal(twin.basal_ganglia.trace_memory, agent.trace_memory)
+    np.testing.assert_array_equal(twin.basal_ganglia._pending_memory, agent._pending_memory)
+    assert twin.basal_ganglia.memory is twin.recall
+    for t in range(6):
+        x, reward = STREAM[(t + 1) % 4], [float(t % 3 == 0)]
+        np.testing.assert_array_equal(brain.live(x, reward=reward), twin.live(x, reward=reward))
+        assert_same_memory(brain.recall, twin.recall)
+        np.testing.assert_array_equal(twin.basal_ganglia.trace_memory, agent.trace_memory)
+    assert_same_checkpoint(brain.save(tmp_path / "later"), twin.save(tmp_path / "twin"))
+    bad = saved_arrays(path)
+    bad["recall/trace"] = bad["recall/trace"][:, :-1]
+    np.savez(tmp_path / "shape.npz", **bad)
+    with pytest.raises(ValueError, match="trace"):
+        cd.Brain.load(tmp_path / "shape.npz")
+    later = saved_arrays(tmp_path / "later.npz")  # a calm answer: nothing pending
+    assert "recall/trace" in later and "recall/pending" not in later
+    later["recall/pending"] = np.zeros_like(later["recall/trace"])
+    np.savez(tmp_path / "stray.npz", **later)
+    with pytest.raises(ValueError, match="pending action"):
+        cd.Brain.load(tmp_path / "stray.npz")
+
+
+def test_without_address_reward_nothing_is_allocated_and_no_byte_changes(tmp_path):
+    """The founder ``address_reward=0`` keeps no eligibility of the map: no trace, no pending
+    contrast, no report of a step and no checkpoint array, the same bytes as a brain that
+    names the founder."""
+    founder = composed(seed=5, arousal=True)
+    named = composed(seed=5, arousal=True, recall_address_reward=0.0)
+    for brain in (founder, named):
+        for t in range(6):
+            brain.live(STREAM[t % 4], reward=None if t == 0 else [float(t % 2)])
+        brain.act(GO)
+        assert brain.basal_ganglia.memory is brain.recall
+        assert brain.basal_ganglia.trace_memory is None
+        assert brain.basal_ganglia._pending_memory is None
+        assert "address_step" not in brain.last_learning
+    assert_same_checkpoint(founder.save(tmp_path / "founder"), named.save(tmp_path / "named"))
+    with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
+        assert not {"recall/trace", "recall/pending"} & set(data.files)
+    assert "address_reward" not in founder.recall.to_dict()
+    with pytest.raises(ValueError):
+        composed(recall_address_reward=-0.1)

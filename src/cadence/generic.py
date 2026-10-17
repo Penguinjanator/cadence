@@ -862,8 +862,18 @@ def _validate_recall_state(
     array("w_x", (key, key))
     array("w_c", (association, key))
     array("b", (key,))
+    # the actor's eligibility of the address map, and the contrast of a pending action
+    eligibility = (batch, key + association + 1, key)
+    if "recall/trace" in data:
+        array("trace", eligibility)
+    if "recall/pending" in data:
+        if not meta.get("pending", False):
+            raise ValueError("a saved address contrast belongs to a pending action")
+        array("pending", eligibility)
     expected = {"keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c", "b"}
-    if {name[len("recall/"):] for name in data if name.startswith("recall/")} != expected:
+    if {name[len("recall/"):] for name in data if name.startswith("recall/")} - {
+        "trace", "pending"
+    } != expected:
         raise ValueError("unexpected saved recall arrays")
 
 
@@ -1200,6 +1210,8 @@ class Brain:
                 connectome, **recalled, source=sensory,
                 inputs=self.code_width if coded_memory else 0,
             )
+            # with ``recall_address_reward`` the actor keeps the address map's eligibility
+            self.basal_ganglia.memory = self.recall
         self.hippocampus: FastSynapses | None = None
         # ``memory_choice`` with a temporal context: the same records keyed by the stream's
         # temporal context, the fading activity of the sensory and the motor neurons
@@ -2330,8 +2342,8 @@ class Brain:
         eligibility of earlier sampled actions fades by one step, as time passes. The
         working trace, the heard history and the recall memory's slots advance at every
         accepted moment, calm or aroused (with ``recall_write="aroused"`` the slots at the
-        aroused moments alone); the recall memory's address map changes in lessons alone.
-        Its forecasts for the
+        aroused moments alone); the recall memory's address map changes in lessons and, with
+        ``recall_address_reward``, by the outcomes of sampled actions. Its forecasts for the
         preceding action were the critic's value when it acted and, when it has an
         associative memory, the record it held for that action; the outcome is
         measured against the value with the value of the present state and against
@@ -3094,7 +3106,9 @@ class Brain:
         feedback update preserves that pending action and both memories; retry this
         outcome after adjusting its numerical configuration. After ``wait`` the next
         state settles from the state the stream sensed last; the critic's eligibility
-        still belongs to the state the action was chosen in.
+        still belongs to the state the action was chosen in. With a positive
+        ``recall_address_reward`` the recall memory's address map steps on its own trace by
+        the same dopamine, and the report names the step (``address_step``).
         """
         following = self._observations(next_observations)
         self._coded_moment = (following, self._code(following))
@@ -3398,6 +3412,11 @@ class Brain:
             for name in ("keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c",
                          "b"):
                 data["recall/" + name] = getattr(recall, name)
+            # the actor's eligibility of the address map, and the pending action's contrast
+            if agent.trace_memory is not None:
+                data["recall/trace"] = agent.trace_memory
+            if agent._pending is not None and agent._pending_memory is not None:
+                data["recall/pending"] = agent._pending_memory
         if self.sparse_code is not None:
             # The brain's code is part of the continuation: the records have its width and the
             # keys read its tables. A brain without one writes the earlier formats unchanged.
@@ -3632,11 +3651,15 @@ class Brain:
                         )
                     )
                 agent._pending = ("states", phases[0], phases[1], data["pending/value"].copy())
+                if "recall/pending" in data:  # validated above: a pending action's contrast
+                    agent._pending_memory = data["recall/pending"].astype(float)
                 if "moment/observations" in data:
                     result._moment = (
                         data["moment/observations"].copy(),
                         data["moment/action"].copy(),
                     )
+            if "recall/trace" in data:
+                agent.trace_memory = data["recall/trace"].astype(float)
             working = meta["working_memory"]
             result.working_memory = None
             if working is not None:
