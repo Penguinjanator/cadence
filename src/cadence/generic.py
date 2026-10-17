@@ -1580,7 +1580,19 @@ class Brain:
         projections, weighs the scores with the address's own attention
         (``recall_address_temperature`` 0.1), and steps the map toward the weighted keys
         (``recall_address`` 0.01, each row's rate bounded by its own input energy).
-        ``recall_capacity`` (64) bounds the slots per stream.
+        ``recall_capacity`` (64) bounds the slots per stream. Options beside the founder
+        memory, each a runtime gene described and saved only where it differs from its
+        founder: ``recall_address_step="toward"`` steps the address by the named keys less
+        the mixture it attended to, in place of the founder's ``"lms"`` step toward the named
+        keys; ``recall_recency=None`` charges a slot's age ``r * log(1 + age)``, ``r =
+        recall_heard^2 / recall_temperature / log(1 + recall_capacity)``, so an unmatched
+        old slot's weight falls as a power of its age; ``recall_write="aroused"`` writes a
+        moment only when its act was sampled (and a moment ``wait`` senses while a sampled
+        action awaits its outcome); a number ``recall_null`` adds a null slot of logit
+        ``recall_null / recall_temperature`` that reads nothing; and
+        ``recall_address_reward`` above zero lets reward train the address map, each sampled
+        act keeping the step its lesson would take as the map's eligibility and each outcome
+        stepping the map by that rate times the dopamine times the trace.
         The founder ``recall=False`` builds the brain without it, byte-identical to the
         composition before the option; the memory is a gene to select against that control.
         ``recall_scale``, ``recall_capacity``, ``recall_value`` and ``recall_next`` are

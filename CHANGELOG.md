@@ -123,6 +123,29 @@
   association region of 512 neurons, against 105 MB for one dense separator). The option
   reproduces the binding instrument
   `benchmarks/binding/index_read.py` moment for moment (`tests/test_recall_memory.py`).
+- Options for the recall memory, each a gene beside `recall=True` that `retune` can change,
+  described and saved only where it differs from its founder, so every founder brain and its
+  checkpoint are as before ([memory guide](docs/memory.md#recall-the-streams-own-moments)).
+  `recall_address_step="toward"` steps the address by the named keys less the mixture it
+  attended to, in place of the founder `"lms"` step toward the named keys: to first order
+  the named slots' logits rise against the attended ones, whatever the keys' norms.
+  `recall_recency=None` charges a slot's age `r * log(1 + age)`, `r = heard^2 / temperature /
+  log(1 + capacity)` (`Recall.charges()`): an unmatched old slot's weight falls as a power of
+  its age, and a full match of a unit-length key outweighs the age of every slot the capacity
+  holds; a number keeps the linear charge. `recall_write="aroused"` writes a moment only when
+  its act was sampled, and a moment `wait` senses while a sampled action awaits its outcome;
+  in a batch a moment written for some streams is held by those streams alone, and each
+  stream's latest held slot learns its own next. A number `recall_null` adds a null slot of
+  logit `null / temperature` that reads nothing, so the slots' shares sum to one less its
+  share; the address lesson weighs the slots alone. `recall_address_reward` above zero lets
+  reward train the address map: each sampled act keeps, beside the synapses' eligibility, the
+  step the address lesson would take were the act's action a lesson's label
+  (`Recall.contrast_rows`), `ActorCritic` keeps it in a trace of its own (`trace_memory`,
+  decaying and forgotten as the synapses' traces are) and steps the map by that rate times
+  the dopamine times the trace, checked before the graph's update and installed after it
+  (`address_step` in the report); a checkpoint carries the trace and a pending action's
+  contrast. The binding instrument's index memory takes the same genes (`address_step`,
+  `recency=None`, `write` with `IndexBrain.aroused_rows`, and `null`).
 - A sparse pattern separator, opt-in: `PatternSeparator(..., fan_in=k)` lets each code
   neuron read `k` distinct inputs chosen at random from its seed, with random weights, held
   as `index` and `weight` arrays of shape `(expansion, k)` in place of the dense

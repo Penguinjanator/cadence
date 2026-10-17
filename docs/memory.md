@@ -87,7 +87,7 @@ The recall memory with cortex values (`recall_value="cortex"`) and an associatio
 | --- | --- | --- | --- |
 | Working `Trace` | Recent association-region activity used as context | Each admitted live action | Nothing; the trace is cleared |
 | `Efference` copy (opt-in gene) | The fading one-hot of the commands the stream issued | Each admitted live action | Nothing; the copy is cleared |
-| `Recall` memory (opt-in gene) | The stream's recent moments as slots, each addressed before its settle ([below](#recall-the-streams-own-moments)) | Each admitted live action and each moment `wait` senses; the address map by each teacher lesson | The address map; the slots are emptied |
+| `Recall` memory (opt-in gene) | The stream's recent moments as slots, each addressed before its settle ([below](#recall-the-streams-own-moments)) | Each admitted live action and each moment `wait` senses (the aroused ones alone with `recall_write="aroused"`); the address map by each teacher lesson, and with `recall_address_reward` by reward | The address map; the slots are emptied |
 | Graph plasticity | Learned synaptic parameters and biases | Supervised contrasts and reward-modulated eligibility | Learned parameters |
 | `SynapticMemory` | Cue-to-outcome associations, with fast per-stream `F` and shared persistent `C` | Observed chosen-action outcomes | Both `F` and `C` |
 | Episodic memory (`memory_choice=True`) | The same store keyed by the observation, and a second keyed by the temporal context; their mean votes in the choice | Known outcomes, demonstrations, replay of the path to a reward | The records; the temporal context and replay path are cleared |
@@ -201,8 +201,8 @@ moment t:  observation x -> address q -> weights over the slots -> recall and ne
   to its target weighted by the row's rate, does not grow under the step. A step whose
   result is not finite is refused and counted (`address_refused`). The keys hold the fixed
   part of the address (the event heard, and with `recall_context` the history before it),
-  so a target never contains the map's own output. Rewards through `learn` and `live`
-  leave the map as it is.
+  so a target never contains the map's own output. At the founder
+  `recall_address_reward=0` rewards through `learn` and `live` leave the map as it is.
 - **Streams and episodes.** Each stream has its own slots. `reset` empties them, an ended
   episode empties its stream's slots, and imagination reads the live slots and writes none.
   The address map is learned: a reset keeps it, `parameters()` counts it and a checkpoint
@@ -215,6 +215,65 @@ moment t:  observation x -> address q -> weights over the slots -> recall and ne
   association activity in place of the event and sizes the two regions by the association
   width; the settled association activity does not carry a moment's content in a form the
   next settle can read back, so the founder stores events.
+
+Options beside the founder change one part of the memory each and leave the founder as it
+is. Each is a gene beside `recall=True` that `retune` can change in a life, and a saved brain
+keeps it ([genes](api.md#recall-memory-genes)):
+
+- **The address step toward the named slots** (`recall_address_step="toward"`). The founder
+  step (`"lms"`) moves the address toward the named keys `K* = sum p* K`; where the keys are
+  shorter than the address, that shortens it, the attention flattens and the slot the lesson
+  names can lose weight. The toward step takes the error `K* - sum p K`, the named keys less
+  the mixture the address attended to, so that to first order the named slots' logits rise
+  against the attended ones, whatever the keys' norms. The rate, its bound and the refusal
+  are the founder's.
+- **A power-law age charge** (`recall_recency=None`). A slot's logit is lowered by
+  `r * log(1 + age)`, `r = heard^2 / temperature / log(1 + capacity)`: the weight of an
+  unmatched old slot falls as a power of its age, `(1 + age)^-r`, two equal matches at ages
+  1 and 3 keep weights in the ratio `2^r`, and a full match of a unit-length key outweighs
+  the age of every slot the capacity holds. `brain.recall.charges()` gives each slot's
+  charge; a number keeps the linear charge `recency * age`.
+- **Aroused writes** (`recall_write="aroused"`). A moment is written when its act was
+  chosen aroused, which is the act's own flag: a sampled act (`step`, `act`, an aroused
+  `live` moment) writes, a greedy act (`act(..., greedy=True)`, a calm `live` moment)
+  writes nothing, and a moment `wait` senses is written while the action it awaits was
+  sampled. The cortex of the moment before and the history move on at every moment. In a
+  batch a moment written for some streams is a column every stream has, held by the written
+  ones, and each stream's latest held slot learns its next from that stream's next written
+  moment.
+- **A null slot** (`recall_null`, a number). A slot of logit `null / temperature` joins the
+  read's softmax and reads nothing, so a moment that matches no slot recalls little:
+  `attended` and the drives read the slots' shares, which sum to one less the null slot's.
+  The address lesson weighs the slots alone.
+- **Reward trains the address map** (`recall_address_reward` above zero). At each sampled
+  act, before its moment is written, the step the address lesson would take were the act's
+  action a lesson's label is the map's eligibility. The actor keeps it in a trace of its own
+  beside the synapses' (it decays by `gamma * lam` per outcome and per calm moment, and an
+  ended stream forgets it), and each outcome steps the map by `recall_address_reward` times
+  the dopamine times that trace, checked before the graph's update; the report names the
+  step (`address_step`).
+
+```python
+import numpy as np
+from cadence import Brain
+
+optioned = Brain.compose(
+    inputs=4, actions=2, modules=(16,), seed=1, recall=True,
+    recall_address_step="toward", recall_recency=None, recall_write="aroused",
+    recall_null=0.0, recall_address_reward=0.1,
+)
+fact, other = np.array([[1.0, 0.0, 0.0, 1.0]]), np.array([[0.0, 1.0, 0.0, 0.0]])
+optioned.act(fact)  # sampled: chosen aroused, the moment is written
+optioned.act(other)  # written too
+optioned.act(other, greedy=True)  # greedy: nothing is written
+assert optioned.recall.slots == 2
+optioned.stimulus(np.array([[0.0, 0.0, 1.0, 0.0]]))  # a moment that matches no slot
+assert optioned.recall.attended.sum() < 1.0  # the null slot keeps the rest
+optioned.act(np.array([[1.0, 0.0, 0.0, 0.0]]))  # sampled: the map's eligibility is kept
+report = optioned.learn(np.array([1.0]), np.array([False]), fact)
+assert report["address_step"] > 0.0  # the outcome stepped the map on its trace
+assert optioned.describe()["genes"]["recall_address_step"] == "toward"
+```
 
 At camera width, with 12,824 inputs, an association region of 512 neurons, 64 slots, the
 brain's code of 1,024 units and cortex values, one stream:

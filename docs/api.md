@@ -556,7 +556,7 @@ and a complete runnable example.
   rows=None)`, `keep(rows)`, `trace` (`(batch, blocks * source)`), `to_dict()`.
   `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
   observation of every act after the act.
-- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, source="sensory", target="recall", inputs=0, writes=0)`:
+- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, address_step="lms", write="always", null=None, address_reward=0.0, source="sensory", target="recall", inputs=0, writes=0)`:
   the index memory of each stream's recent moments, a held-input recall
   ([memory](memory.md#recall-the-streams-own-moments)). `inputs` is the width of the
   observations the memory is given when it is not the `source` range's (a brain whose
@@ -567,13 +567,23 @@ and a complete runnable example.
   association activity), keeps the moment as `last`, and writes `amplitude * p @ values`
   into the `target` region and, with `next`, `amplitude * p @ nexts` into the `next`
   region, where `p = weights(q)` is the softmax over the stream's slots at `temperature`
-  less `recency` per moment of age (another batch size, or a stream without slots, reads
-  silence); the settle holds that drive and does not revise `p`, which `attended` keeps
-  (read-only, recency included, past the moment's write). `witness(observations, state)` writes
-  the moment after its settle: one slot per stream with key `heard * x` (plus `context`
-  times the fading `history`, kept at `context_decay`), value `x` or, with
+  less the charge of each slot's age, `charges()` (`recency` per moment of age; with
+  `recency=None` the power-law charge `r * log(1 + age)`, `r = heard^2 / temperature /
+  log(1 + capacity)`, under which an unmatched old slot's weight falls as `(1 + age)^-r`
+  and a full match of a unit-length key outweighs the age of every slot the capacity
+  holds); another batch size, or a stream without slots, reads silence. With a number
+  `null` a null slot of logit `null / temperature` joins the softmax and reads nothing:
+  `weights` gives the slots' shares, which sum to one less the null slot's. The settle
+  holds that drive and does not revise `p`, which `attended` keeps (read-only, the age
+  charge included, past the moment's write). `witness(observations, state, *, aroused=True)`
+  writes the moment after its settle: one slot per stream with key `heard * x` (plus
+  `context` times the fading `history`, kept at `context_decay`), value `x` or, with
   `value="cortex"`, the association activity of `state`, and the next of the slot before;
-  beyond `capacity` the oldest slot is dropped. `learn(graph, learned)` is the address
+  beyond `capacity` the oldest slot is dropped. With `write="aroused"` the moment is written
+  for the streams `aroused` marks (one flag, or one per stream) alone: in a batch the new
+  slot is a column every stream has and the marked streams hold, each written stream's
+  latest held slot learns the moment as its next, a moment no stream writes adds no slot,
+  and the cortex and history move on either way. `learn(graph, learned)` is the address
   lesson after a lesson whose `LearnedState` is `learned`, a rule of its own beside the
   graph's contrast: it reads the association's movement between the nudged phases back
   through the recall and next synapses of `graph` (`readback(graph, region, movement)`),
@@ -581,18 +591,32 @@ and a complete runnable example.
   `softmax(score / address_temperature + log p)` with the address's attention `p` as the
   prior, and steps the map toward the keys so weighted at the taught rows, each row at the
   rate `min(address, 1 / |z|^2)` on `z = [x, c, 1]`; a step whose map or address is not
-  finite is refused. It returns `address_rows`, `address_error` (the mean absolute error of
-  the addresses before the step) and `address_refused` (the rows a refused step left as
-  they were).
+  finite is refused. The founder step (`address_step="lms"`) takes the error `K* - q`;
+  `address_step="toward"` takes `K* - sum_i p_i K_i`, the named keys less the mixture the
+  address attended to (`p` the attention over the slots alone), which to first order raises
+  the named slots' logits against the attended ones. It returns `address_rows`,
+  `address_error` (the mean absolute error of the addresses before the step) and
+  `address_refused` (the rows a refused step left as they were). With `address_reward`
+  above zero, `contrast_rows(graph, plus, minus)` gives a sampled act's eligibility of the
+  map, one `(inputs + association + 1, inputs)` array per row (the rows of `w_x`, `w_c` and
+  `b`): the step the address lesson would take at that row were the act's action a lesson's
+  label, read from the association's movement between the act's two nudged phases; None at
+  `address_reward=0`. `propose(step)` returns the map after `address_reward` times a step of
+  that shape and the step's norm, refusing one that is not finite, and `accept(proposal)`
+  installs it; `ActorCritic` calls them.
   Arrays: `keys`, `values` and `nexts`
   (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a slot written before
   its stream began again), `previous`, `history`, and the map `w_x`, `w_c` and `b`.
   `reset(batch, rows=None)`, `keep(rows)`, `snapshot()` and `restore(snapshot)`,
-  `imagined()` (a copy that reads the live slots and writes none), `founders()`,
-  `setting(name, value)`, `neurons`, `streams`, `slots`, `ages()`, `attended`, `to_dict()`.
-  `Brain.compose(..., recall=True)` adds it; `Brain.recall` holds it, reads it before every
-  settle, writes the moment of every act and of every moment `wait` senses, and runs its
-  address lesson after every teacher lesson; rewards leave the map as it is.
+  `imagined()` (a copy that reads the live slots and writes none), `founders()` (the genes a
+  memory always describes), `options()` (the founders of `OPTIONS`: `address_step`, `write`,
+  `null` and `address_reward`, which a memory describes and saves only where they differ),
+  `setting(name, value)`, `neurons`, `streams`, `slots`, `ages()`, `charges()`, `attended`,
+  `to_dict()`. `Brain.compose(..., recall=True)` adds it; `Brain.recall` holds it, reads it
+  before every settle, writes the moment of every act and of every moment `wait` senses (with
+  `write="aroused"`, of a sampled act and of a moment waited while a sampled action awaits
+  its outcome), and runs its address lesson after every teacher lesson; at
+  `address_reward=0` rewards leave the map as it is.
 - `FastSynapses(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb", separator=None, writes=0)`:
   one mutable `(pre, post)` matrix per stream; `writes` counts the rows written. `separator`
   is a `PatternSeparator` applied to keys and queries, which makes the matrix
@@ -1003,7 +1027,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     pending action as a zero-reward transition, not a missing outcome. A calm brain answers with the
     greedy choice of one qualified settle and changes no parameter, associative record or
     optimizer state (the working trace advances, and with the recall memory on its slots
-    advance at every accepted moment while its address map changes in lessons alone); the
+    advance at every accepted moment, the aroused ones alone with `recall_write="aroused"`,
+    while its address map changes in lessons and, with `recall_address_reward`, by the
+    outcomes of sampled actions); the
     eligibility of earlier sampled actions fades by one step
     (`ActorCritic.fade`), as it does between two outcomes that are learned from. Its
     forecasts for the preceding action are the critic's value when it acted and, when it
@@ -1038,8 +1064,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     still awaits its outcome. It settles the observation from the current activity,
     reading the working trace, the efference copy, the heard history, the recall memory
     and associative recall, advances the working trace to that state, takes the
-    observation into the heard history and writes the moment to the recall memory (the
-    address map changes in lessons alone). No action is issued and no outcome is
+    observation into the heard history and writes the moment to the recall memory (with
+    `recall_write="aroused"` when the awaited action was sampled; the address map does not
+    change). No action is issued and no outcome is
     taken: the awaited action keeps its forecasts, eligibility and situation, and the
     outcome later given to `live` is credited to it as an immediate outcome would be,
     with the next state settled from the state sensed last; a routine forecast, `act`,
@@ -1134,7 +1161,10 @@ that recursive benefit or automatic reflective behavior has been learned.
     A brain with a recall memory saves as `cadence-generic/8`, with any of the earlier
     components, the heard history among them: its slots, `held`, `previous`, `history`
     and the address map, which `load` reads back as saved; `load` refuses a recall memory
-    under another format name and that name without one.
+    under another format name and that name without one. The recall options are saved
+    where they differ from their founders and take their founders where absent; with
+    `recall_address_reward` the actor's trace of the address map (`recall/trace`) and a
+    pending action's contrast (`recall/pending`) are saved too.
     A brain with its own sparse code saves as `cadence-generic/9`, with any of the earlier
     components, naming the code (`code`: its inputs, units, winners, seed, fan-in and cover,
     and whether the sensory region is the code) and saving its tables (`code/index`,
@@ -1167,7 +1197,7 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_amplitude` | `3.0` | The drive of a slot that holds the whole weight |
 | `recall_temperature` | `0.25` | The softmax temperature over a stream's slots |
 | `recall_heard` | `1.0` | The weight of the present event in its key and its address |
-| `recall_recency` | `0.25` | The logit cost per moment of a slot's age |
+| `recall_recency` | `0.25` | The logit cost per moment of a slot's age; `None` charges `r * log(1 + age)`, `r = recall_heard^2 / recall_temperature / log(1 + recall_capacity)`, so an unmatched old slot's weight falls as a power of its age |
 | `recall_address` | `0.01` | The address lesson's rate, each row's bounded by the row's own input energy; `0.0` leaves the map as it is, the founder's address being the event heard |
 | `recall_address_temperature` | `0.1` | The softmax temperature of the slots' scores against the lesson's movement, weighed with the address's own attention |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` | The fading history of earlier events in a key, and its retention per moment |
@@ -1175,6 +1205,13 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_value` | `"event"` | `"cortex"` stores the settled association activity as the value and sizes the regions by the association width; it does not carry a moment's content in a form the next settle can read back, so the founder stores events (construction) |
 | `recall_next` | `True` | The `next` region and each slot's next (construction) |
 | `recall_scale` | `1.2` | The initial magnitude of the two projections into the association region (a `compose` argument; construction) |
+| `recall_address_step` | `"lms"` | The error of the address lesson's step: `"lms"` the named keys less the address, `"toward"` the named keys less the mixture the address attended to |
+| `recall_write` | `"always"` | `"aroused"` writes a moment only when its act was sampled (an aroused `live` moment, `step`, `act` without `greedy`, a moment waited while a sampled action awaits its outcome) |
+| `recall_null` | `None` | A number adds a null slot of logit `recall_null / recall_temperature` to the read's softmax, which reads nothing |
+| `recall_address_reward` | `0.0` | Above zero, reward trains the address map: each sampled act keeps the step the address lesson would take as the map's eligibility, and the outcome steps the map by this rate times the dopamine times the trace |
+
+The last four are options: a brain describes and saves each only where it differs from its
+founder, and every one can be retuned.
 
 ## Arousal (`cadence.arousal`)
 
@@ -1534,11 +1571,18 @@ founder genes for a small share of moments; the
     `warm` is the state the next state settles from when the streams' activity moved on
     after the action (`Brain.wait`); by default it is the free phase the action was
     chosen in, which always carries the critic's eligibility.
+    With a `memory` (an attribute, which `Brain` sets to its `Recall`) whose learned
+    parameters keep an eligibility of their own, a sampled `act` keeps the memory's
+    `contrast_rows` beside the synapses' pending eligibility, `learn` adds it to
+    `trace_memory` (`e <- gamma lam e + contrast`, allocated once a contrast is kept),
+    proposes the memory's step on that trace weighted by the same dopamine before the
+    graph's update and installs it after (`accept`); a refused update leaves the memory and
+    its trace as they were, and the report names the step (`address_step`).
   - `fade(done=None)`: one moment passed that added no eligibility, its action having
     been answered greedily. Every eligibility trace decays by `gamma * lam`, the step
-    `learn` applies between two sampled actions, and `done` rows forget their traces.
-    Parameters, the critic and optimizer history are unchanged. `Brain.live` calls it
-    for each routine outcome.
+    `learn` applies between two sampled actions, the memory's trace among them, and `done`
+    rows forget their traces. Parameters, the critic and optimizer history are unchanged.
+    `Brain.live` calls it for each routine outcome.
   - `reset()` (cached input/state, eligibility, salience and centering cleared; learned
     parameters and optimizer history retained), `probabilities(state, temperature=None)` (shape `(batch, actions)`
     or `(batch, slots, max_size)` for categorical slots, with exact zero padding;
