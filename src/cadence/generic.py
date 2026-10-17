@@ -77,11 +77,14 @@ _REWARD_ARRAYS = (
 _LATERAL_DEFAULT = -0.5
 _LATERAL_ACTION_LIMIT = 8
 
-# The brain's sparse code, opt-in (``code=units``): each unit reads _CODE_FAN_IN inputs, one
-# unit in _CODE_WINNERS_SHARE is active per observation and at least _CODE_WINNERS_FLOOR (too
-# sparse a code leaves the cortex and the memory too little overlap between a question and the
-# moment it asks for); the memories key on the code as it is.
+# The brain's sparse code, opt-in (``code=units``): every input is read by _CODE_COVER units at
+# least, with positive weights, each unit reading _CODE_FAN_IN inputs (more where that many
+# cannot read every input _CODE_COVER times); one unit in _CODE_WINNERS_SHARE is active per
+# observation and at least _CODE_WINNERS_FLOOR (too sparse a code leaves the cortex and the
+# memory too little overlap between a question and the moment it asks for); the memories key
+# on the code as it is.
 _CODE_FAN_IN = 32
+_CODE_COVER = 2
 _CODE_WINNERS_SHARE = 10
 _CODE_WINNERS_FLOOR = 24
 
@@ -212,10 +215,18 @@ def _code_winners(units: int) -> int:
     return max(_CODE_WINNERS_FLOOR, units // _CODE_WINNERS_SHARE)
 
 
+def _code_fan_in(inputs: int, units: int) -> int:
+    """The inputs each unit of a code of ``units`` reads: 32, or as many as it takes for
+    ``units`` units to read every one of ``inputs`` twice."""
+    return max(_CODE_FAN_IN, -(-_CODE_COVER * inputs // units))
+
+
 def _sparse_code(inputs: int, units: int, seed: int) -> PatternSeparator:
-    """The brain's sparse code: ``units`` code neurons, each reading 32 inputs chosen at random
-    from the seed with random weights of variance 1 / 32, the largest positive sums of one
-    unit in ten kept, at least 24 (``observation_code`` scales the code to unit length)."""
+    """The brain's sparse code: ``units`` code neurons with positive weights, every input read
+    by two of them at least, each reading 32 inputs (more where 32 cannot read every input
+    twice), the readers dealt first and the rest of each fan-in drawn at random from the seed;
+    the largest sums of one unit in ten kept, at least 24 (``observation_code`` scales the
+    code to unit length)."""
     if inputs < _CODE_FAN_IN:
         raise ValueError(
             f"a code reads {_CODE_FAN_IN} inputs per unit; the observation has {inputs} values"
@@ -223,7 +234,8 @@ def _sparse_code(inputs: int, units: int, seed: int) -> PatternSeparator:
     if units < _CODE_WINNERS_FLOOR:
         raise ValueError(f"a code holds at least {_CODE_WINNERS_FLOOR} units")
     return PatternSeparator(
-        inputs, units, _code_winners(units), seed=seed, fan_in=_CODE_FAN_IN
+        inputs, units, _code_winners(units), seed=seed, fan_in=_code_fan_in(inputs, units),
+        cover=_CODE_COVER,
     )
 
 
@@ -261,21 +273,25 @@ def _load_code(
         if any(name.startswith("code/") for name in data):
             raise ValueError("saved code tables require code metadata")
         return None
-    fields = {"inputs", "expansion", "winners", "seed", "center", "fan_in", "cortex"}
+    fields = {"inputs", "expansion", "winners", "seed", "center", "fan_in", "cover", "cortex"}
     if not isinstance(spec, dict) or set(spec) != fields or not isinstance(spec["cortex"], bool):
         raise ValueError("invalid saved code metadata")
-    for name in ("inputs", "expansion", "winners", "seed", "fan_in"):
+    for name in ("inputs", "expansion", "winners", "seed", "fan_in", "cover"):
         value = spec[name]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError(f"saved code {name} must be a nonnegative integer")
     if (
         spec["center"] != 0
-        or spec["fan_in"] != _CODE_FAN_IN
+        or spec["cover"] != _CODE_COVER
+        or not spec["expansion"]
+        or spec["fan_in"] != _code_fan_in(spec["inputs"], spec["expansion"])
         or spec["winners"] != _code_winners(spec["expansion"])
     ):
         raise ValueError(
             f"a saved code reads {_CODE_FAN_IN} inputs per unit and keeps one unit in "
-            f"{_CODE_WINNERS_SHARE} (at least {_CODE_WINNERS_FLOOR}), uncentred"
+            f"{_CODE_WINNERS_SHARE} (at least {_CODE_WINNERS_FLOOR}), uncentred, every input "
+            f"read by {_CODE_COVER} units (more inputs per unit where {_CODE_FAN_IN} cannot "
+            "read each that often)"
         )
     cortex = spec["cortex"]
     try:
@@ -308,6 +324,11 @@ def _load_code(
         or any(len(np.unique(row)) != len(row) for row in index)
     ):
         raise ValueError("a saved code reads distinct inputs of the observation")
+    if (weight <= 0).any() or np.bincount(index.ravel(), minlength=code.inputs).min() < code.cover:
+        raise ValueError(
+            f"a saved code reads every input of the observation with {code.cover} units at "
+            "least, its weights positive"
+        )
     # the saved tables, not ones drawn anew: the code is part of every key
     code.index, code.weight = index.astype(np.int64), weight.astype(float)
     return code.inputs, code, cortex
@@ -934,16 +955,17 @@ class Brain:
     the default brain with working memory.
 
     The memories key on the observation code, ``observation_code``: the observation itself,
-    or with ``code=units`` the brain's own sparse code of it, ``units`` code neurons each
-    reading 32 inputs chosen at random from the seed with random weights, the largest
-    positive sums of one unit in ten kept (at least 24: too sparse a code leaves the cortex
-    and the memory too little overlap between a question and the moment it asks for) and
-    the code scaled to unit length. Left unset, the memories key on the observation whatever
-    its width; a code of 1,024 units is the recommended setting above 1,024 inputs, with
-    the episodic memory's ``memory_fan_in`` 32 above 256 uncoded key values. With
-    ``inputs`` (the width of the
-    observations) the sensory region is the code: every observation is coded before the
-    drive, and ``inputs`` must then be named beside a ``code`` of the region's width.
+    or with ``code=units`` the brain's own sparse code of it, ``units`` code neurons with
+    positive weights that read every input twice at least (each input is dealt two readers
+    first, and each unit's 32 inputs, more where 32 cannot read every input twice, are
+    filled at random from the seed after), the largest sums of one unit in ten kept (at
+    least 24: too sparse a code leaves the cortex and the memory too little overlap between
+    a question and the moment it asks for) and the code scaled to unit length. Left unset,
+    the memories key on the observation whatever its width; a code of 1,024 units is the
+    recommended setting above 1,024 inputs, with the episodic memory's ``memory_fan_in`` 32
+    above 256 uncoded key values. With ``inputs`` (the width of the observations) the
+    sensory region is the code: every observation is coded before the drive, and ``inputs``
+    must then be named beside a ``code`` of the region's width.
     ``sparse_code`` holds the ``PatternSeparator``, ``code_width`` the key width
     (``observation_width`` gives it before the brain is built, to size the ``recall`` and
     ``next`` regions of a custom anatomy). A memory keyed on the code numbers its key
@@ -1421,7 +1443,8 @@ class Brain:
         feature maps project to the first module as the sensory region does.
         ``compose(inputs=int)`` is as before. The memories key on the observation code
         (``observation_code``): the observation itself, or with ``code=units`` the brain's
-        sparse code of it (32 inputs per unit, one unit in ten active, unit length).
+        sparse code of it (every input read by two units at least, with positive weights, 32
+        inputs per unit or more, one unit in ten active, unit length).
         ``code=units`` makes a vector brain's sensory region that code: every observation is
         coded before the drive, so 12,824 inputs reach the cortex as 1,024 units through
         1,024 x 64 sensory synapses in place of 12,824 x 64, and the memories key on the same

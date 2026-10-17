@@ -932,6 +932,14 @@ class PatternSeparator:
     fan-in, whatever the number of inputs. The founder ``fan_in=0`` keeps the dense
     ``projection``; ``index`` and ``weight`` are then None, and ``projection`` is None for a
     sparse separator.
+
+    ``cover`` above zero (with a fan-in) reads every input: each input is given ``cover``
+    distinct code neurons first, each code neuron's remaining fan-in is then filled with
+    distinct inputs at random, and the weights are positive, uniform in ``(0, 1]`` over
+    ``sqrt(fan_in)``. An input that rises above the others' level then drives each of its
+    readers, so without ``center`` no single positive input codes to zero. It needs
+    ``cover * inputs`` within ``expansion * fan_in`` and ``cover`` within ``expansion``.
+    The founder ``cover=0`` draws the signed sparse weights independently, as above.
     """
 
     inputs: int
@@ -940,6 +948,7 @@ class PatternSeparator:
     seed: int = 0
     center: float = 0.0
     fan_in: int = 0
+    cover: int = 0
     projection: np.ndarray | None = field(init=False, repr=False)
     index: np.ndarray | None = field(init=False, repr=False)
     weight: np.ndarray | None = field(init=False, repr=False)
@@ -951,17 +960,31 @@ class PatternSeparator:
             if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 1:
                 raise ValueError(f"{name} must be a positive integer")
         fan_in = self.fan_in
-        if isinstance(fan_in, bool) or not isinstance(fan_in, (int, np.integer)) or fan_in < 0:
-            raise ValueError("fan_in must be a nonnegative integer")
+        for name in ("fan_in", "cover"):
+            value = getattr(self, name)
+            if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 0:
+                raise ValueError(f"{name} must be a nonnegative integer")
         if fan_in > self.inputs:
             raise ValueError("fan_in must not exceed the inputs")
         if self.winners > self.expansion:
             raise ValueError("winners must not exceed the expansion")
         if not 0 <= self.center < 1:
             raise ValueError("center lies in [0, 1)")
+        if self.cover and (
+            not fan_in
+            or self.cover > self.expansion
+            or self.cover * self.inputs > self.expansion * fan_in
+        ):
+            raise ValueError(
+                "cover needs a fan-in, at most the expansion, and cover * inputs within "
+                "expansion * fan_in"
+            )
         rng = np.random.default_rng(self.seed)
         self.projection = self.index = self.weight = None
-        if fan_in:
+        if fan_in and self.cover:
+            self.index = self._covering(rng)
+            self.weight = (1.0 - rng.random((self.expansion, fan_in))) / np.sqrt(fan_in)
+        elif fan_in:
             # each code neuron's inputs, distinct and in order, then their weights
             self.index = np.sort(
                 np.stack([rng.choice(self.inputs, fan_in, replace=False)
@@ -974,6 +997,46 @@ class PatternSeparator:
                 rng.standard_normal((self.inputs, self.expansion)) / np.sqrt(self.inputs)
             )
         self.mean = np.zeros(self.inputs)
+
+    def _covering(self, rng: np.random.Generator) -> np.ndarray:
+        """Each code neuron's inputs, distinct and in order, every input among the inputs of
+        ``cover`` distinct code neurons: the readers of the inputs are dealt first, from the
+        places of every neuron's fan-in in a random order, and each neuron's places left over
+        take distinct other inputs at random."""
+        inputs, units, fan_in, cover = self.inputs, self.expansion, self.fan_in, self.cover
+        places = rng.permutation(np.repeat(np.arange(units), fan_in))
+        readers = places[: cover * inputs].reshape(inputs, cover).copy()
+        spare = places[cover * inputs:].copy()
+        ordered = np.sort(readers, axis=1)
+        for row in np.flatnonzero((ordered[:, 1:] == ordered[:, :-1]).any(axis=1)):
+            # a neuron dealt twice to one input trades the place for another neuron's
+            given = readers[row]
+            for k in range(1, cover):
+                for _ in range(64 * (inputs + len(spare))):
+                    if given[k] not in given[:k]:
+                        break
+                    open_ = np.flatnonzero(~np.isin(spare, given))
+                    if len(open_):
+                        s = open_[rng.integers(len(open_))]
+                        given[k], spare[s] = spare[s], given[k]
+                        continue
+                    other, place = rng.integers(inputs), rng.integers(cover)
+                    if readers[other, place] not in given and given[k] not in readers[other]:
+                        given[k], readers[other, place] = readers[other, place], given[k]
+                else:
+                    raise ValueError("the inputs could not be covered")
+        owner = readers.ravel()
+        order = np.argsort(owner, kind="stable")  # each neuron's given inputs, in order
+        read = np.repeat(np.arange(inputs), cover)[order]
+        bounds = np.searchsorted(owner[order], np.arange(units + 1))
+        index = np.empty((units, fan_in), dtype=np.int64)
+        for unit in range(units):
+            given = read[bounds[unit] : bounds[unit + 1]]
+            # the remaining places: distinct inputs the neuron does not read yet, by rank
+            ranks = rng.choice(inputs - len(given), fan_in - len(given), replace=False)
+            extra = ranks + np.searchsorted(given - np.arange(len(given)), ranks, side="right")
+            index[unit] = np.sort(np.concatenate([given, extra]))
+        return index
 
     def habituate(self, keys: np.ndarray) -> None:
         """Initialize the running mean from ``keys`` before storing records.
@@ -1035,6 +1098,8 @@ class PatternSeparator:
         }
         if self.fan_in:  # the dense founder's description is as it was
             out["fan_in"] = int(self.fan_in)
+        if self.cover:  # and the independent sparse draw's
+            out["cover"] = int(self.cover)
         return out
 
 

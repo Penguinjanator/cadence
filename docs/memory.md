@@ -22,17 +22,22 @@ and `Brain.compose((height, width), actions)` give the cortex the pixels through
 `visual_cortex`, feature maps with local receptive fields that learning shapes. The
 library's generic compression is the brain's sparse code. `brain.observation_code(x)` is
 what both memories key on: the observation itself, or with `code=units` the brain's own
-code of it, `units` code neurons each reading 32 inputs chosen at random from the seed with
-random weights, the largest positive sums of one unit in ten kept (102 of 1,024) and the
-code scaled to unit length (a `PatternSeparator` with a fan-in, owned by the brain and
-saved with it). Too sparse a code leaves the cortex and the memory too little overlap
-between a question and the moment it asks for. Left unset, every brain keys on its
-observation, whatever its width; a code of 1,024 units is the recommended setting above
-1,024 inputs.
+code of it, `units` code neurons with positive weights that read every input at least
+twice, the largest sums of one unit in ten kept (102 of 1,024) and the code scaled to unit
+length (a `PatternSeparator` with a fan-in and `cover=2`, owned by the brain and saved with
+it). The code deals each input two readers first, then fills each unit's fan-in of 32
+inputs at random from the seed (more inputs per unit where 32 cannot read every input
+twice: 201 for 128 units at 12,824 inputs), so a single lit input reaches the code. Too
+sparse a code leaves the cortex and the memory too little overlap between a question and
+the moment it asks for. The code compresses: inputs read by the same units are told apart
+by their weights alone, and an observation lit widely keeps one unit in ten, so the brain
+on its raw observation is the control a code is chosen against. Left unset, every brain
+keys on its observation, whatever its width; a code of 1,024 units is the recommended
+setting above 1,024 inputs.
 
 ```text
 observation ─► sensory region ─► association cortex ─► motor readout
-      └──────► sparse code (fixed: 1,024 units, 32 inputs each, one in ten active, unit length)
+      └──────► sparse code (fixed: 1,024 units, every input read twice, one in ten active, unit length)
                    ├─► episodic memory: place records, and context records with the command
                    └─► recall memory: the slots and their address
 ```

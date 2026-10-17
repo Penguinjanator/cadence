@@ -5,18 +5,24 @@
 - Memories key on the observation code: `Brain.observation_code(x)` is what the episodic
   memory (place and context records), the hippocampus of earlier releases and the recall
   memory key on. It is the observation itself, or with `code=units` (opt-in) the brain's
-  own sparse code of it: `units` code neurons each reading 32 inputs chosen at random from
-  the seed with random weights, the largest positive sums of one unit in ten kept (102 of
-  1,024; too sparse a code leaves the cortex and the memory too little overlap between a
-  question and the moment it asks for), the code scaled to unit length; a
-  `PatternSeparator` with a fan-in, owned by the brain (`brain.sparse_code`, `code_width`,
-  `inputs`) and saved with it. A coded brain's episodic stores take no separator of their
-  own and refuse `memory_expansion` and `memory_fan_in`. A sense organ's own code (a retina, a
-  cochlea, a V1 region) belongs to the application or the anatomy, not to the library.
-  `describe()` reports `observation_code`; a brain with a code saves as `cadence-generic/9`
-  with the code's settings and tables, and `load` checks the records' key widths against
-  the code's and refuses a mismatch naming both widths, as it refuses place records keyed
-  on other coordinates than the brain's. Every brain without `code` is byte-identical at
+  own sparse code of it: `units` code neurons with positive weights that read every input
+  at least twice (each input is dealt two readers first, and each unit's fan-in of 32
+  inputs, more where 32 cannot read every input twice, is filled at random from the seed
+  after), the largest sums of one unit in ten kept (102 of 1,024; too sparse a code leaves
+  the cortex and the memory too little overlap between a question and the moment it asks
+  for), the code scaled to unit length; a `PatternSeparator` with a fan-in and `cover=2`,
+  owned by the brain (`brain.sparse_code`, `code_width`, `inputs`) and saved with it. A
+  single lit input always reaches the code; inputs read by the same units are told apart by
+  their weights. A coded brain's episodic stores take no separator of their own and refuse
+  `memory_expansion` and `memory_fan_in`. A sense organ's own code (a retina, a cochlea, a
+  V1 region) belongs to the application or the anatomy, not to the library. `describe()`
+  reports `observation_code`; a brain with a code saves as `cadence-generic/9` with the
+  code's settings, seed and tables, which `load` installs as saved; `load` checks the
+  records' key widths against the code's and refuses a mismatch naming both widths, as it
+  refuses place and context records keyed on other coordinates than the brain's, bounds a
+  memory's key coordinates by the code's width (which can exceed the graph's neurons) and
+  its outputs by the graph, and refuses code tables that do not read every input twice with
+  positive weights. Every brain without `code` is byte-identical at
   4, 256 and 2,000 inputs and on an image shape, the checkpoint included at 4 and 2,000
   inputs and on the image ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
 - `Brain.compose(inputs, actions, code=units)` makes the sensory region the code: every
@@ -110,7 +116,9 @@
   the expansion and the fan-in at any input width. `Brain.compose(..., memory_choice=True,
   memory_fan_in=16)` gives both episodic stores such a separator (1,024 x 16 indices and
   weights each); `memory_fan_in=0` keeps the dense one, byte-identical with its
-  checkpoint, and a sparse separator saves its arrays and its fan-in.
+  checkpoint, and a sparse separator saves its arrays and its fan-in. With `cover=c` as well
+  every input is read by `c` code neurons at least, the readers dealt first and the
+  weights positive (the brain's code); the episodic separators keep the independent draw.
 - One holder of the current graph for several learners: `Learner.brain` reads the graph from
   the learner's `holder`, a `GraphHolder`, and an update replaces the holder's graph in one
   assignment after every check, so a refused update changes nothing. `Learner.sharing(first,

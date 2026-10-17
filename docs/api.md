@@ -604,24 +604,31 @@ and a complete runnable example.
   identity, representation alignment, key interference, and checkpoint boundaries.
 - `cadence.stream.columns(index)`: a slice when the neurons are one contiguous range,
   else the index array. Slices can avoid the copies required by advanced indexing.
-- `PatternSeparator(inputs, expansion, winners, seed=0, center=0.0, fan_in=0)`: pattern
+- `PatternSeparator(inputs, expansion, winners, seed=0, center=0.0, fan_in=0, cover=0)`: pattern
   separation of the keys of a `FastSynapses` or `SynapticMemory`. `projection` is a fixed
   `(inputs, expansion)` Gaussian matrix from `numpy.random.default_rng(seed)`, divided by
   `sqrt(inputs)`; `mean` is the running key mean. With `fan_in` above zero the projection is
   sparse: each code neuron reads `fan_in` distinct inputs drawn from the same generator, with
   Gaussian weights divided by `sqrt(fan_in)`, held in `index` (int64) and `weight`, both
   `(expansion, fan_in)`, in place of `projection` (then `None`; `index` and `weight` are
-  `None` for the dense founder), so storage and work do not grow with `inputs`. `arrays()`
+  `None` for the dense founder), so storage and work do not grow with `inputs`. With `cover`
+  above zero as well every input is read by at least `cover` distinct code neurons: the
+  readers of the inputs are dealt first from the places of every neuron's fan-in, each
+  neuron's remaining places then take distinct inputs at random, and the weights are
+  positive, uniform in `(0, 1]` divided by `sqrt(fan_in)`, so without `center` a single
+  positive input drives each of its readers; it needs `cover` within `expansion` and
+  `cover * inputs` within `expansion * fan_in`. The brain's code is such a separator
+  (`cover=2`); the founder `cover=0` and the episodic separators draw independently. `arrays()`
   returns the state a checkpoint holds by name. `code(key, learn=False) -> (batch, expansion)`:
   with `center` above zero, `mean` is subtracted first, and `learn=True` first moves `mean`
   by the forgetting factor `center` toward the batch mean of the keys (writes learn, reads
   do not); the code keeps the `winners` largest entries of the rectified `key @ projection`
   and sets the rest to zero. `habituate(keys)` sets `mean` to the mean of a nonempty sample
-  of keys. `to_dict()` (it names `fan_in` only when above zero); attributes `inputs`,
-  `expansion`, `winners`, `seed`, `center`, `fan_in`, `projection`, `index`, `weight` and
-  `mean`. Raises `ValueError` for nonpositive sizes, `winners` above `expansion`, a
-  `fan_in` that is negative or above `inputs`, `center` outside `[0, 1)`, and keys whose
-  code overflows.
+  of keys. `to_dict()` (it names `fan_in` and `cover` only when above zero); attributes
+  `inputs`, `expansion`, `winners`, `seed`, `center`, `fan_in`, `cover`, `projection`,
+  `index`, `weight` and `mean`. Raises `ValueError` for nonpositive sizes, `winners` above
+  `expansion`, a `fan_in` that is negative or above `inputs`, a `cover` without room for its
+  readers, `center` outside `[0, 1)`, and keys whose code overflows.
 - `SynapticMemory(pre, post, decay=0.9, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="delta", separator=None, writes=0, consolidation=0.05)`:
   normalized delta synapses with a shared persistent `consolidated` matrix and per-stream
   effective `strength` matrices. `observe(key, value, write=None, *, salience=None,
@@ -821,18 +828,19 @@ that recursive benefit or automatic reflective behavior has been learned.
   `memory_scale`.
 - `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, memory_fan_in=None, working_memory_decay=0.0, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, history_decays=(), history_amplitude=3.0, recall=False, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, inputs=None, code=None, **genes)`:
   the memories key on the observation code: the observation itself, or with `code=units`
-  the brain's own sparse code of it, `units` code neurons each reading 32 inputs chosen at
-  random from `seed` with random weights, the largest positive sums of one unit in ten kept
-  (at least 24) and the code scaled to unit length; left unset or 0, the memories key on
-  the observation whatever its width, a code of 1,024 units being the recommended setting
-  above 1,024 inputs. `inputs` names the width
-  of the observations when the sensory region is their code (`compose(..., code=units)`
-  builds such a region; a custom anatomy names both), and must then come with a `code` of
-  the region's width. A memory keyed on the code numbers its key coordinates from zero
-  (`pre`) and is never read from the drive; a coded brain's episodic stores take no
-  separator, the code being their separation, and refuse `memory_expansion` and
-  `memory_fan_in`. `memory_fan_in` left unset is 0 (dense); 32 is the recommended setting
-  above 256 key values.
+  the brain's own sparse code of it, `units` code neurons with positive weights reading
+  every input at least twice (a `PatternSeparator` with `cover=2`, drawn from `seed + 2`;
+  each unit reads 32 inputs, or `ceil(2 * inputs / units)` where that is more), the largest
+  sums of one unit in ten kept (at least 24) and the code scaled to unit length; left unset
+  or 0, the memories key on the observation whatever its width, a code of 1,024 units being
+  the recommended setting above 1,024 inputs. `inputs` names the width of the observations
+  when the sensory region is their code (`compose(..., code=units)` builds such a region; a
+  custom anatomy names both), and must then come with a `code` of the region's width. A
+  memory keyed on the code numbers its key coordinates from zero (`pre`), up to the code's
+  width whatever the graph's size, and is never read from the drive; a coded brain's
+  episodic stores take no separator, the code being their separation, and refuse
+  `memory_expansion` and `memory_fan_in`. `memory_fan_in` left unset is 0 (dense); 32 is
+  the recommended setting above 256 key values.
   `arousal=True` enables the founder `ArousalConfig`; a mapping patches its
   fields, and an `ArousalConfig` supplies an explicit configuration. Omitting
   arousal preserves the brain without that controller, and `live` raises.
@@ -1111,12 +1119,15 @@ that recursive benefit or automatic reflective behavior has been learned.
     and the address map, which `load` reads back as saved; `load` refuses a recall memory
     under another format name and that name without one.
     A brain with its own sparse code saves as `cadence-generic/9`, with any of the earlier
-    components, naming the code (`code`: its inputs, units, winners, seed and fan-in, and
-    whether the sensory region is the code) and saving its tables (`code/index`,
-    `code/weight`), which `load` reads back as saved; the records' and the recall memory's
-    key widths are checked against the code's, and a mismatch is refused naming both
-    widths, as are a code under another format name, that name without one, and tables
-    that do not read distinct inputs. A brain keyed on its observation writes the earlier
+    components, naming the code (`code`: its inputs, units, winners, seed, fan-in and cover,
+    and whether the sensory region is the code) and saving its tables (`code/index`,
+    `code/weight`), which `load` installs as saved, with the saved seed; the records' and the
+    recall memory's key widths are checked against the code's, and a mismatch is refused
+    naming both widths, as are a code under another format name, that name without one, and
+    tables that do not read distinct inputs or do not read every input twice with positive
+    weights. A memory keyed on the code has its key coordinates bounded by the code's width
+    (with the motor neurons for the context records), which can exceed the graph's neurons,
+    and its outputs by the graph. A brain keyed on its observation writes the earlier
     formats unchanged, and a checkpoint saved before this release loads keyed on its
     observation as it was saved.
     The archive is replaced atomically. A learner-only checkpoint

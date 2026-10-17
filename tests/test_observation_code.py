@@ -331,6 +331,8 @@ def test_the_code_is_a_sparse_unit_length_code_fixed_by_the_seed():
     assert isinstance(code, cd.PatternSeparator)
     # one unit in ten active, at least 24: 102 of 1,024
     assert (code.inputs, code.expansion, code.winners, code.fan_in) == (12_824, 1024, 102, 32)
+    assert code.cover == 2 and (code.weight > 0).all()
+    assert np.bincount(code.index.ravel(), minlength=12_824).min() >= 2
     assert cd.Brain.compose(300, 2, modules=(8,), code=128).sparse_code.winners == 24
     assert cd.Brain.compose(300, 2, modules=(8,), code=240).sparse_code.winners == 24
     assert cd.Brain.compose(300, 2, modules=(8,), code=250).sparse_code.winners == 25
@@ -353,6 +355,55 @@ def test_the_code_is_a_sparse_unit_length_code_fixed_by_the_seed():
     shared[0, :1000] = 0.0
     apart = frames(12_824, 1, 9)
     assert coded[0] @ brain.observation_code(shared)[0] > 0.5 > coded[0] @ brain.observation_code(apart)[0]
+
+
+def test_every_input_reaches_the_code_and_no_two_inputs_share_one():
+    """The code reads every input: each is dealt two code units before the units' fan-ins are
+    filled at random, and the weights are positive, so a single positive input drives its
+    readers and reaches the code. At 12,824 inputs and 1,024 units (seed 1) no one-hot input
+    codes to zero and no two code alike; 41 pairs read the same units and are told apart by
+    the weights alone. The episodic separator's independent signed draw is unchanged."""
+    brain = cd.Brain.compose(12_824, 2, modules=(8,), code=1024, seed=1, episodic=False)
+    code = brain.sparse_code
+    assert np.bincount(code.index.ravel(), minlength=12_824).min() >= 2
+    zero, codes, units = 0, set(), {}
+    for start in range(0, 12_824, 256):
+        rows = np.arange(start, min(start + 256, 12_824))
+        x = np.zeros((len(rows), 12_824))
+        x[np.arange(len(rows)), rows] = 1.0
+        for row in brain.observation_code(x):
+            active = np.flatnonzero(row)
+            if not len(active):
+                zero += 1
+                continue
+            codes.add((active.tobytes(), row[active].tobytes()))
+            units[active.tobytes()] = units.get(active.tobytes(), 0) + 1
+    assert zero == 0
+    assert len(codes) == 12_824  # every one-hot input has a code of its own
+    assert sum(n for n in units.values() if n > 1) <= 128  # 82 inputs read the same units
+    # a narrow code reads more inputs per unit, as many as two readers per input take
+    narrow = cd.Brain.compose(12_824, 2, modules=(8,), code=128, seed=1, episodic=False)
+    assert narrow.sparse_code.fan_in == 201  # ceil(2 * 12,824 / 128)
+    assert np.bincount(narrow.sparse_code.index.ravel(), minlength=12_824).min() >= 2
+    founder = cd.PatternSeparator(12_824, 1024, 24, seed=1, fan_in=32)
+    assert founder.cover == 0 and (founder.weight < 0).any() and "cover" not in founder.to_dict()
+    assert code.to_dict()["cover"] == 2
+
+
+def test_a_covering_separator_needs_room_for_its_readers():
+    separator = cd.PatternSeparator(40, 24, 24, seed=2, fan_in=4, cover=2)
+    assert np.bincount(separator.index.ravel(), minlength=40).min() >= 2
+    assert all(len(np.unique(row)) == 4 for row in separator.index)
+    np.testing.assert_array_equal(
+        separator.index, cd.PatternSeparator(40, 24, 24, seed=2, fan_in=4, cover=2).index
+    )
+    # every place taken by a reader: 2 * 48 = 24 * 4
+    exact = cd.PatternSeparator(48, 24, 24, seed=5, fan_in=4, cover=2)
+    np.testing.assert_array_equal(np.bincount(exact.index.ravel(), minlength=48), 2)
+    for options in ({"fan_in": 0, "cover": 2}, {"fan_in": 4, "cover": 25},
+                    {"fan_in": 2, "cover": 3}, {"fan_in": 4, "cover": -1}):
+        with pytest.raises(ValueError):
+            cd.PatternSeparator(40, 24, 24, seed=2, **options)
 
 
 def test_compose_can_make_the_sensory_region_the_code():
@@ -589,6 +640,9 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     def odd_table(meta, copy):
         copy["code/index"][0, 0] = 2_000
 
+    def nonpositive_weight(meta, copy):
+        copy["code/weight"][0, 0] = 0.0
+
     def repeated_table(meta, copy):
         copy["code/index"][0, 1] = copy["code/index"][0, 0]
 
@@ -605,7 +659,9 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
         ("earlier_format", earlier_format, "belongs to checkpoint format cadence-generic/9"),
         ("other_fan_in", other_fan_in, "reads 32 inputs per unit and keeps one unit in 10"),
         ("other_winners", other_winners, "reads 32 inputs per unit and keeps one unit in 10"),
-        ("other_width", other_width, "invalid saved state"),
+        # the tables never read the 2,001st input
+        ("other_width", other_width, "reads every input of the observation with 2 units"),
+        ("nonpositive_weight", nonpositive_weight, "with 2 units at least, its weights positive"),
         ("cortex_flag", cortex_flag, "reads observations of 2000 values where the sensory "
                                      "region has 1024"),
         ("odd_table", odd_table, "reads distinct inputs of the observation"),
