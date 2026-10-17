@@ -35,7 +35,9 @@ step toward ``K*`` on its inputs ``z = [x_t, c_{t-1}, 1]`` at the taught rows, e
 the rate ``min(address, 1 / |z|^2)``, so that a row taught alone moves its own address at
 most onto its target. The rows' steps are averaged: in a batch a row can pass its target,
 and the batch error, the rows' squared errors weighted by their rates, does not grow. A
-step whose result is not finite is refused. With the
+step whose result is not finite is refused. With ``address_step="toward"`` the step's error
+is ``K* - sum_i p_i K_i``, the named keys less the mixture the moment attended to, in place
+of ``K* - q``: to first order the named slots' logits rise against the attended ones. With the
 attention as the prior, a moment whose own content happens to be the answer does not displace
 the moment the address found by its relation (a fresh successor is the value of the moment
 after the cued one). Keys hold the fixed part of the address: a key written with the learned
@@ -86,6 +88,7 @@ GENES: dict[str, Any] = {
     "address": 0.0,  # the address lesson's rate; 0: the address stays the event heard
     "address_temperature": 0.1,  # the softmax temperature of the answer's address
     "address_prior": 1.0,  # weight of the moment's own attention in naming the answer's slot
+    "address_step": "lms",  # "toward": the error is K* less the attended keys' mixture
     "context": 0.0,  # weight of the fading history of earlier events in a moment's key
     "context_decay": 0.5,  # the history's retention per moment
     "code": 0,  # code neurons of the observation's sparse code; 0: the observation itself
@@ -93,6 +96,7 @@ GENES: dict[str, Any] = {
     "code_winners": 24,  # code neurons a code keeps
 }
 VALUES = ("event", "cortex")
+STEPS = ("lms", "toward")
 
 
 class SlotMemory:
@@ -217,6 +221,10 @@ class IndexMemory:
         self.history = np.zeros((0, code_width))  # each stream's fading history of earlier events
         self.context = float(genes["context"])
         self.context_decay = float(genes["context_decay"])
+        # the options beside the declared genes; genes recorded before them take their founders
+        self.address_step = str(genes.get("address_step", "lms"))
+        if self.address_step not in STEPS:
+            raise ValueError(f"address_step is one of {STEPS}")
         # (x, c, q, k) of the present moment: event, cortex before it, address, key
         self.last: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
         self._attended: np.ndarray | None = None  # the attention of the latest read
@@ -291,7 +299,9 @@ class IndexMemory:
         """The address lesson at ``rows``: toward the keys of the slots the scores name, each
         row's rate bounded by its own energy, ``min(rate, 1 / |z|^2)`` on ``z = [x, c, 1]``,
         the rows' steps averaged. A candidate map or address that is not finite refuses the
-        step: the map stays and ``address_refused`` counts the rows."""
+        step: the map stays and ``address_refused`` counts the rows. With
+        ``address_step="toward"`` a row's error is its target less the attended keys'
+        mixture."""
         assert self.last is not None
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         memory = self.slots
@@ -309,21 +319,27 @@ class IndexMemory:
             return quiet
         x, c, q, key = (a[rows][moving] for a in self.last)
         n = len(q)
+        toward = self.address_step == "toward"
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             logits = score[moving] / norm[moving, None] / temperature
             prior = float(self.genes["address_prior"])
-            if prior:
+            if prior or toward:
                 # among the moments the address attended to: the attention is the prior
                 attention = np.einsum("bk,bmk->bm", q, keys[moving]) / self.temperature
                 if self.recency:
                     attention = attention - self.recency * memory.ages()[None, :]
                 attention -= attention.max(axis=1, keepdims=True)
                 attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
-                logits = logits + prior * attention
+                if prior:
+                    logits = logits + prior * attention
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
             p /= p.sum(axis=1, keepdims=True)
             target = np.einsum("bm,bmk->bk", p, keys[moving])
-            error = target - q
+            if toward:
+                # from the mixture the moment attended to, toward the keys the scores name
+                error = target - np.einsum("bm,bmk->bk", np.exp(attention), keys[moving])
+            else:
+                error = target - q
             # each row's gain on its own address, rate * |z|^2, at most one
             energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
             step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]

@@ -234,3 +234,25 @@ def test_the_answers_address_is_named_among_the_moments_attended_to() -> None:
         return float((after - before)[0] @ second)
 
     assert 0 < toward_second(1.0) < 0.2 * toward_second(0.0)
+
+
+def test_a_movement_that_names_a_short_key_raises_its_slot_under_the_toward_step() -> None:
+    """Two slots with the short keys [.25, 0] and [0, .25] and the heard key [1, 0]: a
+    movement that names the first slot gives a target near its short key. The founder step
+    moves the address toward it and the first slot's weight falls; the toward step moves the
+    address by the target less the attended keys' mixture and the weight rises."""
+
+    def moved(form: str) -> float:
+        genes = dict(ir.GENES, recency=0.0, next=False, address_step=form)
+        index = ir.IndexMemory(2, 1, 2, genes)
+        for key in 0.25 * np.eye(2):
+            index.slots.observe(key[None], key[None])
+        x = np.array([[1.0, 0.0]])
+        before = index.weights(index.address(x))[0, 0]
+        report = index.learn(np.array([0]), index.slots.values[:, 0].copy(), None, rate=0.01,
+                             temperature=0.1)
+        assert report["address_rows"] == 1.0
+        return float(index.weights(index.address(x))[0, 0] - before)
+
+    assert moved("lms") < 0.0 < moved("toward")
+    assert ir.GENES["address_step"] == "lms"

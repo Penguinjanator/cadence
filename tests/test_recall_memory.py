@@ -1148,3 +1148,221 @@ def test_describe_reports_the_memory_and_parameters_count_its_address_map():
     brain = composed()
     assert brain.describe()["recall"] == brain.recall.to_dict()
     assert brain.parameters() == brain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4
+
+
+# -- options beside the founder memory
+
+
+def bare(width=2, association=2, **settings):
+    """A recall memory on a small anatomy of its own, read and taught directly."""
+    layout = (Region("sensory", width), Region("association", association), motor_cortex(2),
+              Region("recall", width), Region("next", width))
+    projections = (Projection("sensory", "association", reciprocal=False),
+                   Projection("association", "motor"))
+    return cd.Recall(develop(Genome(layout, projections)), **settings)
+
+
+def _log_softmax(z):
+    z = z - z.max(axis=-1, keepdims=True)
+    return z - np.log(np.exp(z).sum(axis=-1, keepdims=True))
+
+
+def _founder_life(brain):
+    for t in range(4):
+        brain.step(STREAM[t % 4], teacher=[t % 2])
+    for t in range(4):
+        brain.live(STREAM[t % 4], reward=[float(t % 3 == 0)])
+    brain.wait(GO)
+
+
+def test_the_options_at_their_founders_build_the_founder_memory(tmp_path):
+    """Each option passed at its founder builds the founder memory: the same life, the same
+    checkpoint bytes and the same description, which leaves the options out."""
+    assert cd.Recall.options() == {"address_step": "lms"}
+    founder = composed(seed=5, arousal=True, learning_surprise=True)
+    explicit = composed(
+        seed=5, arousal=True, learning_surprise=True,
+        **{f"recall_{name}": value for name, value in cd.Recall.options().items()},
+    )
+    for brain in (founder, explicit):
+        _founder_life(brain)
+    assert_same_checkpoint(founder.save(tmp_path / "founder"), explicit.save(tmp_path / "explicit"))
+    assert explicit.describe() == founder.describe()
+    assert not set(cd.Recall.options()) & set(explicit.recall.to_dict())
+
+
+def _option_lives(extra, seed=2, rounds=8):
+    """The library brain with ``extra`` beside the founders and the instrument's
+    ``IndexBrain`` with the same genes, compared moment for moment on the token-binding task:
+    acts, settled states, the attention each read used, lessons, the address map and the
+    slots. Returns the rows the address lessons moved."""
+    ir = instrument("index_read")
+    tb = ir.tb
+    inst = ir.IndexBrain.build(seed, read=dict(_declared(ir), **extra), learning_surprise=True)
+    lib = cd.Brain.compose(
+        tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
+        learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
+    )
+    held = tb.holdout(seed)
+    rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
+    work, moved = tb.new_work(), 0.0
+    for _ in range(rounds):
+        trials = tb.draw(rng, tb.BATCH, held)
+        seq, answer = tb.events(trials), tb.answers(trials)
+        inst.reset()
+        lib.reset()
+        for x in seq[:-1]:
+            np.testing.assert_array_equal(inst.act(x, greedy=True), lib.act(x, greedy=True))
+            np.testing.assert_array_equal(
+                inst.basal_ganglia.state.activation, lib.basal_ganglia.state.activation
+            )
+        ir.lesson(inst, seq[-1], answer, work)
+        moved += lib.lesson(seq[-1], answer)["address_rows"]
+        np.testing.assert_array_equal(inst.index.attended, lib.recall.attended)
+        np.testing.assert_array_equal(inst.brain.efficacy, lib.brain.efficacy)
+        for name in ("w_x", "w_c", "b"):
+            np.testing.assert_array_equal(getattr(inst.index, name), getattr(lib.recall, name))
+        np.testing.assert_array_equal(inst.act(seq[-1], greedy=True), lib.act(seq[-1], greedy=True))
+        for name in ("keys", "values", "nexts"):
+            np.testing.assert_array_equal(
+                getattr(inst.index.slots, name), getattr(lib.recall, name), err_msg=name
+            )
+    assert moved == work["address_rows"]
+    return moved
+
+
+# -- the address step toward the named slots
+
+
+@pytest.mark.parametrize(("form", "rises"), [("lms", False), ("toward", True)])
+def test_a_movement_that_names_a_short_key_raises_its_slot_under_the_toward_step(form, rises):
+    """Two slots with the short keys [.25, 0] and [0, .25], the heard key [1, 0], no recency
+    charge: the address attends to the first slot, and a movement that names it (its value)
+    gives a target near its short key. The founder step moves the address toward that
+    target, shortening it, and the first slot's weight falls; the toward step moves the
+    address by the target less the attended keys' mixture, and the first slot's weight
+    rises."""
+    recall = bare(recency=0.0, next=False, address_step=form)
+    for key in 0.25 * np.eye(2):
+        recall._observe(key[None], key[None])
+    x = np.array([[1.0, 0.0]])
+    before = recall._moment(x)
+    weight = recall.weights(before.address)[0, 0]
+    report = recall._step(before, np.array([0]), recall.values[:, 0].copy(), None)
+    assert report["address_rows"] == 1.0 and report["address_refused"] == 0.0
+    after = recall.weights(recall._moment(x).address)[0, 0]
+    assert after != weight and (after > weight) == rises
+
+
+@pytest.mark.parametrize("seed", range(6))
+def test_the_toward_step_raises_the_named_slots_against_the_attended_ones(seed):
+    """Random keys of any norms, widths, slot counts, cortex and movements. A row taught alone
+    moves its address by s (K* - K_bar), s = min(address |z|^2, 1), so the named slots' mean
+    logit rises by s |K* - K_bar|^2 / T over the attended ones', and at a small rate the
+    named slots' mean log-attention rises by that much to first order. In a batch the rows'
+    first-order rises, each weighed by its row's bound, sum to no less than zero."""
+    rng = np.random.default_rng(seed)
+    width, association = int(rng.choice([2, 5, 16])), int(rng.choice([3, 8]))
+    rows, slots = 4, int(rng.integers(2, 9))
+    temperature, recency = float(rng.choice([0.25, 1.0])), float(rng.choice([0.0, 0.25]))
+    keys = rng.normal(size=(slots, rows, width)) * rng.choice([0.1, 0.5, 2.0], (slots, rows, 1))
+    values = rng.normal(size=(slots, rows, width))
+    events = rng.normal(size=(rows, width)) * rng.choice([0.2, 1.0], size=(rows, 1))
+    cortex = 0.5 * rng.normal(size=(rows, association))
+    d_value, d_next = rng.normal(size=(rows, width)), rng.normal(size=(rows, width))
+    energy = (events**2).sum(axis=1) + (cortex**2).sum(axis=1) + 1.0
+
+    def memory(rate, order):
+        recall = bare(width, association, temperature=temperature, recency=recency,
+                      address=rate, address_step="toward")
+        for t in range(slots):
+            recall._observe(keys[t][order], values[t][order])
+        recall.previous = cortex[order].copy()
+        return recall
+
+    def named(recall, moment, r, row):
+        """The attention p, the named distribution p* and their keys' mixtures at a row."""
+        stored = recall.keys[row]
+        log_p = _log_softmax(stored @ moment.address[row] / temperature
+                             - recency * recall.ages())
+        movement = np.r_[d_value[r], d_next[r]]
+        score = np.c_[recall.values[row], recall.nexts[row]] @ movement / np.linalg.norm(movement)
+        p_star = np.exp(_log_softmax(score / recall.address_temperature + log_p))
+        p = np.exp(log_p)
+        return log_p, p, p_star, p_star @ stored, p @ stored
+
+    largest = 0.0
+    for r in range(rows):
+        for rate in (1e-7, 0.5):
+            recall = memory(rate, [r])
+            moment = recall._moment(events[[r]])
+            log_p, p, p_star, target, attended = named(recall, moment, r, 0)
+            recall._step(moment, np.array([0]), d_value[[r]], d_next[[r]])
+            moved = recall._moment(events[[r]]).address[0] - moment.address[0]
+            s = min(rate * energy[r], 1.0)
+            gap = target - attended
+            # the addresses' own rounding bounds what a difference of two of them can show
+            rounding = 1e-14 * (1.0 + np.abs(moment.address).max())
+            np.testing.assert_allclose(moved, s * gap, rtol=1e-6, atol=rounding)
+            stored = recall.keys[0]
+            rise = (p_star - p) @ (stored @ moved) / temperature
+            slack = 10 * rounding * np.abs((p_star - p) @ stored).sum() / temperature
+            np.testing.assert_allclose(rise, s * gap @ gap / temperature, rtol=1e-6, atol=slack)
+            assert rise >= -slack
+            largest = max(largest, rise)
+            if rate < 1e-3:  # to first order, the named slots' mean log-attention rises as much
+                later = _log_softmax(stored @ (moment.address[0] + moved) / temperature
+                                     - recency * recall.ages())
+                gained = p_star @ (later - log_p)
+                np.testing.assert_allclose(gained, rise, rtol=1e-3, atol=1e-12)
+                if rise > 1e-10:
+                    assert gained > 0.0
+    assert largest > 0.1  # rows whose attention leaves the scores room to name other slots
+    rate = 0.5
+    recall = memory(rate, list(range(rows)))
+    moment = recall._moment(events)
+    found = [named(recall, moment, r, r) for r in range(rows)]
+    recall._step(moment, np.arange(rows), d_value, d_next)
+    moved = recall._moment(events).address - moment.address
+    rises = np.array([(p_star - p) @ (recall.keys[r] @ moved[r]) / temperature
+                      for r, (_, p, p_star, _, _) in enumerate(found)])
+    bounds = np.minimum(1.0, 1.0 / (rate * energy))
+    z = np.c_[events, cortex, np.ones(rows)]
+    gaps = np.array([target - attended for _, _, _, target, attended in found])
+    total = np.einsum("r,ri,rk->ik", bounds, z, gaps)
+    expected = rate / rows * (total**2).sum() / temperature
+    rounding = 1e-12 * (1.0 + np.abs(moment.address).max()) * np.abs(gaps).sum() / temperature
+    np.testing.assert_allclose(bounds @ rises, expected, rtol=1e-6, atol=rounding)
+    assert bounds @ rises >= -rounding
+
+
+def test_the_toward_step_is_the_instruments_moment_for_moment():
+    assert _option_lives({"address_step": "toward"}) > 0
+
+
+def test_the_address_step_is_described_saved_retuned_and_refused_when_unknown(tmp_path):
+    brain = composed(seed=5, arousal=True, recall_address_step="toward")
+    assert brain.recall.address_step == "toward"
+    assert brain.describe()["genes"]["recall_address_step"] == "toward"
+    assert brain.recall.to_dict()["address_step"] == "toward"
+    for t in range(3):
+        brain.step(STREAM[t % 4], teacher=[t % 2])
+    twin = cd.Brain.load(brain.save(tmp_path / "toward"))
+    assert twin.recall.address_step == "toward" and twin.describe() == brain.describe()
+    np.testing.assert_array_equal(brain.step(GO, teacher=[1]), twin.step(GO, teacher=[1]))
+    assert_same_memory(brain.recall, twin.recall)
+    brain.retune(recall_address_step="lms")
+    assert brain.recall.address_step == "lms" and "address_step" not in brain.recall.to_dict()
+    with pytest.raises(ValueError, match="address_step"):
+        brain.retune(recall_address_step="newton")
+    with pytest.raises(ValueError, match="address_step"):
+        composed(recall_address_step=1)
+    with pytest.raises(ValueError, match="recall settings need recall=True"):
+        composed(recall=False, recall_address_step="toward")
+    arrays = saved_arrays(tmp_path / "toward.npz")
+    meta = json.loads(str(arrays["generic"]))
+    meta["recall"]["address_step"] = "newton"
+    arrays["generic"] = np.array(json.dumps(meta))
+    np.savez(tmp_path / "bad.npz", **arrays)
+    with pytest.raises(ValueError):
+        cd.Brain.load(tmp_path / "bad.npz")

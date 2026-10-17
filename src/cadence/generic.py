@@ -161,15 +161,15 @@ def _history_decays(value: Any) -> tuple[float, ...]:
 
 def _recall_genes(recall: Any, genes: dict[str, Any]) -> dict[str, Any]:
     """The recall memory's settings, validated: its founders with every ``recall_<setting>``
-    of ``genes`` over them (those names are removed from ``genes``), or an empty mapping for
-    a brain without it."""
+    of ``genes`` over them (those names are removed from ``genes``), an option only where it
+    is given, or an empty mapping for a brain without it."""
     if not isinstance(recall, bool):
         raise ValueError("recall must be boolean")
     founders = Recall.founders()
     settings: dict[str, Any] = {}
     for name in [name for name in genes if name.startswith("recall_")]:
         setting = name[len("recall_"):]
-        if setting not in founders:
+        if setting not in founders and setting not in Recall.OPTIONS:
             raise TypeError(f"unknown brain setting: {name!r}")
         settings[setting] = Recall.setting(setting, genes.pop(name))
     if not recall:
@@ -803,7 +803,8 @@ def _validate_recall_state(
     names = {*Recall.RUNTIME, *Recall.CONSTRUCTION}
     if (
         not isinstance(recalled, dict)
-        or set(recalled) - {"inputs"} != names | {"source", "target", "neurons", "writes"}
+        or set(recalled) - {"inputs", *Recall.OPTIONS}
+        != names | {"source", "target", "neurons", "writes"}
         or recalled["source"] not in ("sensory", "visual/input")
         or recalled["source"] not in populations
         or recalled["target"] != "recall"
@@ -811,6 +812,9 @@ def _validate_recall_state(
     ):
         raise ValueError("invalid saved recall ports")
     settings = {name: Recall.setting(name, recalled[name]) for name in names}
+    # an option is saved where it differs from its founder, and takes its founder where absent
+    settings.update({name: Recall.setting(name, recalled[name]) for name in Recall.OPTIONS
+                     if name in recalled})
     writes = recalled["writes"]
     if isinstance(writes, bool) or not isinstance(writes, int) or writes < 0:
         raise ValueError("invalid saved recall write count")
@@ -1827,7 +1831,7 @@ class Brain:
                 memory_changes.append((self.context_memory, field, value))
         for name in [name for name in options if name.startswith("recall_")]:
             setting = name[len("recall_"):]
-            if setting not in Recall.RUNTIME:
+            if setting not in Recall.RUNTIME and setting not in Recall.OPTIONS:
                 raise TypeError(f"unknown brain setting: {name!r}")
             if self.recall is None:
                 raise ValueError(f"{name} requires its existing memory component")
@@ -1896,6 +1900,11 @@ class Brain:
                     f"recall_{name}": getattr(self.recall, name)
                     for name in (*Recall.RUNTIME, *Recall.CONSTRUCTION)
                 }
+            )
+            # an option is described where it differs from its founder
+            recalled = self.recall.to_dict()
+            genes.update(
+                {f"recall_{name}": recalled[name] for name in Recall.OPTIONS if name in recalled}
             )
         populations = self.connectome.populations
         result = {
@@ -3560,7 +3569,8 @@ class Brain:
                         "recall": True,
                         **{
                             f"recall_{name}": recalled[name]
-                            for name in (*Recall.RUNTIME, *Recall.CONSTRUCTION)
+                            for name in (*Recall.RUNTIME, *Recall.CONSTRUCTION, *Recall.OPTIONS)
+                            if name in recalled
                         },
                     }
                 ),

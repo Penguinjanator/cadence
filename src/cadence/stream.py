@@ -426,8 +426,12 @@ class Recall:
     slots, ``p* = softmax(score / address_temperature + log p)``, and takes the
     least-mean-squares step of the map toward ``K* = sum_i p*_i K_i`` on ``z = [x, c, 1]``
     at the taught rows, each row at the rate ``min(address, 1 / |z|^2)``; a step whose
-    result is not finite is refused. ``capacity`` bounds the slots per stream, the oldest
-    dropped first. ``reset`` empties streams, and an empty stream reads silence.
+    result is not finite is refused. The founder step (``address_step="lms"``) takes the
+    error ``K* - q``. With ``address_step="toward"`` the error is ``K* - sum_i p_i K_i``, the
+    named keys less the mixture the address attended to: to first order the step raises the
+    logits of the slots the scores name against those the address attended to, whatever the
+    keys' norms. ``capacity`` bounds the slots per stream, the oldest dropped first.
+    ``reset`` empties streams, and an empty stream reads silence.
     """
 
     connectome: Connectome
@@ -442,6 +446,8 @@ class Recall:
     address_temperature: float = 0.1
     context: float = 0.0
     context_decay: float = 0.5
+    # the options beside the founder memory (``OPTIONS``)
+    address_step: str = "lms"
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
     # the width of the observations the memory is given, when it is not the source range's: a
@@ -459,18 +465,31 @@ class Recall:
     b: np.ndarray = field(init=False, repr=False)
 
     VALUES = ("event", "cortex")
+    STEPS = ("lms", "toward")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
     RUNTIME = (
         "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
         "context", "context_decay",
     )
     CONSTRUCTION = ("capacity", "value", "next")
+    # options beside the founder memory, each one runtime: a memory at their founders
+    # describes and saves itself as before, and a saved memory without one takes its founder
+    OPTIONS = ("address_step",)
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
-        """The founder value of every setting: the genes of ``Brain.compose(..., recall=True)``."""
+        """The founder value of every setting the memory always describes: the genes of
+        ``Brain.compose(..., recall=True)``; ``options()`` gives the options beside them."""
         defaults = {item.name: item.default for item in fields(cls)}
         return {name: defaults[name] for name in (*cls.RUNTIME, *cls.CONSTRUCTION)}
+
+    @classmethod
+    def options(cls) -> dict[str, Any]:
+        """The founder value of every option (``OPTIONS``), a gene ``recall_<option>`` of
+        ``Brain.compose(..., recall=True)`` as well, which a memory describes and saves only
+        where it differs from its founder."""
+        defaults = {item.name: item.default for item in fields(cls)}
+        return {name: defaults[name] for name in cls.OPTIONS}
 
     @staticmethod
     def setting(name: str, value: Any) -> Any:
@@ -505,10 +524,14 @@ class Recall:
             if not isinstance(value, bool):
                 raise ValueError("next must be boolean")
             return value
+        if name == "address_step":
+            if not isinstance(value, str) or value not in Recall.STEPS:
+                raise ValueError(f"address_step is one of {Recall.STEPS}")
+            return value
         raise TypeError(f"unknown recall setting: {name!r}")
 
     def __post_init__(self) -> None:
-        for name in (*self.RUNTIME, *self.CONSTRUCTION):
+        for name in (*self.RUNTIME, *self.CONSTRUCTION, *self.OPTIONS):
             setattr(self, name, self.setting(name, getattr(self, name)))
         populations = self.connectome.populations
         regions = (self.source, "association", self.target, *(("next",) if self.next else ()))
@@ -866,50 +889,16 @@ class Recall:
         to no more after the step than before (with equal weights where no row reaches the
         bound). The candidate map and the candidate addresses of the rows are checked before
         the step is kept; one that is not finite refuses the step, the map stays as it was
-        and the report counts the refused rows."""
+        and the report counts the refused rows. With ``address_step="toward"`` each row's
+        error is its target less the keys' mixture its address attended to."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
-        values, nexts, keys = self.values[rows], self.nexts[rows], self.keys[rows]
-        held = self.held[rows]
-        masked = not held.all()
-        score = np.einsum("bc,bmc->bm", d_value, values)
-        norm = np.sum(d_value * d_value, axis=1)
-        if d_next is not None:
-            score += np.einsum("bc,bmc->bm", d_next, nexts)
-            norm += np.sum(d_next * d_next, axis=1)
-        norm = np.sqrt(norm)
-        moving = norm > 1e-12
-        if masked:
-            moving &= held.any(axis=1)  # a stream that began since and holds no slot
-        if not moving.any():
+        found = self._row_steps(moment, rows, d_value, d_next)
+        if found is None:
             return quiet
-        x, c, q, key = (
-            a[rows][moving] for a in (moment.event, moment.cortex, moment.address, moment.key)
-        )
-        n = len(q)
+        _, x, c, key, error, step = found
+        n = len(x)
         rate = self.address
-        # finite inputs can still overflow the arithmetic below: the check before the step is
-        # kept refuses what is not finite
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
-            logits = score[moving] / norm[moving, None] / self.address_temperature
-            if masked:
-                logits = np.where(held[moving], logits, -np.inf)
-            # among the moments the address attended to: the attention is the prior
-            attention = self._attention(q, keys[moving], held[moving] if masked else None)
-            attention -= attention.max(axis=1, keepdims=True)
-            attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
-            logits = logits + attention
-            p = np.exp(logits - logits.max(axis=1, keepdims=True))
-            p /= p.sum(axis=1, keepdims=True)
-            target = np.einsum("bm,bmk->bk", p, keys[moving])
-            error = target - q
-            # each row's gain on its own address, rate * |z|^2, is at most one: a row taught
-            # alone lands on its target at most, and a row within the bound keeps the rate as
-            # it is. Over a batch the step maps the errors E to (I - M) E, M = rate / n * G D
-            # with G the rows' Gram matrix of z and D their bounds; D^(1/2) M D^(-1/2) is
-            # symmetric with its eigenvalues in [0, 1] (its trace is the mean of the rows'
-            # gains), so sum_i D_i |e_i|^2 does not grow, though one row can pass its target.
-            energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
-            step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
             w_x = rate * x.T @ step
             w_x /= n
             w_x += self.w_x
@@ -927,6 +916,62 @@ class Recall:
             "address_refused": 0.0,
         }
 
+    def _row_steps(
+        self, moment: _Moment, rows: np.ndarray, d_value: np.ndarray, d_next: np.ndarray | None
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+        """Each row's step of the address lesson before the average over rows: the rows of
+        ``rows`` that move (a movement and a held slot), and at those rows the event ``x``,
+        the cortex ``c``, the key, the error toward the named keys and the error bounded by
+        the row's own energy, ``error * min(1, 1 / (address |z|^2))``. None when no row
+        moves. The arithmetic is unchecked: a caller checks what it keeps."""
+        values, nexts, keys = self.values[rows], self.nexts[rows], self.keys[rows]
+        held = self.held[rows]
+        masked = not held.all()
+        score = np.einsum("bc,bmc->bm", d_value, values)
+        norm = np.sum(d_value * d_value, axis=1)
+        if d_next is not None:
+            score += np.einsum("bc,bmc->bm", d_next, nexts)
+            norm += np.sum(d_next * d_next, axis=1)
+        norm = np.sqrt(norm)
+        moving = norm > 1e-12
+        if masked:
+            moving &= held.any(axis=1)  # a stream that began since and holds no slot
+        if not moving.any():
+            return None
+        x, c, q, key = (
+            a[rows][moving] for a in (moment.event, moment.cortex, moment.address, moment.key)
+        )
+        rate = self.address
+        # finite inputs can still overflow the arithmetic below: the check before the step is
+        # kept refuses what is not finite
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            logits = score[moving] / norm[moving, None] / self.address_temperature
+            if masked:
+                logits = np.where(held[moving], logits, -np.inf)
+            # among the moments the address attended to: the attention is the prior
+            attention = self._attention(q, keys[moving], held[moving] if masked else None)
+            attention -= attention.max(axis=1, keepdims=True)
+            attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
+            logits = logits + attention
+            p = np.exp(logits - logits.max(axis=1, keepdims=True))
+            p /= p.sum(axis=1, keepdims=True)
+            target = np.einsum("bm,bmk->bk", p, keys[moving])
+            if self.address_step == "toward":
+                # from the mixture the address attended to: moving q by s (K* - K_bar) raises
+                # the named slots' mean logit by s |K* - K_bar|^2 / T over the attended ones'
+                error = target - np.einsum("bm,bmk->bk", np.exp(attention), keys[moving])
+            else:
+                error = target - q
+            # each row's gain on its own address, rate * |z|^2, is at most one: a row taught
+            # alone lands on its target at most, and a row within the bound keeps the rate as
+            # it is. Over a batch the step maps the errors E to (I - M) E, M = rate / n * G D
+            # with G the rows' Gram matrix of z and D their bounds; D^(1/2) M D^(-1/2) is
+            # symmetric with its eigenvalues in [0, 1] (its trace is the mean of the rows'
+            # gains), so sum_i D_i |e_i|^2 does not grow, though one row can pass its target.
+            energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
+            step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
+        return moving, x, c, key, error, step
+
     def to_dict(self) -> dict[str, Any]:
         out = {
             **{name: getattr(self, name) for name in (*self.RUNTIME, *self.CONSTRUCTION)},
@@ -937,6 +982,12 @@ class Recall:
         }
         if self.inputs:  # a memory on the source range's observations describes itself as before
             out["inputs"] = self.inputs
+        # an option at its founder is left out: the founder memory describes itself as before
+        founders = self.options()
+        out.update(
+            {name: getattr(self, name) for name in self.OPTIONS
+             if getattr(self, name) != founders[name]}
+        )
         return out
 
 
