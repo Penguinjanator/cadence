@@ -178,15 +178,19 @@ def test_forks_carry_their_own_memory() -> None:
 def test_the_sparse_code_keeps_its_winners_at_unit_length_whatever_the_width() -> None:
     narrow = ir.SparseCode(64, 128, 8, 6, seed=3)
     wide = ir.SparseCode(12_824, 128, 8, 6, seed=3)
-    assert narrow.index.shape == (128, 8)  # eight reads per unit already read every input twice
-    assert wide.index.shape == (128, 201)  # the fan-in grows until every input is read twice
+    assert narrow.index.shape == (128, 8)  # eight reads per unit read every channel twice
+    assert wide.index.shape == (128, 401)  # the fan-in grows until every channel is read twice
     for code in (narrow, wide):
-        assert np.bincount(code.index.ravel(), minlength=code.separator.inputs).min() >= 2
+        channels = code.separator.channels
+        assert channels == 2 * code.separator.inputs and code.index.max() < channels
+        assert np.bincount(code.index.ravel(), minlength=channels).min() >= 2
     x = (np.random.default_rng(3).random((5, 12_824)) < 0.05).astype(float)
     code = wide(x)
     assert np.all((code > 0).sum(axis=1) <= 6)
     np.testing.assert_allclose(np.linalg.norm(code, axis=1), 1.0)
     np.testing.assert_array_equal(code, ir.SparseCode(12_824, 128, 8, 6, seed=3)(x))
+    # a negative input reaches the code through its OFF channel
+    assert wide(-np.eye(12_824)[:64]).any(axis=1).all()
 
 
 def test_a_coded_brain_keys_and_values_its_moments_in_the_code() -> None:

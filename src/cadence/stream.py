@@ -954,13 +954,17 @@ class PatternSeparator:
     ``projection``; ``index`` and ``weight`` are then None, and ``projection`` is None for a
     sparse separator.
 
-    ``cover`` above zero (with a fan-in) reads every input: each input is given ``cover``
-    distinct code neurons first, each code neuron's remaining fan-in is then filled with
-    distinct inputs at random, and the weights are positive, uniform in ``(0, 1]`` over
-    ``sqrt(fan_in)``. A single positive input, the others zero, then drives each of its
-    readers above zero, so without ``center`` it never codes to zero. It needs
-    ``cover * inputs`` within ``expansion * fan_in`` and ``cover`` within ``expansion``.
-    The founder ``cover=0`` draws the signed sparse weights independently, as above.
+    ``cover`` above zero (with a fan-in) reads every input in both signs, through two
+    rectified channels: ON ``max(x, 0)``, channel ``i`` of input ``i``, and OFF
+    ``max(-x, 0)``, channel ``inputs + i`` (``channels`` is ``2 * inputs``, and ``index``
+    numbers channels). Each channel is given ``cover`` distinct code neurons first, each
+    code neuron's remaining fan-in is then filled with distinct channels at random, and the
+    weights are positive, uniform in ``(0, 1]`` over ``sqrt(fan_in)``. Without ``center``, a
+    single input of either sign, the others zero, drives each reader of its channel above
+    zero, so it never codes to zero, and a nonnegative key leaves every OFF channel silent.
+    It needs ``fan_in`` within the channels, ``cover * 2 * inputs`` within
+    ``expansion * fan_in`` and ``cover`` within ``expansion``. The founder ``cover=0`` draws
+    the signed sparse weights over the inputs independently, as above.
     """
 
     inputs: int
@@ -985,8 +989,12 @@ class PatternSeparator:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 0:
                 raise ValueError(f"{name} must be a nonnegative integer")
-        if fan_in > self.inputs:
-            raise ValueError("fan_in must not exceed the inputs")
+        if fan_in > self.channels:
+            raise ValueError(
+                "fan_in must not exceed the channels, two per input"
+                if self.cover
+                else "fan_in must not exceed the inputs"
+            )
         if self.winners > self.expansion:
             raise ValueError("winners must not exceed the expansion")
         if not 0 <= self.center < 1:
@@ -994,11 +1002,11 @@ class PatternSeparator:
         if self.cover and (
             not fan_in
             or self.cover > self.expansion
-            or self.cover * self.inputs > self.expansion * fan_in
+            or self.cover * self.channels > self.expansion * fan_in
         ):
             raise ValueError(
-                "cover needs a fan-in, at most the expansion, and cover * inputs within "
-                "expansion * fan_in"
+                "cover needs a fan-in, at most the expansion, and cover * 2 * inputs (the "
+                "channels) within expansion * fan_in"
             )
         rng = np.random.default_rng(self.seed)
         self.projection = self.index = self.weight = None
@@ -1019,21 +1027,27 @@ class PatternSeparator:
             )
         self.mean = np.zeros(self.inputs)
 
+    @property
+    def channels(self) -> int:
+        """The values a code neuron's fan-in is drawn from: the inputs, or with ``cover`` the
+        ON and the OFF channel of each input, ``2 * inputs``."""
+        return 2 * int(self.inputs) if self.cover else int(self.inputs)
+
     def _covering(self, rng: np.random.Generator) -> np.ndarray:
-        """Each code neuron's inputs, distinct and in order, every input among the inputs of
-        ``cover`` distinct code neurons: the readers of the inputs are dealt first, from the
+        """Each code neuron's channels, distinct and in order, every channel among those of
+        ``cover`` distinct code neurons: the readers of the channels are dealt first, from the
         places of every neuron's fan-in in a random order, and each neuron's places left over
-        take distinct other inputs at random."""
-        inputs, units, fan_in, cover = self.inputs, self.expansion, self.fan_in, self.cover
+        take distinct other channels at random."""
+        channels, units, fan_in, cover = self.channels, self.expansion, self.fan_in, self.cover
         places = rng.permutation(np.repeat(np.arange(units), fan_in))
-        readers = places[: cover * inputs].reshape(inputs, cover).copy()
-        spare = places[cover * inputs:].copy()
+        readers = places[: cover * channels].reshape(channels, cover).copy()
+        spare = places[cover * channels:].copy()
         ordered = np.sort(readers, axis=1)
         for row in np.flatnonzero((ordered[:, 1:] == ordered[:, :-1]).any(axis=1)):
-            # a neuron dealt twice to one input trades the place for another neuron's
+            # a neuron dealt twice to one channel trades the place for another neuron's
             given = readers[row]
             for k in range(1, cover):
-                for _ in range(64 * (inputs + len(spare))):
+                for _ in range(64 * (channels + len(spare))):
                     if given[k] not in given[:k]:
                         break
                     open_ = np.flatnonzero(~np.isin(spare, given))
@@ -1041,20 +1055,20 @@ class PatternSeparator:
                         s = open_[rng.integers(len(open_))]
                         given[k], spare[s] = spare[s], given[k]
                         continue
-                    other, place = rng.integers(inputs), rng.integers(cover)
+                    other, place = rng.integers(channels), rng.integers(cover)
                     if readers[other, place] not in given and given[k] not in readers[other]:
                         given[k], readers[other, place] = readers[other, place], given[k]
                 else:
-                    raise ValueError("the inputs could not be covered")
+                    raise ValueError("the channels could not be covered")
         owner = readers.ravel()
-        order = np.argsort(owner, kind="stable")  # each neuron's given inputs, in order
-        read = np.repeat(np.arange(inputs), cover)[order]
+        order = np.argsort(owner, kind="stable")  # each neuron's given channels, in order
+        read = np.repeat(np.arange(channels), cover)[order]
         bounds = np.searchsorted(owner[order], np.arange(units + 1))
         index = np.empty((units, fan_in), dtype=np.int64)
         for unit in range(units):
             given = read[bounds[unit] : bounds[unit + 1]]
-            # the remaining places: distinct inputs the neuron does not read yet, by rank
-            ranks = rng.choice(inputs - len(given), fan_in - len(given), replace=False)
+            # the remaining places: distinct channels the neuron does not read yet, by rank
+            ranks = rng.choice(channels - len(given), fan_in - len(given), replace=False)
             extra = ranks + np.searchsorted(given - np.arange(len(given)), ranks, side="right")
             index[unit] = np.sort(np.concatenate([given, extra]))
         return index
@@ -1072,7 +1086,8 @@ class PatternSeparator:
 
     def code(self, key: np.ndarray, learn: bool = False) -> np.ndarray:
         """The sparse code of ``(batch, inputs)`` keys: ``(batch, expansion)``, ``winners``
-        nonzero entries per row at most. ``learn`` updates the running mean (writes only)."""
+        nonzero entries per row at most. ``learn`` updates the running mean (writes only).
+        With ``cover`` each key is read through its ON and its OFF channels."""
         x = np.asarray(key, dtype=float)
         if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all():
             raise ValueError(f"key must be a finite (batch, {self.inputs}) array")
@@ -1085,6 +1100,8 @@ class PatternSeparator:
         with np.errstate(over="ignore", invalid="ignore"):
             if self.fan_in:
                 assert self.index is not None and self.weight is not None
+                if self.cover:  # the ON channels, then the OFF channels
+                    x = np.concatenate([np.maximum(x, 0.0), np.maximum(-x, 0.0)], axis=1)
                 drive = np.maximum(np.einsum("bek,ek->be", x[:, self.index], self.weight), 0.0)
             else:
                 assert self.projection is not None

@@ -22,22 +22,25 @@ and `Brain.compose((height, width), actions)` give the cortex the pixels through
 `visual_cortex`, feature maps with local receptive fields that learning shapes. The
 library's generic compression is the brain's sparse code. `brain.observation_code(x)` is
 what both memories key on: the observation itself, or with `code=units` the brain's own
-code of it, `units` code neurons with positive weights that read every input at least
-twice, the largest sums of one unit in ten kept (102 of 1,024) and the code scaled to unit
-length (a `PatternSeparator` with a fan-in and `cover=2`, owned by the brain and saved with
-it). The code deals each input two readers first, then fills each unit's fan-in of 32
-inputs at random from the seed (more inputs per unit where 32 cannot read every input
-twice: 201 for 128 units at 12,824 inputs), so a single lit input reaches the code. Too
-sparse a code leaves the cortex and the memory too little overlap between a question and
-the moment it asks for. The code compresses: inputs read by the same units are told apart
-by their weights alone, and an observation lit widely keeps one unit in ten, so the brain
-on its raw observation is the control a code is chosen against. Left unset, every brain
-keys on its observation, whatever its width; a code of 1,024 units is the recommended
-setting above 1,024 inputs.
+code of it, `units` code neurons with positive weights that read each input through two
+rectified channels, ON `max(x, 0)` and OFF `max(-x, 0)`, and every channel at least twice,
+the largest sums of one unit in ten kept (102 of 1,024) and the code scaled to unit length
+(a `PatternSeparator` with a fan-in and `cover=2`, owned by the brain and saved with it).
+The code deals each channel two readers first, then fills each unit's fan-in of 32
+channels at random from the seed (more channels per unit where 32 cannot read every
+channel twice: 51 for 1,024 units and 401 for 128 units at 12,824 inputs). A single input
+of either sign reaches the code, a signed observation reaches it in both signs, and a
+nonnegative observation leaves the OFF channels silent. Too sparse a code leaves the
+cortex and the memory too little overlap between a question and the moment it asks for.
+The code compresses: channels read by the same units are told apart by their weights
+alone, and an observation lit widely keeps one unit in ten, so the brain on its raw
+observation is the control a code is chosen against. Left unset, every brain keys on its
+observation, whatever its width; a code of 1,024 units is the recommended setting above
+1,024 inputs.
 
 ```text
 observation ─► sensory region ─► association cortex ─► motor readout
-      └──────► sparse code (fixed: 1,024 units, every input read twice, one in ten active, unit length)
+      └──────► sparse code (fixed: 1,024 units, ON and OFF channels each read twice, one in ten active, unit length)
                    ├─► episodic memory: place records, and context records with the command
                    └─► recall memory: the slots and their address
 ```
@@ -68,13 +71,13 @@ code of 1,024 units:
 | --- | --- | --- |
 | Key width | 12,824 values | 1,024 units |
 | Episodic separators, place and context | 105.1 MB and 105.1 MB, dense (0.63 MB each with `memory_fan_in=32`) | none: the code is the separation |
-| The code's tables, indices and weights | | 0.52 MB |
+| The code's tables, indices and weights | | 0.84 MB |
 | Recall address map `W_x`, `W_c`, `b` | 1,322 MB (`W_x` 1,316 MB) | 8.9 MB |
-| Together | 1,532 MB | 9.4 MB |
+| Together | 1,532 MB | 9.8 MB |
 | Sensory synapses into a module of 64 | 820,736 | 65,536 |
 
 The recall memory with cortex values (`recall_value="cortex"`) and an association region of
-512 neurons holds 14.2 MB at that width, [below](#recall-the-streams-own-moments).
+512 neurons holds 14.5 MB at that width, [below](#recall-the-streams-own-moments).
 
 <a id="three-kinds-of-memory-in-brain"></a>
 
@@ -217,8 +220,8 @@ brain's code of 1,024 units and cortex values, one stream:
 | --- | --- |
 | Slots of one stream (keys, values, nexts) | 1.05 MB |
 | Address map (`W_x`, `W_c`, `b`) | 12.6 MB |
-| Code tables | 0.52 MB |
-| The memory in all | 14.2 MB |
+| Code tables | 0.84 MB |
+| The memory in all | 14.5 MB |
 | One dense `PatternSeparator` of the same inputs into 1,024 cells, for comparison | 105 MB |
 
 ```python

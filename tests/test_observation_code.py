@@ -314,7 +314,7 @@ def test_the_code_and_the_sparse_separation_are_opt_in():
         cd.Brain.compose(300, 2, modules=(8,), memory_choice=True, code=64, memory_expansion=512)
     with pytest.raises(ValueError, match="memory_expansion and memory_fan_in need"):
         cd.Brain.compose(300, 2, modules=(8,), memory_choice=True, code=64, memory_fan_in=8)
-    with pytest.raises(ValueError, match="reads 32 inputs per unit"):
+    with pytest.raises(ValueError, match="reads observations of at least 32 values"):
         cd.Brain.compose(20, 2, modules=(8,), code=16)
     with pytest.raises(ValueError, match="at least 24 units"):
         cd.Brain.compose(300, 2, modules=(8,), code=16)
@@ -329,14 +329,16 @@ def test_the_code_is_a_sparse_unit_length_code_fixed_by_the_seed():
                              code=1024)
     code = brain.sparse_code
     assert isinstance(code, cd.PatternSeparator)
-    # one unit in ten active, at least 24: 102 of 1,024
-    assert (code.inputs, code.expansion, code.winners, code.fan_in) == (12_824, 1024, 102, 32)
-    assert code.cover == 2 and (code.weight > 0).all()
-    assert np.bincount(code.index.ravel(), minlength=12_824).min() >= 2
+    # one unit in ten active, at least 24: 102 of 1,024; each unit reads 51 channels, as many
+    # as it takes 1,024 units to read the ON and the OFF channel of every input twice
+    assert (code.inputs, code.expansion, code.winners, code.fan_in) == (12_824, 1024, 102, 51)
+    assert code.cover == 2 and (code.weight > 0).all() and code.channels == 2 * 12_824
+    assert code.index.max() < code.channels
+    assert np.bincount(code.index.ravel(), minlength=code.channels).min() >= 2
     assert cd.Brain.compose(300, 2, modules=(8,), code=128).sparse_code.winners == 24
     assert cd.Brain.compose(300, 2, modules=(8,), code=240).sparse_code.winners == 24
     assert cd.Brain.compose(300, 2, modules=(8,), code=250).sparse_code.winners == 25
-    assert code.index.shape == code.weight.shape == (1024, 32) and code.projection is None
+    assert code.index.shape == code.weight.shape == (1024, 51) and code.projection is None
     x = frames(12_824, 5, 1)
     coded = brain.observation_code(x)
     assert coded.shape == (5, 1024)
@@ -357,53 +359,118 @@ def test_the_code_is_a_sparse_unit_length_code_fixed_by_the_seed():
     assert coded[0] @ brain.observation_code(shared)[0] > 0.5 > coded[0] @ brain.observation_code(apart)[0]
 
 
-def test_every_input_reaches_the_code_and_no_two_inputs_share_one():
-    """The code reads every input: each is dealt two code units before the units' fan-ins are
-    filled at random, and the weights are positive, so a single positive input drives its
-    readers and reaches the code. At 12,824 inputs and 1,024 units (seed 1) no one-hot input
-    codes to zero and no two code alike; 41 pairs read the same units and are told apart by
-    the weights alone. The episodic separator's independent signed draw is unchanged."""
+def test_every_input_reaches_the_code_in_both_signs_and_no_two_code_alike():
+    """The code reads every input through an ON and an OFF channel, and every channel: each
+    is dealt two code units before the units' fan-ins are filled at random, and the weights
+    are positive, so a single input of either sign drives the readers of its channel and
+    reaches the code. At 12,824 inputs and 1,024 units (seed 1) no one-hot input of either
+    sign codes to zero and no two of the 25,648 code alike; 1,122 of them read the same units
+    as another and are told apart by the weights alone. The episodic separator's independent
+    signed draw over the inputs is unchanged, byte for byte."""
     brain = cd.Brain.compose(12_824, 2, modules=(8,), code=1024, seed=1, episodic=False)
     code = brain.sparse_code
-    assert np.bincount(code.index.ravel(), minlength=12_824).min() >= 2
-    zero, codes, units = 0, set(), {}
+    assert code.channels == 25_648
+    assert np.bincount(code.index.ravel(), minlength=code.channels).min() >= 2
+    zero, codes, units = {1.0: 0, -1.0: 0}, set(), {}
     for start in range(0, 12_824, 256):
         rows = np.arange(start, min(start + 256, 12_824))
         x = np.zeros((len(rows), 12_824))
         x[np.arange(len(rows)), rows] = 1.0
-        for row in brain.observation_code(x):
-            active = np.flatnonzero(row)
-            if not len(active):
-                zero += 1
-                continue
-            codes.add((active.tobytes(), row[active].tobytes()))
-            units[active.tobytes()] = units.get(active.tobytes(), 0) + 1
-    assert zero == 0
-    assert len(codes) == 12_824  # every one-hot input has a code of its own
-    assert sum(n for n in units.values() if n > 1) <= 128  # 82 inputs read the same units
-    # a narrow code reads more inputs per unit, as many as two readers per input take
+        for sign in (1.0, -1.0):
+            for row in brain.observation_code(sign * x):
+                active = np.flatnonzero(row)
+                if not len(active):
+                    zero[sign] += 1
+                    continue
+                codes.add((active.tobytes(), row[active].tobytes()))
+                units[active.tobytes()] = units.get(active.tobytes(), 0) + 1
+    assert zero == {1.0: 0, -1.0: 0}
+    assert len(codes) == 25_648  # every one-hot input of either sign has a code of its own
+    assert sum(n for n in units.values() if n > 1) <= 1_400  # 1,122 read the same units
+    # a narrow code reads more channels per unit, as many as two readers per channel take
     narrow = cd.Brain.compose(12_824, 2, modules=(8,), code=128, seed=1, episodic=False)
-    assert narrow.sparse_code.fan_in == 201  # ceil(2 * 12,824 / 128)
-    assert np.bincount(narrow.sparse_code.index.ravel(), minlength=12_824).min() >= 2
+    assert narrow.sparse_code.fan_in == 401  # ceil(2 * 2 * 12,824 / 128)
+    assert np.bincount(narrow.sparse_code.index.ravel(), minlength=25_648).min() >= 2
     founder = cd.PatternSeparator(12_824, 1024, 24, seed=1, fan_in=32)
     assert founder.cover == 0 and (founder.weight < 0).any() and "cover" not in founder.to_dict()
+    assert founder.channels == 12_824
+    # the independent draw: each unit's inputs in order, then the signed weights
+    rng = np.random.default_rng(1)
+    drawn = np.stack([rng.choice(12_824, 32, replace=False) for _ in range(1024)])
+    np.testing.assert_array_equal(founder.index, np.sort(drawn, axis=1))
+    np.testing.assert_array_equal(founder.weight, rng.standard_normal((1024, 32)) / np.sqrt(32))
     assert code.to_dict()["cover"] == 2
 
 
+def test_a_negative_input_reaches_the_code_and_a_mixed_sign_one_codes_otherwise():
+    """At 256 inputs and 128 units every one-hot input of either sign reaches the code, each
+    with a code of its own (12,824 inputs: the test above), and at both sizes ``e_0 - e_j``
+    codes otherwise than ``e_0``: the negative half of a signed observation reaches the code."""
+    brain = cd.Brain.compose(256, 2, modules=(8,), code=128, seed=1, episodic=False)
+    code = brain.sparse_code
+    assert (code.channels, code.fan_in) == (512, 32)
+    assert np.bincount(code.index.ravel(), minlength=code.channels).min() >= 2
+    one_hot = np.eye(256)
+    positive, negative = brain.observation_code(one_hot), brain.observation_code(-one_hot)
+    assert positive.any(axis=1).all() and negative.any(axis=1).all()
+    assert len({row.tobytes() for row in np.concatenate([positive, negative])}) == 512
+    for inputs, units in ((256, 128), (12_824, 1024)):
+        brain = cd.Brain.compose(inputs, 2, modules=(8,), code=units, seed=1, episodic=False)
+        j = np.arange(1, min(inputs, 2049))
+        alone = np.zeros((1, inputs))
+        alone[0, 0] = 1.0
+        mixed = np.repeat(alone, len(j), axis=0)
+        mixed[np.arange(len(j)), j] = -1.0
+        same = (brain.observation_code(mixed) == brain.observation_code(alone)).all(axis=1)
+        assert not same.any()
+
+
+def test_a_nonnegative_observation_leaves_the_off_channels_silent():
+    """A nonnegative observation's code is the code of its ON part beside an all-zero OFF
+    part, and the readers of the OFF channels add nothing to it; a signed observation drives
+    them."""
+    brain = cd.Brain.compose(300, 2, modules=(8,), code=128, seed=2, episodic=False)
+    code = brain.sparse_code
+    rng = np.random.default_rng(5)
+    x = rng.random((6, 300)) * (rng.random((6, 300)) < 0.2)  # nonnegative intensities
+    # the code by hand: the ON channels and an all-zero OFF part, the winners, unit length
+    channels = np.concatenate([x, np.zeros_like(x)], axis=1)
+    drive = np.einsum("bek,ek->be", channels[:, code.index], code.weight)
+    keep = np.argsort(-drive, axis=1)[:, : code.winners]
+    expected = np.zeros_like(drive)
+    np.put_along_axis(expected, keep, np.take_along_axis(drive, keep, axis=1), axis=1)
+    expected /= np.linalg.norm(expected, axis=1, keepdims=True)
+    np.testing.assert_allclose(brain.observation_code(x), expected, rtol=1e-12, atol=1e-15)
+    silent = cd.PatternSeparator(**code.to_dict())
+    silent.index = code.index
+    silent.weight = np.where(code.index >= code.inputs, 0.0, code.weight)  # no OFF readers
+    np.testing.assert_array_equal(silent.code(x), code.code(x))
+    signed = x - (rng.random((6, 300)) < 0.2)
+    assert (signed < 0).any(axis=1).all()
+    assert not (silent.code(signed) == code.code(signed)).all(axis=1).any()
+
+
 def test_a_covering_separator_needs_room_for_its_readers():
-    separator = cd.PatternSeparator(40, 24, 24, seed=2, fan_in=4, cover=2)
+    separator = cd.PatternSeparator(20, 24, 24, seed=2, fan_in=4, cover=2)
+    assert separator.channels == 40 and separator.index.max() < 40
     assert np.bincount(separator.index.ravel(), minlength=40).min() >= 2
     assert all(len(np.unique(row)) == 4 for row in separator.index)
     np.testing.assert_array_equal(
-        separator.index, cd.PatternSeparator(40, 24, 24, seed=2, fan_in=4, cover=2).index
+        separator.index, cd.PatternSeparator(20, 24, 24, seed=2, fan_in=4, cover=2).index
     )
-    # every place taken by a reader: 2 * 48 = 24 * 4
-    exact = cd.PatternSeparator(48, 24, 24, seed=5, fan_in=4, cover=2)
+    # every place taken by a reader: 2 * 2 * 24 = 24 * 4
+    exact = cd.PatternSeparator(24, 24, 24, seed=5, fan_in=4, cover=2)
     np.testing.assert_array_equal(np.bincount(exact.index.ravel(), minlength=48), 2)
+    # a fan-in beyond the inputs and within the channels
+    assert cd.PatternSeparator(20, 24, 24, seed=2, fan_in=30, cover=2).index.max() < 40
+    with pytest.raises(ValueError, match="fan_in must not exceed the inputs"):
+        cd.PatternSeparator(20, 24, 24, seed=2, fan_in=30)
+    with pytest.raises(ValueError, match="fan_in must not exceed the channels"):
+        cd.PatternSeparator(20, 24, 24, seed=2, fan_in=41, cover=2)
     for options in ({"fan_in": 0, "cover": 2}, {"fan_in": 4, "cover": 25},
                     {"fan_in": 2, "cover": 3}, {"fan_in": 4, "cover": -1}):
         with pytest.raises(ValueError):
-            cd.PatternSeparator(40, 24, 24, seed=2, **options)
+            cd.PatternSeparator(20, 24, 24, seed=2, **options)
 
 
 def test_compose_can_make_the_sensory_region_the_code():
@@ -553,7 +620,7 @@ def test_storage_at_camera_width_stays_small():
                               recall=True)
     assert camera.inputs == 12_824 and camera.code_width == 1024 and camera.coded_cortex
     sizes = storage(camera)
-    assert sizes["separators"] == 0 and sizes["address"] < 9 and sizes["tables"] < 0.6
+    assert sizes["separators"] == 0 and sizes["address"] < 9 and sizes["tables"] < 0.85
     assert sum(sizes.values()) < 20
     # the sensory synapses of the coded cortex against the observation's
     pre = np.asarray(camera.connectome.pre)
@@ -637,8 +704,14 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     def cortex_flag(meta, _):
         meta["code"]["cortex"] = False
 
-    def odd_table(meta, copy):
-        copy["code/index"][0, 0] = 2_000
+    def odd_table(meta, copy):  # past the 4,000 channels, an ON and an OFF per input
+        copy["code/index"][0, 0] = 4_000
+
+    def inputs_alone(meta, copy):  # positive weights on the inputs, no OFF channel read
+        rng = np.random.default_rng(1)
+        copy["code/index"] = np.sort(
+            np.stack([rng.choice(2_000, 32, replace=False) for _ in range(1024)]), axis=1
+        )
 
     def nonpositive_weight(meta, copy):
         copy["code/weight"][0, 0] = 0.0
@@ -657,15 +730,16 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     for name, mutate, message in (
         ("no_code", no_code, "belongs to checkpoint format cadence-generic/9"),
         ("earlier_format", earlier_format, "belongs to checkpoint format cadence-generic/9"),
-        ("other_fan_in", other_fan_in, "reads 32 inputs per unit and keeps one unit in 10"),
-        ("other_winners", other_winners, "reads 32 inputs per unit and keeps one unit in 10"),
-        # the tables never read the 2,001st input
-        ("other_width", other_width, "reads every input of the observation with 2 units"),
+        ("other_fan_in", other_fan_in, "32 channels per unit, and keeps one unit in 10"),
+        ("other_winners", other_winners, "32 channels per unit, and keeps one unit in 10"),
+        # the tables read 4,000 of the 4,002 channels of 2,001 inputs
+        ("other_width", other_width, "reads every channel of the observation"),
+        ("inputs_alone", inputs_alone, "reads every channel of the observation"),
         ("nonpositive_weight", nonpositive_weight, "with 2 units at least, its weights positive"),
         ("cortex_flag", cortex_flag, "reads observations of 2000 values where the sensory "
                                      "region has 1024"),
-        ("odd_table", odd_table, "reads distinct inputs of the observation"),
-        ("repeated_table", repeated_table, "reads distinct inputs of the observation"),
+        ("odd_table", odd_table, "reads distinct channels of the observation"),
+        ("repeated_table", repeated_table, "reads distinct channels of the observation"),
         ("no_table", no_table, "missing saved code table"),
         ("fewer_units", fewer_units, "sensory region of 1024 neurons is not the saved code of "
                                      "512 units"),

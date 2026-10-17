@@ -619,23 +619,29 @@ and a complete runnable example.
   Gaussian weights divided by `sqrt(fan_in)`, held in `index` (int64) and `weight`, both
   `(expansion, fan_in)`, in place of `projection` (then `None`; `index` and `weight` are
   `None` for the dense founder), so storage and work do not grow with `inputs`. With `cover`
-  above zero as well every input is read by at least `cover` distinct code neurons: the
-  readers of the inputs are dealt first from the places of every neuron's fan-in, each
-  neuron's remaining places then take distinct inputs at random, and the weights are
-  positive, uniform in `(0, 1]` divided by `sqrt(fan_in)`, so without `center` a single
-  positive input drives each of its readers; it needs `cover` within `expansion` and
-  `cover * inputs` within `expansion * fan_in`. The brain's code is such a separator
-  (`cover=2`); the founder `cover=0` and the episodic separators draw independently. `arrays()`
+  above zero as well every input is read in both signs, through two rectified channels, ON
+  `max(x, 0)` (channel `i` of input `i`) and OFF `max(-x, 0)` (channel `inputs + i`):
+  `channels` is `2 * inputs` and `index` numbers channels. Every channel is read by at
+  least `cover` distinct code neurons: the readers of the channels are dealt first from the
+  places of every neuron's fan-in, each neuron's remaining places then take distinct
+  channels at random, and the weights are positive, uniform in `(0, 1]` divided by
+  `sqrt(fan_in)`, so without `center` a single input of either sign drives each reader of
+  its channel and a nonnegative key leaves the OFF channels silent; it needs `fan_in`
+  within `2 * inputs`, `cover` within `expansion` and `cover * 2 * inputs` within
+  `expansion * fan_in`. The brain's code is such a separator (`cover=2`); the founder
+  `cover=0` and the episodic separators draw independently over the inputs. `arrays()`
   returns the state a checkpoint holds by name. `code(key, learn=False) -> (batch, expansion)`:
   with `center` above zero, `mean` is subtracted first, and `learn=True` first moves `mean`
   by the forgetting factor `center` toward the batch mean of the keys (writes learn, reads
   do not); the code keeps the `winners` largest entries of the rectified `key @ projection`
-  and sets the rest to zero. `habituate(keys)` sets `mean` to the mean of a nonempty sample
-  of keys. `to_dict()` (it names `fan_in` and `cover` only when above zero); attributes
-  `inputs`, `expansion`, `winners`, `seed`, `center`, `fan_in`, `cover`, `projection`,
-  `index`, `weight` and `mean`. Raises `ValueError` for nonpositive sizes, `winners` above
-  `expansion`, a `fan_in` that is negative or above `inputs`, a `cover` without room for its
-  readers, `center` outside `[0, 1)`, and keys whose code overflows.
+  (with `cover`, of the weighted sums of the channels) and sets the rest to zero.
+  `habituate(keys)` sets `mean` to the mean of a nonempty sample of keys. `to_dict()` (it
+  names `fan_in` and `cover` only when above zero); attributes `inputs`, `expansion`,
+  `winners`, `seed`, `center`, `fan_in`, `cover`, `projection`, `index`, `weight` and
+  `mean`, and the read-only `channels`. Raises `ValueError` for nonpositive sizes, `winners`
+  above `expansion`, a `fan_in` that is negative or above `inputs` (above `2 * inputs` with
+  `cover`), a `cover` without room for its readers, `center` outside `[0, 1)`, and keys
+  whose code overflows.
 - `SynapticMemory(pre, post, decay=0.9, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="delta", separator=None, writes=0, consolidation=0.05)`:
   normalized delta synapses with a shared persistent `consolidated` matrix and per-stream
   effective `strength` matrices. `observe(key, value, write=None, *, salience=None,
@@ -836,8 +842,9 @@ that recursive benefit or automatic reflective behavior has been learned.
 - `Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9, memory_rate=1.0, memory_amplitude=1.0, memory_fan_in=None, working_memory_decay=0.0, working_memory_amplitude=3.0, working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0, history_decays=(), history_amplitude=3.0, recall=False, learning=None, reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0, backend="cpu", device=None, inputs=None, code=None, **genes)`:
   the memories key on the observation code: the observation itself, or with `code=units`
   the brain's own sparse code of it, `units` code neurons with positive weights reading
-  every input at least twice (a `PatternSeparator` with `cover=2`, drawn from `seed + 2`;
-  each unit reads 32 inputs, or `ceil(2 * inputs / units)` where that is more), the largest
+  each input through an ON channel `max(x, 0)` and an OFF channel `max(-x, 0)`, every
+  channel at least twice (a `PatternSeparator` with `cover=2`, drawn from `seed + 2`; each
+  unit reads 32 channels, or `ceil(2 * 2 * inputs / units)` where that is more), the largest
   sums of one unit in ten kept (at least 24) and the code scaled to unit length; left unset
   or 0, the memories key on the observation whatever its width, a code of 1,024 units being
   the recommended setting above 1,024 inputs. `inputs` names the width of the observations
@@ -1133,12 +1140,12 @@ that recursive benefit or automatic reflective behavior has been learned.
     `code/weight`), which `load` installs as saved, with the saved seed; the records' and the
     recall memory's key widths are checked against the code's, and a mismatch is refused
     naming both widths, as are a code under another format name, that name without one, and
-    tables that do not read distinct inputs or do not read every input twice with positive
-    weights. A memory keyed on the code has its key coordinates bounded by the code's width
-    (with the motor neurons for the context records), which can exceed the graph's neurons,
-    and its outputs by the graph. A brain keyed on its observation writes the earlier
-    formats unchanged, and a checkpoint saved before this release loads keyed on its
-    observation as it was saved.
+    tables that do not read distinct channels or do not read every channel, the ON and the
+    OFF channel of each input, twice with positive weights. A memory keyed on the code has
+    its key coordinates bounded by the code's width (with the motor neurons for the context
+    records), which can exceed the graph's neurons, and its outputs by the graph. A brain
+    keyed on its observation writes the earlier formats unchanged, and a checkpoint saved
+    before this release loads keyed on its observation as it was saved.
     The archive is replaced atomically. A learner-only checkpoint
     is rejected by `Brain.load`; `Learner.load` can extract a learner from either.
   Observations must be a nonempty finite batch, with image dimensions flattened per row.

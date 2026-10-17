@@ -154,11 +154,12 @@ class SlotMemory:
 
 class SparseCode:
     """The library's sparse code of an observation for wide inputs: ``units`` code neurons
-    with positive weights, every input read by two of them at least, each reading ``fan_in``
-    inputs (more where ``fan_in`` cannot read every input twice); the ``winners`` largest sums
-    stay, the code scaled to unit length. Storage and work follow the units and the fan-in,
-    whatever the number of inputs. The construction is ``PatternSeparator`` with ``cover=2``,
-    as ``Brain.compose(code=...)`` builds it."""
+    with positive weights reading each input through two rectified channels, ON ``max(x, 0)``
+    and OFF ``max(-x, 0)``, every channel read by two of them at least, each reading
+    ``fan_in`` channels (more where ``fan_in`` cannot read every channel twice); the
+    ``winners`` largest sums stay, the code scaled to unit length. Storage and work follow
+    the units and the fan-in, whatever the number of inputs. The construction is
+    ``PatternSeparator`` with ``cover=2``, as ``Brain.compose(code=...)`` builds it."""
 
     COVER = 2
 
@@ -167,14 +168,16 @@ class SparseCode:
             raise ValueError("0 < fan_in <= inputs and 0 < winners <= units")
         from cadence.stream import PatternSeparator
 
-        fan_in = min(inputs, max(int(fan_in), -(-self.COVER * inputs // units)))
+        channels = 2 * inputs  # an ON and an OFF channel per input
+        fan_in = min(channels, max(int(fan_in), -(-self.COVER * channels // units)))
         self.separator = PatternSeparator(inputs, units, winners, seed=seed, fan_in=fan_in,
                                           cover=self.COVER)
         self.units, self.winners = int(units), int(winners)
 
     @property
     def index(self) -> np.ndarray:
-        """The inputs each code neuron reads, ``(units, fan_in)``."""
+        """The channels each code neuron reads, ``(units, fan_in)``: ``i`` the ON channel of
+        input ``i``, ``inputs + i`` its OFF channel."""
         index = self.separator.index
         assert index is not None
         return index

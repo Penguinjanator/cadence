@@ -5,26 +5,30 @@
 - Memories key on the observation code: `Brain.observation_code(x)` is what the episodic
   memory (place and context records), the hippocampus of earlier releases and the recall
   memory key on. It is the observation itself, or with `code=units` (opt-in) the brain's
-  own sparse code of it: `units` code neurons with positive weights that read every input
-  at least twice (each input is dealt two readers first, and each unit's fan-in of 32
-  inputs, more where 32 cannot read every input twice, is filled at random from the seed
-  after), the largest sums of one unit in ten kept (102 of 1,024; too sparse a code leaves
-  the cortex and the memory too little overlap between a question and the moment it asks
-  for), the code scaled to unit length; a `PatternSeparator` with a fan-in and `cover=2`,
-  owned by the brain (`brain.sparse_code`, `code_width`, `inputs`) and saved with it. A
-  single lit input always reaches the code; inputs read by the same units are told apart by
-  their weights. A coded brain's episodic stores take no separator of their own and refuse
-  `memory_expansion` and `memory_fan_in`. A sense organ's own code (a retina, a cochlea, a
-  V1 region) belongs to the application or the anatomy, not to the library. `describe()`
-  reports `observation_code`; a brain with a code saves as `cadence-generic/9` with the
-  code's settings, seed and tables, which `load` installs as saved; `load` checks the
-  records' key widths against the code's and refuses a mismatch naming both widths, as it
-  refuses place and context records keyed on other coordinates than the brain's, bounds a
-  memory's key coordinates by the code's width (which can exceed the graph's neurons) and
-  its outputs by the graph, and refuses code tables that do not read every input twice with
-  positive weights. Every brain without `code` is byte-identical at
-  4, 256 and 2,000 inputs and on an image shape, the checkpoint included at 4 and 2,000
-  inputs and on the image ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
+  own sparse code of it: `units` code neurons with positive weights that read each input
+  through two rectified channels, ON `max(x, 0)` and OFF `max(-x, 0)`, and every channel at
+  least twice (each channel is dealt two readers first, and each unit's fan-in of 32
+  channels, more where 32 cannot read every channel twice, is filled at random from the
+  seed after), the largest sums of one unit in ten kept (102 of 1,024; too sparse a code
+  leaves the cortex and the memory too little overlap between a question and the moment it
+  asks for), the code scaled to unit length; a `PatternSeparator` with a fan-in and
+  `cover=2`, owned by the brain (`brain.sparse_code`, `code_width`, `inputs`) and saved with
+  it. A single input of either sign always reaches the code, a signed observation reaches
+  the code (and the cortex, when the sensory region is the code) in both signs, and a
+  nonnegative observation leaves the OFF channels silent; channels read by the same units
+  are told apart by their weights. A coded brain's episodic stores take no separator of
+  their own and refuse `memory_expansion` and `memory_fan_in`. A sense organ's own code (a
+  retina, a cochlea, a V1 region) belongs to the application or the anatomy, not to the
+  library. `describe()` reports `observation_code`; a brain with a code saves as
+  `cadence-generic/9` with the code's settings, seed and tables, which `load` installs as
+  saved; `load` checks the records' key widths against the code's and refuses a mismatch
+  naming both widths, as it refuses place and context records keyed on other coordinates
+  than the brain's, bounds a memory's key coordinates by the code's width (which can exceed
+  the graph's neurons) and its outputs by the graph, and refuses code tables that do not
+  read every channel twice with positive weights. Every brain without `code` is
+  byte-identical at 4, 256 and 2,000 inputs and on an image shape, the checkpoint included
+  at 4 and 2,000 inputs and on the image
+  ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
 - `Brain.compose(inputs, actions, code=units)` makes the sensory region the code: every
   observation is coded before the drive, so 12,824 inputs reach the cortex as 1,024 units
   through 1,024 x 64 sensory synapses in place of 12,824 x 64, and the memories key on the
@@ -39,7 +43,7 @@
   width: `memory_fan_in=32` above 256 key values (the episodic separators 0.63 MB each in
   place of 105 MB at 12,824 inputs) and `code=1024` above 1,024 inputs, where the two
   episodic separators and the recall address map go from 2 x 105 MB and 1,322 MB on the
-  observation to none and 8.9 MB on the code, the code's tables 0.52 MB
+  observation to none and 8.9 MB on the code, the code's tables 0.84 MB
   ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
 - The episodic and sequential-task guides state the founder dependence of the continuation
   after teaching: the readings in which `step` eroded a taught chain where `live` kept it
@@ -111,7 +115,7 @@
   `parameters()` counts, and a brain with the memory saves as `cadence-generic/8` and
   continues exactly. The founder `recall=False` builds the brain without it, byte-identical;
   the [memory guide](docs/memory.md#recall-the-streams-own-moments) explains it, with its
-  storage at camera width (14.2 MB with a code of 1,024 neurons, cortex values and an
+  storage at camera width (14.5 MB with a code of 1,024 neurons, cortex values and an
   association region of 512 neurons, against 105 MB for one dense separator). The option
   reproduces the binding instrument
   `benchmarks/binding/index_read.py` moment for moment (`tests/test_recall_memory.py`).
@@ -123,8 +127,9 @@
   memory_fan_in=16)` gives both episodic stores such a separator (1,024 x 16 indices and
   weights each); `memory_fan_in=0` keeps the dense one, byte-identical with its
   checkpoint, and a sparse separator saves its arrays and its fan-in. With `cover=c` as well
-  every input is read by `c` code neurons at least, the readers dealt first and the
-  weights positive (the brain's code); the episodic separators keep the independent draw.
+  each input is read through an ON and an OFF channel and every channel by `c` code neurons
+  at least, the readers dealt first and the weights positive (the brain's code); the
+  episodic separators keep the independent draw over the inputs.
 - One holder of the current graph for several learners: `Learner.brain` reads the graph from
   the learner's `holder`, a `GraphHolder`, and an update replaces the holder's graph in one
   assignment after every check, so a refused update changes nothing. `Learner.sharing(first,
