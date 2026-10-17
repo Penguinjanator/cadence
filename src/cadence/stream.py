@@ -957,8 +957,8 @@ class PatternSeparator:
     ``cover`` above zero (with a fan-in) reads every input: each input is given ``cover``
     distinct code neurons first, each code neuron's remaining fan-in is then filled with
     distinct inputs at random, and the weights are positive, uniform in ``(0, 1]`` over
-    ``sqrt(fan_in)``. An input that rises above the others' level then drives each of its
-    readers, so without ``center`` no single positive input codes to zero. It needs
+    ``sqrt(fan_in)``. A single positive input, the others zero, then drives each of its
+    readers above zero, so without ``center`` it never codes to zero. It needs
     ``cover * inputs`` within ``expansion * fan_in`` and ``cover`` within ``expansion``.
     The founder ``cover=0`` draws the signed sparse weights independently, as above.
     """
