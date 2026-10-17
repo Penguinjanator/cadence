@@ -26,6 +26,14 @@ reading and every condition sees the same frames, and a reading changes no train
 Arms: ``index`` (the declared genes) and ``heard`` (the same with the address lesson off, the
 address staying the event heard). Nothing here changes the library.
 
+The lives take the parameters of the scaling family (``SCALING_PROTOCOL.md``), each at the
+declared task's value when absent: ``genes`` ``None`` (the composed brain without the memory,
+its working trace the only carrier), ``width`` (the association region and its working
+trace), the token task's ``facts``, ``neutral`` and ``names``, the succession's ``length`` and
+``tokens``, the fresh tasks' ``bits``, the continuing task's ``earlier`` trials and the camera
+task's code ``units``; ``level`` reads the family's panels in place of the declared ones, and
+``master`` ends a life once ``hold`` consecutive readings reach that held-out score.
+
     PYTHONPATH=src python benchmarks/binding/index_runs.py --task token --out DIR --workers 2
 """
 
@@ -113,15 +121,67 @@ def genes_for(task: str, arm: str, extra: dict[str, Any] | None = None) -> dict[
     return genes
 
 
+def built(spec: dict[str, Any], **ports: Any) -> Any:
+    """A life's brain on the task's ``ports``: the founder with the index memory of
+    ``spec["genes"]``, or without it (``None``: the composed brain), its association region
+    and working trace ``spec.get("width", tb.WIDTH)`` neurons wide."""
+    return ir.IndexBrain.build(spec["seed"], width=int(spec.get("width", tb.WIDTH)),
+                               read=spec["genes"], learning_surprise=True, **ports)
+
+
+class Clock:
+    """Wall and processor seconds since a life began, and the processor seconds of the
+    latest reading: what a reading costs apart from the training before it."""
+
+    def __init__(self) -> None:
+        self.wall, self.cpu = time.monotonic(), time.process_time()
+        self.mark = self.cpu
+
+    def read(self) -> None:
+        """A reading begins."""
+        self.mark = time.process_time()
+
+    def stamp(self) -> dict[str, float]:
+        now = time.process_time()
+        return {"seconds": time.monotonic() - self.wall, "cpu": now - self.cpu,
+                "read_cpu": now - self.mark}
+
+
+def ended(spec: dict[str, Any], readings: list[dict[str, Any]]) -> bool:
+    """With ``spec["master"]``, a held-out score, a life ends once ``spec.get("hold", 2)``
+    consecutive readings reach it; without it every budget is read."""
+    master, hold = spec.get("master"), int(spec.get("hold", 2))
+    if master is None or len(readings) < hold:
+        return False
+    return all(held_of(spec["task"], r) >= float(master) for r in readings[-hold:])
+
+
+def level_conditions(brain: Any, panel: str) -> tuple[str, ...]:
+    """The family's conditions: the training panel intact; the held-out panel intact, with the
+    slots erased (with a memory) and with the trace erased."""
+    if panel != "held_out":
+        return ("intact",)
+    return ("intact", "trace_erased") if brain.index is None else (
+        "intact", "memory_erased", "trace_erased")
+
+
+def level_gate(held: dict[str, float], chance: float) -> bool:
+    """The instrument's criterion on a level's held-out row: at least .75, the slots erased
+    (without a memory the trace erased) within .15 of chance."""
+    erased = held.get("memory_erased", held["trace_erased"])
+    return bool(held["intact"] >= tb.GATE["held_out"]
+                and erased <= chance + tb.GATE["erased_margin"])
+
+
 def erase(brain: Any, condition: str, donor: Any = None) -> None:
     """The memory's lesion before the read act: the slots erased or replaced, or the trace
-    erased."""
-    slots = brain.index.slots
-    if condition == "memory_erased":
+    erased. A brain without the memory has no slots to erase."""
+    slots = None if brain.index is None else brain.index.slots
+    if condition == "memory_erased" and slots is not None:
         slots.reset(slots.streams)
     elif condition == "trace_erased" and brain.working_memory is not None:
         brain.working_memory.reset(0)
-    elif condition == "memory_transplant" and donor is not None:
+    elif condition == "memory_transplant" and donor is not None and slots is not None:
         slots.take(donor)
 
 
@@ -141,8 +201,9 @@ def episode(brain: Any, seq: list[np.ndarray], answer: np.ndarray, work: dict[st
     if window[1] == WINDOW:
         index = brain.index
         log["right"].append(round(window[0] / WINDOW, 4))
-        log["address_norm"].append(round(float(np.sqrt(
-            (index.w_x ** 2).sum() + (index.w_c ** 2).sum() + (index.b ** 2).sum())), 4))
+        if index is not None:
+            log["address_norm"].append(round(float(np.sqrt(
+                (index.w_x ** 2).sum() + (index.w_c ** 2).sum() + (index.b ** 2).sum())), 4))
         window[:] = [0.0, 0]
 
 
@@ -150,10 +211,10 @@ def episode(brain: Any, seq: list[np.ndarray], answer: np.ndarray, work: dict[st
 
 
 def token_read(brain: Any, trials: dict[str, np.ndarray], condition: str, neutral: int,
-               donor: dict[str, np.ndarray] | None = None) -> np.ndarray:
+               donor: dict[str, np.ndarray] | None = None, names: int = tb.NAMES) -> np.ndarray:
     twin = tb.fork(brain)
     twin.reset()
-    seq = tb.events(trials, neutral)
+    seq = tb.events(trials, neutral, names)
     work = tb.new_work()
     for x in seq[:-1]:
         tb.act(twin, x, work)
@@ -161,7 +222,7 @@ def token_read(brain: Any, trials: dict[str, np.ndarray], condition: str, neutra
     if condition == "memory_transplant" and donor is not None:
         other = tb.fork(brain)
         other.reset()
-        for x in tb.events(donor, neutral)[:-1]:
+        for x in tb.events(donor, neutral, names)[:-1]:
             tb.act(other, x, work)
         slots = other.index.slots
     erase(twin, condition, slots)
@@ -192,22 +253,47 @@ def token_gate(panels: dict[str, Any]) -> bool:
                 and held["follows_donor"] >= tb.GATE["follows_donor"])
 
 
+def token_level_panels(brain: Any, seed: int, held: np.ndarray, facts: int, neutral: int,
+                       names: int) -> dict[str, Any]:
+    """The family's reading of token binding: a training and a held-out panel of 128 trials
+    at the life's own facts and delay, drawn as ``tb.panels`` draws its first two (at two
+    facts and one neutral event, the same trials)."""
+    rng = np.random.default_rng(np.random.SeedSequence([tb.PANEL_SEED, seed]))
+    out: dict[str, Any] = {}
+    for name, queried in (("train", False), ("held_out", True)):
+        trials = tb.draw(rng, 128, held, facts=facts, queried_held=queried)
+        truth = tb.answers(trials)
+        out[name] = {c: tb.accuracy(token_read(brain, trials, c, neutral, names=names), truth)
+                     for c in level_conditions(brain, name)}
+    return out
+
+
 def token_life(spec: dict[str, Any]) -> dict[str, Any]:
     seed = spec["seed"]
-    held = tb.holdout(seed)
+    names = int(spec.get("names", tb.NAMES))
+    facts, neutral = int(spec.get("facts", tb.FACTS)), int(spec.get("neutral", tb.NEUTRAL))
+    held = tb.holdout(seed, names)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
-    brain = ir.IndexBrain.build(seed, read=spec["genes"], learning_surprise=True)
+    brain = built(spec, inputs=tb.input_width(names))
     work: dict[str, Any] = tb.new_work()
-    readings, done, started = [], 0, time.monotonic()
+    readings: list[dict[str, Any]] = []
+    done, clock = 0, Clock()
     for budget in spec["budgets"]:
         while done < budget:
-            trials = tb.draw(rng, tb.BATCH, held)
+            trials = tb.draw(rng, tb.BATCH, held, facts=facts)
             brain.reset()
-            episode(brain, tb.events(trials), tb.answers(trials), work)
+            episode(brain, tb.events(trials, neutral, names), tb.answers(trials), work)
             done += 1
-        panels = token_panels(brain, seed, held)
-        readings.append({"rounds": budget, "seconds": time.monotonic() - started,
-                         "panels": panels, "gate": token_gate(panels)})
+        clock.read()
+        if spec.get("level"):
+            panels = token_level_panels(brain, seed, held, facts, neutral, names)
+            gate = level_gate(panels["held_out"], 1.0 / tb.VALUES)
+        else:
+            panels = token_panels(brain, seed, held)
+            gate = token_gate(panels)
+        readings.append({"rounds": budget, **clock.stamp(), "panels": panels, "gate": gate})
+        if ended(spec, readings):
+            break
     return {"readings": readings, "work": work}
 
 
@@ -232,34 +318,39 @@ def continuing_read(brain: Any, trials: dict[str, np.ndarray], condition: str,
 
 def continuing_life(spec: dict[str, Any]) -> dict[str, Any]:
     """Token binding without a reset between trials: the slots hold earlier trials whose facts
-    name the same tokens with other values, the capacity bounding them."""
+    name the same tokens with other values, the capacity bounding them. Each panel is read
+    after ``spec.get("earlier", 2)`` earlier trials of the same life."""
     seed = spec["seed"]
+    level, count = bool(spec.get("level")), int(spec.get("earlier", 2))
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
-    brain = ir.IndexBrain.build(seed, read=spec["genes"], learning_surprise=True)
+    brain = built(spec)
     brain.reset()
     work: dict[str, Any] = tb.new_work()
-    readings, done, started = [], 0, time.monotonic()
+    readings: list[dict[str, Any]] = []
+    done, clock = 0, Clock()
     for budget in spec["budgets"]:
         while done < budget:
             trials = tb.draw(rng, tb.BATCH, held)
             episode(brain, tb.events(trials), tb.answers(trials), work)
             done += 1
+        clock.read()
         panel_rng = np.random.default_rng(np.random.SeedSequence([tb.PANEL_SEED, seed, 9]))
         panels: dict[str, Any] = {}
         for name, (trials, _) in tb.panels(seed, held).items():
-            if name not in ("train", "held_out", "new_name"):
+            if name not in (("train", "held_out") if level else ("train", "held_out", "new_name")):
                 continue
             n = len(trials["query"])
-            earlier = [tb.draw(panel_rng, n, held), tb.draw(panel_rng, n, held)]
+            earlier = [tb.draw(panel_rng, n, held) for _ in range(count)]
             truth = tb.answers(trials)
+            conditions = (level_conditions(brain, name) if level
+                          else ("intact", "memory_erased", "trace_erased"))
             panels[name] = {c: tb.accuracy(continuing_read(brain, trials, c, earlier), truth)
-                            for c in ("intact", "memory_erased", "trace_erased")}
-        held_row = panels["held_out"]
-        gate = (held_row["intact"] >= tb.GATE["held_out"]
-                and held_row["memory_erased"] <= 1.0 / tb.VALUES + tb.GATE["erased_margin"])
-        readings.append({"rounds": budget, "seconds": time.monotonic() - started,
-                         "panels": panels, "gate": bool(gate)})
+                            for c in conditions}
+        gate = level_gate(panels["held_out"], 1.0 / tb.VALUES)
+        readings.append({"rounds": budget, **clock.stamp(), "panels": panels, "gate": gate})
+        if ended(spec, readings):
+            break
     return {"readings": readings, "work": work}
 
 
@@ -267,19 +358,23 @@ def continuing_life(spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def succession_life(spec: dict[str, Any]) -> dict[str, Any]:
+    """Succession on ``spec.get("tokens", sb.TOKENS)`` tokens, sequences of
+    ``spec.get("length", sb.LENGTH)``; with ``level`` the training and held-out panels at that
+    length, drawn as ``sb.panels`` draws its first two."""
     sb = _sibling("sequence_binding")
     seed = spec["seed"]
-    held = sb.holdout(seed)
+    tokens, length = int(spec.get("tokens", sb.TOKENS)), int(spec.get("length", sb.LENGTH))
+    held = sb.holdout(seed, tokens)
     rng = np.random.default_rng(np.random.SeedSequence([sb.SCHEDULE_SEED, seed]))
-    brain = ir.IndexBrain.build(seed, read=spec["genes"], inputs=sb.INPUTS, actions=sb.TOKENS,
-                                lateral=sb.LATERAL, learning_surprise=True)
+    brain = built(spec, inputs=sb.input_width(tokens), actions=tokens, lateral=sb.LATERAL)
     work: dict[str, Any] = tb.new_work()
-    readings, done, started = [], 0, time.monotonic()
+    readings: list[dict[str, Any]] = []
+    done, clock = 0, Clock()
 
     def read(trials: dict[str, np.ndarray], condition: str) -> np.ndarray:
         twin = tb.fork(brain)
         twin.reset()
-        seq = sb.events(trials)
+        seq = sb.events(trials, tokens)
         w = tb.new_work()
         for x in seq[:-1]:
             tb.act(twin, x, w)
@@ -289,15 +384,27 @@ def succession_life(spec: dict[str, Any]) -> dict[str, Any]:
 
     for budget in spec["budgets"]:
         while done < budget:
-            trials = sb.draw(rng, sb.BATCH, held)
+            trials = sb.draw(rng, sb.BATCH, held, length=length)
             brain.reset()
-            episode(brain, sb.events(trials), sb.answers(trials), work)
+            episode(brain, sb.events(trials, tokens), sb.answers(trials), work)
             done += 1
-        panels = {name: {c: tb.accuracy(read(trials, c), sb.answers(trials))
-                         for c in ("intact", "memory_erased", "trace_erased")}
-                  for name, trials in sb.panels(seed, held).items()}
-        readings.append({"rounds": budget, "seconds": time.monotonic() - started,
-                         "panels": panels, "gate": bool(sb.gate({"panels": panels}))})
+        clock.read()
+        if spec.get("level"):
+            panel_rng = np.random.default_rng(np.random.SeedSequence([sb.PANEL_SEED, seed]))
+            panels = {}
+            for name, cued in (("train", False), ("held_out", True)):
+                trials = sb.draw(panel_rng, 128, held, length=length, cue_held=cued)
+                panels[name] = {c: tb.accuracy(read(trials, c), sb.answers(trials))
+                                for c in level_conditions(brain, name)}
+            gate = level_gate(panels["held_out"], 1.0 / len(held))
+        else:
+            panels = {name: {c: tb.accuracy(read(trials, c), sb.answers(trials))
+                             for c in ("intact", "memory_erased", "trace_erased")}
+                      for name, trials in sb.panels(seed, held).items()}
+            gate = bool(sb.gate({"panels": panels}))
+        readings.append({"rounds": budget, **clock.stamp(), "panels": panels, "gate": gate})
+        if ended(spec, readings):
+            break
     return {"readings": readings, "work": work}
 
 
@@ -356,12 +463,13 @@ def _bindings() -> Any:
     return _sibling("bindings", HERE.parent / "relevance" / "bindings.py")
 
 
-def fresh_brain(seed: int, genes: dict[str, Any], bits: int) -> Any:
-    """The founder on the task's ports with the index memory, as the runner composes its
-    graph: ``episodic=False`` and one two-neuron slot per bit."""
+def fresh_brain(seed: int, genes: dict[str, Any] | None, bits: int,
+                width: int = FRESH["width"]) -> Any:
+    """The founder on the task's ports with the index memory (``None``: without it), as the
+    runner composes its graph: ``episodic=False`` and one two-neuron slot per bit."""
     bd = _bindings()
     return ir.IndexBrain.build(
-        seed, width=FRESH["width"], read=genes, inputs=bd.width(bits), actions=2 * bits,
+        seed, width=width, read=genes, inputs=bd.width(bits), actions=2 * bits,
         lateral=FRESH["lateral"], slots=(2,) * bits, episodic=False, learning_surprise=True,
     )
 
@@ -390,14 +498,16 @@ def fresh_lesion(brain: Any, condition: str, donor: np.ndarray) -> None:
     """The carriers of the prefix before the query: the working trace (the runner's lesion)
     and the slots, each kept, erased or replaced by the donor history's."""
     bd = _bindings()
-    trace, slots = brain.working_memory, brain.index.slots
+    trace = brain.working_memory
+    slots = None if brain.index is None else brain.index.slots
     if condition in ("erased", "trace_erased"):
         bd.lesion(trace, "erased", donor)
-    if condition in ("erased", "memory_erased"):
+    if condition in ("erased", "memory_erased") and slots is not None:
         slots.reset(len(donor))
     if condition == "transplant":
         bd.lesion(trace, "transplant", donor)
-        slots.take(slots, donor)
+        if slots is not None:
+            slots.take(slots, donor)
 
 
 def fresh_competition(brain: Any, panel: np.ndarray, q: int) -> np.ndarray:
@@ -441,7 +551,7 @@ def fresh_reading(brain: Any, bits: int, held: np.ndarray) -> tuple[dict[str, An
                     complete = False
                 else:
                     answers[condition][:, q] = np.asarray(answer).reshape(len(panel), bits)
-                    if condition == "intact":
+                    if condition == "intact" and branch.index is not None:
                         weights[:, q] = fresh_competition(branch, panel, q)
     held_rows = held[panel[:, 0], panel[:, 1]]
     contest = {}
@@ -478,12 +588,13 @@ def named_life(spec: dict[str, Any]) -> dict[str, Any]:
 def fresh_life(spec: dict[str, Any]) -> dict[str, Any]:
     """One life to the longest budget, read at every budget."""
     bd = _bindings()
-    seed, bits = spec["seed"], FRESH["bits"]
+    seed, bits = spec["seed"], int(spec.get("bits", FRESH["bits"]))
     budgets = sorted(spec["budgets"])
     held = bd.holdout(seed, bits)
-    brain = fresh_brain(seed, spec["genes"], bits)
+    brain = fresh_brain(seed, spec["genes"], bits, int(spec.get("width", FRESH["width"])))
     work: dict[str, Any] = tb.new_work()
     readings: list[dict[str, Any]] = []
+    clock, ending = Clock(), "budgets"
     log: dict[str, Any] = {"window": bd.WINDOW, "taught_rows": [], "act_exact": [],
                            "act_per_bit": [], "lessons_exhausted": []}
     window = np.zeros(4)
@@ -510,13 +621,18 @@ def fresh_life(spec: dict[str, Any]) -> dict[str, Any]:
             log["lessons_exhausted"].append(int(window[3]))
             window[:] = 0
         if rounds in budgets:
+            clock.read()
             reading, _ = fresh_reading(brain, bits, held)
             readings.append({"rounds": rounds, "gate": bool(bd.gate(reading, bits)),
                              "scores": reading["scores"], "competition": reading["competition"],
-                             "completed": reading["completed"]})
+                             "completed": reading["completed"], **clock.stamp()})
+            if ended(spec, readings):
+                ending = "mastery"
+                break
     training = {"rounds": rounds, "completed": rounds == budgets[-1], "stop": stop, "log": log,
                 "held_out_pairs": np.argwhere(held).tolist(), "bits": bits,
-                "brain": dict(FRESH)}
+                "brain": dict(FRESH, width=int(spec.get("width", FRESH["width"]))),
+                "ended": ending}
     return {"readings": readings, "training": training, "work": work}
 
 
@@ -570,17 +686,19 @@ def frame_read(brain: Any, seq: list[np.ndarray], condition: str, n: int) -> np.
 
 
 def frame_panels(brain: Any, seed: int, held: np.ndarray, render: Any,
-                 render_seed: int) -> dict[str, Any]:
+                 render_seed: int, level: bool = False) -> dict[str, Any]:
     """Every camera-width panel rendered once with its own noise, then each condition read
-    on the same frames."""
+    on the same frames; with ``level`` the family's panels and conditions alone."""
     panels: dict[str, Any] = {}
     for name, (trials, neutral) in tb.panels(seed, held).items():
-        if name not in FRAME_PANELS:
+        if name not in (("train", "held_out") if level else FRAME_PANELS):
             continue
         truth = tb.answers(trials)
         seq = render(tb.events(trials, neutral), panel_noise(render_seed, seed, name))
+        conditions = (level_conditions(brain, name) if level
+                      else ("intact", "memory_erased", "trace_erased"))
         panels[name] = {c: tb.accuracy(frame_read(brain, seq, c, len(truth)), truth)
-                        for c in ("intact", "memory_erased", "trace_erased")}
+                        for c in conditions}
     return panels
 
 
@@ -702,37 +820,40 @@ class GenericCode:
 def camera_life(spec: dict[str, Any]) -> dict[str, Any]:
     """Token binding seen through the camera and the retina: the brain's observation is the
     retinal code, and the memory keys on it (no further code). With ``spec["generic"]`` (a
-    winners count) the generic sparse code replaces the retina."""
+    winners count) the generic sparse code of ``spec.get("units", 1024)`` code neurons
+    replaces the retina."""
     seed = spec["seed"]
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
     camera = Camera(seed)
     retina: Any = Retina()
     if spec.get("generic"):
-        retina = GenericCode(camera.inputs, camera.pixels, 1024, 32, int(spec["generic"]), seed)
+        retina = GenericCode(camera.inputs, camera.pixels, int(spec.get("units", 1024)), 32,
+                             int(spec["generic"]), seed)
 
     def see(
         events: list[np.ndarray], noise: np.random.Generator | None = None
     ) -> list[np.ndarray]:
         return [retina(frame) for frame in camera(events, noise)]
 
-    brain = ir.IndexBrain.build(seed, read=spec["genes"], inputs=retina.units,
-                                learning_surprise=True)
+    brain = built(spec, inputs=retina.units)
     work: dict[str, Any] = tb.new_work()
-    readings, done, started = [], 0, time.monotonic()
+    readings: list[dict[str, Any]] = []
+    done, clock = 0, Clock()
     for budget in spec["budgets"]:
         while done < budget:
             trials = tb.draw(rng, tb.BATCH, held)
             brain.reset()
             episode(brain, see(tb.events(trials)), tb.answers(trials), work)
             done += 1
-        panels = frame_panels(brain, seed, held, see, int(CAMERA["render_seed"]))
-        held_row = panels["held_out"]
-        gate = (held_row["intact"] >= tb.GATE["held_out"]
-                and held_row["memory_erased"] <= 1.0 / tb.VALUES + tb.GATE["erased_margin"])
-        readings.append({"rounds": budget, "seconds": time.monotonic() - started,
-                         "panels": panels, "gate": bool(gate), "units": retina.units,
-                         "inputs": camera.inputs})
+        clock.read()
+        panels = frame_panels(brain, seed, held, see, int(CAMERA["render_seed"]),
+                              level=bool(spec.get("level")))
+        readings.append({"rounds": budget, **clock.stamp(), "panels": panels,
+                         "gate": level_gate(panels["held_out"], 1.0 / tb.VALUES),
+                         "units": retina.units, "inputs": camera.inputs})
+        if ended(spec, readings):
+            break
     return {"readings": readings, "work": work}
 
 
@@ -744,9 +865,10 @@ LIVES = {"token": token_life, "fresh": fresh_life, "named": named_life,
 
 def life(spec: dict[str, Any]) -> dict[str, Any]:
     warnings.filterwarnings("ignore", "finite teaching free phase", RuntimeWarning)
-    began = time.monotonic()
+    began, cpu = time.monotonic(), time.process_time()
     out = LIVES[spec["task"]](spec)
-    return {**spec, **out, "elapsed": time.monotonic() - began}
+    return {**spec, **out, "elapsed": time.monotonic() - began,
+            "cpu": time.process_time() - cpu}
 
 
 def summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:

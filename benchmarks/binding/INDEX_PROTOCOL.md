@@ -293,3 +293,13 @@ PYTHONPATH=src python benchmarks/binding/memory_probes.py --out DIR/probes.json 
   --seeds 0 1 2 3 4 5 --arms '{"index": {}, "horizon": {"recency": null}, "null": {"null": 0.5},
   "improved": {"address_step": "toward", "recency": null, "null": 0.5}}'
 ```
+
+## Amendment 6, the lives' parameters for the scaling family (17 October 2026)
+
+The lives of `index_runs.py` and the vocabularies of `token_binding.py` and
+`sequence_binding.py` take the parameters of [the scaling family](SCALING_PROTOCOL.md) as
+arguments whose defaults are the declared values; no gene, panel, budget or gate of this
+protocol changes. Every declared task reads the same at two budgets on one founder before and
+after the change. The readings gain processor seconds (`cpu`, and `read_cpu` for the reading
+alone) beside the wall seconds, and the fresh tasks' training record names why the life ended
+(`ended`).

@@ -79,24 +79,33 @@ GATE = {"held_out": 0.75, "erased_margin": 0.15, "founders": 5}
 # -- the task
 
 
-def token_event(tokens: np.ndarray, marker: str) -> np.ndarray:
-    out = np.zeros((len(tokens), INPUTS))
+def input_width(token_count: int = TOKENS) -> int:
+    """Input coordinates: the markers and ``token_count`` tokens."""
+    return len(MARKERS) + token_count
+
+
+def token_event(tokens: np.ndarray, marker: str, token_count: int = TOKENS) -> np.ndarray:
+    out = np.zeros((len(tokens), input_width(token_count)))
     out[:, MARKERS.index(marker)] = 1.0
     out[np.arange(len(tokens)), len(MARKERS) + np.asarray(tokens)] = 1.0
     return out
 
 
-def holdout(seed: int) -> np.ndarray:
-    """``(TRAIN_TOKENS, TRAIN_TOKENS)`` True where the transition ``a -> b`` is held out: one
-    successor per token, a permutation without fixed points, so every token keeps other
-    successors and other predecessors in training."""
+def holdout(seed: int, token_count: int = TOKENS) -> np.ndarray:
+    """``(token_count - 1, token_count - 1)`` True where the transition ``a -> b`` of two
+    training tokens is held out: one successor per token, a permutation without fixed points,
+    so every token keeps other successors and other predecessors in training. The last token
+    is never trained."""
+    train = token_count - 1
+    if train < 3:
+        raise ValueError("the held-out successors need three training tokens at least")
     rng = np.random.default_rng(np.random.SeedSequence([HOLDOUT_SEED, seed]))
     while True:
-        order = rng.permutation(TRAIN_TOKENS)
-        if not (order == np.arange(TRAIN_TOKENS)).any():
+        order = rng.permutation(train)
+        if not (order == np.arange(train)).any():
             break
-    held = np.zeros((TRAIN_TOKENS, TRAIN_TOKENS), bool)
-    held[np.arange(TRAIN_TOKENS), order] = True
+    held = np.zeros((train, train), bool)
+    held[np.arange(train), order] = True
     return held
 
 
@@ -111,14 +120,17 @@ def draw(
 ) -> dict[str, np.ndarray]:
     """``n`` trials: sequences ``(n, length)`` of distinct tokens and the cued position.
 
-    Training sequences contain no held-out transition. With ``cue_held`` the cued transition
-    is a held-out one and the others are not; with ``new_token`` the token never shown in
-    training sits at the cued position."""
+    The tokens are the training tokens of ``held`` (one per row). Training sequences contain
+    no held-out transition. With ``cue_held`` the cued transition is a held-out one and the
+    others are not; with ``new_token`` the token never shown in training sits at the cued
+    position."""
+    if not 2 <= length <= len(held):
+        raise ValueError("a sequence holds two to all of the training tokens")
     sequences = np.zeros((n, length), np.int64)
     cue = rng.integers(length - 1, size=n)
     for i in range(n):
         while True:
-            seq = rng.permutation(TRAIN_TOKENS)[:length]
+            seq = rng.permutation(len(held))[:length]
             steps = held[seq[:-1], seq[1:]]
             if cue_held:
                 if steps[cue[i]] and steps.sum() == 1:
@@ -126,15 +138,17 @@ def draw(
             elif not steps.any():
                 break
         if new_token:
-            seq[cue[i]] = TOKENS - 1
+            seq[cue[i]] = len(held)  # the token after the training tokens
         sequences[i] = seq
     return {"sequences": sequences, "cue": cue}
 
 
-def events(trials: dict[str, np.ndarray]) -> list[np.ndarray]:
+def events(trials: dict[str, np.ndarray], token_count: int = TOKENS) -> list[np.ndarray]:
+    """The events of a batch of trials on the inputs of ``token_count`` tokens: each token of
+    the sequence, then the cue."""
     seqs, cue = trials["sequences"], trials["cue"]
-    out = [token_event(seqs[:, j], "seq") for j in range(seqs.shape[1])]
-    out.append(token_event(seqs[np.arange(len(cue)), cue], "ask"))
+    out = [token_event(seqs[:, j], "seq", token_count) for j in range(seqs.shape[1])]
+    out.append(token_event(seqs[np.arange(len(cue)), cue], "ask", token_count))
     return out
 
 

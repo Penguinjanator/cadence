@@ -78,47 +78,57 @@ GATE = {"held_out": 0.75, "erased_margin": 0.15, "follows_donor": 0.75, "founder
 # -- the task
 
 
-def coordinate(kind: str, index: int = 0) -> int:
-    """The input coordinate of a marker, a name token or a value token."""
+def input_width(name_tokens: int = NAMES) -> int:
+    """Input coordinates: the markers, ``name_tokens`` name tokens and the value tokens."""
+    return len(MARKERS) + name_tokens + VALUES
+
+
+def coordinate(kind: str, index: int = 0, name_tokens: int = NAMES) -> int:
+    """The input coordinate of a marker, a name token or a value token; ``name_tokens`` name
+    tokens precede the value tokens."""
     if kind in MARKERS:
         return MARKERS.index(kind)
     if kind == "name":
         return len(MARKERS) + index
     if kind == "value":
-        return len(MARKERS) + NAMES + index
+        return len(MARKERS) + name_tokens + index
     raise ValueError(kind)
 
 
-def fact_event(names: np.ndarray, values: np.ndarray) -> np.ndarray:
-    out = np.zeros((len(names), INPUTS))
+def fact_event(names: np.ndarray, values: np.ndarray, name_tokens: int = NAMES) -> np.ndarray:
+    out = np.zeros((len(names), input_width(name_tokens)))
     out[:, coordinate("is")] = 1.0
     out[np.arange(len(names)), coordinate("name") + np.asarray(names)] = 1.0
-    out[np.arange(len(names)), coordinate("value") + np.asarray(values)] = 1.0
+    out[np.arange(len(names)), coordinate("value", 0, name_tokens) + np.asarray(values)] = 1.0
     return out
 
 
-def query_event(names: np.ndarray) -> np.ndarray:
-    out = np.zeros((len(names), INPUTS))
+def query_event(names: np.ndarray, name_tokens: int = NAMES) -> np.ndarray:
+    out = np.zeros((len(names), input_width(name_tokens)))
     out[:, coordinate("ask")] = 1.0
     out[np.arange(len(names)), coordinate("name") + np.asarray(names)] = 1.0
     return out
 
 
-def neutral_event(n: int) -> np.ndarray:
-    out = np.zeros((n, INPUTS))
+def neutral_event(n: int, name_tokens: int = NAMES) -> np.ndarray:
+    out = np.zeros((n, input_width(name_tokens)))
     out[:, coordinate("neutral")] = 1.0
     return out
 
 
-def holdout(seed: int) -> np.ndarray:
-    """``(TRAIN_NAMES, VALUES)`` True where a name-value pair is held out: two values per
-    training name, each value held out for exactly one name, so every value and every
-    training name occurs in training."""
+def holdout(seed: int, name_tokens: int = NAMES) -> np.ndarray:
+    """``(name_tokens - 1, VALUES)`` True where a name-value pair is held out: ``VALUES //
+    (name_tokens - 1)`` values per training name (two at the instrument's five name tokens),
+    each value held out for exactly one name, so every value and every training name occurs
+    in training. The last name token is never trained."""
+    train = name_tokens - 1
+    if not 1 <= train <= VALUES or VALUES % train:
+        raise ValueError("the training names must divide the values")
     rng = np.random.default_rng(np.random.SeedSequence([HOLDOUT_SEED, seed]))
     order = rng.permutation(VALUES)
-    held = np.zeros((TRAIN_NAMES, VALUES), bool)
-    per = VALUES // TRAIN_NAMES
-    for name in range(TRAIN_NAMES):
+    held = np.zeros((train, VALUES), bool)
+    per = VALUES // train
+    for name in range(train):
         held[name, order[per * name : per * (name + 1)]] = True
     return held
 
@@ -135,12 +145,15 @@ def draw(
 ) -> dict[str, np.ndarray]:
     """``n`` trials: names ``(n, facts)``, values ``(n, facts)``, the queried position ``(n,)``.
 
-    Names are distinct within a trial. Training trials avoid every held-out pair. With
-    ``queried_held`` the queried fact is a held-out pair; with ``new_name`` the queried fact
-    carries the name never shown in training (its value any). With ``restated`` (three facts)
-    the first fact's name is stated again in the last with another value, and the query asks
-    that name: the later value is the answer."""
-    names = np.stack([rng.permutation(TRAIN_NAMES)[:facts] for _ in range(n)])
+    Names are distinct within a trial, drawn from the training names of ``held`` (one per
+    row). Training trials avoid every held-out pair. With ``queried_held`` the queried fact is
+    a held-out pair; with ``new_name`` the queried fact carries the name never shown in
+    training (its value any). With ``restated`` (three facts) the first fact's name is stated
+    again in the last with another value, and the query asks that name: the later value is
+    the answer."""
+    if not 0 < facts <= len(held):
+        raise ValueError("a trial's facts carry distinct training names")
+    names = np.stack([rng.permutation(len(held))[:facts] for _ in range(n)])
     values = np.zeros((n, facts), np.int64)
     query = rng.integers(facts, size=n)
     for i in range(n):
@@ -150,7 +163,7 @@ def draw(
                 allowed = np.flatnonzero(held[names[i, j]])
             values[i, j] = rng.choice(allowed)
         if new_name:
-            names[i, query[i]] = NAMES - 1
+            names[i, query[i]] = len(held)  # the name token after the training names
             values[i, query[i]] = rng.integers(VALUES)
         if restated:
             names[i, facts - 1] = names[i, 0]
@@ -161,13 +174,16 @@ def draw(
     return {"names": names, "values": values, "query": query}
 
 
-def events(trials: dict[str, np.ndarray], neutral: int = NEUTRAL) -> list[np.ndarray]:
-    """The events of a batch of trials: each fact, the neutral events, then the query."""
+def events(
+    trials: dict[str, np.ndarray], neutral: int = NEUTRAL, name_tokens: int = NAMES
+) -> list[np.ndarray]:
+    """The events of a batch of trials: each fact, the neutral events, then the query, on
+    the inputs of ``name_tokens`` name tokens."""
     names, values, query = trials["names"], trials["values"], trials["query"]
     n = len(query)
-    out = [fact_event(names[:, j], values[:, j]) for j in range(names.shape[1])]
-    out += [neutral_event(n) for _ in range(neutral)]
-    out.append(query_event(names[np.arange(n), query]))
+    out = [fact_event(names[:, j], values[:, j], name_tokens) for j in range(names.shape[1])]
+    out += [neutral_event(n, name_tokens) for _ in range(neutral)]
+    out.append(query_event(names[np.arange(n), query], name_tokens))
     return out
 
 
