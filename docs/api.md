@@ -583,11 +583,12 @@ and a complete runnable example.
   for the streams `aroused` marks (one flag, or one per stream) alone: in a batch the new
   slot is a column every stream has and the marked streams hold, each written stream's
   latest held slot learns the moment as its next, a moment no stream writes adds no slot,
-  and the cortex and history move on either way. `learn(graph, learned)` is the address
-  lesson after a lesson whose `LearnedState` is `learned`, a rule of its own beside the
-  graph's contrast: it reads the association's movement between the nudged phases back
-  through the recall and next synapses of `graph` (`readback(graph, region, movement)`),
-  scores each slot's value and next against it, weighs the scores by
+  and the cortex and history move on either way; `capacity` then bounds the store's
+  columns, so a stream that wrote fewer of them holds fewer slots. `learn(graph, learned)` is
+  the address lesson after a lesson whose `LearnedState` is `learned`, a rule of its own
+  beside the graph's contrast: it reads the association's movement between the nudged
+  phases back through the recall and next synapses of `graph` (`readback(graph, region,
+  movement)`), scores each slot's value and next against it, weighs the scores by
   `softmax(score / address_temperature + log p)` with the address's attention `p` as the
   prior, and steps the map toward the keys so weighted at the taught rows, each row at the
   rate `min(address, 1 / |z|^2)` on `z = [x, c, 1]`; a step whose map or address is not
@@ -1202,7 +1203,7 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_address` | `0.01` | The address lesson's rate, each row's bounded by the row's own input energy; `0.0` leaves the map as it is, the founder's address being the event heard |
 | `recall_address_temperature` | `0.1` | The softmax temperature of the slots' scores against the lesson's movement, weighed with the address's own attention |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` | The fading history of earlier events in a key, and its retention per moment |
-| `recall_capacity` | `64` | Slots per stream, the oldest dropped first (construction) |
+| `recall_capacity` | `64` | Slots per stream, the oldest dropped first (construction); with aroused writes in a batch it bounds the store's columns, and a stream that wrote fewer of them holds fewer slots |
 | `recall_value` | `"event"` | `"cortex"` stores the settled association activity as the value and sizes the regions by the association width; it does not carry a moment's content in a form the next settle can read back, so the founder stores events (construction) |
 | `recall_next` | `True` | The `next` region and each slot's next (construction) |
 | `recall_scale` | `1.2` | The initial magnitude of the two projections into the association region (a `compose` argument; construction) |

@@ -240,7 +240,8 @@ keeps it ([genes](api.md#recall-memory-genes)):
   sampled. The cortex of the moment before and the history move on at every moment. In a
   batch a moment written for some streams is a column every stream has, held by the written
   ones, and each stream's latest held slot learns its next from that stream's next written
-  moment.
+  moment. `recall_capacity` then bounds the store's columns, so a stream that wrote fewer of
+  them holds fewer slots than the capacity.
 - **A null slot** (`recall_null`, a number). A slot of logit `null / temperature` joins the
   read's softmax and reads nothing, so a moment that matches no slot recalls little:
   `attended` and the drives read the slots' shares, which sum to one less the null slot's.

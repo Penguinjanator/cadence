@@ -436,7 +436,8 @@ class Recall:
     named keys less the mixture the address attended to (``p`` over the slots alone, a null
     slot left out, as in the prior): to first order the step raises the logits of the slots
     the scores name against those the address attended to, whatever the keys' norms.
-    ``capacity`` bounds the slots per stream, the oldest dropped first. ``reset`` empties
+    ``capacity`` bounds the slots per stream, the oldest dropped first (with aroused writes
+    in a batch, the store's columns: a stream that wrote fewer holds fewer). ``reset`` empties
     streams, and an empty stream reads silence.
 
     With ``address_reward`` above zero reward trains the map as well: at each sampled act
