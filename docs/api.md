@@ -1577,7 +1577,7 @@ founder genes for a small share of moments; the
     `trace_memory` (`e <- gamma lam e + contrast`, allocated once a contrast is kept),
     proposes the memory's step on that trace weighted by the same dopamine before the
     graph's update and installs it after (`accept`); a refused update leaves the memory and
-    its trace as they were, and the report names the step (`address_step`).
+    its trace as they were, and the report names the step (`address_reward_step`).
   - `fade(done=None)`: one moment passed that added no eligibility, its action having
     been answered greedily. Every eligibility trace decays by `gamma * lam`, the step
     `learn` applies between two sampled actions, the memory's trace among them, and `done`

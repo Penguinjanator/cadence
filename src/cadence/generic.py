@@ -3120,7 +3120,7 @@ class Brain:
         state settles from the state the stream sensed last; the critic's eligibility
         still belongs to the state the action was chosen in. With a positive
         ``recall_address_reward`` the recall memory's address map steps on its own trace by
-        the same dopamine, and the report names the step (``address_step``).
+        the same dopamine, and the report names the step (``address_reward_step``).
         """
         following = self._observations(next_observations)
         self._coded_moment = (following, self._code(following))

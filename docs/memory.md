@@ -251,7 +251,7 @@ keeps it ([genes](api.md#recall-memory-genes)):
   beside the synapses' (it decays by `gamma * lam` per outcome and per calm moment, and an
   ended stream forgets it), and each outcome steps the map by `recall_address_reward` times
   the dopamine times that trace, checked before the graph's update; the report names the
-  step (`address_step`).
+  step (`address_reward_step`).
 
 ```python
 import numpy as np
@@ -271,7 +271,7 @@ optioned.stimulus(np.array([[0.0, 0.0, 1.0, 0.0]]))  # a moment that matches no 
 assert optioned.recall.attended.sum() < 1.0  # the null slot keeps the rest
 optioned.act(np.array([[1.0, 0.0, 0.0, 0.0]]))  # sampled: the map's eligibility is kept
 report = optioned.learn(np.array([1.0]), np.array([False]), fact)
-assert report["address_step"] > 0.0  # the outcome stepped the map on its trace
+assert report["address_reward_step"] > 0.0  # the outcome stepped the map on its trace
 assert optioned.describe()["genes"]["recall_address_step"] == "toward"
 ```
 

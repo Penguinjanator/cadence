@@ -696,7 +696,7 @@ class ActorCritic:
         action was chosen in, which always carries the critic's eligibility. A ``memory``'s
         parameters step on their own trace by the same dopamine, checked before the graph's
         update and installed after it; a refused update leaves them and their trace as they
-        were, and the report names the step (``address_step``).
+        were, and the report names the step (``address_reward_step``).
         """
         arrays = ("trace", "trace_bias", "trace_critic", "trace_memory")
         saved = {
@@ -879,7 +879,7 @@ class ActorCritic:
         self.w_critic, self.b_critic = critic_weights, critic_bias
         if proposal is not None:
             self.memory.accept(proposal)
-            report["address_step"] = float(proposal[3])
+            report["address_reward_step"] = float(proposal[3])
         # a finished row forgets its traces
         if done.any():
             self.trace[done] = 0.0
@@ -1074,7 +1074,7 @@ class ActorCritic:
         self.w_critic, self.b_critic = critic_weights, critic_bias
         if proposal is not None:
             self.memory.accept(proposal)
-            report["address_step"] = float(proposal[3])
+            report["address_reward_step"] = float(proposal[3])
         if done.any():  # a finished stream forgets its traces
             keep = torch.as_tensor(~done, dtype=trace.dtype, device=trace.device)[:, None]
             trace = trace * keep

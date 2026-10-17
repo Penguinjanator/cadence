@@ -143,7 +143,7 @@
   (`Recall.contrast_rows`), `ActorCritic` keeps it in a trace of its own (`trace_memory`,
   decaying and forgotten as the synapses' traces are) and steps the map by that rate times
   the dopamine times the trace, checked before the graph's update and installed after it
-  (`address_step` in the report); a checkpoint carries the trace and a pending action's
+  (`address_reward_step` in the report); a checkpoint carries the trace and a pending action's
   contrast. The binding instrument's index memory takes the same genes (`address_step`,
   `recency=None`, `write` with `IndexBrain.aroused_rows`, and `null`).
 - A sparse pattern separator, opt-in: `PatternSeparator(..., fan_in=k)` lets each code

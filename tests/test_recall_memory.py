@@ -1773,7 +1773,7 @@ def test_an_outcome_steps_the_address_map_by_its_trace_and_the_dopamine():
     step = 0.5 * report["dopamine"] * contrast[0]
     for now, then, part in zip(_map(recall), start, _split(step, 4), strict=True):
         np.testing.assert_allclose(now - then, part, rtol=1e-12, atol=1e-15)
-    assert report["address_step"] == pytest.approx(np.linalg.norm(step))
+    assert report["address_reward_step"] == pytest.approx(np.linalg.norm(step))
     assert brain.last_arousal["mode"] == "routine" and agent._pending_memory is None
     trace, moved = agent.trace_memory.copy(), _map(recall)
     brain.live(GO, reward=[0.0])  # a calm moment: nothing is learned and the traces fade
@@ -1827,7 +1827,7 @@ def test_the_maps_trace_follows_the_streams_and_a_refused_outcome_moves_nothing(
     np.testing.assert_array_equal(agent.trace_memory, trace)
     monkeypatch.undo()
     report = brain.learn(np.ones(3), np.zeros(3, bool), x)
-    assert report["address_step"] > 0.0
+    assert report["address_reward_step"] > 0.0
 
 
 def test_the_maps_trace_survives_a_checkpoint_and_the_life_continues_identically(tmp_path):
@@ -1878,7 +1878,7 @@ def test_without_address_reward_nothing_is_allocated_and_no_byte_changes(tmp_pat
         assert brain.basal_ganglia.memory is brain.recall
         assert brain.basal_ganglia.trace_memory is None
         assert brain.basal_ganglia._pending_memory is None
-        assert "address_step" not in brain.last_learning
+        assert "address_reward_step" not in brain.last_learning
     assert_same_checkpoint(founder.save(tmp_path / "founder"), named.save(tmp_path / "named"))
     with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
         assert not {"recall/trace", "recall/pending"} & set(data.files)
