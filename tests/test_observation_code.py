@@ -568,7 +568,10 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     def earlier_format(meta, _):
         meta["format"] = "cadence-generic/8"
 
-    def other_coordinates(meta, copy):  # place records keyed on other coordinates
+    def other_coordinates(meta, copy):  # place records keyed on other coordinates of the code
+        copy["episodic/pre"] = np.roll(copy["episodic/pre"], 1)
+
+    def beyond_the_code(meta, copy):  # and on coordinates the code does not have
         copy["episodic/pre"] = copy["episodic/pre"] + 1
 
     def other_fan_in(meta, _):
@@ -612,9 +615,135 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
                                      "512 units"),
         ("other_coordinates", other_coordinates, "keyed on other coordinates than the brain's "
                                                  "1024: a coded brain numbers them from zero"),
+        ("beyond_the_code", beyond_the_code, "saved memory keys exceed their 1024 coordinates"),
     ):
         with pytest.raises(ValueError, match=message):
             cd.Brain.load(tampered(name, mutate))
+
+
+def wider_than_the_graph(recall: bool = False, **options) -> cd.Brain:
+    """A custom anatomy whose code is wider than its whole graph: 32 sensory, 8 association
+    and 2 motor neurons and a code of 128 units, with the default episodic memory; with
+    ``recall`` 8 recall and 8 next neurons for a memory of cortex values."""
+    regions = [Region("sensory", 32), Region("association", 8), Region("motor", 2)]
+    projections = [Projection("sensory", "association", reciprocal=False),
+                   Projection("association", "motor")]
+    if recall:
+        regions += [Region("recall", 8), Region("next", 8)]
+        projections += [Projection(name, "association", reciprocal=False)
+                        for name in ("recall", "next")]
+        options = {"recall": True, "recall_value": "cortex", **options}
+    connectome = develop(Genome(tuple(regions), tuple(projections)), seed=3)
+    return cd.Brain(connectome, code=128, seed=3, **options)
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [{}, {"recall": True}, {"memory_choice": True, "memory_context": 0.5, "arousal": True}],
+    ids=["episodic", "recall", "context"],
+)
+def test_a_code_wider_than_the_graph_saves_and_continues_from_a_pending_action(
+    tmp_path, variant
+):
+    """A memory keyed on the code numbers its key coordinates from zero, so a code wider than
+    the graph keys on coordinates beyond the last neuron: the loader checks the keys against
+    the code and the outputs against the graph. The brain saves with an action awaiting its
+    outcome, loads, and continues and saves as the brain it was."""
+    brain = wider_than_the_graph(**variant)
+    assert brain.code_width == 128 > brain.connectome.n
+    np.testing.assert_array_equal(brain.hippocampus.pre, np.arange(128))
+    x = frames(32, 6, 8, density=0.3)
+    brain.step(x[:1])
+    for t in (1, 2, 3):
+        brain.step(x[t:t + 1], reward=[float(t % 2)])
+    assert brain.basal_ganglia._pending is not None  # the last action awaits its outcome
+    path = brain.save(tmp_path / "wide.npz")
+    twin = cd.Brain.load(path)
+    assert twin.describe() == brain.describe()
+    np.testing.assert_array_equal(twin.hippocampus.pre, brain.hippocampus.pre)
+    np.testing.assert_array_equal(twin.hippocampus.strength, brain.hippocampus.strength)
+    if brain.context_memory is not None:
+        np.testing.assert_array_equal(twin.context_memory.pre, np.arange(128 + 2))
+    if brain.recall is not None:
+        assert brain.recall.key_width == 128 and brain.recall.value_width == 8
+        np.testing.assert_array_equal(twin.recall.keys, brain.recall.keys)
+    for t in (4, 5):
+        np.testing.assert_array_equal(
+            brain.step(x[t:t + 1], reward=[float(t % 2)]),
+            twin.step(x[t:t + 1], reward=[float(t % 2)]),
+        )
+    assert checkpoint_digest(brain.save(tmp_path / "later.npz")) == checkpoint_digest(
+        twin.save(tmp_path / "twin.npz")
+    )
+
+
+def test_the_loader_bounds_the_keys_by_the_code_and_the_outputs_by_the_graph(tmp_path):
+    brain = wider_than_the_graph(memory_choice=True, memory_context=0.5)
+    brain.step(frames(32, 1, 9, density=0.3))
+    path = brain.save(tmp_path / "wide.npz")
+    with np.load(path, allow_pickle=False) as data:
+        arrays = {name: data[name].copy() for name in data.files}
+    n = brain.connectome.n
+
+    def refused(name, mutate, message):
+        copy = {k: v.copy() for k, v in arrays.items()}
+        mutate(copy)
+        np.savez(tmp_path / f"{name}.npz", **copy)
+        with pytest.raises(ValueError, match=message):
+            cd.Brain.load(tmp_path / f"{name}.npz")
+
+    def beyond_the_code(copy):
+        copy["episodic/pre"][-1] = 128
+
+    def beyond_the_graph(copy):
+        copy["episodic/post"][0] = n
+
+    def context_beyond_its_code(copy):
+        copy["temporal/pre"][-1] = 130
+
+    def context_on_other_coordinates(copy):
+        copy["temporal/pre"] = copy["temporal/pre"][::-1].copy()
+
+    refused("code", beyond_the_code, "keys exceed their 128 coordinates")
+    refused("graph", beyond_the_graph, "outputs exceed the connectome")
+    refused("context", context_beyond_its_code, "keys exceed their 130 coordinates")
+    refused("order", context_on_other_coordinates, "context records are keyed on other")
+
+
+def parsed(path: Path) -> tuple[dict, dict]:
+    """A checkpoint's metadata entries, parsed, and its other arrays by name."""
+    with np.load(path, allow_pickle=False) as data:
+        arrays = {name: data[name].copy() for name in data.files}
+    meta = {name: json.loads(str(arrays.pop(name))) for name in ("generic", "meta")
+            if name in arrays}
+    return meta, arrays
+
+
+def assert_same_saved(first: Path, second: Path) -> None:
+    (meta, arrays), (again, arrays_again) = parsed(first), parsed(second)
+    assert meta == again
+    assert set(arrays) == set(arrays_again)
+    for name, value in arrays.items():
+        np.testing.assert_array_equal(arrays_again[name], value, err_msg=name)
+
+
+def test_a_coded_round_trip_keeps_the_codes_seed_and_every_saved_setting(tmp_path):
+    """Loading installs the saved code with its whole specification: a code drawn from a
+    seed other than the default saves, loads and saves again with the same parsed metadata
+    and the same arrays, and the continued lives save the same."""
+    brain = cd.Brain.compose(32, 2, modules=(8,), code=24, seed=11, recall=True)
+    assert brain.sparse_code.seed == 13  # the brain's seed plus two
+    brain.act(np.eye(32)[:1], greedy=True)
+    first = brain.save(tmp_path / "first.npz")
+    twin = cd.Brain.load(first)
+    assert twin.sparse_code.to_dict() == brain.sparse_code.to_dict()
+    second = twin.save(tmp_path / "second.npz")
+    assert parsed(second)[0]["generic"]["code"]["seed"] == 13
+    assert_same_saved(first, second)
+    for i in (3, 5, 2):
+        x = np.eye(32)[[i]]
+        np.testing.assert_array_equal(brain.act(x, greedy=True), twin.act(x, greedy=True))
+    assert_same_saved(brain.save(tmp_path / "continued.npz"), twin.save(tmp_path / "twin.npz"))
 
 
 def test_place_records_of_another_width_are_refused_by_the_loader(tmp_path):

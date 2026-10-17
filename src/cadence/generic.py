@@ -395,9 +395,18 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
 
 
 def _load_memory(
-    metadata: Any, data: Mapping[str, Any], neurons: int, prefix: str = "episodic/"
+    metadata: Any,
+    data: Mapping[str, Any],
+    neurons: int,
+    prefix: str = "episodic/",
+    keys: int | None = None,
 ) -> FastSynapses | None:
-    """Validate and restore a detached memory before constructing the resumed composition."""
+    """Validate and restore a detached memory before constructing the resumed composition.
+
+    The memory's outputs (``post``) are neurons of the graph, below ``neurons``. Its key
+    coordinates (``pre``) are neurons too, unless ``keys`` names the width of the code they
+    number from zero (the observation code, with the motor neurons after it for context
+    records), which can exceed the graph."""
 
     def array(name: str, shape: tuple[int, ...] | None = None) -> np.ndarray:
         key = prefix + name
@@ -430,8 +439,14 @@ def _load_memory(
             if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                 raise ValueError(f"saved memory {name} must be a nonnegative integer")
         pre, post = array("pre", (metadata["pre"],)), array("post", (metadata["post"],))
-        if np.any(pre >= neurons) or np.any(post >= neurons):
-            raise ValueError("saved memory indices exceed the connectome")
+        if np.any(pre < 0) or np.any(pre >= (neurons if keys is None else keys)):
+            raise ValueError(
+                "saved memory keys exceed the connectome"
+                if keys is None
+                else f"saved memory keys exceed their {keys} coordinates"
+            )
+        if np.any(post < 0) or np.any(post >= neurons):
+            raise ValueError("saved memory outputs exceed the connectome")
         separator = None
         spec = metadata.get("separator")  # Older unseparated checkpoints omitted this field.
         if spec is None:
@@ -3457,7 +3472,11 @@ class Brain:
                 _validate_life_state(meta, data, learner, code)
             except (KeyError, TypeError, OverflowError) as exc:
                 raise ValueError("invalid or incomplete saved continuation state") from exc
-            memory = _load_memory(meta["hippocampus"], data, learner.brain.connectome.n)
+            # a memory keyed on the code numbers its key coordinates from zero: the code's
+            # width bounds them, with the motor neurons after it for the context records
+            neurons = learner.brain.connectome.n
+            coded = None if code is None else code[1].expansion
+            memory = _load_memory(meta["hippocampus"], data, neurons, keys=coded)
             heard = meta.get("history")
             recalled = meta.get("recall")
             result = cls(
@@ -3488,8 +3507,9 @@ class Brain:
                 ),
             )
             if code is not None:
-                assert result.sparse_code is not None  # built from the saved units and seed
-                result.sparse_code.index, result.sparse_code.weight = code[1].index, code[1].weight
+                # the saved code as validated, its settings, seed and tables: the construction
+                # above drew a code from the default seed
+                result.sparse_code = code[1]
             if heard is not None:
                 assert result.history is not None  # validated above: the population is there
                 result.history.trace = data["history/trace"].astype(float)
@@ -3592,10 +3612,21 @@ class Brain:
                 result.memory_replay = int(episodic["replay"])
                 result.memory_demonstrations = float(episodic["demonstrations"])
                 temporal = _load_memory(
-                    episodic["context_memory"], data, learner.brain.connectome.n, "temporal/"
+                    episodic["context_memory"], data, neurons, "temporal/",
+                    keys=None if coded is None else coded + len(result.motor_index),
                 )
                 if temporal is not None and not isinstance(temporal, SynapticMemory):
                     raise ValueError("an episodic memory's context records consolidate")
+                if temporal is not None and not np.array_equal(
+                    temporal.pre,
+                    np.arange(result.code_width + len(result.motor_index))
+                    if result.sparse_code is not None
+                    else np.concatenate([result.sensory_index, result.motor_index]),
+                ):
+                    raise ValueError(
+                        "the saved context records are keyed on other coordinates than the "
+                        "brain's observation code and its motor neurons"
+                    )
                 result.context_memory = temporal
                 for name in ("context", "decision"):
                     if "episode/" + name in data:
