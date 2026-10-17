@@ -79,6 +79,9 @@ ARMS = {
     "horizon": {"address": 0.01, "recency": None, "capacity": 64},
     "null": {"address": 0.01, "recency": 0.25},
     "improved": {"address": 0.01, "recency": None, "capacity": 64, "address_step": "toward"},
+    # the context-window key of amendment 7: the last k events in order, each on its own block
+    "window2": {"address": 0.01, "recency": 0.25, "window": 2},
+    "window4": {"address": 0.01, "recency": 0.25, "window": 4},
 }
 HALF_NULL = ("null", "improved")  # a null slot at half the logit of a full unit-key match
 CONTINUING = {"capacity": 12}  # the continuing task's slots: three trials

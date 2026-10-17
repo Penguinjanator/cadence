@@ -303,3 +303,26 @@ protocol changes. Every declared task reads the same at two budgets on one found
 after the change. The readings gain processor seconds (`cpu`, and `read_cpu` for the reading
 alone) beside the wall seconds, and the fresh tasks' training record names why the life ended
 (`ended`).
+
+## Amendment 7, the context-window key (17 October 2026)
+
+Declared before its first run. The memory gains a key option: `window` (founder 1) and
+`window_decay` (founder 1.0). With `window` k the key's fixed part is the ordered window of the
+stream's last k events, `[heard x_t, d heard x_{t-1}, ..., d^(k-1) heard x_{t-k+1}]`, each
+position on coordinates of its own (zeros before a stream's first moment and after an episode's
+end); the learned map still reads the present event. Where the same event recurs with different
+continuations, the window separates its occurrences by their recent history.
+
+| Arm | Genes |
+| --- | --- |
+| `index` | as declared, the control |
+| `window2` | `index` with `window` 2 |
+| `window4` | `index` with `window` 4 |
+
+Development founders 0 to 5; the tasks, budgets and gates declared above: `succession` and
+`chain` as the readings the window addresses, `token`, `fresh`, `named` and `continuing` for
+preservation, and `camera` (the generic code) for `window2`. The selection rule of amendment 5
+applies to each window arm against the `index` arm on the same founders; `chain` is read and
+reported. Declared expectation: both window arms keep every gate the `index` arm passes; `chain`
+stays below the gate. The window's main readings are outside this instrument (a music row loop and
+a word stream) and are declared with their own instruments.

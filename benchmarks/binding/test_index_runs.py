@@ -179,3 +179,11 @@ def test_the_option_arms_carry_their_declared_genes() -> None:
     assert runs.genes_for("continuing", "improved")["capacity"] == 12
     assert runs.genes_for("camera", "improved")["null"] == 1.125
     assert runs.genes_for("camera", "index")["null"] is None
+
+
+def test_the_window_arms_carry_their_declared_genes() -> None:
+    """Amendment 7's arms: the index arm with the context-window key of two and of four events."""
+    index = runs.genes_for("succession", "index")
+    assert runs.genes_for("succession", "window2") == dict(index, window=2)
+    assert runs.genes_for("succession", "window4") == dict(index, window=4)
+    assert runs.genes_for("continuing", "window4")["capacity"] == 12
