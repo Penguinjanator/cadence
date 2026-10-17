@@ -94,11 +94,17 @@
   slot before learns it as its next. Before each settle the moment's address, the key plus a
   learned map of the event and of the association activity of the moment before, weighs the
   slots by a softmax (`recall_temperature` 0.25, `recall_recency` 0.25 per moment of age), and
-  the recalled value and next drive the two regions at `recall_amplitude` (3.0). After each
-  lesson the address lesson moves the map a least-mean-squares step toward the slots that
-  would have answered (`recall_address` 0.01, `recall_address_temperature` 0.1; the
-  address's own attention is their prior), at the taught rows. `recall_capacity` (64) bounds the slots
-  per stream. `Brain.lesson(observations, labels)` gives the lesson of
+  the recalled value and next drive the two regions at `recall_amplitude` (3.0), a drive held
+  through the settle, which answers on it and does not revise the choice: a held-input recall,
+  whose last attention `Recall.attended` keeps. After each teacher lesson the address lesson,
+  a rule of its own beside the graph's contrast, scores each slot's value and next against
+  the association's movement under the nudge, read back through the recall and next
+  projections, weighs the scores with the address's own attention
+  (`recall_address_temperature` 0.1), and takes a least-mean-squares step of the map toward
+  the keys so weighted at the taught rows (`recall_address` 0.01, each row's rate bounded by
+  `1 / |z|^2` on its inputs `z = [x, c, 1]`; a step that is not finite is refused and
+  reported as `address_refused`); rewards leave the map as it is. `recall_capacity` (64)
+  bounds the slots per stream. `Brain.lesson(observations, labels)` gives the lesson of
   `step(..., teacher=...)` without its act. `reset`, ended episodes, imagination (reads, no
   writes), `wait`, `describe()` and `retune` of the read and lesson genes treat the memory as
   they treat the heard history; the address map is a learned parameter that resets keep and

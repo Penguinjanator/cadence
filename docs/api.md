@@ -557,35 +557,42 @@ and a complete runnable example.
   `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
   observation of every act after the act.
 - `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, source="sensory", target="recall", inputs=0, writes=0)`:
-  the index memory of each stream's recent moments
+  the index memory of each stream's recent moments, a held-input recall
   ([memory](memory.md#recall-the-streams-own-moments)). `inputs` is the width of the
   observations the memory is given when it is not the `source` range's (a brain whose
   memories key on its sparse code gives the code); 0 reads the range. `stimulate(drive,
   observations)` computes each stream's address `q = heard * x + context * h + x @ w_x + c
-  @ w_c + b` (`x` the `(batch, inputs)` observations, `h` the fading `history` of the
-  earlier events, kept at `context_decay`; `c` the `previous` settled association
-  activity), keeps the moment as `last`,
-  and writes `amplitude * p @ values` into the `target` region and, with `next`,
-  `amplitude * p @ nexts` into the `next` region, where `p = weights(q)` is the softmax
-  over the stream's slots at `temperature` less `recency` per moment of age (another batch
-  size, or a stream without slots, reads silence). `witness(observations, state)` writes
+  @ w_c + b` before the settle (`x` the `(batch, inputs)` observations, `h` the fading
+  `history` of the earlier events, kept at `context_decay`; `c` the `previous` settled
+  association activity), keeps the moment as `last`, and writes `amplitude * p @ values`
+  into the `target` region and, with `next`, `amplitude * p @ nexts` into the `next`
+  region, where `p = weights(q)` is the softmax over the stream's slots at `temperature`
+  less `recency` per moment of age (another batch size, or a stream without slots, reads
+  silence); the settle holds that drive and does not revise `p`, which `attended` keeps
+  (read-only, recency included, past the moment's write). `witness(observations, state)` writes
   the moment after its settle: one slot per stream with key `heard * x` (plus `context`
   times the fading `history`, kept at `context_decay`), value `x` or, with
   `value="cortex"`, the association activity of `state`, and the next of the slot before;
   beyond `capacity` the oldest slot is dropped. `learn(graph, learned)` is the address
-  lesson after a lesson whose `LearnedState` is `learned`, through the synapses of `graph`
-  (`readback(graph, region, movement)`), at the taught rows and rate `address`, the slots
-  that would have answered named by `softmax(score / address_temperature + log p)` with the
-  address's attention `p` as the prior; it returns `address_rows` and `address_error`.
+  lesson after a lesson whose `LearnedState` is `learned`, a rule of its own beside the
+  graph's contrast: it reads the association's movement between the nudged phases back
+  through the recall and next synapses of `graph` (`readback(graph, region, movement)`),
+  scores each slot's value and next against it, weighs the scores by
+  `softmax(score / address_temperature + log p)` with the address's attention `p` as the
+  prior, and steps the map toward the keys so weighted at the taught rows, each row at the
+  rate `min(address, 1 / |z|^2)` on `z = [x, c, 1]`; a step whose map or address is not
+  finite is refused. It returns `address_rows`, `address_error` (the mean absolute error of
+  the addresses before the step) and `address_refused` (the rows a refused step left as
+  they were).
   Arrays: `keys`, `values` and `nexts`
   (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a slot written before
   its stream began again), `previous`, `history`, and the map `w_x`, `w_c` and `b`.
   `reset(batch, rows=None)`, `keep(rows)`, `snapshot()` and `restore(snapshot)`,
   `imagined()` (a copy that reads the live slots and writes none), `founders()`,
-  `setting(name, value)`, `neurons`, `streams`, `slots`, `ages()`, `to_dict()`.
+  `setting(name, value)`, `neurons`, `streams`, `slots`, `ages()`, `attended`, `to_dict()`.
   `Brain.compose(..., recall=True)` adds it; `Brain.recall` holds it, reads it before every
   settle, writes the moment of every act and of every moment `wait` senses, and runs its
-  address lesson after every lesson.
+  address lesson after every teacher lesson; rewards leave the map as it is.
 - `FastSynapses(pre, post, decay=1.0, rate=1.0, amplitude=1.0, normalize=False, replace=False, rule="hebb", separator=None, writes=0)`:
   one mutable `(pre, post)` matrix per stream; `writes` counts the rows written. `separator`
   is a `PatternSeparator` applied to keys and queries, which makes the matrix
@@ -947,13 +954,15 @@ that recursive benefit or automatic reflective behavior has been learned.
     If real feedback is learned but the next action refuses, that learning remains.
     Retry `act(observations)`; do not submit the same reward again.
     With a recall memory the lesson ends with its address lesson, reported as
-    `demonstration_address_rows` and `demonstration_address_error`.
+    `demonstration_address_rows`, `demonstration_address_error` and
+    `demonstration_address_refused`.
   - `lesson(observations, labels) -> report`: the lesson `step(..., teacher=labels)` gives
     before its act, without the act: the drive reads every memory the act reads, the
     surprise rule judges the rows by the settle the act reads, an episodic memory records
     the demonstration, and a recall memory runs its address lesson at the taught rows. The
-    teaching report is returned (with `address_rows` and `address_error` for a recall
-    memory) and kept in `last_learning` under `demonstration_*` keys. The batch must be
+    teaching report is returned (with `address_rows`, `address_error` and
+    `address_refused` for a recall memory) and kept in `last_learning` under
+    `demonstration_*` keys. The batch must be
     the live streams; a sampled action awaiting its outcome is refused with
     `RuntimeError`, since its eligibility belongs to the parameters before the lesson.
     A refused phase raises `LearningPhaseError` and leaves parameters and memories as they
@@ -1149,8 +1158,8 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_temperature` | `0.25` | The softmax temperature over a stream's slots |
 | `recall_heard` | `1.0` | The weight of the present event in its key and its address |
 | `recall_recency` | `0.25` | The logit cost per moment of a slot's age |
-| `recall_address` | `0.01` | The address lesson's rate; `0.0` leaves the map as it is, the founder's address being the event heard |
-| `recall_address_temperature` | `0.1` | The softmax temperature that names the slots that would have answered, among those the address attended to |
+| `recall_address` | `0.01` | The address lesson's rate, each row's bounded by the row's own input energy; `0.0` leaves the map as it is, the founder's address being the event heard |
+| `recall_address_temperature` | `0.1` | The softmax temperature of the slots' scores against the lesson's movement, weighed with the address's own attention |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` | The fading history of earlier events in a key, and its retention per moment |
 | `recall_capacity` | `64` | Slots per stream, the oldest dropped first (construction) |
 | `recall_value` | `"event"` | `"cortex"` stores the settled association activity as the value and sizes the regions by the association width; it does not carry a moment's content in a form the next settle can read back, so the founder stores events (construction) |

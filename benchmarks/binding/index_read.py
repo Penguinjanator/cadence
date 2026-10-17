@@ -6,7 +6,7 @@ shares nothing with. A read inside the settle, a learned query and a recall comp
 stored moments through one energy, starts its query and recall at rest and completes on a
 stored moment nearly at random. Here the address of each moment is computed before
 its settle, from what the brain has at that point, and the recall enters the settle as a
-drive, as the fixed read's does:
+drive held through it, as the fixed read's does:
 
     q_t = heard * x_t + x_t W_x + c_{t-1} W_c + b        the moment's address
     p_t = softmax_i(q_t . K_i / T - recency * age_i)       over the stream's slots
@@ -18,23 +18,22 @@ before. After the settle the moment is written: key ``K_t`` the fixed part of it
 ``V_t`` the event (``value="event"``) or the settled association activity
 (``value="cortex"``), and the previous slot's next ``N_{t-1} = V_t``. At ``W = 0`` the
 address is the event heard: a question that shares an event with a stored moment finds it
-from the first lesson. The recall
-and next neurons are sources with one-way synapses into the association region, so the settle
-is the library's own and its contrast keeps its meaning; those synapses learn by it like the
-sensory ones. A moment's address cannot depend on what that moment recalls: a second step
-takes a second moment (a think event).
+from the first lesson. The recall and next neurons are sources with one-way synapses into the
+association region: their drive is held through the settle, which answers on the mixture the
+address chose and does not revise the choice, and the settle's contrast teaches those
+synapses like the sensory ones. A moment's address cannot depend on what that moment
+recalls: a second step takes a second moment (a think event).
 
-The address map ``W_x, W_c, b`` learns by the address lesson after every lesson. The
-association's movement between the nudged phases, read back through the recall's and the
-next's own synapses, ``d = W_{recall->association} (c_+ - c_-)``, is the direction in which a
-recall would have moved the cortex the way the answer needs (for a source with one-way
-synapses it is the contrast's own sensitivity). Each slot scores ``(d_r . V_i + d_n . N_i) /
-|d|``. Among the moments the address attended to (its own weights ``p``), those that would
-have answered are named by ``p* = softmax(score / address_temperature + address_prior * log
-p)``; ``K* = sum_i p*_i K_i`` is their address, and the map takes the least-mean-squares step
-toward ``K*`` on its inputs ``z = [x_t, c_{t-1}, 1]`` at the taught rows, each row at the rate
-``min(address, 1 / |z|^2)`` so that no row's own address moves past its target; a step whose
-result is not finite is refused. With the
+The address map ``W_x, W_c, b`` learns by the address lesson after every lesson, a rule of
+its own beside the graph's contrast. The association's movement between the nudged phases is
+read back through the recall's and the next's own synapses,
+``d = W_{recall->association} (c_+ - c_-)``, and each slot scores ``(d_r . V_i + d_n . N_i) /
+|d|``, the stored values themselves against that movement. The scores are weighed with the
+moment's own attention ``p``, ``p* = softmax(score / address_temperature + address_prior *
+log p)``; ``K* = sum_i p*_i K_i`` is the target, and the map takes the least-mean-squares
+step toward ``K*`` on its inputs ``z = [x_t, c_{t-1}, 1]`` at the taught rows, each row at
+the rate ``min(address, 1 / |z|^2)`` so that no row's own address moves past its target; a
+step whose result is not finite is refused. With the
 attention as the prior, a moment whose own content happens to be the answer does not displace
 the moment the address found by its relation (a fresh successor is the value of the moment
 after the cued one). Keys hold the fixed part of the address: a key written with the learned

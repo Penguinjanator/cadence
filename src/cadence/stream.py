@@ -390,7 +390,8 @@ class _Moment(NamedTuple):
 
 @dataclass
 class Recall:
-    """The index memory: each stream's recent moments as slots, addressed before each settle.
+    """The index memory, a held-input recall: each stream's recent moments as slots, the
+    address of a moment computed before its settle and the recalled drive held through it.
 
     Each moment the brain accepts (an act, a moment ``wait`` senses) is written after its
     settle as one slot per stream (``witness``). The slot's key is ``heard * x``: ``x`` is
@@ -404,25 +405,29 @@ class Recall:
         q = heard * x + context * h + x W_x + c W_c + b
 
     (``h`` the fading history of the events before, ``c`` the settled association activity
-    of the moment before) weighs the stream's
-    slots, ``p_i = softmax_i(q . K_i / temperature - recency * age_i)``, and ``stimulate``
-    drives the ``target`` region at ``amplitude * sum_i p_i V_i`` and, with ``next``, the
-    ``next`` region at ``amplitude * sum_i p_i N_i``. Both regions are sources whose one-way
-    plastic synapses into the association region learn by the settle's own contrast, as the
-    sensory ones do. With ``W_x``, ``W_c`` and ``b`` at zero the address is the event heard:
-    a moment that shares an event with a stored one finds it before any lesson.
+    of the moment before) weighs the stream's slots once,
+    ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``), and
+    ``stimulate`` sets the drive of the ``target`` region to ``amplitude * sum_i p_i V_i``
+    and, with ``next``, of the ``next`` region to ``amplitude * sum_i p_i N_i``. Both
+    regions are sources: their drive is held through the settle as a sensory drive is, so
+    the settle answers on the mixture the address chose and does not revise the choice, and
+    the address of a moment cannot depend on what that moment recalls (a second recall takes
+    a second moment). Their one-way plastic synapses into the association region learn by
+    the settle's own contrast, as the sensory ones do. With ``W_x``, ``W_c`` and ``b`` at
+    zero the address is the event heard: a moment that shares an event with a stored one
+    finds it before any lesson.
 
-    ``learn`` is the address lesson. After a lesson the association's movement between the
-    nudged phases, read back through each source region's synapses, is the direction in
-    which a recall would have moved the cortex the way the answer needs; each slot scores
-    its value and next against it, the moments the address attended to that would have
-    answered are named by ``softmax(score / address_temperature + log p)`` (the attention
-    ``p`` is the prior), and the map takes the least-mean-squares step toward ``K*``, the
-    named moments' keys, on ``z = [x, c, 1]`` at the taught rows, each row at the rate
-    ``min(address, 1 / |z|^2)``; a step whose result is not finite is refused. ``capacity`` bounds
-    the slots per stream, the oldest dropped first. ``reset`` empties streams, and an empty
-    stream reads silence. The address of a moment cannot depend on what that moment recalls:
-    a second recall takes a second moment.
+    ``learn`` is the address lesson, a rule of its own beside the graph's contrast, which the
+    brain runs after teacher lessons alone (rewards leave the map as it is). After a lesson
+    it reads the association's movement between the nudged phases back through the recall
+    and next synapses, ``d``, scores each slot's value and next against it,
+    ``(d_r . V_i + d_n . N_i) / |d|`` (the stored values themselves, not their effect
+    through the source neurons), weighs the scores with the attention the address gave the
+    slots, ``p* = softmax(score / address_temperature + log p)``, and takes the
+    least-mean-squares step of the map toward ``K* = sum_i p*_i K_i`` on ``z = [x, c, 1]``
+    at the taught rows, each row at the rate ``min(address, 1 / |z|^2)``; a step whose
+    result is not finite is refused. ``capacity`` bounds the slots per stream, the oldest
+    dropped first. ``reset`` empties streams, and an empty stream reads silence.
     """
 
     connectome: Connectome

@@ -1525,10 +1525,14 @@ class Brain:
         Before each settle the moment's address, the key plus a learned map of the event and
         of the association activity of the moment before, weighs the slots by a softmax
         (``recall_temperature`` 0.25, ``recall_recency`` 0.25 per moment of age), and the
-        recalled value and next drive the two regions at ``recall_amplitude`` (3.0).
-        After each lesson the address lesson moves the map toward the slots that would have
-        answered (``recall_address`` 0.01, ``recall_address_temperature`` 0.1), the address's
-        own attention their prior. ``recall_capacity`` (64) bounds the slots per stream.
+        recalled value and next drive the two regions at ``recall_amplitude`` (3.0), a drive
+        held through the settle, which answers on it and does not revise the choice. After
+        each teacher lesson the address lesson scores each slot's value and next against the
+        association's movement under the nudge, read back through the recall and next
+        projections, weighs the scores with the address's own attention
+        (``recall_address_temperature`` 0.1), and steps the map toward the weighted keys
+        (``recall_address`` 0.01, each row's rate bounded by its own input energy).
+        ``recall_capacity`` (64) bounds the slots per stream.
         The founder ``recall=False`` builds the brain without it, byte-identical to the
         composition before the option; the memory is a gene to select against that control.
         ``recall_scale``, ``recall_capacity``, ``recall_value`` and ``recall_next`` are
@@ -2251,7 +2255,7 @@ class Brain:
             self.last_learning["demonstrations"] = 0.0
             raise
         if self.recall is not None:
-            # the address lesson: the answer's movement names the slots the address should find
+            # the address lesson: the slots scored against the lesson's movement step the map
             teaching.update(self.recall.learn(self.learner.brain, lesson))
         self.last_learning.update(
             {"demonstration_" + name: value for name, value in teaching.items()}
