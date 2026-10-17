@@ -284,3 +284,45 @@ def test_the_recency_default_is_a_power_of_age_and_nothing_without_a_bound() -> 
     assert not unbounded.charges().any()
     p = unbounded.weights(unbounded.address(np.eye(4)[[0]]))[0]
     np.testing.assert_allclose(p[2], p[0])
+
+
+def test_aroused_rows_mark_the_streams_a_moment_is_written_for() -> None:
+    """With ``write="aroused"`` a greedy act writes the streams a caller marks in
+    ``aroused_rows`` and nothing unmarked; a sampled act writes every stream. A moment written
+    for some streams is a column every stream has, held by the written ones (zeros elsewhere),
+    and each stream's latest held slot learns that stream's next written moment."""
+    brain = ir.IndexBrain.build(10, read={"write": "aroused"})
+    _, seq = _walk(brain, 10, rows=3, cut=4)  # reset and nothing acted on
+    memory = brain.index.slots
+    brain.act(seq[0], greedy=True)  # calm and unmarked: nothing written
+    assert memory.slots == 0
+    brain.aroused_rows = np.array([True, False, True])
+    brain.act(seq[1], greedy=True)
+    brain.aroused_rows = None
+    np.testing.assert_array_equal(memory.held, [[True], [False], [True]])
+    assert not memory.keys[1].any() and not memory.values[1].any()
+    brain.act(seq[2])  # sampled: every stream
+    np.testing.assert_array_equal(memory.held, [[True, True], [False, True], [True, True]])
+    np.testing.assert_array_equal(memory.nexts[[0, 2], 0], seq[2][[0, 2]])
+    brain.aroused_rows = np.array([False, True, False])
+    brain.act(seq[3], greedy=True)
+    brain.aroused_rows = None
+    np.testing.assert_array_equal(memory.nexts[1, 1], seq[3][1])  # stream 1's latest held slot
+    assert not memory.nexts[[0, 2], 1].any()  # the others wrote nothing since
+    p = brain.index.weights(np.ones((3, tb.INPUTS)))
+    assert p[1, 0] == 0.0 and p[0, 2] == 0.0
+    np.testing.assert_allclose(p.sum(axis=1), 1.0)
+
+
+def test_a_null_slot_reads_nothing_and_takes_its_share() -> None:
+    """Three slots and a null slot of logit 0, a query that matches nothing, no recency: the
+    four logits are equal, so each slot keeps a quarter and the null slot the rest."""
+    index = ir.IndexMemory(3, 1, 3, dict(ir.GENES, null=0.0))
+    for k in range(3):
+        index.slots.observe(np.eye(3)[[k]], np.eye(3)[[k]])
+    np.testing.assert_allclose(index.weights(np.zeros((1, 3))), np.full((1, 3), 0.25))
+    found = index.read(index.address(np.zeros((1, 3))))
+    assert found is not None
+    np.testing.assert_allclose(found[0], np.full((1, 3), 0.25))
+    np.testing.assert_allclose(index.attended.sum(), 0.75)
+    assert ir.GENES["null"] is None and ir.GENES["write"] == "always"

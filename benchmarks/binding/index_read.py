@@ -24,7 +24,9 @@ address chose and does not revise the choice, and the settle's contrast teaches 
 synapses like the sensory ones. A moment's address cannot depend on what that moment
 recalls: a second step takes a second moment (a think event). With ``recency=None`` a slot's
 age costs ``r * log(1 + age_i)``, ``r = heard^2 / T / log(1 + capacity)``, and nothing with an
-unbounded capacity.
+unbounded capacity. With ``write="aroused"`` a moment is written for the streams whose act was
+chosen aroused alone (``IndexBrain.aroused_rows``, or a sampled act); with a number ``null`` a
+null slot of logit ``null / T`` joins the softmax and reads nothing.
 
 The address map ``W_x, W_c, b`` learns by the address lesson after every lesson, a rule of
 its own beside the graph's contrast. The association's movement between the nudged phases is
@@ -91,6 +93,8 @@ GENES: dict[str, Any] = {
     "address_temperature": 0.1,  # the softmax temperature of the answer's address
     "address_prior": 1.0,  # weight of the moment's own attention in naming the answer's slot
     "address_step": "lms",  # "toward": the error is K* less the attended keys' mixture
+    "write": "always",  # "aroused": a moment is written for the streams that acted aroused
+    "null": None,  # a number: a null slot of logit null / T that reads nothing
     "context": 0.0,  # weight of the fading history of earlier events in a moment's key
     "context_decay": 0.5,  # the history's retention per moment
     "code": 0,  # code neurons of the observation's sparse code; 0: the observation itself
@@ -99,11 +103,14 @@ GENES: dict[str, Any] = {
 }
 VALUES = ("event", "cortex")
 STEPS = ("lms", "toward")
+WRITES = ("always", "aroused")
 
 
 class SlotMemory:
     """Each stream's recent moments as slots: keys ``(streams, slots, key_width)``, values and
-    nexts ``(streams, slots, value_width)``; slot ``-1`` is the latest, its next still zero."""
+    nexts ``(streams, slots, value_width)``; slot ``-1`` is the latest, its next still zero.
+    ``held`` ``(streams, slots)`` marks the slots each stream wrote: a moment written for some
+    streams alone is a column every stream has, held by the written ones."""
 
     def __init__(self, key_width: int, value_width: int, capacity: int = 0) -> None:
         if capacity < 0:
@@ -118,6 +125,7 @@ class SlotMemory:
         self.keys = np.zeros((b, 0, self.key_width))
         self.values = np.zeros((b, 0, self.value_width))
         self.nexts = np.zeros((b, 0, self.value_width))
+        self.held = np.zeros((b, 0), dtype=bool)
 
     @property
     def streams(self) -> int:
@@ -131,33 +139,50 @@ class SlotMemory:
         """Moments since each slot was written: ``slots - 1`` for the oldest, 0 the latest."""
         return np.arange(self.slots - 1, -1, -1, dtype=float)
 
-    def observe(self, key: np.ndarray, value: np.ndarray) -> None:
+    def observe(self, key: np.ndarray, value: np.ndarray,
+                written: np.ndarray | None = None) -> None:
         """Write one moment per stream: the latest slot learns what followed it, a new slot
-        holds this moment. A new batch size starts fresh streams."""
+        holds this moment. A new batch size starts fresh streams. With ``written``, one flag
+        per stream, the column is held by the written streams alone (zeros elsewhere), and
+        each written stream's latest held slot learns this moment as its next."""
         key, value = np.asarray(key, dtype=float), np.asarray(value, dtype=float)
         if key.ndim != 2 or key.shape[1] != self.key_width or not np.isfinite(key).all():
             raise ValueError(f"keys must be a finite (batch, {self.key_width}) array")
         if value.shape != (len(key), self.value_width) or not np.isfinite(value).all():
             raise ValueError(f"values must be a finite (batch, {self.value_width}) array")
+        if written is not None and (written.dtype != np.bool_ or written.shape != (len(key),)):
+            raise ValueError("written is one flag per stream")
         if len(key) != self.streams:
             self.reset(len(key))
         if self.slots:
-            self.nexts[:, -1] = value
+            if written is None and self.held.all():
+                self.nexts[:, -1] = value
+            else:
+                held = self.held
+                rows = held.any(axis=1) if written is None else held.any(axis=1) & written
+                latest = held.shape[1] - 1 - np.argmax(held[:, ::-1], axis=1)
+                index = np.flatnonzero(rows)
+                self.nexts[index, latest[index]] = value[index]
+        fresh = np.ones((len(key), 1), dtype=bool)
+        if written is not None:
+            fresh = written[:, None].copy()
+            key, value = np.where(fresh, key, 0.0), np.where(fresh, value, 0.0)
         self.keys = np.concatenate([self.keys, key[:, None, :]], axis=1)
         self.values = np.concatenate([self.values, value[:, None, :]], axis=1)
         self.nexts = np.concatenate([self.nexts, np.zeros_like(value)[:, None, :]], axis=1)
+        self.held = np.concatenate([self.held, fresh], axis=1)
         if self.capacity and self.slots > self.capacity:
             drop = self.slots - self.capacity
-            self.keys, self.values, self.nexts = (
-                a[:, drop:].copy() for a in (self.keys, self.values, self.nexts)
+            self.keys, self.values, self.nexts, self.held = (
+                a[:, drop:].copy() for a in (self.keys, self.values, self.nexts, self.held)
             )
 
     def take(self, other: SlotMemory, rows: np.ndarray | None = None) -> None:
         """This memory becomes a copy of ``other``'s streams (``rows`` of them, in order)."""
-        arrays = (other.keys, other.values, other.nexts)
+        arrays = (other.keys, other.values, other.nexts, other.held)
         if rows is not None:
             arrays = tuple(a[rows] for a in arrays)
-        self.keys, self.values, self.nexts = (a.copy() for a in arrays)
+        self.keys, self.values, self.nexts, self.held = (a.copy() for a in arrays)
 
 
 class SparseCode:
@@ -228,6 +253,13 @@ class IndexMemory:
         self.address_step = str(genes.get("address_step", "lms"))
         if self.address_step not in STEPS:
             raise ValueError(f"address_step is one of {STEPS}")
+        self.writing = str(genes.get("write", "always"))
+        if self.writing not in WRITES:
+            raise ValueError(f"write is one of {WRITES}")
+        null = genes.get("null")
+        self.null = None if null is None else float(null)
+        if self.null is not None and not np.isfinite(self.null):
+            raise ValueError("null must be finite")
         # (x, c, q, k) of the present moment: event, cortex before it, address, key
         self.last: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
         self._attended: np.ndarray | None = None  # the attention of the latest read
@@ -274,13 +306,29 @@ class IndexMemory:
         return q
 
     def weights(self, q: np.ndarray) -> np.ndarray | None:
-        """``p`` over each stream's slots for the addresses ``q``, or None without slots."""
+        """``p`` over each stream's slots for the addresses ``q``, or None without slots. A
+        slot its stream does not hold weighs nothing; with a ``null`` slot the slots' shares
+        sum to one less the null slot's."""
         memory = self.slots
         if not memory.slots or memory.streams != len(q):
             return None
         logits = np.einsum("bk,bmk->bm", q, memory.keys) / self.temperature
         if self.recency is None or self.recency:
             logits = logits - self.charges()[None, :]
+        held = memory.held
+        if self.null is not None:
+            logits = logits if held.all() else np.where(held, logits, -np.inf)
+            null = self.null / self.temperature
+            top = np.maximum(logits.max(axis=1), null)
+            p = np.exp(logits - top[:, None])
+            total = p.sum(axis=1) + np.exp(null - top)
+            return np.asarray(p / total[:, None])
+        if not held.all():
+            logits = np.where(held, logits, -np.inf)
+            top = np.where(~held.any(axis=1), 0.0, logits.max(axis=1))
+            p = np.exp(logits - top[:, None])
+            total = p.sum(axis=1, keepdims=True)
+            return np.asarray(p / np.where(total > 0, total, 1.0))
         p = np.exp(logits - logits.max(axis=1, keepdims=True))
         return np.asarray(p / p.sum(axis=1, keepdims=True))
 
@@ -297,12 +345,19 @@ class IndexMemory:
         return (np.einsum("bm,bmc->bc", p, memory.values),
                 np.einsum("bm,bmc->bc", p, memory.nexts))
 
-    def write(self, value: np.ndarray, cortex: np.ndarray) -> None:
-        """The present moment joins the slots under its key; the cortex and the history move
-        on to it."""
+    def write(self, value: np.ndarray, cortex: np.ndarray, rows: np.ndarray | None = None) -> None:
+        """The present moment joins the slots under its key, for the streams of ``rows`` alone
+        when given (one flag per stream; no stream written leaves the slots as they were); the
+        cortex and the history move on to it."""
         assert self.last is not None, "a moment is written after its address"
         x, _, _, key = self.last
-        self.slots.observe(key, value)
+        rows = None if rows is None else np.asarray(rows, dtype=bool)
+        if rows is None or rows.all():
+            self.slots.observe(key, value)
+        elif rows.any():
+            self.slots.observe(key, value, rows)
+        elif len(x) != self.slots.streams:
+            self.slots.reset(len(x))
         self.previous = np.asarray(cortex, dtype=float).copy()
         if self.context:
             h = self.history if len(self.history) == len(x) else np.zeros_like(x)
@@ -322,6 +377,8 @@ class IndexMemory:
         if not memory.slots or not len(rows):
             return quiet
         values, nexts, keys = memory.values[rows], memory.nexts[rows], memory.keys[rows]
+        held = memory.held[rows]
+        masked = not held.all()
         score = np.einsum("bc,bmc->bm", d_value, values)
         norm = np.sum(d_value * d_value, axis=1)
         if d_next is not None:
@@ -329,6 +386,8 @@ class IndexMemory:
             norm += np.sum(d_next * d_next, axis=1)
         norm = np.sqrt(norm)
         moving = norm > 1e-12
+        if masked:
+            moving &= held.any(axis=1)  # a stream that wrote nothing yet holds no slot
         if not moving.any():
             return quiet
         x, c, q, key = (a[rows][moving] for a in self.last)
@@ -336,12 +395,16 @@ class IndexMemory:
         toward = self.address_step == "toward"
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             logits = score[moving] / norm[moving, None] / temperature
+            if masked:
+                logits = np.where(held[moving], logits, -np.inf)
             prior = float(self.genes["address_prior"])
             if prior or toward:
                 # among the moments the address attended to: the attention is the prior
                 attention = np.einsum("bk,bmk->bm", q, keys[moving]) / self.temperature
                 if self.recency is None or self.recency:
                     attention = attention - self.charges()[None, :]
+                if masked:
+                    attention = np.where(held[moving], attention, -np.inf)
                 attention -= attention.max(axis=1, keepdims=True)
                 attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
                 if prior:
@@ -378,6 +441,9 @@ class IndexBrain(tb.ContentBrain):
     ``lateral`` and ``slots`` put it on another task's ports."""
 
     index: IndexMemory | None = None
+    # with ``write="aroused"``: the streams a caller marks aroused for one act, cleared by the
+    # caller after it; unset, every stream of a sampled act and none of a greedy one
+    aroused_rows: np.ndarray | None = None
     index_recall: np.ndarray | None = None
     index_next: np.ndarray | None = None
     association_index: np.ndarray | None = None
@@ -456,7 +522,12 @@ class IndexBrain(tb.ContentBrain):
             cortex = s[:, self.association_index]
             event = self.index.genes["value"] == "event"
             value = self.coded(np.asarray(x, dtype=float)) if event else cortex
-            self.index.write(value, cortex)
+            rows = None
+            if self.index.writing == "aroused":
+                marked = self.aroused_rows
+                rows = (np.full(len(cortex), not kwargs.get("greedy", False)) if marked is None
+                        else np.asarray(marked, dtype=bool))
+            self.index.write(value, cortex, rows)
         return action
 
     def coded(self, x: np.ndarray) -> np.ndarray:

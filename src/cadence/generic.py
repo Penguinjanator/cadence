@@ -2329,8 +2329,9 @@ class Brain:
         learning, no write to the associative memory, no parameter changes; the
         eligibility of earlier sampled actions fades by one step, as time passes. The
         working trace, the heard history and the recall memory's slots advance at every
-        accepted moment, calm or aroused; the recall memory's address map changes in
-        lessons alone. Its forecasts for the
+        accepted moment, calm or aroused (with ``recall_write="aroused"`` the slots at the
+        aroused moments alone); the recall memory's address map changes in lessons alone.
+        Its forecasts for the
         preceding action were the critic's value when it acted and, when it has an
         associative memory, the record it held for that action; the outcome is
         measured against the value with the value of the present state and against
@@ -2527,7 +2528,8 @@ class Brain:
         The brain settles the present observation from its current activity, reading its
         working trace, the copy of its last command, its heard history, its recall memory and
         its associative memory; its working trace advances to that state, its heard history
-        takes in the observation and its recall memory writes the moment. It issues no action
+        takes in the observation and its recall memory writes the moment (with
+        ``recall_write="aroused"`` when the awaited action was sampled). It issues no action
         and takes no outcome:
         the awaited action keeps the forecasts made before it, its eligibility and the
         situation it was chosen in, and ``live`` later credits its actual outcome to it
@@ -2568,7 +2570,9 @@ class Brain:
         if self.history is not None:
             self.history.hear(self._sensed(x, code))  # what was sensed joins the heard past
         if self.recall is not None:
-            self.recall.witness(code, state)  # the sensed moment joins the stream's slots
+            # the sensed moment joins the stream's slots; with ``recall_write="aroused"`` only
+            # while the action it awaits was sampled
+            self.recall.witness(code, state, aroused=self._moment is not None)
         if self.context_memory is not None:
             self._context = self._episode_key(code)  # what was sensed enters the temporal context
         self._awaiting = (current, state)
@@ -2832,9 +2836,9 @@ class Brain:
             # past; the next drive holds the present
             self.history.hear(self._sensed(x, code))
         if self.recall is not None:
-            # the moment acted on joins the stream's slots; its settled cortex enters the next
-            # moment's address
-            self.recall.witness(code, free)
+            # the moment acted on joins the stream's slots (with ``recall_write="aroused"`` a
+            # sampled act's alone); its settled cortex enters the next moment's address
+            self.recall.witness(code, free, aroused=not greedy)
         if bias is not None:
             if key is not None:
                 # what the stream did joins its temporal context after what it saw

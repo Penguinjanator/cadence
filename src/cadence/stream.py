@@ -394,7 +394,8 @@ class Recall:
     address of a moment computed before its settle and the recalled drive held through it.
 
     Each moment the brain accepts (an act, a moment ``wait`` senses) is written after its
-    settle as one slot per stream (``witness``). The slot's key is ``heard * x``: ``x`` is
+    settle as one slot per stream (``witness``); with ``write="aroused"`` a moment is written
+    for the streams that chose it aroused alone. The slot's key is ``heard * x``: ``x`` is
     the observation as given (a brain gives its observation code), and with ``context`` the
     fading history of the events before it is added. The slot's value is
     the event ``x`` (``value="event"``) or the settled activity of the association region
@@ -407,7 +408,9 @@ class Recall:
     (``h`` the fading history of the events before, ``c`` the settled association activity
     of the moment before) weighs the stream's slots once,
     ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``;
-    with ``recency=None`` the age charge is ``r * log(1 + age_i)``, ``charges``), and
+    with ``recency=None`` the age charge is ``r * log(1 + age_i)``, ``charges``; with a
+    ``null`` slot of logit ``null / temperature`` in the softmax, which reads nothing, the
+    slots' shares sum to one less the null slot's), and
     ``stimulate`` sets the drive of the ``target`` region to ``amplitude * sum_i p_i V_i``
     and, with ``next``, of the ``next`` region to ``amplitude * sum_i p_i N_i``. Both
     regions are sources: their drive is held through the settle as a sensory drive is, so
@@ -449,6 +452,8 @@ class Recall:
     context_decay: float = 0.5
     # the options beside the founder memory (``OPTIONS``)
     address_step: str = "lms"
+    write: str = "always"
+    null: float | None = None
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
     # the width of the observations the memory is given, when it is not the source range's: a
@@ -467,6 +472,7 @@ class Recall:
 
     VALUES = ("event", "cortex")
     STEPS = ("lms", "toward")
+    WRITES = ("always", "aroused")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
     RUNTIME = (
         "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
@@ -475,7 +481,7 @@ class Recall:
     CONSTRUCTION = ("capacity", "value", "next")
     # options beside the founder memory, each one runtime: a memory at their founders
     # describes and saves itself as before, and a saved memory without one takes its founder
-    OPTIONS = ("address_step",)
+    OPTIONS = ("address_step", "write", "null")
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -531,6 +537,12 @@ class Recall:
             if not isinstance(value, str) or value not in Recall.STEPS:
                 raise ValueError(f"address_step is one of {Recall.STEPS}")
             return value
+        if name == "write":
+            if not isinstance(value, str) or value not in Recall.WRITES:
+                raise ValueError(f"write is one of {Recall.WRITES}")
+            return value
+        if name == "null":
+            return None if value is None else real(name, value)
         raise TypeError(f"unknown recall setting: {name!r}")
 
     def __post_init__(self) -> None:
@@ -735,9 +747,18 @@ class Recall:
 
     def weights(self, address: np.ndarray) -> np.ndarray | None:
         """``p`` over each stream's slots for the ``(batch, key)`` addresses, or None when the
-        streams hold no slot or are another batch."""
+        streams hold no slot or are another batch. With a ``null`` slot, whose logit
+        ``null / temperature`` joins the softmax and which reads nothing, the slots' shares
+        sum to one less the null slot's."""
         if not self.slots or self.streams != len(address):
             return None
+        if self.null is not None:
+            logits = self._attention(address, self.keys, None if self.held.all() else self.held)
+            null = self.null / self.temperature
+            top = np.maximum(logits.max(axis=1), null)  # a stream that holds no slot: the null
+            p = np.exp(logits - top[:, None])
+            total = p.sum(axis=1) + np.exp(null - top)
+            return np.asarray(p / total[:, None])
         if self.held.all():
             logits = self._attention(address, self.keys, None)
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
@@ -791,13 +812,20 @@ class Recall:
         settled = np.atleast_2d(np.asarray(state.activation, dtype=float))
         return np.asarray(settled[:, cols], dtype=float).copy()
 
-    def witness(self, observations: np.ndarray, state: BrainState) -> None:
+    def witness(
+        self, observations: np.ndarray, state: BrainState, *, aroused: bool | np.ndarray = True
+    ) -> None:
         """After the settle: the ``(batch, inputs)`` observations the streams acted on join
         their slots under the moment's key, the slot before learns them as its next, and the
-        settled cortex of ``state`` and the history move on to this moment. Another batch
-        size begins the streams with empty memories first. An imagined branch moves the
-        cortex and the history only."""
+        settled cortex of ``state`` and the history move on to this moment. ``aroused`` marks
+        the streams that chose the moment aroused, one flag or one per stream: with
+        ``write="aroused"`` only those streams write it, and a moment no stream writes leaves
+        the slots as they were. Another batch size begins the streams with empty memories
+        first. An imagined branch moves the cortex and the history only."""
         x = self._port(observations)
+        flags = np.asarray(aroused)
+        if flags.dtype != np.bool_ or flags.shape not in ((), (len(x),)):
+            raise ValueError("aroused marks the streams that chose the moment aroused")
         moment = self.last
         if moment is None or moment.event.shape != x.shape or not np.array_equal(moment.event, x):
             moment = self._moment(x)
@@ -805,31 +833,52 @@ class Recall:
         if len(cortex) != len(x):
             raise ValueError("the settled state needs one row per stream")
         if not self._private:
-            self._observe(moment.key, moment.event if self.value == "event" else cortex)
-            self.writes += len(x)
+            value = moment.event if self.value == "event" else cortex
+            if self.write == "always" or flags.all():
+                self._observe(moment.key, value)
+                self.writes += len(x)
+            elif flags.any():
+                written = np.broadcast_to(flags, (len(x),)).copy()
+                self._observe(moment.key, value, written)
+                self.writes += int(written.sum())
+            elif len(x) != self.streams:
+                self._empty(len(x))  # another batch begins with empty memories, as a write would
         self.previous = cortex
         if self.context:
             h = self.history if len(self.history) == len(x) else np.zeros_like(moment.event)
             self.history = self.context_decay * h + moment.event
         self.last = None
 
-    def _observe(self, key: np.ndarray, value: np.ndarray) -> None:
+    def _observe(
+        self, key: np.ndarray, value: np.ndarray, written: np.ndarray | None = None
+    ) -> None:
         """Write one moment per stream: the latest slot learns what followed it, a new slot
-        holds this moment; beyond ``capacity`` the oldest slot is dropped."""
+        holds this moment; beyond ``capacity`` the oldest slot is dropped. With ``written``,
+        one flag per stream, the new slot is a column every stream has and the written
+        streams alone hold (the others keep zeros there), and each written stream's latest
+        held slot, wherever it lies, learns this moment as its next."""
         if len(key) != self.streams:
             self._empty(len(key))
         nexts = self.nexts
         if self.slots:
             nexts = nexts.copy()
-            if self.held.all():
+            if written is None and self.held.all():
                 nexts[:, -1] = value
             else:
-                rows = self.held[:, -1]
-                nexts[rows, -1] = value[rows]
+                # each written stream's latest held slot learns what followed it
+                held = self.held
+                rows = held.any(axis=1) if written is None else held.any(axis=1) & written
+                latest = held.shape[1] - 1 - np.argmax(held[:, ::-1], axis=1)
+                index = np.flatnonzero(rows)
+                nexts[index, latest[index]] = value[index]
+        fresh = np.ones((len(key), 1), dtype=bool)
+        if written is not None:
+            fresh = written[:, None].copy()
+            key, value = np.where(fresh, key, 0.0), np.where(fresh, value, 0.0)
         keys = np.concatenate([self.keys, key[:, None, :]], axis=1)
         values = np.concatenate([self.values, value[:, None, :]], axis=1)
         nexts = np.concatenate([nexts, np.zeros_like(value)[:, None, :]], axis=1)
-        held = np.concatenate([self.held, np.ones((len(key), 1), dtype=bool)], axis=1)
+        held = np.concatenate([self.held, fresh], axis=1)
         if keys.shape[1] > self.capacity:
             drop = keys.shape[1] - self.capacity
             keys, values, nexts, held = (a[:, drop:].copy() for a in (keys, values, nexts, held))
