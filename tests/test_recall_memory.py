@@ -1299,7 +1299,9 @@ def test_the_toward_step_raises_the_named_slots_against_the_attended_ones(seed):
             recall = memory(rate, [r])
             moment = recall._moment(events[[r]])
             log_p, p, p_star, target, attended = named(recall, moment, r, 0)
-            recall._step(moment, np.array([0]), d_value[[r]], d_next[[r]])
+            report = recall._step(moment, np.array([0]), d_value[[r]], d_next[[r]])
+            # the error the toward step corrects is the named keys less the attended mixture
+            assert report["address_error"] == pytest.approx(np.abs(target - attended).mean())
             moved = recall._moment(events[[r]]).address[0] - moment.address[0]
             s = min(rate * energy[r], 1.0)
             gap = target - attended

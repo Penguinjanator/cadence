@@ -369,8 +369,8 @@ class IndexMemory:
         row's rate bounded by its own energy, ``min(rate, 1 / |z|^2)`` on ``z = [x, c, 1]``,
         the rows' steps averaged. A candidate map or address that is not finite refuses the
         step: the map stays and ``address_refused`` counts the rows. With
-        ``address_step="toward"`` a row's error is its target less the attended keys'
-        mixture."""
+        ``address_step="toward"`` a row's error, the one ``address_error`` reports, is its
+        target less the attended keys' mixture."""
         assert self.last is not None
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         memory = self.slots

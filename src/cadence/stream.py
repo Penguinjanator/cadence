@@ -925,8 +925,10 @@ class Recall:
         """The address lesson after a lesson whose phases are ``learned``, at its taught rows,
         through the synapses of ``graph`` (the learner's brain after the lesson's update).
         Reads the moment the lesson's drive addressed (``stimulate``); returns how many rows
-        moved, the mean absolute error of their addresses before the step, and how many rows
-        a refused step left as they were (``address_refused``)."""
+        moved, the mean absolute error the step corrects before it (``address_error``: the
+        addresses' error ``K* - q`` under ``address_step="lms"``, the attended mixture's
+        ``K* - sum_i p_i K_i`` under ``"toward"``), and how many rows a refused step left as
+        they were (``address_refused``)."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         moment = self.last
         if (
@@ -968,7 +970,8 @@ class Recall:
         bound). The candidate map and the candidate addresses of the rows are checked before
         the step is kept; one that is not finite refuses the step, the map stays as it was
         and the report counts the refused rows. With ``address_step="toward"`` each row's
-        error is its target less the keys' mixture its address attended to."""
+        error, the one ``address_error`` reports, is its target less the keys' mixture its
+        address attended to."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         found = self._row_steps(moment, rows, d_value, d_next)
         if found is None:

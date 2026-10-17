@@ -595,15 +595,16 @@ and a complete runnable example.
   `address_step="toward"` takes `K* - sum_i p_i K_i`, the named keys less the mixture the
   address attended to (`p` the attention over the slots alone), which to first order raises
   the named slots' logits against the attended ones. It returns `address_rows`,
-  `address_error` (the mean absolute error of the addresses before the step) and
-  `address_refused` (the rows a refused step left as they were). With `address_reward`
-  above zero, `contrast_rows(graph, plus, minus)` gives a sampled act's eligibility of the
-  map, one `(inputs + association + 1, inputs)` array per row (the rows of `w_x`, `w_c` and
-  `b`): the step the address lesson would take at that row were the act's action a lesson's
-  label, read from the association's movement between the act's two nudged phases; None at
-  `address_reward=0`. `propose(step)` returns the map after `address_reward` times a step of
-  that shape and the step's norm, refusing one that is not finite, and `accept(proposal)`
-  installs it; `ActorCritic` calls them.
+  `address_error` (the mean absolute error the step corrects, before the step: of the
+  addresses, `K* - q`, under `"lms"`; of the attended mixture, `K* - sum_i p_i K_i`, under
+  `"toward"`) and `address_refused` (the rows a refused step left as they were). With
+  `address_reward` above zero, `contrast_rows(graph, plus, minus)` gives a sampled act's
+  eligibility of the map, one `(inputs + association + 1, inputs)` array per row (the rows
+  of `w_x`, `w_c` and `b`): the step the address lesson would take at that row were the
+  act's action a lesson's label, read from the association's movement between the act's
+  two nudged phases; None at `address_reward=0`. `propose(step)` returns the map after
+  `address_reward` times a step of that shape and the step's norm, refusing one that is
+  not finite, and `accept(proposal)` installs it; `ActorCritic` calls them.
   Arrays: `keys`, `values` and `nexts`
   (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a slot written before
   its stream began again), `previous`, `history`, and the map `w_x`, `w_c` and `b`.
