@@ -559,9 +559,21 @@ class Recall:
             return real(name, value, low=0)
         raise TypeError(f"unknown recall setting: {name!r}")
 
+    @staticmethod
+    def null_logit(null: float | None, temperature: float) -> float | None:
+        """The null slot's logit ``null / temperature``, or None without a null slot; a pair
+        of settings whose logit is not finite is refused."""
+        if null is None:
+            return None
+        logit = float(null) / float(temperature)
+        if not np.isfinite(logit):
+            raise ValueError("null / temperature must be finite")
+        return logit
+
     def __post_init__(self) -> None:
         for name in (*self.RUNTIME, *self.CONSTRUCTION, *self.OPTIONS):
             setattr(self, name, self.setting(name, getattr(self, name)))
+        self.null_logit(self.null, self.temperature)
         populations = self.connectome.populations
         regions = (self.source, "association", self.target, *(("next",) if self.next else ()))
         for name in regions:

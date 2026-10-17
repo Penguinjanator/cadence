@@ -1957,3 +1957,26 @@ def test_a_brain_retuned_to_no_address_reward_reports_and_saves_as_one_composed_
     assert other.basal_ganglia.trace_memory is None and "address_reward_step" not in report
     for now, then in zip(_map(other.recall), start, strict=True):
         np.testing.assert_array_equal(now, then)
+
+
+def test_a_null_slot_whose_logit_is_not_finite_is_refused(tmp_path):
+    """The null slot's logit ``null / temperature`` must be finite: at composition, under
+    retune of either setting (nothing changes then) and in a saved memory."""
+    with pytest.raises(ValueError, match="null / temperature"):
+        composed(recall_null=1e300, recall_temperature=1e-10)
+    brain = composed(recall_null=1e10)
+    for change in ({"recall_temperature": 1e-300},
+                   {"recall_null": 1e308, "recall_temperature": 0.01}):
+        with pytest.raises(ValueError, match="null / temperature"):
+            brain.retune(**change)
+        assert (brain.recall.null, brain.recall.temperature) == (1e10, 0.25)
+    brain.retune(recall_null=1e300)  # a finite logit, 4e300
+    assert cd.Recall.null_logit(brain.recall.null, brain.recall.temperature) == 4e300
+    brain.act(CUE, greedy=True)
+    arrays = saved_arrays(brain.save(tmp_path / "null"))
+    meta = json.loads(str(arrays["generic"]))
+    meta["recall"]["temperature"] = 1e-10
+    arrays["generic"] = np.array(json.dumps(meta))
+    np.savez(tmp_path / "bad.npz", **arrays)
+    with pytest.raises(ValueError, match="null / temperature"):
+        cd.Brain.load(tmp_path / "bad.npz")

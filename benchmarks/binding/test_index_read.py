@@ -8,6 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from cadence import Brain, PatternSeparator
 
@@ -326,3 +327,6 @@ def test_a_null_slot_reads_nothing_and_takes_its_share() -> None:
     np.testing.assert_allclose(found[0], np.full((1, 3), 0.25))
     np.testing.assert_allclose(index.attended.sum(), 0.75)
     assert ir.GENES["null"] is None and ir.GENES["write"] == "always"
+    for null, temperature in ((float("inf"), 0.25), (1e300, 1e-10)):  # a logit not finite
+        with pytest.raises(ValueError, match="null"):
+            ir.IndexMemory(3, 1, 3, dict(ir.GENES, null=null, temperature=temperature))

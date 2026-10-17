@@ -258,8 +258,9 @@ class IndexMemory:
             raise ValueError(f"write is one of {WRITES}")
         null = genes.get("null")
         self.null = None if null is None else float(null)
-        if self.null is not None and not np.isfinite(self.null):
-            raise ValueError("null must be finite")
+        logit = [] if self.null is None else [self.null, self.null / self.temperature]
+        if not np.isfinite(logit).all():
+            raise ValueError("null and its logit null / temperature must be finite")
         # (x, c, q, k) of the present moment: event, cortex before it, address, key
         self.last: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
         self._attended: np.ndarray | None = None  # the attention of the latest read

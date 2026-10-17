@@ -1869,6 +1869,16 @@ class Brain:
             memory_changes.append(
                 (self.recall, setting, Recall.setting(setting, options.pop(name)))
             )
+        if self.recall is not None:
+            # the null slot's logit, null / temperature, must stay finite under the change
+            retuned = {
+                field: value for component, field, value in memory_changes
+                if component is self.recall
+            }
+            Recall.null_logit(
+                retuned.get("null", self.recall.null),
+                retuned.get("temperature", self.recall.temperature),
+            )
 
         learning_genes, actor_genes, arousal_genes = split_genes(options)
         learning = configured(learning, learning_genes, "learning")
