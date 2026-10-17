@@ -62,7 +62,7 @@ def _sibling(name: str, path: Path | None = None) -> Any:
 ir = _sibling("index_read")
 tb = ir.tb
 
-TASKS = ("token", "fresh", "succession", "chain", "continuing", "wide", "camera")
+TASKS = ("token", "fresh", "named", "succession", "chain", "continuing", "wide", "camera")
 ARMS = {
     "index": {"address": 0.01, "recency": 0.25},
     "heard": {"address": 0.0, "recency": 0.25},
@@ -71,6 +71,7 @@ CONTINUING = {"capacity": 12}  # the continuing task's slots: three trials
 BUDGETS = {
     "token": (256, 1024),
     "fresh": (512, 2048),
+    "named": (512, 2048, 4096),
     "succession": (256, 1024),
     "chain": (1024, 4096),
     "continuing": (256, 1024),
@@ -338,7 +339,12 @@ FRESH = {"bits": 3, "width": 64, "lateral": -0.5}  # the runner's m64 brain on t
 FRESH_CONDITIONS = ("intact", "erased", "trace_erased", "memory_erased", "transplant")
 
 
+_ENCODING = {"task": "fresh"}  # which encoding the fresh-bindings life reads in this process
+
+
 def _bindings() -> Any:
+    if _ENCODING["task"] == "named":
+        return _sibling("named_bindings").module()
     return _sibling("bindings", HERE.parent / "relevance" / "bindings.py")
 
 
@@ -449,6 +455,16 @@ def fresh_reading(brain: Any, bits: int, held: np.ndarray) -> tuple[dict[str, An
         "scores": bd.score(answers, held, bits),
         "competition": contest,
     }, work
+
+
+def named_life(spec: dict[str, Any]) -> dict[str, Any]:
+    """The fresh-bindings life on ``named_bindings``' encoding: the facts' bits on shared
+    coordinates, so an even mixture of the facts cannot answer."""
+    _ENCODING["task"] = "named"
+    try:
+        return fresh_life(spec)
+    finally:
+        _ENCODING["task"] = "fresh"
 
 
 def fresh_life(spec: dict[str, Any]) -> dict[str, Any]:
@@ -712,7 +728,8 @@ def camera_life(spec: dict[str, Any]) -> dict[str, Any]:
     return {"readings": readings, "work": work}
 
 
-LIVES = {"token": token_life, "fresh": fresh_life, "succession": succession_life,
+LIVES = {"token": token_life, "fresh": fresh_life, "named": named_life,
+         "succession": succession_life,
          "chain": chain_life, "continuing": continuing_life, "wide": wide_life,
          "camera": camera_life}
 
@@ -739,7 +756,7 @@ def summary(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def held_of(task: str, reading: dict[str, Any]) -> float:
-    if task == "fresh":
+    if task in ("fresh", "named"):
         return float(reading["scores"]["intact"]["held_out"]["exact"])
     if task == "chain":
         return float(reading["panels"]["two_held"]["intact"])
@@ -749,7 +766,7 @@ def held_of(task: str, reading: dict[str, Any]) -> float:
 def digests() -> dict[str, str]:
     files = [Path(__file__), HERE / "index_read.py", HERE / "token_binding.py",
              HERE / "sequence_binding.py", HERE / "chain_binding.py",
-             HERE.parent / "relevance" / "bindings.py",
+             HERE / "named_bindings.py", HERE.parent / "relevance" / "bindings.py",
              HERE.parent / "relevance" / "selective_recall.py", HERE / "INDEX_PROTOCOL.md"]
     return {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in files if p.exists()}
 
