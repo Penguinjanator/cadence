@@ -443,7 +443,9 @@ class Recall:
     the step the address lesson would take at each row, were the act's action the lesson's
     label, is that row's eligibility (``contrast_rows``), which the actor keeps in a trace
     of its own beside the synapses' and steps by ``address_reward`` times the dopamine
-    (``propose`` and ``accept``).
+    (``propose`` and ``accept``). The eligibility is a lesson's step at the lesson's bounded
+    rate ``min(address, 1 / |z|^2)``: at ``address_reward=1`` a unit of dopamine moves the
+    map by one lesson's step, and ``address=0`` leaves the map as it is under reward too.
     """
 
     connectome: Connectome

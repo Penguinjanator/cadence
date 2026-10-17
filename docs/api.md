@@ -1208,7 +1208,7 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_address_step` | `"lms"` | The error of the address lesson's step: `"lms"` the named keys less the address, `"toward"` the named keys less the mixture the address attended to |
 | `recall_write` | `"always"` | `"aroused"` writes a moment only when its act was sampled (an aroused `live` moment, `step`, `act` without `greedy`, a moment waited while a sampled action awaits its outcome) |
 | `recall_null` | `None` | A number adds a null slot of logit `recall_null / recall_temperature` to the read's softmax, which reads nothing |
-| `recall_address_reward` | `0.0` | Above zero, reward trains the address map: each sampled act keeps the step the address lesson would take as the map's eligibility, and the outcome steps the map by this rate times the dopamine times the trace |
+| `recall_address_reward` | `0.0` | Above zero, reward trains the address map: each sampled act keeps the step the address lesson would take as the map's eligibility, and the outcome steps the map by this rate times the dopamine times the trace. The eligibility carries the lesson's rate, `recall_address` bounded by each row's input energy: at 1.0 a unit of dopamine moves the map by one lesson's step, and `recall_address=0` leaves the map as it is under reward too |
 
 The last four are options: a brain describes and saves each only where it differs from its
 founder, and every one can be retuned.

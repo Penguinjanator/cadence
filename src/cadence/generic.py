@@ -1592,7 +1592,9 @@ class Brain:
         ``recall_null / recall_temperature`` that reads nothing; and
         ``recall_address_reward`` above zero lets reward train the address map, each sampled
         act keeping the step its lesson would take as the map's eligibility and each outcome
-        stepping the map by that rate times the dopamine times the trace.
+        stepping the map by that rate times the dopamine times the trace: the eligibility
+        carries the lesson's rate, so at 1.0 a unit of dopamine moves the map by one lesson's
+        step, and ``recall_address=0`` leaves the map as it is under reward too.
         The founder ``recall=False`` builds the brain without it, byte-identical to the
         composition before the option; the memory is a gene to select against that control.
         ``recall_scale``, ``recall_capacity``, ``recall_value`` and ``recall_next`` are

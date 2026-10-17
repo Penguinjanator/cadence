@@ -251,7 +251,10 @@ keeps it ([genes](api.md#recall-memory-genes)):
   beside the synapses' (it decays by `gamma * lam` per outcome and per calm moment, and an
   ended stream forgets it), and each outcome steps the map by `recall_address_reward` times
   the dopamine times that trace, checked before the graph's update; the report names the
-  step (`address_reward_step`).
+  step (`address_reward_step`). The eligibility is a lesson's step, taken at the lesson's
+  bounded rate `min(recall_address, 1 / |z|^2)`, so at `recall_address_reward` 1.0 a unit of
+  dopamine moves the map by one lesson's step, and `recall_address=0` leaves the map as it is
+  under reward too.
 
 ```python
 import numpy as np
