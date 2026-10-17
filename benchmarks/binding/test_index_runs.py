@@ -165,3 +165,17 @@ def test_the_competition_reports_the_attention_the_read_used() -> None:
     index.reset()
     assert index.attended is None
 
+
+
+def test_the_option_arms_carry_their_declared_genes() -> None:
+    """Amendment 5's arms: each option beside the index arm, the power-law recency at capacity
+    64 (12 in the continuing task) and the null slot at half a full match, heard^2 / 2."""
+    index = runs.genes_for("token", "index")
+    assert runs.genes_for("token", "toward") == dict(index, address_step="toward")
+    assert runs.genes_for("token", "horizon") == dict(index, recency=None, capacity=64)
+    assert runs.genes_for("token", "null") == dict(index, null=0.5)
+    improved = runs.genes_for("token", "improved")
+    assert improved == dict(index, address_step="toward", recency=None, capacity=64, null=0.5)
+    assert runs.genes_for("continuing", "improved")["capacity"] == 12
+    assert runs.genes_for("camera", "improved")["null"] == 1.125
+    assert runs.genes_for("camera", "index")["null"] is None

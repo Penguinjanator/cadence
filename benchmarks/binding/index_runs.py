@@ -66,7 +66,13 @@ TASKS = ("token", "fresh", "named", "succession", "chain", "continuing", "wide",
 ARMS = {
     "index": {"address": 0.01, "recency": 0.25},
     "heard": {"address": 0.0, "recency": 0.25},
+    # the options of amendment 5, each beside the index arm
+    "toward": {"address": 0.01, "recency": 0.25, "address_step": "toward"},
+    "horizon": {"address": 0.01, "recency": None, "capacity": 64},
+    "null": {"address": 0.01, "recency": 0.25},
+    "improved": {"address": 0.01, "recency": None, "capacity": 64, "address_step": "toward"},
 }
+HALF_NULL = ("null", "improved")  # a null slot at half the logit of a full unit-key match
 CONTINUING = {"capacity": 12}  # the continuing task's slots: three trials
 BUDGETS = {
     "token": (256, 1024),
@@ -101,6 +107,8 @@ def genes_for(task: str, arm: str, extra: dict[str, Any] | None = None) -> dict[
         genes.update({k: WIDE[k] for k in ("code", "code_fan_in", "code_winners")})
     if task == "camera":
         genes.update({"heard": CAMERA["heard"]})  # unit-length codes: the key's scale
+    if arm in HALF_NULL:
+        genes["null"] = genes["heard"] ** 2 / 2
     genes.update(extra or {})
     return genes
 
