@@ -1180,6 +1180,7 @@ def test_the_options_at_their_founders_build_the_founder_memory(tmp_path):
     checkpoint bytes and the same description, which leaves the options out."""
     assert cd.Recall.options() == {
         "address_step": "lms", "write": "always", "null": None, "address_reward": 0.0,
+        "episodes": "forget",
     }
     founder = composed(seed=5, arousal=True, learning_surprise=True)
     explicit = composed(
@@ -1979,4 +1980,120 @@ def test_a_null_slot_whose_logit_is_not_finite_is_refused(tmp_path):
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(tmp_path / "bad.npz", **arrays)
     with pytest.raises(ValueError, match="null / temperature"):
+        cd.Brain.load(tmp_path / "bad.npz")
+
+
+# -- kept episodes
+
+
+def test_kept_episodes_keep_their_slots_while_the_traces_begin_afresh():
+    """With ``recall_episodes="keep"`` a stream whose episode ends (``done`` through ``learn``
+    and ``step``) keeps its slots and the address map, while its working trace, efference
+    copy, heard history and the cortex of the moment before begin afresh as under the
+    founder. The latest slot of the ended episode keeps the nexts it had and learns no
+    successor from the next episode's first moment; the other stream goes on as it would
+    alone. The founder empties the ended stream's slots."""
+    options = dict(history_decays=(0.5,), efference_amplitude=1.0)
+    keep = composed(seed=5, recall_episodes="keep", **options)
+    forget = composed(seed=5, **options)
+    first, second, third = np.eye(4)[:2], np.eye(4)[[2, 3]], np.eye(4)[[1, 0]]
+    for brain in (keep, forget):
+        brain.act(first)
+        brain.step(second, reward=[0.0, 0.0])
+        brain.learn(np.zeros(2), np.array([True, False]), third)  # stream 0's episode ends
+        assert not brain.working_memory.trace[0].any() and brain.working_memory.trace[1].any()
+        assert not brain.efference.trace[0].any() and brain.efference.trace[1].any()
+        assert not brain.history.trace[0].any() and brain.history.trace[1].any()
+        assert not brain.recall.previous[0].any() and brain.recall.previous[1].any()
+    recall = keep.recall
+    assert recall.slots == 2 and recall.held.all()
+    np.testing.assert_array_equal(recall.keys[0], [first[0], second[0]])
+    np.testing.assert_array_equal(recall.nexts[0], [second[0], np.zeros(4)])
+    np.testing.assert_array_equal(recall.ended, [True, False])
+    assert not forget.recall.held[0].any()
+    for brain in (keep, forget):
+        brain.act(third)  # the next episode's first moment
+    np.testing.assert_array_equal(recall.nexts[0], [second[0], np.zeros(4), np.zeros(4)])
+    np.testing.assert_array_equal(recall.nexts[1], [second[1], third[1], np.zeros(4)])
+    assert not recall.ended.any() and recall.held.all()
+    np.testing.assert_array_equal(forget.recall.held, [[False, False, True], [True] * 3])
+    for name in ("keys", "values", "nexts"):  # the stream that went on is the same in both
+        np.testing.assert_array_equal(getattr(recall, name)[1], getattr(forget.recall, name)[1])
+    for name in ("w_x", "w_c", "b"):
+        np.testing.assert_array_equal(getattr(recall, name), getattr(forget.recall, name))
+
+
+def test_a_calm_ending_through_live_keeps_the_slots_as_a_reset_that_keeps_the_memory(tmp_path):
+    """A routine ``live`` moment that ends the episode keeps the slots with
+    ``recall_episodes="keep"``; it acts as a brain reset with ``keep_memory=True`` acts on the
+    same moment, and leaves the same memory."""
+    brain = composed(working_memory_amplitude=0.0, arousal=cd.ArousalConfig(youth=0),
+                     recall_episodes="keep")
+    brain.live(CUE)
+    brain.live(GO, reward=[0.0])
+    assert brain.last_arousal["mode"] == "routine" and brain.recall.slots == 2
+    twin = cd.Brain.load(brain.save(tmp_path / "before-terminal"))
+    twin.reset(keep_memory=True)
+    action = brain.live(GO, reward=[0.0], done=[True])
+    np.testing.assert_array_equal(action, twin.live(GO))
+    assert brain.recall.slots == 3 and not brain.recall.nexts[0, 1].any()
+    np.testing.assert_array_equal(brain.recall.nexts[0, 0], GO[0])
+    assert_same_memory(brain.recall, twin.recall)
+
+
+def test_a_reset_that_keeps_the_memory_keeps_the_slots_and_starts_the_rest_afresh():
+    """``Brain.reset(keep_memory=True)`` keeps the recall memory's slots, under either
+    ``recall_episodes``: each stream ends an episode there, the next moment of the same batch
+    reads the slots and the latest one learns no successor from it. Everything else starts
+    afresh, and a plain reset empties the slots."""
+    brain = composed(seed=5, history_decays=(0.5,))
+    for x in (FACT, GO):
+        brain.act(x, greedy=True)
+    keys = brain.recall.keys.copy()
+    brain.reset(keep_memory=True)
+    recall = brain.recall
+    np.testing.assert_array_equal(recall.keys, keys)
+    assert recall.ended.all() and not recall.previous.any()
+    assert brain.basal_ganglia.state is None and not len(brain.history.trace)
+    assert not len(brain.working_memory.trace)
+    brain.stimulus(NAME)
+    assert recall.attended is not None and recall.attended.shape == (1, 2)
+    brain.act(NAME, greedy=True)
+    assert recall.slots == 3 and not recall.nexts[0, 1].any() and not recall.ended.any()
+    np.testing.assert_array_equal(recall.nexts[0, 0], GO[0])
+    brain.reset()
+    assert recall.slots == 0
+    with pytest.raises(ValueError, match="keep_memory"):
+        brain.reset(keep_memory=1)
+
+
+def test_kept_episodes_survive_a_checkpoint_between_an_ending_and_the_next_moment(tmp_path):
+    brain = composed(seed=5, recall_episodes="keep", arousal=True)
+    x = np.eye(4)[:2]
+    brain.act(x)
+    brain.step(np.roll(x, 1, axis=1), reward=[0.0, 1.0])
+    brain.learn(np.zeros(2), np.array([False, True]), x)
+    path = brain.save(tmp_path / "ended")
+    with np.load(path, allow_pickle=False) as data:
+        meta = json.loads(str(data["generic"]))
+        np.testing.assert_array_equal(data["recall/ended"], [False, True])
+    assert meta["recall"]["episodes"] == "keep"
+    twin = cd.Brain.load(path)
+    assert twin.recall.episodes == "keep" and twin.describe() == brain.describe()
+    np.testing.assert_array_equal(twin.recall.ended, brain.recall.ended)
+    for t in range(3):
+        y = np.eye(4)[[t, 3 - t]]
+        np.testing.assert_array_equal(brain.act(y), twin.act(y))
+        brain.learn(np.ones(2), np.zeros(2, bool), y)
+        twin.learn(np.ones(2), np.zeros(2, bool), y)
+        assert_same_memory(brain.recall, twin.recall)
+    assert not brain.recall.nexts[1, 1].any()  # no successor across the boundary
+    brain.retune(recall_episodes="forget")
+    assert "episodes" not in brain.recall.to_dict()
+    with pytest.raises(ValueError, match="episodes"):
+        brain.retune(recall_episodes="remember")
+    arrays = saved_arrays(path)
+    arrays["recall/ended"] = arrays["recall/ended"].astype(float)
+    np.savez(tmp_path / "bad.npz", **arrays)
+    with pytest.raises(ValueError, match="ended"):
         cd.Brain.load(tmp_path / "bad.npz")

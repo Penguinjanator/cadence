@@ -438,7 +438,10 @@ class Recall:
     the scores name against those the address attended to, whatever the keys' norms.
     ``capacity`` bounds the slots per stream, the oldest dropped first (with aroused writes
     in a batch, the store's columns: a stream that wrote fewer holds fewer). ``reset`` empties
-    streams, and an empty stream reads silence.
+    streams, and an empty stream reads silence. ``end`` ends their episodes and keeps their
+    slots: the latest slot of each learns no successor from the next episode's first moment,
+    and the moment before begins afresh; the brain ends an episode so with
+    ``episodes="keep"`` and empties the stream with the founder ``"forget"``.
 
     With ``address_reward`` above zero reward trains the map as well: at each sampled act
     the step the address lesson would take at each row, were the act's action the lesson's
@@ -466,6 +469,7 @@ class Recall:
     write: str = "always"
     null: float | None = None
     address_reward: float = 0.0
+    episodes: str = "forget"
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
     # the width of the observations the memory is given, when it is not the source range's: a
@@ -485,6 +489,7 @@ class Recall:
     VALUES = ("event", "cortex")
     STEPS = ("lms", "toward")
     WRITES = ("always", "aroused")
+    EPISODES = ("forget", "keep")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
     RUNTIME = (
         "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
@@ -493,7 +498,7 @@ class Recall:
     CONSTRUCTION = ("capacity", "value", "next")
     # options beside the founder memory, each one runtime: a memory at their founders
     # describes and saves itself as before, and a saved memory without one takes its founder
-    OPTIONS = ("address_step", "write", "null", "address_reward")
+    OPTIONS = ("address_step", "write", "null", "address_reward", "episodes")
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -557,6 +562,10 @@ class Recall:
             return None if value is None else real(name, value)
         if name == "address_reward":
             return real(name, value, low=0)
+        if name == "episodes":
+            if not isinstance(value, str) or value not in Recall.EPISODES:
+                raise ValueError(f"episodes is one of {Recall.EPISODES}")
+            return value
         raise TypeError(f"unknown recall setting: {name!r}")
 
     @staticmethod
@@ -661,6 +670,8 @@ class Recall:
         self.held = np.zeros((batch, 0), dtype=bool)
         self.previous = np.zeros((batch, len(self.association)))
         self.history = np.zeros((0, self.key_width))
+        # per stream: its latest slot closed an episode (``end``) and learns no successor
+        self.ended = np.zeros(batch, dtype=bool)
         self.last = None
         self._attended = None
 
@@ -693,6 +704,29 @@ class Recall:
         self.previous = np.where(keep[:, None], self.previous, 0.0)
         if len(self.history) == batch:
             self.history = np.where(keep[:, None], self.history, 0.0)
+        self.ended = self.ended & keep
+        self.last = None
+        self._attended = None
+
+    def end(self, batch: int, rows: np.ndarray | None = None) -> None:
+        """The streams of ``rows`` (every stream without) end an episode and keep their
+        slots: the latest slot of each learns no successor from the stream's next written
+        moment, and the moment before (the cortex of the moment before and the history)
+        begins afresh. The address map is learned and stays. Another batch size empties the
+        streams, as ``reset`` does."""
+        if self.streams != batch:
+            self._empty(batch)
+            return
+        chosen = np.zeros(batch, dtype=bool)
+        chosen[slice(None) if rows is None else np.asarray(rows)] = True
+        if not chosen.any():
+            return
+        keep = ~chosen
+        # new arrays, never writes into the old ones: a caller may hold them to restore
+        self.ended = self.ended | chosen
+        self.previous = np.where(keep[:, None], self.previous, 0.0)
+        if len(self.history) == batch:
+            self.history = np.where(keep[:, None], self.history, 0.0)
         self.last = None
         self._attended = None
 
@@ -704,6 +738,7 @@ class Recall:
         self.previous = self.previous[rows]
         if len(self.history):
             self.history = self.history[rows]
+        self.ended = self.ended[rows]
         self.last = None
         self._attended = None
 
@@ -712,7 +747,7 @@ class Recall:
         these arrays rather than changing them."""
         return {
             name: getattr(self, name)
-            for name in ("keys", "values", "nexts", "held", "previous", "history")
+            for name in ("keys", "values", "nexts", "held", "previous", "history", "ended")
         }
 
     def restore(self, snapshot: dict[str, Any]) -> None:
@@ -882,18 +917,22 @@ class Recall:
         holds this moment; beyond ``capacity`` the oldest slot is dropped. With ``written``,
         one flag per stream, the new slot is a column every stream has and the written
         streams alone hold (the others keep zeros there), and each written stream's latest
-        held slot, wherever it lies, learns this moment as its next."""
+        held slot, wherever it lies, learns this moment as its next. A stream whose latest
+        slot closed an episode (``end``) teaches it nothing, and its new slot is open again."""
         if len(key) != self.streams:
             self._empty(len(key))
         nexts = self.nexts
         if self.slots:
             nexts = nexts.copy()
-            if written is None and self.held.all():
+            if written is None and self.held.all() and not self.ended.any():
                 nexts[:, -1] = value
             else:
-                # each written stream's latest held slot learns what followed it
+                # each written stream's latest held slot learns what followed it, unless it
+                # closed an episode
                 held = self.held
-                rows = held.any(axis=1) if written is None else held.any(axis=1) & written
+                rows = held.any(axis=1) & ~self.ended
+                if written is not None:
+                    rows &= written
                 latest = held.shape[1] - 1 - np.argmax(held[:, ::-1], axis=1)
                 index = np.flatnonzero(rows)
                 nexts[index, latest[index]] = value[index]
@@ -901,6 +940,8 @@ class Recall:
         if written is not None:
             fresh = written[:, None].copy()
             key, value = np.where(fresh, key, 0.0), np.where(fresh, value, 0.0)
+        if self.ended.any():  # a written stream's new slot is open to its successor
+            self.ended = self.ended & ~fresh[:, 0]
         keys = np.concatenate([self.keys, key[:, None, :]], axis=1)
         values = np.concatenate([self.values, value[:, None, :]], axis=1)
         nexts = np.concatenate([nexts, np.zeros_like(value)[:, None, :]], axis=1)

@@ -870,9 +870,12 @@ def _validate_recall_state(
         if not meta.get("pending", False):
             raise ValueError("a saved address contrast belongs to a pending action")
         array("pending", eligibility)
+    # the streams whose latest slot closed an episode, saved while one does
+    if "recall/ended" in data and array("ended", (batch,)).dtype != np.bool_:
+        raise ValueError("invalid saved recall state: ended")
     expected = {"keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c", "b"}
     if {name[len("recall/"):] for name in data if name.startswith("recall/")} - {
-        "trace", "pending"
+        "trace", "pending", "ended"
     } != expected:
         raise ValueError("unexpected saved recall arrays")
 
@@ -1595,6 +1598,10 @@ class Brain:
         stepping the map by that rate times the dopamine times the trace: the eligibility
         carries the lesson's rate, so at 1.0 a unit of dopamine moves the map by one lesson's
         step, and ``recall_address=0`` leaves the map as it is under reward too.
+        ``recall_episodes="keep"`` keeps a stream's slots when its episode ends, where the
+        founder ``"forget"`` empties them: the latest slot of the ended episode learns no
+        successor from the next episode's first moment, and the moment before begins afresh
+        as the working trace does. ``Brain.reset(keep_memory=True)`` keeps the slots too.
         The founder ``recall=False`` builds the brain without it, byte-identical to the
         composition before the option; the memory is a gene to select against that control.
         ``recall_scale``, ``recall_capacity``, ``recall_value`` and ``recall_next`` are
@@ -2487,7 +2494,7 @@ class Brain:
                 if ended[0] and self.history is not None:
                     self.history.reset(1, rows=np.array([0]))
                 if ended[0] and self.recall is not None:
-                    self.recall.reset(1, rows=np.array([0]))
+                    self._end_recall(1, np.array([0]))
                 # a moment without eligibility has passed: the credit of earlier sampled
                 # actions fades as it does between two outcomes that are learned from
                 agent.fade(ended)
@@ -2707,7 +2714,7 @@ class Brain:
             for trace, _ in traces:
                 trace.reset(1, rows=np.array([0]))
             if self.recall is not None:
-                self.recall.reset(1, rows=np.array([0]))
+                self._end_recall(1, np.array([0]))
             agent._free = None
             return self._settled(x)
         finally:
@@ -3147,6 +3154,8 @@ class Brain:
     ) -> dict[str, float]:
         """Dopamine from the reward of the last action; ``done`` rows start a new episode.
 
+        A ``done`` row's working trace, efference copy and heard history begin afresh, and its
+        recall memory's slots are emptied, or kept with ``recall_episodes="keep"``.
         The hippocampus records the reward of the chosen action for the situation it was
         chosen in, and the next choice in that situation reads the record. A refused
         feedback update preserves that pending action and both memories; retry this
@@ -3231,7 +3240,7 @@ class Brain:
             if heard is not None and done.any():
                 heard.reset(len(done), rows=np.flatnonzero(done))
             if recalled is not None and done.any():
-                recalled.reset(len(done), rows=np.flatnonzero(done))
+                self._end_recall(len(done), np.flatnonzero(done))
             report = self.basal_ganglia.learn(
                 reward, done, self.stimulus(following), bootstrap, warm=self._awaited()
             )
@@ -3316,9 +3325,24 @@ class Brain:
             target[rows, chosen] = value
             memory.observe(keys, target, write)
 
-    def reset(self) -> None:
+    def _end_recall(self, batch: int, rows: np.ndarray) -> None:
+        """The recall memory's streams of ``rows`` end an episode: emptied with the founder
+        ``recall_episodes="forget"``, their slots kept with ``"keep"`` (``Recall.end``)."""
+        recall = self.recall
+        assert recall is not None
+        if recall.episodes == "keep":
+            recall.end(batch, rows)
+        else:
+            recall.reset(batch, rows=rows)
+
+    def reset(self, *, keep_memory: bool = False) -> None:
         """Start every stream afresh; hippocampal records are kept. A brain with arousal
-        begins the new stream calm, with what it was used to forgotten and its age kept."""
+        begins the new stream calm, with what it was used to forgotten and its age kept.
+        ``keep_memory=True`` keeps the recall memory's slots too: each stream ends an episode
+        there (``Recall.end``), its slots read by the next streams of the same batch, and
+        everything else starts afresh as without it."""
+        if not isinstance(keep_memory, bool):
+            raise ValueError("keep_memory must be boolean")
         self.basal_ganglia.reset()
         if self.working_memory is not None:
             self.working_memory.reset(0)
@@ -3326,7 +3350,9 @@ class Brain:
             self.efference.reset(0)
         if self.history is not None:
             self.history.reset(0)
-        if self.recall is not None:
+        if self.recall is not None and keep_memory:
+            self.recall.end(self.recall.streams)  # the slots stay, the moment before is fresh
+        elif self.recall is not None:
             self.recall.reset(0)  # the slots are emptied; the address map is learned and stays
         self._moment = None
         self._coded_moment = None
@@ -3458,6 +3484,8 @@ class Brain:
             for name in ("keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c",
                          "b"):
                 data["recall/" + name] = getattr(recall, name)
+            if recall.ended.any():  # streams whose latest slot closed an episode
+                data["recall/ended"] = recall.ended
             # the actor's eligibility of the address map, and the pending action's contrast
             if agent.trace_memory is not None:
                 data["recall/trace"] = agent.trace_memory
@@ -3657,6 +3685,11 @@ class Brain:
                 for name in ("keys", "values", "nexts", "previous", "history", "w_x", "w_c", "b"):
                     setattr(recall, name, data["recall/" + name].astype(float))
                 recall.held = data["recall/held"].astype(bool)
+                recall.ended = (
+                    data["recall/ended"].astype(bool)
+                    if "recall/ended" in data
+                    else np.zeros(len(recall.keys), dtype=bool)
+                )
                 recall.writes = int(recalled["writes"])
             result.learner = learner
             # Initialization provenance is separate from the saved, possibly learned bias.
