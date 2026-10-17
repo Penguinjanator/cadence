@@ -1090,11 +1090,16 @@ class Recall:
         out[np.flatnonzero(moving)[kept]] = rows[kept]
         return out
 
-    def propose(self, step: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, float]:
+    def propose(
+        self, step: np.ndarray
+    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float] | None:
         """The address map after a reward's step, not installed: ``step`` is the rows'
         eligibility weighted by the dopamine and averaged (``contrast_rows``' shape), taken at
-        ``address_reward``. Returns ``w_x``, ``w_c``, ``b`` and the norm of the step; a step
-        whose map is not finite is refused (``ValueError``)."""
+        ``address_reward``. Returns ``w_x``, ``w_c``, ``b`` and the norm of the step, or None
+        at ``address_reward=0``, which takes none; a step whose map is not finite is refused
+        (``ValueError``)."""
+        if not self.address_reward:
+            return None
         step = np.asarray(step, dtype=float)
         width = self.key_width
         shape = (width + len(self.association) + 1, width)

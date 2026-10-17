@@ -1792,7 +1792,9 @@ class Brain:
         Submit that outcome before changing beta; do not discard it to retune. So is
         changing ``recall_address_step``, ``recall_address`` or ``recall_address_reward``
         while that feedback holds the recall memory's address contrast, which belongs to
-        the lesson's form and rates it was taken at.
+        the lesson's form and rates it was taken at. At ``recall_address_reward=0`` the
+        actor drops the address map's trace, and the brain reports and saves as one
+        composed at 0.
 
         Wiring, initialization and enabling/disabling components are construction
         choices. ``reset_arousal=True`` explicitly resets the arousal level and
@@ -1906,6 +1908,10 @@ class Brain:
                 self.arousal.reset()
         for component, field, value in memory_changes:
             setattr(component, field, value)
+        if self.recall is not None and not self.recall.address_reward:
+            # reward leaves the address map as it is: the actor keeps no eligibility of it, and
+            # the brain reports and saves as one composed without it
+            agent.trace_memory = agent._pending_memory = None
         return self
 
     def describe(self) -> dict[str, Any]:

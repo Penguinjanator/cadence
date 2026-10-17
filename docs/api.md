@@ -950,7 +950,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     and actual sampling temperature are retained. Changing `learning_beta`
     with pending sampled feedback is refused until the outcome is consumed, and so is
     changing `recall_address_step`, `recall_address` or `recall_address_reward` while that
-    feedback holds the recall memory's address contrast.
+    feedback holds the recall memory's address contrast. Retuned to
+    `recall_address_reward=0` the actor drops the address map's trace, and the brain reports
+    and saves as one composed at 0.
     See [retuning a life](brain.md#retune-the-same-life).
   - `describe()`: detached, JSON-safe `layout`, effective flat `genes`, resolved
     `learning`/`actor`/`arousal` configurations, memory settings, `initialization`
@@ -1581,7 +1583,9 @@ founder genes for a small share of moments; the
     `trace_memory` (`e <- gamma lam e + contrast`, allocated once a contrast is kept),
     proposes the memory's step on that trace weighted by the same dopamine before the
     graph's update and installs it after (`accept`); a refused update leaves the memory and
-    its trace as they were, and the report names the step (`address_reward_step`).
+    its trace as they were, and the report names the step (`address_reward_step`). An
+    outcome whose action kept no contrast (the memory learns nothing by reward then) drops
+    the trace, and a memory that takes no step proposes none.
   - `fade(done=None)`: one moment passed that added no eligibility, its action having
     been answered greedily. Every eligibility trace decays by `gamma * lam`, the step
     `learn` applies between two sampled actions, the memory's trace among them, and `done`

@@ -572,24 +572,22 @@ class ActorCritic:
 
     def _memory_eligibility(self, batch: int, decay: float) -> None:
         """The memory's trace after an outcome, as every synapse's: ``e <- gamma lam e +
-        contrast``, the pending action's contrast joining it when it kept one; a trace of
-        another batch is dropped."""
+        contrast``. A pending action that kept no contrast belongs to a memory that learns
+        nothing by reward, and the trace is dropped, as is a trace of another batch."""
         contrast, trace = self._pending_memory, self.trace_memory
-        if trace is not None and (
-            len(trace) != batch or (contrast is not None and trace.shape != contrast.shape)
-        ):
-            trace = None
-        if contrast is not None and trace is None:
+        if contrast is None or len(contrast) != batch:
+            self.trace_memory = None
+            return
+        if trace is None or trace.shape != contrast.shape:
             trace = np.zeros_like(contrast)
-        if trace is not None:
-            trace *= decay
-            if contrast is not None:
-                trace += contrast
+        trace *= decay
+        trace += contrast
         self.trace_memory = trace
 
     def _memory_proposal(self, delta: np.ndarray) -> Any:
         """The memory's parameters stepped on their trace by the dopamine, as every synapse
-        steps: proposed and checked by the memory, not installed. None without a trace."""
+        steps: proposed and checked by the memory, not installed. None without a trace, or
+        when the memory takes no step."""
         trace = self.trace_memory
         if trace is None or self.memory is None:
             return None

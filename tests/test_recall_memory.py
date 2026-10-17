@@ -1917,3 +1917,43 @@ def test_the_address_settings_cannot_change_while_an_address_contrast_is_pending
     founder.act(NAME)  # sampled, and no address contrast kept
     founder.retune(recall_address_step="toward", recall_address=0.02)
     assert founder.recall.address_step == "toward" and founder.recall.address == 0.02
+
+
+def test_a_brain_retuned_to_no_address_reward_reports_and_saves_as_one_composed_without(
+    tmp_path,
+):
+    """Retuned to ``recall_address_reward=0`` the actor drops the address map's trace and its
+    pending contrast and proposes nothing: from then on the brain describes, reports and
+    saves as one composed at 0. A rate set to zero on the memory itself drops the trace at
+    the next outcome and takes no step."""
+    brain = composed(seed=5, arousal=True, recall_address_reward=0.5)
+    for t in range(5):
+        brain.live(STREAM[t % 4], reward=None if t == 0 else [float(t % 2)])
+    agent = brain.basal_ganglia
+    assert agent.trace_memory is not None and "address_reward_step" in brain.last_learning
+    brain.act(GO, greedy=True)  # the pending action is replaced: no contrast is pending
+    brain.retune(recall_address_reward=0.0)
+    assert agent.trace_memory is None and agent._pending_memory is None
+    assert "address_reward" not in brain.recall.to_dict()
+    assert "recall_address_reward" not in brain.describe()["genes"]
+    for t in range(5):
+        brain.live(STREAM[t % 4], reward=None if t == 0 else [float(t % 2)])
+        if t:  # an outcome taken
+            assert "address_reward_step" not in brain.last_learning
+        assert agent.trace_memory is None and agent._pending_memory is None
+    with np.load(brain.save(tmp_path / "retuned"), allow_pickle=False) as data:
+        assert not {"recall/trace", "recall/pending"} & set(data.files)
+    # the rate set on the memory itself
+    other = composed(seed=5, recall_address_reward=0.5)
+    for x in (FACT, GO):
+        other.act(x, greedy=True)
+    other.act(NAME)
+    other.learn(np.ones(1), np.zeros(1, bool), CUE)
+    assert other.basal_ganglia.trace_memory is not None
+    other.recall.address_reward = 0.0
+    start = _map(other.recall)
+    other.act(CUE)  # sampled: no contrast is kept at rate zero
+    report = other.learn(np.ones(1), np.zeros(1, bool), GO)
+    assert other.basal_ganglia.trace_memory is None and "address_reward_step" not in report
+    for now, then in zip(_map(other.recall), start, strict=True):
+        np.testing.assert_array_equal(now, then)
