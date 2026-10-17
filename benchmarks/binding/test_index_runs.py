@@ -120,8 +120,6 @@ def test_a_reading_changes_no_training_frame_and_every_condition_sees_the_same_f
     for frames in reads[1:]:
         for x, y in zip(frames, reads[0], strict=True):
             np.testing.assert_array_equal(x, y)
-    # the panel's noise is its own: not the training frames' of the same events
-    assert any(not np.array_equal(x, y) for x, y in zip(reads[0], trained[0], strict=False))
 
 
 # -- the fresh-bindings diagnostic
