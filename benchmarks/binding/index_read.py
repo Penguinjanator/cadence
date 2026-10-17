@@ -153,30 +153,36 @@ class SlotMemory:
 
 
 class SparseCode:
-    """A fixed sparse code of an observation for wide inputs: ``units`` code neurons each read
-    ``fan_in`` inputs with random weights of variance ``1 / fan_in``; the ``winners`` largest
-    positive sums stay, the code scaled to unit length. Storage and work follow the units and
-    the fan-in, whatever the number of inputs."""
+    """The library's sparse code of an observation for wide inputs: ``units`` code neurons
+    with positive weights, every input read by two of them at least, each reading ``fan_in``
+    inputs (more where ``fan_in`` cannot read every input twice); the ``winners`` largest sums
+    stay, the code scaled to unit length. Storage and work follow the units and the fan-in,
+    whatever the number of inputs. The construction is ``PatternSeparator`` with ``cover=2``,
+    as ``Brain.compose(code=...)`` builds it."""
+
+    COVER = 2
 
     def __init__(self, inputs: int, units: int, fan_in: int, winners: int, seed: int) -> None:
         if not 0 < fan_in <= inputs or not 0 < winners <= units:
             raise ValueError("0 < fan_in <= inputs and 0 < winners <= units")
-        rng = np.random.default_rng(np.random.SeedSequence([seed, 7103]))
-        self.index = np.stack(
-            [np.sort(rng.choice(inputs, fan_in, replace=False)) for _ in range(units)]
-        ).astype(np.int64)
-        self.weight = rng.standard_normal((units, fan_in)) / np.sqrt(fan_in)
+        from cadence.stream import PatternSeparator
+
+        fan_in = min(inputs, max(int(fan_in), -(-self.COVER * inputs // units)))
+        self.separator = PatternSeparator(inputs, units, winners, seed=seed, fan_in=fan_in,
+                                          cover=self.COVER)
         self.units, self.winners = int(units), int(winners)
 
+    @property
+    def index(self) -> np.ndarray:
+        """The inputs each code neuron reads, ``(units, fan_in)``."""
+        index = self.separator.index
+        assert index is not None
+        return index
+
     def __call__(self, x: np.ndarray) -> np.ndarray:
-        x = np.atleast_2d(np.asarray(x, dtype=float))
-        drive = np.einsum("buf,uf->bu", x[:, self.index], self.weight)
-        top = np.argpartition(-drive, self.winners - 1, axis=1)[:, : self.winners]
-        rows = np.arange(len(x))[:, None]
-        out = np.zeros_like(drive)
-        out[rows, top] = np.maximum(drive[rows, top], 0.0)
+        out = self.separator.code(np.atleast_2d(np.asarray(x, dtype=float)))
         norm = np.linalg.norm(out, axis=1, keepdims=True)
-        return np.asarray(out / np.maximum(norm, 1e-12))
+        return np.asarray(out / np.where(norm > 0.0, norm, 1.0))
 
 
 class IndexMemory:
