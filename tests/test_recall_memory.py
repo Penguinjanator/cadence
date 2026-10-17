@@ -1366,3 +1366,77 @@ def test_the_address_step_is_described_saved_retuned_and_refused_when_unknown(tm
     np.savez(tmp_path / "bad.npz", **arrays)
     with pytest.raises(ValueError):
         cd.Brain.load(tmp_path / "bad.npz")
+
+
+# -- the recency default: a power-law charge
+
+
+def test_the_recency_default_charges_a_power_of_each_slots_age():
+    """With ``recency=None`` a slot's logit is lowered by ``r log(1 + age)``, ``r = heard^2 /
+    temperature / log(1 + capacity)``. With unit keys a fully matched target of age
+    ``capacity - 1`` keeps a larger weight than a fresh unrelated slot, and of two equal
+    matches at ages 1 and 3 the younger holds the larger weight by the factor ``2^r``."""
+    capacity, heard, temperature = 8, 1.5, 0.5
+    recall = bare(width=capacity, recency=None, capacity=capacity, heard=heard,
+                  temperature=temperature)
+    exponent = heard**2 / temperature / np.log(1 + capacity)
+    events = np.eye(capacity)
+    for event in events:  # the target first, then unrelated moments: the capacity's slots
+        recall._observe(heard * event[None], event[None])
+    np.testing.assert_array_equal(recall.ages(), np.arange(capacity - 1, -1, -1))
+    np.testing.assert_allclose(recall.charges(), exponent * np.log1p(recall.ages()), rtol=1e-15)
+    target = recall._moment(events[[0]])  # the target's own event, a full match
+    p = recall.weights(target.address)[0]
+    logits = heard**2 * events[0] / temperature - exponent * np.log1p(recall.ages())
+    np.testing.assert_allclose(p, softmax(logits), rtol=1e-12)
+    assert p[0] > p[-1]  # the oldest slot, matched, over the fresh unrelated one
+    # two equal matches at ages 1 and 3
+    recall = bare(width=4, recency=None, capacity=capacity, heard=heard, temperature=temperature)
+    for event in np.eye(4)[[0, 1, 0, 2]]:
+        recall._observe(heard * event[None], event[None])
+    p = recall.weights(recall._moment(np.eye(4)[[0]]).address)[0]
+    np.testing.assert_allclose(p[2] / p[0], 2.0**exponent, rtol=1e-12)
+    # a numeric recency keeps the linear charge
+    linear = bare(width=4, recency=0.25, capacity=capacity)
+    for event in np.eye(4):
+        linear._observe(event[None], event[None])
+    np.testing.assert_array_equal(linear.charges(), 0.25 * linear.ages())
+
+
+def test_the_recency_default_lives_in_a_brain_and_survives_retune_and_checkpoints(tmp_path):
+    brain = composed(seed=5, arousal=True, recall_recency=None)
+    assert brain.recall.recency is None
+    assert brain.describe()["genes"]["recall_recency"] is None
+    for x in (FACT, GO, CUE):
+        brain.act(x, greedy=True)
+    brain.stimulus(NAME)
+    recall = brain.recall
+    exponent = 1.0 / 0.25 / np.log(65)
+    logits = np.einsum("bk,bmk->bm", NAME, recall.keys) / 0.25 - exponent * np.log1p(
+        recall.ages()
+    )
+    np.testing.assert_allclose(recall.attended, softmax(logits), rtol=1e-12)
+    for t in range(3):
+        brain.step(STREAM[t % 4], teacher=[t % 2])
+    brain.live(GO)
+    twin = cd.Brain.load(brain.save(tmp_path / "power"))
+    assert twin.recall.recency is None and twin.describe() == brain.describe()
+    for t in range(3):
+        x = STREAM[(t + 1) % 4]
+        np.testing.assert_array_equal(brain.live(x, reward=[1.0]), twin.live(x, reward=[1.0]))
+    assert_same_memory(brain.recall, twin.recall)
+    brain.retune(recall_recency=0.5)
+    assert brain.recall.recency == 0.5
+    brain.retune(recall_recency=None)
+    assert brain.recall.recency is None
+    with pytest.raises(ValueError):
+        brain.retune(recall_recency=-1.0)
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [{"recency": None}, {"recency": None, "address_step": "toward"}],
+    ids=["power", "power_toward"],
+)
+def test_the_recency_default_is_the_instruments_moment_for_moment(extra):
+    assert _option_lives(extra) > 0

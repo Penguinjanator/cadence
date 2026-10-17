@@ -406,7 +406,8 @@ class Recall:
 
     (``h`` the fading history of the events before, ``c`` the settled association activity
     of the moment before) weighs the stream's slots once,
-    ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``), and
+    ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``;
+    with ``recency=None`` the age charge is ``r * log(1 + age_i)``, ``charges``), and
     ``stimulate`` sets the drive of the ``target`` region to ``amplitude * sum_i p_i V_i``
     and, with ``next``, of the ``next`` region to ``amplitude * sum_i p_i N_i``. Both
     regions are sources: their drive is held through the settle as a sensory drive is, so
@@ -438,7 +439,7 @@ class Recall:
     amplitude: float = 3.0
     temperature: float = 0.25
     heard: float = 1.0
-    recency: float = 0.25
+    recency: float | None = 0.25  # None: the power-law charge of ``charges``
     capacity: int = 64
     value: str = "event"
     next: bool = True
@@ -494,7 +495,9 @@ class Recall:
     @staticmethod
     def setting(name: str, value: Any) -> Any:
         """One setting, validated and converted; ``name`` is a field of the memory."""
-        if name in ("amplitude", "recency", "address", "context"):
+        if name == "recency":
+            return None if value is None else real(name, value, low=0)
+        if name in ("amplitude", "address", "context"):
             return real(name, value, low=0)
         if name in ("temperature", "address_temperature"):
             number = real(name, value, low=0)
@@ -593,6 +596,18 @@ class Recall:
     def ages(self) -> np.ndarray:
         """Moments since each slot was written: ``slots - 1`` for the oldest, 0 the latest."""
         return np.arange(self.slots - 1, -1, -1, dtype=float)
+
+    def charges(self) -> np.ndarray:
+        """The logit each slot's age costs it, oldest first: ``recency * age``, or with
+        ``recency=None`` the power-law charge ``r * log(1 + age)``, ``r = heard^2 /
+        temperature / log(1 + capacity)``. Under that charge the weight of an unmatched old
+        slot falls as a power of its age, ``(1 + age)^-r``, two equal matches of ages 1 and 3
+        keep weights in the ratio ``2^r``, and a full match of a unit-length key outweighs the
+        age of every slot the capacity holds."""
+        if self.recency is None:
+            exponent = self.heard**2 / self.temperature / np.log1p(self.capacity)
+            return np.asarray(exponent * np.log1p(self.ages()))
+        return np.asarray(self.recency * self.ages())
 
     @property
     def attended(self) -> np.ndarray | None:
@@ -711,10 +726,11 @@ class Recall:
         self, address: np.ndarray, keys: np.ndarray, held: np.ndarray | None
     ) -> np.ndarray:
         """The logits of the attention over slots: ``address . key / temperature`` less the
-        recency charge per moment of age, ``-inf`` at a slot its stream does not hold."""
+        charge of each slot's age (``charges``), ``-inf`` at a slot its stream does not
+        hold."""
         logits = np.einsum("bk,bmk->bm", address, keys) / self.temperature
-        if self.recency:
-            logits = logits - self.recency * self.ages()[None, :]
+        if self.recency is None or self.recency:
+            logits = logits - self.charges()[None, :]
         return logits if held is None else np.where(held, logits, -np.inf)
 
     def weights(self, address: np.ndarray) -> np.ndarray | None:

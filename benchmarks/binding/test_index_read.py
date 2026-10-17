@@ -256,3 +256,31 @@ def test_a_movement_that_names_a_short_key_raises_its_slot_under_the_toward_step
 
     assert moved("lms") < 0.0 < moved("toward")
     assert ir.GENES["address_step"] == "lms"
+
+
+def test_the_recency_default_is_a_power_of_age_and_nothing_without_a_bound() -> None:
+    """With ``recency=None`` a slot's age costs ``r log(1 + age)``, ``r = heard^2 / T /
+    log(1 + capacity)``: a fully matched target as old as the capacity allows keeps more
+    weight than a fresh unrelated slot, two equal matches at ages 1 and 3 keep weights in
+    the ratio ``2^r``, and an unbounded memory (capacity 0) charges nothing."""
+    capacity = 8
+    index = ir.IndexMemory(capacity, 1, capacity,
+                           dict(ir.GENES, recency=None, capacity=capacity, heard=1.5))
+    events = np.eye(capacity)
+    for event in events:
+        index.slots.observe(1.5 * event[None], event[None])
+    exponent = 1.5**2 / 0.25 / np.log(1 + capacity)
+    np.testing.assert_allclose(index.charges(), exponent * np.log1p(index.slots.ages()))
+    p = index.weights(index.address(events[[0]]))[0]
+    assert p[0] > p[-1]
+    repeated = ir.IndexMemory(4, 1, 4, dict(ir.GENES, recency=None, capacity=capacity))
+    for event in np.eye(4)[[0, 1, 0, 2]]:
+        repeated.slots.observe(event[None], event[None])
+    p = repeated.weights(repeated.address(np.eye(4)[[0]]))[0]
+    np.testing.assert_allclose(p[2] / p[0], 2.0 ** (1 / 0.25 / np.log(1 + capacity)))
+    unbounded = ir.IndexMemory(4, 1, 4, dict(ir.GENES, recency=None, capacity=0))
+    for event in np.eye(4)[[0, 1, 0, 2]]:
+        unbounded.slots.observe(event[None], event[None])
+    assert not unbounded.charges().any()
+    p = unbounded.weights(unbounded.address(np.eye(4)[[0]]))[0]
+    np.testing.assert_allclose(p[2], p[0])

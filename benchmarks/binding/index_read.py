@@ -22,7 +22,9 @@ from the first lesson. The recall and next neurons are sources with one-way syna
 association region: their drive is held through the settle, which answers on the mixture the
 address chose and does not revise the choice, and the settle's contrast teaches those
 synapses like the sensory ones. A moment's address cannot depend on what that moment
-recalls: a second step takes a second moment (a think event).
+recalls: a second step takes a second moment (a think event). With ``recency=None`` a slot's
+age costs ``r * log(1 + age_i)``, ``r = heard^2 / T / log(1 + capacity)``, and nothing with an
+unbounded capacity.
 
 The address map ``W_x, W_c, b`` learns by the address lesson after every lesson, a rule of
 its own beside the graph's contrast. The association's movement between the nudged phases is
@@ -81,7 +83,7 @@ GENES: dict[str, Any] = {
     "temperature": 0.25,  # the softmax temperature over the slots
     "heard": 1.0,  # the present event's weight in its own address
     "recall_scale": 1.2,  # initial magnitude of the recall and next projections (the fixed read's)
-    "recency": 0.0,  # logit cost per moment of a slot's age
+    "recency": 0.0,  # logit cost per moment of a slot's age; None: r log(1 + age), see charges
     "next": True,  # the next neurons and each slot's successor value
     "value": "event",  # "event": the event as witnessed; "cortex": the association activity
     "capacity": 0,  # most slots per stream, the oldest dropped first; 0: no bound
@@ -207,8 +209,9 @@ class IndexMemory:
         self.genes = genes
         self.heard = float(genes["heard"])
         self.temperature = float(genes["temperature"])
-        self.recency = float(genes["recency"])
-        if not np.isfinite([self.heard, self.temperature, self.recency]).all():
+        self.recency = None if genes["recency"] is None else float(genes["recency"])
+        charge = [] if self.recency is None else [self.recency]
+        if not np.isfinite([self.heard, self.temperature, *charge]).all():
             raise ValueError("heard, temperature and recency must be finite")
         if self.temperature <= 0:
             raise ValueError("the temperature must be positive")
@@ -234,6 +237,17 @@ class IndexMemory:
         """The attention the latest read used over each stream's slots, recency included,
         recorded before the moment's write; read-only, None before a read."""
         return self._attended
+
+    def charges(self) -> np.ndarray:
+        """The logit each slot's age costs it, oldest first: ``recency * age``, or with
+        ``recency=None`` the power-law charge ``r * log(1 + age)``, ``r = heard^2 /
+        temperature / log(1 + capacity)``, nothing with an unbounded capacity."""
+        ages = self.slots.ages()
+        if self.recency is None:
+            capacity = self.slots.capacity
+            exponent = self.heard**2 / self.temperature / np.log1p(capacity) if capacity else 0.0
+            return np.asarray(exponent * np.log1p(ages))
+        return np.asarray(self.recency * ages)
 
     def reset(self) -> None:
         self.slots.reset(0)
@@ -265,8 +279,8 @@ class IndexMemory:
         if not memory.slots or memory.streams != len(q):
             return None
         logits = np.einsum("bk,bmk->bm", q, memory.keys) / self.temperature
-        if self.recency:
-            logits = logits - self.recency * memory.ages()[None, :]
+        if self.recency is None or self.recency:
+            logits = logits - self.charges()[None, :]
         p = np.exp(logits - logits.max(axis=1, keepdims=True))
         return np.asarray(p / p.sum(axis=1, keepdims=True))
 
@@ -326,8 +340,8 @@ class IndexMemory:
             if prior or toward:
                 # among the moments the address attended to: the attention is the prior
                 attention = np.einsum("bk,bmk->bm", q, keys[moving]) / self.temperature
-                if self.recency:
-                    attention = attention - self.recency * memory.ages()[None, :]
+                if self.recency is None or self.recency:
+                    attention = attention - self.charges()[None, :]
                 attention -= attention.max(axis=1, keepdims=True)
                 attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
                 if prior:
