@@ -11,9 +11,11 @@ difficulty knob, run on the lives of ``index_runs`` through their parameters:
 - ``camera``: token binding seen at 12,824 inputs through the generic code of ``units``.
 
 The factors: the memory (``none``, the composed brain whose working trace is the only carrier
-of the facts; ``recall``, the index memory of the ``horizon`` arm), the association width and
-the memory's capacity. One life per founder, level and setting, read at 256, 1024, 4096 and
-16384 rounds on forks; a life ends once two consecutive readings are at mastery.
+of the facts; ``recall``, the index memory of the ``horizon`` arm; ``recall_linear``, the
+``index`` arm's linear charge, amendment 1's supplement), the association width and the
+memory's capacity. One life per founder, level and setting, read at 256, 1024, 4096 and 16384
+rounds on forks; a life ends once two consecutive readings are at mastery. ``--grid
+supplement`` lists amendment 1's lives, run after the declared grid into the same output.
 
     PYTHONPATH=src python benchmarks/binding/scaling.py plan --grid trimmed --out DIR/jobs.json
     PYTHONPATH=src python benchmarks/binding/scaling.py run --jobs DIR/jobs.json --out DIR \\
@@ -67,7 +69,10 @@ CAPACITIES = (16, 64, 256)
 CAPACITY = 64  # where the task's span fits in it
 MASTERY = 0.95  # held-out score
 HOLD = 2  # consecutive readings at mastery end a life
-ARM = "horizon"  # the recall: power-law recency (None) at the capacity
+# each memory setting's arm of the index protocol: the recall's power-law charge (recency None
+# at the capacity) and, amendment 1, the linear charge (recency 0.25 per moment of age)
+MEMORIES: dict[str, str | None] = {"none": None, "recall": "horizon", "recall_linear": "index"}
+COMPARISONS = (("recall", "none"), ("recall_linear", "none"), ("recall_linear", "recall"))
 TOKEN_NAMES = 9  # eight training names and the new one: eight facts need eight names
 SUCCESSION_TOKENS = 17  # sixteen training tokens and the new one
 FACTS, DELAYS = (2, 4, 8), (1, 8, 32)
@@ -136,16 +141,16 @@ def job(family: str, level: dict[str, Any], memory: str, width: int, capacity: i
         seed: int, budgets: tuple[int, ...] = BUDGETS) -> dict[str, Any]:
     """One life: the spec ``index_runs.life`` reads, plus the grid's own coordinates."""
     task = FAMILIES[family]["task"]
-    if memory not in ("none", "recall"):
-        raise ValueError("memory is 'none' or 'recall'")
+    if memory not in MEMORIES:
+        raise ValueError(f"memory is one of {tuple(MEMORIES)}")
     if (memory == "none") != (capacity is None):
-        raise ValueError("a capacity belongs to the recall alone")
-    key = level_key(family, level)
-    genes = None if capacity is None else runs.genes_for(task, ARM, {"capacity": int(capacity)})
+        raise ValueError("a capacity belongs to a memory alone")
+    key, arm = level_key(family, level), MEMORIES[memory]
+    genes = None if arm is None else runs.genes_for(task, arm, {"capacity": int(capacity)})
     name = (f"{family}-{key}-{memory}-w{width}" + ("" if capacity is None else f"-c{capacity}")
             + f"-s{seed}")
     return {"name": name, "family": family, "key": key, "task": task, "memory": memory,
-            "arm": "none" if capacity is None else ARM, "width": int(width),
+            "arm": arm or "none", "width": int(width),
             "capacity": capacity, "span": span(family, level), "seed": int(seed),
             "budgets": sorted(budgets), "level": True, "master": MASTERY, "hold": HOLD,
             "genes": genes, **FAMILIES[family]["fixed"], **level}
@@ -211,6 +216,48 @@ def trimmed_grid() -> list[dict[str, Any]]:
     return out
 
 
+def declared_budgets(family: str, level: dict[str, Any], width: int,
+                     capacity: int) -> tuple[int, ...]:
+    """The budgets the declared grid reads for the recall at this level, width and capacity
+    (its longest at that width where it does not read the capacity)."""
+    plan = TRIMMED[(family, level_key(family, level))][width]
+    for budgets, caps in plan:
+        if capacity in (capacities(family, level) if caps is None else caps):
+            return budgets
+    return max((budgets for budgets, _ in plan), key=len)
+
+
+def linear_capacity(family: str, level: dict[str, Any]) -> int:
+    """Amendment 1's capacity: 64 where every trial starts from empty slots (its span fits, no
+    slot is dropped, and the linear charge does not read the capacity); in the continuing life
+    the smallest capacity of the factor that holds the panel's history."""
+    if family == "continuing":
+        return min(c for c in CAPACITIES if c >= span(family, level))
+    return CAPACITY
+
+
+def supplement_grid() -> list[dict[str, Any]]:
+    """Amendment 1's lives: the linear charge (``recall_linear``) on the camera family at every
+    width and budget the declared grid reads, and at width 64 on the token levels of D 8 and 32
+    and the continuing levels of K 8 and 32, at the declared grid's budgets."""
+    out = []
+    for family, level in levels():
+        key = level_key(family, level)
+        if family == "camera":
+            widths = list(TRIMMED[(family, key)])
+        elif ((family == "token" and level["neutral"] in (8, 32))
+              or (family == "continuing" and level["earlier"] in (8, 32))):
+            widths = [64]
+        else:
+            continue
+        capacity = linear_capacity(family, level)
+        for width in widths:
+            budgets = declared_budgets(family, level, width, capacity)
+            out += [job(family, level, "recall_linear", width, capacity, seed, budgets)
+                    for seed in SEEDS]
+    return out
+
+
 def smoke_grid() -> list[dict[str, Any]]:
     """Tiny budgets, end to end: every family's first level with and without the memory, its
     last level with the memory; one life with mastery at zero, so its stop rule and the
@@ -221,13 +268,16 @@ def smoke_grid() -> list[dict[str, Any]]:
         out.append(job(family, first, "none", 64, None, 0, (2, 4)))
         out.append(job(family, first, "recall", 64, CAPACITY, 0, (2, 4)))
         out.append(job(family, last, "recall", 64, max(capacities(family, last)), 0, (2, 4)))
+    out.append(job("camera", FAMILIES["camera"]["levels"][0], "recall_linear", 64, CAPACITY, 0,
+                   (2, 4)))
     stop = job("token", FAMILIES["token"]["levels"][0], "recall", 64, CAPACITY, 0, (2, 4, 8))
     out.append(dict(stop, name=stop["name"] + "-master0", key=stop["key"] + "-master0",
                     master=0.0))
     return out
 
 
-GRIDS = {"full": full_grid, "trimmed": trimmed_grid, "smoke": smoke_grid}
+GRIDS = {"full": full_grid, "trimmed": trimmed_grid, "supplement": supplement_grid,
+         "smoke": smoke_grid}
 
 
 # -- costs
@@ -333,8 +383,10 @@ def probe(spec: dict[str, Any], rounds: int = 2) -> dict[str, Any]:
 
 
 def probe_key(spec: dict[str, Any]) -> str:
-    """A setting's cost class: the capacity bounds a handful of slots and leaves it."""
-    return f"{spec['family']}-{spec['key']}-{spec['memory']}-w{spec['width']}"
+    """A setting's cost class: the capacity bounds a handful of slots and leaves it, and the
+    two charges cost the same."""
+    memory = "none" if spec["memory"] == "none" else "recall"
+    return f"{spec['family']}-{spec['key']}-{memory}-w{spec['width']}"
 
 
 def probe_job(spec: dict[str, Any], rounds: int) -> dict[str, Any]:
@@ -364,7 +416,7 @@ def weight(spec: dict[str, Any]) -> float:
     if spec.get("estimate"):
         return float(spec["estimate"])
     inputs = int(spec.get("units", 0)) / 256
-    per_event = (spec["width"] / 64) ** 0.8 * (1.6 if spec["memory"] == "recall" else 1.0)
+    per_event = (spec["width"] / 64) ** 0.8 * (1.0 if spec["memory"] == "none" else 1.6)
     return max(spec["budgets"]) * (events(spec["family"], spec) + 6) * per_event * (1 + inputs)
 
 
@@ -462,8 +514,8 @@ def conditions(spec: dict[str, Any], reading: dict[str, Any]) -> dict[str, float
     if spec["task"] == "named":
         s = reading["scores"]
         return {"intact": s["intact"]["held_out"]["exact"],
-                "memory_erased": (s["memory_erased"]["held_out"]["exact"]
-                                  if spec["memory"] == "recall" else None),
+                "memory_erased": (None if spec["memory"] == "none"
+                                  else s["memory_erased"]["held_out"]["exact"]),
                 "trace_erased": s["trace_erased"]["held_out"]["exact"],
                 "both_erased": s["erased"]["held_out"]["exact"],
                 "train": s["intact"]["training"]["exact"]}
@@ -533,36 +585,51 @@ def summarize(out: Path) -> dict[str, Any]:
                           {})[j["seed"]] = receipt
     order = {(f, level_key(f, lv)): i for i, (f, lv) in enumerate(levels())}
 
-    def rank(k: tuple[Any, ...]) -> tuple[Any, ...]:
-        return (order.get((k[0], k[1]), len(order)), k[2] != "none", k[3], k[4] or 0)
+    def rank(k: tuple[Any, ...]) -> tuple[Any, ...]:  # a level's memories side by side
+        return (order.get((k[0], k[1]), len(order)), k[3], list(MEMORIES).index(k[2]), k[4] or 0)
 
     cells = [{"family": k[0], "level": k[1], "memory": k[2], "width": k[3], "capacity": k[4],
               **cell_summary(v)} for k, v in sorted(groups.items(), key=lambda kv: rank(kv[0]))]
     paired = []
     for k in sorted(groups, key=rank):
-        if k[2] != "recall" or (k[0], k[1], "none", k[3], None) not in groups:
+        for first, second in COMPARISONS:
+            other = (k[0], k[1], second, k[3], None if second == "none" else k[4])
+            if k[2] != first or other not in groups:
+                continue
+            ours, theirs = groups[k], groups[other]
+            budgets = sorted({b for r in ours.values() for b in r["job"]["budgets"]}
+                             & {b for r in theirs.values() for b in r["job"]["budgets"]})
+            rows = []
+            for budget in budgets:
+                diffs = {}
+                for seed in sorted(set(ours) & set(theirs)):
+                    a, _ = at_budget(ours[seed], budget)
+                    b, _ = at_budget(theirs[seed], budget)
+                    if a is not None and b is not None:
+                        diffs[seed] = (held_out(ours[seed]["job"], a)
+                                       - held_out(theirs[seed]["job"], b))
+                rows.append({"rounds": budget, "difference": _mean(list(diffs.values())),
+                             "by_founder": diffs})
+            paired.append({"family": k[0], "level": k[1], "width": k[3], "capacity": k[4],
+                           "comparison": f"{first} less {second}", "budgets": rows})
+    side = []
+    for k in sorted(groups, key=rank):  # the linear setting beside the others at its capacity
+        if k[2] != "recall_linear":
             continue
-        recall, none = groups[k], groups[(k[0], k[1], "none", k[3], None)]
-        budgets = sorted({b for r in recall.values() for b in r["job"]["budgets"]}
-                         & {b for r in none.values() for b in r["job"]["budgets"]})
-        rows = []
-        for budget in budgets:
-            diffs = {}
-            for seed in sorted(set(recall) & set(none)):
-                a, _ = at_budget(recall[seed], budget)
-                b, _ = at_budget(none[seed], budget)
-                if a is not None and b is not None:
-                    diffs[seed] = (held_out(recall[seed]["job"], a)
-                                   - held_out(none[seed]["job"], b))
-            rows.append({"rounds": budget, "difference": _mean(list(diffs.values())),
-                         "by_founder": diffs})
-        paired.append({"family": k[0], "level": k[1], "width": k[3], "capacity": k[4],
-                       "budgets": rows})
+        trio = [(k[0], k[1], "none", k[3], None), (k[0], k[1], "recall", k[3], k[4]), k]
+        found = {m[2]: next((c for c in cells if (c["family"], c["level"], c["memory"],
+                                                  c["width"], c["capacity"]) == m), None)
+                 for m in trio}
+        side.append({"family": k[0], "level": k[1], "width": k[3], "capacity": k[4],
+                     "cells": {m: None if c is None else {
+                         "held": {r["rounds"]: r["held"] for r in c["budgets"]},
+                         "carried": {r["rounds"]: r["carried"] for r in c["budgets"]},
+                         "first_mastery": c["first_mastery"]} for m, c in found.items()}})
     mastery = []
     for family, level in levels():
         key = level_key(family, level)
         entry: dict[str, Any] = {"family": family, "level": key}
-        for memory in ("none", "recall"):
+        for memory in MEMORIES:
             found = [c for c in cells if c["family"] == family and c["level"] == key
                      and c["memory"] == memory]
             mastered = [c for c in found if c["first_mastery"] is not None]
@@ -572,12 +639,13 @@ def summarize(out: Path) -> dict[str, Any]:
                              "first": None if best is None else {
                                  "width": best["width"], "capacity": best["capacity"],
                                  "rounds": best["first_mastery"]}}
-        if entry["none"]["settings"] or entry["recall"]["settings"]:
+        if any(entry[memory]["settings"] for memory in MEMORIES):
             mastery.append(entry)
     missing = sorted(p.stem for p in (out / "errors").glob("*.txt")) \
         if (out / "errors").exists() else []
     return {"schema": SCHEMA + "/summary", "lives": len(receipts), "mastery_score": MASTERY,
-            "cells": cells, "paired": paired, "mastery": mastery, "failed": missing,
+            "cells": cells, "paired": paired, "side_by_side": side, "mastery": mastery,
+            "failed": missing,
             "versions": versions(), "digests": digests()}
 
 
@@ -617,23 +685,50 @@ def markdown(body: dict[str, Any]) -> str:
                     for k in ("memory_erased", "trace_erased", "both_erased", "train")]
             out.append("| " + " | ".join(row) + " |")
         out.append("")
+    if body.get("side_by_side"):
+        budgets = sorted({int(b) for s in body["side_by_side"] for c in s["cells"].values()
+                          if c is not None for b in c["held"]})
+        out += ["## The linear charge beside the power-law charge and no memory", "",
+                "Each cell: none / recall / recall_linear, the recall at the linear setting's "
+                "capacity; a dash where a setting was not read.", "",
+                "| family | level | width | capacity | " + " | ".join(map(str, budgets))
+                + " | first at mastery |",
+                "| --- | --- | --- | --- | " + " | ".join("---" for _ in budgets) + " | --- |"]
+        for s in body["side_by_side"]:
+            row = [s["family"], s["level"], str(s["width"]), str(s["capacity"])]
+            for b in budgets:
+                parts = []
+                for memory in MEMORIES:
+                    c = s["cells"][memory]
+                    held = None if c is None else c["held"].get(b, c["held"].get(str(b)))
+                    carried = bool(c and c["carried"].get(b, c["carried"].get(str(b))))
+                    parts.append(_f(held, carried) or "-")
+                row.append(" / ".join(parts))
+            row.append(" / ".join("-" if s["cells"][m] is None else
+                                  str(s["cells"][m]["first_mastery"] or "none")
+                                  for m in MEMORIES))
+            out.append("| " + " | ".join(row) + " |")
+        out.append("")
     if body["paired"]:
         budgets = sorted({r["rounds"] for p in body["paired"] for r in p["budgets"]})
-        out += ["## Recall less none, paired by founder", "",
-                "| family | level | width | capacity | " + " | ".join(map(str, budgets)) + " |",
-                "| --- | --- | --- | --- | " + " | ".join("---" for _ in budgets) + " |"]
+        out += ["## Paired differences by founder", "",
+                "| comparison | family | level | width | capacity | "
+                + " | ".join(map(str, budgets)) + " |",
+                "| --- | --- | --- | --- | --- | " + " | ".join("---" for _ in budgets) + " |"]
         for p in body["paired"]:
             by = {r["rounds"]: r["difference"] for r in p["budgets"]}
-            out.append(f"| {p['family']} | {p['level']} | {p['width']} | {p['capacity']} | "
+            out.append(f"| {p.get('comparison', 'recall less none')} | {p['family']} | "
+                       f"{p['level']} | {p['width']} | {p['capacity']} | "
                        + " | ".join(_f(by.get(b)) for b in budgets) + " |")
         out.append("")
     out += ["## Mastery by level", "",
-            "| family | level | recall: settings at mastery | recall: first (width, capacity, "
-            "rounds) | none: settings at mastery | none: first |",
-            "| --- | --- | --- | --- | --- | --- |"]
+            "| family | level | " + " | ".join(
+                f"{m}: settings at mastery | {m}: first (width, capacity, rounds)"
+                for m in ("recall", "recall_linear", "none")) + " |",
+            "| --- | --- | " + " | ".join("--- | ---" for _ in MEMORIES) + " |"]
     for m in body["mastery"]:
         cells_ = []
-        for memory in ("recall", "none"):
+        for memory in ("recall", "recall_linear", "none"):
             e = m[memory]
             first = e["first"]
             cells_ += [f"{e['mastered']} of {e['settings']}",

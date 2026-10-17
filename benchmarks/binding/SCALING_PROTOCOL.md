@@ -168,3 +168,65 @@ python -m pytest -q benchmarks/binding/test_scaling.py
 On a box with many cores, `bash benchmarks/binding/run_scaling.sh DIR` runs the three steps
 with a worker per core; with `PROBE=1` it first measures the grid's cost classes on that box
 and the plan prints the estimate before the lives start.
+
+## Amendment 1, the linear charge beside the power-law charge (17 October 2026)
+
+Declared while the declared grid runs, before any life of this amendment runs. The index
+protocol's confirmation of the `horizon` arm on founders 400 to 411 did not pass the camera
+task, which the `index` arm passed; the readings are retained outside this repository. The
+power-law charge `r log(1 + age)`, `r = heard^2 / T / log(1 + capacity)`, is calibrated on a
+full match of a unit-length key. At the camera task's `heard` 1.5 and capacity 64, `r` is 2.16:
+a trial's two facts, at ages 1 and 2 when the query reads, cost 1.5 and 2.4 logits, and the
+neutral event at age 0 costs nothing. A query's code matches its fact's at .26 to .29 of a full
+match at every code width the grid reads (2.4 to 2.7 logits) and every other event's at about
+.09 (0.8 logits), so an unmatched young moment outweighs the older fact. The grid's `recall` on
+the camera family therefore reads the charge, not the memory's width; its lives run and are
+read as declared, with this amendment's beside them.
+
+| Item | Declared |
+| --- | --- |
+| memory `recall_linear` | the index protocol's `index` arm, its confirmed recall: the `index` genes with `recency` 0.25 (each slot's logit lowered by 0.25 per moment of age) and the task's own genes (`heard` 1.5 in the camera task), at the capacity below |
+| capacity | 64 in the token and camera levels: every trial starts from empty slots, its span fits, no slot is dropped and the linear charge does not read the capacity, so 64 stands for every capacity that holds the span, the index arm's unbounded one included. In the continuing life the smallest capacity of the factor that holds the panel's history, 64 at K 8 and 256 at K 32, so that the charge and not the capacity bounds what the read reaches |
+| lives | (a) the camera family at every level, width and budget the declared grid reads: 256 and 1024 units at widths 64 and 256 to 16384 rounds, 4096 units to 4096 rounds at width 64 and to 1024 at width 256; (b) at width 64 and to 16384 rounds, the token levels of D 8 and D 32 (F 2, 4 and 8) and the continuing levels of K 8 and K 32, where the linear charge's horizon is the question |
+| founders, readings, mastery | as declared: founders 0 to 2; the held-out measure intact, with the slots erased and with the trace erased, and the training panel; mastery at .95; a life ends after two consecutive readings at mastery |
+| grid | `--grid supplement`: 42 lives (camera 18, token 18, continuing 6), run after the declared grid into the same output with a job list and a log of their own; their names carry the setting, so the runner's resume neither skips nor reruns a declared life |
+| summary | the three memories side by side at each level and width the supplement reads (`none`, `recall` at the linear setting's capacity, `recall_linear`), and the paired differences by founder `recall_linear` less `none` and `recall_linear` less `recall` at the same capacity, beside `recall` less `none` |
+
+### Declared expectations
+
+- `camera`: `recall_linear` reaches mastery at the code widths the grid reads, where `recall`
+  stays far below it: at ages 1 and 2 the linear charge costs 0.25 and 0.5 logits, less than a
+  fact's lead of about 1.7 logits over an unmatched moment. Where both fail, the code limits.
+- `token`: a match of the queried name is worth `heard^2 / T`, 4 logits, which the linear
+  charge spends by age 16. At D 8 the facts sit at ages 8 to 15 when the query reads, inside
+  that horizon and near its edge at F 8; at D 32 at ages 32 to 39, charged 8 to 9.75 logits.
+  There the name keeps the queried fact ahead of the other facts, but the neutral moments take
+  most of the read, and mastery depends on whether the address lesson's lift of the facts and
+  the cortex's read of a small share suffice. A failure at D 32 with mastery at D 8 places the
+  linear charge's horizon between them.
+- `continuing`: `recall_linear` holds K 8 and K 32 at least as well as `recall`: an earlier
+  fact with the queried name is at least three moments older (0.75 logits), and each earlier
+  trial costs it a further logit, while the power-law charge at capacity 256 separates old
+  facts by little, so more of them share its read.
+
+### What the amendment would and would not establish
+
+Where `recall_linear` reaches mastery and `recall` does not at the same capacity, the readings
+place the difference in the charge; where neither does, in what the amendment does not vary.
+The declared grid's lives, readings and expectations stand unchanged. A pass of the question's
+sentence with the linear charge in place of the power-law charge holds for the levels this
+amendment reads alone: the camera family, and at width 64 the token levels of D 8 and 32 and
+the continuing levels of K 8 and 32.
+
+### Commands
+
+```sh
+PYTHONPATH=src python benchmarks/binding/scaling.py plan --grid supplement \
+  --out DIR/jobs-supplement.json
+PYTHONPATH=src python benchmarks/binding/scaling.py run --jobs DIR/jobs-supplement.json \
+  --out DIR --workers 2
+PYTHONPATH=src python benchmarks/binding/scaling.py summary --out DIR
+```
+
+On the box, `bash benchmarks/binding/run_scaling.sh DIR WORKERS supplement` runs the three
+steps into the declared grid's `DIR`.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -150,3 +151,49 @@ def test_a_life_ends_at_two_readings_at_mastery_and_the_summary_carries_it() -> 
     assert last["carried"] == 1 and abs(last["held"] - 0.98) < 1e-12
     unfinished = _receipt("c", 2, "recall", [0.5, 0.6])
     assert scaling.at_budget(unfinished, 4096) == (None, False)
+
+
+def test_the_supplement_reads_the_linear_charge_at_the_declared_budgets() -> None:
+    """Amendment 1: the index arm's linear charge at a capacity that holds the span, on the
+    lives the amendment names, at the budgets the declared grid reads, under names of their
+    own."""
+    supplement, trimmed = scaling.supplement_grid(), scaling.trimmed_grid()
+    assert len(supplement) == 42
+    assert not {j["name"] for j in supplement} & {j["name"] for j in trimmed}
+    declared = {(j["family"], j["key"], j["width"], j["capacity"]): j["budgets"]
+                for j in trimmed if j["memory"] == "recall"}
+    for spec in supplement:
+        assert spec["memory"] == "recall_linear" and spec["arm"] == "index"
+        assert spec["genes"] == runs.genes_for(spec["task"], "index",
+                                               {"capacity": spec["capacity"]})
+        assert spec["genes"]["recency"] == 0.25 and spec["capacity"] >= spec["span"]
+        assert spec["budgets"] == declared[(spec["family"], spec["key"], spec["width"],
+                                            spec["capacity"])]
+    families = {f: sum(j["family"] == f for j in supplement) for f in scaling.FAMILIES}
+    assert families == {"token": 18, "succession": 0, "named": 0, "continuing": 6,
+                        "camera": 18}
+    assert {(j["key"], j["capacity"]) for j in supplement if j["family"] == "continuing"} == {
+        ("k8", 64), ("k32", 256)}
+
+
+def test_the_summary_sets_the_three_memories_side_by_side(tmp_path) -> None:
+    lives = tmp_path / "lives"
+    lives.mkdir()
+    for memory, scores in (("none", [0.1, 0.1]), ("recall", [0.2, 0.3]),
+                           ("recall_linear", [0.96, 0.97])):
+        for seed in (0, 1):
+            receipt = _receipt(f"{memory}-{seed}", seed, memory, scores)
+            receipt["job"]["name"] = f"{memory}-{seed}"
+            (lives / f"{memory}-{seed}.json").write_text(json.dumps(receipt))
+    body = scaling.summarize(tmp_path)
+    [side] = body["side_by_side"]
+    assert side["cells"]["recall_linear"]["first_mastery"] == 256
+    assert side["cells"]["recall"]["first_mastery"] is None
+    found = {p["comparison"]: {r["rounds"]: r["difference"] for r in p["budgets"]}
+             for p in body["paired"]}
+    assert set(found) == {"recall less none", "recall_linear less none",
+                          "recall_linear less recall"}
+    assert abs(found["recall_linear less recall"][1024] - 0.67) < 1e-12
+    assert found["recall_linear less recall"][16384] is None  # the recall read no further
+    text = scaling.markdown(body)
+    assert "| 0.10 / 0.20 / 0.96 | 0.10 / 0.30 / 0.97 | - / - / 0.97* |" in text
