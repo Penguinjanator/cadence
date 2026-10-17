@@ -330,3 +330,29 @@ def test_a_null_slot_reads_nothing_and_takes_its_share() -> None:
     for null, temperature in ((float("inf"), 0.25), (1e300, 1e-10)):  # a logit not finite
         with pytest.raises(ValueError, match="null"):
             ir.IndexMemory(3, 1, 3, dict(ir.GENES, null=null, temperature=temperature))
+
+
+def test_the_window_key_orders_the_streams_last_events() -> None:
+    """With ``window`` 3 and ``window_decay`` 0.5 the key is the event, then the stream's two
+    previous events at half and a quarter of the weight, zeros before the first; every moment
+    enters the window, written or not, and a reset empties it."""
+    genes = dict(ir.GENES, window=3, window_decay=0.5, heard=2.0, write="aroused")
+    index = ir.IndexMemory(4, 1, 4, genes)
+    assert index.slots.key_width == 12 and index.w_x.shape == (4, 12)
+    events = np.eye(4)
+    for k, written in ((0, True), (1, False), (2, True)):
+        index.address(events[[k]])
+        index.write(events[[k]], np.zeros((1, 1)), np.array([written]))
+    np.testing.assert_array_equal(index.slots.keys[0, 0], np.r_[2 * events[0], np.zeros(8)])
+    np.testing.assert_array_equal(  # the unwritten moment 1 is in the window all the same
+        index.slots.keys[0, 1], np.r_[2 * events[2], events[1], 0.5 * events[0]]
+    )
+    np.testing.assert_array_equal(index.address(events[[3]])[0],
+                                  np.r_[2 * events[3], events[2], 0.5 * events[1]])
+    index.reset()
+    assert not len(index.past)
+    np.testing.assert_array_equal(index.address(events[[3]])[0], np.r_[2 * events[3], np.zeros(8)])
+    assert (ir.GENES["window"], ir.GENES["window_decay"]) == (1, 1.0)
+    for window, decay in ((0, 1.0), (2, 0.0), (2, 1.5)):
+        with pytest.raises(ValueError, match="window"):
+            ir.IndexMemory(4, 1, 4, dict(ir.GENES, window=window, window_decay=decay))

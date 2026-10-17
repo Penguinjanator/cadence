@@ -26,7 +26,10 @@ recalls: a second step takes a second moment (a think event). With ``recency=Non
 age costs ``r * log(1 + age_i)``, ``r = heard^2 / T / log(1 + capacity)``, and nothing with an
 unbounded capacity. With ``write="aroused"`` a moment is written for the streams whose act was
 chosen aroused alone (``IndexBrain.aroused_rows``, or a sampled act); with a number ``null`` a
-null slot of logit ``null / T`` joins the softmax and reads nothing.
+null slot of logit ``null / T`` joins the softmax and reads nothing. With ``window`` k above 1
+the key is an ordered window of the stream's last k events, ``[heard * x_t, d * heard *
+x_{t-1}, ..., d^(k-1) * heard * x_{t-k+1}]`` (``d`` the ``window_decay``), each position on
+coordinates of its own, zeros before the stream's first moment; the address takes its width.
 
 The address map ``W_x, W_c, b`` learns by the address lesson after every lesson, a rule of
 its own beside the graph's contrast. The association's movement between the nudged phases is
@@ -95,6 +98,8 @@ GENES: dict[str, Any] = {
     "address_step": "lms",  # "toward": the error is K* less the attended keys' mixture
     "write": "always",  # "aroused": a moment is written for the streams that acted aroused
     "null": None,  # a number: a null slot of logit null / T that reads nothing
+    "window": 1,  # the key's ordered window of the stream's last events; 1: the event alone
+    "window_decay": 1.0,  # the window's weight per position back, in (0, 1]
     "context": 0.0,  # weight of the fading history of earlier events in a moment's key
     "context_decay": 0.5,  # the history's retention per moment
     "code": 0,  # code neurons of the observation's sparse code; 0: the observation itself
@@ -240,10 +245,22 @@ class IndexMemory:
             raise ValueError("heard, temperature and recency must be finite")
         if self.temperature <= 0:
             raise ValueError("the temperature must be positive")
-        self.slots = SlotMemory(code_width, value_width, int(genes["capacity"]))
-        self.w_x = np.zeros((code_width, code_width))
-        self.w_c = np.zeros((cortex_width, code_width))
-        self.b = np.zeros(code_width)
+        # the key's ordered window of the stream's last events; genes recorded before it: 1
+        window = genes.get("window", 1)
+        if isinstance(window, bool) or not isinstance(window, (int, np.integer)) or window < 1:
+            raise ValueError("window must be an integer of at least 1")
+        self.window = int(window)
+        self.window_decay = float(genes.get("window_decay", 1.0))
+        if not 0 < self.window_decay <= 1:
+            raise ValueError("window_decay must lie in (0, 1]")
+        self.code_width = int(code_width)
+        width = self.window * self.code_width  # the key's and the address's width
+        self.slots = SlotMemory(width, value_width, int(genes["capacity"]))
+        self.w_x = np.zeros((code_width, width))
+        self.w_c = np.zeros((cortex_width, width))
+        self.b = np.zeros(width)
+        # each stream's previous events in the window, the latest first
+        self.past = np.zeros((0, self.window - 1, self.code_width))
         self.cortex_width = int(cortex_width)
         self.previous = np.zeros((0, cortex_width))  # each stream's settled association, t - 1
         self.history = np.zeros((0, code_width))  # each stream's fading history of earlier events
@@ -285,7 +302,8 @@ class IndexMemory:
     def reset(self) -> None:
         self.slots.reset(0)
         self.previous = np.zeros((0, self.cortex_width))
-        self.history = np.zeros((0, self.slots.key_width))
+        self.history = np.zeros((0, self.code_width))
+        self.past = np.zeros((0, self.window - 1, self.code_width))
         self.last = None
         self._attended = None
 
@@ -302,6 +320,15 @@ class IndexMemory:
         if self.context:
             h = self.history if len(self.history) == n else np.zeros_like(x)
             key = key + self.context * h
+        if self.window > 1:
+            # the stream's previous events in order, each on coordinates of its own
+            past = (
+                self.past
+                if len(self.past) == n
+                else np.zeros((n, self.window - 1, self.code_width))
+            )
+            scale = self.heard * self.window_decay ** np.arange(1, self.window)
+            key = np.concatenate([key, (scale[None, :, None] * past).reshape(n, -1)], axis=1)
         q = key + x @ self.w_x + c @ self.w_c + self.b
         self.last = (x, c, q, key)
         return q
@@ -363,6 +390,13 @@ class IndexMemory:
         if self.context:
             h = self.history if len(self.history) == len(x) else np.zeros_like(x)
             self.history = self.context_decay * h + x
+        if self.window > 1:  # this moment enters the window, written or not
+            past = (
+                self.past
+                if len(self.past) == len(x)
+                else np.zeros((len(x), self.window - 1, self.code_width))
+            )
+            self.past = np.concatenate([x[:, None, :], past[:, :-1]], axis=1)
 
     def learn(self, rows: np.ndarray, d_value: np.ndarray, d_next: np.ndarray | None,
               rate: float, temperature: float) -> dict[str, float]:

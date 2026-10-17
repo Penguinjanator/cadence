@@ -1180,7 +1180,7 @@ def test_the_options_at_their_founders_build_the_founder_memory(tmp_path):
     checkpoint bytes and the same description, which leaves the options out."""
     assert cd.Recall.options() == {
         "address_step": "lms", "write": "always", "null": None, "address_reward": 0.0,
-        "episodes": "forget", "key": "event",
+        "episodes": "forget", "key": "event", "window": 1, "window_decay": 1.0,
     }
     founder = composed(seed=5, arousal=True, learning_surprise=True)
     explicit = composed(
@@ -2222,3 +2222,166 @@ def test_the_predecessor_key_survives_a_checkpoint_and_shapes_the_memory(tmp_pat
         cd.Recall(develop(Genome(layout, (Projection("sensory", "association",
                                                      reciprocal=False),))),
                   key="predecessor")
+
+
+# -- the window key
+
+
+def _window(present, past, heard=1.0, decay=1.0):
+    """A window key: ``heard`` times the present event, then each earlier event (zeros for
+    none) at ``decay`` per position back."""
+    blocks = [heard * np.asarray(present, dtype=float)]
+    for j, event in enumerate(past, start=1):
+        blocks.append(heard * decay**j * (np.zeros_like(blocks[0]) if event is None else event))
+    return np.concatenate(blocks)
+
+
+@pytest.mark.parametrize("episodes", ["forget", "keep"])
+def test_the_window_key_orders_the_streams_last_events(episodes):
+    """With ``recall_window=3`` and ``recall_window_decay=0.5`` a key is the moment's event, then
+    the stream's two previous events at half and a quarter of the weight, each on coordinates
+    of its own: zeros at a stream's first moments and after an episode ends, either way the
+    slots go, each stream of a batch its own. The address is the key while the map is zero;
+    the map reads the event alone and writes the wider key; values stay the events."""
+    brain = composed(seed=5, recall_heard=1.5, recall_window=3, recall_window_decay=0.5,
+                     recall_episodes=episodes)
+    recall = brain.recall
+    assert recall.address_width == 12 and recall.w_x.shape == (4, 12)
+    a, b, c = np.eye(4)[:2], np.eye(4)[[2, 3]], np.eye(4)[[1, 0]]
+    for x in (a, b, c):
+        brain.act(x, greedy=True)
+    for row in range(2):
+        np.testing.assert_array_equal(recall.keys[row, 0], _window(a[row], [None, None], 1.5, 0.5))
+        np.testing.assert_array_equal(recall.keys[row, 1], _window(b[row], [a[row], None], 1.5, 0.5))
+        np.testing.assert_array_equal(recall.keys[row, 2], _window(c[row], [b[row], a[row]], 1.5, 0.5))
+    np.testing.assert_array_equal(recall.values[0], [a[0], b[0], c[0]])
+    brain.stimulus(a)
+    np.testing.assert_array_equal(recall.last.address[1], _window(a[1], [c[1], b[1]], 1.5, 0.5))
+    brain.act(a)  # sampled, so an outcome can end stream 1's episode
+    brain.learn(np.zeros(2), np.array([False, True]), b)
+    brain.act(b, greedy=True)
+    np.testing.assert_array_equal(recall.keys[0, -1], _window(b[0], [a[0], c[0]], 1.5, 0.5))
+    np.testing.assert_array_equal(recall.keys[1, -1], _window(b[1], [None, None], 1.5, 0.5))
+    assert recall.held[1].sum() == (5 if episodes == "keep" else 1)
+    report = brain.lesson(c, [0, 1])
+    assert report["address_rows"] > 0 and recall.w_x.shape == (4, 12)
+
+
+def test_waited_moments_enter_the_window_and_imagination_keeps_its_own_copy():
+    brain = composed(seed=7, arousal=True, recall_window=2)
+    recall = brain.recall
+    brain.live(CUE)
+    brain.wait(GO)  # the waited moment is written and enters the window
+    np.testing.assert_array_equal(recall.keys[0, 1], _window(GO[0], [CUE[0]]))
+    np.testing.assert_array_equal(recall.past[0, 0], GO[0])
+    before = recall.snapshot()
+    phases = brain.imagine([NAME, FACT])
+    assert all(np.all(phase.qualified) for phase in phases)
+    for name, value in before.items():
+        assert getattr(recall, name) is value
+    brain.live(FACT, reward=[0.0])
+    np.testing.assert_array_equal(recall.keys[0, 2], _window(FACT[0], [GO[0]]))
+    calm = composed(seed=7, arousal=cd.ArousalConfig(youth=0), recall_window=2,
+                    recall_write="aroused")
+    calm.live(CUE)  # calm and greedy: not written, and still the window's next event
+    calm.live(GO, reward=[0.0])
+    assert calm.recall.slots == 0
+    np.testing.assert_array_equal(calm.recall.past[0, 0], GO[0])
+
+
+def test_the_window_composes_with_the_context_sum_and_the_predecessor_key():
+    """The context sum is added on the present event's block as without a window, and the
+    predecessor key's blocks, the previous event and the last command, follow the window's."""
+    brain = composed(seed=8, recall_window=2, recall_context=0.5, recall_key="predecessor")
+    recall = brain.recall
+    assert recall.address_width == 2 * 4 + 4 + 2
+    first = int(brain.act(FACT)[0])
+    brain.act(GO, greedy=True)
+    issued = np.zeros(2)
+    issued[first] = 1.0
+    np.testing.assert_array_equal(
+        recall.keys[0, 1], np.r_[GO[0] + 0.5 * FACT[0], FACT[0], FACT[0], issued]
+    )
+
+
+@pytest.mark.parametrize(
+    ("window", "decay"), [(2, 1.0), (2, 0.5), (4, 1.0), (4, 0.5)],
+    ids=["w2", "w2-half", "w4", "w4-half"],
+)
+def test_the_window_is_the_instruments_moment_for_moment(window, decay):
+    assert _option_lives({"window": window, "window_decay": decay}) > 0
+
+
+def test_a_window_reads_the_successor_of_the_matching_history():
+    """A memory-only contract. A stream stores the events A B C A B D, ends its episode with
+    its slots kept and reads at A B: the window gives the slots whose window matches (A then
+    B) and their successors more weight than the event's own key does. Read at C A B, the
+    window tells apart the two B moments by the event before A, and the successor of the
+    matching history, D, outweighs C, where the event's own key weighs them alike."""
+    events = np.eye(4)
+    A, B, C, D = events  # noqa: N806
+
+    def stored(window, end):
+        recall = bare(width=4, recency=0.0, window=window, episodes="keep")
+        n = recall.connectome.n
+        for x in (A, B, C, A, B, D):
+            recall.witness(x[None], SimpleNamespace(activation=np.zeros((1, n))))
+        if end:
+            recall.end(1)
+        return recall, n
+
+    def read(window, history, end):
+        recall, n = stored(window, end)
+        for x in history[:-1]:
+            recall.witness(x[None], SimpleNamespace(activation=np.zeros((1, n))))
+        drive = recall.stimulate(np.zeros((1, n)), history[-1][None])
+        return recall.attended[0], drive[0, recall._next_columns]
+
+    weight = {k: read(k, (A, B), True) for k in (1, 2)}
+    matching = [1, 4]  # the B slots, each after A
+    assert weight[2][0][matching].sum() > weight[1][0][matching].sum()
+    assert weight[2][1][[2, 3]].sum() > weight[1][1][[2, 3]].sum()  # their successors C and D
+    single, _ = read(1, (C, A, B), False)
+    windowed, following = read(3, (C, A, B), False)
+    assert single[1] == pytest.approx(single[4])  # the event's own key: alike
+    assert windowed[4] > 2 * windowed[1]  # the window: B after C A, its successor D
+    assert following[3] > following[2]
+
+
+def test_the_window_survives_a_checkpoint_and_a_window_of_another_length_is_refused(tmp_path):
+    brain = composed(seed=5, arousal=True, recall_window=3, recall_window_decay=0.5,
+                     recall_address=0.2, learning_surprise=True)
+    for t in range(5):
+        brain.step(STREAM[t % 4], teacher=[t % 2])
+    brain.live(GO)
+    path = brain.save(tmp_path / "window")
+    with np.load(path, allow_pickle=False) as data:
+        meta = json.loads(str(data["generic"]))
+        assert data["recall/past"].shape == (1, 2, 4) and data["recall/keys"].shape[2] == 12
+    assert (meta["recall"]["window"], meta["recall"]["window_decay"]) == (3, 0.5)
+    twin = cd.Brain.load(path)
+    assert twin.describe() == brain.describe()
+    np.testing.assert_array_equal(twin.recall.past, brain.recall.past)
+    for t in range(4):
+        x, reward = STREAM[(t + 1) % 4], [float(t % 2)]
+        np.testing.assert_array_equal(brain.live(x, reward=reward), twin.live(x, reward=reward))
+        assert_same_memory(brain.recall, twin.recall)
+    assert_same_checkpoint(brain.save(tmp_path / "later"), twin.save(tmp_path / "twin"))
+    for name, value in (("recall_window", 2), ("recall_window_decay", 1.0)):
+        with pytest.raises(ValueError, match="construction setting"):
+            brain.retune(**{name: value})
+    for genes in ({"recall_window": 0}, {"recall_window": 2.0}, {"recall_window_decay": 0.0},
+                  {"recall_window_decay": 1.5}):
+        with pytest.raises(ValueError, match="window"):
+            composed(**genes)
+    for tamper in ("shorter", "without_past"):
+        arrays = saved_arrays(path)
+        meta = json.loads(str(arrays["generic"]))
+        if tamper == "shorter":
+            meta["recall"]["window"] = 2  # the saved window holds three events
+        else:
+            del arrays["recall/past"]
+        arrays["generic"] = np.array(json.dumps(meta))
+        np.savez(tmp_path / "bad.npz", **arrays)
+        with pytest.raises(ValueError):
+            cd.Brain.load(tmp_path / "bad.npz")

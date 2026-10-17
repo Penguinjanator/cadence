@@ -830,7 +830,9 @@ def _validate_recall_state(
     # the predecessor key adds the previous event and the last command to every key
     predecessor = settings.get("key", "event") == "predecessor"
     commands = len(populations.get("motor", ())) if predecessor else 0
-    address = 2 * key + commands if predecessor else key
+    # and the window, its k events in order, comes first
+    window = settings.get("window", 1)
+    address = window * key + (key + commands if predecessor else 0)
     regions = ("recall", "next") if settings["next"] else ("recall",)
     if (
         any(len(populations.get(name, ())) != value for name in regions)
@@ -866,6 +868,9 @@ def _validate_recall_state(
     array("w_x", (key, address))
     array("w_c", (association, address))
     array("b", (address,))
+    if window > 1:  # the window's previous events per stream: a window of another length
+        past = data.get("recall/past")  # is refused by the shape
+        array("past", (0 if past is None or not len(past) else batch, window - 1, key))
     if predecessor:  # the previous moment's event and the last command, per stream
         before = data.get("recall/before")
         array("before", (0 if before is None or not len(before) else batch, key))
@@ -885,6 +890,8 @@ def _validate_recall_state(
     expected = {"keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c", "b"}
     if predecessor:
         expected |= {"before", "command"}
+    if window > 1:
+        expected |= {"past"}
     if {name[len("recall/"):] for name in data if name.startswith("recall/")} - {
         "trace", "pending", "ended"
     } != expected:
@@ -1596,9 +1603,9 @@ class Brain:
         (``recall_address`` 0.01, each row's rate bounded by its own input energy).
         ``recall_capacity`` (64) bounds the slots per stream. Options beside the founder
         memory, each a gene described and saved only where it differs from its founder and a
-        runtime one but ``recall_key``: ``recall_address_step="toward"`` steps the address by
-        the named keys less the mixture it attended to, in place of the founder's ``"lms"``
-        step toward the named keys; ``recall_recency=None`` charges a slot's age
+        runtime one but the key and the window: ``recall_address_step="toward"`` steps the
+        address by the named keys less the mixture it attended to, in place of the founder's
+        ``"lms"`` step toward the named keys; ``recall_recency=None`` charges a slot's age
         ``r * log(1 + age)``, ``r = recall_heard^2 / recall_temperature / log(1 +
         recall_capacity)``, so an unmatched old slot's weight falls as a power of its age;
         ``recall_write="aroused"`` writes a
@@ -1619,11 +1626,18 @@ class Brain:
         command the stream issued last, zeros at a stream's first moment and after an
         episode ends: a key of ``2 * code + actions`` values in place of ``code``, the address
         and the map's outputs as wide, the values and nexts still the events.
+        ``recall_window`` k above 1 (construction, with ``recall_window_decay`` d in (0, 1])
+        makes every key an ordered window of the stream's last k events, ``[heard * x_t, d *
+        heard * x_(t-1), ..., d^(k-1) * heard * x_(t-k+1)]``, each position on coordinates of
+        its own, zeros before a stream's first moment and after an episode ends: a key of
+        ``k * code`` values (the predecessor key's blocks follow it), the address and the map's
+        outputs as wide; ``recall_context`` adds its fading sum on the present event's block.
         The founder ``recall=False`` builds the brain without it, byte-identical to the
         composition before the option; the memory is a gene to select against that control.
-        ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next`` and
-        ``recall_key`` are construction settings; the keys, the event values and the address
-        map follow the observation code's width, a brain's ``code`` among the ways to bound it.
+        ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next``,
+        ``recall_key``, ``recall_window`` and ``recall_window_decay`` are construction
+        settings; the keys, the event values and the address map follow the observation code's
+        width, a brain's ``code`` among the ways to bound it.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -3512,6 +3526,8 @@ class Brain:
                 data["recall/" + name] = getattr(recall, name)
             if recall.ended.any():  # streams whose latest slot closed an episode
                 data["recall/ended"] = recall.ended
+            if recall.window > 1:  # the window's previous events
+                data["recall/past"] = recall.past
             if recall.key == "predecessor":  # the previous moment's event and last command
                 data["recall/before"], data["recall/command"] = recall.before, recall.command
             # the actor's eligibility of the address map, and the pending action's contrast
@@ -3718,6 +3734,8 @@ class Brain:
                     if "recall/ended" in data
                     else np.zeros(len(recall.keys), dtype=bool)
                 )
+                if recall.window > 1:  # validated above: saved with the window
+                    recall.past = data["recall/past"].astype(float)
                 if recall.key == "predecessor":  # validated above: both are saved
                     recall.before = data["recall/before"].astype(float)
                     recall.command = data["recall/command"].astype(float)
