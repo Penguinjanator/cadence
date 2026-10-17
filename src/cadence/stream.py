@@ -858,11 +858,15 @@ class Recall:
     ) -> dict[str, float]:
         """The least-mean-squares step of the address map toward the keys of the slots the
         scores name, on each row's inputs ``z = [x, c, 1]``. A row's rate is ``address``
-        bounded by the row's own energy, ``min(address, 1 / |z|^2)``: the step moves the row's
-        own address at most onto its target, never past it. The rows' steps are averaged.
-        The candidate map and the candidate addresses of the rows are checked before the
-        step is kept; one that is not finite refuses the step, the map stays as it was and
-        the report counts the refused rows."""
+        bounded by the row's own energy, ``r = min(address, 1 / |z|^2)``: a row taught alone
+        moves its own address toward its target, at most onto it. The rows' steps are
+        averaged, and each row's step moves the addresses of the rows whose inputs overlap
+        its own, so in a batch a row can pass its target. The batch error does not grow: the
+        rows' squared distances to their targets, each weighted by the row's rate ``r``, sum
+        to no more after the step than before (with equal weights where no row reaches the
+        bound). The candidate map and the candidate addresses of the rows are checked before
+        the step is kept; one that is not finite refuses the step, the map stays as it was
+        and the report counts the refused rows."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         values, nexts, keys = self.values[rows], self.nexts[rows], self.keys[rows]
         held = self.held[rows]
@@ -898,10 +902,12 @@ class Recall:
             p /= p.sum(axis=1, keepdims=True)
             target = np.einsum("bm,bmk->bk", p, keys[moving])
             error = target - q
-            # each row's gain on its own address, rate * |z|^2, is at most one: the row lands
-            # on its target at most, and a row within the bound keeps the rate as it is. The
-            # averaged step's gain over the batch has its eigenvalues in [0, 1] (its trace is
-            # the mean of the rows' gains), so repeated steps stay bounded.
+            # each row's gain on its own address, rate * |z|^2, is at most one: a row taught
+            # alone lands on its target at most, and a row within the bound keeps the rate as
+            # it is. Over a batch the step maps the errors E to (I - M) E, M = rate / n * G D
+            # with G the rows' Gram matrix of z and D their bounds; D^(1/2) M D^(-1/2) is
+            # symmetric with its eigenvalues in [0, 1] (its trace is the mean of the rows'
+            # gains), so sum_i D_i |e_i|^2 does not grow, though one row can pass its target.
             energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
             step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
             w_x = rate * x.T @ step

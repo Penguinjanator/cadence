@@ -781,6 +781,51 @@ def test_a_rows_step_is_its_own_whatever_the_batch():
         np.testing.assert_allclose(part, np.mean(single, axis=0), rtol=1e-12, atol=1e-15)
 
 
+def test_in_a_batch_a_row_can_pass_its_target_and_the_batch_error_does_not_grow():
+    """A row taught alone lands on its target at most; the rows' steps are averaged, so in a
+    batch a row can pass its target. Two streams hear the same event ``u`` (512 coordinates,
+    ``|u|^2 = 100``) with one slot each, keys ``2u`` and ``6u``: alone, the first lands on
+    ``2u``; together both move from ``u`` to ``4u``, the first past its target. Over random
+    batches, rows within the bound and beyond it, the rows' squared errors weighted by their
+    rates ``min(address, 1 / |z|^2)`` sum to no more after the step than before."""
+
+    def stepped(keys, events, cortex=None, rate=0.01):
+        """One step of a memory whose streams hold one slot each, ``keys``: the target of
+        each row is its stream's key. Returns the addresses before and after the step."""
+        brain = cd.Brain.compose(events.shape[1], 2, modules=(8,), episodic=False, recall=True,
+                                 seed=2, recall_address=rate)
+        recall = brain.recall
+        recall._observe(keys, keys)
+        recall.previous = np.zeros((len(events), 8)) if cortex is None else cortex
+        moment = recall._moment(events)
+        report = recall._step(moment, np.arange(len(events)), np.ones_like(keys), None)
+        assert report["address_rows"] == len(events) and report["address_refused"] == 0.0
+        return moment.address, recall._moment(events).address
+
+    u = np.zeros(512)
+    u[:100] = 1.0
+    before, alone = stepped(2 * u[None], u[None])
+    np.testing.assert_allclose(before, u[None])
+    np.testing.assert_allclose(alone, 2 * u[None])  # rate * |z|^2 = 1.01: onto the target
+    _, together = stepped(np.stack([2 * u, 6 * u]), np.stack([u, u]))
+    np.testing.assert_allclose(together, np.stack([4 * u, 4 * u]))  # the first past 2u
+    rng = np.random.default_rng(17)
+    grew = 0
+    for _ in range(60):
+        n = int(rng.integers(2, 7))
+        rate = float(rng.choice([0.01, 0.5, 2.0]))
+        keys = rng.normal(size=(n, 16)) * rng.choice([0.1, 1.0, 5.0], size=(n, 1))
+        events = rng.normal(size=(n, 16)) * rng.choice([0.05, 0.5, 3.0], size=(n, 1))
+        events[1] = events[0]  # two rows of the same inputs
+        cortex = 0.5 * rng.normal(size=(n, 8))
+        before, after = stepped(keys, events, cortex, rate)
+        weight = np.minimum(rate, 1.0 / ((events**2).sum(axis=1) + (cortex**2).sum(axis=1) + 1))
+        error, later = ((keys - before) ** 2).sum(axis=1), ((keys - after) ** 2).sum(axis=1)
+        assert weight @ later <= weight @ error * (1.0 + 1e-12)
+        grew += int((later > error + 1e-12).any())
+    assert grew > 0  # a row's own error grew in some batches; the batch error in none
+
+
 def test_the_bound_leaves_the_token_task_as_it_was(monkeypatch):
     """At the widths of the declared readings no row reaches the bound, so the step there is
     the step before it, bit for bit. On the token-binding task (16 inputs, an association

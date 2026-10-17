@@ -195,11 +195,14 @@ moment t:  observation x -> address q -> weights over the slots -> recall and ne
   (`recall_address_temperature` 0.1), and takes a least-mean-squares step of the map
   (`recall_address` 0.01) toward the keys so weighted, at the rows the lesson taught. Each
   row's rate is bounded by the row's own energy, `min(0.01, 1 / |z|^2)` on the map's inputs
-  `z = [x, c, 1]`, so no row's address moves past its target, and a step whose result is
-  not finite is refused and counted (`address_refused`). The keys hold the fixed part of
-  the address (the event heard, and with `recall_context` the history before it), so a
-  target never contains the map's own output. Rewards through `learn` and `live` leave the
-  map as it is.
+  `z = [x, c, 1]`, so a row taught alone moves its address at most onto its target. The
+  rows' steps are averaged, and a row's step moves every row whose inputs overlap its own,
+  so in a batch one row can pass its target; the batch error, each row's squared distance
+  to its target weighted by the row's rate, does not grow under the step. A step whose
+  result is not finite is refused and counted (`address_refused`). The keys hold the fixed
+  part of the address (the event heard, and with `recall_context` the history before it),
+  so a target never contains the map's own output. Rewards through `learn` and `live`
+  leave the map as it is.
 - **Streams and episodes.** Each stream has its own slots. `reset` empties them, an ended
   episode empties its stream's slots, and imagination reads the live slots and writes none.
   The address map is learned: a reset keeps it, `parameters()` counts it and a checkpoint

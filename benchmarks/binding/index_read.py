@@ -32,7 +32,9 @@ read back through the recall's and the next's own synapses,
 moment's own attention ``p``, ``p* = softmax(score / address_temperature + address_prior *
 log p)``; ``K* = sum_i p*_i K_i`` is the target, and the map takes the least-mean-squares
 step toward ``K*`` on its inputs ``z = [x_t, c_{t-1}, 1]`` at the taught rows, each row at
-the rate ``min(address, 1 / |z|^2)`` so that no row's own address moves past its target; a
+the rate ``min(address, 1 / |z|^2)``, so that a row taught alone moves its own address at
+most onto its target. The rows' steps are averaged: in a batch a row can pass its target,
+and the batch error, the rows' squared errors weighted by their rates, does not grow. A
 step whose result is not finite is refused. With the
 attention as the prior, a moment whose own content happens to be the answer does not displace
 the moment the address found by its relation (a fresh successor is the value of the moment
