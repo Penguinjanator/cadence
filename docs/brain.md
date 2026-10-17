@@ -213,7 +213,10 @@ A pending sampled action retains its actual eligibility and behavior temperature
 Rate changes apply when its next real outcome is learned. A change of
 `learning_beta` is refused while that action awaits feedback, because the pending
 contrast was formed at the earlier nudge scale; consume its outcome before
-changing the scale. Construction choices such as `sensory_scale`, `working_memory_scale`,
+changing the scale. With `recall_address_reward` above zero the action also holds the
+recall memory's address contrast, formed at the address lesson's form and rates, so a change
+of `recall_address_step`, `recall_address` or `recall_address_reward` is refused likewise.
+Construction choices such as `sensory_scale`, `working_memory_scale`,
 `history_decays`, `history_scale`, `recall` with its capacity, value, next region, code and
 scale, topology, backend and `resting_bias` cannot be retuned, nor can a retune add a missing
 memory, efference, history, recall or arousal component. Create those components when

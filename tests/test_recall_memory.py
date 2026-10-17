@@ -1887,3 +1887,33 @@ def test_without_address_reward_nothing_is_allocated_and_no_byte_changes(tmp_pat
     assert "address_reward" not in founder.recall.to_dict()
     with pytest.raises(ValueError):
         composed(recall_address_reward=-0.1)
+
+
+def test_the_address_settings_cannot_change_while_an_address_contrast_is_pending():
+    """A sampled act's address contrast belongs to the lesson's form and rates it was taken
+    at: while its outcome is pending, retuning ``recall_address_step``, ``recall_address`` or
+    ``recall_address_reward`` is refused, as ``learning_beta`` is, and nothing changes. The
+    same values, other genes, a consumed outcome and a pending act that kept no contrast
+    retune as before."""
+    brain = composed(seed=6, recall_address_reward=0.5)
+    for x in (FACT, GO):
+        brain.act(x, greedy=True)
+    brain.act(NAME)  # sampled: the contrast is pending
+    assert brain.basal_ganglia._pending_memory is not None
+    recall = brain.recall
+    for name, value in (("recall_address_step", "toward"), ("recall_address", 0.02),
+                        ("recall_address_reward", 0.25)):
+        with pytest.raises(ValueError, match=f"{name} cannot change while sampled feedback"):
+            brain.retune(**{name: value}, recall_temperature=0.5)
+    assert (recall.address_step, recall.address, recall.address_reward, recall.temperature) == (
+        "lms", 0.01, 0.5, 0.25,
+    )
+    brain.retune(recall_address=0.01, recall_temperature=0.5)  # the same rate, another gene
+    assert recall.temperature == 0.5
+    brain.learn(np.ones(1), np.zeros(1, bool), CUE)  # the outcome is consumed
+    brain.retune(recall_address_step="toward", recall_address=0.02, recall_address_reward=0.25)
+    assert (recall.address_step, recall.address, recall.address_reward) == ("toward", 0.02, 0.25)
+    founder = composed(seed=6)
+    founder.act(NAME)  # sampled, and no address contrast kept
+    founder.retune(recall_address_step="toward", recall_address=0.02)
+    assert founder.recall.address_step == "toward" and founder.recall.address == 0.02

@@ -948,7 +948,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     component. Actor rates apply to
     the next learned outcome, including one already pending; its eligibility
     and actual sampling temperature are retained. Changing `learning_beta`
-    with pending sampled feedback is refused until the outcome is consumed.
+    with pending sampled feedback is refused until the outcome is consumed, and so is
+    changing `recall_address_step`, `recall_address` or `recall_address_reward` while that
+    feedback holds the recall memory's address contrast.
     See [retuning a life](brain.md#retune-the-same-life).
   - `describe()`: detached, JSON-safe `layout`, effective flat `genes`, resolved
     `learning`/`actor`/`arousal` configurations, memory settings, `initialization`

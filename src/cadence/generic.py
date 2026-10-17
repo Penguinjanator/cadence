@@ -1789,7 +1789,10 @@ class Brain:
         New settings apply to subsequent operations, including the next reward
         for an already issued action. Changing ``learning_beta`` with sampled
         feedback pending is refused: its saved contrast belongs to the old beta.
-        Submit that outcome before changing beta; do not discard it to retune.
+        Submit that outcome before changing beta; do not discard it to retune. So is
+        changing ``recall_address_step``, ``recall_address`` or ``recall_address_reward``
+        while that feedback holds the recall memory's address contrast, which belongs to
+        the lesson's form and rates it was taken at.
 
         Wiring, initialization and enabling/disabling components are construction
         choices. ``reset_arousal=True`` explicitly resets the arousal level and
@@ -1873,6 +1876,19 @@ class Brain:
         )
         if self.basal_ganglia._pending is not None and learning.beta != self.learner.config.beta:
             raise ValueError("learning_beta cannot change while sampled feedback is pending")
+        if self.basal_ganglia._pending_memory is not None:
+            # held with sampled feedback alone: the pending address contrast belongs to the
+            # lesson's form and rates
+            for component, field, value in memory_changes:
+                if (
+                    component is self.recall
+                    and field in ("address_step", "address", "address_reward")
+                    and value != getattr(component, field)
+                ):
+                    raise ValueError(
+                        f"recall_{field} cannot change while sampled feedback with an address "
+                        "contrast is pending"
+                    )
 
         # Publication begins only after all validation. Never reconstruct a live
         # memory or optimizer to change its scalar settings.
