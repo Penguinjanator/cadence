@@ -146,6 +146,22 @@
   (`address_reward_step` in the report); a checkpoint carries the trace and a pending action's
   contrast. The binding instrument's index memory takes the same genes (`address_step`,
   `recency=None`, `write` with `IndexBrain.aroused_rows`, and `null`).
+- Two more options for the recall memory, described and saved only where they differ from
+  their founders ([memory guide](docs/memory.md#recall-the-streams-own-moments)).
+  `recall_episodes="keep"` keeps a stream's slots and the address map when its episode ends
+  (`done` through `step`, `learn` or `live`, and a calm `live` moment that ends it), where
+  the founder `"forget"` empties them; the working trace, efference copy and heard history
+  begin afresh either way, the latest slot of the ended episode learns no successor from the
+  next episode's first moment (`Recall.end`), and ages go on counting the store's columns.
+  `Brain.reset(keep_memory=True)` keeps the recall slots across a reset in the same way; a
+  plain `reset()` empties them as before. `recall_key="predecessor"` (construction) adds the
+  stream's previous moment to every key: `[heard * x_t, heard * x_(t-1), heard * c_(t-1)]`,
+  the previous moment's event and the one-hot of the command the stream issued last (passed
+  by the brain at each act, so no efference copy is needed; a moment `wait` senses keeps the
+  last command), zeros at a stream's first moment and after an episode ends. The key, the
+  address, the map's outputs and a reward eligibility hold `2 * code + actions` values in
+  place of `code` (`Recall.address_width`); the values and nexts stay the events. A
+  checkpoint carries the ended marks and the previous events and commands where they apply.
 - A sparse pattern separator, opt-in: `PatternSeparator(..., fan_in=k)` lets each code
   neuron read `k` distinct inputs chosen at random from its seed, with random weights, held
   as `index` and `weight` arrays of shape `(expansion, k)` in place of the dense

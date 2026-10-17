@@ -556,7 +556,7 @@ and a complete runnable example.
   rows=None)`, `keep(rows)`, `trace` (`(batch, blocks * source)`), `to_dict()`.
   `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
   observation of every act after the act.
-- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, address_step="lms", write="always", null=None, address_reward=0.0, source="sensory", target="recall", inputs=0, writes=0)`:
+- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, address_step="lms", write="always", null=None, address_reward=0.0, episodes="forget", key="event", source="sensory", target="recall", inputs=0, writes=0)`:
   the index memory of each stream's recent moments, a held-input recall
   ([memory](memory.md#recall-the-streams-own-moments)). `inputs` is the width of the
   observations the memory is given when it is not the `source` range's (a brain whose
@@ -608,13 +608,26 @@ and a complete runnable example.
   two nudged phases; None at `address_reward=0`. `propose(step)` returns the map after
   `address_reward` times a step of that shape and the step's norm, refusing one that is
   not finite, and `accept(proposal)` installs it; `ActorCritic` calls them.
-  Arrays: `keys`, `values` and `nexts`
-  (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a slot written before
-  its stream began again), `previous`, `history`, and the map `w_x`, `w_c` and `b`.
+  `end(batch, rows=None)` ends the episodes of `rows` (every stream without) and keeps their
+  slots: the latest slot of each learns no successor from the stream's next written moment
+  (`ended` marks it until then), and the cortex of the moment before, the history and the
+  predecessor key's event and command begin afresh; `Brain` ends an episode so with
+  `episodes="keep"` and empties the stream with the founder `"forget"`. With
+  `key="predecessor"` (construction) a key is `[heard * x_t, heard * x_(t-1), heard *
+  c_(t-1)]`, the previous moment's event (`before`) and the one-hot of the last command
+  (`command`, given as `witness(..., command=...)` at each act and kept by a moment without
+  one), zeros at a stream's first moment and after an episode ends; `address_width` is
+  `2 * inputs + commands` (`commands` the motor neurons) in place of `inputs`, the width of
+  the keys, the address, the map's outputs (`w_x` is `(inputs, address_width)`) and a row's
+  reward eligibility. Arrays: `keys` (`(streams, slots, address_width)`), `values` and
+  `nexts` (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a slot written
+  before its stream began again), `previous`, `history`, `ended`, `before`, `command`, and
+  the map `w_x`, `w_c` and `b`.
   `reset(batch, rows=None)`, `keep(rows)`, `snapshot()` and `restore(snapshot)`,
   `imagined()` (a copy that reads the live slots and writes none), `founders()` (the genes a
   memory always describes), `options()` (the founders of `OPTIONS`: `address_step`, `write`,
-  `null` and `address_reward`, which a memory describes and saves only where they differ),
+  `null`, `address_reward`, `episodes` and `key`, which a memory describes and saves only
+  where they differ),
   `setting(name, value)`, `neurons`, `streams`, `slots`, `ages()`, `charges()`, `attended`,
   `to_dict()`. `Brain.compose(..., recall=True)` adds it; `Brain.recall` holds it, reads it
   before every settle, writes the moment of every act and of every moment `wait` senses (with
@@ -1148,9 +1161,11 @@ that recursive benefit or automatic reflective behavior has been learned.
     same outcome. This differs from an accepted outcome followed by a refused next action.
     After `wait`, the next state settles from the state the stream sensed last; the
     critic's eligibility still uses the state in which the action was chosen.
-  - `reset()` clears working state, action cache, eligibility and reward centering; hippocampal
-    records and slow parameters are kept. A recall memory's slots are emptied and its
-    address map is kept. A brain with arousal begins the next stream calm,
+  - `reset(*, keep_memory=False)` clears working state, action cache, eligibility and reward
+    centering; hippocampal records and slow parameters are kept. A recall memory's slots are
+    emptied and its address map is kept; `keep_memory=True` keeps the slots as well, each
+    stream ending an episode there (`Recall.end`) and its slots read by the next streams of
+    the same batch. A brain with arousal begins the next stream calm,
     with what it was used to cleared and its age and work counts kept.
     `parameters()` counts actor/critic parameters, the shared consolidated memory matrix
     and a recall memory's address map; per-stream state is additional storage.
@@ -1172,7 +1187,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     under another format name and that name without one. The recall options are saved
     where they differ from their founders and take their founders where absent; with
     `recall_address_reward` the actor's trace of the address map (`recall/trace`) and a
-    pending action's contrast (`recall/pending`) are saved too.
+    pending action's contrast (`recall/pending`) are saved too, the ended marks of kept
+    episodes while one is set (`recall/ended`), and with `recall_key="predecessor"` the
+    streams' previous events and last commands (`recall/before`, `recall/command`).
     A brain with its own sparse code saves as `cadence-generic/9`, with any of the earlier
     components, naming the code (`code`: its inputs, units, winners, seed, fan-in and cover,
     and whether the sensory region is the code) and saving its tables (`code/index`,
@@ -1217,9 +1234,11 @@ as `recall_<gene>` beside `recall=True`, and a `recall_` name without it is refu
 | `recall_write` | `"always"` | `"aroused"` writes a moment only when its act was sampled (an aroused `live` moment, `step`, `act` without `greedy`, a moment waited while a sampled action awaits its outcome) |
 | `recall_null` | `None` | A number adds a null slot of logit `recall_null / recall_temperature` to the read's softmax, which reads nothing; a logit that is not finite is refused |
 | `recall_address_reward` | `0.0` | Above zero, reward trains the address map: each sampled act keeps the step the address lesson would take as the map's eligibility, and the outcome steps the map by this rate times the dopamine times the trace. The eligibility carries the lesson's rate, `recall_address` bounded by each row's input energy: at 1.0 a unit of dopamine moves the map by one lesson's step, and `recall_address=0` leaves the map as it is under reward too |
+| `recall_episodes` | `"forget"` | `"keep"` keeps a stream's slots when its episode ends, the latest slot learning no successor from the next episode; the traces begin afresh either way |
+| `recall_key` | `"event"` | `"predecessor"` adds the previous moment's event and the one-hot of the last command to every key, `2 * code + actions` values in place of `code` (construction) |
 
-The last four are options: a brain describes and saves each only where it differs from its
-founder, and every one can be retuned.
+The last six are options: a brain describes and saves each only where it differs from its
+founder, and every one but `recall_key` can be retuned.
 
 ## Arousal (`cadence.arousal`)
 

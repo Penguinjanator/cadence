@@ -87,7 +87,7 @@ The recall memory with cortex values (`recall_value="cortex"`) and an associatio
 | --- | --- | --- | --- |
 | Working `Trace` | Recent association-region activity used as context | Each admitted live action | Nothing; the trace is cleared |
 | `Efference` copy (opt-in gene) | The fading one-hot of the commands the stream issued | Each admitted live action | Nothing; the copy is cleared |
-| `Recall` memory (opt-in gene) | The stream's recent moments as slots, each addressed before its settle ([below](#recall-the-streams-own-moments)) | Each admitted live action and each moment `wait` senses (the aroused ones alone with `recall_write="aroused"`); the address map by each teacher lesson, and with `recall_address_reward` by reward | The address map; the slots are emptied |
+| `Recall` memory (opt-in gene) | The stream's recent moments as slots, each addressed before its settle ([below](#recall-the-streams-own-moments)) | Each admitted live action and each moment `wait` senses (the aroused ones alone with `recall_write="aroused"`); the address map by each teacher lesson, and with `recall_address_reward` by reward | The address map; the slots are emptied, or kept with `reset(keep_memory=True)` |
 | Graph plasticity | Learned synaptic parameters and biases | Supervised contrasts and reward-modulated eligibility | Learned parameters |
 | `SynapticMemory` | Cue-to-outcome associations, with fast per-stream `F` and shared persistent `C` | Observed chosen-action outcomes | Both `F` and `C` |
 | Episodic memory (`memory_choice=True`) | The same store keyed by the observation, and a second keyed by the temporal context; their mean votes in the choice | Known outcomes, demonstrations, replay of the path to a reward | The records; the temporal context and replay path are cleared |
@@ -204,7 +204,8 @@ moment t:  observation x -> address q -> weights over the slots -> recall and ne
   so a target never contains the map's own output. At the founder
   `recall_address_reward=0` rewards through `learn` and `live` leave the map as it is.
 - **Streams and episodes.** Each stream has its own slots. `reset` empties them, an ended
-  episode empties its stream's slots, and imagination reads the live slots and writes none.
+  episode empties its stream's slots (or keeps them, `recall_episodes="keep"` below), and
+  imagination reads the live slots and writes none.
   The address map is learned: a reset keeps it, `parameters()` counts it and a checkpoint
   saves it.
 - **Wide inputs.** The memory keys on the [observation code](#from-pixels-to-keys): the
@@ -260,6 +261,27 @@ keeps it ([genes](api.md#recall-memory-genes)):
   bounded rate `min(recall_address, 1 / |z|^2)`, so at `recall_address_reward` 1.0 a unit of
   dopamine moves the map by one lesson's step, and `recall_address=0` leaves the map as it is
   under reward too.
+- **Kept episodes** (`recall_episodes="keep"`). When a stream's episode ends (`done` through
+  `step`, `learn` or `live`, and a calm `live` moment that ends it), the founder `"forget"`
+  empties its slots with its working trace, efference copy and heard history. With `"keep"`
+  the slots and the address map stay while the traces begin afresh as before: the latest
+  slot of the ended episode keeps the nexts it had and learns no successor from the next
+  episode's first moment, the cortex of the moment before and the history begin afresh, and
+  ages go on counting the store's columns. `brain.reset(keep_memory=True)` keeps the slots
+  across a reset in the same way, under either setting, for the next streams of the same
+  batch; a plain `reset()` empties them.
+- **The predecessor key** (`recall_key="predecessor"`, a construction setting). Each key
+  gains the stream's previous moment, `[heard * x_t, heard * x_(t-1), heard * c_(t-1)]`:
+  the event of the previous moment and the one-hot of the command the stream issued last
+  (the command the efference copy is given; the brain passes it whether or not it has an
+  efference copy, and a moment `wait` senses keeps the last command), zeros at a stream's
+  first moment and after an episode ends. The address and the map's outputs take the same
+  width, `2 * code + actions` values in place of `code` (`brain.recall.address_width`); the
+  map still reads the event and the cortex, and the values and nexts stay the events. The
+  keys, the address map, each read's products and a reward eligibility grow by that factor:
+  at camera width with a code of 1,024 units, cortex values, an association region of 512
+  neurons and four actions, a key holds 2,052 values in place of 1,024, the keys of one
+  stream 1.05 MB in place of 0.52 MB and the address map 25.2 MB in place of 12.6 MB.
 
 ```python
 import numpy as np
