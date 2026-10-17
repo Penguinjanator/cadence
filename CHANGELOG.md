@@ -162,6 +162,19 @@
   address, the map's outputs and a reward eligibility hold `2 * code + actions` values in
   place of `code` (`Recall.address_width`); the values and nexts stay the events. A
   checkpoint carries the ended marks and the previous events and commands where they apply.
+- The recall memory's window key, opt-in: `recall_window` k above 1 (construction, with
+  `recall_window_decay` d in (0, 1], founders 1 and 1.0) makes every key an ordered window
+  of the stream's last k events, `[heard * x_t, d * heard * x_(t-1), ..., d^(k-1) * heard *
+  x_(t-k+1)]`, each position on coordinates of its own, so that where an event recurs with
+  different continuations a moment finds the occurrences whose recent history matches its
+  own. Every moment the stream hears enters the window (acts and moments `wait` senses,
+  written or not); it holds zeros before a stream's first moment and after an episode ends,
+  under either `recall_episodes`. `recall_context` adds its sum on the present event's block
+  as before, and the predecessor key's blocks follow the window's. The keys, the address,
+  the map's outputs and a reward eligibility take `k` times the code's width (`Recall.past`
+  holds the previous events); values and nexts stay the events. A checkpoint carries the
+  window's events and refuses a window of another length. The binding instrument's index
+  memory takes the same genes, `window` and `window_decay`.
 - A sparse pattern separator, opt-in: `PatternSeparator(..., fan_in=k)` lets each code
   neuron read `k` distinct inputs chosen at random from its seed, with random weights, held
   as `index` and `weight` arrays of shape `(expansion, k)` in place of the dense

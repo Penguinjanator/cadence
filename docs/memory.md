@@ -282,6 +282,22 @@ keeps it ([genes](api.md#recall-memory-genes)):
   at camera width with a code of 1,024 units, cortex values, an association region of 512
   neurons and four actions, a key holds 2,052 values in place of 1,024, the keys of one
   stream 1.05 MB in place of 0.52 MB and the address map 25.2 MB in place of 12.6 MB.
+- **The window key** (`recall_window` k, with `recall_window_decay` d; construction). The
+  founder's key holds the present event alone (with `recall_context`, a fading sum that loses
+  the order), so where an event recurs with different continuations the read returns a
+  mixture of every occurrence's successor. With k above 1 every key is an ordered window of
+  the stream's last k events, `[heard * x_t, d * heard * x_(t-1), ..., d^(k-1) * heard *
+  x_(t-k+1)]`, each position on coordinates of its own: the events of the stream's previous
+  moments, acts and moments `wait` senses, written or not, zeros before its first moment and
+  after an episode ends (with `recall_episodes="keep"` the window restarts too). A moment
+  then finds the occurrences whose recent history matches its own. `recall_context` adds its
+  sum on the present event's block as before, and the predecessor key's blocks follow the
+  window's. The keys of every slot, the address, the map's outputs and a reward eligibility
+  take `k` times the code's width (plus the predecessor's blocks), and each read's products
+  grow alike: a window of 4 at camera width with a code of 1,024 units and cortex values
+  holds 4,096 values per key, the keys of one stream 2.1 MB in place of 0.52 MB and the
+  address map 50.4 MB in place of 12.6 MB. The values, nexts and the two regions keep their
+  width.
 
 ```python
 import numpy as np
