@@ -288,6 +288,13 @@ def _load_code(
             raise ValueError("saved code tables require code metadata")
         return None
     fields = {"inputs", "expansion", "winners", "seed", "center", "fan_in", "cover", "cortex"}
+    if isinstance(spec, dict) and set(spec) == fields - {"cover"}:
+        # a code saved before the covering construction drew signed weights independently;
+        # this version neither builds such a code nor reads one
+        raise ValueError(
+            "the saved code lacks the covering construction's field, cover: it was saved "
+            "before the covering code and cannot be loaded by this version"
+        )
     if not isinstance(spec, dict) or set(spec) != fields or not isinstance(spec["cortex"], bool):
         raise ValueError("invalid saved code metadata")
     for name in ("inputs", "expansion", "winners", "seed", "fan_in", "cover"):

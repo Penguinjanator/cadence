@@ -1142,11 +1142,13 @@ that recursive benefit or automatic reflective behavior has been learned.
     recall memory's key widths are checked against the code's, and a mismatch is refused
     naming both widths, as are a code under another format name, that name without one, and
     tables that do not read distinct channels or do not read every channel, the ON and the
-    OFF channel of each input, twice with positive weights. A memory keyed on the code has
-    its key coordinates bounded by the code's width (with the motor neurons for the context
-    records), which can exceed the graph's neurons, and its outputs by the graph. A brain
-    keyed on its observation writes the earlier formats unchanged, and a checkpoint saved
-    before this release loads keyed on its observation as it was saved.
+    OFF channel of each input, twice with positive weights. A code saved before the covering
+    construction (its metadata without `cover`) is refused with a message naming that cause.
+    A memory keyed on the code has its key coordinates bounded by the code's width (with the
+    motor neurons for the context records), which can exceed the graph's neurons, and its
+    outputs by the graph. A brain keyed on its observation writes the earlier formats
+    unchanged, and a checkpoint saved before this release loads keyed on its observation as
+    it was saved.
     The archive is replaced atomically. A learner-only checkpoint
     is rejected by `Brain.load`; `Learner.load` can extract a learner from either.
   Observations must be a nonempty finite batch, with image dimensions flattened per row.

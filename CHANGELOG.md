@@ -28,9 +28,10 @@
   mismatch naming both widths, as it refuses place and context records keyed on other
   coordinates than the brain's, bounds a memory's key coordinates by the code's width (which
   can exceed the graph's neurons) and its outputs by the graph, and refuses code tables that
-  do not read every channel twice with positive weights. Every brain without `code` is
-  byte-identical at 4, 256 and 2,000 inputs and on an image shape, the checkpoint included
-  at 4 and 2,000 inputs and on the image
+  do not read every channel twice with positive weights, and a code saved before the
+  covering construction, whose metadata has no `cover`, naming that cause. Every brain
+  without `code` is byte-identical at 4, 256 and 2,000 inputs and on an image shape, the
+  checkpoint included at 4 and 2,000 inputs and on the image
   ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
 - `Brain.compose(inputs, actions, code=units)` makes the sensory region the code: every
   observation is coded before the drive, so 12,824 inputs reach the cortex as 1,024 units

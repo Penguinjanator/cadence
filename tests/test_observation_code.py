@@ -686,6 +686,15 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     def earlier_format(meta, _):
         meta["format"] = "cadence-generic/8"
 
+    def before_the_cover(meta, copy):  # a code saved before the covering construction
+        del meta["code"]["cover"]
+        meta["code"]["fan_in"] = 32
+        signed = cd.PatternSeparator(2_000, 1024, 102, seed=meta["code"]["seed"], fan_in=32)
+        copy["code/index"], copy["code/weight"] = signed.index, signed.weight
+
+    def unknown_field(meta, _):
+        meta["code"]["channels"] = 4_000
+
     def other_coordinates(meta, copy):  # place records keyed on other coordinates of the code
         copy["episodic/pre"] = np.roll(copy["episodic/pre"], 1)
 
@@ -730,6 +739,10 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     for name, mutate, message in (
         ("no_code", no_code, "belongs to checkpoint format cadence-generic/9"),
         ("earlier_format", earlier_format, "belongs to checkpoint format cadence-generic/9"),
+        ("before_the_cover", before_the_cover, "lacks the covering construction's field, "
+                                               "cover: it was saved before the covering code "
+                                               "and cannot be loaded by this version"),
+        ("unknown_field", unknown_field, "invalid saved code metadata"),
         ("other_fan_in", other_fan_in, "32 channels per unit, and keeps one unit in 10"),
         ("other_winners", other_winners, "32 channels per unit, and keeps one unit in 10"),
         # the tables read 4,000 of the 4,002 channels of 2,001 inputs
