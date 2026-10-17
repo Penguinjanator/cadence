@@ -122,6 +122,24 @@ def test_a_reading_changes_no_training_frame_and_every_condition_sees_the_same_f
             np.testing.assert_array_equal(x, y)
 
 
+def test_the_lives_pass_the_index_memorys_options_through() -> None:
+    """Every task's genes carry the options at their founders, and an override reaches the
+    instrument unchanged."""
+    for task in runs.TASKS:
+        genes = runs.genes_for(task, "index")
+        assert {k: genes[k] for k in ("address_step", "write", "null")} == {
+            "address_step": "lms", "write": "always", "null": None,
+        }
+    extra = {"address_step": "toward", "recency": None, "write": "aroused", "null": 0.0}
+    genes = runs.genes_for("continuing", "index", extra)
+    assert {k: genes[k] for k in extra} == extra
+    assert genes["capacity"] == runs.CONTINUING["capacity"]
+    index = runs.ir.IndexMemory(4, 2, 4, genes)
+    assert (index.address_step, index.recency, index.writing, index.null) == (
+        "toward", None, "aroused", 0.0,
+    )
+
+
 # -- the fresh-bindings diagnostic
 
 

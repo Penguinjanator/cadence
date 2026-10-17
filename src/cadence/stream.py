@@ -433,10 +433,11 @@ class Recall:
     at the taught rows, each row at the rate ``min(address, 1 / |z|^2)``; a step whose
     result is not finite is refused. The founder step (``address_step="lms"``) takes the
     error ``K* - q``. With ``address_step="toward"`` the error is ``K* - sum_i p_i K_i``, the
-    named keys less the mixture the address attended to: to first order the step raises the
-    logits of the slots the scores name against those the address attended to, whatever the
-    keys' norms. ``capacity`` bounds the slots per stream, the oldest dropped first.
-    ``reset`` empties streams, and an empty stream reads silence.
+    named keys less the mixture the address attended to (``p`` over the slots alone, a null
+    slot left out, as in the prior): to first order the step raises the logits of the slots
+    the scores name against those the address attended to, whatever the keys' norms.
+    ``capacity`` bounds the slots per stream, the oldest dropped first. ``reset`` empties
+    streams, and an empty stream reads silence.
 
     With ``address_reward`` above zero reward trains the map as well: at each sampled act
     the step the address lesson would take at each row, were the act's action the lesson's
