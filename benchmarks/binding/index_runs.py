@@ -19,6 +19,10 @@ The tasks reuse their instruments' trials, panels and gates function by function
   local pooling units, the brain's observation and the memory's key alike; the slots are
   erased.
 
+At camera width the training frames draw their noise from the training stream's generator
+alone, and each reading panel from one of its own, drawn afresh at every reading: every
+reading and every condition sees the same frames, and a reading changes no training frame.
+
 Arms: ``index`` (the declared genes) and ``heard`` (the same with the address lesson off, the
 address staying the event heard). Nothing here changes the library.
 
@@ -83,6 +87,9 @@ WIDE = {"inputs": 12_824, "patch": 400, "noise": 0.01, "code": 1024, "code_fan_i
         "code_winners": 24, "render_seed": 61221}
 FOUNDERS = tuple(range(6))
 WINDOW = 64  # rounds per entry of the training log
+# the panels the camera-width tasks read; each is rendered with noise of its own, the same at
+# every reading and in every condition, and never drawn from the training stream's
+FRAME_PANELS = ("train", "held_out", "new_name", "three_facts")
 
 
 def genes_for(task: str, arm: str, extra: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -380,14 +387,11 @@ def fresh_lesion(brain: Any, condition: str, donor: np.ndarray) -> None:
 
 
 def fresh_competition(brain: Any, panel: np.ndarray, q: int) -> np.ndarray:
-    """The weight the query moment's address put on the asked fact's slot, per history."""
-    index = brain.index
-    assert index.last is not None
-    address = index.last[2]
-    keys = index.slots.keys[:, :-1]  # the query moment itself was written after its act
-    logits = np.einsum("bk,bmk->bm", address, keys) / index.temperature
-    p = np.exp(logits - logits.max(axis=1, keepdims=True))
-    p /= p.sum(axis=1, keepdims=True)
+    """The weight the query moment's read put on the asked fact's slot, per history: the
+    attention the read used, recency included, as the memory recorded it before the query
+    moment was written."""
+    p = brain.index.attended
+    assert p is not None, "the query moment read the slots"
     asked = np.where(q == 0, panel[:, 2], 1 - panel[:, 2])  # A is first under order 0
     return np.asarray(p[np.arange(len(panel)), asked])
 
@@ -497,7 +501,8 @@ def fresh_life(spec: dict[str, Any]) -> dict[str, Any]:
 
 class Renderer:
     """Each token coordinate a fixed patch of ``patch`` pixels of ``inputs``; an event lights
-    its tokens' patches and, each frame anew, ``noise`` of the other pixels."""
+    its tokens' patches and, each frame anew, ``noise`` of the other pixels. The noise is
+    drawn from ``rng``, the training stream's own generator when none is given."""
 
     def __init__(self, seed: int) -> None:
         rng = np.random.default_rng(np.random.SeedSequence([WIDE["render_seed"], seed]))
@@ -506,13 +511,53 @@ class Renderer:
             self.patches[token, rng.choice(WIDE["inputs"], WIDE["patch"], replace=False)] = 1.0
         self.rng = np.random.default_rng(np.random.SeedSequence([WIDE["render_seed"], seed, 1]))
 
-    def __call__(self, events: list[np.ndarray]) -> list[np.ndarray]:
+    def __call__(
+        self, events: list[np.ndarray], rng: np.random.Generator | None = None
+    ) -> list[np.ndarray]:
+        rng = self.rng if rng is None else rng
         out = []
         for x in events:
             frame = np.minimum(np.asarray(x) @ self.patches, 1.0)
-            noise = self.rng.random(frame.shape) < WIDE["noise"]
+            noise = rng.random(frame.shape) < WIDE["noise"]
             out.append(np.maximum(frame, noise.astype(float)))
         return out
+
+
+def panel_noise(render_seed: int, seed: int, name: str) -> np.random.Generator:
+    """The noise of one reading panel: a generator of its own for the founder and the panel,
+    drawn afresh at every reading, so every reading and every condition sees the same
+    frames and no reading draws from the training stream's generator."""
+    return np.random.default_rng(
+        np.random.SeedSequence([render_seed, seed, 2, FRAME_PANELS.index(name)])
+    )
+
+
+def frame_read(brain: Any, seq: list[np.ndarray], condition: str, n: int) -> np.ndarray:
+    """One condition of a rendered panel on a fork of the life: the events, the lesion, the
+    query's act."""
+    twin = tb.fork(brain)
+    twin.reset()
+    w = tb.new_work()
+    for x in seq[:-1]:
+        tb.act(twin, x, w)
+    erase(twin, condition)
+    out = tb.act(twin, seq[-1], w)
+    return np.full(n, -1) if out is None else out
+
+
+def frame_panels(brain: Any, seed: int, held: np.ndarray, render: Any,
+                 render_seed: int) -> dict[str, Any]:
+    """Every camera-width panel rendered once with its own noise, then each condition read
+    on the same frames."""
+    panels: dict[str, Any] = {}
+    for name, (trials, neutral) in tb.panels(seed, held).items():
+        if name not in FRAME_PANELS:
+            continue
+        truth = tb.answers(trials)
+        seq = render(tb.events(trials, neutral), panel_noise(render_seed, seed, name))
+        panels[name] = {c: tb.accuracy(frame_read(brain, seq, c, len(truth)), truth)
+                        for c in ("intact", "memory_erased", "trace_erased")}
+    return panels
 
 
 def wide_life(spec: dict[str, Any]) -> dict[str, Any]:
@@ -526,31 +571,13 @@ def wide_life(spec: dict[str, Any]) -> dict[str, Any]:
                                 learning_surprise=True)
     work: dict[str, Any] = tb.new_work()
     readings, done, started = [], 0, time.monotonic()
-
-    def read(trials: dict[str, np.ndarray], condition: str, neutral: int) -> np.ndarray:
-        twin = tb.fork(brain)
-        twin.reset()
-        seq = render(tb.events(trials, neutral))
-        w = tb.new_work()
-        for x in seq[:-1]:
-            tb.act(twin, x, w)
-        erase(twin, condition)
-        out = tb.act(twin, seq[-1], w)
-        return np.full(len(trials["query"]), -1) if out is None else out
-
     for budget in spec["budgets"]:
         while done < budget:
             trials = tb.draw(rng, tb.BATCH, held)
             brain.reset()
             episode(brain, render(tb.events(trials)), tb.answers(trials), work)
             done += 1
-        panels: dict[str, Any] = {}
-        for name, (trials, neutral) in tb.panels(seed, held).items():
-            if name not in ("train", "held_out", "new_name", "three_facts"):
-                continue
-            truth = tb.answers(trials)
-            panels[name] = {c: tb.accuracy(read(trials, c, neutral), truth)
-                            for c in ("intact", "memory_erased", "trace_erased")}
+        panels = frame_panels(brain, seed, held, render, int(WIDE["render_seed"]))
         held_row = panels["held_out"]
         gate = (held_row["intact"] >= tb.GATE["held_out"]
                 and held_row["memory_erased"] <= 1.0 / tb.VALUES + tb.GATE["erased_margin"])
@@ -585,11 +612,16 @@ class Camera:
             self.patches[token, (rows[:, None] * c["width"] + cols[None, :]).ravel()] = 1.0
         self.rng = np.random.default_rng(np.random.SeedSequence([c["render_seed"], seed, 1]))
 
-    def __call__(self, events: list[np.ndarray]) -> list[np.ndarray]:
+    def __call__(
+        self, events: list[np.ndarray], rng: np.random.Generator | None = None
+    ) -> list[np.ndarray]:
+        """The frames of ``events``, the noise drawn from ``rng`` or, without one, from the
+        training stream's own generator."""
+        rng = self.rng if rng is None else rng
         out = []
         for x in events:
             frame = np.minimum(np.asarray(x) @ self.patches, 1.0)
-            noise = self.rng.random(frame.shape) < CAMERA["noise"]
+            noise = rng.random(frame.shape) < CAMERA["noise"]
             out.append(np.maximum(frame, noise.astype(float)))
         return out
 
@@ -654,38 +686,22 @@ def camera_life(spec: dict[str, Any]) -> dict[str, Any]:
     if spec.get("generic"):
         retina = GenericCode(camera.inputs, camera.pixels, 1024, 32, int(spec["generic"]), seed)
 
-    def see(events: list[np.ndarray]) -> list[np.ndarray]:
-        return [retina(frame) for frame in camera(events)]
+    def see(
+        events: list[np.ndarray], noise: np.random.Generator | None = None
+    ) -> list[np.ndarray]:
+        return [retina(frame) for frame in camera(events, noise)]
 
     brain = ir.IndexBrain.build(seed, read=spec["genes"], inputs=retina.units,
                                 learning_surprise=True)
     work: dict[str, Any] = tb.new_work()
     readings, done, started = [], 0, time.monotonic()
-
-    def read(trials: dict[str, np.ndarray], condition: str, neutral: int) -> np.ndarray:
-        twin = tb.fork(brain)
-        twin.reset()
-        seq = see(tb.events(trials, neutral))
-        w = tb.new_work()
-        for x in seq[:-1]:
-            tb.act(twin, x, w)
-        erase(twin, condition)
-        out = tb.act(twin, seq[-1], w)
-        return np.full(len(trials["query"]), -1) if out is None else out
-
     for budget in spec["budgets"]:
         while done < budget:
             trials = tb.draw(rng, tb.BATCH, held)
             brain.reset()
             episode(brain, see(tb.events(trials)), tb.answers(trials), work)
             done += 1
-        panels: dict[str, Any] = {}
-        for name, (trials, neutral) in tb.panels(seed, held).items():
-            if name not in ("train", "held_out", "new_name", "three_facts"):
-                continue
-            truth = tb.answers(trials)
-            panels[name] = {c: tb.accuracy(read(trials, c, neutral), truth)
-                            for c in ("intact", "memory_erased", "trace_erased")}
+        panels = frame_panels(brain, seed, held, see, int(CAMERA["render_seed"]))
         held_row = panels["held_out"]
         gate = (held_row["intact"] >= tb.GATE["held_out"]
                 and held_row["memory_erased"] <= 1.0 / tb.VALUES + tb.GATE["erased_margin"])

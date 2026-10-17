@@ -497,6 +497,27 @@ def test_the_address_starts_as_the_event_heard_and_reads_by_competition():
     assert not brain.stimulus(NAME, memory=False)[:, np.r_[first, following]].any()
 
 
+def test_the_memory_records_the_attention_each_read_used():
+    """``attended`` is the attention the latest read used, recency included, kept past the
+    moment's write, read-only; a reset forgets it."""
+    brain = composed()
+    recall = brain.recall
+    assert recall.attended is None
+    for x in (FACT, GO, CUE):
+        brain.act(x, greedy=True)
+    brain.stimulus(NAME)
+    logits = np.einsum("bk,bmk->bm", NAME, recall.keys) / 0.25 - 0.25 * recall.ages()[None]
+    np.testing.assert_allclose(recall.attended, softmax(logits))
+    np.testing.assert_array_equal(recall.attended, recall.weights(recall.last.address))
+    brain.act(NAME, greedy=True)  # the act's own read, then its write
+    assert recall.slots == 4 and recall.attended.shape == (1, 3)
+    np.testing.assert_allclose(recall.attended, softmax(logits))
+    with pytest.raises(ValueError):
+        recall.attended[0, 0] = 0.0
+    brain.reset()
+    assert recall.attended is None
+
+
 def test_capacity_drops_the_oldest_slot_and_recency_charges_age():
     brain = composed(recall_capacity=2)
     for i in range(4):

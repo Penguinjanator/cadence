@@ -158,3 +158,19 @@ outside the repository.
 PYTHONPATH=src python benchmarks/binding/index_runs.py --task camera --out DIR/camera-generic \
   --arms index --seeds 0 1 2 3 4 5 --generic 96 --workers 2
 ```
+
+## Amendment 3, the input schedule, the address step and the attention record (17 October 2026)
+
+Three changes to the instrument; no gene, panel, budget or gate changes.
+
+| Item | Change |
+| --- | --- |
+| input schedule (`wide`, `camera`) | the training frames take their noise from the training stream's generator alone; each reading panel takes noise of its own, drawn afresh from the founder and the panel at every reading, so every reading and every condition (intact, slots erased, trace erased) sees the same frames, and a reading changes no later training frame (`test_index_runs.py`) |
+| address step | each taught row's rate is `min(0.01, 1 / (z . z))` on `z = [x_t, c_{t-1}, 1]`, the rows' steps averaged as before; a step whose map or address is not finite is refused and counted (`address_refused`). The declared tasks' inputs (at most 27 values, or a unit-length code with at most 24 body inputs) and an association region of 64 neurons whose activations lie below one keep `0.01 * (z . z)` below 0.92, so no row of them reaches the bound and the step is the earlier one bit for bit |
+| attention record | the memory keeps the attention each read used (`attended`), recency included, recorded before the moment's write; `fresh_competition` reports it in place of a weight recomputed without the recency charge. The scores and the gates do not read it |
+
+The readings taken before this amendment are kept as measured. In them the reading panels of
+`wide` and `camera` drew their noise from the training stream's generator, so their conditions
+saw different noise and the training after a reading followed that reading's draws; and the
+fresh-bindings `p_asked` and `decided` omit the recency charge. `wide` and `camera` are read
+again under this schedule before their gates are cited.

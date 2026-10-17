@@ -5,8 +5,10 @@ from __future__ import annotations
 import importlib.util
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 HERE = Path(__file__).resolve().parent
 
@@ -60,3 +62,90 @@ def test_a_query_shares_its_facts_code_and_little_else() -> None:
     other = np.where(q[:, None] == 0, codes[1], codes[0])
     assert np.sum(codes[3] * asked, axis=1).mean() > 0.35
     assert np.sum(codes[3] * other, axis=1).mean() < 0.1
+
+
+# -- the input schedule of the camera-width lives
+
+
+def _schedule(monkeypatch, task: str, budgets: list[int], generic: int | None = None):
+    """The frames a life trains on and reads, in order, with the graph and its lessons stubbed
+    and one small panel: the life's own control flow, task draws, renderers and retina run
+    unchanged."""
+    training: list[list[np.ndarray]] = []
+    reading: list[np.ndarray] = []
+
+    class Inert:
+        def reset(self) -> None:
+            pass
+
+    panel = {"held_out": (tb.draw(np.random.default_rng(125), 2, tb.holdout(0),
+                                  queried_held=True), 1)}
+
+    def act(brain, x, work):
+        reading.append(np.asarray(x).copy())
+        return np.zeros(len(x), dtype=int)
+
+    monkeypatch.setattr(runs.ir.IndexBrain, "build", lambda *args, **kwargs: Inert())
+    monkeypatch.setattr(runs.tb, "fork", lambda brain: Inert())
+    monkeypatch.setattr(runs.tb, "panels", lambda seed, held: panel)
+    monkeypatch.setattr(runs.tb, "act", act)
+    monkeypatch.setattr(runs, "erase", lambda *args, **kwargs: None)
+    monkeypatch.setattr(runs, "episode", lambda brain, seq, answer, work: training.append(
+        [x.copy() for x in seq]))
+    spec = {"seed": 0, "task": task, "arm": "index", "budgets": budgets,
+            "genes": runs.genes_for(task, "index")}
+    if generic is not None:
+        spec["generic"] = generic
+    runs.LIVES[task](spec)
+    return training, reading
+
+
+@pytest.mark.parametrize(("task", "generic"), [("wide", None), ("camera", None), ("camera", 96)],
+                         ids=["wide", "camera", "camera_generic"])
+def test_a_reading_changes_no_training_frame_and_every_condition_sees_the_same_frames(
+    monkeypatch, task, generic
+) -> None:
+    """Training and the readings draw their noise from generators of their own: a life read at
+    one round on its way to two trains on the frames of a life read at two alone, and every
+    condition of a panel, at every reading, sees the same frames."""
+    direct, _ = _schedule(monkeypatch, task, [2], generic)
+    trained, read = _schedule(monkeypatch, task, [1, 2], generic)
+    assert len(direct) == len(trained) == 2
+    for first, second in zip(direct, trained, strict=True):
+        for x, y in zip(first, second, strict=True):
+            np.testing.assert_array_equal(x, y)
+    events = 4  # two facts, the neutral event and the query
+    reads = [read[k:k + events] for k in range(0, len(read), events)]
+    assert len(reads) == 2 * 3  # two readings, three conditions each
+    for frames in reads[1:]:
+        for x, y in zip(frames, reads[0], strict=True):
+            np.testing.assert_array_equal(x, y)
+    # the panel's noise is its own: not the training frames' of the same events
+    assert any(not np.array_equal(x, y) for x, y in zip(reads[0], trained[0], strict=False))
+
+
+# -- the fresh-bindings diagnostic
+
+
+def test_the_competition_reports_the_attention_the_read_used() -> None:
+    """Three orthogonal slots, a query that matches none, recency .25: the read weighs the
+    oldest slot .2543, recency included, and the fresh-bindings diagnostic reports that
+    record of the read, taken before the query moment was written."""
+    index = runs.ir.IndexMemory(3, 1, 3, runs.genes_for("fresh", "index"))
+    for k in range(3):
+        index.slots.observe(np.eye(3)[[k]], np.eye(3)[[k]])
+    q = index.address(np.zeros((1, 3)))
+    used = index.weights(q)
+    assert index.attended is None
+    index.read(q)
+    np.testing.assert_array_equal(index.attended, used)
+    index.write(np.zeros((1, 3)), np.zeros((1, 1)))
+    assert index.slots.slots == 4
+    reported = runs.fresh_competition(SimpleNamespace(index=index), np.array([[0, 0, 0]]), 0)
+    np.testing.assert_allclose(reported, [0.2542752125904656], rtol=1e-12)
+    assert reported[0] < 1 / 3  # the weight without the recency charge
+    with pytest.raises(ValueError):
+        index.attended[0, 0] = 1.0
+    index.reset()
+    assert index.attended is None
+

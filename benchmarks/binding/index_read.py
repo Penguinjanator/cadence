@@ -204,12 +204,20 @@ class IndexMemory:
         self.context_decay = float(genes["context_decay"])
         # (x, c, q, k) of the present moment: event, cortex before it, address, key
         self.last: tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None = None
+        self._attended: np.ndarray | None = None  # the attention of the latest read
+
+    @property
+    def attended(self) -> np.ndarray | None:
+        """The attention the latest read used over each stream's slots, recency included,
+        recorded before the moment's write; read-only, None before a read."""
+        return self._attended
 
     def reset(self) -> None:
         self.slots.reset(0)
         self.previous = np.zeros((0, self.cortex_width))
         self.history = np.zeros((0, self.slots.key_width))
         self.last = None
+        self._attended = None
 
     def address(self, x: np.ndarray) -> np.ndarray:
         """The address of the present moment of each stream; kept for its write and lesson.
@@ -240,8 +248,12 @@ class IndexMemory:
         return np.asarray(p / p.sum(axis=1, keepdims=True))
 
     def read(self, q: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
-        """The recalled value and next of each stream: ``sum_i p_i V_i``, ``sum_i p_i N_i``."""
+        """The recalled value and next of each stream: ``sum_i p_i V_i``, ``sum_i p_i N_i``;
+        the attention ``p`` stays as ``attended``."""
         p = self.weights(q)
+        if p is not None:
+            p.flags.writeable = False
+        self._attended = p
         if p is None:
             return None
         memory = self.slots

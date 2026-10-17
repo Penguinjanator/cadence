@@ -542,6 +542,7 @@ class Recall:
         self._recall_synapses = self._synapses(self.recall_neurons)
         self._next_synapses = self._synapses(self.next_neurons)
         self.last: _Moment | None = None
+        self._attended: np.ndarray | None = None  # the attention of the latest read
         self._private = False  # an imagined branch reads the slots and writes none
         self.reset(0)
 
@@ -565,6 +566,13 @@ class Recall:
         """Moments since each slot was written: ``slots - 1`` for the oldest, 0 the latest."""
         return np.arange(self.slots - 1, -1, -1, dtype=float)
 
+    @property
+    def attended(self) -> np.ndarray | None:
+        """The attention ``p`` the latest read gave each stream's slots, ``(streams, slots)``,
+        as that read used it (recency included) and before the moment was written, read-only;
+        None before a read, when the read found no slots, and once the streams changed."""
+        return self._attended
+
     def _empty(self, batch: int) -> None:
         self.keys = np.zeros((batch, 0, self.key_width))
         self.values = np.zeros((batch, 0, self.value_width))
@@ -573,6 +581,7 @@ class Recall:
         self.previous = np.zeros((batch, len(self.association)))
         self.history = np.zeros((0, self.key_width))
         self.last = None
+        self._attended = None
 
     def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
         """Empty every stream, or the streams of ``rows`` only (streams that begin again): their
@@ -604,6 +613,7 @@ class Recall:
         if len(self.history) == batch:
             self.history = np.where(keep[:, None], self.history, 0.0)
         self.last = None
+        self._attended = None
 
     def keep(self, rows: np.ndarray) -> None:
         """Keep the memories of ``rows`` only (streams that ended are dropped)."""
@@ -614,6 +624,7 @@ class Recall:
         if len(self.history):
             self.history = self.history[rows]
         self.last = None
+        self._attended = None
 
     def snapshot(self) -> dict[str, Any]:
         """The per-stream state, to restore after a refused operation; every write replaces
@@ -628,6 +639,7 @@ class Recall:
         for name, value in snapshot.items():
             setattr(self, name, value)
         self.last = None
+        self._attended = None
 
     def imagined(self) -> Recall:
         """A private copy for an imagined branch: it reads the live slots and writes none; the
@@ -636,6 +648,7 @@ class Recall:
         branch.previous = self.previous.copy()
         branch.history = self.history.copy()
         branch.last = None
+        branch._attended = None
         branch._private = True
         return branch
 
@@ -698,11 +711,14 @@ class Recall:
         ``amplitude * sum_i p_i V_i`` on the recall region and, with ``next``,
         ``amplitude * sum_i p_i N_i`` on the next region. ``observations`` are ``(batch,
         inputs)``. Streams without slots, or of another batch, read silence. The moment is
-        kept for its write and its lesson."""
+        kept for its write and its lesson, and the attention the read used as ``attended``."""
         moment = self._moment(self._port(observations))
         self.last = moment
         out = np.array(drive, dtype=float)
         p = self.weights(moment.address)
+        if p is not None:
+            p.flags.writeable = False
+        self._attended = p  # the attention this read uses, kept past the moment's write
         if p is not None:
             out[:, self._recall_columns] = self.amplitude * np.einsum("bm,bmc->bc", p, self.values)
             if self.next:
