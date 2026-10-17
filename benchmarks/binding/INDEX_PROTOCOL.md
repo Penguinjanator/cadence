@@ -191,3 +191,105 @@ this amendment.
 | readings | `wide` and the camera task with the generic code (`--generic 96`) are read again on this code before their gates are cited; the camera task's retina does not read the code |
 
 The readings taken before this amendment are kept as measured.
+
+## Amendment 5, four options of the memory (17 October 2026)
+
+Declared before the first run of any of them. The memory gains four options, each a gene whose
+founder value is the `index` arm's, so every reading declared above is unchanged. The library's
+held-input memory carries the same options as settings.
+
+| Option | Gene (founder) | Definition |
+| --- | --- | --- |
+| address step | `address_step` (`"lms"`) | `"toward"`: the lesson's error is `K* - sum_i p_i K_i`, the named keys less the attended ones, in place of `K* - q_t`. To first order a step `s (K* - K_bar)` raises the named slots' logits against the attended ones by `s |K* - K_bar|^2 / T`; the error `K* - q_t` gives no such guarantee once the address lies away from the keys |
+| recency | `recency` (0.25) | `None`: each slot's logit is lowered by `r log(1 + age_i)`, `r = heard^2 / T / log(1 + capacity)`: a full match of a unit-length key outweighs the age of every slot the capacity holds, and of two equal matches the younger keeps the larger weight by the factor `(1 + a_old)^r / (1 + a_young)^r` |
+| writes | `write` (`"always"`) | `"aroused"`: a moment is written only for the rows whose act was sampled, or that the caller marks aroused |
+| null slot | `null` (none) | a number: a slot with logit `null / T` joins the read and reads nothing; the slots' weights sum to one minus its share |
+
+Under reward the library's memory also offers `address_reward` (0, off): each sampled act's
+address step, the step a lesson naming that act would take, joins an eligibility trace, and the
+temporal-difference error steps the map along it. This instrument teaches by lessons and does
+not read it.
+
+### Arms
+
+| Arm | Genes |
+| --- | --- |
+| `index` | as declared: the control, read again on this instrument's code |
+| `toward` | `index` with `address_step="toward"` |
+| `horizon` | `index` with `recency=None` and capacity 64 (12 in the continuing task) |
+| `null` | `index` with `null` at half the logit of a full match of a unit-length key: `heard^2 / 2`, 0.5 (1.125 in the camera task) |
+| `improved` | `index` with `address_step="toward"`, `recency=None`, capacity 64 (12 in the continuing task) and `null` at `heard^2 / 2` |
+
+### Component probes
+
+`memory_probes.py` on founders 0 to 5, untrained, capacity 64, one-hot events of unit length:
+what the next moment attends to, before it is written.
+
+| Probe | Arms | Gate, on every founder |
+| --- | --- | --- |
+| age | `index`, `horizon`, `improved` | `horizon`, `improved`: the target holds the largest of the slots' weights at every age to 63 of 64; `index` reported |
+| repeat | `index` with `write="aroused"` (the fact aroused, the questions calm), `index` | aroused writes: the fact holds at least .9 at every ask (1 to 8); `index` reported |
+| no match | `index`, `null`, `improved` | `null`, `improved`: the null share at least .5 at the unrelated event and at the all-zero event; every arm: no slot above .5 |
+| successor | every arm | known successor: cosine at least .8; unknown: norm at most a quarter of the known one's |
+| density | every arm | no refused settle or lesson; every parameter finite |
+
+### Binding chambers
+
+Development founders 0 to 5; the tasks, budgets, gates and development pass counts declared
+above. `named` is the fresh-bindings task with both facts' bits on shared coordinates
+(`named_bindings.py`: the question shares nothing with either fact, and an even mixture of the
+two facts cannot answer a bit where they differ), read through the fresh runner at 512, 2048
+and 4096 rounds with the fresh gate, development 4 of 6.
+
+| Arm | Tasks |
+| --- | --- |
+| `index` | token, succession, fresh, named, continuing, chain |
+| `toward` | token, succession, fresh, named, continuing, chain |
+| `horizon` | token, succession, continuing |
+| `null` | token, fresh, named |
+| `improved` | token, succession, fresh, named, continuing, chain, camera with the generic code |
+
+### Selection and confirmation
+
+An option is selected as a library founder when, on the development founders: (i) every task
+the `index` arm passes at its development count, the option's arm passes too; (ii) on no task
+does its mean held-out score over the founders at the last budget fall more than .05 below the
+`index` arm's (token: also its `long_delay` and `restated` panels); (iii) its probe gate holds
+on every founder. `chain` is read and reported; its gate decides nothing here. The selected
+options are confirmed together, as the `improved` arm less the options not selected, on founders
+400 to 411 with the same tasks, budgets and gates (10 of 12; `fresh` and `named` 8 of 12) and
+the same comparison with the `index` arm. A selected option becomes a founder only with the
+witnesses of the worlds, which are declared with their own instruments.
+
+### Declared expectations
+
+- `toward`: within the founders' spread of the `index` arm on every task, at least as fast on
+  `named`.
+- `horizon`: the age probe passes (it follows from the charge for unit-length keys); `restated`
+  at or above the `index` arm's (ages one and three differ by `r log 2`, .66 at capacity 64,
+  against .5 under the linear charge); `continuing` at the gate.
+- `null`: the chambers hold; a full match keeps all but about a tenth of its weight.
+- `improved`: the chambers hold, `camera` at the gate.
+- `chain`: below the gate for every arm, as declared for the `index` arm.
+
+### Commands
+
+```sh
+for task in token succession fresh named continuing chain; do
+  PYTHONPATH=src python benchmarks/binding/index_runs.py --task $task --out DIR/$task \
+    --arms index toward improved --seeds 0 1 2 3 4 5 --workers 2
+done
+for task in token succession continuing; do
+  PYTHONPATH=src python benchmarks/binding/index_runs.py --task $task --out DIR/$task-horizon \
+    --arms horizon --seeds 0 1 2 3 4 5 --workers 2
+done
+for task in token fresh named; do
+  PYTHONPATH=src python benchmarks/binding/index_runs.py --task $task --out DIR/$task-null \
+    --arms null --seeds 0 1 2 3 4 5 --workers 2
+done
+PYTHONPATH=src python benchmarks/binding/index_runs.py --task camera --out DIR/camera \
+  --arms improved --seeds 0 1 2 3 4 5 --generic 96 --workers 2
+PYTHONPATH=src python benchmarks/binding/memory_probes.py --out DIR/probes.json \
+  --seeds 0 1 2 3 4 5 --arms '{"index": {}, "horizon": {"recency": null}, "null": {"null": 0.5},
+  "improved": {"address_step": "toward", "recency": null, "null": 0.5}}'
+```
