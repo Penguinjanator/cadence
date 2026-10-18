@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.84.0 — 2026-10-18
 
 - Memories key on the observation code: `Brain.observation_code(x)` is what the episodic
   memory (place and context records), the hippocampus of earlier releases and the recall
