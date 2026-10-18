@@ -260,7 +260,10 @@ keeps it ([genes](api.md#recall-memory-genes)):
   step (`address_reward_step`). The eligibility is a lesson's step, taken at the lesson's
   bounded rate `min(recall_address, 1 / |z|^2)`, so at `recall_address_reward` 1.0 a unit of
   dopamine moves the map by one lesson's step, and `recall_address=0` leaves the map as it is
-  under reward too.
+  under reward too. A calm `live` moment that ends the episode forecasts the next moment on
+  the stream as the end leaves it, and the new episode's first act keeps the forecast's read:
+  its eligibility is the read's and `attended` describes it, as after a fresh read of the same
+  stream.
 - **Kept episodes** (`recall_episodes="keep"`). When a stream's episode ends (`done` through
   `step`, `learn` or `live`, and a calm `live` moment that ends it), the founder `"forget"`
   empties its slots with its working trace, efference copy and heard history. With `"keep"`

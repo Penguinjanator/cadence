@@ -629,7 +629,9 @@ and a complete runnable example.
   `values` and `nexts` (`(streams, slots, width)`), `held` (`(streams, slots)`, false for a
   slot written before its stream began again), `previous`, `history`, `ended`, `before`,
   `command`, `past`, and the map `w_x`, `w_c` and `b`.
-  `reset(batch, rows=None)`, `keep(rows)`, `snapshot()` and `restore(snapshot)`,
+  `reset(batch, rows=None)`, `keep(rows)`, `snapshot()` and `restore(snapshot)`, `reading()`
+  and `hold(reading)` (the latest read, held through an end or a restore it was taken
+  before),
   `imagined()` (a copy that reads the live slots and writes none), `founders()` (the genes a
   memory always describes), `options()` (the founders of `OPTIONS`: `address_step`, `write`,
   `null`, `address_reward`, `episodes`, `key`, `window` and `window_decay`, which a memory

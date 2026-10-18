@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- A calm `live` moment that ends the episode keeps its forecast's read of the recall memory
+  through the end it commits. The first act of the new episode, sampled by a brain the
+  outcome woke, keeps the read's address eligibility under `recall_address_reward` and its
+  next outcome steps the address map; a greedy act keeps no eligibility; for both,
+  `brain.recall.attended` describes the read. Before, the read was cleared with the
+  forecast's restore and the sampled act kept an eligibility of zero. A refused outcome
+  leaves the read cleared. A brain without the recall memory, or whose address map does not
+  learn by reward, acts, learns and saves as in 0.84.1.
+
 ## 0.84.1 — 2026-10-18
 
 - A lesson under `learning_surprise` judges its rows by the act the brain would issue, the
