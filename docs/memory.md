@@ -229,10 +229,14 @@ keeps it ([genes](api.md#recall-memory-genes)):
   are the founder's.
 - **A power-law age charge** (`recall_recency=None`). A slot's logit is lowered by
   `r * log(1 + age)`, `r = heard^2 / temperature / log(1 + capacity)`: the weight of an
-  unmatched old slot falls as a power of its age, `(1 + age)^-r`, two equal matches at ages
-  1 and 3 keep weights in the ratio `2^r`, and a full match of a unit-length key outweighs
-  the age of every slot the capacity holds. `brain.recall.charges()` gives each slot's
-  charge; a number keeps the linear charge `recency * age`.
+  unmatched old slot falls as a power of its age, `(1 + age)^-r`, and two equal matches at
+  ages 1 and 3 keep weights in the ratio `2^r`. The exponent is set so that a full match of
+  a unit-length key outweighs the age of every slot the capacity holds. Where a query
+  matches its stored moment only in part, the charge on young slots can outweigh that
+  partial match, so the linear default suits codes whose queries match in part and the
+  power-law charge suits keys that match fully over long spans.
+  `brain.recall.charges()` gives each slot's charge; a number keeps the linear charge
+  `recency * age`.
 - **Aroused writes** (`recall_write="aroused"`). A moment is written when its act was
   chosen aroused, which is the act's own flag: a sampled act (`step`, `act`, an aroused
   `live` moment) writes, a greedy act (`act(..., greedy=True)`, a calm `live` moment)
