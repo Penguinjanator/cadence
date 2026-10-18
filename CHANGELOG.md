@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.84.1 — 2026-10-18
 
 - A lesson under `learning_surprise` judges its rows by the act the brain would issue, the
   readout with the episodic vote, so a demonstration corrects a brain whose memory turns a
