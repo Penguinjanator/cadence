@@ -2537,7 +2537,11 @@ class Brain:
                 if ended[0] and self.history is not None:
                     self.history.reset(1, rows=np.array([0]))
                 if ended[0] and self.recall is not None:
+                    # the forecast read the stream as this end leaves it; its read is held
+                    # through the end as the moment's, for the act's eligibility and write
+                    reading = self.recall.reading()
                     self._end_recall(1, np.array([0]))
+                    self.recall.hold(reading)
                 # a moment without eligibility has passed: the credit of earlier sampled
                 # actions fades as it does between two outcomes that are learned from
                 agent.fade(ended)
@@ -2741,7 +2745,9 @@ class Brain:
     def _forecast(self, x: np.ndarray, ended: bool) -> tuple[np.ndarray, BrainState]:
         """Read the next value without changing the stream. A finished episode's
         forecast starts from rest and fresh traces; accepting its outcome commits
-        that reset, so a refused forecast or arousal update preserves feedback."""
+        that reset, so a refused forecast or arousal update preserves feedback. The
+        recall memory's read of the ended stream stays the forecast's past the restore
+        (``Recall.hold``): the act the forecast decides keeps the read's eligibility."""
         agent = self.basal_ganglia
         if not ended:
             return self._settled(x)
@@ -2754,13 +2760,17 @@ class Brain:
         if self.history is not None:
             traces.append((self.history, {"trace": self.history.trace.copy()}))
         recalled = None if self.recall is None else self.recall.snapshot()
+        reading = None
         try:
             for trace, _ in traces:
                 trace.reset(1, rows=np.array([0]))
             if self.recall is not None:
                 self._end_recall(1, np.array([0]))
             agent._free = None
-            return self._settled(x)
+            answer = self._settled(x)
+            if self.recall is not None:
+                reading = self.recall.reading()  # of the ended stream, as the forecast read it
+            return answer
         finally:
             agent._free, agent._free_brain, agent._drive = kept
             for trace, values in traces:
@@ -2768,6 +2778,8 @@ class Brain:
                     setattr(trace, name, value)
             if self.recall is not None and recalled is not None:
                 self.recall.restore(recalled)
+                if reading is not None:
+                    self.recall.hold(reading)
 
     # -- lower-level interaction operations
 

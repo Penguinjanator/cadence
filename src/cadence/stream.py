@@ -826,6 +826,20 @@ class Recall:
         self.last = None
         self._attended = None
 
+    def reading(self) -> tuple[_Moment | None, np.ndarray | None]:
+        """The latest read as ``witness``, ``learn`` and ``contrast_rows`` take it: the moment
+        it addressed (``last``, None once the moment is written) and the attention it gave the
+        slots (``attended``). ``restore``, ``end`` and ``reset`` address the next moment
+        afresh; a read taken on the state they leave is held through them with ``hold``."""
+        return self.last, self._attended
+
+    def hold(self, reading: tuple[_Moment | None, np.ndarray | None]) -> None:
+        """Hold a ``reading`` as the latest read: one taken on the state the streams are in.
+        A forecast at an episode's end reads the streams as the end leaves them before the
+        end is committed; once it is, that read is the moment's, so the act it decides keeps
+        the read's eligibility and ``attended`` describes it."""
+        self.last, self._attended = reading
+
     def imagined(self) -> Recall:
         """A private copy for an imagined branch: it reads the live slots and writes none; the
         cortex of the moment before and the history follow the branch."""
