@@ -2301,7 +2301,10 @@ class Brain:
         Reward/done describe the preceding action; an omitted reward means no
         reward event on a real transition (zero), not an unknown outcome. Wait for
         the issued action to finish before the next call. ``teacher`` labels the
-        current observation. The first
+        current observation. The reward is credited to the action ``step`` issued:
+        where a teacher's or caregiver's action ran in its place, teach that action
+        with ``lesson(observations, labels)`` and do not report its reward to
+        ``step``, since that reward would credit an action that did not run. The first
         call has no previous action to reward. Later calls retain the batch's row
         identities; call ``reset`` before starting different streams. Salience is
         nonnegative, per row, and defaults to absolute reward for consolidation.

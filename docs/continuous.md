@@ -39,6 +39,12 @@ Reward and `done` describe the **previous action**. `teacher=` labels the
 have shape `(streams, inputs)`. Keep the same stream in each batch row until
 `reset()`. The first call has no preceding action to reward.
 
+The reward is credited to the action `step` issued: where a teacher's or
+caregiver's action ran in its place, teach that action with
+`brain.lesson(observations, labels)` and do not report its reward to `step`.
+That reward would credit an action that did not run, and over many shown moments
+such rewards can saturate the motor readout on one command.
+
 For an ended row, pass its next episode's reset observation with `done=True`.
 A truncation can supply a final value through `bootstrap`. Omitted reward means
 zero reward on an actual transition, not an unknown outcome or permission to

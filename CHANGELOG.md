@@ -10,6 +10,11 @@
   calm `live` answer was taught before its outcome, or after `step(..., teacher=...)` taught
   and its act refused. `save` writes what it wrote before, so such a checkpoint written by an
   earlier release loads too; a saved drive is still checked against the free state.
+- `Brain.step`, the continuous-interaction guide and the learning guide say where the reward
+  of a demonstrated action belongs: the reward given to `step` is credited to the action
+  `step` issued, so where a teacher's or caregiver's action ran in its place, teach that
+  action with `lesson(observations, labels)` and do not report its reward to `step`, since
+  that reward would credit an action that did not run.
 
 ## 0.84.2 — 2026-10-18
 
