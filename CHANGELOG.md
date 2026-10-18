@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.84.2 — 2026-10-18
 
 - A calm `live` moment that ends the episode keeps its forecast's read of the recall memory
   through the end it commits. The first act of the new episode, sampled by a brain the
