@@ -2352,8 +2352,9 @@ class Brain:
         address lesson follows at the taught rows. A row the brain would answer as shown is
         no surprise and gets no lesson, also where its episodic memory turns a wrong cortical
         answer into the right act: consolidating the cortex under an answer the memory
-        supports is another objective than teaching by surprise. An episodic memory that
-        remembers demonstrations records the taught rows. Returns the teaching report (with a
+        supports is another objective than teaching by surprise, and a lesson-only curriculum
+        leaves the cortex untaught on those rows. An episodic memory that remembers
+        demonstrations records the taught rows. Returns the teaching report (with a
         recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too), which
         ``last_learning`` holds with the ``demonstration_`` prefix; a refused phase raises
         ``LearningPhaseError`` and leaves the parameters and memories as they were. The next
@@ -3017,10 +3018,11 @@ class Brain:
         decision's own temporal key (``_decision_key``, read before the decision moves the
         context on), joins the readout before each slot's softmax and the most probable
         action is taken, as ``_choose`` and ``ActorCritic.act`` do for a greedy act; without
-        it the choice is the most active motor neuron of every slot. Pure: the records are
-        read and nothing changes. The surprise lesson judges by this choice, ``live`` decides
-        from it whether an issued action was the brain's own best guess, and an imagined
-        branch issues it."""
+        it the choice is the most active motor neuron of every slot, the readout's argmax as
+        0.84.0 read it, which differs from a greedy act's softmax argmax only at an exact tie
+        of two motor activations. Pure: the records are read and nothing changes. The
+        surprise lesson judges by this choice, ``live`` decides from it whether an issued
+        action was the brain's own best guess, and an imagined branch issues it."""
         if not self.memory_choice or self.hippocampus is None:
             return self._choices(state)
         p = self.basal_ganglia.probabilities(state, bias=self._vote(code, key))

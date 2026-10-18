@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased: bugfix for the episodic memory's greedy choice and replay boundaries
+## Unreleased
 
 - A lesson under `learning_surprise` judges its rows by the act the brain would issue, the
   readout with the episodic vote, so a demonstration corrects a brain whose memory turns a

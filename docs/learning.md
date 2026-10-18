@@ -321,8 +321,9 @@ taught rows only.
 With an [episodic memory that votes in the choice](episodic.md#one-choice-for-acting-teaching-and-imagining)
 the act includes the vote: a lesson corrects a brain whose memory turns a right cortical answer
 into a wrong act, and an answer the memory makes right is no surprise and gets no lesson.
-Consolidating the cortex under an answer the memory supports is a separate objective, not part
-of surprise teaching.
+A lesson-only curriculum thus leaves the cortex untaught on the rows the memory carries; the
+cortex learns them from the outcomes of its own acts. Consolidating the cortex under an answer
+the memory supports is an objective of its own, outside surprise teaching.
 
 The rule is the teaching form of surprise: a demonstration of what the net would have done
 carries no lesson. Select it where a readout saturates under repeated lessons on cases it

@@ -46,8 +46,8 @@ reward beyond what was expected ─► replay: the decisions on the recent path,
 - **Replay.** A reward replays the stream's recent path backwards, up to `memory_replay`
   decisions. The path keeps one decision per situation, the one that left it: an action that
   left the situation unchanged is not on the path and is not credited. A decision whose own
-  outcome was known stays on the path, also when the next decision is taken in the same
-  situation. Replay runs through the decisions whose own outcome was nothing and stops at the
+  outcome was a reward or a punishment stays on the path, also when the next decision is taken
+  in the same situation. Replay runs through the decisions whose own outcome was nothing and stops at the
   last decision whose outcome was known, a reward or a punishment: outcomes bound the episode,
   so nothing has to mark the end of an attempt. Each replayed decision gains credit discounted
   by the actor's `gamma` per step, up to the discounted reward, and replay only ever adds
@@ -84,8 +84,10 @@ temporal context.
 - **A lesson only where the answer differs** (`learning_surprise=True`) judges a row by the act
   the brain would issue. A demonstration corrects a brain whose memory turns a right cortical
   answer into a wrong act. An answer the memory makes right is no surprise and gets no lesson:
-  no update of the cortex and no recorded demonstration. Consolidating the cortex under an
-  answer the memory supports is a separate objective, not part of surprise teaching.
+  no update of the cortex and no recorded demonstration. A lesson-only curriculum thus leaves
+  the cortex untaught on the rows the memory carries; the cortex learns them from the outcomes
+  of its own acts. Consolidating the cortex under an answer the memory supports is an objective
+  of its own, outside surprise teaching.
 - **Surprise in a continuing life** (`live`): only the outcome of the brain's own best guess
   can surprise it, and its own best guess is the act it would issue greedily, read when the
   action is issued. A greedy act the vote decided is its own, and its outcome counts.
