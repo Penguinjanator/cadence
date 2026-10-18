@@ -1654,13 +1654,14 @@ class Brain:
         ``memory_decay`` (0.9) per later write, and consolidates into the record every stream
         shares and resets keep at ``consolidation`` (0.05). A reward is replayed backwards
         along the stream's recent path (``memory_replay`` steps, 8; one decision per
-        situation, the one that left it), through the decisions whose own outcome was
-        nothing, back to the last known outcome, discounted per step and up to the discounted
-        reward. A reward that ends an attempt (``done``) is replayed whole into both kinds of
-        record. In a continuing life a reward is replayed in proportion to its surprise, the
-        reward less what the memory expected of the paid decision: into each decision's
-        context record, and into its place record as far as it was an exploration rather than
-        the brain's best guess. Nothing has to mark the end of an attempt. Keys are separated
+        situation, the one that left it, while a decision whose own outcome was known stays
+        on the path), through the decisions whose own outcome was nothing, back to the last
+        known outcome, discounted per step and up to the discounted reward. A reward that
+        ends an attempt (``done``) is replayed whole into both kinds of record. In a
+        continuing life a reward is replayed in proportion to its surprise, the reward less
+        what the memory expected of the paid decision: into each decision's context record,
+        and into its place record as far as it was an exploration rather than the brain's
+        best guess. Nothing has to mark the end of an attempt. Keys are separated
         (``memory_expansion`` 1,024 cells, ``memory_winners`` 24; a coded brain keys on its
         code as it is, with no separation). ``memory_fan_in`` above zero makes the separation
         sparse: each of its cells reads that many of the key's values, chosen at random, so
@@ -3066,7 +3067,9 @@ class Brain:
         """Add each stream's decision to its recent path; ``x`` is the observation code. A
         decision taken on the code of the stream's previous decision replaces it: that
         decision left the situation as it was, and only the decision that leaves a situation
-        lies on the path onwards."""
+        lies on the path onwards. A previous decision whose own outcome was known, a reward
+        or a punishment, stays on the path: it bounds what a later reward replays, whatever
+        is decided after it in the same situation."""
         if len(self._paths) != len(x):
             self._paths = [[] for _ in range(len(x))]
         for row, path in enumerate(self._paths):
@@ -3078,7 +3081,9 @@ class Brain:
                 False,
                 float(guess[row]),
             )
-            if path and np.array_equal(path[-1][2], entry[2]):
+            # the replay stops at a received outcome that is not nothing
+            bound = bool(path) and path[-1][4] and path[-1][3] != 0.0
+            if path and not bound and np.array_equal(path[-1][2], entry[2]):
                 path[-1] = entry
             else:
                 path.append(entry)

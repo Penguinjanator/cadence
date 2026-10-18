@@ -1,9 +1,11 @@
-"""The episodic memory's complete greedy policy.
+"""The episodic memory's complete greedy policy and the outcome boundaries of its replay.
 
 With ``memory_choice`` a greedy act is the readout with the episodic vote. A lesson under
 ``learning_surprise`` judges a row by that act, ``live`` decides from it whether an issued action
 was the brain's own best guess, and an imagined branch issues it to its efference copy and the
-recall memory's predecessor key.
+recall memory's predecessor key. A replay path keeps a decision whose outcome was a reward or a
+punishment when the next decision is taken in the same situation, so a later reward replays only
+the decisions taken since that outcome.
 """
 
 from __future__ import annotations
@@ -34,6 +36,12 @@ def assert_same_checkpoint(first, second):
             np.testing.assert_array_equal(a[name], b[name], err_msg=name)
 
 
+def path(brain: cd.Brain) -> list[tuple[int, float, bool]]:
+    """The stream's replay path: each decision's observation, its outcome and whether the
+    outcome was received."""
+    return [(int(np.argmax(entry[2])), entry[3], entry[4]) for entry in brain._paths[0]]
+
+
 def cued(seed: int, **options) -> tuple[cd.Brain, dict[int, np.ndarray], np.ndarray]:
     """A brain shown each cue's answer once at the go moment after it. Its cortex learns
     nothing from the lessons (``learning_eta=0``): the records alone carry them."""
@@ -48,12 +56,12 @@ def cued(seed: int, **options) -> tuple[cd.Brain, dict[int, np.ndarray], np.ndar
     return brain, cues, go
 
 
-def misled(**options) -> tuple[cd.Brain, np.ndarray, int]:
+def misled() -> tuple[cd.Brain, np.ndarray, int]:
     """A brain whose memory turns its cortex's answer into the other act: one demonstration of
     the other action is recorded, and the cortex learns nothing from it."""
     x = one_hot(0, 3)
     brain = episodic(3, 2, modules=(8,), seed=3, learning_surprise=True, learning_eta=0,
-                     learning_eta_bias=0, **options)
+                     learning_eta_bias=0)
     cortical = int(brain.act(x, greedy=True)[0])
     brain.reset()
     brain.step(x, teacher=[1 - cortical])
@@ -261,3 +269,83 @@ def test_an_imagined_branch_gives_the_predecessor_key_the_act_the_brain_would_is
     assert decided
     assert_same_checkpoint(before, brain.save(tmp_path / "after.npz"))
 
+
+# -- a known outcome bounds the replay, whatever follows it in the same situation
+
+
+@pytest.mark.parametrize("outcome", [1.0, -1.0])
+def test_an_outcome_at_an_unchanged_observation_bounds_the_next_replay(outcome, monkeypatch):
+    brain = episodic(4, 2, modules=(8,), seed=0)
+    x = np.eye(4)
+    brain.step(x[[0]])
+    brain.step(x[[1]], reward=[0.0])
+    brain.step(x[[1]], reward=[outcome])  # the outcome at 1, and the next decision at 1 again
+    assert path(brain) == [(0, 0.0, True), (1, outcome, True), (1, 0.0, False)]
+    brain.step(x[[2]], reward=[0.0])
+    keys = [entry[0].copy() for entry in brain._paths[0]]
+    written = []
+    observe = brain.context_memory.observe
+
+    def recorded(key, value, write=None, **kwargs):
+        rows = np.ones(len(key), bool) if write is None else np.asarray(write)
+        written.extend(np.asarray(key)[rows])
+        observe(key, value, write, **kwargs)
+
+    monkeypatch.setattr(brain.context_memory, "observe", recorded)
+    brain.learn([2.0], [False], x[[3]])
+    # the paid decision and the one taken since the outcome, not the decision before it
+    assert len(written) == 2
+    np.testing.assert_array_equal(written[0], keys[3])
+    np.testing.assert_array_equal(written[1], keys[2])
+    assert path(brain) == [(0, 0.0, True), (1, outcome, True), (1, 0.0, True), (2, 2.0, True)]
+
+
+def test_decisions_without_an_outcome_still_collapse_at_an_unchanged_observation():
+    brain = episodic(4, 2, modules=(8,), seed=0)
+    x = np.eye(4)
+    brain.step(x[[0]])
+    for _ in range(3):
+        brain.step(x[[0]], reward=[0.0])  # nothing came of it: each decision replaces the last
+    assert path(brain) == [(0, 0.0, False)]
+    brain.act(x[[0]])  # a decision whose outcome never came is replaced as well
+    assert path(brain) == [(0, 0.0, False)]
+    brain.step(x[[0]], reward=[1.0])  # paid: the outcome stays and the next decision follows
+    assert path(brain) == [(0, 1.0, True), (0, 0.0, False)]
+    for _ in range(3):
+        brain.step(x[[0]], reward=[0.0])
+    assert path(brain) == [(0, 1.0, True), (0, 0.0, False)]
+
+
+def test_a_saved_path_keeps_its_boundary_and_continues_exactly(tmp_path):
+    brain = episodic(4, 2, modules=(8,), seed=0)
+    x = np.eye(4)
+    brain.step(x[[0]])
+    brain.step(x[[1]], reward=[0.0])
+    brain.step(x[[1]], reward=[1.0])
+    assert brain.pending_feedback  # the decision taken at 1 again awaits its outcome
+    copy = cd.Brain.load(brain.save(tmp_path / "brain.npz"))
+    assert path(copy) == path(brain) == [(0, 0.0, True), (1, 1.0, True), (1, 0.0, False)]
+    for subject in (brain, copy):
+        subject.step(x[[2]], reward=[0.0])
+        writes = subject.context_memory.writes
+        subject.learn([2.0], [False], x[[3]])
+        assert subject.context_memory.writes == writes + 2
+    assert path(copy) == path(brain)
+    for name in ("hippocampus", "context_memory"):
+        np.testing.assert_array_equal(getattr(copy, name).strength, getattr(brain, name).strength)
+    np.testing.assert_array_equal(copy.act(x[[3]]), brain.act(x[[3]]))
+
+
+def test_an_outcome_that_comes_after_waiting_bounds_the_replay_too():
+    brain = episodic(4, 2, modules=(8,), seed=0, arousal={"youth": 1000})  # every outcome learned
+    x = np.eye(4)
+    brain.live(x[[0]])
+    brain.live(x[[1]], reward=[0.0])
+    brain.live(x[[1]], reward=[1.0])
+    brain.wait(x[[2]])  # the decision at 1 awaits its outcome while the stream senses on
+    assert path(brain) == [(0, 0.0, True), (1, 1.0, True), (1, 0.0, False)]
+    brain.live(x[[2]], reward=[0.0])
+    writes = brain.context_memory.writes
+    brain.live(x[[3]], reward=[2.0])
+    assert brain.context_memory.writes == writes + 2
+    assert path(brain)[:3] == [(0, 0.0, True), (1, 1.0, True), (1, 0.0, True)]
