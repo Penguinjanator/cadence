@@ -39,13 +39,12 @@ def routine(brain):
 
 def rereading(brain):
     """The reference: a brain that reads the recall memory again, on the stream as the moment
-    is acted in, when it would act without a read. The drive it reads must be the forecast's,
-    so the act and its settle are the same and only the read is restored."""
+    is acted in, before every act. The drive it reads must be the forecast's, so the act and
+    its settle are the same and only the read is taken afresh."""
     original = brain._choose
 
     def choose(self, observations, drive, free, **options):
-        if self.recall.last is None:
-            np.testing.assert_array_equal(self.stimulus(observations), drive)
+        np.testing.assert_array_equal(self.stimulus(observations), drive)
         return original(observations, drive, free, **options)
 
     brain._choose = MethodType(choose, brain)
