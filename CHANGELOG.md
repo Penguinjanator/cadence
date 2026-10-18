@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased: bugfix for the episodic memory's greedy choice and replay boundaries
+
+- A lesson under `learning_surprise` judges its rows by the act the brain would issue, the
+  readout with the episodic vote, so a demonstration corrects a brain whose memory turns a
+  right cortical answer into a wrong act, and an answer the memory makes right is no surprise
+  and gets no lesson.
+- `live` decides whether an issued action was the brain's own best guess from the act it would
+  issue greedily, read when the action is issued, so a greedy act the episodic vote decided is
+  owned and its outcome can surprise the brain.
+- An imagined branch issues privately the act the brain would issue, with the episodic vote
+  read under the branch's own temporal context, to its efference copy and the recall memory's
+  predecessor key.
+- A decision whose outcome was a reward or a punishment stays on the replay path when the next
+  decision is taken in the same situation, so the next reward replays only the decisions taken
+  since that outcome.
+
+A brain without `memory_choice` acts, learns and saves as in 0.84.0.
+
 ## 0.84.0 — 2026-10-18
 
 - Memories key on the observation code: `Brain.observation_code(x)` is what the episodic

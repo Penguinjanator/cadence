@@ -141,7 +141,7 @@ retain their own defaults, listed in the [API reference](api.md).
 | `learning_free_steps`, `learning_tolerance` | `1024`, `0.003` | Free answers and teaching; free answers require equation qualification |
 | `learning_nudged_steps` | `12` | Teaching budget; reward eligibility uses its own budget below |
 | `learning_qualified`, `learning_damping` | `False`, `3` | Opt-in qualified teaching and its numerical fallback |
-| `learning_surprise` | `False` | Opt-in: a lesson through `step(teacher=...)`, `fit` or the learner teaches only the rows whose free answer differs from the label ([learning](learning.md#lessons-only-where-the-answer-differs)) |
+| `learning_surprise` | `False` | Opt-in: a lesson through `step(teacher=...)`, `fit` or the learner teaches only the rows whose answer differs from the label: through `step` the act the brain would issue, the episodic vote included, in `fit` or the learner the free answer ([learning](learning.md#lessons-only-where-the-answer-differs)) |
 | `learning_nudge` | `"cross_entropy"` | Teaching target law; the actor uses its categorical policy law |
 | `learning_normalize`, `learning_normalize_floor`, `learning_momentum` | `0.0`, `0.001`, `0.9` | Teaching optimizer; independent of actor normalization and momentum |
 | `learning_decay`, `learning_scale_cap` | `0.0`, `8.0` | Parameter decay and efficacy cap in the shared learner update machinery |
@@ -399,8 +399,10 @@ resumed = Brain.load("brain.npz")
 
 Inspect each phase's `converged` flags before using it. Imagination stops at the
 first refused phase and includes that phase in its result. It privately advances
-a copied trace; it does not change live memory, parameters, randomness or pending
-outcomes. It evaluates observations you supply. [Temporal planning](planning.md)
+a copied trace and issues privately the act the brain would issue, with an episodic
+memory's vote read under the branch's own temporal context; it does not change live
+memory, parameters, randomness or pending outcomes. A returned state holds the cortex's
+response before that vote. It evaluates observations you supply. [Temporal planning](planning.md)
 uses a learned environmental model to consider action consequences.
 
 `Brain.save/load` includes neural parameters, critic, optimizers, random
