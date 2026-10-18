@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- A brain saved between `lesson` and its next act loads and continues as the saved brain
+  would. The lesson keeps the stream's free state and clears the drive that state was
+  settled for, so that the next act settles afresh under the taught parameters; `load`
+  restores the free state without a drive, as the lesson left it. Before, `load` refused the
+  checkpoint with `missing saved state: actor/_drive`, and so it refused a brain saved after a
+  calm `live` answer was taught before its outcome, or after `step(..., teacher=...)` taught
+  and its act refused. `save` writes what it wrote before, so such a checkpoint written by an
+  earlier release loads too; a saved drive is still checked against the free state.
+
 ## 0.84.2 — 2026-10-18
 
 - A calm `live` moment that ends the episode keeps its forecast's read of the recall memory
