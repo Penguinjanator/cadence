@@ -45,11 +45,13 @@ reward beyond what was expected ─► replay: the decisions on the recent path,
   if the shown action had paid that much.
 - **Replay.** A reward replays the stream's recent path backwards, up to `memory_replay`
   decisions. The path keeps one decision per situation, the one that left it: an action that
-  left the situation unchanged is not on the path and is not credited. Replay runs through the
-  decisions whose own outcome was nothing and stops at the last decision whose outcome was
-  known, a reward or a punishment: outcomes bound the episode, so nothing has to mark the end
-  of an attempt. Each replayed decision gains credit discounted by the actor's `gamma` per
-  step, up to the discounted reward, and replay only ever adds credit.
+  left the situation unchanged is not on the path and is not credited. A decision whose own
+  outcome was a reward or a punishment stays on the path, also when the next decision is taken
+  in the same situation. Replay runs through the decisions whose own outcome was nothing and stops at the
+  last decision whose outcome was known, a reward or a punishment: outcomes bound the episode,
+  so nothing has to mark the end of an attempt. Each replayed decision gains credit discounted
+  by the actor's `gamma` per step, up to the discounted reward, and replay only ever adds
+  credit.
   - A reward that ends an attempt (`done=True`) closes an episode: it is replayed whole, into
     both kinds of record.
   - In a continuing life it is not known where the paid effort began, so a reward is replayed
@@ -62,7 +64,8 @@ reward beyond what was expected ─► replay: the decisions on the recent path,
 - **The vote.** At every choice, greedy or sampled, the mean of the place and the context
   records is added to the motor readout before the softmax. The slow cortex keeps learning
   from the actions the brain takes, so what the memory chose and what paid is consolidated
-  into the synapses over time.
+  into the synapses over time. A lesson, an outcome and an imagined branch read the same
+  complete choice ([one choice](#one-choice-for-acting-teaching-and-imagining)).
 - **Two speeds.** The store has the per-stream fast residual and the shared consolidated
   matrix of [`SynapticMemory`](memory.md#memory-in-the-composed-brain). A write corrects the
   stream's record halfway at once (`memory_rate` 0.5), and that correction fades by
@@ -70,6 +73,29 @@ reward beyond what was expected ─► replay: the decisions on the recent path,
   moves `consolidation` (0.05) of the way, faster with a supplied `salience=`. One outcome is
   remembered at once; repetition makes a record lasting, and one misleading outcome cannot
   erase what repetition established.
+
+## One choice for acting, teaching and imagining
+
+The vote joins the motor readout after the settle, so the cortex's most active motor neuron is
+not always what the brain does. Wherever the brain asks what it would do, it reads the same
+complete choice: the readout with the vote, the context records read under the decision's own
+temporal context.
+
+- **A lesson only where the answer differs** (`learning_surprise=True`) judges a row by the act
+  the brain would issue. A demonstration corrects a brain whose memory turns a right cortical
+  answer into a wrong act. An answer the memory makes right is no surprise and gets no lesson:
+  no update of the cortex and no recorded demonstration. A lesson-only curriculum thus leaves
+  the cortex untaught on the rows the memory carries; the cortex learns them from the outcomes
+  of its own acts. Consolidating the cortex under an answer the memory supports is an objective
+  of its own, outside surprise teaching.
+- **Surprise in a continuing life** (`live`): only the outcome of the brain's own best guess
+  can surprise it, and its own best guess is the act it would issue greedily, read when the
+  action is issued. A greedy act the vote decided is its own, and its outcome counts.
+- **Imagination** (`imagine`): an imagined branch issues privately the act the brain would
+  issue, to its own efference copy and the recall memory's predecessor key, with the vote read
+  under the branch's own temporal context, which the branch's acts move on. A returned state
+  holds the cortex's response, before the vote; to read the complete act on an observation, act
+  greedily on a loaded copy ([check that the memory does the work](#check-that-the-memory-does-the-work)).
 
 ## Turning it on
 

@@ -309,14 +309,21 @@ nudged phase and no update, and the contrast of the others is averaged over them
 caller that has the net's answer passes it (`step(drive, labels, answer=...)`): the agreeing
 rows are dropped before the free phase, so the lesson settles the differing rows only, and a
 batch without a differing row runs no phase. The composed brain does that through
-`step(teacher=...)`: its answer is the settle its act reads, warm from the stream, so the
-judgment is the one its behaviour shows (a free phase from rest can agree with a label the
-warm act gets wrong, and such a row would then never be taught). The report counts the rows:
-`attempted_presentations` is the batch, `accepted_presentations` the rows taught and
-`agreed_presentations` the rest; `LearnedState.taught` marks the taught rows, and the states it
-holds are those rows' phases. Through `step(teacher=...)` the same counts arrive under
-`demonstration_*`, and an episodic memory that records demonstrations records the taught rows
-only.
+`step(teacher=...)`: its answer is the act it would issue on the settle its act reads, warm
+from the stream, so the judgment is the one its behaviour shows (a free phase from rest can
+agree with a label the warm act gets wrong, and such a row would then never be taught). The
+report counts the rows: `attempted_presentations` is the batch, `accepted_presentations` the
+rows taught and `agreed_presentations` the rest; `LearnedState.taught` marks the taught rows,
+and the states it holds are those rows' phases. Through `step(teacher=...)` the same counts
+arrive under `demonstration_*`, and an episodic memory that records demonstrations records the
+taught rows only.
+
+With an [episodic memory that votes in the choice](episodic.md#one-choice-for-acting-teaching-and-imagining)
+the act includes the vote: a lesson corrects a brain whose memory turns a right cortical answer
+into a wrong act, and an answer the memory makes right is no surprise and gets no lesson.
+A lesson-only curriculum thus leaves the cortex untaught on the rows the memory carries; the
+cortex learns them from the outcomes of its own acts. Consolidating the cortex under an answer
+the memory supports is an objective of its own, outside surprise teaching.
 
 The rule is the teaching form of surprise: a demonstration of what the net would have done
 carries no lesson. Select it where a readout saturates under repeated lessons on cases it

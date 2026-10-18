@@ -1017,8 +1017,11 @@ that recursive benefit or automatic reflective behavior has been learned.
     `demonstration_address_refused`.
   - `lesson(observations, labels) -> report`: the lesson `step(..., teacher=labels)` gives
     before its act, without the act: the drive reads every memory the act reads, the
-    surprise rule judges the rows by the settle the act reads, an episodic memory records
-    the demonstration, and a recall memory runs its address lesson at the taught rows. The
+    surprise rule judges the rows by the act the brain would issue on the settle the act
+    reads (with `memory_choice` the readout with the episodic vote, so an answer the memory
+    makes right is no surprise and gets no lesson, cortical or episodic; consolidating the
+    cortex under it is a separate objective), an episodic memory records the demonstration,
+    and a recall memory runs its address lesson at the taught rows. The
     teaching report is returned (with `address_rows`, `address_error` and
     `address_refused` for a recall memory) and kept in `last_learning` under
     `demonstration_*` keys. The batch must be
@@ -1045,7 +1048,12 @@ that recursive benefit or automatic reflective behavior has been learned.
     history follow the branch privately. Inspect each
     phase's `qualified` field; a refused phase ends the branch and remains in the
     tuple. The empty sequence returns `()`. Live activity, parameters, records, random
-    state and pending actual outcomes remain unchanged. This predicts brain responses
+    state and pending actual outcomes remain unchanged. After each imagined moment the
+    branch issues privately, to its efference copy and the recall memory's predecessor
+    key, the act the brain would issue; with `memory_choice` that act includes the
+    episodic vote, read under the branch's own temporal context, which the branch's acts
+    move on. A returned state holds the cortex's response before the vote; a greedy `act`
+    on a loaded copy reads the complete act. This predicts brain responses
     to supplied observations; use the separate `TemporalPatchNet.plan` interface for
     a learned external-world action/consequence model.
   - `live(observations, *, reward=None, done=None, decision_id=None) -> actions`: one moment of a
@@ -1064,7 +1072,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     (`last_arousal["record_error"]`); the outcome is measured against the value with the
     value of the present state and against the record as it is. Surprise or want raises the arousal (see
     [Arousal](#arousal-cadencearousal)); only the outcome of the brain's own greedy
-    choice can surprise it or change its usual forecast error. Every actual reward
+    choice can surprise it or change its usual forecast error. Its own greedy choice is the
+    act it would issue greedily, read when the action is issued: with `memory_choice` the
+    readout with the episodic vote, so a greedy act the vote decided is its own. Every actual reward
     updates its recent and long-run income, including sampled choices. An aroused brain
     samples its base policy, with one uniformly selected motor slot at
     `learning.temperature * arousal.heat`; other slots keep `learning.temperature`.
