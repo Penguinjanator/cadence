@@ -2345,16 +2345,21 @@ class Brain:
         """Teach the labels of the present observations without acting on them.
 
         This is the lesson ``step(..., teacher=labels)`` gives before its act: the drive reads
-        every memory the act reads, under ``learning_surprise`` the rows are judged by the
-        settle the act reads, and with a recall memory the address lesson follows at the
-        taught rows. An episodic memory that remembers demonstrations records the taught
-        rows. Returns the teaching report (with a recall memory, ``address_rows``,
-        ``address_error`` and ``address_refused`` too), which ``last_learning`` holds with the
-        ``demonstration_`` prefix; a refused phase raises ``LearningPhaseError`` and leaves the
-        parameters and memories as they were. The next ``act`` settles afresh under the
-        changed parameters and writes the moment. The streams are the live ones; an action
-        whose sampled outcome is pending is refused, since its eligibility belongs to the
-        parameters before the lesson: report the outcome first (``step`` or ``learn``).
+        every memory the act reads, under ``learning_surprise`` the rows are judged by the act
+        the brain would issue, its complete greedy choice on the settle the act reads (with
+        ``memory_choice`` the readout with the episodic vote), and with a recall memory the
+        address lesson follows at the taught rows. A row the brain would answer as shown is
+        no surprise and gets no lesson, also where its episodic memory turns a wrong cortical
+        answer into the right act: consolidating the cortex under an answer the memory
+        supports is another objective than teaching by surprise. An episodic memory that
+        remembers demonstrations records the taught rows. Returns the teaching report (with a
+        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too), which
+        ``last_learning`` holds with the ``demonstration_`` prefix; a refused phase raises
+        ``LearningPhaseError`` and leaves the parameters and memories as they were. The next
+        ``act`` settles afresh under the changed parameters and writes the moment. The streams
+        are the live ones; an action whose sampled outcome is pending is refused, since its
+        eligibility belongs to the parameters before the lesson: report the outcome first
+        (``step`` or ``learn``).
         """
         x = self._observations(observations)
         labels = self.learner._labels(np.asarray(labels))
@@ -2379,10 +2384,15 @@ class Brain:
         self._coded_moment = (x, self._code(x))
         drive = self.stimulus(x)
         code = self._coded(x)
+        key = self._decision_key(code)  # of the decision the lesson is shown for
         answer = None
         if self.learner.config.surprise:
-            # the brain's own answer: the settle its act reads, warm from the stream
-            answer = self._choices(self._qualified(drive, self._activity(), operation="act"))
+            # the brain's own answer, the act it would issue: its complete greedy choice on the
+            # settle its act reads, warm from the stream, with the episodic vote under the
+            # decision's own key; a row that answer already gives as shown is no surprise
+            answer = self._greedy(
+                self._qualified(drive, self._activity(), operation="act"), code, key
+            )
         try:
             lesson, teaching = self.learner.step(drive, labels, answer=answer)
         except LearningPhaseError as error:
@@ -2400,15 +2410,12 @@ class Brain:
         # A demonstration teaches the slow policy, not an invented reward value. An
         # episodic memory also records the shown action for the situation it was shown in,
         # under the observation code; under the learner's surprise rule, for the rows the
-        # lesson taught.
+        # lesson taught, those whose complete answer differed from the label.
         shown = np.ones(batch, bool) if lesson.taught is None else lesson.taught
         if (self.memory_choice and self.memory_demonstrations
                 and self.hippocampus is not None and shown.any()):
             value = np.full(batch, self.memory_demonstrations)
-            self._remember(
-                code, self._episode_key(code) if self.context_memory is not None else None,
-                labels, value, shown,
-            )
+            self._remember(code, key, labels, value, shown)
         self._prepared = None
         self.basal_ganglia._drive = None
         self.last_learning["demonstrations"] = float(batch)
@@ -2432,7 +2439,10 @@ class Brain:
         associative memory, the record it held for that action; the outcome is
         measured against the value with the value of the present state and against
         the record as it is, and a surprising outcome or a reward below what life
-        usually pays raises the arousal (``Arousal`` gives the law). Aroused, the brain samples its
+        usually pays raises the arousal (``Arousal`` gives the law). Only the outcome of the
+        brain's own best guess can surprise it: the act it would issue greedily, read when the
+        action is issued, with ``memory_choice`` the readout with the episodic vote, so a
+        greedy act the vote decided is its own. Aroused, the brain samples its
         action from its policy. Want raises the temperature of one uniformly chosen
         motor slot; the other slots keep the base temperature. It keeps eligibility and
         learns from the outcome as ``step`` does. The outcome that woke a calm
@@ -2574,15 +2584,16 @@ class Brain:
                 temperatures = np.full(slot_count, self.learner.config.temperature)
                 temperatures[heated_slot] = temperature
         code = self._coded(x)  # computed by the settle of this moment
+        # the brain's own best guess, read at issue time before the decision moves the
+        # temporal context on: the act it would issue greedily, the readout with the episodic
+        # vote under the decision's own key, one choice per slot
+        guessed = self._greedy(answer[1], code, self._decision_key(code))
+        best = [int(choice) for choice in np.atleast_1d(guessed[0])]
         action = self._choose(x, *answer, greedy=not aroused, temperature=temperatures)
         state = agent.state
         assert state is not None
         if agent._pending is not None:
             learning_sweeps += int(agent._pending[1].steps) + int(agent._pending[2].steps)
-        # the brain's own best guess: the most active motor neuron of every slot
-        motor = np.asarray(state.activation)[0, self.motor_index]
-        slots = zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
-        best = [int(np.argmax(motor[start : start + size])) for start, size in slots]
         chosen = [int(choice) for choice in np.atleast_1d(action[0])]
         self._lived = (
             x.copy(),
@@ -2776,6 +2787,14 @@ class Brain:
         each returned state's activation. A refused phase ends the branch and
         remains in the result; inspect ``qualified`` before using a response.
 
+        After each imagined moment the branch issues, privately, the act the brain would
+        issue on it, its complete greedy choice; the branch's efference copy and the recall
+        memory's predecessor key take it in. With ``memory_choice`` that act includes the
+        episodic vote, read under the branch's own temporal context, which the branch's acts
+        move on as the stream's acts move the stream's. The vote joins the readout after the
+        settle, so a returned state holds the cortex's response; a greedy ``act`` on a loaded
+        copy reads the complete act on a supplied observation.
+
         This imagines the brain's responses, not an unobserved environment's
         dynamics. ``TemporalPatchNet.plan`` supplies the separate learned
         consequence-model interface for continuous action planning.
@@ -2818,6 +2837,11 @@ class Brain:
         if heard is not None:
             heard.trace = heard.trace.copy()
         recalled = None if self.recall is None else self.recall.imagined()
+        # the branch issues the act the brain would issue where the act is heard, by the copy
+        # of the command or the predecessor key; the episodic vote is read under the branch's
+        # own temporal context, the stream's moved on privately by the branch's acts
+        issues = echo is not None or (recalled is not None and recalled.key == "predecessor")
+        context = None if self._context is None else self._context.copy()
         phases = []
         for value in sequence:
             self._coded_moment = (value, self._code(value))
@@ -2845,22 +2869,30 @@ class Brain:
             current = _copy_state(phase.state)
             if trace is not None:
                 trace.update(phase.state)
+            command = None
+            if issues:
+                # the imagined branch issues, privately, the act the brain would issue: its
+                # complete greedy choice, the readout with the episodic vote under the branch's
+                # own key, after which the branch's context moves on
+                key = None if self.context_memory is None else self._keyed(code, context)
+                choice = self._greedy(phase.state, code, key)
+                if key is not None:
+                    context = self._following(key, choice)
+                command = self._command(choice)
             if echo is not None:
-                # the imagined branch issues the response's own best guess, privately
-                echo.issue(self._command(self._choices(phase.state)))
+                assert command is not None
+                echo.issue(command)
             if heard is not None:
                 # the imagined observation, as the sensory neurons were given it, joins the
                 # private history
                 heard.hear(self._sensed(value, code))
             if recalled is not None:
                 # the branch's cortex moves on, and with the predecessor key the branch's own
-                # best guess is the command the next imagined moment follows
-                command = (
-                    self._command(self._choices(phase.state))
-                    if recalled.key == "predecessor"
-                    else None
+                # act is the command the next imagined moment follows
+                recalled.witness(
+                    code, phase.state,
+                    command=command if recalled.key == "predecessor" else None,
                 )
-                recalled.witness(code, phase.state, command=command)
         return tuple(phases)
 
     def act(
@@ -2926,7 +2958,7 @@ class Brain:
         code = self._coded(x)  # the memories key on the observation code
         key = bias = None
         if self.memory_choice and self.hippocampus is not None:
-            key = self._episode_key(code) if self.context_memory is not None else None
+            key = self._decision_key(code)
             bias = self._vote(code, key)
         action = self.basal_ganglia.act(drive, greedy=greedy, temperature=temperature, bias=bias)
         state = self.basal_ganglia.state
@@ -2948,10 +2980,7 @@ class Brain:
             if key is not None:
                 # what the stream did joins its temporal context after what it saw
                 self._decision = key
-                self._context = key.copy()
-                self._context[:, self.code_width:] += (1.0 - self.memory_context) * (
-                    self._command(action)
-                )
+                self._context = self._following(key, action)
             if self.memory_replay:
                 assert state is not None
                 # how far the choice was the brain's best guess: the chosen action's
@@ -2980,23 +3009,56 @@ class Brain:
         context = np.asarray(self.context_memory.recall(key), dtype=float)
         return np.asarray(0.5 * (place + context))
 
+    def _greedy(self, state: BrainState, code: np.ndarray, key: np.ndarray | None) -> np.ndarray:
+        """The brain's complete greedy choice on a settled state: the action a greedy act on it
+        issues, one per output slot, ``(batch,)`` or ``(batch, slots)``. With
+        ``memory_choice`` the records' vote for the observation ``code`` under ``key``, the
+        decision's own temporal key (``_decision_key``, read before the decision moves the
+        context on), joins the readout before each slot's softmax and the most probable
+        action is taken, as ``_choose`` and ``ActorCritic.act`` do for a greedy act; without
+        it the choice is the most active motor neuron of every slot. Pure: the records are
+        read and nothing changes. The surprise lesson judges by this choice, ``live`` decides
+        from it whether an issued action was the brain's own best guess, and an imagined
+        branch issues it."""
+        if not self.memory_choice or self.hippocampus is None:
+            return self._choices(state)
+        p = self.basal_ganglia.probabilities(state, bias=self._vote(code, key))
+        return np.asarray(np.argmax(p, axis=-1), dtype=np.int64)
+
     def _decided(self, batch: int) -> np.ndarray | None:
         """The context key of each stream's last decision, when it belongs to this batch."""
         decision = self._decision
         return decision if decision is not None and len(decision) == batch else None
 
+    def _decision_key(self, code: np.ndarray) -> np.ndarray | None:
+        """The temporal key of a decision taken now on this observation code, before the
+        decision moves the stream's context on (``_episode_key``); None without context
+        records."""
+        return None if self.context_memory is None else self._episode_key(code)
+
     def _episode_key(self, code: np.ndarray) -> np.ndarray:
         """The key of a decision on this observation code: the stream's temporal context with
         the code entered, ``(batch, code_width + motor)``. The code takes the share
         ``1 - memory_context``; the context before it keeps the rest."""
+        return self._keyed(code, self._context)
+
+    def _keyed(self, code: np.ndarray, context: np.ndarray | None) -> np.ndarray:
+        """The key of a decision on this observation code in a temporal ``context``: the
+        stream's (``_episode_key``) or an imagined branch's own."""
         x = np.asarray(code, dtype=float)
         keep = self.memory_context
         fresh = np.zeros((len(x), self.code_width + len(self.motor_index)))
         fresh[:, : self.code_width] = x
-        context = self._context
         if context is None or len(context) != len(x) or not keep:
             return (1.0 - keep) * fresh if keep else fresh
         return keep * context + (1.0 - keep) * fresh
+
+    def _following(self, key: np.ndarray, action: np.ndarray) -> np.ndarray:
+        """The temporal context after a decision of this key: what the stream did joins it
+        after what it saw, the issued command at the share ``1 - memory_context``."""
+        context = key.copy()
+        context[:, self.code_width:] += (1.0 - self.memory_context) * self._command(action)
+        return context
 
     def _extend_paths(
         self, x: np.ndarray, key: np.ndarray | None, action: np.ndarray, guess: np.ndarray
