@@ -1987,8 +1987,8 @@ def test_a_null_slot_whose_logit_is_not_finite_is_refused(tmp_path):
 
 
 def test_kept_episodes_keep_their_slots_while_the_traces_begin_afresh():
-    """With ``recall_episodes="keep"`` a stream whose episode ends (``done`` through ``learn``
-    and ``step``) keeps its slots and the address map, while its working trace, efference
+    """With ``recall_episodes="keep"`` a stream whose episode ends (``done`` through ``learn``,
+    the path ``step`` takes) keeps its slots and the address map, while its working trace, efference
     copy, heard history and the cortex of the moment before begin afresh as under the
     founder. The latest slot of the ended episode keeps the nexts it had and learns no
     successor from the next episode's first moment; the other stream goes on as it would
@@ -2042,8 +2042,8 @@ def test_a_calm_ending_through_live_keeps_the_slots_as_a_reset_that_keeps_the_me
 
 
 def test_a_reset_that_keeps_the_memory_keeps_the_slots_and_starts_the_rest_afresh():
-    """``Brain.reset(keep_memory=True)`` keeps the recall memory's slots, under either
-    ``recall_episodes``: each stream ends an episode there, the next moment of the same batch
+    """``Brain.reset(keep_memory=True)`` keeps the recall memory's slots (here under the
+    founder's ``recall_episodes``): each stream ends an episode there, the next moment of the same batch
     reads the slots and the latest one learns no successor from it. Everything else starts
     afresh, and a plain reset empties the slots."""
     brain = composed(seed=5, history_decays=(0.5,))

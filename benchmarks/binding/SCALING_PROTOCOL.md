@@ -70,10 +70,9 @@ mastery a life reads every budget of its setting.
 The full grid (`--grid full`): 21 levels; at each level and width, `none` and `recall` at every
 capacity of the level; three widths, four budgets in one life, three founders: 486 lives (token
 216, succession 54, named 54, continuing 108, camera 54). A training round's processor time
-grows with the width (about tenfold from 64 to 1024) and with the events per trial (41 at F 8,
-D 32). Camera brains at width 1024 with 1024 or more code units hold more than the library's
-dense limit of 2048^2 block entries, so every settle takes the sparse path, and a round costs
-18 to 60 times the round at the same width with 256 units. The full grid does not fit one box.
+grows with the width and with the events per trial (41 at F 8, D 32). Camera brains at width
+1024 with 1024 or more code units hold more than the library's dense limit of 2048^2 block
+entries, so every settle takes the slower sparse path. The full grid does not fit one box.
 
 The declared grid (`--grid trimmed`, `scaling.py`'s `TRIMMED`): 324 lives. Every level runs at
 widths 64 and 256; width 1024 runs at the easiest token level, where a wide brain without the
@@ -171,16 +170,13 @@ and the plan prints the estimate before the lives start.
 
 ## Amendment 1, the linear charge beside the power-law charge (17 October 2026)
 
-Declared while the declared grid runs, before any life of this amendment runs. The index
-protocol's confirmation of the `horizon` arm on founders 400 to 411 did not pass the camera
-task, which the `index` arm passed; the readings are retained outside this repository. The
+Declared while the declared grid runs, before any life of this amendment runs. The
 power-law charge `r log(1 + age)`, `r = heard^2 / T / log(1 + capacity)`, is calibrated on a
 full match of a unit-length key. At the camera task's `heard` 1.5 and capacity 64, `r` is 2.16:
 a trial's two facts, at ages 1 and 2 when the query reads, cost 1.5 and 2.4 logits, and the
-neutral event at age 0 costs nothing. A query's code matches its fact's at .26 to .29 of a full
-match at every code width the grid reads (2.4 to 2.7 logits) and every other event's at about
-.09 (0.8 logits), so an unmatched young moment outweighs the older fact. The grid's `recall` on
-the camera family therefore reads the charge, not the memory's width; its lives run and are
+neutral event at age 0 costs nothing. A camera query matches its fact's code only in part,
+so an unmatched young moment can outweigh the older fact. The grid's `recall` on the camera
+family therefore reads the charge as well as the memory's width; its lives run and are
 read as declared, with this amendment's beside them.
 
 | Item | Declared |

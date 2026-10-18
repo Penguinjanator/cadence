@@ -739,7 +739,7 @@ class Recall:
             self._empty(batch)
             return
         chosen = np.zeros(batch, dtype=bool)
-        chosen[np.asarray(rows)] = True
+        chosen[np.asarray(rows, dtype=np.int64)] = True
         if chosen.all():
             self._empty(batch)
             return
@@ -778,14 +778,15 @@ class Recall:
     def end(self, batch: int, rows: np.ndarray | None = None) -> None:
         """The streams of ``rows`` (every stream without) end an episode and keep their
         slots: the latest slot of each learns no successor from the stream's next written
-        moment, and the moment before (the cortex of the moment before, the history and the
-        predecessor key's event and command) begins afresh. The address map is learned and
-        stays. Another batch size empties the streams, as ``reset`` does."""
+        moment, and the moment before (the cortex of the moment before, the history, the
+        predecessor key's event and command and the window's events) begins afresh. The
+        address map is learned and stays. Another batch size empties the streams, as
+        ``reset`` does."""
         if self.streams != batch:
             self._empty(batch)
             return
         chosen = np.zeros(batch, dtype=bool)
-        chosen[slice(None) if rows is None else np.asarray(rows)] = True
+        chosen[slice(None) if rows is None else np.asarray(rows, dtype=np.int64)] = True
         if not chosen.any():
             return
         # new arrays, never writes into the old ones: a caller may hold them to restore

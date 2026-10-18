@@ -302,7 +302,7 @@ arguments whose defaults are the declared values; no gene, panel, budget or gate
 protocol changes. Every declared task reads the same at two budgets on one founder before and
 after the change. The readings gain processor seconds (`cpu`, and `read_cpu` for the reading
 alone) beside the wall seconds, and the fresh tasks' training record names why the life ended
-(`ended`).
+(`ended`) and the brain's association width (`width`).
 
 ## Amendment 7, the context-window key (17 October 2026)
 

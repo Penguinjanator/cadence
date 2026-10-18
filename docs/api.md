@@ -556,7 +556,7 @@ and a complete runnable example.
   rows=None)`, `keep(rows)`, `trace` (`(batch, blocks * source)`), `to_dict()`.
   `Brain.compose(..., history_decays=...)` adds it; `Brain.history` holds it and hears the
   observation of every act after the act.
-- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, address_step="lms", write="always", null=None, address_reward=0.0, episodes="forget", key="event", source="sensory", target="recall", inputs=0, writes=0)`:
+- `Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25, capacity=64, value="event", next=True, address=0.01, address_temperature=0.1, context=0.0, context_decay=0.5, address_step="lms", write="always", null=None, address_reward=0.0, episodes="forget", key="event", window=1, window_decay=1.0, source="sensory", target="recall", inputs=0, writes=0)`:
   the index memory of each stream's recent moments, a held-input recall
   ([memory](memory.md#recall-the-streams-own-moments)). `inputs` is the width of the
   observations the memory is given when it is not the `source` range's (a brain whose

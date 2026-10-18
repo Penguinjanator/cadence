@@ -3380,7 +3380,8 @@ class Brain:
         begins the new stream calm, with what it was used to forgotten and its age kept.
         ``keep_memory=True`` keeps the recall memory's slots too: each stream ends an episode
         there (``Recall.end``), its slots read by the next streams of the same batch, and
-        everything else starts afresh as without it."""
+        everything else starts afresh as without it; a brain without a recall memory resets
+        as it does without the keyword."""
         if not isinstance(keep_memory, bool):
             raise ValueError("keep_memory must be boolean")
         self.basal_ganglia.reset()
