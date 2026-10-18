@@ -15,6 +15,15 @@
   `step` issued, so where a teacher's or caregiver's action ran in its place, teach that
   action with `lesson(observations, labels)` and do not report its reward to `step`, since
   that reward would credit an action that did not run.
+- `Brain.reset`, `retune(reset_arousal=True)`, the API reference and the composition and
+  continuous-interaction guides say what these resets leave an adult brain (its youth over):
+  no income or error references, also after `reset(keep_memory=True)`, so a new stream that
+  pays nothing from its start does not rouse it. In a two-armed bandit whose paying arm
+  moved, adults reset this way chose the newly paying arm at none of the next 120 moments in
+  5 of 5 seeds, while the same adults living on without the reset, or reset with their
+  arousal state restored, learned it. Where the world may stop paying, restore the arousal
+  state after the reset, give the brain a positive `need`, or let it keep living without
+  the reset.
 
 ## 0.84.2 — 2026-10-18
 

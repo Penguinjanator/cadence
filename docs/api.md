@@ -966,7 +966,9 @@ that recursive benefit or automatic reflective behavior has been learned.
     atomic: an invalid request changes nothing. Successful calls preserve
     acquired parameters, optimizer history, activity, traces, records, random
     state and pending feedback. `reset_arousal=True` resets arousal's level
-    and reward references, preserving its age and work counters. Retuning cannot
+    and reward references, preserving its age and work counters; an adult brain
+    (its youth over) is then left as `reset()` leaves it, and a stream that pays
+    nothing from then on does not rouse it. Retuning cannot
     alter topology, `sensory_scale`, backend or `resting_bias`, nor add a missing
     component. Actor rates apply to
     the next learned outcome, including one already pending; its eligibility
@@ -1184,7 +1186,13 @@ that recursive benefit or automatic reflective behavior has been learned.
     emptied and its address map is kept; `keep_memory=True` keeps the slots as well, each
     stream ending an episode there (`Recall.end`) and its slots read by the next streams of
     the same batch. A brain with arousal begins the next stream calm,
-    with what it was used to cleared and its age and work counts kept.
+    with what it was used to cleared and its age and work counts kept. An adult brain
+    (its youth over) then has no income or error references, also with
+    `keep_memory=True`, so a new stream that pays nothing from its start does not rouse
+    it; where its world may stop paying, restore its arousal state after the reset
+    (`state = brain.arousal.to_dict()` before it, `brain.arousal = Arousal.from_dict(state)`
+    after it), give it a positive `need`, or let it keep living without the reset
+    ([continuous interaction](continuous.md#reset-and-save)).
     `parameters()` counts actor/critic parameters, the shared consolidated memory matrix
     and a recall memory's address map; per-stream state is additional storage.
   - `save(path) -> Path`, `Brain.load(path, *, backend="cpu", device=None, precision=None)`:

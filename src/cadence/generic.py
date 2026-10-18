@@ -1840,7 +1840,10 @@ class Brain:
         Wiring, initialization and enabling/disabling components are construction
         choices. ``reset_arousal=True`` explicitly resets the arousal level and
         reward references, retaining its age and work counters; no other state
-        is reset. Returns this same brain.
+        is reset. An adult brain (its youth over) is then left as ``reset`` leaves
+        it, with no income or error references: a stream that pays nothing from then
+        on does not rouse it. Where its world may stop paying, leave ``reset_arousal``
+        off or give it a positive ``need``. Returns this same brain.
         """
         if not isinstance(reset_arousal, bool):
             raise ValueError("reset_arousal must be boolean")
@@ -3469,7 +3472,14 @@ class Brain:
         ``keep_memory=True`` keeps the recall memory's slots too: each stream ends an episode
         there (``Recall.end``), its slots read by the next streams of the same batch, and
         everything else starts afresh as without it; a brain without a recall memory resets
-        as it does without the keyword."""
+        as it does without the keyword.
+
+        After a reset, also with ``keep_memory=True``, an adult brain (its youth over) has no
+        income or error references, so a new stream that pays nothing from its start does
+        not rouse it. Where its world may stop paying, restore its arousal state after the
+        reset (``state = brain.arousal.to_dict()`` before it,
+        ``brain.arousal = Arousal.from_dict(state)`` after it), give it a positive
+        ``need``, or let it keep living without the reset."""
         if not isinstance(keep_memory, bool):
             raise ValueError("keep_memory must be boolean")
         self.basal_ganglia.reset()
