@@ -16,16 +16,16 @@ rules. Internal consistency does not establish correct understanding or cheap
 computation.
 
 Python 3.11+ and NumPy are required.
-These guides use Cadence 0.84.2:
+These guides use Cadence 0.84.3:
 
 ```sh
-python -m pip install cadence-net==0.84.2
+python -m pip install cadence-net==0.84.3
 ```
 
 ## Start here
 
 For a version-pinned reading order, use the
-[release documentation](https://github.com/muellerberndt/cadence/blob/v0.84.2/docs/README.md).
+[release documentation](https://github.com/muellerberndt/cadence/blob/v0.84.3/docs/README.md).
 
 1. [The continuing world model](world-model.md): lifecycle, design intent and current boundaries.
 2. [Quickstart](quickstart.md): run one brain through observations and outcomes.

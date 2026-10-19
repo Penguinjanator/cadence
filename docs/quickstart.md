@@ -20,10 +20,10 @@ bootstrap a useful interpretation, use it, repair witnessed failures and continu
 the same brain. This quickstart exercises equilibrium action and memory;
 it does not yet integrate learned environmental transitions.
 
-Python 3.11+ and NumPy are required. Install Cadence 0.84.2:
+Python 3.11+ and NumPy are required. Install Cadence 0.84.3:
 
 ```bash
-python -m pip install cadence-net==0.84.2
+python -m pip install cadence-net==0.84.3
 ```
 
 ## Observe, act and learn

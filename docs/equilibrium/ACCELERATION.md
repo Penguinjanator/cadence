@@ -21,10 +21,10 @@ The containing Cadence distribution also requires NumPy.
 Install the optional tensor backend for the same release when needed:
 
 ```sh
-python -m pip install "cadence-net[accel]==0.84.2"
+python -m pip install "cadence-net[accel]==0.84.3"
 ```
 
-Use the [quickstart](QUICKSTART.md) for the current `0.84.2` installation.
+Use the [quickstart](QUICKSTART.md) for the current `0.84.3` installation.
 The device measurements below retain their recorded source versions; they are
 not current-version or all-workload performance guarantees.
 

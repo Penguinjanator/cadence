@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
   would. The lesson keeps the stream's free state and clears the drive that state was
