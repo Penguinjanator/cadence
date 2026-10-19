@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+- A brain saved between `lesson` and its next act loads and continues as the saved brain
+  would. The lesson keeps the stream's free state and clears the drive that state was
+  settled for, so that the next act settles afresh under the taught parameters; `load`
+  restores the free state without a drive, as the lesson left it. Before, `load` refused the
+  checkpoint with `missing saved state: actor/_drive`, and so it refused a brain saved after a
+  calm `live` answer was taught before its outcome (also during `wait`), or after
+  `step(..., teacher=...)` taught and its act refused. `save` writes what it wrote before, so
+  such a checkpoint written by an earlier release loads too. A saved drive is still checked
+  against the free state, and a sampled action awaiting its outcome still needs the drive it
+  was chosen on.
+- `Brain.step`, the continuous-interaction guide and the learning guide say where the reward
+  of a demonstrated action belongs: the reward given to `step` is credited to the action
+  `step` issued, so where a teacher's or caregiver's action ran in its place, replace the
+  issued action with `act(observations, greedy=True)`, which learns nothing from it, and
+  teach the shown action with `lesson(observations, labels)`; the next `step` then takes no
+  reward. Reported to `step`, the shown action's reward, or the zero of an omitted one,
+  would credit an action that did not run. A moment in which a teacher acts can also be
+  taught with `lesson` followed by a greedy `act`, in place of `step`.
+- `Brain.reset`, `retune(reset_arousal=True)`, the API reference and the composition and
+  continuous-interaction guides say what these resets leave the arousal of an adult brain
+  (its youth over), also after `reset(keep_memory=True)`: no income or error references and,
+  at the founder `need=0`, no want, so only a surprise at its own forecasts can rouse it. In
+  a two-armed bandit whose paying arm moved, none did: adults reset this way chose the newly
+  paying arm at none of the next 120 moments in 5 of 5 seeds, while the same adults living
+  on without the reset, reset with their arousal state restored, or given
+  `retune(arousal_need=0.5)` before `reset()`, learned it. Where the world may stop paying,
+  restore the arousal state after the reset, give the brain a positive `need`, or let it
+  keep living without the reset.
+
 ## 0.84.2 — 2026-10-18
 
 - A calm `live` moment that ends the episode keeps its forecast's read of the recall memory

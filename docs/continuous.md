@@ -39,6 +39,17 @@ Reward and `done` describe the **previous action**. `teacher=` labels the
 have shape `(streams, inputs)`. Keep the same stream in each batch row until
 `reset()`. The first call has no preceding action to reward.
 
+The reward is credited to the action `step` issued. Where a teacher's or
+caregiver's action ran in its place, the issued action has no outcome: replace it
+with `brain.act(observations, greedy=True)`, which learns nothing from it, as for
+any [outcome that will never come](#outcomes-that-arrive-later-wait), and teach the
+shown action with `brain.lesson(observations, labels)`; the next `step` then takes
+no reward. Reported to `step`, the shown action's reward, or the zero of an omitted
+one, would credit an action that did not run, and over many shown moments such
+rewards can drive the motor readout toward a few commands. A moment in which a
+teacher acts can also be taught with `lesson` followed by a greedy `act`, in place
+of `step`.
+
 For an ended row, pass its next episode's reset observation with `done=True`.
 A truncation can supply a final value through `bootstrap`. Omitted reward means
 zero reward on an actual transition, not an unknown outcome or permission to
@@ -411,6 +422,22 @@ retaining associative memories. `brain.hippocampus.reset(batch)` clears fast
 residuals but retains persistent synapses; `clear()` erases both. Changing memory
 batch size resets fast residuals on a write; reads use the persistent baseline
 without changing the live memory.
+
+A brain with arousal begins the new stream calm, with what it was used to
+forgotten. After `reset()`, also with `keep_memory=True`, or after
+`retune(reset_arousal=True)`, an adult brain (its youth over) has no income or
+error references and, at the founder `need=0`, no want: only a surprise at its own
+forecasts, measured against the usual error the new stream's first outcome sets,
+can rouse it. In a two-armed bandit with one constant observation whose paying arm
+moved after 300 moments (`Brain.compose(1, 2, modules=(16,), arousal=True)`,
+seeds 0 to 4), none did: every adult given one of these resets stayed calm and
+chose the newly paying arm at none of the next 120 moments, while the same adults
+living on without the reset, reset with their arousal state restored, or given
+`retune(arousal_need=0.5)` before `reset()`, chose it at each of the last 40.
+Where the world may stop paying, restore the arousal state after the reset
+(`state = brain.arousal.to_dict()` before it,
+`brain.arousal = Arousal.from_dict(state)` after it), give the brain a positive
+`need`, or let it keep living without the reset.
 
 ```python
 brain.save("continuing-brain.npz")

@@ -615,7 +615,8 @@ def _validate_life_state(
             array("free/" + name, (batch, n))
     elif meta.get("pending", False) or meta.get("free_current", False):
         raise ValueError("saved pending action or cache needs a free state")
-    if batch:
+    if meta.get("pending", False):
+        # a sampled action awaiting its outcome was chosen on the drive of its free state
         array("actor/_drive", (batch, n))
     if ("actor/trace" in data) != ("actor/trace_bias" in data):
         raise ValueError("incomplete saved eligibility traces")
@@ -630,6 +631,9 @@ def _validate_life_state(
         ("trace_bias", n),
         ("trace_critic", association + 1),
         ("salience", n),
+        # the drive the free state was settled for, required above with a pending action; a
+        # lesson clears it so that the next act settles afresh, and a brain saved before that
+        # act keeps its free state without one
         ("_drive", n),
     ):
         if "actor/" + name in data:
@@ -1840,7 +1844,12 @@ class Brain:
         Wiring, initialization and enabling/disabling components are construction
         choices. ``reset_arousal=True`` explicitly resets the arousal level and
         reward references, retaining its age and work counters; no other state
-        is reset. Returns this same brain.
+        is reset. Its arousal is then left as ``reset`` leaves it: an adult brain (its
+        youth over) has no income or error references and, at the founder ``need=0``,
+        no want, so only a surprise at its own forecasts can rouse it; in a two-armed
+        bandit whose paying arm moved, none did, and the brain chose the newly paying arm
+        at none of 120 moments in 5 of 5 seeds. Where its world may stop paying, leave
+        ``reset_arousal`` off or give it a positive ``need``. Returns this same brain.
         """
         if not isinstance(reset_arousal, bool):
             raise ValueError("reset_arousal must be boolean")
@@ -2301,10 +2310,17 @@ class Brain:
         Reward/done describe the preceding action; an omitted reward means no
         reward event on a real transition (zero), not an unknown outcome. Wait for
         the issued action to finish before the next call. ``teacher`` labels the
-        current observation. The first
-        call has no previous action to reward. Later calls retain the batch's row
-        identities; call ``reset`` before starting different streams. Salience is
-        nonnegative, per row, and defaults to absolute reward for consolidation.
+        current observation. The reward is credited to the action ``step`` issued.
+        Where a teacher's or caregiver's action ran in its place, the issued action has
+        no outcome: replace it with ``act(observations, greedy=True)``, which learns
+        nothing from it, and teach the shown action with
+        ``lesson(observations, labels)``; the next ``step`` then takes no reward.
+        Reported to ``step``, the shown action's reward, or the zero of an omitted one,
+        would credit an action that did not run. A moment in which a teacher acts can
+        also be taught with ``lesson`` followed by a greedy ``act``, in place of
+        ``step``. The first call has no previous action to reward. Later calls retain
+        the batch's row identities; call ``reset`` before starting different streams.
+        Salience is nonnegative, per row, and defaults to absolute reward for consolidation.
         There is no training/inference switch. For a frozen measurement use a
         separate instance's ``predict``/greedy ``act``. If the next action fails
         to settle, already accepted feedback remains learned. Retry with ``act``
@@ -3466,7 +3482,17 @@ class Brain:
         ``keep_memory=True`` keeps the recall memory's slots too: each stream ends an episode
         there (``Recall.end``), its slots read by the next streams of the same batch, and
         everything else starts afresh as without it; a brain without a recall memory resets
-        as it does without the keyword."""
+        as it does without the keyword.
+
+        After a reset, also with ``keep_memory=True``, an adult brain (its youth over) has no
+        income or error references and, at the founder ``need=0``, no want: only a surprise
+        at its own forecasts can rouse it, measured against the usual error the new stream's
+        first outcome sets. In a two-armed bandit whose paying arm moved, none did, and the
+        reset brain chose the newly paying arm at none of 120 moments in 5 of 5 seeds. Where
+        its world may stop paying, restore its arousal state after the reset
+        (``state = brain.arousal.to_dict()`` before it,
+        ``brain.arousal = Arousal.from_dict(state)`` after it), give it a positive
+        ``need``, or let it keep living without the reset."""
         if not isinstance(keep_memory, bool):
             raise ValueError("keep_memory must be boolean")
         self.basal_ganglia.reset()
