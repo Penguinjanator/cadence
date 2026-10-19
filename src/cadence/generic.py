@@ -1844,10 +1844,12 @@ class Brain:
         Wiring, initialization and enabling/disabling components are construction
         choices. ``reset_arousal=True`` explicitly resets the arousal level and
         reward references, retaining its age and work counters; no other state
-        is reset. An adult brain (its youth over) is then left as ``reset`` leaves
-        it, with no income or error references: a stream that pays nothing from then
-        on does not rouse it. Where its world may stop paying, leave ``reset_arousal``
-        off or give it a positive ``need``. Returns this same brain.
+        is reset. Its arousal is then left as ``reset`` leaves it: an adult brain (its
+        youth over) has no income or error references and, at the founder ``need=0``,
+        no want, so only a surprise at its own forecasts can rouse it; in a two-armed
+        bandit whose paying arm moved, none did, and the brain chose the newly paying arm
+        at none of 120 moments in 5 of 5 seeds. Where its world may stop paying, leave
+        ``reset_arousal`` off or give it a positive ``need``. Returns this same brain.
         """
         if not isinstance(reset_arousal, bool):
             raise ValueError("reset_arousal must be boolean")
@@ -3483,9 +3485,12 @@ class Brain:
         as it does without the keyword.
 
         After a reset, also with ``keep_memory=True``, an adult brain (its youth over) has no
-        income or error references, so a new stream that pays nothing from its start does
-        not rouse it. Where its world may stop paying, restore its arousal state after the
-        reset (``state = brain.arousal.to_dict()`` before it,
+        income or error references and, at the founder ``need=0``, no want: only a surprise
+        at its own forecasts can rouse it, measured against the usual error the new stream's
+        first outcome sets. In a two-armed bandit whose paying arm moved, none did, and the
+        reset brain chose the newly paying arm at none of 120 moments in 5 of 5 seeds. Where
+        its world may stop paying, restore its arousal state after the reset
+        (``state = brain.arousal.to_dict()`` before it,
         ``brain.arousal = Arousal.from_dict(state)`` after it), give it a positive
         ``need``, or let it keep living without the reset."""
         if not isinstance(keep_memory, bool):

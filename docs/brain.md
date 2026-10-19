@@ -207,9 +207,9 @@ learned parameters, optimizer history, neural activity, traces, records, random 
 and pending feedback. It does not run a moment or replay an outcome.
 `reset_arousal=True` explicitly resets the arousal level and reward references,
 retaining its age and work counters; use it only when that reset is part of the
-intended stage. An adult brain (its youth over) is then left as `reset()` leaves
-it: a stream that pays nothing from then on does not rouse it
-([continuous interaction](continuous.md#reset-and-save)).
+intended stage. Its arousal is then left as `reset()` leaves it: an adult brain
+(its youth over) has no want at the founder `need=0`, and only a surprise at its
+own forecasts can rouse it ([continuous interaction](continuous.md#reset-and-save)).
 
 A pending sampled action retains its actual eligibility and behavior temperature.
 Rate changes apply when its next real outcome is learned. A change of

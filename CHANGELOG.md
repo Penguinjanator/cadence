@@ -21,14 +21,15 @@
   would credit an action that did not run. A moment in which a teacher acts can also be
   taught with `lesson` followed by a greedy `act`, in place of `step`.
 - `Brain.reset`, `retune(reset_arousal=True)`, the API reference and the composition and
-  continuous-interaction guides say what these resets leave an adult brain (its youth over):
-  no income or error references, also after `reset(keep_memory=True)`, so a new stream that
-  pays nothing from its start does not rouse it. In a two-armed bandit whose paying arm
-  moved, adults reset this way chose the newly paying arm at none of the next 120 moments in
-  5 of 5 seeds, while the same adults living on without the reset, or reset with their
-  arousal state restored, learned it. Where the world may stop paying, restore the arousal
-  state after the reset, give the brain a positive `need`, or let it keep living without
-  the reset.
+  continuous-interaction guides say what these resets leave the arousal of an adult brain
+  (its youth over), also after `reset(keep_memory=True)`: no income or error references and,
+  at the founder `need=0`, no want, so only a surprise at its own forecasts can rouse it. In
+  a two-armed bandit whose paying arm moved, none did: adults reset this way chose the newly
+  paying arm at none of the next 120 moments in 5 of 5 seeds, while the same adults living
+  on without the reset, reset with their arousal state restored, or given
+  `retune(arousal_need=0.5)` before `reset()`, learned it. Where the world may stop paying,
+  restore the arousal state after the reset, give the brain a positive `need`, or let it
+  keep living without the reset.
 
 ## 0.84.2 — 2026-10-18
 

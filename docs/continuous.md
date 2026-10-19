@@ -425,15 +425,17 @@ without changing the live memory.
 
 A brain with arousal begins the new stream calm, with what it was used to
 forgotten. After `reset()`, also with `keep_memory=True`, or after
-`retune(reset_arousal=True)`, an adult brain (its youth over) starts with no
-income or error references, so a new stream that pays nothing from its start does
-not rouse it. In a two-armed bandit with one constant observation whose paying
-arm moved after 300 moments (`Brain.compose(1, 2, modules=(16,), arousal=True)`,
-seeds 0 to 4), every adult given one of these resets chose the newly paying arm
-at none of the next 120 moments; the same adults living on without the reset,
-reset with their arousal state restored, or reset with `need=0.5`, chose it at
-each of the last 40. Where the world may stop paying, restore the arousal state
-after the reset (`state = brain.arousal.to_dict()` before it,
+`retune(reset_arousal=True)`, an adult brain (its youth over) has no income or
+error references and, at the founder `need=0`, no want: only a surprise at its own
+forecasts, measured against the usual error the new stream's first outcome sets,
+can rouse it. In a two-armed bandit with one constant observation whose paying arm
+moved after 300 moments (`Brain.compose(1, 2, modules=(16,), arousal=True)`,
+seeds 0 to 4), none did: every adult given one of these resets stayed calm and
+chose the newly paying arm at none of the next 120 moments, while the same adults
+living on without the reset, reset with their arousal state restored, or given
+`retune(arousal_need=0.5)` before `reset()`, chose it at each of the last 40.
+Where the world may stop paying, restore the arousal state after the reset
+(`state = brain.arousal.to_dict()` before it,
 `brain.arousal = Arousal.from_dict(state)` after it), give the brain a positive
 `need`, or let it keep living without the reset.
 
