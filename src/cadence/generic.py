@@ -615,6 +615,9 @@ def _validate_life_state(
             array("free/" + name, (batch, n))
     elif meta.get("pending", False) or meta.get("free_current", False):
         raise ValueError("saved pending action or cache needs a free state")
+    if meta.get("pending", False):
+        # a sampled action awaiting its outcome was chosen on the drive of its free state
+        array("actor/_drive", (batch, n))
     if ("actor/trace" in data) != ("actor/trace_bias" in data):
         raise ValueError("incomplete saved eligibility traces")
     array("actor/w_critic", (association,))
@@ -628,8 +631,9 @@ def _validate_life_state(
         ("trace_bias", n),
         ("trace_critic", association + 1),
         ("salience", n),
-        # the drive the free state was settled for; a lesson clears it so that the next act
-        # settles afresh, and a brain saved before that act keeps its free state without one
+        # the drive the free state was settled for, required above with a pending action; a
+        # lesson clears it so that the next act settles afresh, and a brain saved before that
+        # act keeps its free state without one
         ("_drive", n),
     ):
         if "actor/" + name in data:

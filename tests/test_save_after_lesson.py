@@ -4,9 +4,12 @@ next act settles afresh under the taught parameters; ``save`` writes the free st
 a drive, and through 0.84.2 ``load`` refused the checkpoint (``missing saved state:
 actor/_drive``). The loaded brain has no drive either and continues as the saved brain does:
 the same acts, lessons, outcomes and arrays. A calm ``live`` answer taught before its
-outcome, and a ``step`` whose act refused after its lesson, leave the stream in the same
-state."""
+outcome, a lesson while that outcome is awaited (``wait``), a forecast refused after a
+lesson, a ``step`` whose act refused after its lesson and a surprise lesson that taught
+nothing leave the stream in the same state. A sampled action awaiting its outcome still
+needs the drive it was chosen on."""
 
+import json
 import warnings
 
 import numpy as np
@@ -37,6 +40,11 @@ def rows(batch, *indices):
 def saved_arrays(path):
     with np.load(path, allow_pickle=False) as data:
         return {name: data[name].copy() for name in data.files}
+
+
+def saved_meta(path):
+    with np.load(path, allow_pickle=False) as data:
+        return json.loads(str(data["generic"]))
 
 
 def assert_same_checkpoint(first, second):
@@ -74,6 +82,27 @@ def continuation(brain, batch):
     return seen
 
 
+def calm():
+    """A brain with arousal, calm from birth, whose routine answer awaits its outcome."""
+    brain = cd.Brain.compose(3, 2, modules=(8,), seed=1, arousal={"youth": 0})
+    brain.live(EYE[[0]])
+    for t in range(4):
+        brain.live(EYE[[t % 3]], reward=[0.0])
+    assert brain.last_arousal["mode"] == "routine" and brain.pending_feedback
+    assert brain.basal_ganglia._pending is None  # a greedy answer: a lesson is admitted
+    return brain
+
+
+def lives(brain, moments=((2, 1.0, False), (0, 0.0, False), (1, -1.0, True), (2, 0.0, False))):
+    """Moments of ``live`` with the outcomes of the answers before them: each answer and the
+    readings of its moment."""
+    seen = []
+    for cue, reward, done in moments:
+        seen.append(brain.live(EYE[[cue]], reward=[reward], done=[done]))
+        seen.append(dict(brain.last_arousal))
+    return seen
+
+
 @pytest.mark.parametrize("recipe", [{}, {"learning_surprise": True}], ids=["founder", "surprise"])
 def test_a_checkpoint_between_a_lesson_and_the_next_act_loads(tmp_path, recipe):
     """The defect of 0.84.2: a greedy act, a lesson and a save gave a checkpoint that
@@ -106,20 +135,68 @@ def test_a_brain_saved_after_a_lesson_continues_as_the_saved_one(tmp_path, recip
 def test_a_calm_answer_taught_before_its_outcome_resumes(tmp_path):
     """A lesson between a routine ``live`` answer and its outcome: both brains keep the issued
     action and its forecast, and take the outcome once."""
-    brain = cd.Brain.compose(3, 2, modules=(8,), seed=1, arousal={"youth": 0})
-    brain.live(EYE[[0]])
-    for t in range(4):
-        brain.live(EYE[[t % 3]], reward=[0.0])
-    assert brain.last_arousal["mode"] == "routine" and brain.pending_feedback
+    brain = calm()
     brain.lesson(EYE[[1]], np.array([1]))
     copy = cd.Brain.load(brain.save(tmp_path / "calm"))
     assert copy.basal_ganglia._drive is None
     assert copy.pending_feedback and copy.decision_id == brain.decision_id
-    for moment, reward in enumerate((1.0, 0.0, -1.0, 0.0)):
-        x = EYE[[moment % 3]]
-        np.testing.assert_array_equal(copy.live(x, reward=[reward]), brain.live(x, reward=[reward]))
-        np.testing.assert_equal(dict(copy.last_arousal), dict(brain.last_arousal))
+    np.testing.assert_equal(lives(copy), lives(brain))
     assert_same_checkpoint(brain.save(tmp_path / "kept"), copy.save(tmp_path / "resumed"))
+
+
+def test_a_lesson_while_an_outcome_is_awaited_resumes(tmp_path):
+    """A lesson after ``wait``: the checkpoint carries the sensed state awaiting the outcome
+    (format ``cadence-generic/5``) and no drive, and the outcome is credited as before."""
+    brain = calm()
+    owner = brain.decision_id
+    brain.wait(EYE[[2]])
+    brain.lesson(EYE[[2]], np.array([1]))
+    path = brain.save(tmp_path / "waiting")
+    assert saved_meta(path)["format"] == "cadence-generic/5"
+    assert "actor/_drive" not in saved_arrays(path)
+    copy = cd.Brain.load(path)
+    assert copy.basal_ganglia._drive is None and copy.decision_id == owner
+    first = [life.live(EYE[[0]], reward=[1.0], decision_id=owner) for life in (brain, copy)]
+    np.testing.assert_array_equal(first[1], first[0])
+    np.testing.assert_equal(lives(copy), lives(brain))
+    assert_same_checkpoint(brain.save(tmp_path / "kept"), copy.save(tmp_path / "resumed"))
+
+
+def test_a_forecast_refused_after_a_lesson_resumes(tmp_path):
+    """The forecast of an ended episode restores the stream it found when it refuses, the
+    drive a lesson cleared included; the same call, retried on the loaded brain, continues as
+    on the saved one."""
+    brain = calm()
+    brain.lesson(EYE[[1]], np.array([1]))
+    budget = brain.learner.config.free_steps
+    brain.retune(learning_free_steps=1)
+    with pytest.raises(RuntimeError, match="did not settle"):
+        brain.live(EYE[[2]], reward=[1.0], done=[True])
+    assert brain.basal_ganglia._drive is None and brain.pending_feedback
+    copy = cd.Brain.load(brain.save(tmp_path / "refused"))
+    for life in (brain, copy):
+        life.retune(learning_free_steps=budget)
+    retried = ((2, 1.0, True), (0, 0.0, False), (1, -1.0, False))
+    np.testing.assert_equal(lives(copy, retried), lives(brain, retried))
+    assert_same_checkpoint(brain.save(tmp_path / "kept"), copy.save(tmp_path / "resumed"))
+
+
+def test_a_surprise_lesson_that_teaches_nothing_resumes(tmp_path):
+    """A label the brain's act already gives is no surprise: the lesson changes no parameter,
+    so the free state still belongs to the current parameters (``free_current``), and the
+    drive is cleared as after any lesson."""
+    brain = cd.Brain.compose(3, 2, modules=(8,), seed=1, learning_surprise=True)
+    answer = brain.act(EYE[[0]], greedy=True)
+    report = brain.lesson(EYE[[0]], answer)
+    assert report["agreed_presentations"] == 1.0 and report["accepted_presentations"] == 0.0
+    path = brain.save(tmp_path / "agreed")
+    assert saved_meta(path)["free_current"] is True
+    assert "actor/_drive" not in saved_arrays(path)
+    copy = cd.Brain.load(path)
+    agent = copy.basal_ganglia
+    assert agent._free_brain is copy.brain and agent._drive is None
+    for kept, resumed in zip(continuation(brain, 1), continuation(copy, 1), strict=True):
+        np.testing.assert_equal(resumed, kept)
 
 
 def test_a_step_whose_act_refused_after_its_lesson_resumes(tmp_path):
@@ -152,4 +229,18 @@ def test_a_saved_drive_is_still_checked(tmp_path):
     arrays["actor/_drive"] = np.zeros((2, brain.connectome.n))
     np.savez(path, **arrays)
     with pytest.raises(ValueError, match="invalid saved state: actor/_drive"):
+        cd.Brain.load(path)
+
+
+def test_a_pending_action_needs_its_saved_drive(tmp_path):
+    """A sampled action awaiting its outcome was chosen on the drive of its free state, which
+    ``save`` writes with it; a checkpoint without that drive is damaged and refused."""
+    brain = cd.Brain.compose(3, 2, modules=(8,), seed=1)
+    brain.step(EYE[[0]])
+    assert brain.basal_ganglia._pending is not None
+    path = brain.save(tmp_path / "pending")
+    arrays = saved_arrays(path)
+    del arrays["actor/_drive"]
+    np.savez(path, **arrays)
+    with pytest.raises(ValueError, match="missing saved state: actor/_drive"):
         cd.Brain.load(path)
