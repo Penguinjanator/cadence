@@ -14,9 +14,12 @@
   was chosen on.
 - `Brain.step`, the continuous-interaction guide and the learning guide say where the reward
   of a demonstrated action belongs: the reward given to `step` is credited to the action
-  `step` issued, so where a teacher's or caregiver's action ran in its place, teach that
-  action with `lesson(observations, labels)` and do not report its reward to `step`, since
-  that reward would credit an action that did not run.
+  `step` issued, so where a teacher's or caregiver's action ran in its place, replace the
+  issued action with `act(observations, greedy=True)`, which learns nothing from it, and
+  teach the shown action with `lesson(observations, labels)`; the next `step` then takes no
+  reward. Reported to `step`, the shown action's reward, or the zero of an omitted one,
+  would credit an action that did not run. A moment in which a teacher acts can also be
+  taught with `lesson` followed by a greedy `act`, in place of `step`.
 - `Brain.reset`, `retune(reset_arousal=True)`, the API reference and the composition and
   continuous-interaction guides say what these resets leave an adult brain (its youth over):
   no income or error references, also after `reset(keep_memory=True)`, so a new stream that

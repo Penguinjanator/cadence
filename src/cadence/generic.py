@@ -2308,13 +2308,17 @@ class Brain:
         Reward/done describe the preceding action; an omitted reward means no
         reward event on a real transition (zero), not an unknown outcome. Wait for
         the issued action to finish before the next call. ``teacher`` labels the
-        current observation. The reward is credited to the action ``step`` issued:
-        where a teacher's or caregiver's action ran in its place, teach that action
-        with ``lesson(observations, labels)`` and do not report its reward to
-        ``step``, since that reward would credit an action that did not run. The first
-        call has no previous action to reward. Later calls retain the batch's row
-        identities; call ``reset`` before starting different streams. Salience is
-        nonnegative, per row, and defaults to absolute reward for consolidation.
+        current observation. The reward is credited to the action ``step`` issued.
+        Where a teacher's or caregiver's action ran in its place, the issued action has
+        no outcome: replace it with ``act(observations, greedy=True)``, which learns
+        nothing from it, and teach the shown action with
+        ``lesson(observations, labels)``; the next ``step`` then takes no reward.
+        Reported to ``step``, the shown action's reward, or the zero of an omitted one,
+        would credit an action that did not run. A moment in which a teacher acts can
+        also be taught with ``lesson`` followed by a greedy ``act``, in place of
+        ``step``. The first call has no previous action to reward. Later calls retain
+        the batch's row identities; call ``reset`` before starting different streams.
+        Salience is nonnegative, per row, and defaults to absolute reward for consolidation.
         There is no training/inference switch. For a frozen measurement use a
         separate instance's ``predict``/greedy ``act``. If the next action fails
         to settle, already accepted feedback remains learned. Retry with ``act``

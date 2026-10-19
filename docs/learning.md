@@ -296,8 +296,10 @@ Teacher demonstrations in `step` teach the slow graph. Actual rewarded actions
 in `learn` write the associative store; they are different observed targets.
 Do not invent rewards to populate memory. A reward reported to `step` or `learn`
 is credited to the action the brain issued: where a demonstrated action ran in
-its place, teach it with `Brain.lesson(observations, labels)` and leave its reward
-unreported, since that reward would credit an action that did not run. Rehearsal
+its place, replace the issued action with a greedy `act`, which learns nothing
+from it, teach the shown action with `Brain.lesson(observations, labels)` and
+leave its reward unreported
+([continuous interaction](continuous.md#explicit-learning-with-step)). Rehearsal
 can help preserve learned relations, but every repeated observation and learning
 phase counts as experience and work. Compare it with the declared no-rehearsal
 control. Use unambiguous cue/target pairs: conflicting labels on an identical
