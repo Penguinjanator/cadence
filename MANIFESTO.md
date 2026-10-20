@@ -41,6 +41,15 @@ brain answers from one greedy settle and learns nothing; surprise, pain and want
 arousal, and an aroused brain explores, learns from every outcome and writes memory. The
 share of routine moments and the sweeps per moment are measured, not assumed.
 
+**Codes of meaning.** The brain computes, and indexes its memories, on learned compressed
+representations of meaning. Raw observations are its input; the code it learns from them is
+what the cortex settles on and what the memories store and address, so a memory finds moments
+that mean alike even when their raw inputs share little. The code is learned by the same local
+repair inside the settle, slowly enough that stored keys stay readable; a backpropagated
+embedding table is a control. The released memories key on the observation or on a fixed
+random code of it; the learned code is work in progress in
+[#211](https://github.com/muellerberndt/cadence/issues/211).
+
 **System 1 is the default; System 2 is optional.** System 1 is acquired competence in the
 reciprocal graph with memory, plasticity, private imagination and action. System 2 is
 observing regions that read the graph and return their influence into the same

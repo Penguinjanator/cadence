@@ -43,6 +43,13 @@ memory when an outcome surprises it or reward stays below its usual level. Its
 evidence is one bounded chamber; a general failure-only learning gate is not
 implemented.
 
+The brain computes, and indexes its memories, on learned compressed
+representations of meaning; raw observations are its input. A memory keyed on
+raw observations, or on a fixed random code of them (`code=units`), finds only
+moments whose raw inputs overlap. Design keys, memories and applications for a
+learned code; the library's learned code is work in progress in
+[#211](https://github.com/muellerberndt/cadence/issues/211).
+
 ## Goal and mechanism
 
 **Fixed foundation and default hypotheses.** Every addition must remain within
