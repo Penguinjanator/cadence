@@ -1,143 +1,105 @@
-# Cadence documentation: build a continuing brain
+# Cadence documentation
 
-**We are building an animal brain.** Cadence is not a classifier, not any traditional naive
-neural network, not an MLP, and not a transformer with an attention matrix that scales badly
-with context. **Cadence is a continuing equilibrium world-model brain.** Its working hypothesis
-is that a settled interpretation is the world model in operation. Learned
-relationships and retained memories support a family of such interpretations
-across situations. Start with [the world-model guide](world-model.md), then run
-the [quickstart](quickstart.md) and [continuing example](../examples/continuing_brain.py).
+Cadence builds an animal-like brain: one continuing equilibrium that settles each observation
+into an interpretation, acts on it and repairs its local relationships from the outcome.
+System 1 is the default brain, System 2 observers are optional regions in the same settlement,
+and an MLP or classifier setup is a control to compare against. The
+[manifesto](../MANIFESTO.md) states the aims and [AGENTS.md](../AGENTS.md) the construction rules.
 
-These guides use Cadence 0.84.3. Install it with
-`python -m pip install cadence-net==0.84.3`; contributors can install the checkout
-with `python -m pip install -e .` from the repository root.
-The [index](index.md) is the catalogue; this page gives a reading order.
+## Install
+
+```sh
+python -m pip install cadence-net==0.84.3
+```
+
+Cadence needs Python 3.11 or later and NumPy. From a checkout, run `python -m pip install -e .`
+at the repository root. The extras `[fast]` (Numba and SciPy), `[accel]` (PyTorch) and
+`[apple]` (MLX) add backends; [backends](backends.md) says which to choose. The
+[v0.84.3 documentation](https://github.com/muellerberndt/cadence/blob/v0.84.3/docs/README.md)
+is pinned to the release tag.
 
 ## Start here
 
-1. Read [one continuing equilibrium brain](world-model.md) for the design:
-   bootstrap, use, witness a failure, repair and continue the same acquired brain.
-2. Run the [quickstart](quickstart.md), then
-   [examples/continuing_brain.py](../examples/continuing_brain.py). The latter
-   records actual outcomes, correction, settling work and saved continuation.
-3. Use [composition](brain.md) and [continuous interaction](continuous.md) to
-   connect your own environment. Declare what the brain observes, what its
-   actions do, and when the body reports each outcome. Read [context](context.md)
-   for what the brain carries between moments and how to wire it for retention.
-4. Read [contracts](contracts.md) before changing a solver or learning rule,
-   and [task design](task-design.md) before claiming acquired behavior.
-
-Agents working in this repository must also read [AGENTS.md](../AGENTS.md) and
-[CONTRIBUTING.md](../CONTRIBUTING.md). They identify the construction rules,
-capabilities to preserve and checks to run. Use the [API reference](api.md) for
-exact signatures, defaults, mutation and refusal behavior.
+1. [Quickstart](quickstart.md): compose a brain, run it live, imagine, save and resume; then
+   run [examples/continuing_brain.py](../examples/continuing_brain.py).
+2. [World model](world-model.md): the lifecycle of one continuing brain and the order of one moment.
+3. [Continuous interaction](continuous.md): connect a body through `live` and `step`.
+4. [Memory](memory.md): what the brain keeps between moments and which memory to switch on.
+5. [Compose a brain](brain.md): regions, observers and the founder values of every setting.
 
 ## Choose the interface for the task
 
-| You want to… | Start with | Read next |
+| Goal | Start with | Read next |
 | --- | --- | --- |
-| Run one memory-using brain through real observations and actions | `Brain.compose(..., arousal=True)`, then `brain.live(...)` | [Quickstart](quickstart.md), [continuous interaction](continuous.md), [memory](memory.md) |
-| Adjust a continuing brain's settings without replacing its state | `brain.retune(...)`, `brain.describe()` | [Defaults, rate ownership and application choices](brain.md#defaults-and-expert-overrides) |
-| Declare custom neural regions and reciprocal projections | `Genome`, `develop`, `NeuralGraph`; optional `Brain` wrapper | [Composition](brain.md), [cortices](cortex.md), [connectomes](connectomes.md) |
-| Study explicit reciprocal patches and optional recursive observation | `PatchNet` | [PatchNet](patchnet.md), [recursive settlement](recursive-settlement.md), [recursive training](recursive-training.md) |
-| Learn environmental transitions and plan actions through them | `TemporalPatchNet`, `TemporalMemory` | [Interaction](interaction.md), [planning](planning.md), [response protection](temporal-memory.md) |
-| Store witnessed events and consolidate them through dreams | `RecordPatchNet.observe`, `dream` and `sleep` | [Record-patch acquisition](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night), [API](api.md#recordpatchnet-cadencerecord_patch) |
-| Explore belief assimilation, steering and selective activity | `BeliefPatch`, `Steered`, `Life` | [Belief](belief.md), [steering](steering.md), [habit/imagination/learning](howto-demo.md) |
-| Study exact state-and-error readback under its own equations | `cadence.experimental.equilibrium` | [Advanced population guide](equilibrium/index.md) |
+| One continuing stream of observations and actions | `Brain.compose(..., arousal=True)`, `brain.live(...)` | [Continuous interaction](continuous.md) |
+| Explicit teaching, batched streams, learning from every outcome | `brain.step(...)` | [Continuous interaction](continuous.md), [learning](learning.md) |
+| Memory across moments | `Brain.compose` memory settings | [Memory](memory.md) |
+| Change settings of a living brain | `brain.retune(...)`, `brain.describe()` | [Retune the same life](brain.md#retune-the-same-life) |
+| Learned consequences and planning | `TemporalPatchNet`, `TemporalPatchNet.plan` | [Temporal](temporal.md), [planning](planning.md) |
+| Sequence records | `RecordPatchNet` | [Record patch](record-patch.md) |
+| Belief under action | `BeliefPatch` | [Belief](belief.md) |
+| Self-readback gains and a governed life | `Steered`, `Life` | [Steering](steering.md) |
+| Custom anatomy | `Genome`, `develop`, `NeuralGraph` | [Write a cortex](cortex.md) |
+| Connectome import | `NeuralGraph` from a measured wiring diagram | [Connectomes](connectomes.md) |
+| Selection across lives | `genes`, `evolve`, `cadence.genome.mutate` | [Evolution](evolution.md) |
+| Many brains on a GPU | `cadence.population.PopulationPatch` (torch) | [Population](population.md) |
+| The population solver | `cadence.experimental.equilibrium` | [Population solver](equilibrium/index.md) |
 
-`Brain.compose` constructs the brain; `live` advances its one continuing life;
-`last_settlement` only reports diagnostics. Use `step` for batched streams,
-teacher labels or learning from every outcome. The other rows expose specialist
-mechanisms with their own state and learning contracts; importing two classes
-does not integrate them into one equilibrium.
+Each model family carries its own guarantee, and one family's guarantee does not certify a
+composition of families ([contracts](contracts.md)).
 
-Record-patch `dream` completes supplied cues from the retained model and
-records; `sleep` fixes those completions as targets, teaches the slow weights and
-rewrites the store's residuals. That cycle is separate from the composed brain's
-private `imagine` and online `SynapticMemory` consolidation, and is not wired
-into `Brain.compose`.
+## All guides
 
-## Keep one continuing life
+| Group | Page | Covers |
+| --- | --- | --- |
+| Start | [Quickstart](quickstart.md) | first continuing brain, imagination, save and resume |
+| | [World model](world-model.md) | lifecycle and causal order of one moment |
+| | [Orientation](orientation.md) | Cadence for machine-learning readers |
+| | [Concepts](concepts.md) | neuron equations, settling, state lifetimes |
+| Run the brain | [Compose a brain](brain.md) | composition settings and founder values |
+| | [Continuous interaction](continuous.md) | `live`, `step`, arousal, refusal, saving |
+| | [Sequential tasks](sequential-tasks.md) | multi-step prerequisite chains |
+| Memory | [Memory](memory.md) | every memory type and when to use it |
+| | [Episodic memory](episodic.md) | `memory_choice=True` records that vote in the choice |
+| | [Recall memory](recall.md) | `recall=True` slots and the learned address |
+| | [Standalone stores](records.md) | `Records`, `FastSynapses` and other stores used directly |
+| Learning and reward | [Learning](learning.md) | the free/nudged rule and teaching budgets |
+| | [Reward](reward.md) | three-factor rule, critic, dopamine, `ActorCritic` |
+| Build and wire | [Build your own brain](build.md) | tutorials on your own data |
+| | [Write a cortex](cortex.md) | regions, projections, ports |
+| | [Connectomes](connectomes.md) | a measured wiring diagram as one `NeuralGraph` |
+| | [Evolution](evolution.md) | genomes, mutation and selection |
+| Other model families | [PatchNet](patchnet.md) | reciprocal patches on continuous observations |
+| | [Recursive settlement](recursive-settlement.md) | observer populations in one graph |
+| | [Temporal](temporal.md) | `TemporalPatchNet` transitions |
+| | [Planning](planning.md) | private repair of input ports toward a goal |
+| | [Protect temporal responses](temporal-memory.md) | `TemporalPatchNet` tool that protects chosen responses; not a brain memory |
+| | [Partitioned](partitioned.md) | fixed connectivity masks, experimental |
+| | [Record patch](record-patch.md) | `RecordPatchNet` and its compositions |
+| | [Population](population.md) | `PopulationPatch` on torch |
+| | [Belief](belief.md) | `BeliefPatch` assimilation and imagination |
+| | [Steering](steering.md) | `Steered` and `Life` |
+| Evaluate | [Evaluate a brain](evaluation.md) | task design, baselines, controls |
+| | [Protocols](protocols.md) | held-out predicate tests |
+| | [Receipts](receipts.md) | outcomes bound to source hashes |
+| | [Troubleshooting](troubleshooting.md) | symptom to remedy |
+| Reference | [Contracts](contracts.md) | numerical and learning guarantee per family |
+| | [Certificate](certificate.md) | the settling contraction certificate |
+| | [Backends](backends.md) | devices, precision, extras |
+| | [API reference](api.md) | every public name and signature |
+| Population solver | [Population solver](equilibrium/index.md) | `cadence.experimental.equilibrium` |
+| | [Quickstart](equilibrium/QUICKSTART.md) | build, teach, test, save and resume |
+| | [Brain design](equilibrium/BRAIN_DESIGN.md) | wiring, teaching rows, capacity, diagnosis |
+| | [Live operation](equilibrium/LIVE.md) | bodies, reward learning, retention |
+| | [Execution and cost](equilibrium/ACCELERATION.md) | devices, batching, parallel lives |
+| | [Specification](equilibrium/SPECIFICATION.md) | equations, qualification, continuation |
+| | [Solver API reference](equilibrium/REFERENCE.md) | classes, parameters, diagnostics |
+| | [Agent guide](equilibrium/AGENTS.md) | application workflow for coding agents |
 
-```mermaid
-flowchart LR
-    O[Observation and retained context] --> S[Bounded neural settlement]
-    S -->|Qualified| A[Execute action]
-    S -->|Refused| R[Inspect solve and retry]
-    R --> S
-    A --> W[Witness actual outcome]
-    W --> F[Feedback and optional correction]
-    F --> O
-```
+## Evaluate and contribute
 
-Keep learned relations and relevant memory across this loop, and save pending
-feedback when pausing. `live` consumes the preceding action's outcome before
-settling the current observation. If that next solve refuses after accepting the
-feedback, retry `live(observations)` without submitting the outcome again. The
-[interaction guide](continuous.md#routine-and-repair-live) explains both retry cases.
-
-## Recognize the intended lifecycle
-
-A useful application makes these six things inspectable:
-
-1. **Boundaries and state.** Declare observations, actions, stream identities and
-   the context carried between events. A window of input is a declared boundary,
-   not evidence of continuing acquired knowledge.
-2. **Reciprocal interpretation.** `Brain.compose` couples processing and motor
-   regions reciprocally, even with one processing region and no observers.
-   Sensory drive enters one way, and default processing regions have no internal
-   synapses. The recurrent solve, not the number of layers, is what separates
-   this from a feed-forward computation.
-3. **Retained knowledge.** Reuse learned parameters, working trace and
-   associative memory across experience. Independent `predict` omits both memory
-   reads without erasing them; `fit` clears pending stream state. Both are
-   component controls.
-4. **Witnessed correction.** Score issued actions against actual outcomes.
-   Supplied teachers label the current observation; rewards concern the preceding
-   action. Every outcome is consumed once, including success.
-5. **Measured work.** Read `last_settlement` beside task outcomes and learning
-   reports. Free-answer sweeps and residuals are not total work or physical
-   energy. Cheap routine behavior is a target to test.
-6. **Continuation and retention.** Disturb the environment, measure recovery and
-   old skills, and resume a saved brain with its pending feedback.
-
-The composed brain exposes neural state and sensory/motor indices, reads a
-working `Trace` and `SynapticMemory`, and changes local relationships through
-feedback. Explicit record-field ports and exact state-and-error readback belong
-to other APIs with their own contracts. Optional System 2 observers extend this
-recurrence; they are not required for the lifecycle.
-
-## Implemented mechanisms and current boundaries
-
-| Mechanism | What to use and what it establishes |
-| --- | --- |
-| Continuing action, memory and saved feedback | [Brain](brain.md), [continuous interaction](continuous.md) and [memory](memory.md); a qualified neural state uses held trace and memory inputs. |
-| Action settling diagnostics | `Brain.last_settlement` reports accepted and refused free-answer solves. [Full recording](api.md#record-every-settling-step) can capture additional solver calls; it incurs overhead. |
-| Local teaching and reward updates | [Learning](learning.md) and [reward](reward.md); supplied labels and real feedback retain their distinct contracts. Centered dopamine can suppress actor modulation, not all learning or work. |
-| Routine and repair in one life | `Brain.live` uses arousal to choose between greedy routine and exploration with learning; see [continuous interaction](continuous.md#routine-and-repair-live). Routine still pays a full settle. |
-| Dreaming and sleep consolidation | [Record-patch sleep](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night) transfers retained completions into slow weights. [Behavioral tests](../tests/test_record_patch.py) check recall after removing the record store; sleep does not guarantee correction of false memories. |
-| Selective activity in a separate composition | [Life](api.md#life-cadencelife) governs a belief/steering model with an application-supplied habit. It is not an automatic gate inside `Brain.compose`. |
-| Learned environmental consequences | [Temporal planning](planning.md), [record patches](record-patch.md) and [belief models](belief.md); integration into the default continuing brain is tracked in [the consequence-model issue](https://github.com/muellerberndt/cadence/issues/93). |
-| Reliable cheap routine and selective repair | A measured research target. [The repair issue](https://github.com/muellerberndt/cadence/issues/122) owns the missing integrated contract; neither small residual nor successful reward proves it. |
-
-## Read in order
-
-| Stage | Guides |
-| --- | --- |
-| Understand the hypothesis | [World-model lifecycle](world-model.md), [equilibrium world models](equilibrium-world-models.md), [architecture](architecture.md), [orientation for ML readers](orientation.md) |
-| Run a continuing brain | [Quickstart](quickstart.md), [composition](brain.md), [continuous interaction](continuous.md), [experience design](experience.md), [memory](memory.md), [reward](reward.md) |
-| Understand and test local updates | [Concepts](concepts.md), [learning](learning.md), [task controls](tasks.md), [arrays and component controls](build.md) |
-| Evaluate a whole life | [Task design](task-design.md), [sequential tasks and prerequisite chains](sequential-tasks.md), [missteps](missteps.md), [scaling](scaling.md), [troubleshooting](troubleshooting.md), [creativity](creativity.md) |
-| Check numerical and evidence contracts | [Contracts](contracts.md), [certificates](certificate.md), [existing settling and recovery results](settling-literature.md), [protocols](protocols.md), [receipts](receipts.md), [API](api.md), [backends](backends.md) |
-| Study learned consequences and records | [Interaction](interaction.md), [temporal models](temporal.md), [planning](planning.md), [response protection](temporal-memory.md), [record patches](record-patch.md), [belief](belief.md), [steering](steering.md), [habit/imagination/learning](howto-demo.md) |
-| Build custom reciprocal graphs | [PatchNet](patchnet.md), [recursive settlement](recursive-settlement.md), [recursive training](recursive-training.md), [cortices](cortex.md), [genomes](evolution.md), [connectomes](connectomes.md), [partitioned settling](partitioned.md) |
-| Explore execution and visualization | [Population execution](population.md), [viewer pages](pages.md), [advanced state-and-error solver](equilibrium/index.md) |
-
-Use each model family's own mathematics and tests: a guarantee about the
-population solver, temporal model or record store does not certify the composed
-neural graph without a demonstrated correspondence.
-
-For verification commands and package checks, use
-[CONTRIBUTING.md](../CONTRIBUTING.md). Report a result with its task, source
-revision, seeds, outcome measurements and full work accounting through
-[protocols](protocols.md) and [receipts](receipts.md).
+Design a claim with [evaluation](evaluation.md), test it with [protocols](protocols.md) and
+report it with [receipts](receipts.md). [CONTRIBUTING.md](../CONTRIBUTING.md) lists the checks,
+[CHANGELOG.md](../CHANGELOG.md) the releases, the [paper](https://philpapers.org/rec/MUECAP-2)
+the hypothesis and [cadence-demos](https://github.com/muellerberndt/cadence-demos) the
+application demos.

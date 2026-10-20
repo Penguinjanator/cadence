@@ -92,7 +92,7 @@ A brain without `memory_choice` acts, learns and saves as in 0.84.0.
   covering construction, whose metadata has no `cover`, naming that cause. Every brain
   without `code` is byte-identical at 4, 256 and 2,000 inputs and on an image shape, the
   checkpoint included at 4 and 2,000 inputs and on the image
-  ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
+  ([the observation code](docs/memory.md#the-observation-code)).
 - `Brain.compose(inputs, actions, code=units)` makes the sensory region the code: every
   observation is coded before the drive, so 12,824 inputs reach the cortex as 1,024 units
   through 1,024 x 64 sensory synapses in place of 12,824 x 64, and the memories key on the
@@ -108,7 +108,7 @@ A brain without `memory_choice` acts, learns and saves as in 0.84.0.
   place of 105 MB at 12,824 inputs) and `code=1024` above 1,024 inputs, where the two
   episodic separators and the recall address map go from 2 x 105 MB and 1,322 MB on the
   observation to none and 8.9 MB on the code, the code's tables 0.84 MB
-  ([from pixels to keys](docs/memory.md#from-pixels-to-keys)).
+  ([the observation code](docs/memory.md#the-observation-code)).
 - The episodic and sequential-task guides state the founder dependence of the continuation
   after teaching: the readings in which `step` eroded a taught chain where `live` kept it
   belong to the five fresh founders of the chain instrument, and on other founders both paths
@@ -150,7 +150,7 @@ A brain without `memory_choice` acts, learns and saves as in 0.84.0.
   imagination, `wait`, `describe()` and `retune(history_amplitude=...)` treat it as they
   treat the working trace, and a brain with one saves as `cadence-generic/7` and continues
   exactly. The founder `history_decays=()` builds the brain without it, byte-identical; the
-  [context guide](docs/context.md#hear-the-past-at-several-timescales) says when to add it.
+  [context guide](docs/memory.md#hear-the-past-at-several-timescales) says when to add it.
 - The recall memory, opt-in ([issue 199](https://github.com/muellerberndt/cadence/issues/199),
   [issue 201](https://github.com/muellerberndt/cadence/issues/201)): `Brain.compose(...,
   recall=True)` adds an index of the stream's own recent moments, a `recall` and a `next`
@@ -178,14 +178,14 @@ A brain without `memory_choice` acts, learns and saves as in 0.84.0.
   they treat the heard history; the address map is a learned parameter that resets keep and
   `parameters()` counts, and a brain with the memory saves as `cadence-generic/8` and
   continues exactly. The founder `recall=False` builds the brain without it, byte-identical;
-  the [memory guide](docs/memory.md#recall-the-streams-own-moments) explains it, with its
+  the [memory guide](docs/recall.md) explains it, with its
   storage at camera width (14.5 MB with a code of 1,024 neurons, cortex values and an
   association region of 512 neurons, against 105 MB for one dense separator). The option
   reproduces the binding instrument
   `benchmarks/binding/index_read.py` moment for moment (`tests/test_recall_memory.py`).
 - Options for the recall memory, each a gene beside `recall=True` that `retune` can change,
   described and saved only where it differs from its founder, so every founder brain and its
-  checkpoint are as before ([memory guide](docs/memory.md#recall-the-streams-own-moments)).
+  checkpoint are as before ([memory guide](docs/recall.md)).
   `recall_address_step="toward"` steps the address by the named keys less the mixture it
   attended to, in place of the founder `"lms"` step toward the named keys: to first order
   the named slots' logits rise against the attended ones, whatever the keys' norms.
@@ -207,7 +207,7 @@ A brain without `memory_choice` acts, learns and saves as in 0.84.0.
   contrast. The binding instrument's index memory takes the same genes (`address_step`,
   `recency=None`, `write` with `IndexBrain.aroused_rows`, and `null`).
 - Two more options for the recall memory, described and saved only where they differ from
-  their founders ([memory guide](docs/memory.md#recall-the-streams-own-moments)).
+  their founders ([memory guide](docs/recall.md)).
   `recall_episodes="keep"` keeps a stream's slots and the address map when its episode ends
   (`done` through `step`, `learn` or `live`, and a calm `live` moment that ends it), where
   the founder `"forget"` empties them; the working trace, efference copy and heard history
@@ -316,7 +316,7 @@ A brain without `memory_choice` acts, learns and saves as in 0.84.0.
   on that bandit (seeds 0 to 5, two above 0.9; the earlier composition 0.25, none) and still
   learns the delayed response of `tests/test_generic.py` from reward in 6 of 6 seeds (8 to
   13; amplitude 0.3 at scale 12 learned 3). `Brain.build` keeps its
-  `memory_scale` of 12. The new [context guide](docs/context.md) explains what a brain
+  `memory_scale` of 12. The new [context guide](docs/memory.md#working-trace) explains what a brain
   carries, how to wire it for retention and which settings to change.
   Compatibility: a composed checkpoint records `working_memory_scale` in its composition;
   one saved before 0.82.0 loads as 12 with its own synapses and settings, and releases

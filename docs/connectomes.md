@@ -1,193 +1,158 @@
 # Brains from a connectome
 
-A measured wiring diagram becomes one `NeuralGraph`: every neuron a unit of the
-graded rate model, every synapse class an entry with its count and its sign, one
-global gain. This page is the recipe, with the numbers that decide each step and
-the limits that were measured on wiring at both scales, a 302-neuron nervous
-system and a 150,802-neuron brain and nerve cord. The purpose is to import
-structural data, supply declared inputs and read model outputs. Biological
-dynamics and behavior require their own validation; see the
-[numerical and learning contracts](contracts.md). The
-[Connectome demo](https://github.com/muellerberndt/cadence-demos/tree/main/connectome)
-runs compiled wiring with plastic connections in the browser.
+A measured wiring diagram becomes one `NeuralGraph`: every neuron a unit of the graded rate
+model, every synapse class one entry with its contact count and sign, one global gain. This
+page is the import recipe. Biological dynamics and behaviour need their own validation
+([numerical and learning contracts](contracts.md)). The
+[Connectome demo](https://github.com/muellerberndt/cadence-demos/tree/main/connectome) runs
+compiled fly wiring with plastic connections in the browser.
 
-## 1. Custody
+## 1. Custody: manifest and dictionary decisions
 
-Pin the release files by URL and SHA-256, fetch them once, and build a fixture the checks can
-rebuild from the same bytes. Record every decision of the dictionary in one place:
+Pin the release files by URL and SHA-256, fetch them once, and build a fixture that the checks
+rebuild from the same bytes. Commit a manifest (counts, hashes, `Connectome.digest()`, the
+dictionary) and rebuild the fixture itself with one command. The dictionary records every
+import decision in one place:
 
-- which objects are neurons (the fly: proofread objects of every super class except glia,
-  trachea and non-neuronal, 150,802 of 188,508);
-- the synapse floor (classes at five or more synapses: 1,877,099 classes carrying 23,131,051
-  synapses; the floor decides the sub-net a page can settle later), and the seams the floor
-  must not touch: a distributed memory is many weak synapses, and the fly's floor of five kept
-  231 of the 1,079 Kenyon cell classes onto one output neuron of the lessons and 14 of the 336
-  onto the other, so that what plasticity there could express was measured to be nothing. The
-  seam a lesson will move is kept at every count (16,795 Kenyon-cell-to-MBON classes), and
-  `seam_report` says what custody left of it before a lesson is designed on it;
-- the sign of every class from the presynaptic transmitter (acetylcholine +1; GABA, glutamate
-  and histamine -1; modulators 0), which is a declaration, since the predictions are
-  per neuron and imperfect;
-- what the release lacks (the fly's release holds chemical synapses only, so the giant fibre's
-  electrical path to the jump muscles is absent and no fact about it can be asked).
-
-The fixture's manifest (counts, hashes, the dictionary) is committed; the fixture itself is
-rebuilt by one command and is not.
+- **Which objects are neurons.** For the fly, the proofread objects of every super class except
+  glia, trachea and non-neuronal: 150,802 of 188,508.
+- **The synapse floor** (`min_count`, section 2), and the seams it must leave untouched.
+- **The sign of every class**, from the presynaptic transmitter: acetylcholine +1; GABA,
+  glutamate and histamine -1; modulators 0. Transmitter predictions are per neuron and
+  imperfect, so the sign map is a declaration.
+- **What the release lacks.** A release of chemical synapses only has no electrical paths, and
+  no fact about them can be asked.
 
 ## 2. The connectome and its populations
 
-<!-- not-run: reads the fly dataset built in section 1 -->
-```python
-from cadence import NeuralGraph, Connectome, NeuronModel
+`Connectome.from_synapses(n, pre=, post=, count=, sign=, populations=, label=, min_count=)`
+drops self-synapses and every input row with fewer than `min_count` contacts (the floor applies
+before merging), merges parallel rows between the same pair by summing counts (the sign becomes
+the count-weighted mean), and sorts synapses by receiving neuron, then sender. `count` defaults
+to 1, `sign` to +1, `label` to `"connectome"`, `min_count` to 0. It refuses indices outside
+`[0, n)`, negative counts (inhibition goes in `sign`), non-finite values and a negative or
+non-finite `min_count`. `populations` maps a name to neuron indices (stored sorted and
+deduplicated). Names are the interface of every later tool (protocols, `seam_report`,
+`calibrate_bias`), so name every set a gate or a page will read: afferents by modality and
+side, motor neurons by muscle and side, the memory site's cells by type.
 
-connectome = Connectome.from_synapses(n, pre=pre, post=post, count=count, sign=sign, populations=sets)
-brain = NeuralGraph(connectome, NeuronModel(gain=0.02), backend="cpu")
+The floor removes noise and also removes distributed memories, which are many weak synapses.
+`seam_report(connectome, pre, post)` says what custody left of a seam before a lesson is
+designed on it, and the seam a lesson will move is kept at every count:
+
+```python
+import numpy as np
+from cadence import Connectome, NeuralGraph, NeuronModel, seam_report
+
+rng = np.random.default_rng(0)
+groups = {"orn:fruit": range(0, 20), "orn:yeast": range(20, 40), "ln": range(40, 70),
+          "pn:fruit": range(70, 90), "pn:yeast": range(90, 110), "kc": range(110, 290),
+          "mbon": range(290, 292)}
+
+def wire(a, b, p, mean):  # random classes from population a to b, geometric counts
+    a, b = np.array(groups[a]), np.array(groups[b])
+    i, j = np.nonzero(rng.random((len(a), len(b))) < p)
+    return a[i], b[j], rng.geometric(1 / mean, len(i))
+
+parts = [wire("orn:fruit", "pn:fruit", 0.4, 6), wire("orn:yeast", "pn:yeast", 0.4, 6),
+         wire("orn:fruit", "ln", 0.3, 4), wire("orn:yeast", "ln", 0.3, 4),
+         wire("ln", "ln", 0.5, 6), wire("ln", "pn:fruit", 0.5, 4), wire("ln", "pn:yeast", 0.5, 4),
+         wire("pn:fruit", "kc", 0.03, 6), wire("pn:yeast", "kc", 0.03, 6),
+         wire("kc", "mbon", 0.5, 1.5)]
+pre, post, count = (np.concatenate(x) for x in zip(*parts))
+sign = np.ones(len(pre))  # all cholinergic in this toy
+
+floored = Connectome.from_synapses(292, pre=pre, post=post, count=count, sign=sign,
+                                   populations=groups, min_count=2)
+print(seam_report(floored, "kc", "mbon")["coverage_pre"])  # about 0.28: the floor thinned it
+
+seam = np.isin(pre, groups["kc"]) & np.isin(post, groups["mbon"])
+keep = (count >= 2) | seam  # the floor everywhere except the seam
+C = Connectome.from_synapses(292, pre=pre[keep], post=post[keep], count=count[keep],
+                             sign=sign[keep], populations=groups, label="toy-lobe")
+report = seam_report(C, "kc", "mbon")
+assert report["coverage_pre"] > 0.7
 ```
 
-Name every population the gates and the page will read (`populations` is a dict of name to
-neuron indices): the afferents by modality and side, the motor neurons by muscle and side, the
-descending neurons by type, the memory site's cells by type. Names are the interface of every
-later tool; the fly's `mbon:MBON11:right` is one neuron, `orn:decaying_fruit:left` 130.
-
-The whole brain settles at about 4 ms per step on a laptop CPU at this size; rest is an exact
-fixed point of the rectified activation, and activity stayed below one percent of neurons under
-every stimulus up to a gain of 0.04. Never call `dense()` on a brain of this size.
+`seam_report` returns `classes`, `synapses`, `coverage_pre` (the share of senders with a class
+onto some receiver), `classes_per_post` and `median_count`. Reading it, with `preflight` and
+`naive_efficacy`, is described in [learning from reward](reward.md#check-before-the-first-lesson).
+The default `cpu` backend keeps a large connectome sparse; never call `brain.dense()` on one.
 
 ## 3. The gain by protocol
 
-One global gain is selected by two or three training facts from the physiology literature and
-held out against the rest, with shuffled wirings (the same neurons and counts, postsynaptic
-endpoints permuted) each selecting their own gain ([protocols](protocols.md)):
+Select the global gain (`NeuronModel(gain=)`) with `select_gain` from two or three training
+facts from the physiology literature, and score the held-out rest. Each shuffled wiring (same
+neurons and counts, receiving endpoints permuted) selects its own gain as the control. A mean
+over a large readout cannot reach 0.5, so large readouts need the `sparse` predicate, and
+left-right sets need `lateralized`. Write the facts with their sources before the run. [Protocols](protocols.md) owns `Protocol`, the predicates,
+[the shuffled control](protocols.md#the-shuffled-control) and
+[gain selection under a sparsity cap](protocols.md#gain-selection-under-a-sparsity-cap).
 
-- a fact is a row: a stimulus on a named population at a level, a readout population, a
-  predicate; the fly's steering circuit passed 7 of 13 held-out facts at the selected gain
-  against 3, 1 and 1 on three shuffled wirings, its instincts 8 of 14 against 2 each;
-- readouts over large populations need the `sparse` predicate (a mean over 1,312 descending
-  neurons cannot reach 0.5) and left-right sets the `lateralized` one (a steering set holds
-  motor neurons with no haltere input, so `active` on the set's mean fails).
+## 4. A gain per cell class
 
-Write the facts with their sources before the run, and keep the shuffled wirings' own gains in
-the receipt; a control at the measured wiring's gain is a weaker control.
+A loop of excitatory local neurons that is supercritical at the steering circuit's gain lights
+every odour into the same code, and raising their threshold leaves a multiplicative loop
+ignited. `NeuralGraph(log_gain=)` holds one log gain per neuron on its
+outgoing synapses (weight = `gain * count * efficacy * exp(log_gain[pre])`), and `select_gain`
+picks a class's value the same way as the global gain:
 
-## 4. What a rate model cannot carry
-
-Declare it, supply it, and put the gate on record. The fly's equilibrium reflex at the wingbeat
-timescale rests on the spike timing of the haltere afferents; in the closed loop the measured
-cord damped roll and yaw and did not damp pitch, so the reflex is the body's own inner loop,
-the way the worm's undulation is the body's. Timing-coded pathways, electrical synapses and
-neuromodulation are outside the model, and a page that lets the brain override a hand-written
-layer keeps the boundary visible.
-
-## 5. One gain, many circuits: a gain per cell class, selected by protocol
-
-At one global gain the fly's antennal lobe ignites. 104 of its 425 local neurons are predicted
-cholinergic; they are the broad ones (a median of 88 projection neuron targets each against 16
-for the GABAergic ones) and they excite each other through 194,044 synapses, a loop that is
-supercritical at the gain the steering circuit selected. Any input lights the lobe into one
-state, 38 to 40 percent of the Kenyon cells answer, almost all of them to every odour, and the
-codes of the fruit and yeast odours have a cosine of 0.98 at every gain, where the animal's code
-is sparse (about 5 percent) and specific. Neuron adaptation did not sparsen it, and neither did a
-threshold: with the local neurons' bias at -6 they stayed a third active and the cosine stayed
-0.98. A runaway loop is multiplicative and needs a gain.
-
-The remedy is a gain per cell class, selected the way the global gain was:
-
-<!-- not-run: reads the fly dataset built in section 1 -->
 ```python
-def make(attenuation):                       # the candidate: -log gain of the local neurons
-    log_gain = np.zeros(C.n); log_gain[C.populations["ln"]] = -attenuation
-    return NeuralGraph(C, NeuronModel(gain=GAIN), log_gain=log_gain)
+from cadence import Protocol, select_gain
+from cadence.protocol import Levels
 
-protocol = Protocol(stimuli={"fruit": (...), "yeast": (...)}, rows=[...],
-                    training=[("fruit", "kc", "sparse"), ("yeast", "kc", "sparse"),
-                              ("fruit", "kc", "specific", "yeast")],
-                    levels=Levels(sparse_min=0.02, sparse_max=0.15, specific_max=0.25, code_level=0.05))
-attenuation, table = select_gain(make, protocol, [0, 0.7, 1.4, 2.1, 3.0, 4.6], sparsity_cap=0.05)
+def make(attenuation):  # the candidate: minus the log gain of the local neurons
+    log_gain = np.zeros(C.n)
+    log_gain[list(C.populations["ln"])] = -attenuation
+    return NeuralGraph(C, NeuronModel(gain=0.05), log_gain=log_gain)
+
+protocol = Protocol(
+    stimuli={"fruit": ("orn:fruit",), "yeast": ("orn:yeast",)}, rows=[],
+    training=[("fruit", "kc", "sparse"), ("yeast", "kc", "sparse"),
+              ("fruit", "kc", "specific", "yeast")],
+    levels=Levels(sparse_min=0.02, sparse_max=0.15, specific_max=0.25, code_level=0.05))
+attenuation, table = select_gain(make, protocol, [0, 0.7, 1.4, 2.1, 3.0], sparsity_cap=0.3)
+print(attenuation, [(row["gain"], row["facts_passed"]) for row in table])
+assert attenuation == 0.7 and not table[0]["admissible"]
+brain = make(attenuation)
 ```
 
-The facts are the animal's (about 5 percent of Kenyon cells answer an odour; the codes of two
-odours are specific), the `specific` predicate holds one code apart from another
-([protocols](protocols.md)), the candidate is the smallest attenuation that passes them, and
-shuffled wirings select their own. Select on the whole brain, as the global gain was: a
-sub-net's own stimulated receptors already exceed the sparsity cap. On the fly the local neurons' gain lands at a twentieth of
-the measured wiring's: the Kenyon cell codes go to 4 and 11 percent with a cosine of 0.32, 81
-cells answer the fruit alone, 372 the yeast alone, 67 both. The number is declared in the
-example's dictionary (`CLASS_LOG_GAIN`) next to the global gain, with its receipt.
+`select_gain` keeps the candidates that are admissible (at most `sparsity_cap` of all neurons
+active under every training stimulus; the default cap is 0.05 and `None` turns it off), takes
+the one that passes the most training facts, and breaks ties by the smallest value. It raises
+`ValueError` on an empty grid or when no candidate is admissible. Here the unattenuated lobe
+activates 0.32 of all neurons, over the cap, and shares 0.8 of its Kenyon cell code between the
+odours; 0.7 and 1.4 pass all three facts and 0.7 is chosen. Select on the whole brain, because a
+sub-net's own stimulated receptors can exceed the cap, and declare the value in the dictionary
+next to the global gain. Measure the code at the learning site before designing a lesson: a code shared by every stimulus carries nothing
+a lesson can attach to.
 
-Measure the code of the site you want to learn at before designing a lesson on it: a code that
-is the same for every stimulus carries nothing a lesson can attach to, and no learning rule
-repairs that downstream.
+## 5. What a rate model cannot carry
+
+Timing-coded pathways, electrical synapses, neuromodulation, hormones and peptides are outside
+the model, and transmitter signs are a fast-interaction map only. Declare such a pathway, supply
+it from outside (a hand-written layer or the body's own loop), and keep the boundary visible
+on any page that lets the brain override it. The fly's wingbeat-timescale equilibrium reflex
+rests on haltere spike timing, so a closed loop supplies it.
 
 ## 6. Graph coverage in a browser
 
-The current fly export includes all 150,802 neurons and 1,877,099 connection
-classes in its retained fixture. Proofreading and contact-count filters are
-importer choices and remain explicit; no additional 60,000-neuron recruitment
-cap is used by the current local page.
+Export the full graph the dictionary selected. A reduced graph is an approximation that needs
+its own evidence: equal population means do not give equal member-level behaviour, so compare
+individual activities, readouts and task outcomes under the same stimuli. Export synapses in
+`Connectome`'s order (receiving neuron, then sender) so a member-level parity test can hold a
+browser engine to the library.
 
-A reduced graph is an optional approximation requiring its own evidence.
-Matching selected population means does not establish equivalent
-member-level behavior. Compare individual activities, readouts and task outcomes
-under the same stimuli, rather than inferring closure from size alone. Export
-in the library's order of synapses (receiving neuron, then sender) so a browser
-engine can be held to the library by a parity test.
+## 7. Before the first lesson
 
-## 7. Learning on it
-
-The rule is the same actor-critic as on any brain ([learning from reward](reward.md)); the
-traps it met on a real wiring are listed there with their readings. Before the first decision,
-run the check that reads them all at once:
-
-<!-- not-run: reads the fly dataset built in section 1 -->
-```python
-report = preflight(brain, outputs, plastic, drives)   # drives: the situations it will decide in
-assert report["warnings"] == []                       # each warning names the block that repairs it
-```
-
-It finitely settles the brain under the drives and reports a readout with little response (`calibrate_bias`),
-a plastic senders' code shared between two situations (a gain per cell class on the `specific`
-fact), and a seam too thin for eligibility (custody, `seam_report`); the fly's setup writes
-the report into its receipt. On the fly's measured wiring, set up as below, it warns nothing
-(the readouts between 0.38 and 0.81, the senders' code 0.23 shared, 75 and 13 active plastic
-inputs); on a shuffled wiring the same call warns three times (both readouts pinned at 1.00,
-the code 0.82 shared, a thin seam), which is what a control should do. Two decisions come
-first:
-which neurons read the action (the fly reads approach and avoidance from two mushroom body
-output neurons of known valence, one cell each) and which synapses are plastic (the seam the
-animal is known to change, `plastic_synapses` on the learner). Then two operating points the
-connectome does not carry, both declared and both generic:
-
-- **The readout's threshold.** A connectome says who talks to whom, not how excitable a cell
-  is; at one global threshold a readout cell sits on a rail (the fly's approach cell at 1.00
-  under every odour, its avoidance cell at 0.01), where the observed nudge has
-  little response. `calibrate_bias(brain, drives, {outputs: 0.5}, per_neuron=True)` searches the bias of
-  each readout cell by coordinate bisection toward a mean of one half over the
-  supplied situations. Coupled cells are revisited, but the finite search can
-  miss its target. Check the final full-equation residual and actual means;
-  the [qualified calibration option](learning.md#calibrating-the-operating-point)
-  refuses an unresolved solve. A target
-  such as 0.6/0.4 declares an engineered initial preference; it does not recover
-  innate appetite from the connectome. The current export's payload and receipt
-  specify the actual calibration. The array goes into `NeuralGraph(bias=...)`.
-- **The seam's starting strength.** Synapse counts alone do not identify what
-  was inherited versus learned by the specimen. `naive_efficacy(connectome,
-  plastic)` gives plastic classes equal effective magnitude as a controlled
-  initialization for the learning assay. This changes their measured relative
-  strengths and must be reported; it is not a reconstruction of an untrained
-  biological brain. The learner starts from it (`NeuralGraph(efficacy=...)`) and the
-  measured counts stay in the receipt.
-
-An empty finite `preflight` warning list does not certify equilibrium or useful
-acquisition. The selected operating point needs its own numerical check and
-free learning assay.
-
-Then the assay: every action the readout can take must have an outcome, and the outcomes the
-value can balance; one decision per episode, credited to that decision (the fly's page took a
-decision every 0.3 s along an approach and sugar rewarded whichever nudge had been larger).
-With the three in place the fly's T-maze reverses in both directions on the library's
-actor-critic (sugar at one odour, blows there while the sugar moves, the other found: the
-example's `tools/tmaze.py` and its receipt), where before it could not learn one.
-A bounded odor assay does not establish reliable food seeking in a
-full-scene environment. Transmitter signs are only a simplified fast-interaction map;
-receptor-specific modulation, hormone and peptide signaling, innate appetite
-and detailed muscle dynamics are not imported by assigning those signs.
+The learning rule is the same actor-critic as on any brain ([learning from reward](reward.md)).
+Decide which neurons read the action and which synapses are plastic (the seam the animal is known
+to change, passed as the learner's `plastic_synapses` mask). Two operating points are not in the connectome, and both are declared: the readout's
+threshold (a readout cell on a rail gives a nudge little to act on;
+[`calibrate_bias`](learning.md#calibrating-the-operating-point) searches its bias into
+`NeuralGraph(bias=)`), and the seam's starting strength (`naive_efficacy` gives plastic classes
+equal magnitude into `NeuralGraph(efficacy=)`, a controlled initialization that changes the
+measured relative strengths and is reported as such). Run `preflight` before the first decision
+([check before the first lesson](reward.md#check-before-the-first-lesson)); an empty warning list
+does not certify equilibrium or useful acquisition. The assay then gives every action an
+outcome, one decision per episode credited to that decision.

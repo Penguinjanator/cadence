@@ -1,182 +1,45 @@
-# Choose, train and run a brain
+# Design and teach a population brain
 
-Start from [one continuing equilibrium brain](../world-model.md). Design for
-bootstrap, ordinary use, witnessed disruption and local repair in the same
-acquired model; retain its learned relations and declared memory. An independent
-classifier or external answer network is a control, not this application.
-This guide owns the experimental population model's joint stationary energy
-solve. Its explicit history and parameter admission must not be confused with
-`Brain.compose`'s memory pathways and neural contrast rule.
-
-A brain is one connected graph whose patches repair disagreement together.
-Start with a sensing population read by an output population, then choose sizes
-and connections from the information the task needs. More patches add capacity;
-an intermediate population changes the paths and constraints in the graph.
-Measure free behavior and complete learning/query cost before scaling.
-
-Every population uses the same patch rule. `inputs=` supplies sensors or live
-states, and optional `observes=` adds exact current error readback in the same
-solve. The [experimental boundary](EXPERIMENTAL.md) explains the intended
-routine/correction roles and which capabilities remain unproved.
-
-For a first program, use [the quickstart](QUICKSTART.md). For exact signatures,
-use [the reference](REFERENCE.md); for saved continuation, see
-[checkpoints](REFERENCE.md#checkpoints). The [agent recipe](AGENTS.md) gives a short
-application workflow.
+This page continues the [quickstart](QUICKSTART.md): what to give the brain,
+how to wire it, how to teach a skill and keep it, and what to measure. Signatures
+are in the [API reference](REFERENCE.md), equations in the
+[specification](SPECIFICATION.md). The examples share one namespace.
 
 ## Define the body's information and outcomes
 
-Write down what the brain observes, what its outputs mean, what the body actually
-executes, and which later observation establishes success. For navigation, a
-current image may omit velocity, the last turn or a recently hidden landmark.
-For music, a few recent notes may suffice for local rhythm while omitting the
-phrase whose return matters much later. More patches cannot reconstruct
-information that never reaches them.
+Write down what the brain observes, what each output means, what the body
+executes and which later observation establishes success. More patches cannot
+reconstruct information that never reaches them: one camera frame omits velocity
+and the last turn. One body adapter supplies every named sensor and receives
+every named output; the application defines objective, reward units and
+actuator behaviour.
 
-One body adapter can supply all named sensors and receive all named outputs.
-Internal populations do not need separate external evaluators. Supervised
-witnesses enter through selected output names in `observe`; reward-driven
-choices use `Reinforcement`. The application still defines the measurements,
-reward units and actuator behavior. The library cannot infer the objective of
-an unfamiliar environment from a sensor shape.
+Scale inputs and targets well inside the `tanh` range (with default bounds,
+values near `-0.6` and `0.6` work). Fit preprocessing on teaching data only and
+save it with the brain. Split recordings by episode before cutting windows, and
+keep development and assessment sets apart.
 
-Normalize inputs consistently and encode targets comfortably within both the
-`tanh` prediction range and the state bound. With defaults, values such as
-`-0.6` and `0.6` are useful starting units. Increasing `state_bound` does not
-expand `tanh`. Fit preprocessing using training data only and preserve it with
-the application checkpoint. For classification, expose distinct score patches
-and decode the largest score; scores are not normalized probabilities.
-
-Split recordings by independent episodes, performances or environments before
-extracting overlapping windows. Reserve development data for choosing settings
-and fresh assessment data for the final measurement. Future observations may
-supply teaching targets; they must not enter the inputs used to forecast them.
-
-<a id="coupled-deeper-and-recursive-layouts"></a>
-
-## Choose sizes and connections
-
-Every patch predicts `p = tanh(bias + weighted incoming signals)` and has current
-error `state - p`. `column(..., inputs=earlier_population)` reads live states;
-`observer(..., observes=earlier_population)` reads both states and exact errors.
-An output exposes selected patch states. There is no separate output network.
-
-A two-population graph is a useful starting point. Increase a population's width
-when it needs more represented coordinates; add an intermediate population when
-you want a learned composition; use branches and a shared reader when sensors
-need separate representations. These choices change actual connectivity, not
-just a category called "flat" or "deep". Every population must belong to the
-same connected graph.
-
-State contacts return influence during repair: a reader's error contributes to
-repair of the states it reads. Error readback adds derivative paths through the
-current errors. All states remain eligible together, with one final qualification.
-Choose connections by measured task benefit and cost.
-
-### Experimental observer wiring
-
-Choose an observer's inputs deliberately and compare it with a capable
-state-coupled control. During teaching, a clamped motor
-state records the action that actually happened. A later relation reading only
-that fixed state cannot send its error into the motor's own parameters through
-that connection. Reading the motor's error adds a parameter-learning path,
-because that error depends on the motor's prediction. This can change what is
-learned; it does not guarantee a better action or assign reward credit. Ordinary
-coupling already affects free states, so an output change alone does not
-demonstrate a benefit from error readback. For an input-only observed patch at
-fixed parameters, its error is just its state minus a fixed sensory prediction.
-An equally informed ordinary control may represent that same feature. A useful
-recursive comparison must establish a behavioral contribution, not merely the
-presence of an error edge. The [experimental recipes](VARIANTS.md#experimental-recursive-observer-settlement)
-show how to wire this explicitly.
-
-### Capacity and connectivity
-
-Width counts processing states. Observation depth means an observer reads
-another observer. Neither a population called `reflection` nor extra settling
-sweeps demonstrates reasoning. The public builder accepts previously declared
-sources only: it supports jointly coupled state/error constraints, but does not
-expose explicit recurrent state cycles. Retaining activity with `step` alone is
-not evidence of useful temporal memory.
-
-The [ordinary and experimental layout quickstarts](VARIANTS.md) and
-[shared executable example](../../examples/equilibrium/layout_learning.py) teach, query and
-save each pattern with the same `signal`/`answer` body interface. They are
-construction and acquisition examples, not matched-capacity comparisons.
-
-Inspect `connections`, `output_connected_patches` and each output's
-`sensor_coverage_by_coordinate`, not just total patch count. These report
-structural reachability, not measured causal influence: saturation or learned
-cancellation can suppress a connection. Perturb relevant inputs and measure
-changes in free outputs. For several scalar outputs from one population, use
-explicit different `indices`; otherwise each defaults to patch zero.
-
-Default wiring connects all coordinates of each declared source. A positive
-`fan_in` requests sparse wiring and changes what each patch can read. Dense
-input-to-population connections cost roughly input width times population
-width; dense population-to-population connections cost the product of both
-widths. Observation adds error contacts as well as state contacts. Check the
-compiled graph against `max_connections` before increasing image resolution,
-history length or population size. All compiled patches must remain connected;
-sparse wiring that produces disconnected components is rejected. See [layout variants](VARIANTS.md).
-
-## Make temporal information explicit
-
-When the latest sample is ambiguous, first establish a sufficient-information
-control using a bounded `History` window. Its presence masks distinguish initial
-padding from observed zeros. This is explicit application memory, and its size
-must count in a comparison.
+The example body on this page answers `answer = 0.6 * signal`. Teaching,
+development and assessment values are distinct:
 
 ```python
-from cadence.experimental.equilibrium import Brain, Cortex, History, bootstrap
+from cadence.experimental.equilibrium import Cortex, bootstrap
 
-history = History(1, steps=3)
-history.push([0.2])
-encoded = history.push([0.4])
-assert len(encoded) == history.size == 6
+def rows(values):
+    return [({"signal": [x]}, {"answer": [0.6 * x]}) for x in values]
 
-history_layout = Cortex(seed=2)
-recent = history_layout.input("recent", shape=history.shape)
-features = history_layout.column("features", patches=4, inputs=recent)
-response = history_layout.column("response", patches=1, inputs=features)
-history_layout.output("answer", shape=1, reads=response)
-history_brain = history_layout.build()
-assert history_brain.settle({"recent": encoded})["qualified"]
+examples = rows((-0.8, -0.4, 0.4, 0.8))   # admitted as teaching
+checks = rows((-0.6, 0.6))                # development: decide when to stop
+assessment = (-0.7, -0.2, 0.2, 0.7)       # final, no targets
 ```
 
-Choose the window from the task's causal horizon and sampling rate. Test longer
-occlusions or delays separately. A model given an explicit history window has
-more temporal information than one given only the latest observation. To claim
-learned memory, remove that extra history in a declared control, disable learning
-during recall, and test writes, retention, replacement and reset. Ordinary
-activity retention and recursive error readback do not guarantee those abilities.
+## Wire a connected brain
 
-`observe_batch` does not make a sequence: its rows have private activities,
-each initialized from the same retained live state. An accepted batch retains
-shared parameters and preserves live state. Ordered environment interaction
-requires ordered application records and calls.
-
-## Acquire a small ability before scaling
-
-Begin with defaults and the smallest brain: a few sensing patches read by one
-output patch per simple output. For a small nonlinear relation, a connected
-representation of 4–16 patches feeding 1–4 output patches is a starting search
-range, not a capability guarantee.
-Use [bootstrapping and size](BOOTSTRAP.md) for more detailed recipes.
-Keep the simpler ordinary network when added depth does not improve measured
-quality enough to justify its complete query and learning costs.
-
-`state_prior` changes the activity penalty and therefore the preferred answers;
-it is not simply a speed setting. `parameter_prior` anchors relations to their
-values immediately before each admission, with that anchor fixed throughout
-the solve. A larger value penalizes each parameter change more strongly and can
-require more exposure; it is not permanent protection for old skills. Start
-with defaults and compare a small declared set of settings on development data.
-Freeze the choice before final assessment, and count that calibration work.
-
-Here the supplied body relation is `answer = 0.6 * signal`. Development checks
-control stopping; the final four probes are separate from both teaching and
-those checks.
+Every patch predicts `p = tanh(bias + weighted incoming signals)` and carries
+the error `state - p`. `column(..., inputs=...)` reads sensors or the live states
+of earlier populations. An output exposes selected patch states; there is no
+separate output network. `build()` requires at least two populations joined into
+one connected graph and refuses a population or group that would settle alone.
 
 ```python
 layout = Cortex(seed=2)
@@ -185,207 +48,283 @@ features = layout.column("features", patches=4, inputs=signal)
 response = layout.column("response", patches=1, inputs=features)
 layout.output("answer", shape=1, reads=response)
 brain = layout.build()
-examples = [
-    ({"signal": [x]}, {"answer": [0.6 * x]})
-    for x in (-0.8, -0.4, 0.4, 0.8)
-]
-checks = [
-    ({"signal": [x]}, {"answer": [0.6 * x]}) for x in (-0.6, 0.6)
-]
-report = bootstrap(
-    brain, examples, checks=checks, max_error=0.1,
-    epochs=20, batch_size=4, seed=2,
-)
+
+description = brain.inspect()
+assert description["output_connected_patches"] == 5
+assert description["outputs"][0]["sensor_coverage_by_coordinate"] == (1,)
+```
+
+| Choice | Construction | Meaning |
+| --- | --- | --- |
+| Width | `column(patches=256, inputs=...)` | 256 processing states and their incoming relations |
+| Intermediate population | A column reading another column | A learned composition; downstream relations reshape upstream states through the joint energy |
+| Sensory branches | Columns reading different sensors, read by a later column | Separate representations settling in the same solve |
+| Direct paths | `inputs=(eyes, perception)` | A later population reads sensors as well as earlier states |
+| Error readback (experimental) | `observer(observes=...)` | States and exact current errors of the observed populations |
+
+Patches within one population do not read each other. Selecting one patch as an
+output gives it no access to its neighbours, so widening a population while
+reading only its first state adds no hidden representation: connect a second
+population to create one. For several scalar outputs from one population, pass
+distinct `indices`; each defaults to patch zero. Start with defaults and the
+smallest brain that builds; for a small nonlinear relation, 4 to 16 connected
+representation patches feeding one output patch per output coordinate is a
+starting search range.
+
+Sensory branches are the starting layout for a multimodal task:
+
+```python
+cortex = Cortex(seed=7)
+eyes = cortex.input("eyes", shape=(4, 4))
+ears = cortex.input("ears", shape=(4,))
+vision = cortex.column("vision", patches=8, inputs=eyes)
+hearing = cortex.column("hearing", patches=8, inputs=ears)
+fusion = cortex.column("fusion", patches=8, inputs=(vision, hearing))
+cortex.output("move", shape=2, reads=fusion)
+senses = cortex.build()
+assert senses.inspect()["patches"] == 24
+assert senses.inspect()["sensor_coverage"] == 20
+```
+
+`inspect()` also reports `input_samples` and `connections`. Its counts are
+structural paths that saturation or learned cancellation can suppress; perturb
+inputs and measure free outputs before relying on one.
+
+## Experimental recursive observer settlement
+
+`observer(..., observes=...)` reads the observed populations' states and their
+exact current prediction errors. An observer can observe another observer and can
+also take ordinary `inputs`. Every relation joins the same energy: higher
+populations do not wait for lower ones and then issue a separate correction.
+Ordinary state contacts return influence as well; readback adds a current error
+channel, recomputed as states change, and holds no record of a past forecast.
+
+```python
+recursive = Cortex(seed=7)
+signal = recursive.input("signal", shape=1)
+representation = recursive.column("representation", patches=4, inputs=signal)
+integration = recursive.observer("integration", patches=2, observes=representation)
+reflection = recursive.observer("reflection", patches=1, observes=integration)
+recursive.output("answer", shape=1, reads=reflection)
+recursive_brain = recursive.build()
+
+report = bootstrap(recursive_brain, examples, checks=checks,
+                   epochs=20, max_error=0.1, batch_size=4, seed=2)
+assert report["passed"], report
+```
+
+An action need not come from the highest observer. In a mixed layout ordinary
+columns produce the answer and `observer("monitor", patches=2,
+observes=(integration, response))` reads their states and errors; its relations
+return influence through the same settlement, with no second body interface.
+
+Whether readback helps a task is open. Reading a clamped motor's error adds a
+parameter-learning path into the motor's own relations, which changes what is
+learned and assigns no reward credit. Compare each observer layout with an
+equally informed state-coupled control at matched parameters and total work;
+equal patch counts need not mean equal parameters, connections or work. With
+direct sensor paths, a policy can use the bypass while its observers stay
+numerically active: perturb sensory inputs with history held fixed, and treat
+a detached lesion as a sensitivity measurement, distinct from a trained
+control. Zero error leaves an observer's influence in place. The runnable
+example is `layout_learning.py --layout recursive`.
+
+## Connectivity and cost
+
+| Setting | Default | Guidance |
+| --- | --- | --- |
+| `fan_in` | `None` (every source coordinate) | A positive integer requests sparse wiring. It is capped at the source width and raised until the destination population covers every source coordinate. |
+| `max_connections` | `1000000` | Bounds compiled directed connections; `max_patches` (`10000`) and `max_inputs` (`1000000`) bound patches and sensor samples. The builder refuses and never drops inputs. |
+
+Dense input wiring costs input width times population width; dense population
+wiring costs the product of both widths. An observer adds error contacts to its
+state contacts; reading the same population through `inputs` and `observes`
+shares the state contact. A camera shows the scale:
+
+```python
+camera = Cortex(seed=1)
+frame = camera.input("camera", shape=(240, 320, 3))
+retina = camera.column("retina", patches=256, inputs=frame)
+camera.output("move", shape=2, reads=camera.column("motor", patches=2, inputs=retina))
+try:
+    camera.build()  # 256 * 230,400 = 58,982,400 connections
+except ValueError as error:
+    assert "Connection budget exceeded" in str(error)
+
+small = Cortex(seed=1, fan_in=8)
+frame = small.input("camera", shape=(24, 32, 3))
+retina = small.column("retina", patches=64, inputs=frame)
+small.output("move", shape=1, reads=small.column("motor", patches=1, inputs=retina))
+sparse = small.build().inspect()
+assert sparse["sensor_coverage"] == 2304 and sparse["connections"] == 2368
+```
+
+Here `fan_in=8` is raised to 36 so that 64 patches cover all 2,304 samples.
+Sparse wiring that splits the compiled patches into separate components is
+refused (shared sensors do not couple patches); increase `fan_in` or add a
+population reading across the components. `settle_budget` (default `2048`)
+counts accepted repair sweeps; evaluations, rejected proposals and final
+qualification add work. Devices and measured costs are in
+[execution and cost](ACCELERATION.md).
+
+## Make temporal information explicit
+
+When the latest sample is ambiguous, give the brain a bounded `History` window
+([usage](LIVE.md#supply-recent-context-explicitly)). It is explicit input memory
+whose size counts in any comparison; choose its length from the task's causal
+horizon and sampling rate. `step` retains activity between calls, which alone is
+no evidence of temporal memory: the builder reads only previously declared
+sources, so it has no recurrent state cycles, and `observe_batch` rows gain no
+order from adjacency. To claim learned memory, remove the extra history in a
+declared control, freeze learning during recall and test writes, retention,
+replacement and reset.
+
+## Teach a skill
+
+Each teaching row has a meaning, and the operation must match it:
+
+| Available evidence | Operation | What it can acquire |
+| --- | --- | --- |
+| Measured sensor or body consequence | `observe` / `observe_batch` with the default `source="witness"` | Prediction of that consequence |
+| An actual demonstration action | The same witness operations | Imitation of that action from the supplied context |
+| A transformed target, prediction or simulator preference | The same operations with `source="estimate"` | The declared estimated relation |
+| Reward after an executed discrete action | `Reinforcement` act, feedback, replay | Estimated action values; see [live use](LIVE.md#preserve-execution-and-feedback-ownership) |
+
+A reward is no motor target. Teaching the brain its own executed commands trains
+imitation, even when the outcome was poor. Source labels bind retry identity;
+they do not authenticate evidence. Missing outcomes are not zero rewards.
+Sampling shapes what is learned: a predictor taught mostly on selected events
+cannot recover how often they occur across all opportunities, so keep factual
+forecasts representative. Which operation retains activity, parameters and
+events is tabled in the [quickstart](QUICKSTART.md#3-save-it-and-use-it-live).
+
+`bootstrap(brain, examples, *, checks, max_error, epochs=20, seed=0,
+budget=None, batch_size=1)` replays examples until every free query qualifies
+and recall of `examples` and the development `checks` both meet `max_error`,
+in output units:
+
+```python
+report = bootstrap(brain, examples, checks=checks, max_error=0.1,
+                   epochs=20, batch_size=4, seed=2)
 assert report["passed"], report
 assert report["accepted"] == 4 * report["updates"]
 
-for x in (-0.7, -0.2, 0.2, 0.7):
+for x in assessment:
     query = brain.settle({"signal": [x]})  # no answer clamp
     assert query["qualified"]
     assert abs(query["outputs"]["answer"][0] - 0.6 * x) < 0.1
 ```
 
-The example shows acquisition on a tiny numerical relation. It is not a recipe
-for raw vision, autonomous navigation or long-term planning. Set a task-specific
-error or behavior threshold before comparing architectures. For control, run
-complete episodes with the teacher disconnected; agreement on demonstration
-states alone can hide failure on states reached by the learned policy.
+It copies the dataset before changing the brain, checks readiness before
+teaching and after each epoch, and sets `report["reason"]` to `"passed"`,
+`"epochs"` or `"refused"`; admissions before a refusal stay committed.
+`epochs=0` only checks readiness, `seed` fixes the per-epoch shuffle and
+`budget` overrides `settle_budget` for each solve. `history` holds per-epoch
+errors and `failure` the refusal. Solver `tolerance` (default `1e-6`) bounds
+stationarity: it certifies no accuracy, and loosening it adds no skill.
 
-Give each candidate enough admissions to measure a learning curve. Count
-distinct experiences, replayed presentations and accepted updates separately.
-A 16-row batch is one parameter admission involving 16 examples, not 16 serial
-updates. Check earlier skills after new learning: neither parameter anchoring
-nor replay guarantees protected retention.
+| Counter | Meaning |
+| --- | --- |
+| `presentations` | Attempted example rows, including a refused group |
+| `accepted` | Example rows in admitted calls |
+| `updates` | Accepted atomic learning calls |
+| `work` | Summed numerical work, including readiness queries |
 
-Compare fresh initializations and preserve refusals, timeouts and unsuccessful
-candidates. If ordinary composition and observation see different inputs or
-parameter counts, state the difference. Report both equal-exposure and declared
-work-budget comparisons when sample efficiency and compute efficiency differ.
-Increasing depth after failed acquisition is a hypothesis to test, not a repair
-for missing inputs, poorly scaled targets or insufficient training.
+The default `batch_size=1` uses ordered `observe` calls, which retain activity
+and parameters. A larger size uses `observe_batch`: rows have private activities
+and share one parameter anchor, live activity is unchanged and a refused batch
+retains nothing. Batch size changes the learning trajectory, so four admitted
+rows can be one update and equal presentations need not mean equal work. For
+external experience that may be retried, pass increasing `event_id`s:
+
+```python
+live_state = brain.state
+update = brain.observe_batch(examples, event_id=100)
+assert update["accepted"] and brain.state == live_state
+
+retry = brain.observe_batch(examples, event_id=100)  # identical latest event
+assert retry["duplicate"] and not retry["accepted"]
+```
+
+An identical retry of the latest event teaches nothing twice; older or changed
+identities raise `ValueError`. An omitted ID is allocated only on acceptance and
+identifies no external retry. See [batch experience](REFERENCE.md#batch-experience).
+For large recordings, feed bounded row lists to `observe_batch`: bootstrap's
+`batch_size` limits each joint solve, while the whole dataset is copied up front.
+
+| Setting | Default | Effect and when to change it |
+| --- | --- | --- |
+| `initial_scale` | `0.3` | Initial weights are uniform in `±initial_scale / sqrt(incoming contacts)`; it must not exceed `parameter_bound` (`4.0`). More scale gives nonlinear curvature and makes settlement harder. |
+| `state_prior` | `0.01` | Activity penalty. It changes preferred answers as well as speed; a free unread output settles at `tanh(drive) / (1 + state_prior)`. |
+| `parameter_prior` | `0.1` | Anchors each admission to the parameters at its start. Larger values resist change and need more exposure; this is no long-term protection. |
+| `state_bound` | `1.0` | Box for states and clamps. Raising it permits larger clamps without expanding `tanh`: a clamped target of `2` can qualify and be unreachable free. |
+
+Compare a small declared set of settings on development data and freeze the
+choice before assessment. For classes, expose one score patch per class and
+decode with argmax over legal actions; scores are not probabilities.
+Rebalancing rare actions is a curriculum choice; check rare and ordinary
+decisions afterwards.
+
+## Continue learning without losing the earlier skill
+
+An accepted update can improve its clamped objective while worsening free
+answers or an earlier skill. Interleave earlier examples with new experience and
+recheck both skills without targets; neither `parameter_prior` nor replay
+guarantees retention. A candidate restored from the actor's snapshot can be
+assessed before it replaces the actor, which is kept for rollback.
+
+Then run the deployed output and decoder with the teacher disconnected.
+Agreement on demonstration states hides failures on the states the learned
+policy reaches. Label demonstrations collected there as a supervised curriculum
+and compare with an equal-exposure replay control. For control tasks, measure
+routine behaviour, a real disturbance, recovery and retention after further
+learning; [live use](LIVE.md) covers the body loop.
 
 ## Keep numerical error, forecast surprise and task value separate
 
 | Measurement | What it tells you | What it cannot establish |
 | --- | --- | --- |
-| `stationarity` and `qualified` | Every eligible coordinate in the whole graph meets the projected repair tolerance under this call's clamps | Correct predictions, good actions, a unique answer or a global energy minimum |
-| `prediction_residual` and patch `errors` | Current disagreement between internal state and the current local prediction | Whether an earlier forecast was contradicted by a later real observation |
-| Historical forecast surprise | Difference between an immutable issued forecast and its later actual observation | Whether that outcome is good or bad for the task |
-| Reward or goal deficit | Observed value or predicted shortfall in declared task units | Automatic credit assignment to every population |
+| `stationarity` and `qualified` | Every eligible coordinate meets the repair tolerance under this call's clamps | Correct predictions, good actions or a unique answer |
+| `prediction_residual` and patch `errors` | Current disagreement between state and local prediction | Whether an earlier forecast was contradicted |
+| Forecast surprise | Difference between a stored issued forecast and the later observation | Whether that outcome is good or bad |
+| Reward or goal deficit | Value or shortfall in declared task units | Credit for each population |
 
-Keep the original forecast, observation context, action identity and model
-identity before its outcome arrives. Compare that fixed forecast with the later
-measurement. Recomputing a prediction after learning can erase the very error
-you wanted to measure. `LearningProgress` summarizes changes in supplied
-predictor errors; it is not an automatic surprise detector or information-gain
-measure. Even with unchanged parameters, a patch's local prediction and its
-settled output can differ because of priors and coupling. Declare which value
-your application issues as its forecast and preserve that exact value.
-
-A predictable failure can have zero surprise and still require correction.
-An unexpected good result can have large surprise without negative value.
-Neither signal should silently stand in for the other.
-
-Targets also change the settling problem. An observer's error inputs during
-joint teaching can differ from the signals available when the future answer is
-free. Evaluate with that answer unclamped. When diagnosing an apparent readback
-benefit, compare those two signal conditions with identical parameters and
-causally available observations. A low teaching loss is not sufficient evidence
-of a useful free prediction. Observers also read states, so zero error does not
-make their input or influence vanish; it is not a safe automatic sleep signal.
-
-## Keep actions and outcomes attached to the right life
-
-Choose operations by what should persist:
-
-| Operation | Retained activity | Retained parameters and event |
-| --- | --- | --- |
-| `settle` / `predict` | Unchanged | Unchanged |
-| Qualified `step` | Complete solved activity | Unchanged |
-| New accepted `observe` | Complete solved activity | Parameters and one admission |
-| New accepted `observe_batch` | Unchanged | Shared parameters and one admission |
-
-These Brain operations retain none of a refused proposal. Check `qualified`
-before using query outputs and
-`accepted` before treating an update as committed. `predict` raises
-`SettlementError` on numerical refusal. Diagnostic outputs from a refused call
-are not actions.
-
-`step` and `settle` accept the same optional `targets` and `interventions`.
-These clamps condition a frozen-parameter solve; they are not teaching
-admissions. `step` retains the resulting activity, but the constraints expire
-at the end of that call. Supply any continuing constraint again on the next
-call. A measured past outcome can condition a current decision. A desired
-future output is an intention; leave it free in a separate query to obtain a
-forecast. Even an all-clamped, immediately qualified call proves no prediction
-or acquired skill.
-
-For discrete reward-driven choices, `Reinforcement.act` proposes an action and
-issues a `decision_id` when accepted. Execute through the body, then call
-`feedback` with the same identifier and the actual `executed_action`; actuator
-overrides must be recorded. Do not reward a hypothetical or abandoned command.
-`reset()` discards pending ownership: record an executed action's outcome before
-resetting for a new episode. An identical latest feedback retry is
-idempotent; stale or conflicting outcomes are rejected.
-
-The helper stores actual rewards and transitions, then fits derived Q targets
-through `observe_batch(source="estimate")`. Those targets are estimates, not
-measured future rewards. A stored outcome survives a refused fit; retry fitting
-with `replay()`. Direct supervised `observe` calls instead use `source="witness"`
-for measured targets and explicit event IDs when external retries need identity.
-
-A reward can influence connected relations through joint repair, but there is
-no automatic brain-wide emotion, responsibility assignment or task evaluator.
-The current temporal-credit interface and its bounded scope are documented in
-[the live guide](LIVE.md) and [reference](REFERENCE.md#reinforcement-discrete-reward-driven-choices).
-A larger credit horizon is not a learned world model or a planning algorithm.
-Keep the single body-level outcome stream lossless; `LiveController`'s replaceable
-sensory slot must not hold reward or transition records.
-
-Recording an executed action establishes what happened, not whether the action
-was useful. Repeatedly teaching a motor output to copy its own choices can erase
-an acquired routine. Use measured consequences to teach a body predictor and a
-declared outcome-credit procedure to teach preferences; test routine retention
-throughout live learning.
-
-<a id="spend-compute-according-to-measured-need"></a>
+Store each forecast with its context, action and model identity before the
+outcome arrives; recomputing it after learning erases the error you wanted.
+A patch's local prediction and its settled state can differ under priors and
+coupling, so declare which of the two your application issues as the forecast.
+`LearningProgress` summarizes changes in supplied predictor errors and detects
+no surprise by itself. A predictable failure carries zero surprise and needs
+correction all the same. Clamped targets change the settling problem, so
+evaluate with the answer free.
 
 ## Measure speed and retained correction
 
-Current calls solve synchronously. Every participating population remains in
-the energy and every eligible coordinate remains in final qualification.
-Naming a branch `fast` or `reflection` does not schedule it independently.
-An explicit observer can therefore add latency to every solve, even when the
-routine is familiar and its predictions are good.
-`LiveController` keeps a caller responsive while a serial callback owns the
-brain; it cannot certify a fresh action while an unresolved part of that
-same state is silently omitted. Parallelize independent lives or collection,
-and serialize access to one brain's continuation.
+Each call solves synchronously. Every participating population stays in the
+energy and every eligible coordinate in final qualification, so naming a branch
+`fast` schedules nothing and an observer adds latency to every solve. Parallelize
+independent lives; serialize calls to one brain. Query-cache rules are in the
+[specification](SPECIFICATION.md#repair-and-qualification).
 
-The intended application boundary is one brain receiving observations,
-issuing qualified actions and acknowledging actual outcomes. Users should not
-need a second brain, a wake flag or an evaluator per population. A future
-internal scheduler must define dependency invalidation and qualification
-before claiming independent population speeds. Concurrent learning proposals,
-coordinate scheduling and arithmetic reuse are distinct mechanisms.
+Count queries, candidate actions, teaching, replay, checks and refusals, summing
+primitive `work` counters or a helper's aggregate, never both. Report task
+quality, qualification rate, latency and wall time with `evaluations`,
+`edge_visits`, `patch_visits`, `proposals`, `backtracks` and `sweeps`; a sweep
+budget is no time deadline. For a correction test, establish competent routine
+behaviour, disturb the actual body, measure recovery, then freeze learning and
+test retained quality and later work. Include a routine-plus-factual-fit control
+and count failed correction attempts.
 
-The current reference query cache reuses predictions depending only on fixed
-sensory inputs, including bias-only predictions, within one solve. Errors and
-returning derivatives remain current, and final qualification is fresh. The
-cache does not sleep an observer or carry learned attention between calls.
-See [performance](PERFORMANCE.md).
+## Diagnose before adding compute
 
-Measure queries, candidate actions, teaching, replay, checks and refusals.
-Sum primitive `work` counters or use a helper's aggregate, without counting
-both. Report task quality, qualification rate, latency and wall time alongside
-`evaluations`, `edge_visits`, `patch_visits`, `proposals`, `backtracks` and
-sweeps. A sweep budget is not an elapsed-time deadline; zero sweeps still
-require evaluation.
-
-For a correction test, first establish competent autonomous routine behavior.
-Disturb the actual body, measure recovery, then freeze learning and test
-retained quality and subsequent work. Include a routine-plus-factual-fit
-control: improvement after fitting does not by itself show that planning or
-observation was necessary. Count successful correction fits as well as
-failed attempts; a controller that keeps requesting correction but never
-consolidates it has not demonstrated a return to inexpensive routine.
-
-Start with `device="python"` for small graphs. Optional `device="cpu"` uses
-PyTorch on CPU; `"cuda"` and `"mps"` select supported GPU execution. Device
-proposals still need float64 reference qualification and may need refinement.
-Include transfer, setup and reference work in comparisons. Small brains can
-lose time to device overhead; see [acceleration](ACCELERATION.md).
-
-## Preserve and diagnose continuation
-
-```python
-saved = brain.snapshot()
-resumed = Brain.from_snapshot(saved)
-assert resumed.snapshot() == saved
-assert resumed.predict({"signal": [0.5]}) == brain.predict({"signal": [0.5]})
-```
-
-Brain snapshots bind exact implementation sources, layout and configuration.
-An older snapshot is not automatically compatible with a newer release; retain
-the originating installation and follow the [checkpoint contract](REFERENCE.md#checkpoints).
-Allowed device/dtype overrides validate the original snapshot before changing
-execution settings. They do not bypass source compatibility.
-
-Save preprocessing, body state, external `History`, environment RNG and data
-position alongside the brain. A reward learner needs `Reinforcement.snapshot()`
-so pending action ownership, replay and RNG survive together. Do not execute a
-restored pending action twice. A checkpoint preserves continuation; its source
-hashes do not authenticate an external observation.
-
-| Observed failure | First investigation |
+| Observation | Check next |
 | --- | --- |
-| Solves refuse | Inspect `reason`, stationarity and attempted work; test budget headroom from the unchanged continuation. Report any tolerance change. |
-| Solves qualify but training recall fails | Check input sufficiency, output connectivity, target units, useful capacity, anchoring and exposure. |
-| Recall passes but new cases fail | Inspect split independence, coverage, overfitting and the states reached by the learned controller. |
-| A temporal task fails | Establish whether the supplied observation/history distinguishes the required answers before attributing failure to depth. |
-| New learning destroys an old skill | Measure retention and compare explicit replay curricula; do not assume protected memory. |
-| More depth raises cost without improving behavior | Retain the simpler qualified model and the unsuccessful comparison; give deeper observation a different, explicitly motivated task. |
+| A solve refuses | `reason`, `stationarity`, `work`, bounds and budget headroom, from the unchanged continuation; report any tolerance change |
+| Solves qualify but teaching examples are not recalled freely | Input sufficiency, output connectivity, target units, useful capacity, anchoring and exposure |
+| Recall passes but new cases fail | Split independence, coverage, decoder and the states the learned controller reaches |
+| A temporal task fails | Whether the supplied observation or history distinguishes the answers, before blaming depth |
+| A new skill displaces an old one | Replay coverage, update frequency, parameter anchoring and explicit retention checks |
+| Depth or observers add work without benefit | Keep the simpler qualified model; compare against an equally informed ordinary control at total task cost |
 
-Choose the next increase in task complexity from those measurements. Good local
-control, temporal information, outcome credit and planning are separate abilities
-that need their own acquisition and behavioral checks.
+More exposure, depth or hardware cannot repair absent information or a
+disconnected representation.

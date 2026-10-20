@@ -1,6 +1,7 @@
 # Start a continuing brain
 
-Build one **System 1** brain with `Brain.compose`, then run it with `brain.live`.
+Install Cadence as described in [the documentation's install section](README.md#install),
+then build one **System 1** brain with `Brain.compose` and run it with `brain.live`.
 
 ```python
 from cadence import Brain
@@ -9,22 +10,12 @@ brain = Brain.compose(inputs=4, actions=2, arousal=True)
 action = brain.live([[1.0, 0.0, 0.0, 0.0]])
 ```
 
-It includes connected processing regions, motor choices, a working trace and
-fast/persistent associative memory. Regions
-carry local state, exchange signals and repair disagreement in one neural
-settlement. Optional **System 2** adds observing regions with returning feedback
-in that same graph.
-
-The [world-model guide](world-model.md) explains the intended lifecycle:
-bootstrap a useful interpretation, use it, repair witnessed failures and continue
-the same brain. This quickstart exercises equilibrium action and memory;
-it does not yet integrate learned environmental transitions.
-
-Python 3.11+ and NumPy are required. Install Cadence 0.84.3:
-
-```bash
-python -m pip install cadence-net==0.84.3
-```
+By default `compose` builds one association region (`modules=(64,)`) between the
+sensory and motor neurons, a working trace that carries the last interpretation into
+the next settle, and an associative memory that consolidates what it writes. Every
+region settles together into one equilibrium, and that equilibrium is the answer.
+The [world-model guide](world-model.md) describes the life this brain is meant to
+live: bootstrap an interpretation, use it, repair witnessed failures and continue.
 
 ## Observe, act and learn
 
@@ -41,23 +32,19 @@ assert action.shape == (1,)
 assert brain.learner.updates > 0
 ```
 
-`live` follows one continuing stream: pass one observation row and execute its
-returned action index. The constructor uses the default System 1 layout and
-enables arousal. A young or aroused brain explores and learns; a calm brain
-answers greedily without learning. Report the **previous action's actual outcome**
-before requesting the next action. Use `reset()` to start a different stream.
+`live` follows one continuing stream. Pass one observation row, execute the returned
+action index, and report that action's actual outcome as `reward` with the next
+observation. A young brain (its first 100 moments, `arousal_youth`) or an aroused one
+samples its action, learns from the outcome and writes memory. A calm brain answers
+greedily from one settle and learns nothing.
+Call `reset()` before starting a different stream. `brain.last_arousal` holds the
+readings of the latest moment.
 
-For batches, supplied teaching labels or learning from every outcome, use
-[`step`](continuous.md). It is the explicit learning loop for those tasks.
-Use named overrides such as `actor_eta=0.1, actor_eta_bias=0.01` only after
-checking the task; `brain.retune(...)` changes selected settings without losing
-acquired state. [`brain.describe()` and the defaults table](brain.md#defaults-and-expert-overrides)
-show what is running and which operation uses each rate.
-
-This short example exercises a feedback update, not a learned policy benchmark.
-Memory and learned associations can affect later choices; capacity is finite
-and memories can interfere. [Continuous interaction](continuous.md) covers
-teaching, episodes and memory timing.
+For batches, teaching labels or learning from every outcome, use
+[`step`](continuous.md#explicit-learning-with-step). Named overrides such as
+`actor_eta=0.1` change a rate at construction, and `brain.retune(...)` changes
+selected settings without losing acquired state. `brain.describe()` and
+[the defaults table](brain.md#defaults-and-expert-overrides) show what is running.
 
 ## Inspect the work of answering
 
@@ -68,21 +55,12 @@ assert report["max_residual"] <= report["tolerance"]
 print("free-answer sweeps:", report["steps"], "residual:", report["max_residual"])
 ```
 
-The read-only report records the latest free-answer solve, including a refused
-attempt. It also counts residual checks and numerical damping. It excludes
-reward eligibility, teaching, feedback and memory work. Compare these counters
-with actual task outcomes; small residual means internal consistency, not a
-correct action, predictable environment or low physical energy.
-
-The [continuing example](../examples/continuing_brain.py) measures these signals
-through bootstrap, unchanged conditions, disruption and correction. It supplies
-a corrective teacher only after an executed mistake, repeating the failed cue
-so that the teacher labels the current observation. It still consumes every
-real reward exactly once. This is an explicit teaching policy in the example;
-`step` does not automatically suppress successful-outcome learning.
-
-For narrower existing mechanisms, see [centered dopamine and selective activity](reward.md#centered-dopamine-and-selective-activity).
-Reducing an update does not necessarily reduce the work spent computing it.
+`last_settlement` is a read-only report of the latest free-answer solve, refused
+attempts included: sweeps, residual, residual checks and damping halvings. It leaves
+out reward eligibility, teaching and memory work. A small residual means the network
+agrees with itself; whether the action was good is measured by the task's outcomes.
+The [continuing example](../examples/continuing_brain.py) tracks these counters
+through bootstrap, unchanged conditions, disruption and correction.
 
 ## Imagine privately and resume
 
@@ -101,18 +79,20 @@ assert np.array_equal(continued, replayed)
 assert brain.arousal.to_dict() == resumed.arousal.to_dict()
 ```
 
-`imagine` carries a private trace through supplied observations. It leaves live
-memory, parameters, random state and pending feedback unchanged. Inspect every
-phase's `qualified` flags: the result stops at the first refused phase. This
-evaluates the brain's responses to supplied observations; a learned model of
-environmental consequences belongs to [temporal planning](planning.md).
+`imagine` settles the brain's responses to a supplied sequence of observations
+along a private trace. Live memory, parameters, random state and pending feedback
+are unchanged. A refused phase ends the branch and stays in the result, so check
+each phase's `qualified` flags before using a response. `Brain.compose` builds no
+transition model; learned consequences and planning are in [planning.md](planning.md).
 
-Save/load preserves the current brain's full continuation, including pending
-feedback. Save the environment separately and resume its stream identities too.
+`save` and `load` keep the brain's full continuation, pending feedback included.
+Save the environment separately and resume its stream as well. If `live` refuses
+an answer, the [qualification rules](continuous.md#qualification-and-refusal) say
+how to retry without reporting an outcome twice.
 
 ## Add optional observers
 
-Optional System 2 extends a two-module System 1 with observers:
+**System 2** adds observer regions to the same graph:
 
 ```python
 recursive = Brain.compose(
@@ -122,25 +102,23 @@ recursive = Brain.compose(
 assert recursive.live(observation).shape == (1,)
 ```
 
-Observers read and return influence to processing regions, motor regions and
-earlier observers. They participate in the same settlement and interaction API.
-This provides recursive feedback; a useful task advantage must be learned and
-measured.
-
-Actions and independent predictions require the full neural equation residual
-to meet the configured tolerance. If `live` refuses its forecast before accepting
-feedback, the same call can be retried. If it accepts the outcome and then refuses
-the next action, retry `live(observation)` without submitting the outcome again.
-See [routine and repair](continuous.md#routine-and-repair-live).
+Observers read from and return influence to the processing regions, the motor
+region and earlier observers, inside the same settlement and the same `live` and
+`step` calls. They attach to any module count; this project adds them to a developed
+two-module System 1 by convention. Any task advantage they bring has to be learned
+and measured. [Recursive observers](recursive-settlement.md) covers depth and widths.
 
 ## Specialist guides
 
-- [Compose a brain](brain.md): custom regions, wiring and checkpoint semantics.
-- [Memory](memory.md): working traces, fast associations and consolidation.
-- [Temporal models](temporal.md) and [response protection](temporal-memory.md):
-  learned consequences, private planning and selected durable responses.
-- [Record patches](record-patch.md): one-write event records, categorical ports
-  and learning from stored completions.
-- [Reciprocal patches](patchnet.md): explicit patch ports and local contrasts.
-- [The population solver](equilibrium/index.md): advanced exact state-and-error
-  readback under its own numerical contract.
+- Run the brain: [continuous interaction](continuous.md) and
+  [compose a brain](brain.md) for custom regions, wiring and checkpoints.
+- Memory: [every memory the brain has, and which to use when](memory.md).
+- Learning and reward: [the free/nudged rule](learning.md) and
+  [learning from reward](reward.md).
+- Build and wire: [write a cortex](cortex.md) and [evolve a brain](evolution.md).
+- Other model families: [temporal models](temporal.md), [planning](planning.md),
+  [response protection](temporal-memory.md), [record patches](record-patch.md) and
+  [reciprocal patches](patchnet.md).
+- Evaluate: [evaluate a brain](evaluation.md).
+- Reference: [API reference](api.md).
+- Population solver: [exact state-and-error readback](equilibrium/index.md).

@@ -6,20 +6,20 @@ requirement changes, and distinguish design goals from implemented capabilities.
 
 Start with [the guided documentation README](docs/README.md), then read the
 [continuing-world-model guide](docs/world-model.md) before designing an application,
-tutorial or experiment. Use [the catalogue](docs/index.md) to find individual
+tutorial or experiment. Use [the catalogue](docs/README.md#all-guides) to find individual
 guides. Read the owning guide, [numerical contracts](docs/contracts.md) and
 [API reference](docs/api.md) before changing semantics.
 
 | Task | Read and use |
 | --- | --- |
-| Build a continuing brain | [Quickstart](docs/quickstart.md), [composition](docs/brain.md), [architecture](docs/architecture.md), [runnable lifecycle](examples/continuing_brain.py) |
-| Manage streams, outcomes and memory | [Continuous interaction](docs/continuous.md), [memory](docs/memory.md), [reward](docs/reward.md), [experience](docs/experience.md) |
+| Build a continuing brain | [Quickstart](docs/quickstart.md), [composition](docs/brain.md), [runnable lifecycle](examples/continuing_brain.py) |
+| Manage streams, outcomes and memory | [Continuous interaction](docs/continuous.md), [memory](docs/memory.md), [episodic memory](docs/episodic.md), [recall memory](docs/recall.md), [reward](docs/reward.md), [world model](docs/world-model.md) |
 | Diagnose learning or settling work | [Learning](docs/learning.md), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
 | Use retained-record dreaming and sleep | [Record patches](docs/record-patch.md): `RecordPatchNet.dream` and `sleep`; this is a separate model from `Brain.compose` |
 | Learn transitions, plan or protect responses | [Temporal patches](docs/temporal.md), [planning](docs/planning.md), [temporal memory](docs/temporal-memory.md), [runnable example](examples/memory_imagination.py) |
-| Add optional recursive observation | [Cortical regions](docs/cortex.md), [recursive settlement](docs/recursive-settlement.md), [recursive training](docs/recursive-training.md) |
+| Add optional recursive observation | [Cortical regions](docs/cortex.md), [recursive settlement](docs/recursive-settlement.md), [PatchNet training](docs/patchnet.md#train-on-observed-targets) |
 | Work on the population equilibrium solver | [Its entry guide](docs/equilibrium/README.md), [agent instructions](docs/equilibrium/AGENTS.md) and [reference](docs/equilibrium/REFERENCE.md) |
-| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [task design](docs/task-design.md), [protocols](docs/protocols.md), [receipts](docs/receipts.md) |
+| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [protocols](docs/protocols.md), [receipts](docs/receipts.md) |
 
 ## What Cadence is, and is not
 
@@ -263,7 +263,7 @@ correspondence must identify the variables, equations and assumptions of each
 model. In the default neural brain, qualification checks the declared state
 equations. The experimental population model qualifies stationarity of its
 energy and can retain nonzero prediction errors; neither forces all patches to
-the same value ([prediction and disagreement](docs/equilibrium/ELEMENT.md#prediction-and-disagreement)).
+the same value ([prediction and disagreement](docs/equilibrium/SPECIFICATION.md#prediction-and-disagreement)).
 Keep the two projects' claims separate. OPH results do not establish a Cadence
 capability, Cadence measurements do not test OPH physics, and Cadence code and
 documentation do not depend on OPH.

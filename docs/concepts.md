@@ -1,102 +1,20 @@
-# Concepts of the settling brain
+# How the neural graph settles
 
-This guide describes the neuron model, settling and the graph compositions of
-the settling brain: `NeuralGraph`, `Learner` and `Records`. [Compose a brain](brain.md)
-and [write a cortex](cortex.md) build one; [temporal learning](temporal.md) and
-[the record patch](record-patch.md) are the path-based patches.
-
-A Cadence brain is software state organised into neurons, synapses and regions,
-with readouts, records and a learning update. It is a design for computation. It
-does not ascribe experience to the software or establish a biological brain model.
-
-For the application frame, start with [one continuing equilibrium brain](world-model.md):
-bootstrap useful relationships and memory, use them, repair witnessed failures,
-then continue the same life. The equations and isolated controls below describe
-mechanisms within that design.
-
-This is a self-reading computational design: local state, declared
-synaptic boundaries, readback, records and feedback, with protocols and source-bound
-receipts for evidence. The biological names describe computational roles.
-
-The [experience guide](experience.md) starts from an ongoing learning life, connecting
-world prediction, episodes, goals, action and communication. The
-[composition guide](experience.md#connect-functions-through-actual-ports) connects those functions through actual ports.
-The architecture is a hypothesis to test.
-
-## Four principles
-
-In this composition, Records learn what follows a reading, while local repair
-and checked convergence describe the settled graph regions. Random drive
-perturbations can propose alternative states. These are distinct from the
-centered free/nudged contrast used for learning and
-[temporal input planning](planning.md).
-
-**Records.** A records cortex (`cd.Records`) subtracts each input unit's running mean from
-a reading, maps it through a fixed random expansion onto many cells, keeps the most active
-few and inhibits the rest. Each active cell holds one record per predicted field. The
-prediction is the sum of the records the reading touches, weighted by activity, and
-learning writes the witnessed outcome into exactly those records by the delta rule, at a
-slow rate for consequences and a fast rate for valued fields such as reward. The number of
-records a reading touches sets the learning speed: a sparse code confines each write to few
-records, readings on other cells keep their reads, and records learn from one stream
-without replay. Reading and writing need no settling. See [records](memory.md#records).
-
-**Local repair.** Each neuron reads its own potential, its synaptic input and its drive,
-and moves toward the input plus drive and bias, with adaptation when enabled.
-`brain.settle_batch(drive,
-steps=..., tolerance=...)` runs that update for every neuron of a batch; `brain.settle(stimulus)`
-does the same for one stimulus. `Learner.step(drive, labels)`
-runs a free phase and nudged phases on the same brain, then changes each synapse from the
-activities of its own two neurons in those phases. Output nudges can read a target
-and an output group; reward learning broadcasts a prediction-error signal. These
-teaching signals are explicit. No backward computation graph is stored through the brain.
-
-**Checked convergence.** A step cap is a work limit; the fixed-point
-equations decide. `brain.residual(drive, state)` returns the largest equation error per row.
-`brain.equilibrate(drive, budget=..., chunk=..., tolerance=...)` settles until every row's
-residual is below the tolerance or the budget is spent, and returns the state with `steps`,
-the per-row `residual` and the per-row `converged` flags. Pass the same `mask` and `nudge`
-to a settle and to its residual check. A spent budget is a result to report.
-
-**Random drive perturbations.** A settled brain gives one answer under one drive. To sample
-alternatives, add bounded random drive to the latent neurons and settle again. Each batch
-row supplies a separate candidate; check whether it reaches an equilibrium:
-
-```python
-import numpy as np
-import cadence as cd
-
-connectome = cd.layered(4, 16, 4, density=1.0, seed=1)
-brain = cd.NeuralGraph(connectome, cd.learning_neuron_model())
-latent = list(connectome.populations["hidden"])
-rng = np.random.default_rng(0)
-
-drive = np.zeros((8, connectome.n))          # eight rows, the same input in each
-drive[:, list(connectome.populations["input"])] = np.eye(4)[0]
-drive[:, latent] += rng.uniform(-0.1, 0.1, (8, len(latent)))  # bounded detuning
-result = brain.equilibrate(drive, budget=512, chunk=32, tolerance=1e-6)
-print(result.converged.all(), result.state.activation[:, list(connectome.populations["output"])].round(3))
-```
-
-Each added drive lies in `[-0.1, 0.1]`; a Gaussian draw has no such bound.
-Check residuals, then rank candidates with a validated
-critic or readout. Detuning does not teach a model of consequences; only a model
-with useful learned or supplied dynamics can make these predictions useful for action.
-[Evolve a brain](evolution.md#detuning-inside-a-life) ranks detuned candidates by a read of
-the records or by a critic.
+The mechanics below [`Brain.compose`](brain.md), for building or debugging a `NeuralGraph`
+or `Learner` directly. Learning rules live in [learning](learning.md) and
+[reward](reward.md); [orientation](orientation.md#where-the-learning-signal-comes-from) says
+where each family's teaching signal comes from.
 
 ## Neurons and synapses
 
-A *neuron* holds a potential `v` and publishes an activation `s`. It is a graded
-(rate) unit and can stand for one biological neuron or, at coarse resolution, a
-population. A directed *synapse* carries one neuron's activation to another. A
-*reciprocal synapse pair* is a synapse and its reverse sharing one learned weight
-(`Learner(reciprocal=True)`, the default). `Connectome` declares the synapses and
-named populations of neurons, such as `input` and `output`.
+A neuron holds a potential `v` and publishes an activation `s`: a graded (rate) unit for
+one neuron or, at coarse resolution, a population. A directed synapse carries one neuron's
+activation to another. A `Connectome` declares the synapses and named populations:
+`input` neurons receive the stimulus, `output` neurons are read and taught, `hidden`
+neurons carry the rest (`cd.layered` creates all three). With `Learner(reciprocal=True)`,
+the default, a synapse and its reverse share one learned weight.
 
-`NeuralGraph` holds the connectome, the neuron model and the parameter arrays. On each
-step it collects every neuron's synaptic input, then each neuron updates its own
-state:
+On each step every neuron collects its synaptic input and then updates its own state:
 
 ```text
 synaptic_input[i] = sum(weights[e] * s[pre[e]] for synapses e ending at i)
@@ -104,122 +22,194 @@ v[i] += dt * (synaptic_input[i] + drive[i] + bias[i] - strength * a[i] - v[i])
 s[i]  = activation(v[i])
 ```
 
-Here `dt` is the numerical relaxation fraction, and `steps` counts updates of
-this map. Neither quantity supplies elapsed environment seconds or biological
-neural time without an explicit model and calibration. Environment events,
-settling work and learning updates have [separate clocks](equilibrium-world-models.md#three-clocks).
+The effective weight of synapse `e` is `gain * count[e] * efficacy[e] * exp(log_gain[pre[e]])`.
 
-The adaptation term is absent unless enabled. The effective weight of synapse `e`
-is `gain * count[e] * efficacy[e] * exp(log_gain[pre[e]])`, where `count` is the
-number of synaptic contacts. The synaptic `efficacy` starts from the connectome's
-signs and can be learned. Transport follows the declared synapses; the neuron update
-reads its own state and synaptic input. Softmax and key normalization additionally
-read their declared groups.
+| `NeuralGraph` parameter | Shape | Meaning |
+|---|---|---|
+| `efficacy` | one per synapse | Signed strength; starts from the connectome's signs and is what learners change |
+| `log_gain` | one per neuron | Scales every outgoing synapse of that neuron; set it per cell class to declare a region's gain (`g = np.zeros(C.n); g[C.populations["ln"]] = -1.0`, then `log_gain=g`); learners leave it alone |
+| `bias` | one per neuron | Constant drive; starts at zero |
+| `count` | on the connectome | Number of synaptic contacts |
+| `gain` | on the `NeuronModel` | Global scale |
 
-A *stimulus* supplies the external drive, which is added to the neuron's input on
-every step. The stimulus does not clamp the membrane potential, so synaptic input,
-bias and adaptation still move a stimulated neuron.
+The graph's parameter arrays are read-only views; replace one by assigning a whole array
+(`graph.bias = b`) or with `graph.with_parameters(...)`, which rebuilds the effective
+weights. Backend, device, precision and `dense_limit`: see [backends](backends.md).
+
+The drive is added to a neuron's input on every step. It does not clamp the potential:
+synaptic input, bias and adaptation move a stimulated neuron too.
+`NeuralGraph.settle(stimulus)` accepts a dense vector, a list of neurons (each driven at
+`stimulus_amplitude`) or a `{neuron: level}` map (`level * stimulus_amplitude`).
+
+A `Nudge` adds teaching drive `beta * mask * (target - s)`. With `softmax_temperature` set,
+the masked neurons compete and the drive is `beta * (target - softmax(s / T))`, a cross-entropy nudge; `groups` (one integer
+per neuron, `-1` for none) splits them into separate softmax groups, and a temperature
+vector must be constant within each group. `weight`, one number per batch row, scales the
+nudge per row; a negative weight pushes away from the target, which is how an advantage
+enters reward learning. `anchor` and `anchor_gain` add an independent boundary drive
+`anchor_gain * (anchor - s)` that `beta`, `mask` and `weight` do not scale, so positive and
+negative phases share the same boundary. They must be supplied together; `anchor_gain` is a
+nonnegative vector over neurons. In the graph update a neuron reads only its own state, its
+synaptic input and its drive. Two operations read a declared group: a softmax nudge reads its
+group, and key normalisation in `FastSynapses` (`normalize=True` or `rule="delta"`) reads the
+whole key vector (see [standalone memory stores](records.md#reading-and-writing-directly)).
 
 ## Settling and equilibrium
 
-Named functional regions can share one connectome. Neuron-local updates cross the
-synapses between regions and seek a common fixed point of the whole brain under the
-current drive. Agreement means satisfying these coupled equations, not making
-all neurons equal. The drive includes the memory readback held for this solve;
-the full life can change that context and its parameters between solves.
-Settle the brain once for that joint state; independent solves
-followed by a merged visualization do not couple the regions. See [composition](experience.md#connect-functions-through-actual-ports).
+`settle(stimulus, *, steps=60, state=None, mask=None, trajectory=False, nudge=None,
+tolerance=None)` and `settle_batch(drive, ...)` (dense `(batch, n)` drive, same keywords)
+run the update from rest or from a supplied `state`. `steps` caps the work; `tolerance`
+stops early once the largest activation change in a step falls below it (`None` or zero
+disables this). `mask` holds fractions in `[0, 1]`, shape `(n,)` or `(batch, n)`, and zeros
+ablated neurons; pass the same `mask` and `nudge` to a settle and to its check. The
+returned `BrainState` holds `v`, `activation`, `adaptation`, `steps` taken,
+`activity_change` (total movement per row) and, with `trajectory=True`, the activation
+after every step. It can be a transient, a fixed point or part of an oscillation.
 
-Settling runs the update from rest or from a supplied state. A returned
-`BrainState` can be a transient, a fixed point, or part of an oscillation.
-`steps` limits work and `tolerance` stops on small activation movement;
-`BrainState.activity_change` reports the total movement per row.
-`NeuralGraph.residual` separately measures the remaining fixed-point equation
-error. Saturation can produce small movement with a large residual.
+`residual(drive, state)` returns the largest fixed-point equation error per row. Small
+movement does not imply a small residual: a saturated neuron moves little while its
+equation is far from satisfied. `equilibrate(drive, *, budget=512, chunk=32,
+tolerance=1e-5, state=None, mask=None, nudge=None, damping=0)` continues until every row's
+residual is below `tolerance` or the budget is spent, at one extra transport per chunk.
+All rows advance together. It returns an `Equilibrium` with `state`, per-row `residual`,
+`steps` (sweeps in this call), `converged` (residual within tolerance) and `qualified`
+(converged plus any refinement checks). `damping=k` splits the budget over up to `k + 1`
+attempts, each at half the previous `dt`, all checked against the original equations. A
+spent budget is a result to report and act on.
 
-An equilibrium need not be unique or stable. Carrying a state between inputs can
-save work or select a different attractor. Test both cold and warm starts as
-declared controls. Preserve context through a continuing life; reset transient
-state only under the application's explicit terminal or independent-control
-contract. A unique attracting equilibrium
-under a fixed drive erases its initial condition; keeping history then requires
-an explicit record, a trace, or a drive that carries history.
+Regions that share one connectome settle toward one joint fixed point under the current
+drive; independent solves merged afterwards do not couple them. An equilibrium need not be
+unique or stable. Carrying a state between inputs (warm start) can save work or select a
+different attractor than starting from rest (cold start); test both. A unique attracting
+equilibrium forgets its initial condition, so history needs a trace, a memory or a drive
+that carries it.
 
-
-When every neuron's absolute incoming effective weight sum is below `1 / L`, with `L` the largest slope of the activation, one settling step is a contraction and the [certificate](certificate.md) bounds the remaining distance to the unique equilibrium from the last step's movement. `cd.certificate(brain)` reports it.
+When every neuron's absolute incoming effective weight sum is below `1 / L` (`L` the
+largest activation slope) and adaptation is off, one free-phase step (no nudge) is a
+contraction and [`cd.certificate(brain)`](certificate.md) bounds the distance to the unique
+equilibrium.
 
 ## Activation and adaptation
 
-`NeuronModel` rebases a sigmoid so that zero potential emits zero. With zero
-drive, zero bias, and zero adaptation, the all-zero state is an exact fixed
-point. `learning_neuron_model()` uses a gentler slope and a small negative leak to
-give the learner a responsive starting point. Neither setting guarantees convergence.
+`NeuronModel(dt=0.2, slope=4.0, threshold=1.5, gain=0.02, stimulus_amplitude=3.0,
+adaptation=None, leak=0.0)` rebases a sigmoid so zero potential emits zero; with zero
+drive, bias and adaptation the all-zero state is an exact fixed point. `dt` is the
+relaxation fraction in `(0, 1]` and `steps` counts updates of the map; neither is elapsed
+time. `slope` and `gain` must be positive and `leak` lies in `[0, 1]`. With `leak` above
+zero a neuron below rest emits a small negative activation, no lower than `-leak`, so a
+learning rule can tell a silent neuron from a dead one.
 
-Builders start with zero bias. With signed random inputs, many hidden neurons can
-remain near rest and carry weak learning contrasts. Measure activation and contrast
-distributions for the intended experience stream. An explicit `NeuralGraph(..., bias=...)`
-can shift the operating point; validate responsiveness and saturation together.
+`learning_neuron_model(gain=1.0, *, slope=1.0, leak=0.1, dt=0.5, stimulus_amplitude=1.0)`
+sets threshold zero for nets that learn: unit slope keeps a fan-scaled layer responsive, a
+unit stimulus reads input levels roughly linearly, and the larger `dt` converges in tens of
+steps. Builders start with zero bias, so many hidden neurons can sit near rest under signed
+inputs; measure activation distributions on your stream and shift `bias` if needed.
 
-`Adaptation` adds one variable per neuron that follows its activation and
-subtracts from its drive. In suitable mutually inhibitory circuits this can
-produce an oscillation; [the dynamics tests](../tests/test_cadence.py)
-check that behavior. Leave adaptation off when beginning with
-equilibrium learning; its gradient interpretation needs additional assumptions.
+`Adaptation(tau_steps=50.0, strength=1.0)` adds one variable per neuron,
+`a <- a + (s - a) / tau_steps`, and subtracts `strength * a` from its drive. In mutually
+inhibitory circuits it produces rhythm instead of a fixed point. It is off by default;
+leave it off for equilibrium learning, and note that the certificate excludes it.
 
 ## Three state lifetimes
 
 | State | What changes it | How to manage it |
 |---|---|---|
 | Potential, activation, adaptation | Settling steps | Pass `state=` to continue; omit it to start from rest |
-| A trace or fast-memory matrix | Explicit activity or observation updates | Preserve within a continuing stream; declare any terminal/control resets and preserve batch row identities |
-| Learned weights, biases, records and consolidated associations | Local learner updates, reward/eligibility, `Records.write` or `SynapticMemory.observe` | Save each owning component; evaluate on a separate snapshot |
+| Trace or fast-memory matrix | Explicit activity or observation updates | Keep it through a continuing stream; reset only at a declared terminal |
+| Weights, biases, records, consolidated associations | Learner updates, reward, `Records.write`, `SynapticMemory.observe` | Save each owning component; evaluate on a separate snapshot |
 
-A [trace](api.md#streams-cadencestream) retains fading activity.
-[Fast memory](memory.md) retains associations between supplied keys and values.
-[Learning](learning.md) changes a reusable response through free/nudged endpoint
-contrasts. Records change by one delta-rule write per witnessed outcome, without
-settling. The centered learner uses three phases: free, positive nudge, and
-negative nudge. Under its equilibrium assumptions, the small-nudge contrast
-corresponds to a loss gradient with the stated parameter scaling. A raw `NeuralGraph`
-does not update its weights because time passes or because it is settled again.
-`Brain.step` schedules real-action learning; custom compositions own their
-update clocks. A unique fixed point alone cannot preserve all past observations.
+A raw `NeuralGraph` changes no weights by settling. `Brain.step` schedules learning in a
+composed brain; a custom composition owns its update calls. See
+[traces](api.md#streams-cadencestream), [memory](memory.md) and [records](records.md).
 
-## Evidence and controls
+## Three clocks
 
-A [protocol](protocols.md) declares stimuli, readouts, interventions, and predicates.
-A shuffled connectome tests whether a response depends on the particular connections
-under the same neuron model. It is one control.
-High gains can saturate an excitatory circuit, so protocols can limit the active
-fraction during gain selection.
-
-`conformance` compares a trajectory with the neuron-by-neuron reference.
-It checks the tested transport and update. A [receipt](receipts.md) binds stored
-results to sources when those files are included and checked; its caller supplies
-the arithmetic verifier. Neither check establishes benchmark fairness.
-
-## Compared with backprop networks
-
-| | Feed-forward model trained by backprop | Cadence brain |
+| Clock | What changes | What stays fixed within the operation |
 |---|---|---|
-| Reading an answer | Evaluate layers | Repeated neuron updates with a bounded solve and an optional residual check |
-| State between inputs | A cache or a separate memory | A settled state, trace or record, each explicit |
-| Credit | Reverse-mode differentiation | Free and nudged endpoint contrasts; delta-rule writes for records |
-| Exact gradient conditions | Differentiable computation | Stable smooth equilibrium, symmetric effective weights, converged phases, vanishing nudge |
-| Work | Forward and backward passes | Every step of the free and nudged phases plus the update |
+| Environment step | Observations, executed actions and carried state | Previously admitted evidence |
+| Inference iteration | The interpretation of the same evidence | Evidence, parameters and the memory snapshot |
+| Learning update | Parameters, memory contents or a learned address map | Which targets were observed, taught or imagined |
 
-Measure settling, learning and record maintenance separately on the same held-out
-data, and include the simple algorithmic solver when a task has one.
+An environment step has the duration its simulator or body declares; solver sweeps and
+`dt` have none, so measure wall time separately. An imagined future has its own step index
+inside a private branch; its steps simulate environment time and count neither as
+inference on the present nor as new observations. [Continuous interaction](continuous.md#defaults-and-the-thinking-clock)
+states which events advance trace, eligibility, arousal and learning in `Brain`.
 
-This table compares update mechanisms.
-Networks trained by backpropagation can also be recurrent, online, model-based and
-memory-using. Matrix multiplication is an implementation operation. The experience
-tests ask what the system acquires and transfers, how it uses goals and memories,
-and what changes when its environment changes.
+Assign every state update to one clock. A previous-state mixing term adds no inference
+depth to a one-step read from a zero initial state, because that term is zero; more
+internal steps or a deeper port are a separate computation with a separate cost.
 
-## When to add machinery
+## Prediction error is not model error
 
-Settling, memory and learning are distinct operations of one ongoing step because their
-state lifetimes differ. A new mechanism needs a failure it fixes and an ablation on the
-same inputs, budget and seeds, with its state and cost counted. Brain functions
-are compositions of the existing operations; [experience](experience.md) connects them.
+A correct probabilistic model cannot predict which random outcome occurs. A fair-coin
+model assigns one half to heads; observing heads resolves this toss and gives no reason to
+switch to an always-heads rule. An observation can change the current belief and the best
+action with the learned dynamics unchanged: state estimation and model learning are
+separate operations. The cross-entropy logit gradient `p - y` is nonzero on each toss and
+has zero expectation under a calibrated prediction, so sample updates average out;
+repeated systematic errors justify changing the model. Judge probabilistic predictions by
+mean log loss and calibration against the declared uncertainty, and do not widen
+uncertainty to make every error look acceptable.
+
+An unexpected observation supplies evidence and possibly a teaching target; the `beta` of a
+learning contrast, inference damping and the random drive below are separate quantities.
+
+<a id="detuning-inside-a-life"></a>
+
+## Sample candidate equilibria by drive perturbation
+
+A settled graph gives one answer under one drive. To sample alternatives inside one
+decision, repeat the drive in a batch, add a bounded random drive to the latent neurons of
+each row, settle with `equilibrate`, keep the converged rows and rank their actions by a
+validated read such as [records](records.md) or a critic. Parameters, memories and the
+genome stay as they are; only this decision's drive changes. Elsewhere in these docs
+"detuning" means the learning nudge (`beta`), which is a different operation.
+
+```python
+import numpy as np
+import cadence as cd
+
+connectome = cd.layered(2, 16, 2, density=1.0, seed=1)    # cue in, action out
+brain = cd.NeuralGraph(connectome, cd.learning_neuron_model())
+cue_units, latent, action_units = (list(connectome.populations[k]) for k in ("input", "hidden", "output"))
+
+records = cd.Records(2 + 2, {"reward": 1}, valued=["reward"], cells=1000, active=20, seed=0)
+for cue in range(2):                     # witnessed: the action equal to the cue pays
+    for action in range(2):
+        code = records.code(np.r_[np.eye(2)[cue], np.eye(2)[action]], adapt=True)[:, 0]
+        records.write(code, {"reward": np.array([float(action == cue)])})
+
+cue = np.eye(2)[1]
+drive = np.zeros((8, connectome.n))      # eight candidate rows, the same cue in each
+drive[:, cue_units] = cue
+drive[:, latent] += np.random.default_rng(0).uniform(-0.5, 0.5, (8, len(latent)))
+result = brain.equilibrate(drive, budget=512, chunk=32, tolerance=1e-6)
+candidates = result.state.activation[:, action_units].argmax(axis=1)
+imagined = np.stack([np.r_[cue, np.eye(2)[a]] for a in candidates])
+score = records.read(records.code(imagined))["reward"][:, 0]
+score[~result.converged] = -np.inf       # a row without an equilibrium offers no candidate
+choice = int(candidates[np.argmax(score)])
+print(candidates, score.round(2), choice)
+```
+
+A uniform draw in `[-a, a]` keeps each added drive within `a`; a Gaussian draw has no such
+bound. In a composed brain build the repeated drive with `brain.stimulus([observation])`,
+settle with `brain.brain.equilibrate`, perturb `brain.association_index` and read actions
+at `brain.motor_index`; `brain.basal_ganglia.value(result.state)` ranks the same rows by the
+critic. Perturbation proposes; the ranking only helps as far as
+the records or critic have learned consequences.
+
+## Controls and when to add machinery
+
+A [protocol](protocols.md) declares stimuli, readouts, interventions and predicates. A
+[shuffled connectome](protocols.md#the-shuffled-control) tests whether a response depends on
+the particular connections; gain selection can
+[cap the active fraction](protocols.md#gain-selection-under-a-sparsity-cap) so high gains do
+not saturate an excitatory circuit.
+`cd.conformance(brain, stimulus)` compares a trajectory with the neuron-by-neuron
+reference. A [receipt](receipts.md) binds stored results to their sources.
+
+Settling, memory and learning are separate operations because their state lifetimes
+differ. A new mechanism needs a failure it fixes and an ablation on the same inputs,
+budget and seeds, with its state and cost counted.

@@ -1,12 +1,12 @@
 # Receipts
 
-A receipt stores outcomes, an embedded digest, and a manifest of selected source
-files. The caller decides which outcomes to record and what the verifier checks.
+A receipt stores outcomes, an embedded digest and a manifest of selected source files.
+The caller decides which outcomes to record and what the verifier checks.
 
 ## Write and verify a small receipt
 
-Save this as `receipt_demo.py` and run `python receipt_demo.py`. The example binds
-a small arithmetic result to its script and the installed receipt implementation:
+Save this as `receipt_demo.py` and run `python receipt_demo.py`. It binds a small
+arithmetic result to its own script and to the installed receipt implementation:
 
 ```python
 from pathlib import Path
@@ -29,20 +29,13 @@ def check(body):
 
 ok, message = cd.Receipt.verify(path, sources=sources, check=check)
 assert ok, message
+assert cd.Receipt.read(path).digest == receipt.digest
 print(message)
 ```
 
-Expected output: `canonical form, digest, sources, arithmetic agree`.
-For an experiment, bind every consumed source and dataset, then supply checks for
-its schedule, outcomes, and metrics. This small sum example verifies only its
-declared arithmetic; it does not reproduce a model or a training run.
-
-The examples' run receipts use a second format, `cadence-experience-run/v1`, written by
-their stage runners: `stage`, `status` (`incomplete` until the schedule completes), `seeds`,
-`sources` (the library's commit and a hash of its source files, the hashes of the stage
-files), `artifacts` (the event logs with their sha256, and the checkpoints), `acceptance`
-(each predicate with its value, threshold, aggregation and pass flag) and
-`receipt_sha256`. The stage verifier recomputes the metrics from the event logs.
+Expected output: `canonical form, digest, sources, arithmetic agree`. For an experiment,
+bind every consumed source and dataset, and supply checks for its schedule, outcomes
+and metrics.
 
 ## Shape
 
@@ -51,66 +44,64 @@ files), `artifacts` (the event logs with their sha256, and the checkpoints), `ac
   "kind": "experiment/v1",
   "body": { "...": "recorded readings, rows, gain tables, custody" },
   "source": { "files": [{"path": "experiment.py", "sha256": "..."}], "manifest_sha256": "..." },
-  "digest": "sha256 of the canonical JSON of kind, body, and source"
+  "digest": "sha256 of the canonical JSON of kind, body and source"
 }
 ```
 
-Written as newline-terminated canonical JSON: sorted keys, no whitespace, no NaN.
+`Receipt.build(kind, body, sources=())` hashes each `(relative, path)` pair in `sources`
+(an empty tuple gives an empty manifest) and the canonical JSON of the payload
+(`cd.canonical_json`: sorted keys, no whitespace). Mapping keys become strings, tuples become
+lists, NumPy arrays and scalars and `Path` values become plain JSON, and NaN or infinity
+raises `ValueError`. `write(path)` creates parent directories, writes the newline-terminated
+canonical form and returns the path; `Receipt.read(path)` loads a file without checking it;
+`to_dict()` returns the four fields. `cadence.receipts.canonical_sha256(value)` and
+`cadence.receipts.source_manifest(pairs)` (not exported at top level) build the digest and the
+`source` block.
 
 ## Verification
 
-`Receipt.verify(path, sources=..., check=...)` checks the following and fails on the first disagreement.
-Source and arithmetic checks are optional and must be supplied by the caller:
-
-1. the file is byte-for-byte the canonical form of its own content;
-2. the embedded digest matches;
-3. when `sources` is supplied, that complete source manifest matches the receipt;
-4. when supplied, the caller's `check(body)` finds no arithmetic problem, which for a protocol receipt
-   means every pass flag follows from the stored readings and every tally follows from
-   the rows.
+`Receipt.verify(path, *, sources=None, check=None)` returns `(ok, message)` and stops at the
+first disagreement: (1) the file is byte for byte the canonical form of its content;
+(2) the embedded digest matches; (3) when `sources` is supplied, the complete source
+manifest matches; (4) when `check` is supplied, `check(body)` returns no problem text (for a
+protocol receipt: every pass flag follows from the stored readings and every tally from the
+rows). The message lists what was checked, or names the disagreement or the check's text.
 
 ## What belongs in the body
 
-- the connectome summary and digest, and the custody block for measured data;
-- the neuron model and the brain description (`NeuralGraph.to_dict()`);
-- the gain selection table, every gain tried, with its admissibility;
-- the protocol as data, including the reference for every row;
-- the score, with readings and reference readings on every row;
-- the control's score;
-- the conformance report for the backend used;
-- an explicit boundary block: what the experiment supplies rather than derives, and what it does
-  not claim.
+The connectome summary and digest (`Connectome.summary()`, `Connectome.digest()`) with the
+custody block for measured data; the graph description (`NeuralGraph.to_dict()`: connectome
+summary, neuron model, backend, transport, layout); the gain selection table with every gain
+tried and its admissibility; the protocol as data, with the reference for every row; the
+score with readings and reference readings on every row, and the control's score; the
+backend's conformance report (`cd.conformance(graph, stimulus)` on a `NeuralGraph`); and a
+boundary block saying what the experiment supplies rather than derives and what it does not
+claim.
 
 ## The cost and the orienting fields
 
-A demo's receipt carries the same accounting for every arm, so that arms compare: per arm,
-`macs_per_moment` (from `BeliefPatch.macs_per_moment` or `Steered.macs_per_moment`),
-`moments_per_decision`, and the `cost` counters (`moments`, `macs`, `replays`) over the
-life, from which a moments-per-decision and a multiply-accumulates-per-decision follow; a
-life adds the governor's steps as moments and the decisions by mode (`Life.compute`). A
-demo that reads a gain's response to events carries `orienting`'s output per kind (the
-count, the capture of the first and last events, the curve, the latency shares, the mean
-return) and the `dishabituation` pair, so that two demos' captures mean the same thing.
-Unobserved returns are `null`, with `return_censored=true` after a positive capture;
-they are not counted as observed recovery at the end of the window. Partial final
-habituation bins remain in the curve.
+Every arm of a comparison carries the same accounting: `macs_per_moment`
+(`BeliefPatch.macs_per_moment()` or `Steered.macs_per_moment()`), `moments_per_decision`
+and the `cost` counters (`moments`, `macs`, `replays`) over the life. `Life.compute()`
+returns these with the governor's steps added as moments and the decisions by mode.
 
-Label MAC counts as dense forward-work estimates. Include their exclusions
-(adjoints, writes, nonlinearities, callbacks and memory traffic) and any governor
-step-to-moment conversion. They are not total training FLOPs. Report total elapsed
-time, peak memory, learning/search work and all failed attempts for an efficiency
-comparison. Test targets must never calibrate the governor or choose a baseline;
-record the disjoint calibration/validation split and its seeds.
+A demo that reads a gain's response to events carries `cd.orienting` per kind (count,
+capture of the first and last `bins` events, curve, latency shares, mean return) and the
+`cd.dishabituation` pair, so that two demos' captures mean the same thing. An unobserved
+return is `null`, with `return_censored=true` after a positive capture, and is not
+counted as recovery. Partial final curve bins stay in the curve.
+
+MAC counts are dense forward-work estimates that exclude adjoints, writes, nonlinearities,
+callbacks and memory traffic; state these exclusions and any governor step-to-moment
+conversion. An efficiency comparison also reports elapsed time, peak memory, learning and
+search work and every failed attempt. Test targets never calibrate the governor or choose a
+baseline; record the disjoint calibration and validation split and its seeds.
 
 ## Editing invalidates, on purpose
 
-Every file named in the source manifest is bound to the receipt. If such a file
-changes, a source check against those edited files fails. Record source hashes
-as well as a library version, since a version string can cover several source
-revisions. Verification does not launch an experiment automatically.
-
-A historical receipt remains evidence for its original source snapshot. Preserve its
-bytes and verify against that snapshot; do not re-sign an old result against later code.
-Each run should record library source hashes, data generation/seeds, every scheduled
-condition, predictions and targets, and validation choices. A verifier should reject
-missing outcomes instead of recomputing averages over whichever rows remain.
+A source check fails once any file in the manifest changes. Record source hashes beside the
+library version, because one version string can cover several source revisions. A receipt
+is evidence for its own source snapshot: keep its bytes and verify against that snapshot
+instead of re-signing an old result against later code. A run records data generation,
+seeds, every scheduled condition, predictions and targets, and its verifier rejects missing
+outcomes instead of averaging whichever rows remain.

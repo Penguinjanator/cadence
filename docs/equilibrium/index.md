@@ -1,45 +1,65 @@
-# Cadence documentation
+# The population solver
 
-This advanced guide covers `cadence.experimental.equilibrium`: one connected
-graph of patches that repair disagreement together. Choose population sizes and
-the ports they read, teach through the same joint repair, then measure free
-behavior. Learned relations persist and remain plastic, and outputs are selected
-patch states from a qualified solve, not answers from a separate readout network.
+`cadence.experimental.equilibrium` builds one connected graph of bounded
+patches that repair disagreement together. Each patch holds a state, ports,
+retained relations and a local prediction. You choose population sizes and the
+ports they read, teach through the same joint repair, then measure free
+behaviour. Outputs are selected patch states from a qualified solve. Import it
+with `from cadence.experimental.equilibrium import Cortex`.
 
-These experiments keep their own energy and stationarity equations and their own
-explicit history; they do not stand in for the default `Brain.compose`
-implementation, which [one continuing equilibrium brain](../world-model.md)
-describes. Small independent calibrations are mechanism controls.
+A population reads live states of other populations with `inputs=`; an
+observer population (`Cortex.observer`) also reads their exact current errors
+with `observes=`. Returning influence enters the same energy and the same
+qualification check as every other edge.
+
+This solver is separate from the default brain,
+[`Brain.compose`](../brain.md) (see [one continuing equilibrium brain](../world-model.md)).
+It has its own energy and stationarity equations, explicit `History` in place
+of the working trace and associative stores, and no planner.
 
 ## A short learning path
 
-1. [Quickstart](QUICKSTART.md): construct a brain, teach a relation, test fresh
+1. [Quickstart](QUICKSTART.md): build a brain, teach a relation, test fresh
    predictions without targets, then save and resume.
-2. [Wiring examples](VARIANTS.md): add states, intermediate populations, branches
-   or optional error readback within the same graph.
-3. [Brain design](BRAIN_DESIGN.md): choose observations, temporal context,
-   connected capacity and a cost budget.
-4. [Bootstrapping](BOOTSTRAP.md), then [live operation](LIVE.md): acquire a
-   behavior, execute it, learn from actual outcomes and check retained skills.
+2. [Brain design](BRAIN_DESIGN.md): choose observations, temporal context,
+   wiring, connected capacity and a cost budget; teach and diagnose a behaviour.
+3. [Live operation](LIVE.md): drive an actual body, learn from actual outcomes
+   and check retained skills.
+4. [Execution and cost](ACCELERATION.md): devices, precision, batch repair,
+   independent lives and query and learning work.
 
-Bootstrapping and live operation use the same brain and learning rule. Numerical
-qualification and useful behavior need separate checks. The
-[experimental boundary](EXPERIMENTAL.md) explains recursive observation, intended
-routine/correction roles and their current limits.
+The [specification](SPECIFICATION.md) states the equations, qualification and
+refusal rules; the [API reference](REFERENCE.md) lists every class and argument.
 
-## Reference and examples
+## Scope and limits
+
+- The package is experimental. APIs and saved formats may change with no
+  cross-version compatibility or migration layer. Save the source and the
+  complete application continuation (body state, pending outcomes) for any
+  experiment you need to reproduce; checkpoints validate the implementation
+  sources they were written with.
+- Observer error readback (`observes=`) is implemented and tested. Its
+  advantage on a task, automatic recruitment on surprise and separate observer
+  clocks are open research; ordinary connected populations are the control.
+- Current disagreement, the miss of an earlier forecast and an unmet goal are
+  separate quantities. A qualified stationary state can predict reality poorly,
+  so check useful behaviour separately. Learned relations persist, and
+  competing learning can overwrite them.
+- `Reinforcement` uses `credit_horizon=1` by default; a larger horizon changes
+  return construction and replay cost and supplies no learned planning.
+
+## Pages and examples
 
 | Read | Purpose |
 | --- | --- |
-| [Runnable examples](../../examples/equilibrium/README.md) | Learning, body control, explicit history, reward, batching and cost measurement |
-| [Agent recipe](AGENTS.md) | Application workflow and documentation rules |
-| [GPU execution and parallel experience](ACCELERATION.md) | Devices, precision, batch repair and independent lives |
-| [Architecture guide](DRSN.md) | Patch equations, connected populations and recursive readback |
-| [Capability and cost](PERFORMANCE.md) | Query and learning work and comparison controls |
-| [Processing patch](ELEMENT.md) | Local state, prediction errors, repair and retained relations |
+| [Quickstart](QUICKSTART.md) | Build, teach, test, save and resume; the isolated-population refusal |
+| [Brain design](BRAIN_DESIGN.md) | Wiring, teaching rows, capacity and diagnosis |
+| [Live operation](LIVE.md) | Actual bodies, reward learning, outcome ownership and retention |
+| [Execution and cost](ACCELERATION.md) | Devices, batching, parallel lives and cost |
+| [Specification](SPECIFICATION.md) | Equations, qualification, refusal and continuation |
 | [API reference](REFERENCE.md) | Classes, parameters, methods and diagnostics |
-| [Specification](SPECIFICATION.md) | Qualification, refusal, witness admission and saved continuation |
+| [Agent guide](AGENTS.md) | Application workflow for coding agents |
+| [Folder entry](README.md) | Short entry for the package |
+| [Runnable examples](../../examples/equilibrium/README.md) | Learning, body control, history, reward, batching and cost |
 
-[Source](https://github.com/muellerberndt/cadence) ·
-[Public demos](https://github.com/muellerberndt/cadence-demos) ·
-[Release notes](../../CHANGELOG.md)
+Open work is tracked in the [issues](https://github.com/muellerberndt/cadence/issues).

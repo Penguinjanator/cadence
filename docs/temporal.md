@@ -1,20 +1,9 @@
 # TemporalPatchNet
 
-`TemporalPatchNet` is the temporal patch: a settling patch over a path. Each
-moment owns hidden activity and an output, with an overlap to the preceding
-moment. Observations enter declared input ports. Whole-path repair lets later
-observed discrepancies affect earlier temporal patches during learning.
-
-It uses residual predictive coding and centered equilibrium propagation on
-time-varying input and output vectors with a persistent initial boundary. It is
-a NumPy CPU implementation; the optional backends of the settling brain do not
-accelerate it.
-
-## A finite observed path
-
-All paths have shape `(batch, time, ports)`. Batch rows are independent streams
-sharing parameters. Targets contain externally supplied observations and are
-read only in the detuned learning phases.
+`TemporalPatchNet` learns transitions over short observed paths. Each moment of a path is a
+patch with hidden activity and an output, overlapping the moment before it. Inputs enter
+declared ports; targets are read only while learning. Learning repairs the whole path at
+once, so an error late in the path changes the activity of earlier moments.
 
 ```python
 import numpy as np
@@ -28,25 +17,44 @@ heard = np.array([0.0, 0.0, 0.2, -0.2, 0.2, -0.2])
 target = np.stack([heard, -heard])[:, :, None]
 
 result = net.observe(observations, target, beta=0.01, rate=0.1)
-assert result.updated
+assert result.updated and result.reason == "updated"
 assert result.free.converged and result.plus.converged and result.minus.converged
 np.testing.assert_array_equal(net.state, result.free.final_state)
 ```
 
-One update does not establish accurate prediction. Measure accuracy on withheld
-paths, delayed-cue tests and continued learning. `observe` returns the free,
-positive and negative phases, an update decision and the centered parameter
-derivatives. Failed detuning changes no parameters or update count. A valid
-free final state still becomes the current state. Invalid inputs change nothing.
-No target-detuned hidden state becomes the live continuation boundary.
+## A finite observed path
+
+Inputs and targets have shape `(batch, time, ports)`; batch rows are independent streams
+sharing one set of parameters. The live state has shape `(batch, hidden)`, so call `reset()`
+before changing the batch size.
+
+`observe(inputs, target, beta=0.01, rate=0.1, backtrack=False, symmetry_tolerance=0.15,
+max_halvings=8)` solves three phases from one initial boundary: the free path and a positive
+and a negative teaching path. `rate` must be finite and nonnegative. It returns a
+`TemporalObservation` with the phases (`plus` and `minus` are `None` when the free phase
+fails), `updated`, `reason`, the centered step `delta` and the `beta` used. Only a converged
+free phase's final state becomes the live state. A failed phase changes no parameters and no
+update count; invalid input changes nothing. `net.updates` counts committed parameter steps.
+Measure accuracy on withheld paths.
+
+| Constructor option | Default | Effect |
+| --- | --- | --- |
+| `seed` | `0` | Initial `A`, `B`, `C`. |
+| `output_precision` | all ones | Per-output teaching weights ([below](#explicit-output-teaching-precision)). |
+| `initial_radius` | `0.95` | `A` starts as this times a random orthogonal matrix. |
+| `tolerance` | `1e-9` | Gradient bound a phase must meet to converge. |
+| `max_iterations` | `80` | Newton iterations per teaching phase. |
+| `max_backtracks` | `24` | Step sizes tried in each Newton line search (1, then halving). |
+| `max_damping_trials` | `16` | Damping levels per iteration (0, then `1e-8` growing tenfold). |
 
 ## Context, private continuation and readback
 
-The learned arrays `A`, `B`, `C` persist separately from the active hidden state.
-`advance` carries target-free activity without learning. `imagine` starts at the
-current boundary and returns a detached path without changing the network.
-To start a private branch cold, supply an explicit zero state. `reset()` clears
-active context and diagnostics while retaining all learned arrays and updates.
+The learned arrays `A`, `B`, `C` are kept apart from the live hidden state. `advance(inputs)`
+runs the free recurrence without learning and carries its final state when it converges.
+`imagine(inputs, state=None)` starts at the live state or an explicit `state` and changes
+nothing; pass a zero state for a cold branch. `settle(inputs, target=None, beta=0.0,
+state=None)` is the read-only detuned solve for diagnostics and ignores the target at
+`beta=0`. `reset()` clears the live state and readback and keeps parameters and `updates`.
 
 ```python
 net.reset()
@@ -65,108 +73,20 @@ assert np.all(np.abs(readback.activity) <= 1.0)
 assert readback.state_parameter_revision == readback.parameter_revision
 ```
 
-This is functional self-readback: detached activity, equation residual and energy
-are available as observations to an application. It is not an automatic
-higher-level self-model or evidence of consciousness. After `observe`, readback
-labels the parameter revision used for its free phase; that phase precedes the
-learning update. Its old residual does not certify equilibrium under new weights.
+`readback()` returns a `TemporalReadback` with `state`, `activity` (its tanh), the last
+carried free `residual` and `energy`, `updates`, `parameter_revision` and
+`state_parameter_revision`. After `observe` it labels the revision of the free phase, which
+precedes the update. `state` and `parameters()` return copies; `set_parameters` replaces
+`A`, `B` and `C` together after validation, keeps the live state and raises the revision.
 
-The caller decides which inputs represent observations, intention or external
-controls. Zeros mean zero drive, not a built-in missing-data flag. Add a declared
-presence port when an observed zero must differ from an absent observation.
-Neither the solver nor checkpoints insert a clock, future cue or desired output
-into free inference. A supplied intention is not learned goal formation.
+The caller decides which ports carry observations, intentions or controls. A zero input is
+zero drive; when an observed zero must differ from an absent observation, add a presence
+port, as the first example does. The solver inserts no clock, future cue or desired output
+into free inference.
 
-## Energy and update
-
-For inputs `u[t]` and a fixed initial hidden boundary `h[-1]`, the defects are
-
-```text
-e[t] = h[t] - A tanh(h[t-1]) - B u[t]
-r[t] = y[t] - C tanh(h[t])
-E = mean_batch(0.5 sum_time(||e[t]||² + ||r[t]||²))
-L = 0.5 mean_batch,time,outputs(output_precision * (y - target)²)
-```
-
-Free inference is the causal recurrence and has zero defects up to roundoff.
-That says the path agrees with the model; it says nothing about its accuracy,
-usefulness or creative quality. Tanh bounds activity, not the stored hidden
-preactivation or output. Nonfinite paths are rejected.
-
-The two teaching phases repair `E + beta L` and `E - beta L`, starting at the
-same free path and holding the same initial boundary. Outputs are eliminated
-analytically per output with `b[j] = beta * output_precision[j]/(time * outputs)`.
-Every negative-phase coefficient must satisfy `b[j] > -1`. Adjacent hidden-width blocks pass
-precision matrices and information vectors through an exact block Hessian solve.
-The Hessian includes residual times activation-curvature terms. This is a
-matrix computation local to temporal blocks, not a scalar-synapse-only solver.
-
-Damped Newton proposals need positive Schur pivots and an Armijo energy decrease;
-the rounding allowance is `1e-15 * max(1, abs(previous_energy))` per stream.
-Convergence requires the full state gradient to meet `tolerance` and the final
-**unshifted** Hessian to have positive Schur pivots. Iteration caps, failed
-curvature checks and nonfinite updates are reported as failures. A positive
-Hessian certifies only the returned local minimum, not a unique equilibrium or
-that both detuned phases belong to the same smooth branch.
-
-For each phase the parameter derivatives are local products:
-
-```text
-dE/dA = -mean_batch(sum_time(e[t] tanh(h[t-1])ᵀ))
-dE/dB = -mean_batch(sum_time(e[t] u[t]ᵀ))
-dE/dC = -mean_batch(sum_time(r[t] tanh(h[t])ᵀ))
-delta = (dE_plus - dE_minus)/(2 beta)
-parameter <- parameter - rate * delta
-```
-
-No derivative through the solver is used. Credit crosses the supplied finite
-path through state repair. Its initial boundary is held fixed, so learning does
-not differentiate through earlier calls. Under the usual smooth stable-branch
-assumptions the centered contrast approaches the gradient of free prediction
-loss as beta tends to zero. Finite beta and numerical tolerance introduce error.
-The tests include independently evaluated energy/loss derivatives, a negative
-curvature rejection and parity with the frozen scalar-cue engine.
-
-## Explicit output teaching precision
-
-Teaching precision defaults to one for every output. A caller may supply finite,
-strictly positive per-output weights to express a declared task metric or noise
-assumption. This changes the quadratic loss; it is not learned importance,
-precision inference, a new optimizer or a temporal-variation guarantee.
-
-```python
-precision = np.array([2.0])
-net.set_output_precision(precision)
-np.testing.assert_array_equal(net.output_precision, precision)
-```
-
-The constructor also accepts `output_precision=...`. Updating precision is atomic
-and leaves A/B/C, live activity, parameter revisions and free-energy diagnostics
-unchanged: none of them depends on the teaching loss. Explicit response-memory
-bindings remain valid. Checkpoints store the supplied vector; older checkpoints
-without it load with all ones. The implementation preserves the default kernel
-arithmetic for all-one weights.
-
-For centered teaching, require `0 < beta * max(output_precision) < time * outputs`.
-Large weights can therefore require smaller beta. If weights are estimated from
-training statistics, freeze the formula, floors and normalization before
-evaluation and retain the original unweighted task metrics. Weighting a loss
-cannot alone establish useful autonomous continuation.
-
-## API and checkpoints
-
-| Operation | Effect |
-| --- | --- |
-| `observe(inputs, target, beta=0.01, rate=0.1, backtrack=False)` | Repair free/positive/negative paths; carry only free state. Optional parameter backtracking requires improvement in causal replay before committing. |
-| `advance(inputs)` | Free inference, carrying a converged final state; no learning. |
-| `imagine(inputs, state=None)` | Read-only free path from live state or the explicit supplied boundary. |
-| `settle(inputs, target=None, beta=0, state=None)` | Read-only diagnostic detuning; target is wholly ignored at beta zero. |
-| `reset()` | Clear active state/readback; keep parameters and update count. |
-| `state`, `parameters()`, `readback()` | Detached copies, safe for private inspection. |
-| `output_precision`, `set_output_precision(vector)` | Detached supplied positive teaching weights and atomic loss-configuration replacement; free dynamics unchanged. |
-| `set_parameters(mapping)` | Explicit validated atomic replacement of A/B/C; preserves active state and marks the new parameter revision. |
-| `snapshot()`, `TemporalPatchNet.restore(snapshot)` | Detached complete state and construction of a fresh continuation. |
-| `save(path)`, `TemporalPatchNet.load(path)` | Atomic NumPy archive and validated restoration without pickle. |
+`snapshot()` and `TemporalPatchNet.restore(snapshot)` copy the complete state.
+`save(path, compressed=True)` writes an atomic `.npz` archive (`compressed=False` writes
+faster) and `load(path)` restores it without pickle.
 
 ```python
 path = net.save("temporal_brain.npz")
@@ -177,78 +97,124 @@ np.testing.assert_array_equal(
 )
 ```
 
-Every phase exposes `hidden`, `output`, `converged`, `reason`, `residual`, energy
-history, accepted step sizes/damping, minimum Schur pivot eigenvalue and work
-counts. `block_chain_attempts` counts attempted whole-chain solves, including
-failed attempts and final curvature checks. Each successful chain factors one
-hidden-width block per time step and batch row; it is not one scalar operation.
-`message_bytes` is the largest successful chain's explicit precision/vector
-storage, excluding arrays, Hessian blocks and numerical-library workspace.
-`energy_evaluations` counts path-energy evaluations, including line searches.
+## Energy and update
+
+For inputs `u[t]` and a fixed initial boundary `h[-1]`:
+
+```text
+e[t] = h[t] - A tanh(h[t-1]) - B u[t]
+r[t] = y[t] - C tanh(h[t])
+E = mean_batch(0.5 sum_time(||e[t]||² + ||r[t]||²))
+L = 0.5 mean_batch,time,outputs(output_precision * (y - target)²)
+```
+
+Free inference is the causal recurrence. The teaching phases minimize `E + beta L` and `E - beta L` from the free path. Outputs are eliminated
+with `b[j] = beta * output_precision[j] / (time * outputs)`, and each negative-phase `b[j]`
+must exceed `-1`. Adjacent hidden-width blocks exchange precision matrices and information
+vectors in an exact block Hessian solve. A damped Newton step needs positive Schur pivots and
+an Armijo decrease (rounding allowance `1e-15 * max(1, abs(previous_energy))` per stream). A
+phase converges when the full state gradient meets `tolerance` and the final undamped Hessian
+has positive pivots, which certifies a local minimum only.
+
+The parameter step uses local products and no derivative through the solver:
+
+```text
+dE/dA = -mean_batch(sum_time(e[t] tanh(h[t-1])ᵀ))
+dE/dB = -mean_batch(sum_time(e[t] u[t]ᵀ))
+dE/dC = -mean_batch(sum_time(r[t] tanh(h[t])ᵀ))
+delta = (dE_plus - dE_minus)/(2 beta)
+parameter <- parameter - rate * delta
+```
+
+The boundary is held fixed, so learning does not reach into earlier calls. On a smooth
+stable branch the contrast approaches the free-loss gradient as beta goes to zero;
+`tests/test_temporal.py` checks it against independent derivatives. The free recurrence has
+zero residual by construction even when its predictions are wrong, so measure surprise and
+accuracy with the observation-minus-prediction error.
+
+## Explicit output teaching precision
+
+Teaching precision defaults to one per output. Supply finite, strictly positive weights
+for a declared task metric or noise assumption, here or as `output_precision=` at
+construction.
+
+```python
+precision = np.array([2.0])
+net.set_output_precision(precision)
+np.testing.assert_array_equal(net.output_precision, precision)
+```
+
+The change is atomic and touches only the teaching loss: parameters, live state, revisions
+and free diagnostics are unchanged, and [`TemporalMemory`](temporal-memory.md) bindings stay
+valid. Checkpoints store the vector. `observe` requires
+`0 < beta * max(output_precision) < time * outputs`, so large weights need a smaller beta.
+Weights computed from training statistics should be fixed before evaluation, with the
+unweighted metric reported too.
 
 ## Checking that the contrast is centered
 
-The centered contrast is a derivative of the free loss only while the two
-detuned paths sit symmetrically around the free path. A detuned solve can
-converge on another branch of the energy while still reporting convergence,
-and the contrast then points somewhere else. `observe` and `plan` therefore
-check `contrast_asymmetry(free, plus, minus)`, the norm of
-`plus + minus - 2 * free` over the norm of `plus - minus` on the hidden paths,
-against `symmetry_tolerance` (default 0.15). The ratio grows in proportion to
-beta and the contrast error with its square, so an off-center pair is solved
-again at half the beta, up to `max_halvings` times (default 8). A pair that
-stays off center is refused with the reason `contrast_asymmetric`; parameters,
-revisions and the update count do not change, and the valid free activity is
-carried as for any failed phase. `TemporalObservation` reports the `beta` of
-the last pair and the number of `contrast_halvings`. An infinite tolerance
-disables the check. The measure is public as
-`cadence.temporal.contrast_asymmetry`.
+The contrast is a derivative only while the two teaching paths sit symmetrically around the
+free path; a teaching solve can converge on another branch of the energy and report success.
+`observe` and [`plan`](planning.md) compute `cadence.temporal.contrast_asymmetry(free, plus,
+minus)`, the norm of `plus + minus - 2 * free` over the norm of `plus - minus` on the hidden
+paths. The ratio grows in proportion to beta and the contrast error with its square.
+
+Above `symmetry_tolerance` (default 0.15) both phases are solved again at half the beta, up
+to `max_halvings` times (default 8). A pair that stays off center is refused with
+`contrast_asymmetric`: parameters, revisions and `updates` do not change and the valid free
+state is carried. The result reports the last `beta` and `contrast_halvings`.
+`symmetry_tolerance=np.inf` disables the check. A small ratio does not bound the gradient error.
 
 ## Checking a learning step
 
-`observe(..., backtrack=True)` checks
-the proposed parameter change against the actual teaching path. Converged
-positive and negative phases alone do not ensure that a finite parameter step
-improves the model. A good direction can overshoot.
+A good direction can overshoot. `observe(..., backtrack=True)` tries the rate and up to
+fifteen halvings. Each candidate predicts the path without targets from the original
+boundary and is accepted when its precision-weighted half-MSE drops below the old loss by a
+floating-point floor and `new_loss <= old_loss - 1e-4 * step * ||delta||²` for the tried
+rate `step`. The result
+reports `initial_loss`, `final_loss`, `accepted_rate`, `replay_losses` (`None` for a
+nonfinite or unsolved candidate) and `replay_calls`. With no decreasing step the reason is
+`no_decreasing_parameter_step`; parameters are kept and only the free state is carried. Rate
+zero cannot commit. The check covers the current path only, and
+[`TemporalMemory.observe`](temporal-memory.md) does not run it.
 
-The optional check tries the supplied rate and up to fifteen halvings. Each
-candidate makes a target-free prediction from the **original hidden boundary**.
-Its precision-weighted half-MSE must decrease beyond a floating-point floor
-and satisfy `new_loss <= old_loss - 1e-4 * rate * ||delta||²`. This is a
-measured acceptance condition; a finite-beta EP estimate need not be an exact
-gradient. There is no extra persistent optimizer state or retained episode.
+## Reasons
 
-`TemporalObservation` reports `initial_loss`, `final_loss`, `accepted_rate`,
-`replay_losses` and `replay_calls`. A `None` trial loss denotes a nonfinite or
-unsolved candidate. Nonfinite parameter proposals need no replay, so the
-number of trials can exceed the replay count. Rejection returns
-`no_decreasing_parameter_step`, preserves parameters, revisions and update
-count, and carries only the original valid free activity. Failed phases keep
-their distinct failure reason. With backtracking, rate zero cannot commit.
-The fixed rate is the default.
+| `TemporalObservation.reason` | Meaning |
+| --- | --- |
+| `updated` | Parameters changed; `updates` and the revision rose by one. |
+| `free_phase_failed` | The free path did not converge. |
+| `phase_failed` | A teaching phase failed; see `plus.reason` and `minus.reason`. |
+| `contrast_asymmetric` | The pair stayed off center after `max_halvings`. |
+| `nonfinite_update` | The proposed parameters were not finite. |
+| `no_decreasing_parameter_step` | With `backtrack=True`, no tried rate lowered the loss. |
 
-This check improves the current observed objective only. It does not establish
-generalization, protect earlier skills, choose important experiences or supply
-new observations. Use the separate `TemporalMemory.observe` transaction when
-response constraints are bound to the model; bypassing it with a direct
-parameter update can invalidate those constraints. The new option is not
-automatically applied by the memory transaction.
+| `TemporalPhase.reason` | Meaning |
+| --- | --- |
+| `exact_free`, `free_residual_failed` | Free path met or missed `tolerance`. |
+| `nonfinite_free_state` | The recurrence overflowed. |
+| `nonfinite_energy`, `nonfinite_residual` | Teaching energy or gradient became nonfinite. |
+| `converged` | Teaching phase met `tolerance` with positive pivots. |
+| `iteration_cap` | `max_iterations` reached. |
+| `nonminimum_stationary_point` | Stationary, but the Hessian was not positive. |
+| `no_decreasing_spd_step` | No damping level gave a descending step. |
+| `full_residual_failed` | The residual including outputs missed `tolerance`. |
 
-Free-phase residual and energy measure agreement within the model. The causal
-recurrence has zero residual by construction even when its predictions are
-wrong. Use actual observation-minus-prediction error to assess surprise or
-model accuracy; do not read zero free energy as confidence about the world.
+A `TemporalPhase` also exposes `hidden`, `output`, `activity`, `final_state`, `residual`,
+`energy`, `energy_history`, `iterations`, `accepted_step_sizes`, `accepted_damping`,
+`minimum_pivot_eigenvalue`, `block_chain_attempts` (failed solves and the final curvature
+check included), `energy_evaluations` (line searches included) and `message_bytes`.
 
-Persistent numeric parameters occupy `8*(hidden² + hidden*inputs + outputs*hidden)`
-bytes; supplied teaching precision adds `8*outputs` bytes, and active state
-occupies `8*batch*hidden` bytes when present. Metadata,
-Python objects and transient solved paths cost additional space. Training paths
-are not retained by the net. There is no replay buffer, protection against
-interference, learned importance or guarantee of lifelong retention. Gaussian
-past-message compression belongs to the separate fixed-model actor. A free
-rollout is a prediction; the [planning interface](planning.md)
-adds declared continuous action ports and preferences, using the same temporal
-model for private input repair. [Actual interaction](interaction.md) checks
-learned consequences against an executed body. Long-range context, retention,
-transfer and creativity remain behavioral tests, not consequences of attaining
-a small equation residual.
+## Cost and memory
+
+Parameters take `8*(H² + H*inputs + outputs*H)` bytes for hidden width `H`; precision adds
+`8*outputs` and the live state `8*batch*H`. The net keeps no training paths, replay buffer or
+protection against interference.
+
+For batch `N` and path length `T`, one teaching chain factorization costs on the order of
+`N*T*H³` operations. Its message storage, reported as `message_bytes`, is `8*N*T*(H² + H)`
+bytes in float64; Hessian blocks, arrays and solver workspace cost more. Free prediction skips
+the factorization and runs sequentially over time. The net runs in NumPy on the CPU: the
+optional backends of the settling brain do not accelerate it, and
+[connection masks](partitioned.md) do not make the solver sparse. Planning over action ports
+is on the [planning page](planning.md); work accounting is on [evaluation](evaluation.md).

@@ -32,11 +32,10 @@ jobs:
           from pathlib import Path
 
           for name in ("README.md", "docs/world-model.md", "docs/patchnet.md", "docs/quickstart.md", "docs/temporal.md",
-                       "docs/temporal-memory.md", "docs/architecture.md",
-                       "docs/planning.md", "docs/interaction.md", "docs/partitioned.md",
+                       "docs/temporal-memory.md", "docs/memory.md", "docs/recall.md",
+                       "docs/planning.md", "docs/partitioned.md",
                        "docs/record-patch.md", "docs/build.md", "docs/belief.md",
                        "docs/steering.md", "docs/recursive-settlement.md",
-                       "docs/recursive-training.md",
                        "docs/api.md", "docs/learning.md",
                        "docs/protocols.md", "docs/receipts.md"):
               page = Path(name).read_text(encoding="utf-8")

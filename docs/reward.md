@@ -1,43 +1,40 @@
 # Learning from reward
 
-Cadence combines free/nudged contrasts, eligibility traces and a reward prediction
-error without a backward computation graph. Each synapse keeps its own eligibility
-trace, and one broadcast dopamine signal gates every trace into a weight change.
-This page describes those components and the tests that check them.
+A Cadence brain learns from reward with a three-factor rule: each synapse keeps an
+eligibility trace of its recent contrasts, and one broadcast prediction error (the
+dopamine) turns every trace into a weight change, with no backward computation graph.
+`Brain.step` and an aroused [`Brain.live`](continuous.md#routine-and-repair-live) take the
+reward of the preceding action and return the next one:
 
-For one continuing stream, compose with `arousal=True` and use
-[`Brain.live`](continuous.md#routine-and-repair-live); use `step` to learn from
-every actual outcome or to supply a current teaching label. Both receive the
-preceding action's reward and return the next action. There is no separate
-training mode. The phase-level API below exposes the same mechanism for custom
-architectures and measurement.
+```python
+import numpy as np
+from cadence import Brain
 
-Reward learning reads `actor_eta`, `actor_eta_bias` and `actor_eta_critic`;
-`learning_eta` and `learning_eta_bias` govern demonstrations and do not change
-`live` reward updates. `temperature` is shared by the teaching softmax and actor
-policy. Set these names in `Brain.compose` or `brain.retune`, with explicit
-paired actor rates when needed. The [composed defaults table](brain.md#defaults-and-expert-overrides)
-records their ownership and the remaining genes.
+brain = Brain.compose(2, 2, modules=(16,), seed=0, actor_eta=0.1, actor_eta_bias=0.01)
+rng = np.random.default_rng(0)
+cue = np.eye(2)[[rng.integers(2)]]
+action = brain.step(cue)                           # the first moment has no outcome yet
+for _ in range(300):
+    reward = [1.0 if action[0] == cue[0].argmax() else -1.0]
+    cue = np.eye(2)[[rng.integers(2)]]
+    action = brain.step(cue, reward=reward)        # the reward belongs to the previous action
+```
+
+Use it when outcomes pay actions: bandits, reversing rules, rewards a few choices later
+([reversal](../benchmarks/reversal/README.md), [key-door](../benchmarks/keydoor/README.md),
+[competing skills](../benchmarks/competing/README.md)). With signed, noisy outcomes and a
+cost per move, the composed actor rate of 1.0 on one stream walks the policy to one held
+action; a tenth of it, as above, lets the cue decide
+([night-replay chamber](../benchmarks/replay/README.md)). Labelled lessons belong to
+[learning](learning.md).
 
 ## Eligibility traces and dopamine
 
-`ActorCritic` wraps a `Learner`. Acting runs the free phase; the action is a draw from the
-softmax over each categorical motor slot (or, with `Bins`, one softmax draw per
-continuous dimension). Unequal categorical slots use the existing `Learner(slots=[...])`
-layout; every slot participates in the same settlement. Two nudged phases, toward and away from the
-action taken, give every synapse its per-row contrast, an estimate of that action's score
-under the [equilibrium assumptions](learning.md). The actor always uses a softmax
-nudge, even when the learner uses quadratic imitation. Sampling and eligibility
-use the same temperature, including explicit temperatures and per-slot exploration.
-For slot temperatures `T_i`, the local mask is scaled by `c/T_i`, where `c` is the
-minimum of the base temperature and the supplied temperatures. The contrast estimates
-`c * grad(log policy)`; several slots estimate the sum of their log probabilities.
-At the base temperature the mask remains one and the existing scale is unchanged.
-The bounded mask also permits very small temperatures without an overflowing gain.
-This removes the systematic score bias caused by sampling a hot policy while
-differentiating a sharper one. Finite phases retain their approximation error and
-do not guarantee acquisition. Each synapse keeps an eligibility trace
-of those contrasts:
+`ActorCritic` wraps a `Learner`. `act` runs the free phase and draws the action from a
+softmax over each motor slot. Two nudged phases, toward and away from the action taken,
+give every synapse its contrast, an estimate of the score of that action under the
+[equilibrium assumptions](learning.md). The actor always uses a softmax nudge, even when
+the learner imitates with a quadratic one. `learn` then applies
 
 ```
 elig[e]      <- gamma * lam * elig[e] + contrast[e]
@@ -45,298 +42,242 @@ delta         = r + gamma * V(s') - V(s)
 efficacy[e] += eta * delta * elig[e]
 ```
 
-This is a three-factor rule. Presynaptic and postsynaptic activity enter through the
-contrast and accumulate in the synapse's eligibility trace; the prediction error `delta`,
-the dopamine signal, is the same for every synapse and sets the sign and size of the
-weight change. `V` is a linear readout of the neurons named as the critic (usually the
-hidden population). The actor signal is clipped (`dopamine_cap`) and can be centred
-and scaled by its own running statistics (`dopamine_center`). The critic has two
-explicit choices:
+`delta` is the same for every synapse and sets the sign and size of each change; `V` is a
+linear readout of the critic neurons, usually the hidden population. The actor's signal is
+clipped at `dopamine_cap` and can be centred (below). `critic_signal="td"` teaches the
+critic the raw error, which fits discounted return in reward units; `"modulated"` gives it
+the actor's signal, which can stabilize an update without predicting return. A critic fed
+the centred signal chases a moving target and its value runs away, so `"auto"` picks
+`"td"` exactly when `dopamine_center > 0`.
 
-- `critic_signal="modulated"` preserves the original rule: the critic shares the
-  actor signal. This can stabilize an update, but clipping or centring means it need
-  not predict mean discounted return in reward units.
-- `critic_signal="td"` uses the raw prediction error for the critic, independently
-  of actor modulation. Use this when a calibrated return prediction is required.
-  It can require retuning the critic rate and reward scale. The default
-  `critic_signal="auto"` selects `"td"` when dopamine centering is enabled,
-  otherwise `"modulated"`.
-
-The critic's step can be divided by its trace's energy (`critic_normalize`). Reports
-include the absolute raw `td_error`, the absolute modulated `delta`, signed
-`dopamine`, and `capped`, the share of observed rows whose signal exceeded
-`dopamine_cap` before the clip: near 1, every outcome moves the synapses by the
-cap times the trace, whatever its size. A time limit is not a terminal state: pass
-`bootstrap=` the value of the last observation for a truncated row.
-
-The adaptive local step uses `momentum` and `normalize` to keep a running mean and RMS
-of each synapse's own steps, with corrections for its short history. Each synapse reads its
-own optimizer state; this does not guarantee stable learning for every task or setting.
+Sampling and eligibility use the same temperature. With temperature `T_i` for slot `i`, its
+nudge mask is scaled by `c/T_i`, `c` the smallest of the base and supplied temperatures, so
+the contrast estimates `c * grad(log policy)` summed over slots. The trace lives per stream:
+it carries across moments, a routine (unaroused) moment of `live` fades it by `gamma * lam`
+(`fade`), and `done` or `reset` clears it.
 
 ## Centered dopamine and selective activity
 
-With `ActorCriticConfig.dopamine_center > 0`, the actor maintains per-stream
-running error statistics. `dopamine_floor` sets a band around the running centre
-in which its modulation is zero, and has no effect when centering is disabled.
-This reduces actor updates for familiar outcomes. It is not a correctness test:
-momentum can still move parameters, the centered critic uses raw TD error, and
-eligibility phases and associative writes still run, so zero modulation is not
-zero computation. Each actual outcome is still supplied once.
+With `dopamine_center > 0` each stream keeps a running mean and scale of its prediction
+error, and the actor's dopamine is the deviation from that level. `center_scale=True`
+divides it by the running scale; `False` keeps the reward's own units. `dopamine_floor`
+zeroes the signal within that many scales of the level, so familiar outcomes move no actor
+synapse; it has no effect without centering. Momentum, the critic, the eligibility phases
+and memory writes run regardless, so a zero signal is not zero computation.
 
-[Life](api.md#life-cadencelife) provides a different opt-in mechanism: a governor
-selects habit, imagination or learning for a `BeliefPatch`/`Steered` composition
-using recorded prior surprise. The application supplies the cheap habit.
-This is a separate sequential composition, not a governor automatically wired
-into `Brain.compose` or a joint neural-equilibrium certificate.
+`Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True)` is this signal
+without a critic: `level`, `floor` and `cap` act as `dopamine_center`, `dopamine_floor` and
+`dopamine_cap`, `units=False` as `center_scale=True`, and `per_stream=False` keeps one level
+for all streams. Call it with one `delta` per stream (optional boolean `observed`);
+`reset()` forgets the level.
 
 ## A custom reward learner
 
-For custom wiring, build an actor on a declared output population:
+Build an actor on a declared output population. `slots=[2, 3]` gives two categorical motor
+slots of unequal size that settle together; `act` returns one index per slot.
 
 ```python
 import numpy as np
 import cadence as cd
 
-connectome = cd.layered(2, 8, 3, density=1.0, seed=0)
-learner = cd.Learner(
-    cd.NeuralGraph(connectome, cd.learning_neuron_model()), connectome.populations["output"]
-)
-drive = np.zeros((1, connectome.n))
-drive[:, list(connectome.populations["input"])] = [[0.5, 0.8]]
+connectome = cd.layered(2, 8, 5, density=1.0, seed=0)
+learner = cd.Learner(cd.NeuralGraph(connectome, cd.learning_neuron_model()),
+                     connectome.populations["output"], slots=[2, 3])
 ac = cd.ActorCritic(learner, critic=connectome.populations["hidden"],
-                    config=cd.ActorCriticConfig(gamma=0.99, lam=0.95, eta=0.001, eta_bias=0.0001,
-                                                eta_critic=0.5, normalize=0.999, momentum=0.9))
-action = ac.act(drive)                       # settle, draw, keep eligibility
-reward, done, next_drive = np.ones(len(drive)), np.zeros(len(drive), bool), drive  # from your environment
-ac.learn(reward, done, next_drive)           # settle the next state, dopamine, every synapse moves
+                    config=cd.ActorCriticConfig(gamma=0.9, lam=0.8, eta=0.01))
+drive = np.zeros((4, connectome.n))
+drive[:, list(connectome.populations["input"])] = [0.5, 0.8]
+for _ in range(3):
+    action = ac.act(drive, temperature=[0.2, 0.4])   # (4, 2): one draw per slot
+    reward = (action[:, 0] == 1).astype(float)        # from your environment
+    report = ac.learn(reward, np.zeros(4, dtype=bool), drive)
+assert {"td_error", "delta", "dopamine", "capped", "saturation", "trace"} <= set(report)
 ```
+
+For a continuous action pass `population=Bins(dims, size=9)`: each dimension owns `size`
+output neurons standing for levels in `[-1, 1]` (the output set holds `dims * size`), `act`
+returns one sampled level per dimension, and a population code takes no choice `bias`.
+
+## Settings
+
+`ActorCritic(learner, critic, config=None, seed=0, population=None)`. In a composed brain
+each field is the named setting `actor_<field>`, set in `Brain.compose` or `brain.retune`;
+the composed founders are `gamma=0.9, lam=0.8, eta=1.0, eta_bias=0.05, eta_critic=0.3,
+eligibility_steps=12` ([defaults table](brain.md#defaults-and-expert-overrides)).
+
+| `ActorCriticConfig` field | Default | Meaning |
+| --- | --- | --- |
+| `gamma` | `0.99` | Discount |
+| `lam` | `0.9` | Eligibility decay; credit at a delay of `d` transitions is scaled by `(gamma * lam) ** d` |
+| `eta` | `0.5` | Actor synapse step per unit dopamine per unit trace |
+| `eta_bias` | `None` | Bias step; `None` derives `eta / 10` at construction |
+| `eta_critic` | `0.05` | Critic step |
+| `normalize` | `0.0` | Forgetting factor of each parameter's RMS that divides its step ([below](#rates-under-normalization)) |
+| `momentum` | `0.0` | Each parameter steps on a running average of its own steps |
+| `dopamine_cap` | `1.0` | Clip of the actor's signal; `0` for none |
+| `dopamine_center`, `dopamine_floor`, `center_scale` | `0.0`, `0.0`, `True` | [Centred dopamine](#centered-dopamine-and-selective-activity) |
+| `critic_signal`, `critic_normalize` | `"auto"`, `True` | The [critic's signal](#eligibility-traces-and-dopamine); its step divided by its trace's energy |
+| `eligibility_steps` | `None` | Steps of each reward-nudged phase; `None` uses the learner's `nudged_steps` |
+
+`beta`, the base `temperature` and `tolerance` come from the learner's `LearnerConfig`
+(composed: `learning_beta`, `temperature`); `learning_eta` and `learning_eta_bias` govern
+only lessons.
+
+- `act(drive, greedy=False, temperature=None, *, bias=None)`: one temperature or one per
+  slot; `bias` adds a `(batch, motor)` vote before each softmax (the episodic memory votes
+  this way) while eligibility scores the readout's own policy.
+- `learn(reward, done, next_drive, bootstrap=None, *, observed=None, warm=None)`: `observed`
+  marks real rows (at least one); padding rows are left out of plasticity and statistics
+  and their traces reset. `warm` is the state to settle the next state from when the
+  stream moved on ([`Brain.wait`](continuous.md#outcomes-that-arrive-later-wait)).
+- `value(state)`, `value_of(drive)` (settled cold, cache untouched), `probabilities(state,
+  temperature=None, *, bias=None)` (`(batch, slots, max_size)`, zero-padded, for several
+  slots), `state` (the latest free phase), `fade(done=None)`, `reset()`. `salience`, a
+  `(batch, neurons)` array set before `learn`, weights eligibility by each sender's
+  salience. `memory` is a memory with learned parameters (as [`Recall`](recall.md) has)
+  that the same dopamine trains beside the synapses; `trace_memory` is its eligibility.
+- Report: `td_error` (mean absolute raw error), `delta` (mean absolute actor signal),
+  `dopamine` (signed mean), `capped` (share beyond `dopamine_cap` before the clip),
+  `saturation` (share of outputs within 0.02 of 0 or 1), `trace` (mean absolute plastic
+  eligibility), `value`, `free_steps`, `scale_step`, `bias_step` (mean absolute applied
+  steps), and `address_reward_step` with a `memory`.
 
 ## Decision and reset contract
 
-Drives are nonempty finite `(batch, neurons)` arrays. Rewards and optional bootstrap
-values have shape `(batch,)`; `done` is boolean. Validation precedes trace and parameter
-updates. Each batch row keeps its own potential, adaptation, eligibility and reward
-centering. Ended rows reset before the next free phase; their neighbours get the usual
-single phase. The next free phase estimates the bootstrap value before the parameter
-update. The next action settles again from that warm state under the updated parameters.
-A cached free phase is reused only when both the drive and the brain parameters are
-unchanged. Budget for both free phases and the action’s two nudged phases.
+Drives are nonempty finite `(batch, neurons)` arrays, rewards and bootstrap values
+`(batch,)`, `done` boolean; validation precedes every update. Each row keeps its own
+potential, adaptation, eligibility and centering. `done` rows restart from rest and
+bootstrap from `bootstrap`, or zero without it. A time limit is not terminal: mark the
+truncated row `done` and pass its value, `value_of(next_drive)`, as `bootstrap`. `learn`
+settles the next state before the update, and the next `act` settles again from it under
+the new parameters (the cached phase is reused only for an unchanged drive and
+parameters): two free and two nudged phases per decision.
 
-`act(..., greedy=True)` is an evaluation read: it clears eligibility and cannot be
-followed by `learn`. Calling another `act` replaces the pending action. Finish the
-reward transition before changing learner parameters elsewhere, or call `reset`.
-`reset` clears stream state and centering, but preserves the learned critic, actor and
-optimizer history. `Brain.save/load` includes this full state; `Learner.save`
-does not save a separately constructed actor-critic.
-
-## Reward evidence
-
-Measure actual task outcomes separately from shaped reward. An
-undiscounted potential difference does not generally preserve the original
-objective under discounting; that guarantee requires the discounted form
-`gamma * Phi(next) - Phi(now)` with appropriate terminal handling.
-
-The [experience guide](experience.md) connects eligibility, prediction error
-and valence to the rest of the learning life.
-
-## Budget the ongoing loop
-
-Choose the settling budget using changing observations and the task's outcome
-metric. Compare cold and warm starts as controls, declare terminal resets, retain
-learned state across the continuing life, and measure all decision work.
-A small step count or a cached response to one unchanged
-input does not establish reliable control or lower decision cost.
+`act(..., greedy=True)` is an evaluation read: it keeps no eligibility for its action and
+cannot be followed by `learn`. Another `act` replaces the pending action. Finish a reward
+transition before changing learner parameters elsewhere, or call `reset`, which clears
+stream state, traces and centering and keeps the critic, actor and optimizer history.
+`Brain.save/load` carries the full state; `Learner.save` does not save a separately built
+`ActorCritic`. A shaped reward keeps the task's optimum only in the discounted form
+`gamma * Phi(next) - Phi(now)` with terminal handling.
 
 ## What delayed credit requires
 
-A reward that follows the reading it belongs to is a record: written in one exposure at
-the fast rate and read back at that reading ([records](memory.md#records)). The
-eligibility trace is for the policy where the reward arrives after other decisions.
-
-An eligibility trace remembers which action could have caused a later reward; it
-does not remember an arbitrary observation or learn a memory address. At a delay of
-`d` transitions its contribution is multiplied by `(gamma * lam) ** d`. A trace
-that fades too soon cannot assign useful credit, while a long trace includes more
-unrelated actions. State representation, exploration and the critic matter too.
-
-The [delayed-credit test](../tests/test_child.py) pays a choice three moments later,
-after blank moments with presses of their own; the learned greedy choice reaches a hit
-rate of at least 0.8 with the trace (`lam=0.9`) and at most 0.65 without it (`lam=0`). The
-[policy credit tests](../tests/test_policy_credit.py) check that the eligibility
-differentiates the sampled policy. Passing these small tests does not establish
-performance on any larger task.
-
-For a real task, record raw held-out return, forgetting and every interaction used
-by rehearsal or planning. Choose the eligibility horizon from actual action-to-reward
-delays, and test imitation, reward practice and rehearsal separately. A biological
-analogy supplies a hypothesis; the behavioral test determines whether it works.
+A reward that follows the reading it belongs to is a record, written in one exposure by the
+[associative store](memory.md#associative-store-the-hippocampus). The eligibility trace
+serves the policy when the reward arrives after other decisions: it remembers which action
+could have caused the reward, never an arbitrary observation. Too short a trace assigns no
+useful credit, too long a one credits unrelated actions; choose `lam` from the actual
+action-to-reward delays. The [delayed-credit test](../tests/test_child.py) pays a choice
+three moments later: the greedy hit rate is at least 0.8 with `lam=0.9` and at most 0.65
+with `lam=0` ([policy credit tests](../tests/test_policy_credit.py)). Chains of
+prerequisite actions: [sequential tasks](sequential-tasks.md#what-breaks-a-chain).
 
 ## Replaying a life through `step`
 
-`step` cannot tell a replayed observation from a live one. An application that lets
-a saved copy of a brain re-experience its own day, calling `step(observation,
-reward=...)` on the recorded observations with the reward each replayed choice would
-have earned, gives that copy more experience of the same day at the same rates: every
-replayed transition writes the associative memory and moves the actor and the critic
-as a live one would, and the boundary between passes is an ordinary transition unless
-`done` marks it. That is not a consolidation operation. The sleep of the
+`step` cannot tell a replayed observation from a live one, so replaying a saved copy's day
+with the reward each choice earned is more experience at the same rates; a pass boundary is
+an ordinary transition unless `done` marks it. `Brain.compose` has no night of its own (the
 [record patch](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night)
-is a separate model that teaches its slow weights fixed completions from its store;
-`Brain.compose` has no night of its own, and its `SynapticMemory` consolidates on
-each outcome.
-
-Whether such a night helps depends on what the day's updates do, which the
-[night-replay chamber](../benchmarks/replay/README.md) measures: one decision per
-interval, a signed outcome in small units, a fixed cost for every non-resting
-action, a world in which a cue decides the paying move and one in which nothing
-does, and the same number of fresh awake decisions as the control. Three
-readings decide whether a night is safe:
-
-- **`report["capped"]`.** Outcomes of several units against `dopamine_cap=1.0`
-  clip to their sign, so a gain of one unit and a loss of six move every synapse
-  equally. At a high share the night repeats that distortion.
-- **`report["saturation"]`.** At the composed actor rate on a single stream the
-  policy walks to a held action, and replay walks it further.
-- **The working trace.** At the composed amplitude the association region can
-  run on its own history instead of the observation
-  ([memory](memory.md#three-kinds-of-memory-in-brain)).
-
-With the trace informing rather than leading and a smaller actor rate, replay
-raised the agreement with the paying rule as the awake control did; at the larger
-rate a long night lowered it. The smaller the rate, the safer a long night.
-Measure a frozen copy's policy before adopting a slept brain: its dependence on
-the observation is the gate, and a constant greedy choice is only correct where
-no observation pays.
+has one). In the [night-replay chamber](../benchmarks/replay/README.md) a night is worth
+about as many fresh decisions when the day's updates are sound and harms when they are not.
+Read `capped` (outcomes beyond the cap teach their sign alone), `saturation` and the
+[working trace](memory.md#memory-in-the-composed-brain) first; a smaller actor rate makes
+a long night safer. Gate a slept brain on a frozen copy's dependence on the observation; a
+constant greedy choice is right only where no observation pays:
 
 ```python
-import numpy as np
-from cadence import Brain
-
-brain = Brain.compose(4, 3, modules=(16,), seed=0)
-day = np.eye(4)[[0, 1, 2, 3, 0, 1]]
-brain.step(day[:1])
-for observation in day[1:]:
-    brain.step([observation], reward=[0.5], done=[False])
-copy = Brain.load(brain.save("slept.npz"))  # the gate reads a frozen copy
+copy = Brain.load(brain.save("slept.npz"))
 copy.reset()
 policies = []
-for observation in day:
-    copy.act([observation], greedy=True)  # no learning; the trace carried as in life
+for observation in np.eye(2)[[0, 1, 1, 0]]:
+    copy.act([observation], greedy=True)              # no learning; compare with predict
     policies.append(copy.basal_ganglia.probabilities(copy.basal_ganglia.state)[0])
 policies = np.asarray(policies)
 dependence = float(0.5 * np.abs(policies - policies.mean(axis=0)).sum(axis=1).mean())
-assert 0.0 <= dependence <= 1.0  # near 0: the choice ignores the observation
+assert 0.0 <= dependence <= 1.0                       # near 0: the choice ignores the observation
 ```
 
-Compare the greedy `act` with `predict`, which reads neither trace nor memory, to
-see which of the graph, the trace and the memory holds the choice.
+`predict` reads neither trace nor memory: against the greedy `act` it shows what holds the
+choice.
+
+## Check before the first lesson
+
+`preflight(brain, outputs, plastic, drives, *, level=0.5, saturation=0.02, shared_max=0.25,
+eligibility_min=10, steps=100, tolerance=1e-4)` settles a `NeuralGraph` under `drives`, one
+row per situation, and warns, naming the remedy, about:
+
+| Finding | Remedy |
+| --- | --- |
+| A readout within `saturation` of 0 or 1 under every drive | [`calibrate_bias`](learning.md#calibrating-the-operating-point) |
+| Plastic senders (at or above `level`) sharing over `shared_max` of their code between two drives | an upstream gain selected on the `specific` fact ([connectomes](connectomes.md)) |
+| Fewer than `eligibility_min` plastic synapses from active senders onto a readout under some drive | a whole seam (`seam_report`) |
+| Two drives overlapping on over `shared_max` of their driven neurons | senses that tell them apart |
+
+It returns `{"outputs", "shared", "inputs", "eligibility", "warnings"}`; an empty list
+certifies neither equilibrium nor acquisition. `seam_report(connectome, pre, post)` takes
+population names or indices and returns `classes`, `synapses`, `coverage_pre` (share of
+`pre` with a class onto `post`), `classes_per_post` and `median_count`.
+`naive_efficacy(connectome, plastic)` sets each plastic class to its sign times the mean
+count over its own count, so every class has the same effective weight, and keeps the sign
+elsewhere: a lesson without an inherited preference. Report it, since it changes measured
+strengths.
+
+```python
+import cadence as cd
+
+wiring = cd.layered(4, 12, 2, density=1.0, seed=0)
+graph = cd.NeuralGraph(wiring, cd.learning_neuron_model())
+readouts = list(wiring.populations["output"])
+plastic = np.isin(wiring.pre, wiring.populations["hidden"]) & np.isin(wiring.post, readouts)
+drives = np.zeros((2, wiring.n))
+drives[0, wiring.populations["input"][:2]] = 1.0
+drives[1, wiring.populations["input"][2:]] = 1.0
+check = cd.preflight(graph, readouts, plastic, drives)
+assert any("the seam is thin" in warning for warning in check["warnings"])  # senders below 0.5
+seam = cd.seam_report(wiring, "hidden", "output")
+assert seam["classes"] == 24 and seam["coverage_pre"] == 1.0
+start = cd.NeuralGraph(wiring, cd.learning_neuron_model(),
+                       efficacy=cd.naive_efficacy(wiring, plastic))
+```
 
 ## Traps, with their measurements
 
-These are properties of the rule and the readout, each with a reading in the
-`learn` report. The last three are checked before any lesson by
-`preflight(brain, outputs, plastic, drives)`, which names the remedy for each;
-run it first.
+Each is a property of the rule or the readout, with its reading in the `learn` report;
+[troubleshooting](troubleshooting.md#learning-from-reward) maps symptoms to them.
 
-- **Continued learning can interfere with acquired behaviour.** Arousal gates
-  updates but does not protect particular earlier responses while the brain
-  learns. A smaller actor step reduces interference; it is a bounded control, not
-  a retention mechanism, and [#169](https://github.com/muellerberndt/cadence/issues/169)
-  owns the candidates. Raising the arousal threshold only removes learning
-  opportunities, and associative-memory `consolidation` controls record writes,
-  not actor weights. Compare retained skills and adaptation in the same brains.
-- **The temperature is relative to the activation range.** The action is a
-  softmax over the output neurons' activations divided by `temperature`, and
-  activations lie in [0, 1]. At 0.05, two outputs differing by 0.3 make a choice
-  with probability 0.998, the nudge's push `beta * (target - p)` is nothing, and
-  no synapse moves. Outputs that live near rest take 0.05; outputs that sit at
-  0.7 to 1.0 under their drive take 0.3. Set it from the naive activations.
-- **The saturation latch.** Once one output saturates and the other is silenced,
-  the activation has no slope, the contrast `a_pre * (b_plus - b_minus)` is zero,
-  and the rule cannot leave the state whatever the reward says.
-  `report["saturation"]` is the fraction of output activations within 0.02 of 0
-  or 1 and `report["trace"]` the mean absolute eligibility: saturation near 1
-  with the trace near 0 is the latch, and it is visible long before the reward
-  curve shows it. The remedies are a gain that puts the outputs in the sensitive
-  band, `LearnerConfig(scale_cap=...)` below the default 8 so learning cannot
-  drive them out of it, and a readout that is neither silent nor saturated under
-  the task's drive before any lesson.
-- **The value on a code that cannot see progress.** With a terminal reward and a
-  linear critic on a state code that is the same all along the approach, the
-  value stays near the discounted mean everywhere, so every outcome surprises by
-  a fixed amount and the shared synapses drift until the latch. Make the outcomes
-  symmetric where the assay allows it, or give the code the progress, such as a
-  level that rises with distance.
-- **The assay decides whether avoidance can be rewarded.** Where one avoidance
-  turn leads nowhere, no reward ever arrives for it and the rule learns "approach
-  everything" whatever the wiring. Where avoiding one option means taking the
-  other, and every search ends at an outcome, the association can be learned.
-  Build the arena so that every action the readout can take has an outcome.
-- **Centring and the critic.** `dopamine_center > 0` makes the actor's dopamine
-  the surprise over its running level; a critic fed the same signal chases a
-  moving target and its value runs away. `critic_signal="auto"` (the default)
-  gives the critic the raw error whenever the dopamine is centred.
-- **A cap applied by rebuilding the brain.** Clipping efficacies with
-  `brain.with_parameters` after every decision re-uploads every weight on the
-  torch backend, at a factor of ten per decision. The cap is a config field,
-  `LearnerConfig(scale_cap=...)`, applied inside the update.
-- **A code the lesson cannot attach to.** The actor moves the synapses from the
-  active cells of the state code; if that code is nearly the same for every
-  stimulus, every lesson moves every stimulus, and a few outcomes at one cue drag
-  both probabilities together. Measure the code with the `specific` fact before
-  the lesson and select the offending population's gain on it
-  ([brains from a connectome](connectomes.md)); no rule downstream repairs it.
-- **A readout on a rail, and a readout with a past.** A connectome carries no
-  operating point: at one global threshold a readout cell can sit at 1.00 under
-  every input and its opposite at 0.01, where the nudge has little response on
-  either. `calibrate_bias` searches each readout cell's bias toward a declared
-  mean over the supplied situations; check the resulting means and full residual
-  before installing them, since finite bisection does not guarantee the target.
-  The [qualified calibration option](learning.md#calibrating-the-operating-point)
-  checks every attempted state. Measured synapse counts are themselves a past: a
-  naive readout can already prefer one cue, and an option that is never taken is
-  never rewarded. `naive_efficacy` starts a seam with every plastic class at the
-  same weight.
-- **A seam thinned by custody.** A synapse floor removes a distributed memory
-  along with the noise, leaving a seam that a lesson barely moves. Keep the seam
-  a lesson will move at every count and read `seam_report` before designing on it.
-- **The critic that learns faster than the actor.** With a large `eta_critic` the
-  value reaches the outcome in a few trials and the dopamine goes to zero while
-  the actor, whose contrast is small near a rail, has barely moved; with a large
-  `eta` one lesson puts an output on its rail. Read `report["delta"]` across
-  repeated outcomes and `report["saturation"]` before raising either.
-- **Eligibility mixed along one approach.** Several decisions along one approach
-  give the trace both approach and avoid nudges from the same episode, and the
-  reward then credits whichever nudge was larger. Take one decision per episode
-  and credit it to that decision.
+- **Continued learning interferes with acquired behaviour.** Arousal gates updates and
+  protects no earlier response. A smaller actor step reduces interference without retaining a
+  skill ([#169](https://github.com/muellerberndt/cadence/issues/169)); `consolidation`
+  governs record writes and leaves actor weights alone.
+- **The temperature is relative to the activation range [0, 1].** At 0.05, outputs 0.3
+  apart choose with probability 0.998 and the nudge `beta * (target - p)` vanishes. Outputs
+  near rest take 0.05, outputs at 0.7 to 1.0 take 0.3.
+- **The saturation latch.** With one output saturated and the other silenced the contrast
+  `a_pre * (b_plus - b_minus)` is zero whatever the reward: `saturation` near 1 with `trace`
+  near 0. Bring the outputs into the sensitive band (gain, `calibrate_bias`) and keep them
+  there with `LearnerConfig(scale_cap=...)` below 8.
+- **A value on a code that cannot see progress.** A terminal reward on a state code that is
+  the same along the approach surprises by a fixed amount every time, and the shared synapses
+  drift into the latch. Make outcomes symmetric or put progress in the code.
+- **A shared code, a readout on a rail, a thinned seam.**
+  [`preflight`](#check-before-the-first-lesson) finds all three.
+- **A critic faster than the actor.** A large `eta_critic` zeroes the dopamine before the
+  actor moves; a large `eta` puts an output on its rail in one lesson. Read `delta` and
+  `saturation` over repeated outcomes before raising either.
+- **Eligibility mixed along one approach.** Several decisions in one episode put approach and
+  avoid nudges in one trace; take one decision per episode and credit it.
 
 ## Rates under normalization
 
-`ActorCriticConfig.normalize` divides the actor's reward-modulated eligibility
-signal by its own bias-corrected running RMS plus `1e-3`. With momentum, the
-numerator is its bias-corrected running mean. This applies independently to
-efficacies (`eta`) and neuron biases (`eta_bias`), using the actor's optimizer
-history; the supervised learner's normalization setting does not enable or
-disable it. The [learning guide](learning.md#rates-under-normalization) gives the formula
-and its limits.
-
-A consistent signal above the floor gives a parameter increment near its
-rate before masks, tying, decay and clipping. The rate is not a fixed increment
-or an upper bound. A fresh `ActorCriticConfig` derives an unset `eta_bias` as
-`eta / 10`; an explicit value is kept. Composed named overrides and `retune`
-preserve the current bias rate unless it too is named: use
-`actor_eta_bias=None` to derive it again, or supply an explicit paired rate.
-Construction warns when the bias rate exceeds a positive `eta`. Under RMS
-normalization both rates are absolute per-parameter steps: a bias step much
-larger than the synapse step rewrites the policy into a bias policy whose greedy
-action does not depend on the observation, with the biases far from
-initialization while the synapses stay near it. The composed brain keeps
-`eta_bias=0.05` at `eta=1.0`. A development sweep of `eta=0.001` to `0.003` is a
-starting experiment. Measure free behavior against the task's controls; no range
-guarantees learning or prevents a policy from collapsing to a held action.
-
-Construction emits `RuntimeWarning` if `normalize > 0` and either `eta` or
-`eta_bias` exceeds `0.05`. This advisory threshold does not alter settings or
-certify smaller rates. `eta_critic` is excluded: `critic_normalize` divides the
-critic update by trace energy, which is a separate rule from the actor's RMS
-normalization. The warning introduces no new learning rule or default.
+With `normalize > 0` each actor parameter's step is divided by the bias-corrected running
+RMS of its own raw steps plus `1e-3` (with `momentum`, the numerator is their bias-corrected
+running mean). Efficacies (`eta`) and biases (`eta_bias`) are normalized separately on the
+actor's own history, independently of the [learner's](learning.md#rates-under-normalization).
+A consistent signal then steps by about the rate, so both rates are absolute per-parameter
+steps, and a bias rate far above the synapse rate makes a policy whose greedy action
+ignores the observation; `eta` from 0.001 to 0.003 is a starting range. A named
+`actor_eta` in `Brain.compose` or `retune` keeps the current bias rate; pass
+`actor_eta_bias=None` to derive `eta / 10` again. Construction emits a `RuntimeWarning`, and changes nothing, when
+`normalize > 0` with `eta` or `eta_bias` above 0.05, or when `eta_bias` exceeds a positive
+`eta`. `eta_critic` is outside both.

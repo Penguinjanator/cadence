@@ -1,15 +1,14 @@
-# Explicit response protection
+# Protect a temporal response
 
-`TemporalMemory` constrains how a `TemporalPatchNet` may change after a caller
-marks a learned response as important. It retains orthonormal bases of the
-protected presynaptic directions for A, B and C. It stores neither a raw replay
-phrase nor a future-output lookup table. Importance is **supplied**, not inferred.
-
-The method is related to orthogonal weight modification: projecting updates to
-preserve earlier responses has established prior art in [Zeng et al., *Continual
-learning of context-dependent processing in neural networks*](https://www.nature.com/articles/s42256-019-0080-x).
-Cadence applies this constraint to its temporal residual model's local EP update;
-it does not claim the projection principle is novel.
+`TemporalMemory` keeps a [`TemporalPatchNet`](temporal.md) from changing a
+response the caller marks as important. It stores orthonormal bases of the
+protected presynaptic directions of the A, B and C blocks and projects later
+updates out of them; it keeps no replay phrase and no output table, and it
+infers no importance. It is a `TemporalPatchNet` tool that `Brain.compose` does
+not use; the composed brain's memories are on [memory.md](memory.md). The
+projection is orthogonal weight modification ([Zeng et al., *Continual learning
+of context-dependent processing in neural networks*](https://www.nature.com/articles/s42256-019-0080-x)),
+applied to the temporal model's local EP update.
 
 ```python
 import numpy as np
@@ -17,166 +16,116 @@ from cadence import TemporalPatchNet, TemporalMemory
 
 net = TemporalPatchNet(2, 8, 1, seed=151)
 memory = TemporalMemory()
-old_input = np.array([[[1.0, 0.0]]])
-new_input = np.array([[[0.0, 1.0]]])
+old_input, new_input = np.array([[[1.0, 0.0]]]), np.array([[[0.0, 1.0]]])
 cold = np.zeros((1, 8))
 old_output = net.imagine(old_input, state=cold).output
-report = memory.protect(net, old_input, state=cold)
-assert report.maximum_residual < 1e-12
+assert memory.protect(net, old_input, state=cold).maximum_residual < 1e-12
 
 for _ in range(8):
     net.reset()
-    result = memory.observe(net, new_input, np.full((1, 1, 1), 0.25))
-    assert result.updated
+    assert memory.observe(net, new_input, np.full((1, 1, 1), 0.25)).updated
 np.testing.assert_allclose(
     net.imagine(old_input, state=cold).output, old_output, atol=1e-12
 )
 ```
 
-`protect` is read-only with respect to the network. It follows the free path
-from the supplied initial boundary and gathers the actual inputs and neural
-activity into bases. It protects the model's **current response**, including any
-error that response already contains. Targets are not an argument. Preserve
-the same initial boundary and query when testing retention; other queries,
-nearby cues, or different live context are not automatically protected.
+`protect(net, inputs, *, state=None)` leaves the network unchanged. It runs the
+free path from `state` (the live state when omitted, zero when there is none)
+and adds its inputs and activity to the bases. It protects the current
+response, errors included, and takes no target. Other cues and boundaries are
+unprotected, so test retention with the same ones. An unconverged path raises
+`ValueError`.
 
 ## A local quadratic parameter constraint
 
-For every protected presynaptic vector `x`, require
-`(W_new - W_old) @ x = 0`. If `Q` has orthonormal columns spanning the protected
-vectors, the closest admissible update to `D` in Frobenius norm is
-
-```text
-D_protected = D @ (I - Q @ Q.T)
-```
-
-This is a quadratic overlap constraint on local parameter responses. It is
-solved analytically; it is not an additional teacher or a gradient through the
-temporal solver. A numerical second projection removes residual floating-point
-components along the same basis. Previously admitted basis directions are
-retained when later data have a different scale. Singular values below the
-configured tolerance are discarded, so finite-precision retention is measured,
-not presumed exact.
-
-Preserving A's responses on previous activity, B's responses on inputs, and C's
-responses on current activity preserves the selected causal path in exact
-arithmetic, by induction. That induction is conditional on exact map agreement:
-it does not certify the numerical SVD or make a protected response true or
-useful.
-
-As a basis fills its input space, that parameter block loses all plastic
-directions. Protecting many paths can eventually prevent compatible new
-learning. There is no automatic decay, contradiction resolution, relevance
-selection or unlimited capacity claim. Retention and remaining new-task
-acquisition must be tested together.
-
-Unused dimensions alone do not establish usable learning capacity. A new
-activity vector may lie almost entirely in the protected span. Its remaining
-component can then require a large weight change to produce even a moderate
-new response. Report conditioning and weight norms alongside basis ranks;
-preserving all earlier local responses is stronger than preserving only the
-earlier useful behavior. More training is not a demonstrated remedy for either
-restriction.
+Every protected presynaptic vector `x` must satisfy `(W_new - W_old) @ x = 0`.
+With `Q` an orthonormal basis of those vectors, the closest admissible update to
+`D` in Frobenius norm is `D_protected = D @ (I - Q @ Q.T)`, applied twice to
+remove floating-point residue. Fixing A's response on previous activity, B's on
+inputs and C's on current activity preserves the protected causal path by
+induction over time, in exact arithmetic. `TemporalMemory(*,
+relative_tolerance=1e-12)` sets the rank cut: a new direction is admitted when
+its singular value exceeds `relative_tolerance` times the Frobenius norm of the
+new vectors, so retention holds to that precision. Admitted directions are
+always kept. A tolerance outside (0, 1) raises `ValueError`.
 
 ## A local metric for poorly conditioned readout updates
 
-`memory.observe` takes an optional `readout_damping` argument.
-The default `None` keeps the plain projected update. With a positive finite
-value `mu`, the method scales the readout update by the covariance of current
-free activity in the remaining unprotected directions:
+New activity close to the protected span has a small free component, and the
+plain projected readout step then learns slowly. A positive `readout_damping`
+value `mu` rescales the C update by the free-activity covariance in the
+unprotected directions (A and B keep the plain projected update):
 
 ```text
-X = flattened free tanh activity
-P = I - Q_C @ Q_C.T
-S = X.T @ X / (batch * time)
+X = flattened free tanh activity,  P = I - Q_C @ Q_C.T,  S = X.T @ X / (batch * time)
 Delta_C = -rate * gradient_C @ P @ inverse(P @ S @ P + mu * I) @ P
 ```
 
-The implementation solves a linear system and applies the existing numerical
-projection. It uses the same centered EP gradient; the metric reads no teaching
-target and adds no persistent optimizer state. A and B keep ordinary projected
-updates. `S + mu I` is the chosen local geometry, not the full task Hessian:
-output-count normalization and teaching precision remain in the gradient.
-The damping is supplied, not learned confidence or an importance score.
+The gradient is the same centered EP gradient; the metric reads no target and
+keeps no optimizer state. The default `None` uses the plain update; a
+non-positive or non-finite value raises `ValueError`.
 
 ```python
-# The net and memory from the earlier example remain a bound pair.
 net.reset()
-attempt = memory.observe(
-    net, new_input, np.full((1, 1, 1), 0.35),
-    beta=0.001, rate=1.0, readout_damping=1e-4,
-)
+attempt = memory.observe(net, new_input, np.full((1, 1, 1), 0.35),
+                         beta=0.001, rate=1.0, readout_damping=1e-4)
 assert attempt.updated or attempt.reason == "metric_step_rejected"
-np.testing.assert_allclose(
-    net.imagine(old_input, state=cold).output, old_output, atol=1e-12
-)
+assert np.allclose(net.imagine(old_input, state=cold).output, old_output, rtol=0, atol=1e-12)
 ```
 
-A metric candidate must preserve local protected responses within the stated
-numerical check and reduce the weighted half-MSE of a **target-free replay from
-the original boundary**. The required decrease exceeds
-`64 * machine_epsilon * max(abs(old_loss), abs(new_loss), smallest_normal_float)`.
-The response check bounds `max(abs(Delta_W @ Q))` by
-`1e-12 * max(1, max(abs(W_before @ Q)))`; a huge proposed step cannot relax that
-bound by making itself the scale.
-
-Rejected metric candidates return `updated=False` and
-`reason="metric_step_rejected"`. They preserve weights, update/revision counters
-and memory binding, carrying only the valid original free activity. Ties near
-the numerical floor can be rejected; rejection is neither failed phase
-convergence nor a proof of stationarity. Invalid arguments raise before mutation.
-The usual raw EP `delta` remains available in the result.
-
-This path adds one hidden-width linear solve and, for a valid projected
-candidate, one causal replay. Those operations are extra to the returned
-free/positive/negative phase counters. There is no parameter backtracking or
-automatic beta selection. Two converged, positive-curvature detunings can still
-lie on different branches; sufficiently small detuning and checked outcomes
-matter. Strong coefficient growth may amplify unprotected inputs. This option
-improves a numerical conditioning problem; it does not remove finite memory
-capacity or discover which experience deserves protection.
+The candidate is accepted when its change along each basis is at most
+`1e-12 * max(1, max(abs(W_before @ Q)))` and a target-free replay from the
+original boundary lowers the weighted half-MSE by more than
+`64 * eps * max(abs(old_loss), abs(new_loss), tiny)`. Otherwise the call returns
+`updated=False`, `reason="metric_step_rejected"`, carries only the free
+activity and keeps weights, counters and binding; near-ties can be rejected.
+The extra hidden-width solve and replay are not in the phase counters.
 
 ## Atomic learning and saved state
 
-`memory.observe(net, inputs, target, beta=..., rate=...)` stages ordinary centered
-EP and constrained projection on private snapshots. It commits the network and
-constraint binding together after validation. An exception leaves both live
-objects unchanged. Failed phases carry only valid free activity, just as
-`TemporalPatchNet.observe` does, while keeping parameters and binding unchanged.
-The returned `TemporalObservation.delta` is the raw EP derivative before
-projection; inspect committed parameter differences to measure the applied step.
-This transaction is single-threaded and accepts the base `TemporalPatchNet`;
-custom subclasses need their own complete state transaction.
+`observe(net, inputs, target, *, beta=0.01, rate=0.1, readout_damping=None,
+symmetry_tolerance=0.15, max_halvings=8)` runs centered EP and the projection on
+private copies and commits network and memory together. As in
+`TemporalPatchNet.observe`, beta halves until the contrast passes
+`symmetry_tolerance`, at most `max_halvings` times; there is no parameter line
+search. A failed phase or an asymmetric contrast returns `updated=False`, carries
+the free activity and keeps weights and binding. An exception changes neither
+object. `result.delta` is the raw EP derivative before projection; compare
+committed parameters to measure the applied step. `observe` is single-threaded
+and raises `TypeError` for anything but the base class, including
+[`RecordPatchNet`](record-patch.md) and the [partitioned net](partitioned.md).
 
-A parameter fingerprint detects changes made outside the admitted protected
-update path. Resetting active state is allowed because the binding concerns
-learned parameters. Restoring only the network or only the memory can produce a
-binding mismatch. Save and restore both:
+A parameter fingerprint binds the memory to the network: a change made outside
+`observe` or `project` makes the next call raise `ValueError`, while resetting
+the active state is allowed. `snapshot()` returns detached arrays (the
+tolerance, `basis_A`, `basis_B`, `basis_C` and the 32-byte binding);
+`TemporalMemory.restore` validates them, loads no pickled objects and raises
+`ValueError` on a malformed checkpoint. Save and restore both objects:
 
 ```python
-net_state, memory_state = net.snapshot(), memory.snapshot()
-np.savez("protected_brain.npz",
-         **{"net_" + k: v for k, v in net_state.items()},
-         **{"memory_" + k: v for k, v in memory_state.items()})
-with np.load("protected_brain.npz", allow_pickle=False) as archive:
-    restored = TemporalPatchNet.restore(
-        {k[4:]: archive[k] for k in archive.files if k.startswith("net_")}
-    )
-    recalled = TemporalMemory.restore(
-        {k[7:]: archive[k] for k in archive.files if k.startswith("memory_")}
-    )
+np.savez("protected.npz", **{"net_" + k: v for k, v in net.snapshot().items()},
+         **{"memory_" + k: v for k, v in memory.snapshot().items()})
+with np.load("protected.npz", allow_pickle=False) as saved:
+    def part(prefix):
+        return {k[len(prefix):]: saved[k] for k in saved.files if k.startswith(prefix)}
+    restored = TemporalPatchNet.restore(part("net_"))
+    recalled = TemporalMemory.restore(part("memory_"))
 restored.reset()
 assert recalled.observe(restored, new_input, np.full((1, 1, 1), 0.25)).updated
 ```
 
-`report().ranks` states the consumed dimensions per parameter block.
-`report().bytes` counts basis arrays, the eight-byte tolerance and the 32-byte
-binding when present; Python objects, serialization and transient SVD/solver
-workspace are extra. `maximum_residual` from `protect` measures how well its
-new vectors fit the retained bases. A plain `report()` does not re-evaluate
-protected paths and its default residual is not a retention certificate.
+`report()` returns a `ConstraintReport`: `ranks` per block, `bytes` (bases,
+eight for the tolerance, 32 for the binding; Python objects and solver
+workspace are extra) and `maximum_residual`, which only `protect` fills with
+the fit of its new vectors; a plain `report()` gives 0.0, which certifies no
+retention. `project(before, proposed)` returns a constrained parameter dict and
+advances the binding before the caller applies it with `net.set_parameters`;
+use `observe` for training.
 
-The lower-level `project(before, proposed)` remains available for explicit
-transactions. It advances the memory binding before the caller applies the
-result, so normal training should use `memory.observe` to avoid a partially
-committed pair. No raw examples are replayed by either operation.
+## Limits
+
+Capacity is finite: each protected path consumes basis dimensions, and a full
+basis freezes its block. Before that, new activity near the protected span needs
+large weight changes, so report ranks and weight norms with retention. Protected
+responses stay protected, errors included, with no decay, relevance selection or
+contradiction resolution. Test retention and new learning together.

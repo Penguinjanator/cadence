@@ -1,16 +1,10 @@
 # Compose a brain
 
-Start with `Brain.compose`. It builds **System 1**: one continuing neural
-graph with sensory input, reciprocal processing regions, motor choices, a working
-trace and fast/persistent associative memory. Optional observer regions add
-**System 2** feedback within that graph.
-
-Keep this brain through acquisition, ordinary use and correction. The
-[world-model guide](world-model.md) explains why its learned relations and memory
-support changing equilibria. The calibration and isolated-response examples below
-are controls, not the demonstration of a continuing brain.
-
-## Brain
+`Brain.compose` builds **System 1**: one continuing neural graph with senses,
+reciprocal processing regions, a motor choice, a working trace and an associative
+memory, all settling together. Optional observer regions add **System 2** feedback
+inside the same graph. Keep one composed brain through acquisition, use and
+correction; the [world-model guide](world-model.md) explains that life.
 
 ```python
 import numpy as np
@@ -22,172 +16,123 @@ action = brain.live(observation)
 assert action.shape == (1,)
 ```
 
-`live` follows one stream: inputs have shape `(1, inputs)` and the output is one
-action index. The default has one 64-neuron processing region. For more regions,
-`modules=(16, 8)` creates two; the last is the association region.
-Sensory input reaches the first, the association
-region exchanges signals with motor neurons, and its working trace enters through
-context neurons: each moment's settled interpretation is carried into the next settle
-([context](context.md) explains it and how to wire for retention). `SynapticMemory`
-records the actually chosen action's reward; its fast and persistent associations
-influence later choices. With `memory_choice=True` the hippocampus is an episodic memory:
-it records what happened in each situation, by place and by temporal context, remembers
-demonstrated actions, replays the path to a reward, and its records vote in every
-choice ([episodic memory](episodic.md)).
+`live` takes one stream's observation of shape `(1, inputs)` and returns one action
+index ([continuous interaction](continuous.md) covers `live`, `step` and saving).
 
-`Brain.compose(..., efference_amplitude=1.0)` adds the efference copy of the
-issued command: one `efference` neuron per motor neuron, driven by the fading
-one-hot of the action each stream issued (`efference_decay`, default 0.2) and
-read by the association region through a plastic projection. The working trace
-is written from the settled state before the decision, so it carries which
-action was executed only through the margin the motor competition left, and
-nothing of a sampled choice. The write is fixed, like the trace's; what to do
-after what it did is learned. The founder `efference_amplitude=0.0` leaves the
-population out, so the copy is a gene selected against that control. The
-[steady-rhythm chamber](../benchmarks/rhythm/README.md) measures it on the task
-the trace alone did not carry: alternate two actions under identical drive.
+## Brain
 
-`Brain.compose(..., history_decays=(0.2, 0.8, 0.95))` adds the heard history: a
-`history` region of one block of sensory width per decay, each block a fading
-trace of the observations as heard, the values the sensory neurons were
-stimulated with before settling. After each act the blocks take in the
-observation the brain acted on, so at a decision the history holds the past and
-the sensory drive the present. The association region reads it through a plastic
-projection that starts like the working trace's. The founder `history_decays=()`
-leaves the region out, so the history is a gene selected against that control
-([context](context.md#hear-the-past-at-several-timescales) explains when to add it).
+The composed graph, in the order its regions are developed:
 
-`Brain.compose(..., recall=True)` adds the recall memory, an index of the
-stream's own recent moments: a `recall` and a `next` region, read by the
-association region through plastic projections that start like the working
-trace's. Each moment the brain acts on is written as one slot per stream, keyed
-by the event heard; the slot before it learns it as its next. Before each settle
-the moment's address, the event heard plus a learned map of the event and of the
-cortex of the moment before, weighs the slots, and the recalled value and next
-drive the two regions, a drive held through the settle. After each teacher lesson
-the address lesson scores each slot's value and next against the association's
-movement under the nudge, read back through the recall and next projections, and
-steps the map toward the keys the scores weigh. The founder `recall=False` leaves
-the regions out, so the memory is a gene selected against that control
-([memory](memory.md#recall-the-streams-own-moments) explains it).
+| Region | Neurons | Wiring | Home |
+| --- | --- | --- | --- |
+| `sensory`, or `visual` for an image | `inputs`, the `code=units` code, or the visual cortex | Projects to the first module; initial scale `sensory_scale` | [image inputs](#image-inputs) |
+| `module_0` ... | `modules[:-1]` | A chain of reciprocal projections | this page |
+| `association` | `modules[-1]` | Reciprocal with `motor` | this page |
+| `prefrontal` | one per association neuron | The working trace of the settled association, held at `working_memory_amplitude` 3.0, read through a plastic projection of initial scale `working_memory_scale` 1.2 | [memory](memory.md#working-trace) |
+| `motor` | `actions`, in `slots` | Lateral inhibition within a slot | [motor competition](#operating-point-and-motor-competition) |
+| `observer_0` ... | `observers` | Reciprocal with every module, `motor` and earlier observers | below |
+| `efference` | `actions` | With `efference_amplitude` above 0 | [memory](memory.md#efference-copy) |
+| `history` | sensory width per decay | With a nonempty `history_decays` | [memory](memory.md#heard-history) |
+| `recall`, `next` | observation-code width, or `modules[-1]` with `recall_value="cortex"` | With `recall=True`; `next` unless `recall_next=False` | [recall memory](recall.md) |
 
-The base can already be deep. Add recursive readback separately:
+The hippocampus is a `SynapticMemory` from the observation code to the motor drive,
+with `memory_choice=True` the [episodic memory](episodic.md), and with
+`episodic=False` absent. The default `modules=(64,)` is one region settling
+recurrently with the others; in `modules=(16, 8)` the last entry is the association
+region and sets the working trace's width. An action is issued only from a state,
+observers included, that meets the full-equation tolerance
+([qualification and refusal](continuous.md#qualification-and-refusal)).
 
 ```python
 recursive = Brain.compose(
-    inputs=4, actions=2, modules=(16, 8), observers=(8, 4), seed=7,
-    arousal=True,
+    inputs=4, actions=2, modules=(16, 8), observers=(8, 4), seed=7, arousal=True,
 )
 assert recursive.live(observation).shape == (1,)
 ```
 
-Each observer exchanges activity with the base, motor regions and earlier
-observers, and all regions settle together. This wires recursive correction; it
-does not by itself learn useful reflection. Observers read neural state; exact
-state-and-error readback belongs to the
-[population solver](equilibrium/index.md) under its own equations.
+Observers settle with the base and never override a finished answer. The wiring
+permits recursive correction without teaching it; exact state-and-error readback
+belongs to the [population solver](equilibrium/index.md).
+
+## Image inputs
+
+`inputs=(height, width)` or `(height, width, channels)` makes the sensory region a
+`visual_cortex`: `features` maps (8) of `field` by `field` receptive fields (3) feed
+the first module. Observations may be flat `(1, height * width * channels)` or keep
+the image shape.
+
+```python
+eyes = Brain.compose(inputs=(8, 8), actions=3, features=4, seed=1)
+assert eyes.act(np.random.default_rng(0).random((1, 8, 8))).shape == (1,)
+```
+
+The memories key on the pixels. With `code=units` they key on a fixed sparse code
+and the cortex reads the pixels ([the observation code](memory.md#the-observation-code)).
 
 ## Defaults and expert overrides
 
-The composed founders are controls, not values proven optimal for every body.
-`arousal=True` is shorthand for `ArousalConfig()`; omit `arousal` to compose the
-same brain without a `live` controller. No setting is inferred from an example,
-an input count or a reward.
-
-Set only the values you intend to change:
+Set only the values you intend to change; the rest keep their composed founders, which
+are the control for any change you measure.
 
 ```python
 tuned = Brain.compose(
     inputs=4, actions=2, arousal=True,
-    sensory_scale=2.0,
-    actor_eta=0.1, actor_eta_bias=0.01,
-    arousal_youth=30,
+    sensory_scale=2.0, actor_eta=0.1, actor_eta_bias=0.01, arousal_youth=30,
 )
 settings = tuned.describe()
 assert settings["genes"]["actor_eta"] == 0.1
 assert settings["initialization"]["composition"]["sensory_scale"] == 2.0
 ```
 
-This is an override example, not a performance recommendation. `sensory_scale`
-sets the initial sensory-to-first-module projection, which stays plastic.
-`describe()` returns JSON-safe `layout`, effective flat `genes`, resolved
-`learning`/`actor`/`arousal` configurations and `initialization` provenance.
-The initialization records choices such as sensory scale, not the current
-plastic weights. Save/load carries those settings alongside acquired state;
-older files without composition metadata report that provenance as unknown.
-Constructor settings for an absent component have no runtime effect: for
-example, `memory_rate` with `episodic=False`, or `efference_decay` with no
-efference population. `describe()["genes"]` omits those inactive settings;
-`retune` refuses them instead of adding a component to an acquired brain.
+`describe()` returns JSON-safe `layout`, the effective `genes`, the resolved
+configurations and `initialization` (construction choices, not current weights).
 
-Each field of `LearnerConfig`, `ActorCriticConfig` and `ArousalConfig` is reachable
-as `learning_<field>`, `actor_<field>` and `arousal_<field>`. `temperature` is a
-short alias for `learning_temperature`; it controls both teaching and the
-actor's base policy. Unknown names and ambiguous bare rates such as `eta` are
-rejected. This is the composed defaults table; the separate config constructors
-retain their own defaults, listed in the [API reference](api.md).
+| Setting | Composed founder | Changed at | Home |
+| --- | --- | --- | --- |
+| `modules`, `observers` | `(64,)`, `()` | construction | [map](#brain) |
+| `lateral`, `slots`, `resting_bias` | -0.5 up to 8 actions and 0.0 above, `1`, `0.0` | construction | [motor competition](#operating-point-and-motor-competition) |
+| `sensory_scale`, `features`, `field`, `seed` | `1.0`, `8`, `3`, `0` | construction | [image inputs](#image-inputs) |
+| `learning_beta`, `learning_eta`, `learning_eta_bias`, `temperature` | `0.1`, `0.5`, `0.05`, `0.2` | retune | [learning](learning.md#7-every-knob) |
+| `learning_free_steps`, `learning_nudged_steps`, `learning_tolerance`, `learning_qualified`, `learning_damping` | `1024`, `12`, `0.003`, `False`, `3` | retune | [learning](learning.md#qualified-teaching-budgets) |
+| `learning_centered`, `learning_nudge`, `learning_decay`, `learning_scale_cap`, `learning_surprise` | `True`, `"cross_entropy"`, `0.0`, `8.0`, `False` | retune | [learning](learning.md#7-every-knob) |
+| `learning_normalize`, `learning_normalize_floor`, `learning_momentum` | `0.0`, `0.001`, `0.9` | retune | [learning](learning.md#rates-under-normalization) |
+| `actor_gamma`, `actor_lam`, `actor_eligibility_steps`, `actor_eta`, `actor_eta_bias`, `actor_eta_critic` | `0.9`, `0.8`, `12`, `1.0`, `0.05`, `0.3` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
+| `actor_normalize`, `actor_momentum` | `0.0`, `0.0` | retune | [reward](reward.md#rates-under-normalization) |
+| `actor_dopamine_cap`, `actor_dopamine_center`, `actor_dopamine_floor`, `actor_center_scale`, `actor_critic_normalize`, `actor_critic_signal` | `1.0`, `0.0`, `0.0`, `True`, `True`, `"auto"` | retune | [reward](reward.md#centered-dopamine-and-selective-activity) |
+| `arousal` | off; `True` is `ArousalConfig()` | construction (switch), retune (fields) | [continuous](continuous.md#routine-and-repair-live) |
+| `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor`, `arousal_fast`, `arousal_slow` | `0.2`, `0.9`, `2.0`, `0.1`, `0.05`, `0.005` | retune | [continuous](continuous.md#routine-and-repair-live) |
+| `arousal_heat`, `arousal_youth`, `arousal_value_surprise`, `arousal_record_surprise`, `arousal_need` | `2.0`, `100`, `1.0`, `0.0`, `0.0` | retune | [continuous](continuous.md#routine-and-repair-live) |
+| `working_memory_*` | scale `1.2`, amplitude `3.0`, decay `0.0`, focus `0.0` | scale at construction | [memory](memory.md#working-trace) |
+| `efference_*` | amplitude `0.0` (absent), decay `0.2` | a positive amplitude at construction adds it | [memory](memory.md#efference-copy) |
+| `history_*` | decays `()` (absent), amplitude `3.0`, scale `1.2` | decays and scale at construction | [memory](memory.md#heard-history) |
+| `episodic`, `memory_rate`, `memory_decay`, `memory_amplitude`, `consolidation` | `True`, `1.0` (`0.5` with `memory_choice`), `0.9`, `1.0`, `0.05` | `episodic` at construction | [memory](memory.md#associative-store-the-hippocampus) |
+| `code` | unset: the observation itself | construction | [memory](memory.md#the-observation-code) |
+| `memory_choice` and the other `memory_*` episodic settings | `False` | construction | [episodic memory](episodic.md) |
+| `recall`, `recall_scale` and every `recall_*` | `False` | see the page | [recall memory](recall.md) |
+| `backend`, `device` | `"cpu"`, `None` | construction | [backends](backends.md) |
 
-| Named setting | Composed founder | Used by |
-| --- | --- | --- |
-| `sensory_scale` | `1.0` | Initial sensory projection; construction only |
-| `code` | unset: the observation itself | `code=units` keys the memories on the brain's sparse code of the observation and makes the sensory region that code, the recommended setting above 1,024 inputs ([from pixels to keys](memory.md#from-pixels-to-keys)); construction only |
-| `working_memory_scale` | `1.2` | Initial projection that reads the carried interpretation back; construction only ([context](context.md)) |
-| `learning_eta`, `learning_eta_bias` | `0.5`, `0.05` | Teaching with `step(teacher=...)`, `fit` or the learner; `live` does not read these rates |
-| `actor_eta`, `actor_eta_bias` | `1.0`, `0.05` | Reward plasticity in `step`/`learn`, and aroused `live` |
-| `actor_eta_critic` | `0.3` | Value updates from those same learned outcomes |
-| `temperature` | `0.2` | Teaching softmax and sampled action policy; arousal can add exploration heat |
-| `learning_beta` | `0.1` | Nudge scale for teaching and reward eligibility |
-| `learning_centered` | `True` | Teaching contrasts; reward eligibility always uses both nudges |
-| `learning_free_steps`, `learning_tolerance` | `1024`, `0.003` | Free answers and teaching; free answers require equation qualification |
-| `learning_nudged_steps` | `12` | Teaching budget; reward eligibility uses its own budget below |
-| `learning_qualified`, `learning_damping` | `False`, `3` | Opt-in qualified teaching and its numerical fallback |
-| `learning_surprise` | `False` | Opt-in: a lesson through `step(teacher=...)`, `fit` or the learner teaches only the rows whose answer differs from the label: through `step` the act the brain would issue, the episodic vote included, in `fit` or the learner the free answer ([learning](learning.md#lessons-only-where-the-answer-differs)) |
-| `learning_nudge` | `"cross_entropy"` | Teaching target law; the actor uses its categorical policy law |
-| `learning_normalize`, `learning_normalize_floor`, `learning_momentum` | `0.0`, `0.001`, `0.9` | Teaching optimizer; independent of actor normalization and momentum |
-| `learning_decay`, `learning_scale_cap` | `0.0`, `8.0` | Parameter decay and efficacy cap in the shared learner update machinery |
-| `actor_gamma`, `actor_lam` | `0.9`, `0.8` | Reward discount and eligibility decay; routine `live` also fades eligibility |
-| `actor_eligibility_steps` | `12` | Each finite reward-nudged phase, independent of teaching qualification |
-| `actor_normalize`, `actor_momentum` | `0.0`, `0.0` | Reward optimizer |
-| `actor_dopamine_cap`, `actor_dopamine_center`, `actor_dopamine_floor` | `1.0`, `0.0`, `0.0` | Reward modulation |
-| `actor_center_scale`, `actor_critic_normalize`, `actor_critic_signal` | `True`, `True`, `"auto"` | Dopamine units and critic update law |
-| `working_memory_decay`, `working_memory_amplitude`, `working_memory_focus` | `0.0`, `3.0`, `0.0` | Continuing working trace: the carried interpretation ([context](context.md)) |
-| `efference_decay`, `efference_amplitude` | `0.2`, `0.0` | Issued-command trace; a positive amplitude at construction adds its population |
-| `history_decays` | `()` | Heard history: a nonempty sequence adds one block of sensory width per decay; construction only ([context](context.md#hear-the-past-at-several-timescales)) |
-| `history_amplitude`, `history_scale` | `3.0`, `1.2` | How clearly the heard history is held, and its projection's initial magnitude (construction only) |
-| `recall` | `False` | Recall memory: `True` adds the `recall` and `next` regions and the index of the stream's moments; construction only ([memory](memory.md#recall-the-streams-own-moments)) |
-| `recall_amplitude`, `recall_temperature`, `recall_heard`, `recall_recency` | `3.0`, `0.25`, `1.0`, `0.25` with `recall=True` | How strongly a recalled moment drives its regions, the softmax over the slots, the event's weight in its address, the cost per moment of a slot's age |
-| `recall_address`, `recall_address_temperature` | `0.01`, `0.1` with `recall=True` | The address lesson: its rate (each row's bounded by its own input energy), and how sharply it weighs the slots' scores against the lesson's movement, with the address's own attention as the prior |
-| `recall_context`, `recall_context_decay` | `0.0`, `0.5` with `recall=True` | The fading history of earlier events in a key |
-| `recall_capacity`, `recall_value`, `recall_next`, `recall_scale` | `64`, `"event"`, `True`, `1.2` | Slots per stream, what a slot stores, the next region, and the projections' initial magnitude; construction only |
-| `memory_decay`, `memory_rate`, `memory_amplitude`, `consolidation` | `0.9`, `1.0` (`0.5` with `memory_choice=True`), `1.0`, `0.05` | Associative retention, actual-outcome writes, recall and consolidation |
-| `memory_choice` | `False` | `True` builds the episodic memory and its settings below ([episodic memory](episodic.md)); construction only |
-| `memory_context`, `memory_replay`, `memory_demonstrations` | `0.5`, `8`, `1.0` with `memory_choice=True` | The share of the past in the context key, replay of the path to a reward, remembered demonstrations; construction only |
-| `memory_expansion`, `memory_winners` | `1024`, `24` with `memory_choice=True` | Separation of the episodic memory's keys; construction only |
-| `memory_fan_in` | `0` | How many of the key's values each cell of the episodic memory's separation reads; 0 reads them all, and 32 is the recommended setting above 256 key values; a coded brain has no separation; construction only |
-| `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor` | `0.2`, `0.9`, `2.0`, `0.1` | Routine/aroused decision in `live`, when arousal is enabled |
-| `arousal_fast`, `arousal_slow` | `0.05`, `0.005` | Recent and long-run outcome statistics in `live` |
-| `arousal_heat`, `arousal_youth` | `2.0`, `100` | Exploration and initial aroused moments in `live` |
-| `arousal_value_surprise`, `arousal_record_surprise`, `arousal_need` | `1.0`, `0.0`, `0.0` | Critic/record surprise and unmet need in `live` |
+Override rules:
 
-Changing one rate preserves the existing bias rate. Pass both rates explicitly,
-or use `actor_eta_bias=None` (likewise `learning_eta_bias=None`) to derive one
-tenth of the newly resolved rate. For example,
-`brain.retune(actor_eta=0.1, actor_eta_bias=None)` resolves the bias rate to
-`0.01`. Enabling RMS normalization changes the effective scale of updates;
-review [teaching rates](learning.md#rates-under-normalization) and
-[actor rates](reward.md#rates-under-normalization) before choosing them.
-
-Experts can still supply complete `learning=LearnerConfig(...)` and
-`reward=ActorCriticConfig(...)` objects. Those replace whole configurations;
-named overrides then change only selected fields. A fresh learner config has
-`eta=0.2`, `eta_bias=0.02`, `momentum=0`, free/nudged budgets `100/50` and
-tolerance `1e-4`; a fresh actor config has discount/trace `0.99/0.9`,
-actor/bias/critic rates `0.5/0.05/0.05`, and inherits the learner's nudged budget.
-Do not use a fresh config to express a one-field edit to a composed brain.
+- Every field of `LearnerConfig`, `ActorCriticConfig` and `ArousalConfig` is a
+  `learning_<field>`, `actor_<field>` or `arousal_<field>` name. `temperature` aliases
+  `learning_temperature` and sets both the teaching softmax and the sampled policy.
+- Unknown names and the ambiguous bare `eta` or `eta_bias` raise `TypeError`.
+- `arousal=True` uses the founders, a mapping such as `arousal={"heat": 1.0}` patches
+  them, an `ArousalConfig` replaces them, and `arousal_*` names need one of the three.
+  Without `arousal`, `live` raises `ValueError`.
+- A changed rate keeps the existing bias rate; `actor_eta_bias=None` (or
+  `learning_eta_bias=None`) derives one tenth of the new rate.
+- A setting for an absent component, such as `memory_rate` with `episodic=False`, has
+  no effect; `describe()` omits it and `retune` refuses it.
+- `learning=LearnerConfig(...)` and `reward=ActorCriticConfig(...)` replace the whole
+  configuration, and a fresh config replaces every founder: `LearnerConfig()` has
+  `eta=0.2`, `momentum=0`, budgets `100/50` and tolerance `1e-4`; `ActorCriticConfig()`
+  has `gamma=0.99`, `lam=0.9` and rates `0.5/0.05/0.05`. Use named overrides for a
+  one-field edit.
 
 ## Retune the same life
 
-Use `retune` when measured task needs change, such as moving from practice to
+`retune` changes named settings on a living brain, for example from practice to
 ordinary interaction:
 
 ```python
@@ -198,228 +143,87 @@ tuned.retune(
 )
 ```
 
-`retune` accepts the same mutable named genes and partial arousal settings;
-expert configuration objects retain their complete-replacement meaning.
-It validates the whole request against the existing configuration domains before
-installing anything. Evolutionary search spaces choose a sampling range within
-those domains; they are not universal limits on expert settings. Retuning keeps
-learned parameters, optimizer history, neural activity, traces, records, random state
-and pending feedback. It does not run a moment or replay an outcome.
-`reset_arousal=True` explicitly resets the arousal level and reward references,
-retaining its age and work counters; use it only when that reset is part of the
-intended stage. Its arousal is then left as `reset()` leaves it: an adult brain
-(its youth over) has no want at the founder `need=0`, and only a surprise at its
-own forecasts can rouse it ([continuous interaction](continuous.md#reset-and-save)).
+It takes the same names, validates the whole request before installing anything,
+runs no moment and returns the same brain. Parameters, optimizer history, activity,
+traces, records, random state and pending feedback are kept, and new rates apply from
+the next learned outcome. It raises `ValueError` for a construction setting (those
+marked construction above), for a missing component (arousal included), and for a
+change of `learning_beta` while a sampled action awaits feedback, whose contrast
+belongs to the old scale; learn that outcome first. With `recall_address_reward`
+above zero the same holds for `recall_address`, `recall_address_step` and
+`recall_address_reward` ([recall memory](recall.md)).
 
-A pending sampled action retains its actual eligibility and behavior temperature.
-Rate changes apply when its next real outcome is learned. A change of
-`learning_beta` is refused while that action awaits feedback, because the pending
-contrast was formed at the earlier nudge scale; consume its outcome before
-changing the scale. With `recall_address_reward` above zero the action also holds the
-recall memory's address contrast, formed at the address lesson's form and rates, so a change
-of `recall_address_step`, `recall_address` or `recall_address_reward` is refused likewise.
-Construction choices such as `sensory_scale`, `working_memory_scale`,
-`history_decays`, `history_scale`, `recall` with its capacity, value, next region, code and
-scale, topology, backend and `resting_bias` cannot be retuned, nor can a retune add a missing
-memory, efference, history, recall or arousal component. Create those components when
-composing.
+`reset_arousal=True` resets the arousal level and reward references and keeps its age
+and work counters. An adult brain at the founder `need=0` is then roused only by
+surprise at its own forecasts; where the world may stop paying, leave it off or set a
+positive `need` ([reset and save](continuous.md#reset-and-save)).
 
 ## Choose settings for the application
 
-The same interface serves different observation shapes, action groupings and
-experience protocols.
-
-| Application | Interface and decisions |
+| Application | Interface |
 | --- | --- |
-| Vector senses, several motors | The [Robot Arena demo](https://github.com/muellerberndt/cadence-demos/tree/main/robot-arena) composes one motor `slot` per motor, then uses `live` and `retune`; keep real action/outcome custody across stage changes. |
-| Pixels and a teacher | The [Atari demo](https://github.com/muellerberndt/cadence-demos/tree/main/atari-arcade) uses pixel observations, teaching and `step`; select teaching rates with `learning_*` and reward rates with `actor_*`. |
-| Retained events | The [Amen demo](https://github.com/muellerberndt/cadence-demos/tree/main/amen) uses the separate `RecordPatchNet` model. Its rates and guarantees are those of [record patches](record-patch.md), not the composed actor. |
+| Vector senses, several motors | One motor slot per motor, `live` and `retune`, each real action paired with its outcome across stage changes, as in the [Robot Arena demo](https://github.com/muellerberndt/cadence-demos/tree/main/robot-arena). |
+| Pixels and a teacher | Image `inputs`, teaching through `step`; teaching rates are `learning_*`, reward rates `actor_*`. See the [Atari demo](https://github.com/muellerberndt/cadence-demos/tree/main/atari-arcade). |
+| Retained events | The separate [`RecordPatchNet`](record-patch.md) with its own rates and guarantees, as in the [Amen demo](https://github.com/muellerberndt/cadence-demos/tree/main/amen). |
 
-A measured operating point belongs to the body and task it was measured on: the
-[odour nursery](continuous.md#routine-and-repair-live) uses one, the
-[steady-rhythm chamber](../benchmarks/rhythm/README.md) another. Before changing
-a founder, measure fresh acquisition, retention, interference and recovery on
-your own task against the founder as the control.
+Gain, bias and solver steps are distinct levers: gain scales synaptic drive in the
+whole graph, a population bias moves selected neurons' operating points, and steps and
+damping change only how the equations are solved. Check candidate biases with the
+[calibration guide](learning.md#calibrating-the-operating-point), choose on development
+inputs and compare against the founders on your own task ([evaluation](evaluation.md)).
 
 ## Operating point and motor competition
 
-`Brain.compose(..., lateral=...)` configures motor competition. This is
-the signed weight between each distinct pair of motor neurons; zero removes
-those lateral connections while keeping reciprocal processing/motor feedback.
-Left unset, the default is -0.5 up to 8 actions and 0.0 above. Each additional
-action adds another inhibitory input per motor neuron: measured on composed
-brains, -0.5 settles a small action menu in the same few dozen sweeps as 0.0,
-while from about 12 actions the undamped free solve stops settling at all and
-damped answers take about nine times the sweeps (issue 124). Inspect free
-activity and its full residual on the actual task before selecting a
-different value.
+`lateral` is the signed weight between each pair of motor neurons in a slot; `0.0`
+removes those synapses and keeps the association and motor feedback. Left unset it is
+-0.5 up to 8 actions and 0.0 above, because from about 12 actions the undamped free
+solve stops settling under -0.5. The `cortex`, `motor_cortex` and `layered` factories
+default to `0.0`.
 
-`Brain.compose(..., slots=...)` groups the motor neurons into several readouts that
-settle together, one softmax each: a count of equal groups, or one size per group
-covering `actions`. An action with several parts, such as kind, pitch class and
-octave for a row of music, is one slot per part instead of one softmax over every
-combination. `act` and `step` return one index per slot, lateral inhibition stays
-within a slot, the unset `lateral` follows the largest slot, and `save`/`load` carry
-the grouping (issue 142).
+`slots` groups the motor neurons into readouts that settle together, one softmax each:
+a count of equal groups or one size per group. An action with parts (kind, pitch,
+octave) is one slot per part. `act` and `step` return one index per slot, the unset
+`lateral` follows the largest slot, and `act(temperature=...)` takes one value or one
+per slot. `save` and `load` carry the grouping.
 
-`Brain.compose(..., resting_bias=0.5)` initializes the modules, association
-region and any observers with that bias; sensory, working-memory, efference and
-motor biases start at zero, and the default is zero throughout. The value must
-be a finite nonnegative real scalar. A positive bias can reduce silence under
-some random drives; compare acquisition, retention and convergence against the
-zero-bias control before selecting it.
+```python
+chord = Brain.compose(inputs=4, actions=5, slots=(3, 2), seed=3)
+chosen = chord.act(observation, temperature=[0.5, 0.1])
+assert chosen.shape == (1, 2)
+```
 
-With the signed leaky neuron, an emission below rest can still respond to input
-and contribute to local teaching, so the fraction of nonpositive emissions is an
-activity diagnostic rather than a count of dead neurons.
-`tests/test_operating_range_function.py` checks the signed response derivative,
-qualified acquisition, old/new retention and saved continuation at both zero and
-0.5 bias.
-
-All these biases remain plastic. `brain.resting_bias` records the initialization
-choice; `brain.brain.bias` holds the current learned values. Checkpoints preserve
-both, and loading restores the learned vector without reapplying initialization.
-For custom connectomes, named populations outside the `sensory`, `visual`,
-`prefrontal`, `efference` and `motor` families are eligible. A neuron in any excluded family
-keeps zero initial bias even if another population aliases it. Image builders
-therefore leave the entire visual region at zero, including its processing cells.
-
-Global gain changes synaptic drive throughout the graph; population bias
-changes selected neurons' operating points; integration steps and damping change
-only how the equations are solved. A faster qualified solve does not establish
-that the motor state responds usefully to teaching. The
-[calibration guide](learning.md#calibrating-the-operating-point) checks candidate
-biases before installing them. Choose gain, bias targets and lateral wiring on
-development inputs, keep their hand-set controls, and freeze them before
-confirmation.
+`resting_bias` (finite, nonnegative, default `0.0`) initializes the bias of the
+modules, association, observers and other named populations. The `sensory`, `visual`,
+`prefrontal`, `efference`, `history` and `motor` families stay at zero, as do `recall`
+and `next` with `recall=True`, even where another population aliases them. A positive
+bias can reduce silence under some random drives; compare it against zero. Biases stay
+plastic: `brain.resting_bias` records the choice, `brain.brain.bias` holds the learned
+values, and loading restores them. A signed neuron below rest responds to input and
+contributes to teaching, so the share of nonpositive emissions is an activity
+diagnostic (`tests/test_operating_range_function.py`).
 
 ## One experience step by hand
 
-`step` combines learning from the previous outcome and choosing the next action.
-Use `act` and `learn` separately when the body needs to manage that timing:
+`step` learns from the previous outcome and chooses the next action. Use `act` and
+`learn` when the body manages that timing:
 
 ```python
-body_brain = Brain.compose(4, 2, modules=(16, 8), seed=7)
-chosen = body_brain.act(observation)
-
-# Execute the choice in a tiny environment: action 0 earns one unit.
-reward = (chosen == 0).astype(float)
+body = Brain.compose(4, 2, modules=(16, 8), seed=7)
+chosen = body.act(observation)
+reward = (chosen == 0).astype(float)  # action 0 earns one unit
 following = np.array([[0.0, 1.0, 0.0, 0.0]])
-body_brain.learn(reward, np.array([False]), following)
-next_action = body_brain.act(following)
+body.learn(reward, np.array([False]), following)
+next_action = body.act(following)
 ```
 
-Reward and termination describe the preceding executed action. A demonstration
-labels the current observation instead. Keep batch-row identities fixed until
-`reset()`. [Continuous interaction](continuous.md) covers episodes, teaching,
-private imagination and retries. The
-[continuing brain example](../examples/continuing_brain.py) shows the complete
-reward, teacher and checkpoint loop using the current composition API.
-Independent [Records](memory.md#records) can
-store declared observation/action/outcome fields; their reads and writes have
-an explicit record rule rather than a neural-settlement certificate.
-
-## Settle and check
-
-`Brain.act`, `predict` and `accuracy` check the full potential/adaptation
-equations before returning answers, including observer state. The defaults allow
-1024 free steps at residual tolerance `3e-3`. A difficult free solve may use
-half-step numerical damping within that same total budget; its final residual
-is checked against the original model. Default teaching uses finite nudged phases,
-where `tolerance` checks activity movement rather than the full equation residual.
-
-The [defaults table](#defaults-and-expert-overrides) names the teaching and
-reward budgets separately, and both optimizers leave RMS normalization disabled
-unless selected.
-
-Other operations have independent defaults: `Brain.imagine` uses residual
-tolerance `1e-6`, `NeuralGraph.equilibrate` uses `1e-5`, and `calibrate_bias`
-uses `1e-4` (finite movement by default, full residual with `qualified=True`).
-They do not inherit the action tolerance. Record the actual tolerance and phase
-contract when comparing answers or work.
-
-Set named overrides to preserve the composition's other defaults. Here qualified
-teaching receives a longer nudged budget and checks the original full equations
-in every phase:
-
-```python
-qualified = Brain.compose(
-    inputs=4, actions=2, modules=(16, 8), seed=7,
-    learning_qualified=True, learning_nudged_steps=1024,
-)
-qualified.step(observation, teacher=np.array([0]))
-assert qualified.last_learning["demonstration_qualified"] == 1.0
-```
-
-This requires every free and teaching phase to satisfy the original full
-equations before a supervised update. The longer nudged budget is part of the
-opt-in: keeping the composed `nudged_steps=12` while setting `qualified=True`
-refuses every lesson on realistic input, so constructing a qualified
-configuration whose nudged budget is below its free budget warns, and the
-refusal names the mismatch
-([qualified teaching budgets](learning.md#qualified-teaching-budgets)).
-`LearningPhaseError` retains the attempted
-phases and their cost report; a refusal preserves parameters and optimizer
-history. `last_learning` records accepted and refused teaching diagnostics under
-`demonstration_` keys, including attempted presentations and row work.
-These qualified solves use configurable damping: a stalled attempt
-can move to a smaller numerical step sooner, within the same total budget and
-without relaxing the original equation check.
-Qualified teaching does not change the reward eligibility contract: the
-Brain default allows up to 12 finite nudged steps, configured separately through
-`ActorCriticConfig.eligibility_steps`.
-
-An exhausted `act` raises `RuntimeError` without changing live activity, memory,
-randomness or pending feedback. If `step` learned an outcome before the next action
-refused, keep the learning and retry `act`; do not send the same reward again.
-A qualified state satisfies the equations to tolerance. Accuracy, uniqueness
-and stability require their own evidence.
-
-`predict` and `accuracy` start independent cold graph solves without reading the
-working trace or associative memory. Use greedy `act` on a separately loaded
-brain to measure the complete memory-aware response. Reset live state and the
-trace for each independent query; clear fast associative residuals too when the
-question is recall from consolidated associations alone. Keep those resets
-separate from erasing durable parameters or records. [Memory](memory.md) describes
-the three stores and their limits.
-
-The lower-level `NeuralGraph.equilibrate` returns an `Equilibrium` with per-row
-`residual` and `converged`, the state and total steps. `NeuralGraph.residual` checks an
-existing state without settling. See [contracts](contracts.md) and
-[certificates](certificate.md).
-
-## Imagination and checkpoints
-
-<a id="checkpoints"></a>
-
-```python
-phases = brain.imagine([observation, following], budget=1024, tolerance=1e-6)
-assert phases
-brain.save("brain.npz")
-resumed = Brain.load("brain.npz")
-```
-
-Inspect each phase's `converged` flags before using it. Imagination stops at the
-first refused phase and includes that phase in its result. It privately advances
-a copied trace and issues privately the act the brain would issue, with an episodic
-memory's vote read under the branch's own temporal context; it does not change live
-memory, parameters, randomness or pending outcomes. A returned state holds the cortex's
-response before that vote. It evaluates observations you supply. [Temporal planning](planning.md)
-uses a learned environmental model to consider action consequences.
-
-`Brain.save/load` includes neural parameters, critic, optimizers, random
-state, traces, both associative-memory timescales and a pending action's feedback
-state. Save the body separately and resume the same stream identities. Memory
-shapes and numerical values are validated before use.
-
-For advanced compositions, `Learner.save/load` saves the learner rather than an
-entire body loop. Independently owned `Records` need their configuration, `tables`,
-`mean`, `pathway_norm`, `seen` and `writes`; independently owned traces and critics
-also belong to the caller's saved state. [API details](api.md) define each contract.
+Reward and termination describe the preceding executed action; a demonstration labels
+the current observation. Keep batch-row identities fixed until `reset()`. The
+[continuing brain example](../examples/continuing_brain.py) runs the full reward,
+teacher and checkpoint loop.
 
 ## Genome, development, brain
 
-Use `Genome` for named regions, custom projections or evolved wiring:
+Use a `Genome` for named regions, custom projections or evolved wiring:
 
 ```python
 import cadence as cd
@@ -432,26 +236,44 @@ genome = cd.Genome(
         cd.Projection("association", "motor"),
     ),
 )
-connectome = cd.develop(genome, seed=0)
-network = cd.NeuralGraph(connectome, cd.learning_neuron_model())
-assert network.connectome.n == connectome.n
+network = cd.NeuralGraph(cd.develop(genome, seed=0), cd.learning_neuron_model())
 ```
 
-[Write a cortex](cortex.md) describes ports and projections;
-[evolution](evolution.md) describes genomes and selection.
-The lower-level `motor_cortex`, `cortex` and `layered` factories default to
-`lateral=0.0`; the custom example above therefore has no motor competition.
-Pass the intended value explicitly when comparing it with `Brain.compose`,
-which left unset keeps `lateral=-0.5` up to 8 actions and drops to `0.0`
-above ([operating point and motor competition](#operating-point-and-motor-competition)).
-`Brain.build` offers the image/vector builder, and
-`Brain(connectome, ...)` accepts the named populations required by its
-interaction loop. These are advanced construction options for specific wiring
-needs. A custom `NeuralGraph` alone does not install the complete Brain loop.
+This graph has no motor competition (`motor_cortex` defaults to `lateral=0.0`) and no
+Brain loop. Three entry points give one:
+
+- `Brain.genome(inputs, actions, hidden=64, density=1.0, lateral=None,
+  working_memory=False, memory_scale=12.0, features=8, field=3, seed=0, slots=1)`
+  returns the single-region default layout as a `Genome` to edit or evolve.
+- `Brain.build(...)` develops it and wraps it, adding `episodic=True` and constructor
+  options; it has no trace unless `working_memory=True` ([memory](memory.md#working-trace)).
+- `Brain(connectome, ...)` wraps any connectome with `association`, `motor` and
+  `sensory` (or `visual/input`) populations and takes the table's constructor options;
+  `inputs=` is the observation width when the sensory population is a `code=units` code.
+
+Both constructors keep the table's learning, actor, arousal and memory founders.
+`compose` alone fills in the episodic founders: with `Brain.build` or `Brain(...)`,
+`memory_choice=True` starts its context, replay, demonstrations and separation at
+zero unless you pass them ([episodic memory](episodic.md)).
+
+[Write a cortex](cortex.md) covers regions, ports and projections;
+[evolution](evolution.md) covers genomes and selection.
 
 ## The brain in a browser page
 
-`record_settlements` captures the actual graph iterations behind an answer, for
-an application-owned display. The library ships no browser environment or body;
-[cadence-demos](https://github.com/muellerberndt/cadence-demos) holds the
-application examples, several of which run a brain in the page.
+The library ships no browser page, environment or body. For an application display,
+`record_settlements(callback, label=)` sends every actual settlement inside the
+context to the callback, including those inside learning and imagination, with the
+potential, activation and adaptation at every iteration:
+
+```python
+records = []
+with cd.record_settlements(records.append, label="display"):
+    brain.live(observation)
+assert records and records[0].label == "display"
+```
+
+Recording copies every iteration and costs time, so use it for a display or an audit
+([record every settling step](api.md#record-every-settling-step)). The public
+[cadence-demos](https://github.com/muellerberndt/cadence-demos) repository holds
+application pages that run or draw a brain.

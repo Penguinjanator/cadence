@@ -1,48 +1,46 @@
 # Experimental fixed connectivity
 
-Pin a release or a commit when reproducing an experiment with
-`cadence.experimental.partitioned`.
-
-`PartitionedTemporalPatchNet` applies fixed boolean connection masks to one
-`TemporalPatchNet`. Coordinate groups remain parts of a single jointly repaired
-temporal path, with local state, ports, readback and detuning. This is a supplied
-architecture for controlled experiments. It does not discover modules, assign
-their roles, learn specialization or change the default temporal model.
+`cadence.experimental.PartitionedTemporalPatchNet` applies fixed boolean
+connection masks to one [`TemporalPatchNet`](temporal.md); its coordinate groups
+are parts of one jointly repaired temporal path. The masks are supplied
+architecture for controlled experiments: the model learns no modules, roles or
+specialization; compare it against a same-width dense control
+([cost and controls](#cost-and-controls)).
 
 ## What the masks mean
 
-The existing causal recurrence is unchanged:
+The causal recurrence is the ordinary one:
 
 ```text
 h[t] = A @ tanh(h[t-1]) + B @ input[t]
 y[t] = C @ tanh(h[t])
 ```
 
-The masks have the same shapes as `A`, `B` and `C`: `(hidden, hidden)`,
-`(hidden, inputs)` and `(outputs, hidden)`. An `A[row, column]` entry permits a
-connection from the preceding state's column to the current state's row.
-Recurrent communication therefore spans one represented path step. Its physical
-duration, if any, belongs to the application; it is not one solver iteration.
-There is no added instantaneous coupling or independent component clock.
+`PartitionedTemporalPatchNet(inputs, hidden, outputs, *, masks=None, **options)`
+takes `masks` as a dict of boolean arrays `A` `(hidden, hidden)`, `B`
+`(hidden, inputs)` and `C` `(outputs, hidden)`; `options` go to
+`TemporalPatchNet`. Any other key set, dtype or shape raises `ValueError`. A
+true `A[row, column]` connects the previous state's `column` to the current
+state's `row`, so recurrent communication spans one path step (the model's time
+coordinate, never a solver iteration), with no instantaneous coupling or separate
+clock. `masks=None` means all-true masks, which reproduce the dense model's
+phases, updates and carried state exactly.
 
-Initialization first draws the ordinary dense parameters, then zeros forbidden
-entries. It does **not** renormalize the masked recurrence. `initial_radius`
-describes the dense initialization before masking, not the resulting radius.
-All-true masks reproduce the dense model's numerical phases and updates.
-
-The local parameter gradients are masked before any candidate update or
-parameter backtracking. `set_parameters` rejects nonzero forbidden entries.
-`masks` returns detached copies; changing a copy cannot change the architecture.
-The masks are immutable for the lifetime of the model.
+Initialization draws the dense parameters and zeros forbidden entries without
+renormalizing, so `initial_radius` describes the dense draw. Gradients are
+masked before any candidate update or backtracking, and `set_parameters` raises
+`ValueError` on a nonzero forbidden entry. The masks are immutable; the `masks`
+property returns copies and `trainable_parameter_count` counts permitted entries.
 
 ## A small executable example
 
-The optional `two_group_masks` helper declares two coordinate groups. Its names
-`context_hidden` and `motor_hidden` describe supplied roles: both groups use the
-same dynamics. Within-group recurrence is dense; `cross_coupling=True` permits
-both delayed directions. Only the second group has direct output connections.
-Input sets may overlap or be empty. For another topology, supply your own three
-boolean arrays instead.
+`two_group_masks(context_hidden, motor_hidden, inputs, outputs, *,
+context_inputs, motor_inputs, cross_coupling=True)` builds two coordinate
+groups with the same dynamics; the names describe supplied roles. Within-group
+recurrence is dense, `cross_coupling=True` permits both delayed cross-group
+directions, and only the motor group reaches the outputs. Input index sets may
+overlap or be empty; out-of-range or duplicate indices raise `ValueError`. For
+another topology, pass your own three arrays.
 
 ```python
 import numpy as np
@@ -54,6 +52,7 @@ masks = two_group_masks(
     context_inputs=[0], motor_inputs=[1], cross_coupling=True,
 )
 net = PartitionedTemporalPatchNet(2, 6, 1, masks=masks, seed=7)
+assert net.trainable_parameter_count == 36 + 6 + 3
 inputs = np.zeros((1, 4, 2))
 inputs[0, 0, 0] = 1.0  # one observed context pulse
 inputs[0, :, 1] = [0.0, 0.1, -0.1, 0.2]
@@ -64,49 +63,39 @@ assert result.free.converged
 for key, values in net.parameters().items():
     assert np.all(values[~net.masks[key]] == 0)
 
-before = net.snapshot()
-prediction = net.imagine(inputs)
-restored = PartitionedTemporalPatchNet.restore(before)
-np.testing.assert_array_equal(restored.imagine(inputs).output, prediction.output)
-assert all(np.array_equal(before[key], net.snapshot()[key]) for key in before)
+restored = PartitionedTemporalPatchNet.restore(net.snapshot())
+expected = net.imagine(inputs).output
+np.testing.assert_array_equal(restored.imagine(inputs).output, expected)
 ```
 
-`observe`, `advance`, `imagine`, `plan`, `reset` and `readback` retain the
-[temporal model's contracts](temporal.md). In particular, private planning
-adjusts selected input ports under fixed parameters; it does not execute an
-action or alter the masks. Inspect returned phase and learning outcomes rather
-than assuming that a permitted connection guarantees acquisition.
+`observe`, `advance`, `imagine`, `plan`, `reset` and `readback` keep the
+[temporal contracts](temporal.md); `plan` adjusts the selected input ports under
+fixed parameters and masks. A permitted connection does not guarantee
+acquisition, so inspect the returned phase and learning outcomes.
 
 ## Checkpoints and compatibility
 
-Snapshots store the masks alongside the complete temporal continuation.
-Use `PartitionedTemporalPatchNet.restore(snapshot)` or
-`PartitionedTemporalPatchNet.load(path)` after `net.save(path)`. Restoring through
-the base `TemporalPatchNet` class discards future mask enforcement and is not a
-substitute. The subclass restore validates both the masks and the zero values
-of forbidden parameters before returning a model.
+`snapshot()` records the masks under the format `cadence-fixed-connectivity/1`.
+`PartitionedTemporalPatchNet.restore(snapshot)` and `PartitionedTemporalPatchNet.load(path)`
+validate the masks and the zero forbidden entries and raise `ValueError` otherwise; a restore
+through the base `TemporalPatchNet` drops mask enforcement.
+[`TemporalMemory.observe`](temporal-memory.md) raises `TypeError` for this subclass before
+changing either object; `TemporalMemory.protect` collects its constraints, but no protected
+step uses them.
 
-**`TemporalMemory.observe` rejects this subclass with `TypeError` before
-changing the network or memory.** `TemporalMemory.protect` can collect response
-constraints, but this does not enable a combined protected-learning transaction.
-Neither ordinary projection nor its optional readout metric supports this
-combination. Do not bypass the rejection by restoring a base-class model.
+## Cost and controls
 
-## What has been checked
+Masks reduce the trainable entries. The allocated arrays and the dense
+hidden-width message solve keep their full size, so equal width costs what the
+dense model costs ([cost and memory](temporal.md#cost-and-memory)). Zeroing
+connections changes the initial recurrence spectrum, and input routing changes
+what each group sees. Compare against a same-width dense control, counting
+permitted parameters, mask bytes and phase work ([controls](evaluation.md)).
 
-Tests cover dense parity, restricted finite-difference gradients, legal
-backtracked updates, failed-step behavior, checkpoint continuation, private
-planning and atomic rejection by `TemporalMemory`. A small hash-bound fixture
-in `tests/fixtures/partitioned_phrase/` checks a real development update against
-the original helper, including detuned endpoints and committed parameters.
+## Tests
 
-These implementation checks do not establish a behavioral advantage. In the
-bounded four-bar recall comparison that supplied the fixture, the manually
-partitioned model recalled fewer event identities than the same-width dense
-control; both runs stopped at the shared computation cap. No learned
-specialization or original composition was demonstrated.
-
-Masks reduce the number of trainable entries, not the allocated arrays or the
-dense hidden-width message solver. Count boolean masks, parameters, phase work
-and initialization changes when comparing architectures. See
-[scaling](scaling.md) and [common missteps](missteps.md).
+`tests/test_partitioned.py` covers dense parity, finite-difference gradients,
+legal backtracked updates, failed detuning, checkpoint continuation, private
+planning and the `TemporalMemory` rejection. The hash-bound fixture in
+`tests/fixtures/partitioned_phrase/` checks one real update against a frozen
+reference.

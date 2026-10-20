@@ -1,11 +1,12 @@
-# PatchNet: continuous observations and isolated rehearsal
+# PatchNet
 
-`PatchNet` composes the settling brain for continuous observations and
-[recursive observers that settle together](recursive-settlement.md).
-The graph interface composes the nonlinear `NeuralGraph` and local contrastive `Learner` without
-requiring an external associative store. Its default factory creates a fully
-reciprocal graph; the older `layered` factory alone does not add every reverse
-input contact.
+`PatchNet` wraps one reciprocal `NeuralGraph` and its local `Learner` for
+continuous observations. Inputs enter as soft drives, the whole graph settles,
+outputs are read from that same state, and `observe` learns from the
+free/nudged contrast on the output ports you mark as observed. It has no
+associative stores and no action loop; [`Brain.compose`](brain.md) has those.
+`create` builds a fully reciprocal input/hidden/output graph;
+[`recursive`](recursive-settlement.md) adds observing populations.
 
 ```python
 import numpy as np
@@ -14,149 +15,205 @@ import cadence as cd
 net = cd.PatchNet.create(
     inputs=2, hidden=8, outputs=1, seed=7, density=1.0,
     config=cd.LearnerConfig(nudge="quadratic", eta=0.2, eta_bias=0.02),
-    steps=512, tolerance=1e-5,
-    context_strength=1.0,  # experimental temporal overlap; default is zero
 )
-
-observation = np.array([[0.2, 0.8]])
-drive = net.stimulus(observation)
+drive = net.stimulus(np.array([[0.2, 0.8]]))
 result = net.observe(drive, np.array([[0.6]]), source_id="sensor:1")
-print(result.reason, net.read(result.free))
-
-# Hypothetical continuations use a private activity branch.
-branch = net.imagine([
-    net.stimulus(np.array([[0.3, 0.7]])),
-    net.stimulus(np.array([[0.4, 0.6]])),
-])
-print(net.read(branch[-1]))
-
-path = net.save("patch-life.npz")
-resumed = cd.PatchNet.load(path)
-resumed.reset()  # clears activity, preserving learned parameters and evidence IDs
+assert result.updated, result.reason
+print(net.read(result.free))
 ```
 
-The numbers in this example are supplied observations and teaching targets,
-not a demonstrated memory or prediction benchmark. Check `result.updated`
-and `result.reason`. The possible outcomes include `updated`, `duplicate`,
-`no_observations`, `free_unconverged` and `nudge_unconverged`.
+| Argument | Default | Meaning |
+|---|---|---|
+| `create(inputs, hidden, outputs)` | | port counts of the factory graph |
+| `seed`, `density`, `init` | `0`, `0.3`, `1.0` | graph seed, input-to-hidden density, initial weight scale |
+| `config` | `LearnerConfig(nudge="quadratic")` | learning rule, see [learning](learning.md#7-every-knob) |
+| `backend`, `device` | `"cpu"`, `None` | see [backends](backends.md) |
+| `input_index` | the `"input"` population | neurons that `stimulus` drives |
+| `steps`, `chunk`, `tolerance` | `512`, `32`, `1e-5` | sweeps per phase, sweeps between residual checks, equation tolerance |
+| `source_capacity` | `256` | evidence-ID window; `0` turns it off |
+| `context_strength`, `context_mask` | `0.0`, hidden neurons | overlap with the previous free activity |
+| `solver`, `refinement_steps` | `"local"`, `64` | `"hybrid"` adds bounded Newton refinement |
+
+Rows from `input_index` down are arguments of `PatchNet(learner, ...)`, which
+wraps any compatible `Learner`; `create` forwards them as `**runtime_options`.
 
 ## What persists
 
-The network has current activity and learned relationships. Activity is
-carried between calls; synaptic efficacy and biases change only through
-learning or an explicit parameter edit. `reset()` clears the former and
-retains the latter, along with optimizer history and the evidence-ID window.
-An activity attractor can retain a cue, but the supplied graph and its learned
-parameters must actually admit that behavior. Passing a state between calls
-does not by itself establish useful short-term memory.
+Activity is carried between calls. Weights and biases change only through
+`observe` or an explicit parameter edit. `settle(drive)` advances the live
+activity without learning; `read()` returns the outputs of the live state or of
+a given phase. `reset()` clears activity and keeps parameters, optimizer
+history and the evidence-ID window. Batch rows are persistent streams: a drive
+whose batch size differs from the carried state raises `ValueError`, and you
+call `reset()` whenever the rows stop being the same streams.
 
-With `context_strength=kappa > 0`, a selected set of neurons also overlaps
-with the previous free activity. If that boundary is `c`, each solve adds
-the drive `kappa * context_mask * (c - activity)`, corresponding to the
-quadratic energy `kappa/2 * sum(context_mask * (activity - c)**2)`.
-The default boolean mask selects the factory's hidden neurons. A custom
-graph needs declared hidden neurons or an explicit nonempty `context_mask`.
-Both configuration fields are checkpointed. Fresh and reset streams use a
-zero boundary; an explicit zero `BrainState` gives the same equation.
-
-The boundary is held fixed across the free, positive and negative phases
-of one observation. It advances to the free activity only between events;
-imagined events advance their own private boundary. There is no gradient
-through previous events and no additional persistent context array.
-The target-nudged state never becomes the next boundary. A unique equilibrium
-for each fixed boundary can therefore coexist with history-dependent behavior.
-
-This introduces a measurable tradeoff. The first small library comparison at
-`kappa=1` preserved cue differences for one blank event, but those differences
-almost vanished after 16 blanks. Repeated warm-context associations were
-learned; querying them immediately after clearing context failed the declared
-accuracy threshold. Holding a zero boundary adds a restoring force that is
-absent once consecutive activities agree. Temporal overlap is therefore an
-experimental option, not a completed short-term or long-term memory mechanism.
-Increasing it can also require a smaller integration step for convergence.
-
-There is no autonomous importance detector, replay archive, permanent weight
-lock or synaptic consolidation potential in this interface. Ordinary idle
-settling does not decay learned weights. If the learner's optional uniform
-weight decay is enabled, it applies indiscriminately to trainable parameters.
-Protection of rare useful memories and selective forgetting during continued
-learning are open capability tests, not consequences of serialization.
+With `context_strength=kappa > 0`, each solve adds the energy
+`kappa/2 * sum(context_mask * (activity - c)**2)`, where `c` is the previous
+event's free activity (zero after `reset`). `c` is fixed across the phases of
+one event and then advances to the new free activity; the nudged state never
+becomes `c`, and no gradient flows through earlier events. The default mask is
+the `"hidden"` population; a graph without one needs an explicit nonempty
+boolean mask. Large strengths can need a smaller integration step. This overlap
+is experimental; durable memory lives in the [composed brain](memory.md).
 
 ## Observed ports and local detuning
 
-`stimulus(inputs)` places a continuous external drive on named input neurons.
-Inputs are soft fields, not hard clamps: the reciprocal network can feed back
-onto them. `observe(drive, target, observed=mask, weight=gain)` accepts a target
-array of shape `(batch, outputs)`, a shared boolean output mask, and optional
-nonnegative gain per batch row. Unobserved target entries may be NaN; they
-are excluded from the nudge. Zero gain or an empty observation mask advances
-only the free activity and does not commit learning.
+`stimulus(inputs, amplitude=1.0)` writes `amplitude * inputs` on the input
+neurons as a drive; the network also feeds back onto them.
+`observe(drive, target, observed=None, weight=None, source_id=None)` takes
+targets of shape `(batch, outputs)`, one boolean `observed` vector shared by
+all rows (default all true) and an optional nonnegative gain per row.
+Unobserved targets may be NaN.
 
-The teaching target is absent from the free phase. A quadratic nudge pulls observed
-outputs toward it; centered learning compares positive and negative nudges
-started from that same free state. Existing synaptic updates compare the
-activities of each contact's endpoints. The loss sums squared errors over
-observed output ports and averages over batch rows. Gain is supplied teaching
-strength; it is not inferred importance or truth reliability.
+`observe` settles a target-free free phase, then a `+beta` phase nudged toward
+the targets and, only when `LearnerConfig.centered=True` (the default), a
+`-beta` phase, both from the free state. With batch size `B`, outputs `s`,
+targets `y`, mask `m` and gains `w`, the objective is
 
-Each phase has an explicit step budget and checks the potential/adaptation
-equations through `NeuralGraph.equilibrate`. If a required phase does not converge,
-the free activity is retained but weights, optimizer history and source IDs
-are not updated. The carried state is never replaced by the target-nudged
-state. After a successful parameter update it is an initial state for the
-next solve, not a certificate of equilibrium under the changed parameters.
+`L = (1 / (2 B)) * sum_b w[b] * sum_o m[o] * (s[b, o] - y[b, o])**2`.
 
-`PatchNet` requires reciprocal effective weights, matching reciprocal
-contact/gain factors and plasticity masks, and no adaptation. The usual
-equilibrium-propagation gradient interpretation additionally assumes a smooth
-stable equilibrium branch and sufficiently small nudge. A finite residual
-check does not prove those assumptions. The factory's unit gain/contact
-factors avoid a parameter-unit conversion; arbitrary compatible learners may
-require accounting for those factors in interpreting the raw contrast.
+`L` is divided neither by the observed-port count nor by the sum of gains; with
+all ports observed and unit gains it is `outputs / 2` times the mean squared
+error.
 
-Batch rows identify persistent streams. Call `reset()` when their identities
-change. Reordering examples while carrying the same row states changes the
-experiment and must not masquerade as a chronological lifetime.
+The update commits only when every required phase qualifies. A rejected attempt
+keeps the finite free activity and leaves weights, optimizer and IDs unchanged.
+`PatchObservation` holds `free`, `plus`, `minus` (each an `Equilibrium` or
+`None`), `updated`, `reason` and the learner's `metrics`.
+
+| `reason` | Meaning |
+|---|---|
+| `updated` | all phases qualified and the parameters moved |
+| `duplicate` | this `source_id` was committed with the same payload; nothing ran |
+| `no_observations` | empty mask or all gains zero; only the free activity advanced |
+| `free_unconverged`, `free_unqualified` | the free phase missed the tolerance, or failed the hybrid checks |
+| `nudge_unconverged`, `nudge_unqualified` | a nudged phase missed the tolerance, or failed the hybrid checks |
+
+The constructor and each `observe` raise `ValueError` unless the learner is
+quadratic with one slot, its effective weights are reciprocal without
+adaptation, every contact has a reciprocal candidate contact, and reciprocal
+contacts have equal contact/gain factors and plasticity masks. Both factories
+meet this. Why the contrast follows the gradient of `L` is in
+[learning](learning.md#5-why-the-contrast-is-a-gradient).
+
+## Train on observed targets
+
+Fit input statistics on training data only and freeze them; floor the standard
+deviation and leave flags such as "value missing" unstandardized. Keep targets
+inside the output range, about `(-0.1, 1)` for `create` and `(-1, 1)` for
+`recursive`, fix their scale before evaluation and report clipping. Mark an
+outcome you did not observe as unobserved; never write a zero for it.
+
+Call `reset()` before every independently sampled minibatch and evaluation
+batch. Since the mask is shared, group records that each observe one output by
+that output, or teach them one at a time. Use `source_capacity=0` for
+deliberate offline replay, and evaluate held-out data without calling
+`observe`. A lesson's phases belong to the pre-update parameters, so settle
+again before acting and act only on rows whose `qualified` is true. The bias
+part of
+`learner.contrast(free, plus, minus)` is the negative gradient of `L`:
+
+```python
+def quadratic_loss(prediction, target, observed):
+    return float(0.5 * np.mean(np.sum((prediction - target)[:, observed] ** 2, axis=1)))
+
+small = cd.PatchNet.recursive(
+    3, [4, 2], 3, seed=83, steps=256, chunk=8, tolerance=1e-10, source_capacity=0,
+    config=cd.LearnerConfig(nudge="quadratic", beta=0.01, eta=0.01, eta_bias=0.01),
+)
+drive = small.stimulus(np.array([[0.2, -0.1, 0.3], [-0.2, 0.1, 0.4]]), amplitude=2.0)
+observed = np.array([False, True, False])
+target = np.full((2, 3), np.nan)
+target[:, 1] = [0.3, -0.2]
+bias, port = small.brain.bias.copy(), int(small.output_index[1])
+
+def loss_with_bias(shift):
+    small.brain.bias = bias + shift * (np.arange(len(bias)) == port)
+    small.reset()
+    return quadratic_loss(small.read(small.settle(drive)), target, observed)
+
+numeric = (loss_with_bias(1e-5) - loss_with_bias(-1e-5)) / 2e-5
+small.brain.bias = bias
+small.reset()
+lesson = small.observe(drive, target, observed=observed)
+assert lesson.updated, lesson.reason
+_, neurons = small.learner.contrast(lesson.free.state, lesson.plus.state, lesson.minus.state)
+assert np.isclose(-neurons[port], numeric, rtol=1e-3)
+```
+
+## The hybrid solver
+
+`solver="hybrid"` runs the local iteration, then up to `refinement_steps` warm
+Newton steps on the global energy for unresolved rows, with the inputs
+eliminated. It needs the CPU float64 backend, the smooth `tanh(v/2)` neuron
+(slope 1, threshold 0, leak 1) without adaptation, exact reciprocal effective
+weights, zero weights among inputs, disjoint input and output indices, and no
+context anchoring of inputs. `recursive` graphs qualify; `create` graphs (leak
+0.1) are refused. The structure is rechecked before every solve, since
+learning moves the weights.
+
+A hybrid row qualifies when its full residual meets `tolerance` and the
+smallest eigenvalue of the reduced energy Hessian is positive: a local
+stability check, without a global-minimum or uniqueness guarantee.
+`Equilibrium.converged` tests the residual alone, `qualified` adds the solver
+checks, `steps` counts local sweeps, and `refinement` (`None` for local solves)
+is a `RefinementReport` with per-row `local_residual` (before refinement),
+accepted Newton `steps`, `min_curvature` and `status`.
+`status` is `local` or `refined` on a qualified row; other values
+(`step_cap`, `nonpositive_curvature`, `line_search_exhausted`, ...) name the
+failure. The counters omit line-search trials and dense matrix work.
+
+With `I` input and `C` other neurons, refinement stores `I x C` and `C x C`
+blocks and costs about `O(I C^2)` per row for the curvature plus `O(C^3)`
+dense algebra, so it suits small cores. Learning credit is the local phase
+contrast in both modes; [settling certificates](certificate.md) bound the
+local solver.
+
+```python
+hybrid = cd.PatchNet(small.learner, steps=256, chunk=8, tolerance=1e-10, solver="hybrid")
+phase = hybrid.settle(drive)
+assert phase.qualified.all(), phase.refinement.status
+print(phase.refinement.min_curvature)
+```
 
 ## Evidence and imagined continuations
 
-Only an explicit `observe` call accepts teaching evidence. With `source_id`,
-an already committed identical event is skipped without advancing live state.
-Reusing that ID with a different payload raises an error. The oldest ID
-expires when `source_capacity` is exceeded; a replay after expiry can be
-accepted again. This bounded deduplication window is not a full causal poset,
-authentication system or test of independent real-world evidence.
+Only `observe` accepts teaching evidence. A `source_id` (nonempty, at most 1024
+characters) repeated with the same payload returns `duplicate` without
+advancing live state; the same ID with a different payload raises
+`ValueError`. IDs are recorded on `updated` only; the oldest expires once
+`source_capacity` is exceeded and can then be accepted again. The window
+suppresses repeats; distinct IDs are not thereby independent evidence.
 
-`imagine(drives, state=...)` returns a sequence of `Equilibrium` objects on a
-private branch. Each starts from the previous branch state. A caller can feed
-predicted outputs into a subsequent branch call by passing its last state;
-that feedback mapping and any action selection are explicit application
-choices. Live state, parameters, optimizer and evidence IDs remain unchanged,
-including when a later branch input raises an error. No branch automatically
-becomes a witnessed fact or a training target. The application remains
-responsible for the truth of a later explicit `observe` call.
+`imagine(drives, state=None)` settles a sequence of drives on a private branch
+from the live state (or `state`) and returns a tuple of `Equilibrium`. Pass
+the last branch state to continue a rollout. Live activity, parameters,
+optimizer and IDs are untouched, also when a drive raises. Feedback of
+predictions and action choice are application code; nothing imagined becomes a
+target.
 
-This implements a substrate for internal rehearsal. Creative problem solving
-requires a learned consequence model, useful candidate generation, measured
-selection and successful autonomous output. An isolated branch alone proves
-none of those capabilities.
+```python
+branch = net.imagine([net.stimulus(np.array([[0.3, 0.7]])),
+                      net.stimulus(np.array([[0.4, 0.6]]))])
+more = net.imagine([net.stimulus(np.array([[0.5, 0.5]]))], state=branch[-1].state)
+print(net.read(more[-1]))
+```
 
 ## Checkpoint and readback
 
-`save` atomically writes a versioned NumPy archive containing the complete
-learner and continuation state. `load` validates it and supports an explicit
-backend choice. Exact continuation requires the same backend and numerical
-precision. `state` and `snapshot()` return detached copies, so editing them
-does not mutate the live network. Snapshot array sizes count payload storage;
-they do not include Python objects, numerical scratch or external run logs.
+`save(path, compressed=True)` atomically writes a `cadence-patch/3` NumPy
+archive with learner parameters and optimizer, current activity, the ID window
+and every constructor setting. `load(path, backend="cpu", device=None,
+precision=None)` validates it and also reads `cadence-patch/1` and `/2`, which
+load with the local solver (the [API reference](api.md) lists each format).
+Exact continuation needs the same backend and precision; input statistics, RNG
+state and data order belong to the application. `state` returns a detached
+copy of the live activity and `snapshot()` the checkpoint as a dict of detached
+arrays.
 
-## Research reproduction
-
-The retention comparisons behind this page were run against the library with
-frozen sources, checkpoints and an independent endpoint verifier, and both the
-activity-only and the temporal-overlap outcomes were kept. They are development
-probes, not evidence of a competent controller or animal-like lifelong memory.
-
-`Brain` supplies the continuing action/memory interface; `Records` supplies
-explicit event stores. Their additional mechanisms have their own contracts
-and do not establish the same capabilities for a bare `PatchNet`.
+```python
+path = net.save("patch-life.npz")
+resumed = cd.PatchNet.load(path)
+np.testing.assert_array_equal(resumed.state.v, net.state.v)
+resumed.reset()  # an independent evaluation starts from fresh activity
+```

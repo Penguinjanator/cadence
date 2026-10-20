@@ -1,12 +1,10 @@
 # Episodic memory: what happened in this situation before
 
-A brain's synapses learn slowly. Each update moves the whole policy a little, and neighbouring
-situations share most of their representation, so one lesson barely moves one answer. Animals
-also learn in one go: a place where food was found once, a route a parent showed once, the
-step of a song that comes next. Since 0.83.0 the composed brain can keep such episodes in its
-hippocampus, an episodic memory beside the slow cortex whose records vote in every choice:
-`Brain.compose(..., memory_choice=True)`. It is not yet the default; [when to turn it
-on](#when-to-turn-it-on) says why.
+Synapses learn slowly; an animal also learns in one go, from a place where food was found once
+or a route a parent showed once. `Brain.compose(..., memory_choice=True)` adds an episodic
+memory: records of what happened in a situation, which vote in every choice beside the slow
+cortex. It is opt-in ([when to turn it on](#when-to-turn-it-on)); [memory](memory.md#episodic-memory)
+places it among the brain's other memories.
 
 ## How it works
 
@@ -15,218 +13,154 @@ observation now ─────────────────────�
 seen and done before ─┐                                  ├─► mean ─► vote ─┐
 observation now ──────┴─► temporal context ─► context records ─┘           ├─► softmax ─► action
 observation now ─► settle ─► motor readout ─────────────────────────────────┘
-
-outcome, when known ─────────────► record of the chosen action under its key
-reward beyond what was expected ─► replay: the decisions on the recent path, backwards
 ```
 
-- **Two keys for every record.** Each record is kept twice. The place records are keyed by
-  the present observation code: the observation itself, or with `code=units` the brain's
-  sparse code of it ([from pixels to keys](memory.md#from-pixels-to-keys)). The context
-  records are keyed by the temporal context: the present code together with a fading trace
-  of what the stream saw and did before, past codes and the brain's own issued actions.
-  `memory_context` is the share the past keeps from one moment to the next; the present
-  code enters with the rest.
-- **Why two.** Two moments that look alike but follow different histories get different
-  context keys, so a cue that is gone still shapes the vote, and so does the place in a
-  sequence of the brain's own actions. Where history does not matter, the context splits one
-  situation's records over every path that reaches it; the place records keep them together,
-  so a known situation reached along a new path is still recognized. The trace is fixed,
-  not learned: a record stays addressable while the cortex learns.
-- **Records** hold one value per action for each key, in reward units. An uncoded key is
-  separated first (a fixed random expansion to 1,024 cells, of which the 24 most active
-  stay; dense, or with `memory_fan_in` each cell reading that many key values), so
-  different situations write different synapses; a coded brain's key is the code itself.
-- **What is written.** The outcome of the chosen action, when it is known: a reward or a
+- **Two keys.** Each record is kept twice. `brain.hippocampus` holds the place records, keyed
+  by the present [observation code](memory.md#the-observation-code). `brain.context_memory`
+  holds the context records, keyed by the temporal context: the present code with a fixed
+  fading trace of past codes and of the brain's own issued actions, where `memory_context` is
+  the share the past keeps from one moment to the next. Two moments that look alike after
+  different histories get different context keys, so a cue that is gone can decide the vote.
+  The place records keep a situation together when a new path reaches it.
+- **Records** hold one value per action in reward units. An uncoded key passes a fixed random
+  separation first (`memory_expansion` cells, the `memory_winners` most active kept), so
+  different situations write different synapses. A coded brain keys on its code as it is.
+- **What is written.** The outcome of the chosen action, once it is known: a reward or a
   punishment, the end of an attempt (`done`), a surprise that woke a calm `live` brain, or an
-  outcome the caller marks with a positive `salience=`. A zero outcome in the middle of an
-  attempt is not yet an outcome and leaves the record as it was. A caregiver's demonstration
-  (`teacher=`) is recorded for the situation it was shown in, at `memory_demonstrations`, as
-  if the shown action had paid that much.
+  outcome marked with a positive `salience=`. A zero outcome in the middle of an attempt
+  writes nothing. A demonstration (`teacher=`) is recorded for its situation as if the shown
+  action had paid `memory_demonstrations`. `done=True` makes the last outcome known and starts
+  the next attempt with a fresh temporal context and path.
 - **Replay.** A reward replays the stream's recent path backwards, up to `memory_replay`
-  decisions. The path keeps one decision per situation, the one that left it: an action that
-  left the situation unchanged is not on the path and is not credited. A decision whose own
-  outcome was a reward or a punishment stays on the path, also when the next decision is taken
-  in the same situation. Replay runs through the decisions whose own outcome was nothing and stops at the
-  last decision whose outcome was known, a reward or a punishment: outcomes bound the episode,
-  so nothing has to mark the end of an attempt. Each replayed decision gains credit discounted
-  by the actor's `gamma` per step, up to the discounted reward, and replay only ever adds
-  credit.
-  - A reward that ends an attempt (`done=True`) closes an episode: it is replayed whole, into
-    both kinds of record.
-  - In a continuing life it is not known where the paid effort began, so a reward is replayed
-    in proportion to its surprise, the reward less what the memory expected of the decision
-    it paid; an expected reward replays nothing. Each decision gains it in its context
-    record, that decision in the history it was taken in, and in its place record only as far
-    as it was an exploration rather than the brain's best guess: a habitual choice that
-    happened to come before a reward says nothing about what paid apart from its history, an
-    exploration that came before a surprising reward says much.
-- **The vote.** At every choice, greedy or sampled, the mean of the place and the context
-  records is added to the motor readout before the softmax. The slow cortex keeps learning
-  from the actions the brain takes, so what the memory chose and what paid is consolidated
-  into the synapses over time. A lesson, an outcome and an imagined branch read the same
-  complete choice ([one choice](#one-choice-for-acting-teaching-and-imagining)).
-- **Two speeds.** The store has the per-stream fast residual and the shared consolidated
-  matrix of [`SynapticMemory`](memory.md#memory-in-the-composed-brain). A write corrects the
-  stream's record halfway at once (`memory_rate` 0.5), and that correction fades by
-  `memory_decay` per later write; the record every stream shares, and that a reset keeps,
-  moves `consolidation` (0.05) of the way, faster with a supplied `salience=`. One outcome is
-  remembered at once; repetition makes a record lasting, and one misleading outcome cannot
-  erase what repetition established.
+  decisions, each credited up to the reward discounted by the actor's `gamma` per step.
+  Replay only adds credit. Its rules:
+  - the path keeps one decision per situation, the one that left it; a decision whose own
+    outcome was a reward or a punishment stays on the path even in an unchanged situation;
+  - replay runs through decisions whose outcome was nothing and stops at the last known
+    outcome, so nothing has to mark where an attempt began;
+  - a reward with `done=True` is replayed whole into both kinds of record;
+  - in a continuing life a reward is replayed in proportion to its surprise (the reward less
+    what the memory expected of the paid decision): into each decision's context record, and
+    into its place record only as far as the decision was an exploration rather than the
+    brain's best guess. An expected reward replays nothing.
+- **The vote.** At every choice, greedy or sampled, the mean of the place and the context reads
+  is added to the motor readout before the softmax. The vote never enters the drive, so the
+  settle is unchanged. The cortex learns from the actions taken, so what the memory chose and
+  what paid consolidates into its synapses over time.
+- **Two speeds.** Each store is a [`SynapticMemory`](memory.md#associative-store-the-hippocampus).
+  A write corrects the stream's record halfway at once (`memory_rate` 0.5), a correction that
+  fades by `memory_decay` per later write. The record all streams share, which `reset` keeps,
+  moves by `consolidation`, faster with a supplied `salience=`. One outcome is remembered at
+  once, repetition makes it lasting, and one misleading outcome cannot erase it.
 
 ## One choice for acting, teaching and imagining
 
-The vote joins the motor readout after the settle, so the cortex's most active motor neuron is
-not always what the brain does. Wherever the brain asks what it would do, it reads the same
-complete choice: the readout with the vote, the context records read under the decision's own
-temporal context.
+The vote joins after the settle, so the most active motor neuron is not always the act. Every
+place that asks what the brain would do reads the same complete choice: readout plus vote, with
+the context records read under that decision's own temporal context.
 
-- **A lesson only where the answer differs** (`learning_surprise=True`) judges a row by the act
-  the brain would issue. A demonstration corrects a brain whose memory turns a right cortical
-  answer into a wrong act. An answer the memory makes right is no surprise and gets no lesson:
-  no update of the cortex and no recorded demonstration. A lesson-only curriculum thus leaves
-  the cortex untaught on the rows the memory carries; the cortex learns them from the outcomes
-  of its own acts. Consolidating the cortex under an answer the memory supports is an objective
-  of its own, outside surprise teaching.
-- **Surprise in a continuing life** (`live`): only the outcome of the brain's own best guess
-  can surprise it, and its own best guess is the act it would issue greedily, read when the
-  action is issued. A greedy act the vote decided is its own, and its outcome counts.
-- **Imagination** (`imagine`): an imagined branch issues privately the act the brain would
-  issue, to its own efference copy and the recall memory's predecessor key, with the vote read
-  under the branch's own temporal context, which the branch's acts move on. A returned state
-  holds the cortex's response, before the vote; to read the complete act on an observation, act
-  greedily on a loaded copy ([check that the memory does the work](#check-that-the-memory-does-the-work)).
+- **Lessons only where the answer differs** (`learning_surprise=True`,
+  [learning](learning.md#lessons-only-where-the-answer-differs)) judge a row by the act the
+  brain would issue. A demonstration corrects a brain whose memory turns a right cortical
+  answer into a wrong act. An answer the memory makes right gets no lesson: no cortex update
+  and no recorded demonstration. The cortex then learns those rows from the outcomes of its
+  own acts.
+- **Surprise in `live`** counts only the outcome of the brain's own best guess, the act it
+  would issue greedily. A greedy act the vote decided is its own, and its outcome counts.
+- **Imagination** (`imagine`) issues privately the act the brain would issue, to its efference
+  copy and the recall memory's predecessor key, with the vote read under the branch's own
+  temporal context. A returned state holds the cortex's response before the vote; act greedily
+  on a [loaded copy](#check-that-the-memory-does-the-work) to read the complete act.
 
 ## Turning it on
 
 ```python
+import numpy as np
 from cadence import Brain
 
-brain = Brain.compose(inputs=3, actions=2, arousal=True, memory_choice=True)
-brain.step([[1.0, 0.0, 0.0]], teacher=[0])                  # shown once: remembered
-action = brain.live([[1.0, 0.0, 0.0]])                      # the record votes for 0
+brain = Brain.compose(inputs=3, actions=2, arousal=True, memory_choice=True, seed=0)
+x = np.array([[1.0, 0.0, 0.0]])
+assert brain.act(x, greedy=True)[0] == 0   # the newborn's answer
+brain.step(x, teacher=[1])                 # shown once: recorded at memory_demonstrations
+assert brain.live(x)[0] == 1               # the record votes for the shown action
 ```
 
-`memory_choice=True` brings the settings below. Each can be passed beside it.
-
-| Setting | With `memory_choice=True` | What it does |
-| --- | --- | --- |
-| `memory_choice` | `True` | The records vote in the choice; the founder `False` keeps the hippocampus of earlier releases, keyed by the senses and read into the motor drive |
-| `memory_context` | `0.5` | The share of the past in the context key; 0 keeps the place records alone |
-| `memory_replay` | `8` | How many decisions back a surprising reward is replayed |
-| `memory_demonstrations` | `1.0` | The value at which a shown action is recorded; 0 records none |
-| `memory_rate` | `0.5` | How far one write moves the stream's record at once; 1.0 lets the last outcome replace it |
-| `memory_expansion`, `memory_winners` | `1024`, `24` | Separation of the keys; 0 cells use the key as it is |
-| `memory_fan_in` | `0` | How many of the key's values each cell of the separation reads; 0 reads them all, 32 is the recommended setting above 256 key values; a coded brain has no separation |
-
-These are construction settings: pass them to `Brain.compose(...)`; `retune` refuses them,
-except `memory_rate`, a store setting like `memory_decay`, `memory_amplitude` and
-`consolidation`, which `retune` changes for both stores together. The same settings turn it
-on in `Brain(...)` and `Brain.build(...)`, where every setting has to be named.
-
-## When to turn it on
-
-Turn it on when a skill is taught by showing or correcting, when a chain of actions is paid only
-at its end, when a cue that is gone must still decide an answer, and for sequences of the
-brain's own actions. Nothing has to mark the end of an attempt. Measured on fresh founders and
-seeds against the composition without it (the default `Brain.compose`), none of them used to
-choose the settings:
-
-| Task (fresh founders or seeds) | Without | With `memory_choice=True` |
-| --- | --- | --- |
-| Four-step crafting chain, a caregiver corrects executed mistakes (5 founders): success after teaching | 38.1% | 98.7% |
-| the same, then 80 episodes alone through `live` | 9.0% | 97.8% |
-| the same chain from reward alone, through `step`: after training, then alone | 9.1%, 9.5% | 73.2%, 88.0% |
-| A second crafting chain (5 seeds): taught, after the caregiver leaves | 2.8% | 99.0% |
-| the same from reward alone, after the caregiver leaves | 15.0% | 75.6% |
-| A four-step chain in one continuing life, paid only at its completion, no `done` (10 seeds): greedy completions per thousand moments | 0 | 108 |
-| Rules that reverse in a continuing life (odour nursery, 20 lives): lives within every gate; reversal lags | 20 of 20; 46, 57 | 20 of 20; 55, 52 |
-| Delayed response learned from reward (6 seeds) | | 6 of 6 at 1.0 |
-| Two four-note songs cued once, 10 lessons (6 seeds): notes right | 0.52 | 0.65 |
-| Taught recall of a vanished cue (4 founders): clean-4, clean-8, distractor-2, capacity-2 | 0.70 | 0.75 |
-| Continuing bandit whose history does not matter (6 seeds): hit rate | 0.86 | 0.75 |
-
-Where it does not help yet: on the bandit whose history does not matter it scored below the
-composition without it; on the continuing chain, four of the ten seeds completed no chain with
-or without it; the recall gain is uneven, +0.31 on one founder and -0.20 on another; and on
-the five fresh founders of the chain instrument, after 80 episodes alone through `step` the
-frozen greedy policy of the corrected chain could stall at one stage while the sampled policy
-succeeded (through `live` it did not). It is not the default for now.
-
-The chain reading belongs to the five founders it came from. Which path erodes a taught chain
-after the caregiver leaves, and at which stage, depends on the founder: on other founders of
-the same chain with the memory, read stage by stage after 80 episodes alone, both paths kept
-the greedy chain in most of them and `step` lost more stages than `live`; on seeds of a
-replica of the chain the drift came through `live`, while `step` had recovered by 80
-episodes. Whole-chain success hides a stalled stage. After the caregiver leaves, read the
-greedy policy stage by stage beside whole-chain success, and continue through `live` or lower
-the actor step.
-
-On the [Stone Age environment](https://github.com/ali12mahmood12345-boop/cadence-stone-age)'s
-own benchmarks of its four-step crafting chain (seeds 42 to 46, frozen full-chain success
-after training): backward lessons stopped at competency go from 8.4% to 25.6% (the untrained
-founder 9.0%, uniform random 7.2%) with a third of the lesson trips and a fifth of the rescue
-trips, and retention rescue goes from 6.2% to 37.4%, keeping all four steps where without it
-two of them collapse.
+`memory_choice=True` in `Brain.compose` brings the founder values in the table below; each can
+be passed beside it. `Brain(...)` and `Brain.build(...)` take the same names, but their
+defaults are 0 (and `memory_winners` 32, `memory_rate` 1.0), so name every setting there.
+`memory_choice` needs `episodic=True`.
 
 ## Settings
 
-| Setting | Raise it when | Lower it when |
+All of these are construction settings: pass them at construction; `retune` refuses them.
+
+| Setting | With `memory_choice=True` | Change it when |
 | --- | --- | --- |
-| `memory_context` | the answer depends on what came long before: a cue that is gone, the next step of a long sequence of the brain's own actions | history does not matter, and the context records only dilute the place records (0 keeps the place records alone) |
-| `memory_replay` | rewards come at the end of long chains of decisions | (0 replays nothing) |
-| `memory_demonstrations` | shown actions should outweigh the rewards of the brain's own trials | the caregiver is unreliable (0 records no demonstration) |
-| `memory_expansion` | many situations must be told apart | (0 uses the key unseparated) |
-| `memory_rate` | the world changes quickly and the latest outcome is the best guide | outcomes are noisy, or one failure should not undo a learned skill |
+| `memory_choice` | `True` (founder `False`) | `False` keeps the [associative store](memory.md#associative-store-the-hippocampus), keyed by the senses and read into the motor drive |
+| `memory_context` | `0.5` | Raise toward 1 (exclusive) when the answer depends on what came long before; lower when history does not matter; 0 keeps the place records alone and builds no `context_memory` |
+| `memory_replay` | `8` | Raise when rewards come at the end of long chains; 0 replays nothing |
+| `memory_demonstrations` | `1.0` | Raise when shown actions should outweigh the brain's own trials; lower for an unreliable teacher; 0 records none |
+| `memory_expansion` | `1024` (0 on a coded brain) | Raise when many situations must be told apart; 0 uses the key unseparated. With `code=units` it is set to 0 and a nonzero value is refused |
+| `memory_winners` | `24` | How many separation cells stay active per key; at most `memory_expansion` |
+| `memory_fan_in` | `0` (dense) | Above 0 each separation cell reads that many random key values; use 32 for keys wider than 256 values. Needs `memory_expansion` and at most the key width; refused with `code=units` |
 
-Where the world has attempts (a chain completed, a trial over, a game lost), `done=True` makes
-the outcome of the last decision known and starts the next attempt with a fresh context and
-path. The memory needs no such mark to learn a sequence: rewards and punishments bound what a
-reward replays.
+A dense separation holds `width x 1,024` floats per store (105 MB at 12,824 inputs); with
+`memory_fan_in=32` it holds `1,024 x 32` indices and weights at any width. A brain with
+[`code=units`](memory.md#the-observation-code) has no separation of its own.
 
-## A sparse separation
+`memory_rate` (0.5 here, 1.0 without `memory_choice`), `memory_decay`, `memory_amplitude` and
+`consolidation` belong to the [associative store](memory.md#associative-store-the-hippocampus);
+`retune` changes them for both stores together.
 
-`memory_fan_in` above zero makes the separation sparse: each of its 1,024 cells reads that
-many of the key's values, chosen at random, so a store's separation holds
-`1,024 x memory_fan_in` indices and weights at any width (0.52 MB at a fan-in of 32) beside
-a running mean of one float per key value, where the dense separation holds `width x
-1,024` floats (105 MB at 12,824 inputs). The founder 0 keeps the dense separation; 32 is
-the recommended setting above 256 key values. The key is the
-[observation code](memory.md#from-pixels-to-keys): with `code=units` the brain codes the
-observation and the stores key on that code as it is, with no separation of their own.
+## When to turn it on
+
+- A skill is taught by demonstration or by correcting executed mistakes.
+- A chain of actions is paid only at its end ([sequential tasks](sequential-tasks.md#what-breaks-a-chain)).
+- The right answer depends on the situation's history: a cue that is gone, the next step of a
+  sequence of the brain's own actions.
+
+Leave it off where the history does not matter, and compare against the composition without it
+on the task. The mechanism contracts are in
+[`tests/test_episodic_memory.py`](../tests/test_episodic_memory.py) (writes, replay, the
+temporal context recalling a cue that is gone) and
+[`tests/test_episodic_policy.py`](../tests/test_episodic_policy.py) (the one-choice rule).
 
 ## Check that the memory does the work
 
-Compare the same acquired brain with and without its records, on copies:
+Compare the same brain with and without its records, on loaded copies. Here the actor is frozen,
+so only the records can change the answer:
 
 ```python
 import os
 import tempfile
 
+frozen = {"actor_eta": 0.0, "actor_eta_bias": 0.0, "actor_eta_critic": 0.0}
+paid = Brain.compose(inputs=3, actions=2, memory_choice=True, seed=0, **frozen)
+assert paid.act(x, greedy=True)[0] == 0          # the newborn's answer
+action = paid.step(x)
+for _ in range(6):                               # only action 1 pays
+    action = paid.step(x, reward=[1.0 if action[0] == 1 else 0.0])
 path = os.path.join(tempfile.mkdtemp(), "brain.npz")
-brain.save(path)
+paid.save(path)
 remembering, forgetting = Brain.load(path), Brain.load(path)
-forgetting.hippocampus.clear()  # erase the place records
-forgetting.context_memory.clear()  # and the context records
-x = [[1.0, 0.0, 0.0]]
-print(remembering.act(x, greedy=True), forgetting.act(x, greedy=True))
+forgetting.hippocampus.clear()                   # erase the place records
+forgetting.context_memory.clear()                # and the context records
+assert remembering.act(x, greedy=True)[0] == 1   # the records choose the action that paid
+assert forgetting.act(x, greedy=True)[0] == 0
 ```
 
-If the answers differ, the records decide that choice. If they never differ, the slow
-cortex has consolidated what the memory held, or the memory holds nothing for that key.
+If the answers never differ, the cortex has consolidated what the records held, or they hold
+nothing for that key. [Memory](memory.md#check-that-a-memory-does-the-work) lists the erase call
+for every memory.
 
-## What it is not
+## Limits
 
-- It is not a list of episodes. Its storage is fixed by the key width and the separation; it
-  does not grow with experience. Correlated keys interfere, as every delta-rule store does.
-- The keys are not learned. The memory recalls what happened in the same place and in the
-  same context; it does not discover which part of the history matters. Where it matters,
-  the place records of the aliased moments average over histories and halve the context's
-  vote; where it does not, the context records add little.
-- Records are in reward units. With rewards of a very different size, the vote weighs more or
-  less against the readout; `memory_amplitude` scales the read.
+- Storage is fixed by the key width and the separation and does not grow with experience;
+  correlated keys interfere, as in every delta-rule store.
+- The keys are not learned: the memory recalls the same place and the same context, and does
+  not discover which part of a history matters.
+- Where history matters, the place records of aliased moments average over histories and
+  halve the context records' share of the vote.
+- Records are in reward units: rewards of a very different size weigh the vote more or less
+  against the readout. `memory_amplitude` scales the read.
 - `predict` and `fit` answer independent samples and read no memory.
-
-See [context](context.md) for the carried interpretation of the working trace,
-[memory](memory.md) for the stores and their rules, and [sequential tasks](sequential-tasks.md)
-for chains of actions.

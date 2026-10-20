@@ -147,11 +147,11 @@ archive and confirmation-audit tests.
 A change to a guide's code is a change to a test. The
 [minimal-install job](https://github.com/muellerberndt/cadence/blob/main/.github/workflows/ci.yml)
 builds the wheel with NumPy alone
-and runs 20 pages without optional backends: `README.md` and, under `docs/`,
+and runs 19 pages without optional backends: `README.md` and, under `docs/`,
 `world-model.md`, `patchnet.md`, `quickstart.md`, `temporal.md`,
-`temporal-memory.md`, `architecture.md`, `planning.md`, `interaction.md`,
+`temporal-memory.md`, `memory.md`, `recall.md`, `planning.md`,
 `partitioned.md`, `record-patch.md`, `build.md`, `belief.md`, `steering.md`,
-`recursive-settlement.md`, `recursive-training.md`, `api.md`, `learning.md`,
+`recursive-settlement.md`, `api.md`, `learning.md`,
 `protocols.md` and `receipts.md`. It also executes
 `examples/continuing_brain.py`, `examples/memory_imagination.py` and
 `examples/equilibrium/layout_learning.py`. For changes to these guides or
@@ -230,7 +230,7 @@ environments. Run one substantial local QA process at a time on a busy machine.
 | --- | --- |
 | `src/cadence/` | the numerical library: `brain.py`, `learning.py`, `genome.py`, `regions.py` (the settling brain); `temporal.py`, `planning.py`, `temporal_memory.py`; `record_patch.py`, `records.py`, `record_stack.py`, `record_ports.py`, `ports.py`; `belief.py`, `belief_torch.py`; `steering.py`, `life.py`, `instruments.py` (composition) |
 | `tests/` | unit, numerical, integration and documentation contract tests |
-| `docs/` | the guides; `docs/index.md` is the map |
+| `docs/` | the guides; `docs/README.md` is the map |
 
 ## Examples
 

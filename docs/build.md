@@ -1,39 +1,25 @@
 # Build your own brain
 
-This page trains, evaluates and saves three supported mechanisms: a record patch,
-a supervised neural graph and a temporal model. These component recipes test
-their own learning and memory contracts. For a continuing brain, start with the
-[world-model lifecycle](world-model.md) and the [Brain quickstart](quickstart.md),
-then retain that same brain through use, disturbance and correction. The recipes
-below do not measure that complete lifecycle.
-
-Every block runs on NumPy; the blocks of one section run together, in order.
-Read [Cadence for machine-learning people](orientation.md) if the terms are new.
-
-These guides use Cadence 0.84.3. Install the published package:
-
-```bash
-python -m pip install cadence-net==0.84.3
-```
+Three component recipes on your own data: a record patch on a stream, a supervised
+neural graph and a temporal patch. For a continuing brain, start with the
+[world-model lifecycle](world-model.md) and the [Brain quickstart](quickstart.md).
+The blocks of one section run together, in order, on NumPy after you
+[install](README.md#install) the package; [orientation](orientation.md) explains the terms.
 
 ## A record patch on a stream
 
-The record patch learns from a stream of moments: at each moment it hears
-something and predicts an outcome. Use it when single facts must be kept after one
-exposure, when a regularity should move into the weights, and when the data will be
-gone before the brain has learned them.
+The record patch hears something at each moment of a stream and predicts an outcome.
+Use it when single facts must be kept after one exposure, when a regularity should move
+into the weights, and when the data will be gone before the brain has learned them.
 
 ### 1. Encode
 
-Paths have shape `(batch, time, ports)`. Batch rows are independent streams sharing
+Paths have shape `(batch, time, ports)`; batch rows are independent streams sharing
 parameters. Encode a categorical input as one-hot ports and give a continuous input
 unit variance. A categorical outcome is one-hot and declared in `groups`, so the slow
-readout ends in a softmax per group and learns by cross-entropy; a continuous outcome
-is a plain port.
-
-The data here are streams of tokens from a vocabulary of eight, and the outcome at
-each moment is a rule of the token heard. Replace `make_streams` with your own loader
-that returns the same shapes.
+readout ends in a softmax per group; a continuous outcome is a plain port. Here the
+tokens come from a vocabulary of eight and the outcome is a rule of the token heard.
+Replace `make_streams` with a loader that returns the same shapes.
 
 ```python
 import numpy as np
@@ -42,11 +28,9 @@ from cadence import RecordPatchNet
 VOCAB, OUTCOMES, HIDDEN = 8, 4, 16
 rng = np.random.default_rng(3)
 
-
 def make_streams(count, length):
     tokens = rng.integers(VOCAB, size=(count, length))
     return np.eye(VOCAB)[tokens], np.eye(OUTCOMES)[tokens % OUTCOMES]
-
 
 heard, outcome = make_streams(32, 16)             # 32 training streams of 16 moments
 heard_test, outcome_test = make_streams(8, 16)    # 8 held-out streams
@@ -65,6 +49,9 @@ net = RecordPatchNet(
 )
 ```
 
+Starting values for a first build. The table is a subset; every knob, its default
+and its cost are in [the record patch](record-patch.md).
+
 | Knob | What it sets | Where to start |
 | --- | --- | --- |
 | `hidden` | context channels; the width of the slow patch | 16 to 128 |
@@ -78,9 +65,8 @@ net = RecordPatchNet(
 
 ### 3. Evaluate before, during and after
 
-Score the brain two ways: with its records, and with the slow weights alone. Score on
-held-out streams. Compare with the simplest control the task admits; here it is the most
-frequent outcome of the held-out streams.
+Score held-out streams with the records and with the slow weights alone, against the
+simplest control the task admits (here the most frequent held-out outcome).
 
 ```python
 def accuracy(net, heard, outcome, records=True):
@@ -90,17 +76,17 @@ def accuracy(net, heard, outcome, records=True):
     said = probe.imagine(heard, state=np.zeros((len(heard), HIDDEN))).output.argmax(-1)
     return float((said == outcome.argmax(-1)).mean())
 
-
 chance = np.bincount(outcome_test.argmax(-1).ravel()).max() / outcome_test[..., 0].size
 before = accuracy(net, heard_test, outcome_test, records=False)
 ```
 
 ### 4. Learn by day
 
-With the world present, learn at a slow rate above zero and let every observed moment
-write its residual into the store. `backtrack=True` admits a step only when a
-target-free replay lowers the slow loss, halving the rate until it does. Reset the
-context at the start of every independent pass.
+With the world present, learn at a slow rate above zero; every observed moment also
+writes its residual into the store. `backtrack=True` admits a step only when a
+target-free replay lowers the slow loss, halving the rate up to sixteen times;
+otherwise `reason` is `"no_decreasing_parameter_step"`. Reset the context before
+every independent pass.
 
 ```python
 for day in range(20):
@@ -114,17 +100,15 @@ print(f"held-out: chance {chance:.2f}, before {before:.2f}, records {with_record
 assert slow_only >= 0.95 and with_records >= 0.95
 ```
 
-The records score the held-out streams from the first passes, by overlap: a held-out
-reading touches the cells of the training readings that heard the same token, and their
-records agree. The slow weights take longer and then know the rule without the store.
-A rule about what came before, a conjunction of this token and the last, is something
-the gate has to learn and takes many more updates; a second patch that reads the first
-patch's context learns it ([two patches in depth](record-patch.md#two-patches-in-depth)).
+The records score held-out streams from the first passes, because a held-out reading
+touches the cells of training readings that heard the same token. The slow weights learn
+the rule more slowly and then need no store. A conjunction of this token and the last
+needs a second patch ([two patches in depth](record-patch.md#two-patches-in-depth)).
 
 ### 5. Keep a fact after one exposure
 
-Hear the held-out streams once at slow rate zero. Nothing but the store changes, and the
-store recalls every moment:
+Hear the held-out streams once at slow rate zero. The slow weights stay put
+(`reason` is `"no_step"`), and the store recalls every moment:
 
 ```python
 net.reset()
@@ -136,10 +120,12 @@ assert accuracy(net, heard_test, outcome_test) == 1.0
 
 ### 6. Sleep when the data are gone
 
-When the streams are gone and the store is the only copy, a night moves
-what the store holds into the slow weights: `sleep` dreams every cue once (the store's
-own completion of it), teaches the slow weights those fixed dreams with `observe(write=False)`,
-and at dawn writes the dreams back so the store holds only what the weights did not take.
+When the store is the only copy, a night moves what it holds into the slow weights.
+`sleep(cues, passes=1, rate=1.0, backtrack=False, dawn_passes=2)` dreams every cue
+once (the store's completion of it), teaches the slow weights those fixed dreams for
+`passes` passes of `observe(write=False)`, and at dawn writes them back `dawn_passes`
+times so the store holds only what the weights did not take. It returns the cue count,
+admitted updates, the dream loss before and after, and the dawn writes.
 
 ```python
 sleeper = RecordPatchNet(VOCAB, HIDDEN, OUTCOMES, seed=1, cells=4096, active=16,
@@ -154,9 +140,9 @@ print(f"slow weights alone, held-out: bedtime {bedtime:.2f}, dawn {dawn:.2f}; {n
 assert dawn >= 0.95
 ```
 
-A learner with the world present learns by day; a learner whose day is over sleeps.
-What the store reads at bedtime bounds the night: dreams carry the store's errors as
-faithfully as its regularities ([acquisition in two phases](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night)).
+Dreams carry the store's errors as faithfully as its regularities, so what the store
+reads at bedtime bounds the night
+([acquisition in two phases](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night)).
 
 ### 7. Save, load, read back
 
@@ -171,48 +157,37 @@ readback = net.readback()
 print(readback.updates, readback.writes, readback.record_entries, readback.parameter_revision)
 ```
 
-The checkpoint holds the parameters, the record tables, the running statistics of the
-reading and the live context. `readback` is the detached state with its counters; an
-application may feed it to another patch through a port, and it is never a teaching signal
-by itself.
+The checkpoint holds the parameters, the record tables, the reading statistics and the
+live context. `readback` is the detached state with its counters; an application may
+feed it to another patch through a port, never as a teaching signal by itself.
 
 ### 8. Diagnose the store
 
-A store can fail silently, because it always holds something. Replay the training
-readings through `net.records.code(reading, valued=False)` and count, per cell, how often it
-is active: the cells in use, the share of activations the most active cells take, and the
-code overlap when only one block of the reading changes are the three numbers to watch
-([diagnosing a record store](record-patch.md#diagnosing-a-record-store)). If the reading
-concatenates blocks of different scale, the larger block owns the address; give every unit
-unit variance.
+A store always holds something, so it can fail silently. Count how often each cell is
+active over the training readings and read the three numbers in
+[diagnosing a record store](record-patch.md#diagnosing-a-record-store).
 
 ### 9. Grow it
 
-- Pictures: read the grid through a tied local kernel at the port,
-  `RecordPatchNet(port=StructuredPort(...))` ([maps](record-patch.md#maps-a-structured-input-port)).
+- Pictures: `RecordPatchNet(port=StructuredPort(...))`, a tied local kernel at the port
+  ([maps](record-patch.md#maps-a-structured-input-port)).
 - Depth: `RecordPatchStack` for a conjunction of what came before.
-- Several senses: `JointRecordPatches` settles several patches as one equilibrium through
-  declared ports ([several patches joined by ports](record-patch.md#several-patches-joined-by-ports)).
+- Several senses: `JointRecordPatches` settles patches as one equilibrium through
+  declared ports ([joined by ports](record-patch.md#several-patches-joined-by-ports)).
 - A belief carried under action, with imagination: [the belief patch](belief.md).
-- A brain in a page: [record the settlings](pages.md) for an application to draw.
 
 ## A supervised graph-learning control
 
-This independent-row classifier tests custom wiring and graph plasticity. A
-genome names regions and projections, `develop` creates one connectome,
-`NeuralGraph` settles it, and `Learner` updates synapses using free and nudged
-phases. The graph has reciprocal feedback; arranging regions in a chain does
-not make its settlement a feed-forward pass.
+This independent-row classifier tests custom wiring and graph plasticity. A genome
+names regions and projections, `develop` creates one connectome, `NeuralGraph` settles
+it with reciprocal feedback, and `Learner` updates synapses from free and nudged phases.
+For continuing context, memory and recovery use [Brain.compose](brain.md).
 
-The example measures held-out classification and checks saved predictions.
-It does not exercise continuing context, memory recall, interference or recovery.
-Use [Brain.compose](brain.md) for the continuing interaction route.
+### 1. Encode and wire
 
-### 1. Encode
-
-A drive has shape `(batch, n)`, one column per neuron of the connectome; the features go
-on the input region's neurons. Scale features to roughly unit range. Labels for
-`Learner.step` are integer indices into the output group.
+A drive has shape `(batch, n)`, one column per neuron; the features, scaled to roughly
+unit range, go on the input region's neurons. Labels are integer indices into the
+output group.
 
 ```python
 import numpy as np
@@ -223,17 +198,13 @@ FEATURES, CLASSES = 8, 3
 rng = np.random.default_rng(0)
 centres = rng.standard_normal((CLASSES, FEATURES)) * 1.5
 
-
 def make(count):
     labels = rng.integers(CLASSES, size=count)
     return centres[labels] + 0.6 * rng.standard_normal((count, FEATURES)), labels
 
-
 x_train, y_train = make(240)
 x_test, y_test = make(120)
 ```
-
-### 2. Wire it
 
 ```python
 genome = cd.Genome(
@@ -246,8 +217,7 @@ genome = cd.Genome(
 connectome = cd.develop(genome, seed=0)
 brain = cd.NeuralGraph(connectome, cd.learning_neuron_model())
 features = list(connectome.populations["features"])
-learner = cd.Learner(brain, connectome.populations["motor/actions"], cd.LearnerConfig(eta=1.0, beta=0.1))
-
+learner = cd.Learner(brain, connectome.populations["motor/actions"], cd.LearnerConfig(eta=1.0, beta=0.1, free_steps=300))
 
 def drive(x):
     d = np.zeros((len(x), connectome.n))
@@ -257,23 +227,19 @@ def drive(x):
 
 Hidden neurons learn only where a nudge on the outputs reaches them, so the projection
 from the cortex to the motor region is reciprocal. `lateral=-0.5` makes the actions
-compete. [Write a cortex](cortex.md) has the catalogue of regions, projections and heads;
-[compose a brain](brain.md) adds working trace, associative memory and actual-outcome
-reward feedback around the neural graph.
+compete. [Write a cortex](cortex.md) has the catalogue of regions, projections and heads.
 
-### 3. Calibrate, learn, evaluate
+### 2. Calibrate, learn, evaluate
 
-`calibrate` picks the sampled gain whose mean free motor activity is closest to
-0.5; it may still leave the readout unresponsive. Its default search is centered
-on the current gain, and an explicit `grid` fixes the candidates and their order.
-Inspect `learner.last_calibration` for the residuals and all attempted work.
-Qualified learning also requires each calibration candidate to meet the full
-equations before it can be selected. Choose the gain on training inputs before
-scoring held-out data ([calibration contract](learning.md#calibrating-the-operating-point)).
-This example declares a small-gain grid for its densely connected motor region;
-the widest operating-point search does not necessarily select the best learner.
-Each `step` runs a free phase and two nudged phases and moves the synapses once;
-the configuration in this example uses finite teaching.
+`calibrate` picks the sampled gain whose free output operating point is nearest the
+target; the default target puts the mean of the highest output activation at 0.5, and
+the default grid tries the current gain, then its powers-of-two multiples from 1/256 to
+256. This example declares a small-gain `grid` for its densely connected motor region.
+`learner.last_calibration` keeps every candidate and its work; the chosen gain need not
+make every output responsive. Calibrate on training
+inputs before scoring held-out data
+([calibrating the operating point](learning.md#calibrating-the-operating-point)). Each
+`step` runs a free phase and two nudged phases and moves the synapses once.
 
 ```python
 learner.calibrate(drive(x_train[:32]), grid=[0.02 * 1.3**k for k in range(16)])
@@ -287,12 +253,12 @@ for epoch in range(3):
 assert learner.accuracy(drive(x_test), y_test) >= 0.95
 ```
 
-### 4. Check the settling
+### 3. Check the settling
 
-A converged phase satisfies the neuron equations at its state; the residual is the check.
-The certificate bounds the distance to the equilibrium when the incoming weight mass of
-every neuron is below its limit; a learned brain often crosses it, and then the residual
-is the check.
+A converged phase satisfies the neuron equations at its state, and the residual is the
+check. The [certificate](certificate.md) bounds the distance to the free equilibrium
+only while the largest incoming weight mass of any neuron (`row_mass`) is below
+`mass_limit` and the neurons have no adaptation; a learned brain often crosses it.
 
 ```python
 free = learner.free(drive(x_test[:8]))
@@ -301,74 +267,53 @@ cert = cd.certificate(learner.brain)
 print("certified", cert.certified, "row mass", round(cert.row_mass, 2), "limit", cert.mass_limit)
 ```
 
-### 5. Save, load, draw
+### 4. Save and load
 
 ```python
-from pathlib import Path
-
 learner.save("decision_brain.npz")
 again = cd.Learner.load("decision_brain.npz")
 assert again.accuracy(drive(x_test), y_test) == learner.accuracy(drive(x_test), y_test)
-
 ```
 
 To draw it, record the settlings of a solve and hand them to a page of your own
-([the brain in a page](pages.md)).
+([the brain in a browser page](brain.md#the-brain-in-a-browser-page)).
 
-### 6. Grow it
+### 5. Grow it
 
-- Reward instead of labels: `ActorCritic` over the same learner, eligibility traces and a
-  broadcast prediction error ([reward](reward.md)); `Brain` is the ready composition
-  with a critic, a working trace and associative memory ([compose a brain](brain.md#brain)).
-- Learned consequences and planning: a separate temporal model
-  ([learn consequences, then act](interaction.md)); this is not automatically
-  integrated into `Brain.compose`.
-- Let selection size the regions: `evolve` over the genome across lives
+- Reward instead of labels: `ActorCritic` over the same learner ([reward](reward.md));
+  `Brain` is the ready composition with a critic, a working trace and associative
+  memory ([compose a brain](brain.md#brain)).
+- Selection sizes the regions: `evolve` over the genome across lives
   ([evolve a brain](evolution.md)); any hand-set constant can be a gene.
-- A measured connectome: `Connectome.from_synapses` from a synapse list, then a
-  protocol with a shuffled control ([protocols](protocols.md)).
+- A measured connectome: `Connectome.from_synapses`, then a protocol with a shuffled
+  control ([protocols](protocols.md)).
 - Speed: `NeuralGraph(..., backend="torch")` for a large blocked connectome
   ([backends](backends.md)).
 
 ## A temporal patch on continuous observations and actions
 
-The temporal patch models a body: continuous observations and actions on
-paths of shape `(batch, time, ports)`, a learned dynamics model, and planning that
-repairs the action ports under that model.
+The temporal patch models a body: continuous observations and actions on paths of
+shape `(batch, time, ports)`, a learned dynamics model, and planning that repairs the
+action ports under it. [The temporal patch](temporal.md) owns the model;
+[learn consequences, then act](planning.md#learn-consequences-then-act) is the runnable
+walkthrough. The call order is the recipe for any body:
 
-[Learn consequences, then act](interaction.md) is the complete walkthrough: collect
-executed actions and measured positions, learn the transition with `observe` on
-independent episodes, check the forecast error on held-out paths against a persistence
-baseline, then `plan` under a goal, execute the first action, measure, replan, through an
-unannounced disturbance. It runs in a few seconds and asserts its own numbers. The order
-of the calls is the recipe for any body:
-
-1. Declare the ports: which are observations, which are actions, and a presence flag
-   where an observed zero must differ from no observation.
+1. Declare observation and action ports, with a presence flag where an observed zero
+   must differ from no observation.
 2. `net.reset()` between independent episodes; `observe(inputs, measured, beta=0.01, rate=...)`
    on executed inputs and measured outcomes only.
-3. `imagine(inputs, state=...)` on held-out paths; report the forecast error and the
-   persistence baseline.
+3. `imagine(inputs, state=...)` on held-out paths; report the forecast error beside persistence.
 4. `plan(inputs, goal=..., controls=..., bounds=..., state=...)`; execute the first
-   action through the real body; admit what was measured; plan again.
-5. Protect a response before further learning with `TemporalMemory.protect` and learn
-   through `memory.observe` ([response protection](temporal-memory.md)).
+   action through the real body, admit what was measured and plan again.
+5. Protect a response with `memory = TemporalMemory()` and `memory.protect(net, inputs)`,
+   then learn through `memory.observe(net, inputs, measured)`
+   ([response protection](temporal-memory.md)).
 
-The solver is dense in the hidden width (`N * T * H^3` per detuned chain), so keep the
-hidden width and the path length modest and read [scaling](scaling.md) before a long
-run. For a belief that a transition carries under action from pictures, with
-imagination that consumes no observation, use [the belief patch](belief.md).
+Keep the hidden width and path length modest and read
+[cost and memory](temporal.md#cost-and-memory) before a long run.
 
 ## Before you trust a number
 
-- The score is on streams, episodes or rows the brain never saw, and the split was made
-  before any tuning.
-- The control is stated: the majority outcome, persistence, a linear predictor, the
-  search alone, a shuffled connectome.
-- The slow weights and the records are scored separately.
-- The full equation residual meets the declared tolerance for a qualified settle;
-  movement alone is not that check. Certificates retain their own hypotheses, and
-  a reported `reason` other than an update is read, never ignored.
-- The seed, the library version and the data revision are recorded; a
-  [receipt](receipts.md) binds the numbers to the sources.
-- [Common missteps](missteps.md) lists the ways a good-looking number is wrong.
+Score on data the brain never saw, split before any tuning, against a stated control.
+Read every `reason` other than an update, and bind seed, version and data to a
+[receipt](receipts.md). [Evaluate a brain](evaluation.md) has the rules and the [missteps](evaluation.md#common-missteps).

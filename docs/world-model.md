@@ -1,114 +1,54 @@
 # One continuing equilibrium brain
 
-**Cadence is not a feed-forward deep neural network.** Its organizing idea is a
-continuing equilibrium brain that acquires a reusable interpretation of
-its world, carries it through experience, and repairs it when experience disagrees.
-Perception, memory and action should constrain one another through reciprocal
-connections. The answer belongs to the brain's settled state. Reading its motor
-choice exposes that state; a separately trained answer-producing decoder would
-be another model.
+Cadence builds one brain that acquires a reusable interpretation of its world,
+carries it through experience and repairs it when experience disagrees.
+Perception, memory and action constrain one another through reciprocal
+connections, and the answer is read from the settled state of the brain's motor
+population.
 
-Start with `Brain.compose`: the default **System 1** has reciprocal processing
-regions, local plasticity, working trace and fast/persistent associative memory.
-It can already be deep. Optional **System 2** adds observing regions with returning
-feedback inside the same neural settlement. Biological names describe software
-roles, not a literal biological implementation.
+The learned relations and retained memories encode a family of possible
+equilibria, one for each combination of evidence and context. Learning changes
+the family; ordinary use moves between its members as observations, goals and
+context change.
 
-**Simple first; animal brains are the reference.** Local agreement repair
-between patches into one coupled global equilibrium is the fixed foundation. Try
-the existing System 1 before adding structure, and check state, experience,
-sensory information, memory and implementation first. Cadence abstracts evolved
-functions, including finite capacity and possible rigidity; equilibrium does not
-promise perfect learning. Every addition uses the same local repair and
-settlement and preserves demonstrated capabilities under the
-[required mechanism review](../CONTRIBUTING.md#preserve-the-capable-foundation).
-
-For settling, recovery and cost research, start with
-[existing distributed-systems and operator results](settling-literature.md).
-Map their assumptions to the actual continuing brain before extending a theorem
-or changing a mechanism. Use existing context, retention and work fixtures to
-decide whether a bound improves diagnosis or execution; a linear compatibility
-model does not itself certify the nonlinear, learning life.
-
-| Inconsistent with the intended application | Right organizing lifecycle |
-| --- | --- |
-| Rebuild a classifier for each observation, bypass memory, and count label accuracy as a world model. | Bootstrap one brain, retain its acquired relations and memory, use it, witness failures, repair and continue. |
-| Have an external trained readout or language model supply the answer. | Let reciprocal regions constrain the answer read from the brain's declared motor population. |
-| Call any small residual a correct, cheap interpretation of the world. | Check the numerical equations, actual task outcomes, retention and measured work separately. |
-
-Isolated classifiers and calibration remain useful unit controls. The distinction
-is what capability the application demonstrates, not whether those tests exist.
-
-![A feed-forward network passes activity one way; a patch net's neurons hold local
-state and settle together over reciprocal synapses under a declared update
-schedule](assets/patchnet.svg)
+`Brain.compose` builds the default **System 1** brain: reciprocal processing
+regions, local plasticity, a working trace and associative memory. Optional
+**System 2** observers add regions with returning feedback inside the same
+settlement. Biological names describe software roles.
 
 ## Bootstrap, use, repair, continue
 
-1. **Bootstrap a useful interpretation.** Present real observations, consequences
-   and demonstrations to one brain. Let connections and memory acquire relations
-   that can support later answers with the teaching signal absent. Judge usefulness
-   on held-out experience and retention, separately from numerical settlement.
-2. **Operate with what was learned.** New evidence and remembered context change
-   the boundary of the solve. Reciprocal regions seek a compatible present state;
-   the brain acts and the environment supplies the actual consequence.
-3. **Repair a witnessed failure.** The application compares an issued action or,
-   when its chosen model supplies one, a saved prediction with the observed
-   outcome before correction. A false expectation or missed goal supplies task
-   evidence; a large equation residual instead means the numerical solve has
-   not qualified. `Brain.live` receives that measured reward; it does not make
-   an environmental transition prediction or compare a corrected utterance.
-4. **Resume the same life.** Retain acquired parameters, relevant memories and
-   pending feedback through correction. Measure recovery and old capabilities
-   after the disturbance, without rebuilding the brain for each observation.
+```mermaid
+flowchart LR
+    O[Observation and retained context] --> S[Bounded neural settlement]
+    S -->|Qualified| A[Execute action]
+    S -->|Refused| R[Inspect solve and retry]
+    R --> S
+    A --> W[Witness actual outcome]
+    W --> F[Feedback and optional correction]
+    F --> O
+```
 
-The stored relationships and memories encode a **family of possible equilibria**
-under different evidence and context. Learning changes that family. Ordinary use
-does not mean holding one activation vector forever: even a well-learned world
-requires different states as observations, goals and context change.
+1. **Bootstrap.** Present real observations, consequences and demonstrations to
+   one brain until its connections and memory support answers with the teacher
+   absent. Judge this on held-out experience and retention.
+2. **Use.** New evidence and remembered context change the boundary of the solve;
+   the regions settle a compatible present state, the brain acts and the
+   environment supplies the consequence.
+3. **Repair.** Compare the issued action, or a saved prediction, with the observed
+   outcome before correcting. A missed goal is task evidence; a large equation
+   residual means the solve did not qualify. `Brain.live` receives the measured
+   reward and predicts no environmental transition.
+4. **Continue.** Keep parameters, memories and pending feedback through the
+   correction, and measure recovery and old capabilities on the same brain.
 
-In `Brain.compose` the patch boundaries are sensory and motor neuron indices,
-readback exposes neural state and numerical residuals, and the retained records
-are working traces and learned cue/outcome associations. Reciprocal signals and
-local plasticity supply feedback and repair. Explicit record-field ports and the
-population solver's exact error readback are separate interfaces. A numerical
-fixed point checks the declared equations only: not external truth, useful
-meaning, retention or a unique stable interpretation.
+The [common missteps](evaluation.md#common-missteps) list what this lifecycle rules out.
 
-## Coherent behavior over time
+## A life in code
 
-The intended sequence capability is behavior governed by continuing learned
-context. A phrase, sentence or action sequence can unfold one event at a time,
-with sensory feedback; working traces, associative memory and efference are the
-mechanisms that carry the context. Next-event accuracy or a self-feeding rollout
-is component evidence, not acquired phrase or sequence competence.
-
-Test whether learned context governs continuation: retain it, remove or perturb
-it under matched exposure, and measure recovery and counterfactual contexts.
-Musical surprise, coherent development and successful action are separate
-observations; a surprising event need not be a numerical failure.
-
-Default `Brain.act` solves the present neural state while trace and memory input
-are held. That is not a joint equilibrium over future events. The goal prescribes
-no phrase module and no whole song in one solve: begin with the simplest existing
-brain and its experience, and keep any addition inside the same coupled
-equilibrium. An adapter must not supply the answer, the phase or the arrangement
-on the brain's behalf.
-
-Declare component versus integrated scope in the
-[task's evidence contract](task-design.md#test-coherent-behavior-over-time).
-The [canonical principle and capability coordination](https://github.com/muellerberndt/cadence/issues/109#coherent-behavior-over-time)
-keep these targets distinct from current implementation claims.
-
-## What the current interface provides
-
-The current `Brain` supports a continuing equilibrium interpretation, action and
-memory. This realizes part of the world-model hypothesis; it does not yet
-integrate a learned model of environmental transitions. For one creature, compose
-a brain with arousal and use `live` throughout its life. It receives the preceding
-action's measured outcome and chooses the next action, with arousal deciding
-when to explore and learn. This small loop keeps one stream and both memory
-pathways active:
+Compose a brain with arousal and call `live` once per moment. Each call receives
+the preceding action's outcome and chooses the next action; arousal decides when
+the brain explores and learns.
 
 ```python
 import numpy as np
@@ -120,9 +60,8 @@ cue = 0
 action = brain.live(observations[[cue]])
 
 for transition in range(8):
-    # The toy body's rule changes halfway through this continuing life.
-    target = 1 - cue if transition < 4 else cue
-    reward = (action == target).astype(float)  # actual executed action
+    target = 1 - cue if transition < 4 else cue  # the body's rule changes halfway
+    reward = (action == target).astype(float)    # outcome of the executed action
     cue = 1 - cue
     action = brain.live(observations[[cue]], reward=reward)
 
@@ -130,74 +69,109 @@ assert brain.learner.updates > 0
 assert brain.hippocampus is not None and brain.hippocampus.writes > 0
 ```
 
-Eight outcomes exercise continuing feedback through a changed environment; they
-do not establish acquisition or recovery. For batches, supplied teachers or
-learning from every outcome, use `step`. The
-[runnable lifecycle example](../examples/continuing_brain.py) separates
-bootstrap, unchanged conditions and changed conditions, records actual outcomes,
-and verifies identical continuation from a saved pending action.
-[Continuous interaction](continuous.md) specifies event order, refusal/retry,
-memory writes and reset semantics. Save the environment separately.
+`live` takes the preceding outcome before it settles the current observation; if
+that settle refuses, retry `live(observations)` without the reward
+([refusal](continuous.md#qualification-and-refusal)). Use `step` for batches,
+supplied teachers or learning from every outcome. The
+[lifecycle example](../examples/continuing_brain.py) runs bootstrap, unchanged and
+changed conditions and resumes from a saved pending action.
 
-| Mechanism | Implemented contract and boundary |
+## One moment in causal order
+
+1. Receive the observation and the feedback for the **preceding action**.
+2. Score its saved prediction before the learner sees the outcome. Update from the
+   observed components and apply reward to the saved eligibility of that action.
+3. Retain relevant actual events with their time, context and provenance.
+4. Combine current evidence, remembered events and the goal. Imagination uses
+   isolated branch state and read-only parameters.
+5. Save the next prediction, execute the action or utterance, and attend to the
+   result.
+
+A missing feature differs from an observed zero: give the reading a missing flag
+for it, in witnessed and imagined readings alike. A UI tick or other host event is
+no action outcome; report each issued action's outcome once, success included.
+
+`cadence.circuits.assemble` or `Genome`/`develop` connect regions by declared
+synapses. Put regions that should settle jointly into one `NeuralGraph`;
+independent solves shown side by side are uncoupled dynamics. Wire an auxiliary
+memory's recall into declared drive ports and count its store in the cost. A
+named region gets a function only from its connections and experience.
+
+## What the composed brain provides
+
+The composed `Brain` provides a continuing interpretation, action and memory. It
+integrates no learned model of environmental transitions
+([issue #93](https://github.com/muellerberndt/cadence/issues/93)).
+
+| Mechanism | Contract and boundary |
 | --- | --- |
-| Present interpretation and action | `Brain.act` checks the whole neural-graph residual with held trace and memory input. It does not jointly equilibrate the auxiliary memory stores. |
-| Inspectable settling work | `Brain.last_settlement` retains free-answer residuals, sweeps, checks and qualification, including refused attempts. It excludes eligibility, teaching, feedback and memory work. |
-| Short and long memory | Working traces and fast/persistent associations influence actions; graph parameters also retain learning. Their capacities, update clocks and interference differ. |
-| Local correction | Current teacher labels change graph parameters; actual chosen-action outcomes drive reward plasticity and associative writes. A teacher label does not automatically become a stored event or credit an earlier sequence. |
-| Routine and repair | `Brain.live`, for a brain constructed with `arousal`, answers greedily and learns nothing while calm (the working trace advances, and with the recall memory on its slots advance at every accepted moment while its address map changes in lessons alone); youth or arousal enables sampling, learning and associative writes. Surprise, reward shortfall or an unmet `need` can raise arousal. One stream; the law's constants are genes. |
-| Private imagination | `Brain.imagine` evaluates **supplied** observation sequences with private trace and read-only durable memory. It does not learn or generate environmental transitions. |
-| Dreaming and sleep | `RecordPatchNet.dream` completes cues using the model and records; `sleep` teaches fixed completions to slow weights and rewrites residual records. This supported [sleep cycle](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night) is distinct from `Brain.imagine` and online associative consolidation, and is not integrated into `Brain.compose`. |
-| Learned consequences | `TemporalPatchNet` provides a separate learned temporal model and planning interface. Records provide other explicit prediction mechanisms. These are not automatically integrated into `Brain.compose`. |
-| State-and-error population experiments | `cadence.experimental.equilibrium` qualifies a joint stationary state under its own energy. It uses explicit `History`, not the default Brain's trace and associative memory; its law and guarantees stay distinct. |
+| Present interpretation and action | `Brain.act` qualifies the whole neural graph's residual with the trace and memory reads held as drive. With `memory_choice=True` the episodic vote joins the motor readout after the settle. The memory stores do not equilibrate jointly with the graph. |
+| Settling work | `Brain.last_settlement` reports free-answer residuals, sweeps, checks and qualification, refused attempts included. Eligibility, teaching, feedback, imagination and memory work are excluded; [`record_settlements`](api.md#record-every-settling-step) records every settlement, learning and imagination included, at a memory and copy cost. |
+| Memories | Working trace and associative store on; efference copy, heard history, episodic and recall memory opt-in. Each is read as held drive (the episodic vote joins after the settle) and written after the settle. [Memory](memory.md#memory-in-the-composed-brain). |
+| Local correction | Teacher labels change graph parameters, the address map of a recall memory and, with `memory_choice=True`, the episodic records. Chosen-action outcomes drive reward plasticity and associative writes. A label credits no earlier action. |
+| Routine and repair | `Brain.live`, for a brain built with `arousal`, answers greedily from one qualified settle while calm and changes no parameter or associative record; the trace, heard history and recall slots advance. Surprise, a reward shortfall or an unmet `need` (founder 0) raises arousal, and the outcome that wakes the brain is written to its associative store. The first `youth` moments (100) and aroused moments sample, keep eligibility and learn, from success too. One stream; the law's constants are genes. [Routine and repair](continuous.md#routine-and-repair-live). |
+| Private imagination | `Brain.imagine` settles **supplied** observation sequences with a private trace and read-only durable memory. It learns nothing and generates no environmental transition. [Private imagination](continuous.md#private-imagination). |
+| Dreaming and sleep | `RecordPatchNet.dream` completes cues from the model and records; `sleep` teaches those completions to slow weights and rewrites residual records. Separate from `Brain.imagine` and from `Brain.compose`. [Sleep cycle](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night). |
+| Learned consequences | `TemporalPatchNet` is a separate learned temporal model with planning; `Records` give explicit predictions. Neither is wired into `Brain.compose`. [Planning](planning.md#learn-consequences-then-act). |
+| Selective activity elsewhere | [Centered dopamine](reward.md#centered-dopamine-and-selective-activity) suppresses familiar actor modulation; [`Life`](steering.md) selects habit, imagination and learning for a belief/steering composition. Neither gates `Brain.step`. |
+| State-and-error population | `cadence.experimental.equilibrium` qualifies a joint stationary state under its own energy, with explicit `History` in place of the trace and associative memory. [Population solver](equilibrium/index.md). |
 
-The full world-model lifecycle is the design direction, not a completed default.
-`step` processes real feedback even when the task succeeded; it does not gate an
-update on witnessed failure. [`live`](continuous.md#routine-and-repair-live)
-gates learning by arousal for one stream: routine moments settle once and change
-no parameter or record, while a surprising outcome or a lasting reward shortfall
-starts exploration and learning. Youth and sustained arousal also learn from
-success, so this is not a failure-only gate. Its evidence is the
-[odour nursery](../benchmarks/reversal/README.md), where the associative memory
-carries the repair. Settled-state reuse across moments, repair localized to
-declared dependencies and integrated learned consequences are owned by
-[learned-consequence integration](https://github.com/muellerberndt/cadence/issues/93)
-and [failure-driven repair and qualified reuse](https://github.com/muellerberndt/cadence/issues/122).
+`step` learns from every outcome it is given. `live` gates learning by arousal;
+its evidence is the [odour nursery](../benchmarks/reversal/README.md), where the
+associative memory carries the repair. Reuse of a settled state across moments
+and repair confined to declared dependencies belong to
+[issue #122](https://github.com/muellerberndt/cadence/issues/122).
 
-Two narrower mechanisms exist. [Centered dopamine](reward.md#centered-dopamine-and-selective-activity)
-suppresses familiar actor modulation when `dopamine_center` and `dopamine_floor`
-are configured, while critic updates, momentum, eligibility and memory writes
-still do work. [Life](api.md#life-cadencelife) selects habit, imagination and
-learning for a separate belief/steering composition. Neither turns `Brain.step`
-into a failure gate.
+Components for compositions beyond the default brain:
 
-The default sensory projection feeds a chain of processing regions; neighboring
-regions and the association/motor pair exchange reciprocal signals. Processing
-regions have no internal synapses by default. Even `modules=(64,)` therefore
-uses recurrent settlement with memory, rather than a single feed-forward pass.
-More modules or optional observers change connectivity; their behavioral benefit
-must be measured. See [equilibrium world models](equilibrium-world-models.md)
-for the distinction between stochastic innovation and a learning error.
+| Function | Build with | Learned or supplied explicitly |
+| --- | --- | --- |
+| Perception and grounding | Input regions, associations and local updates (`Brain.compose`, `Genome`) | Features, entities, word/referent bindings |
+| Consequence prediction | `Records`, one table per predicted field; `TemporalPatchNet` | Action-conditioned consequences, missing flags, rates |
+| Episodes and consolidation | Valued `Records` fields at the fast rate, `FastSynapses`, `SynapticMemory` | Addressing, relevant writes, retention, correction |
+| Workspace and goals | Recurrent state, `Trace`, goal and readback ports | Persistent context, goals and subgoals |
+| Action and value | `ActorCritic`, eligibility, `Valence`, optional `cadence.circuits.Deliberator` | Exploration, delayed credit, useful planning |
+
+## Coherent behavior over time
+
+The target is behavior governed by continuing learned context: a phrase, sentence
+or action sequence unfolds one event at a time with sensory feedback, carried by
+the working trace, associative memory and efference. Next-event accuracy or a
+self-feeding rollout is component evidence. Integrated evidence retains the
+context, removes or perturbs it under matched exposure, and measures recovery and
+counterfactual contexts. A surprising event need not be a numerical failure.
+
+`Brain.act` solves the present neural state with trace and memory input held,
+which is no joint equilibrium over future events. Keep any addition inside the
+same coupled equilibrium; no adapter may supply the answer, the phase or the
+arrangement. Declare component or integrated scope in the
+[evaluation contract](evaluation.md#test-coherent-behavior-over-time)
+([issue #109](https://github.com/muellerberndt/cadence/issues/109)).
 
 ## Build and measure the whole life
 
-Keep the same brain across acquisition, use, interference and repair. Preserve
-stream identities and reset transient state only at declared boundaries.
-`predict`, `accuracy` and `fit` are independent-sample controls: they omit
-working and associative memory, and `fit` clears pending stream state. A frozen
-evaluation can load a checkpoint, provided it retains the state the tested
-capability needs.
+The default sensory projection feeds a chain of processing regions without
+internal synapses; neighbouring regions and the association/motor pair exchange
+reciprocal signals, so even `modules=(64,)` answers by recurrent settlement.
+Measure the benefit of more modules or observers.
 
-For language, the intended result is understanding and producing full sentences
-with compositional vocabulary through that continuing system. A fixed word
-classifier tests a narrower mechanism, and an external language model or trained
-readout that supplies the answer is a separate baseline, not the brain's
-acquired language.
+Keep the same brain across acquisition, use, interference and repair, with
+stream identities preserved and transient state reset only at declared
+boundaries. Each stream keeps its own episode records, random state and pending
+actions; `SynapticMemory` shares its slow weights across streams, so a
+measurement snapshot must leave the live learner's shared matrix unchanged.
+`Brain.save` covers the standard composition; save the environment, partner,
+curriculum and replay state beside it, and custom stores with their owner.
 
-Measure numerical residuals, task quality, memory retention, recovery and work
+`predict`, `accuracy` and `fit` are independent-sample controls: they read no
+memory (trace, efference, history, recall or associative store), and `fit` resets
+pending stream state. A
+frozen evaluation loads a checkpoint, provided it holds the state the tested
+capability needs. Measure residuals, task quality, retention, recovery and work
 separately, and count bootstrap, stable use, learning, replay, imagination and
-refused attempts. Greater capability, scalability and efficiency are targets for
-matched comparisons, not consequences of the word equilibrium.
+refused attempts. What a numerical fixed point checks is set out in
+[contracts](contracts.md).
 
-Continue with the [quickstart](quickstart.md), [composition API](brain.md),
-[experience design](experience.md) and [temporal planning](planning.md).
+For language, the target is understanding and producing full sentences through
+this continuing system. A fixed word classifier tests a narrower mechanism; an
+external language model that supplies the answer is a separate baseline.

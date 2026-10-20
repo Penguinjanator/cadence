@@ -21,7 +21,7 @@ on a policy that has not hardened: under the weak payoff the frozen copy reads 0
 and 0.67 reset, the door's value, with unchanged weights. When the ring pays as the arena's
 melee does, a signed and noisy pay, the loss of #169 **reproduces** at every actor step, alone
 and beside the competing skill, while the actor's efficacies barely move: what the melee
-overwrites is the episodic memory's one-shot record of the chosen action's reward, which
+overwrites is the associative store's one-shot record of the chosen action's reward, which
 carries a short nursery's competence (see "Signed pay" below). The smaller actor steps
 retain no more than the gene step under the certain and weak payoffs, hold the competing skill
 less, and do not prevent the melee's loss. Gates are declared only after development;
@@ -227,7 +227,7 @@ continued aroused learning at the gene step, with or without a competing skill a
 without noisy unavoidable punishment; the smaller steps the arena adopted retain no more and
 acquire far less; and a frozen greedy test reads the context the working trace carries. When the ring pays as the melee does, the loss of
 #169 reproduces at every actor step while the actor's efficacies barely move: the competence
-of a four-thousand-moment nursery lives mostly in the episodic memory's one-shot record of
+of a four-thousand-moment nursery lives mostly in the associative store's one-shot record of
 the chosen action's reward (`memory_rate` 1.0), which the noisy pay overwrites. An averaged
 record (`memory_rate` 0.2 or 0.05) halves the loss; a slow set point under every parameter
 and a sign-consistency stiffness, screened on unshipped library variants, do not hold the

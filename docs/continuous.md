@@ -1,281 +1,47 @@
 # Continuous interaction with Brain
 
-`Brain.compose` creates a continuing **System 1** brain with working trace,
-plastic connections and fast/persistent associative memory; optional observer
-regions add **System 2** feedback in the same neural graph. For one creature,
-construct it with `arousal=True` and use `brain.live(...)`: observe, report the
-preceding action's actual outcome, then act again. There is no
-training/inference mode switch, and bootstrap, unchanged conditions and
-witnessed disruption belong to the same life.
-
-[`live`](#routine-and-repair-live) lets arousal decide when to explore and learn
-and when to answer greedily without learning. The explicit `step` loop below is
-for batched streams, teacher labels or learning from every outcome. Keep a task
-error separate from a numerical failure to settle. The
-[quickstart](quickstart.md) is the small starting example, and
-[one continuing equilibrium brain](world-model.md) the design.
-
-<a id="observations-actions-and-reward"></a>
-
-## Explicit learning with `step`
-
-```python
-import numpy as np
-from cadence import Brain
-
-brain = Brain.compose(4, 2, modules=(16, 8), seed=7)
-observation = np.array([[1.0, 0.0, 0.0, 0.0]])
-action = brain.step(observation)
-
-# A tiny body rewards action 0, then reports its next observation.
-reward = (action == 0).astype(float)
-following = np.array([[0.0, 1.0, 0.0, 0.0]])
-action = brain.step(following, reward=reward, done=np.array([False]))
-assert action.shape == (1,)
-```
-
-Reward and `done` describe the **previous action**. `teacher=` labels the
-**current observation**. Every vector has one entry per stream; observations
-have shape `(streams, inputs)`. Keep the same stream in each batch row until
-`reset()`. The first call has no preceding action to reward.
-
-The reward is credited to the action `step` issued. Where a teacher's or
-caregiver's action ran in its place, the issued action has no outcome: replace it
-with `brain.act(observations, greedy=True)`, which learns nothing from it, as for
-any [outcome that will never come](#outcomes-that-arrive-later-wait), and teach the
-shown action with `brain.lesson(observations, labels)`; the next `step` then takes
-no reward. Reported to `step`, the shown action's reward, or the zero of an omitted
-one, would credit an action that did not run, and over many shown moments such
-rewards can drive the motor readout toward a few commands. A moment in which a
-teacher acts can also be taught with `lesson` followed by a greedy `act`, in place
-of `step`.
-
-For an ended row, pass its next episode's reset observation with `done=True`.
-A truncation can supply a final value through `bootstrap`. Omitted reward means
-zero reward on an actual transition, not an unknown outcome or permission to
-advance before the body acts. The critic and eligibility still advance.
-
-```python
-# A separate life receives a demonstration for its first observation.
-student = Brain.compose(4, 2, modules=(16, 8), seed=7)
-student.step(observation, teacher=np.array([0]))
-```
-
-Use actual labels and consequences. Teaching from the brain's own guesses can
-reinforce mistakes. `teacher` changes graph parameters; it does not write its
-label into associative memory. The reward loop records the chosen action's
-observed reward, with unobserved action entries masked. For frozen measurements,
-use a separate instance. Its `predict` and `accuracy` ignore both the working
-trace and associative memory; greedy `act` reads both and advances the trace.
-Lower-level `act`/`learn` separates action and feedback timing.
-The [continuing brain example](../examples/continuing_brain.py) runs this loop
-through bootstrap, unchanged conditions and changed conditions, then checks a
-saved pending action's continuation. It reports actual task outcomes without
-assuming that settlement guarantees recovery.
-
-The example supplies a corrective label only after an executed mistake and
-repeats that cue for the next action. Thus its teacher labels the **current**
-observation while reward still describes the previous action. Successes still
-reach reward learning and associative memory. This is an application teaching
-policy, not automatic suppression of all successful-outcome updates. See
-[centered dopamine and Life](reward.md#centered-dopamine-and-selective-activity)
-for the narrower selective mechanisms already available.
-
-## A supervised-only stream
-
-`step(teacher=...)` still issues a reward-eligible action. On the next `step`,
-omitting `reward` supplies zero on that transition; the actor and critic can
-update as well as the teacher. It does not mean "teach without reward learning,"
-and it need not preserve the effect of an earlier lesson.
-
-For a stream that has demonstrations but no reward protocol, start a separate
-continuing brain and use the lower-level learner with memory-bearing drives:
-
-```python
-supervised = Brain.compose(4, 2, modules=(16, 8), seed=7)
-supervised.act(observation, greedy=True)  # Read and advance context, without reward eligibility.
-_, lesson_work = supervised.learner.step(
-    supervised.stimulus(following), np.array([1])
-)
-answer = supervised.act(following, greedy=True)
-assert answer.shape == (1,)
-```
-
-The label belongs to `following`, whose drive includes the carried context.
-Keep the returned teaching report alongside `last_settlement` when counting
-work. Direct learner calls do not populate `Brain.last_learning`; they retain
-the learner's configured finite or qualified contract. Greedy actions advance
-the working trace without reward learning or associative outcome writes. Do
-not use a greedy action to discard an outstanding real outcome from an existing
-reward-driven life; finish that outcome first.
-
-## Qualification and refusal
-
-Every `Brain` action and independent prediction must satisfy the full
-neural equation residual, including optional observers. Default free answers
-have a 1024-step budget and tolerance `3e-3`. The solver may use half-step
-numerical damping within that total budget, then checks the original model's
-residual. This numerical fallback does not alter the finite teaching rule or add
-a second controller.
-
-A refused `act` raises `RuntimeError` before changing activity, memory, random
-state or pending feedback. If `step` has learned a real outcome and its following
-action refuses, that learning remains. Retry `act` after adjusting the solve;
-do not submit that outcome twice. `tolerance=None` cannot disable action
-qualification. See [contracts](contracts.md) for the separate finite
-free/nudged learning and eligibility rules.
-
-Inspect the latest free-answer attempt without changing the action return type:
-
-```python
-answer_work = brain.last_settlement
-assert answer_work is not None
-assert answer_work["qualified"]
-assert answer_work["steps"] <= answer_work["budget"]
-assert answer_work["max_residual"] <= answer_work["tolerance"]
-```
-
-`last_settlement` is a read-only snapshot with per-row residuals and admission,
-sweeps, residual checks, damping halvings and stagnation comparisons. A refused
-answer leaves its report available after the exception. It describes the last
-completed free-answer solve: validation errors and failures before that solve
-do not replace it. `operation` distinguishes `act` from independent `predict`;
-`step` delegates to `act`. `reset` and loading a checkpoint clear this diagnostic.
-
-This is not a total cost report. It excludes feedback, eligibility, teaching and
-memory work; `last_learning` reports learning separately. Optional
-[settlement recording](api.md#record-every-settling-step) captures the other
-solver calls at additional cost. The continuing example records those sweeps
-too. No numerical counter substitutes for measured task success or hardware
-energy, and a surprise need not increase settling work.
-
-Teaching diagnostics, eligibility duration and feedback rollback have
-separate contracts:
-`LearnerConfig(qualified=True, ...)` requires full-equation qualification
-of every supervised free and teaching phase before changing parameters.
-`LearningPhaseError` reports an attempted lesson that could not qualify.
-Qualified solves use configurable damping; stagnation detection can
-admit a smaller numerical step sooner within the same budget and original
-equation check. The default finite configuration keeps its half-step fallback.
-Accepted and refused teaching diagnostics appear in `brain.last_learning` with
-`demonstration_` prefixes, alongside any preceding accepted reward report. They
-count attempted presentations and solver work. See [building a brain](brain.md)
-for a runnable configuration. Reward eligibility is configured independently:
-`ActorCriticConfig.eligibility_steps=12` is the Brain default. For a standalone
-`ActorCritic`, `None` uses its learner's `nudged_steps`.
-
-If learning cannot qualify the next state needed for a reward bootstrap, it
-preserves the preceding action, memories, optimizer state and random state.
-Adjust the solve and retry that same outcome. Once the outcome has been accepted,
-a later action refusal has the different retry rule above: call `act` alone.
-
-## Private imagination
-
-```python
-phases = brain.imagine([observation, following], budget=1024, tolerance=1e-6)
-assert phases
-```
-
-Each phase reports its state and `converged` flags. A refused phase is returned
-and ends the branch. The private trace can carry earlier hypothetical observations
-forward, while live activity, durable memory, random state and pending outcomes
-stay unchanged. These are responses to supplied observations, not predictions of
-what the environment will do. [Temporal learning and planning](interaction.md)
-provide the separate learned action-consequence interface.
-
-## Repetition and salience become lasting synaptic changes
-
-`compose` includes a working `Trace` and `SynapticMemory`; `episodic=False` omits
-the associative pathway. The trace retains earlier activity as input to later
-settlement. Durable graph plasticity retains learned weights and biases, while
-the associative pathway retains cue-to-outcome records. These are separate
-mechanisms with separate acquisition and retention tests. Losing an old response
-after new teaching can be parameter interference even when no working trace is
-involved. A warm numerical starting state alone does not guarantee recall.
-
-`SynapticMemory` has persistent matrix `C`, shared across streams, and fast
-residual `F` for each stream. With a normalized key `k` and an observed value `v`:
-
-```text
-F *= decay
-alpha = min(1, consolidation * (1 + salience))
-C += alpha * outer(k, v - k @ C)
-F += rate * outer(k, v - k @ (C + F))
-```
-
-Defaults are `decay=0.9`, `consolidation=0.05` and `rate=1`. In the reward loop,
-salience defaults to `abs(reward)`; explicit `salience=` supplies a nonnegative
-vector. This is a supplied importance signal. The signed value determines what
-is remembered. Batch writes average persistent updates over observed rows,
-and a value mask excludes unobserved actions.
-
-```python
-from cadence import SynapticMemory
-
-memory = SynapticMemory(np.arange(3), np.arange(3, 5))
-cue = np.array([[1.0, 0.0, 0.0]])
-for _ in range(40):
-    memory.observe(cue, np.array([[1.0, 0.0]]))
-memory.reset(1)  # Clear fast residuals, retaining persistent associations.
-assert memory.recall(cue)[0, 0] > 0.85
-```
-
-Orthogonal keys preserve one another under the stated rule; correlated keys can
-interfere. Storage is fixed and new observations can revise associations.
-Rehearsing actual earlier observations can protect recall, but consumes extra
-writes and does not guarantee retention. Test old and new responses in the same
-brain after intervening experience, with answers free and the relevant transient
-state cleared. A successful record-store test does not establish acquisition by
-the graph's contrast rule.
-Persistent memory costs `key_width × value_width` numbers, plus that amount per
-stream for fast weights. Reads neither consolidate nor decay memory. Learning
-weights does not require growing new anatomical connections.
+A `Brain.compose` brain is one continuing life with no training/inference switch.
+Each call is one moment: the body reports the outcome of the preceding action, the
+brain settles on the present observation and issues the next action. Observations
+have shape `(streams, inputs)`, the other vectors one entry per stream, and each row
+stays the same stream until `reset()`. Use `live` for one creature whose arousal
+decides when to learn, and `step` for batches, teacher labels or learning from every
+outcome. The [quickstart](quickstart.md) is the first run, [world model](world-model.md)
+the design.
 
 ## Routine and repair: `live`
 
-`step` samples an action, keeps its eligibility and learns from its outcome at
-every moment. `live` lets the brain's arousal decide. A calm brain answers with
-the greedy choice of one qualified settle and learns nothing: no eligibility
-phases, no parameter change, no write to the associative memory, and the
-eligibility of its earlier sampled actions fades with each moment. The working
-trace, the heard history and the recall memory's slots advance at every accepted
-moment, calm or aroused; the recall memory's address map changes in lessons alone.
+`live(observations, *, reward=None, done=None, decision_id=None)` follows one stream
+of a brain composed with `arousal=True`. A calm brain answers with the greedy choice
+of one qualified settle and learns nothing: no eligibility phases, no parameter
+change, no associative write; earlier eligibility fades one step. Two things rouse it:
 
-Two things rouse it:
+- **Surprise**: the outcome contradicts the forecast made before acting, which is
+  the critic's value of the situation and, weighed by `record_surprise`, the
+  associative record held for the chosen action. Only outcomes of the brain's own
+  greedy choices can surprise it or move its usual error.
+- **Want**: the recent reward falls below what this life usually pays, or below
+  the body's `need`. The need's want is the unmet share of the need; it never
+  habituates and a rare reward's small mean cannot dilute it.
 
-- **Surprise**: an outcome that contradicts the forecast it made before acting.
-  The forecast is the critic's value of the situation and, through a gene the
-  founders weigh at zero, the record it holds for the action it chose. Only
-  outcomes of its own greedy choices can surprise it or move its usual forecast
-  error.
-- **Want**: a reward below what its life usually pays, which also covers a
-  failure it predicts correctly, or a reward below the body's `need` — a gene
-  the founders set at zero, measured as the share of the need left unmet, which
-  a rare reward's small mean cannot dilute and which never habituates.
-
-An aroused brain samples its policy, keeps eligibility, learns from every
-outcome and writes the outcome that woke it to memory at once. Want raises the
-temperature of one uniformly chosen motor slot per moment, so extra exploration
-does not flatten every motor choice at once; a one-slot brain keeps its existing
-sampling law. Eligibility credits the actual temperatures used, and
-`last_arousal["temperatures"]` records them beside `heated_slot` (`None` when no
-extra heat was applied). Every actual reward updates the recent and long-run
-income, including sampled choices, so a brain exploring with many slots does not
-stay aroused by an old shortfall. It can habituate to a poorer life while
-sampling; a positive unmet `need` still keeps it wanting.
+An aroused brain samples its policy, learns from every outcome as `step` does and
+writes the outcome that woke it to memory. Want heats one uniformly chosen motor slot
+to `learning.temperature * (1 + heat * want)`. Every actual reward updates the income
+averages, so a brain habituates to a poorer life unless a positive `need` keeps it
+wanting.
 
 ```python
 import numpy as np
-from cadence import Brain
-
-brain = Brain.compose(
-    4, 2, modules=(16,), seed=0,     # the default context informs; the present input leads
-    consolidation=0.25,             # lasting memory takes half of a witnessed unit outcome
-    arousal=True, arousal_youth=30,
-    actor_eta=0.1, actor_eta_bias=0.01,  # this chamber's measured rates
-)
+from cadence import Arousal, Brain
 
 cues = np.eye(4)
+observation, following = cues[[0]], cues[[1]]
+brain = Brain.compose(
+    4, 2, modules=(16,), seed=0,
+    consolidation=0.25,                  # lasting memory takes half of a witnessed unit outcome
+    arousal=True, arousal_youth=30,      # a short youth for a short life
+    actor_eta=0.1, actor_eta_bias=0.01,  # one stream's operating point on the odour nursery
+)
 rng = np.random.default_rng(0)
 cue = 0
 action = brain.live(cues[[cue]])
@@ -283,9 +49,8 @@ modes, hits = [], []
 for moment in range(600):
     rewarded = cue % 2 if moment < 300 else 1 - cue % 2   # the rule turns over halfway
     hits.append(action[0] == rewarded)
-    reward = 1.0 if hits[-1] else -1.0
     cue = int(rng.integers(4))
-    action = brain.live(cues[[cue]], reward=[reward])
+    action = brain.live(cues[[cue]], reward=[1.0 if hits[-1] else -1.0])
     modes.append(brain.last_arousal["mode"])
 
 assert modes[250:300].count("routine") >= 45 and sum(hits[250:300]) >= 45  # calm and right
@@ -294,189 +59,257 @@ assert modes[-50:].count("routine") >= 45 and sum(hits[-50:]) >= 45        # rep
 assert brain.arousal.moments["routine"] > 4 * brain.arousal.moments["aroused"]
 ```
 
-Reward and `done` describe the preceding action, as in `step`, and `live`
-follows one stream. `brain.last_arousal` holds the readings of the moment and
-`brain.arousal` the stream's state with the moments and settling sweeps of each
-mode; [the API](api.md#arousal-cadencearousal) gives the law. A brain taught
-through `step` continues through `live` without a reset: the action `step`
-sampled is adopted. If the forecast settle refuses, nothing has changed and the
-same call can be retried. If the answer refuses after the outcome was taken, the
-outcome stays learned: retry with `live(observations)` alone. The read-only
-`brain.pending_feedback` reports whether the current action still awaits its
-outcome, including a routine choice.
+`consolidation` and the actor rates are one stream's operating point on the
+[odour nursery](../benchmarks/reversal/README.md), where the composed actor rate locks
+a single stream's policy. Select them again per task; [`retune`](brain.md#retune-the-same-life)
+changes them in the same life.
 
-When an action awaits feedback, omitting `reward` supplies zero, as in `step`;
-it does not represent a missing or delayed outcome. Do not advance this stream
-with `live` before the body's actual outcome; observations that arrive first go
-to [`wait`](#outcomes-that-arrive-later-wait). Youth and sustained arousal permit learning
-from successful outcomes too. The arousal statistics control sampling and
-eligibility outside the neural solve; they are not another settled patch or a
-certificate of task failure. Every answer still comes from the qualified graph,
-and learning uses its existing local updates and associative write rule.
+The law, per outcome with unsigned temporal-difference error `error`:
 
-The constants of the law are genes, `ArousalConfig`, and the values above are
-hand-set founders. The three other settings are the operating point of one
-continuing stream measured on the
-[odour nursery](../benchmarks/reversal/README.md): at the composed defaults the
-working trace outweighs the present input of a continuing life, and the actor
-rate, selected on batches of streams, locks one stream's policy. They are that
-chamber's development settings, to be selected again for another task.
+```text
+surprise = log(error / (tolerance * usual + floor * scale))   when positive, else 0
+want     = max(clip((longrun - recent) / scale, 0, 1), clip((need - recent) / need, 0, 1))
+level    = decay * level + (1 - decay) * (surprise + want)
+```
 
-What this establishes is bounded. With the founder `need=0`, arousal responds to
-change, so a brain whose life has always paid poorly and whose youth has ended is
-not roused by it: a long bootstrap belongs to `step` or to a longer `youth`. A
-positive `need` keeps an unmet want active, with its benefit to be measured. In
-the nursery the associative memory carries the adaptation; the graph's reward
-learning alone does not acquire the task in one stream, and a minority of gated
-lives never find the moved reward. A routine moment still pays one full settle,
-and a settled routine answer satisfies the neural equations while it can still
-be wrong about the world; the next outcome is what tells.
+`usual` is the running own-choice error, `recent` and `longrun` the reward at the
+`fast` and `slow` rates, `scale` the spread of learned outcomes around `longrun`; a
+want term with a zero denominator is zero. The record channel has its own `usual`, and
+surprise is the larger weighted channel. The brain is aroused while
+`level >= threshold` and for its first `youth` moments. Set genes with
+`arousal_<field>` at `compose` or `retune`
+([composition](brain.md#defaults-and-expert-overrides)); construction refuses values
+outside their ranges, a negative `need` and `fast < slow`.
 
-Change a measured operating point with [`brain.retune(...)`](brain.md#retune-the-same-life),
-using `actor_*` for reward rates and `learning_*` for teaching rates. It preserves
-acquired state and pending outcomes; arousal resets are explicit. Inspect effective
-settings with `brain.describe()` and keep the environment's stage in its own save.
+| Gene | Founder | Effect |
+| --- | --- | --- |
+| `threshold` | 0.2 | level at or above which the brain leaves routine |
+| `decay` | 0.9 | share of the level one moment hands to the next, in `[0, 1)` |
+| `tolerance` | 2.0 | errors within this many usual errors are no surprise; large removes surprise |
+| `floor` | 0.1 | nor are errors within this many reward scales |
+| `fast` | 0.05 | rate of the recent reward; at `slow` it removes the long-run want |
+| `slow` | 0.005 | rate of the long-run reward, the usual error and the scale |
+| `heat` | 2.0 | temperature gain per unit of want on the heated slot; 0 removes it |
+| `youth` | 100 | first moments of a life spent aroused |
+| `value_surprise` | 1.0 | weight of surprise at the critic's forecast |
+| `record_surprise` | 0.0 | weight of surprise at the action's record; on the [odour nursery](../benchmarks/reversal/README.md#how-the-operating-point-and-the-founders-were-selected) it wakes lives sooner and leaves more of them searching too briefly |
+| `need` | 0.0 | reward per moment the body requires; 0 removes the need's want |
 
-### Outcomes that arrive later: `wait`
+`brain.last_arousal` snapshots the latest moment: `mode`, `level`, `error`,
+`record_error`, `surprise`, `want`, `temperature`, per-slot `temperatures`,
+`heated_slot`, `learned`, `recorded`, `sweeps` and `learning_sweeps`; it is `None`
+after construction, reset or load. `brain.arousal` counts `moments` and `sweeps` per
+mode, `learning_sweeps` and `age` ([class methods](api.md#arousal-cadencearousal)).
+An action that `step` or `act` sampled is adopted, so a bootstrapped brain continues
+through `live` without a reset. Under `memory_choice=True` the greedy choice includes
+the [episodic vote](episodic.md#one-choice-for-acting-teaching-and-imagining).
 
-A body may report an action's outcome only after the stream has sensed more: an
-arm that needs several frames to finish a reach, or a reply that comes back over
-a network. Not calling the brain until the outcome arrives keeps that action's
-custody, but nothing sensed in between reaches the brain. Calling `live` per
-frame senses every frame, but takes each one as the outcome, zero when the reward
-is omitted, and takes the real outcome as the outcome of the last action issued.
-`wait` settles such a frame without taking an outcome or issuing an action:
+At `need=0` an adult whose life always paid poorly is not roused; bootstrap it with
+`step` or a longer `youth`. In the nursery the associative memory carries the
+adaptation, and a minority of lives never find the moved reward. In an unchanging
+world, reward noise rouses the founders for a small share of moments. A routine moment
+pays one full settle.
+
+<a id="observations-actions-and-reward"></a>
+
+## Explicit learning with `step`
+
+`step(observations, *, reward=None, done=None, teacher=None, salience=None,
+bootstrap=None)` learns from the preceding outcome, teaches the label of the present
+observation, then samples and returns the next action.
+
+```python
+stepped = Brain.compose(4, 2, modules=(16, 8), seed=7)
+action = stepped.step(observation)
+reward = (action == 0).astype(float)   # the body pays action 0
+action = stepped.step(following, reward=reward, done=np.array([False]))
+stepped.act(following, greedy=True)              # a teacher acted instead; nothing to credit
+shown = stepped.lesson(following, np.array([1]))  # teach the shown action
+assert stepped.last_learning["demonstrations"] == 1.0
+```
+
+| Argument | Describes | Notes |
+| --- | --- | --- |
+| `reward` | the preceding action | omitted is a real zero-reward transition, never an unknown outcome |
+| `done` | the preceding action | for an ended row pass the next episode's reset observation |
+| `bootstrap` | an ended row | per-row value of a truncated episode's last observation; omitted, an ended row bootstraps from zero |
+| `salience` | the preceding outcome | nonnegative per row; defaults to `abs(reward)` for consolidation |
+| `teacher` | the present observation | changes graph parameters |
+
+Call `step` once per real transition. `act(observations, *, greedy=False,
+temperature=None)` and `learn(reward, done, next_observations, *, bootstrap=None,
+salience=None)` split the moment when the body needs that timing
+([by hand](brain.md#one-experience-step-by-hand)). Teach from actual labels; the
+brain's own guesses can reinforce mistakes. A `teacher` label writes no associative
+record, except under `memory_choice=True`, where it is recorded and zero outcomes in
+the middle of an attempt write nothing ([episodic memory](episodic.md#how-it-works)).
+
+When a teacher's action ran in place of the issued one, as at the end of the example,
+replace the issued action with a greedy `act`, which learns nothing from it, and teach
+the shown action with `lesson(observations, labels)`; the next `step` takes no reward.
+A reward reported for the shown action would credit an action that did not run.
+`lesson` reads every memory the act reads, keeps its report in `last_learning` under
+`demonstration_*` keys and refuses while a sampled action awaits its outcome.
+
+## A supervised-only stream
+
+`step(teacher=...)` issues a reward-eligible action, so the next `step` without a
+reward teaches the actor and critic a zero outcome. For demonstrations with no reward
+protocol, read context with greedy actions and teach the learner on the memory-bearing
+drive of `stimulus(observations, *, memory=True)`:
+
+```python
+supervised = Brain.compose(4, 2, modules=(16, 8), seed=7)
+supervised.act(observation, greedy=True)   # advance context without reward eligibility
+_, lesson_work = supervised.learner.step(supervised.stimulus(following), np.array([1]))
+assert supervised.act(following, greedy=True).shape == (1,)
+```
+
+Direct learner calls leave `Brain.last_learning` untouched; keep their report. Finish
+any outstanding real outcome before a reward-driven life switches to greedy actions.
+
+## Qualification and refusal
+
+Every action, wait and independent prediction must satisfy the full
+potential/adaptation equations, observers included, to `learning.tolerance` (`3e-3`)
+within `learning.free_steps` (1024). A hard solve may fall back to half-step
+numerical damping inside the same budget (a `LearnerConfig(qualified=True)` learner
+uses its `damping` instead); the final residual is checked against the original
+model, and the teaching rule is unchanged. `tolerance=None` is refused (`ValueError`).
+Other operations keep their own tolerances: `imagine` uses `1e-6`.
+
+A refused answer raises `RuntimeError` before changing activity, memory, random state
+or pending feedback. The retry depends on what was accepted first:
+
+| What refused | State afterwards | Retry |
+| --- | --- | --- |
+| the forecast settle of `live`, before feedback | unchanged | the same call |
+| the answer, after the outcome was accepted (`live`, `step`) | outcome learned and counted | `live(observations)` or `act(observations)` without the outcome |
+| learning from the outcome (`learn` feedback solve) | memory writes, trace resets and actor changes rolled back; action pending | the same outcome |
+
+`brain.pending_feedback` says whether the current action awaits its outcome, including
+a routine choice; read it before resubmitting.
+
+```python
+answer_work = brain.last_settlement
+assert answer_work["qualified"] and answer_work["steps"] <= answer_work["budget"]
+assert answer_work["max_residual"] <= answer_work["tolerance"]
+```
+
+`last_settlement` snapshots the latest completed free-answer solve, refused ones
+included: `operation` (`"act"`, `"wait"` or `"predict"`; `step` reports `act`,
+`accuracy` and `fit` their last `predict` batch), `scope` (`"free_answer"`), `qualified`,
+per-row `row_qualified` and `residual`, `max_residual`, `steps`, `budget`,
+`tolerance`, `residual_checks`, `damping_halvings` and `stagnation_checks`.
+Validation errors, `learn` and `imagine` leave it; reset and load clear it. It counts
+answer work only: teaching and feedback work, refused teaching included, is in
+`last_learning`, and [settlement records](api.md#record-every-settling-step) capture
+every solver call. Reward eligibility has its own budget, `actor_eligibility_steps=12`;
+qualified teaching is opt-in ([budgets](learning.md#qualified-teaching-budgets)).
+
+## Private imagination
+
+```python
+phases = brain.imagine([observation, following], budget=1024, tolerance=1e-6)
+assert all(phase.qualified for phase in phases)
+```
+
+`imagine(observations, *, budget=1024, tolerance=1e-6)` settles supplied
+observations (each a batch of the live streams) on a private trace and reads durable
+memory without writing it. The branch's efference copy and recall predecessor key
+take in the act the brain would issue at each phase. A refused phase ends the branch
+and is returned. Live state, parameters, records, random state and pending outcomes are
+untouched. A learned model of the world's consequences is
+[planning](planning.md#learn-consequences-then-act).
+
+## Outcomes that arrive later: `wait`
+
+When a body reports an outcome only after more frames, sense those frames with
+`wait(observations)`. It settles the frame, advancing activity, working trace, heard
+history and recall slots, and issues no action and takes no outcome. The awaited
+action keeps its forecasts, eligibility and situation, so its outcome is credited as
+an immediate one would be.
 
 ```python
 creature = Brain.compose(4, 2, modules=(16,), seed=0, arousal=True)
-action = creature.live(cues[[0]])
-owner = creature.decision_id                   # the action that owns the next outcome
-writes = creature.hippocampus.writes
-waited = 0                                     # settling sweeps spent while waiting
-for frame in (cues[[1]], cues[[2]]):           # the reach is still under way
+creature.live(cues[[0]])
+owner = creature.decision_id                 # the action that owns the next outcome
+waited = 0
+for frame in (cues[[1]], cues[[2]]):         # the reach is under way
     creature.wait(frame)
     waited += creature.last_settlement["steps"]
 assert creature.pending_feedback and creature.decision_id == owner
-assert creature.hippocampus.writes == writes   # no frame was taken as an outcome
-action = creature.live(cues[[3]], reward=[1.0], decision_id=owner)  # an explicit outcome
-assert creature.decision_id == owner + 1       # the outcome was taken once
-counted = sum(creature.arousal.sweeps.values()) + creature.arousal.learning_sweeps
-work = counted + waited                        # waits are outside arousal's counts
-assert work > counted > 0 and waited > 0
+creature.live(cues[[3]], reward=[1.0], decision_id=owner)
+assert creature.decision_id == owner + 1     # the outcome was taken once
+work = sum(creature.arousal.sweeps.values()) + creature.arousal.learning_sweeps + waited
 ```
 
-Waiting moves the stream's activity and working trace with what it senses;
-`last_settlement` reports each settle with `operation` `wait`, and like the work
-of a refused attempt it is not part of `arousal`'s counts, which still add up the
-readings of the live moments. A stream's settling work is those counts plus the
-`steps` of every wait, as the example adds them. The awaited action keeps the
-forecasts made before it, its eligibility and the situation it was chosen in, so
-its outcome is credited as an immediate outcome would be: the same eligibility,
-forecast and associative record. What settles next starts from where the stream
-now is: the outcome's next state, a routine forecast, an answer that replaces the
-action and `imagine`; a finished episode still starts from rest.
-Parameters, eligibility traces, associative memory, random state, the copy of
-the issued command and the arousal state do not change while waiting.
-Eligibility, arousal, its age, youth and `need` advance with live moments, and
-one outcome is one temporal-difference step however many frames were waited.
+Waits are outside arousal's counts; add their `steps` to total a stream's work. One
+outcome is one temporal-difference step however many frames were waited. `decision_id`
+is the arousal age of the awaiting `live` action (the first is 1), or `None`; an
+outcome under another identity, or one reported twice, raises `ValueError` and changes
+nothing. Give the awaited outcome an explicit `reward`, since an omitted one is a zero
+outcome. There is no deadline: for an outcome that will never come, `act` replaces the
+action without learning and `reset` starts a new stream. `wait` refuses without
+arousal or with several streams (`ValueError`) and with no awaited action
+(`RuntimeError`).
 
-This is an event-time rule: a waited frame does not discount the outcome, fade
-eligibility or add to a want. In animals the eligibility of an action fades with
-the time that passes before its outcome; a per-frame decay is a candidate gene,
-with this rule as its control. Event time belongs to
-[#116](https://github.com/muellerberndt/cadence/issues/116), and irregular
-physical time is among the open delay items of
-[#111](https://github.com/muellerberndt/cadence/issues/111).
-
-The caller decides which frames are waited, as the environment decides when an
-outcome is reported; the brain does not choose to wait, and this is not the
-learned behavior of waiting through a pause. `decision_id` is the arousal age
-once `live` issued the awaited action (its first action is 1), or `None` when no
-`live` action awaits an outcome. An outcome reported under any other identity
-raises `ValueError` and changes nothing, including the same outcome reported
-again once it was taken; pass it when a body or a network may deliver an outcome
-twice or late. Give the awaited outcome with an explicit `reward`: an omitted
-reward after a wait is a zero outcome, which `live` takes as that action's
-outcome. Waiting has no deadline. An outcome that will never come is not a
-zero reward: `act` replaces the action without learning from it (`step`, like
-`live`, would take a sampled action's omitted reward as a zero outcome), and
-`reset` begins a new stream. A save during the wait resumes it.
-
-The caller also supplies the link between a late outcome and the action it
-belongs to; the brain does not infer it. That fits an action still under way in
-the body or in a channel. Where the brain is to learn the link between a choice
-and its delayed consequence, as in the delayed key-door reward of
-[#111](https://github.com/muellerberndt/cadence/issues/111) or a cache dug up
-later, the moments in between are actions with outcomes of their own: report them
-through `live` and leave the credit to eligibility. A result obtained with `wait`
-declares the link as supplied by its adapter.
-
-This is the custody of one awaited action in one stream. It does not establish
-better behavior from the additional sensing, the timing of a real body, several
-actions in flight, or that the body executed the action it was given.
+The caller decides which frames are waited and links the late outcome to its action.
+Where the brain is to learn that link, as in a delayed key-door reward, report the
+moments in between through `live` and leave the credit to eligibility.
 
 ## Reset and save
 
-`brain.reset()` clears live neural/eligibility state and the working trace,
-retaining associative memories. `brain.hippocampus.reset(batch)` clears fast
-residuals but retains persistent synapses; `clear()` erases both. Changing memory
-batch size resets fast residuals on a write; reads use the persistent baseline
-without changing the live memory.
-
-A brain with arousal begins the new stream calm, with what it was used to
-forgotten. After `reset()`, also with `keep_memory=True`, or after
-`retune(reset_arousal=True)`, an adult brain (its youth over) has no income or
-error references and, at the founder `need=0`, no want: only a surprise at its own
-forecasts, measured against the usual error the new stream's first outcome sets,
-can rouse it. In a two-armed bandit with one constant observation whose paying arm
-moved after 300 moments (`Brain.compose(1, 2, modules=(16,), arousal=True)`,
-seeds 0 to 4), none did: every adult given one of these resets stayed calm and
-chose the newly paying arm at none of the next 120 moments, while the same adults
-living on without the reset, reset with their arousal state restored, or given
-`retune(arousal_need=0.5)` before `reset()`, chose it at each of the last 40.
-Where the world may stop paying, restore the arousal state after the reset
-(`state = brain.arousal.to_dict()` before it,
-`brain.arousal = Arousal.from_dict(state)` after it), give the brain a positive
-`need`, or let it keep living without the reset.
+`reset(*, keep_memory=False)` starts every stream afresh. It clears activity,
+eligibility, any pending action, reward centering, the working trace, the efference
+copy, the heard history and the episodic context, plus `last_learning`,
+`last_settlement` and `last_arousal`. It keeps parameters and associative records;
+recall slots survive only with `keep_memory=True` ([recall](recall.md)). Arousal
+starts calm with its references cleared and its age kept, as after
+`retune(reset_arousal=True)`, so an adult at `need=0` is roused only by surprise and
+can stay calm in a world that stopped paying. Restore the arousal state, set a
+positive `need`, or keep living without the reset.
 
 ```python
+state = brain.arousal.to_dict()
+brain.reset()
+brain.arousal = Arousal.from_dict(state)
 brain.save("continuing-brain.npz")
 resumed = Brain.load("continuing-brain.npz")
 ```
 
-Save/load includes parameters, critic, optimizers, traces, fast and persistent
-memory, random state, arousal, an action awaiting feedback and what a waiting
-stream has sensed since. Resume the same rows and supply that action's actual
-outcome once. Save the environment separately.
-If a pattern separator is used, its actual projection and running mean are
-saved too. Shapes, finite values and continuation state are validated on load.
+A save carries parameters, critic, optimizers, random state, every trace and memory,
+arousal, an action awaiting feedback and what a waiting stream has sensed; load
+validates them ([formats](api.md#brain-cadence)). Resume the same rows, supply the
+pending outcome once and save the environment separately.
+
+## Independent-sample controls
+
+`predict(observations)`, `accuracy(observations, labels)` and `fit(observations,
+labels, *, epochs=30, batch=32)` treat rows as independent samples: qualified cold
+solves that read no trace or associative memory. `fit` resets stream state and returns
+training accuracy per epoch; a refused score keeps accepted lessons. Use them as
+controls on a separate instance; greedy `act` on a loaded copy measures the
+memory-aware response.
+
+```python
+control = Brain.compose(4, 2, modules=(16,), seed=1)
+control.fit(cues, np.array([0, 1, 0, 1]), epochs=2)
+assert control.predict(cues).shape == (4,) and 0 <= control.accuracy(cues, [0, 1, 0, 1]) <= 1
+```
 
 ## Defaults and the thinking clock
 
 | Mechanism | Default in `Brain.compose` | Advances on |
 | --- | --- | --- |
-| Neural activity | Retained | Actual interaction, including frames sensed by `wait` |
-| Working trace | Included | Each admitted action's free state and each `wait` |
-| Reward plasticity and demonstrations | Available through `step` | Actual outcomes and supplied current labels |
-| Arousal | Absent unless enabled, e.g. `arousal=True` | Each outcome `live` receives |
-| Fast/persistent associations | Included | Observed chosen-action outcomes |
-| Recursive observers | Empty unless requested | The same neural solve when included |
-| Private imagination | Explicit call | Supplied hypothetical observations |
+| Neural activity | retained | each accepted action and each `wait` |
+| Memories | working trace and associative store on, the rest opt-in | as listed in [memory](memory.md#memory-in-the-composed-brain); `wait` advances the working trace, heard history and recall slots |
+| Reward plasticity and demonstrations | `step`, `learn`, `lesson`, aroused `live` | actual outcomes and supplied labels |
+| Arousal | off unless `arousal=True` | each outcome `live` receives |
+| Observers | none unless requested | the same neural solve |
+| Imagination | explicit call | supplied hypothetical observations |
 
-`Brain.build` is a separate configurable builder; its working trace is
-opt-in. No hidden thread drives either interface. Do not call `step` for every UI
-frame: it consumes a real transition. Frames that a `live` stream senses before its
-outcome go to `wait`. The application owns scheduling.
-
-Advanced `Deliberator` search retains unfinished work across bounded `tick`
-calls using supplied actions, transition and evaluator. It does not automatically
-override the brain's action. Keep the model fixed during a search and restart
-after learning; imagined outcomes must not train the live brain. Its node budget
-does not bound a callback's wall time. See [the API](api.md) and
-[deliberation tests](../tests/test_deliberator.py).
-
-For partially filled environment pools, lower-level `ActorCritic.learn(...,
-observed=active_rows)` masks padding transitions. Stop when no real rows remain.
-For visualizations, record actual iterations and their action/outcome identity
-with [record_settlements](api.md#record-every-settling-step); do not invent
-oscillations or a reward signal from an absolute update statistic.
+No hidden thread drives the brain; the application owns scheduling. A `step` consumes
+a real transition, so never call it per UI frame; frames before a `live` outcome go to
+`wait`. [Memory](memory.md) describes each store, and the bounded `Deliberator` search
+in [the API](api.md) runs on a fixed model across `tick` calls.

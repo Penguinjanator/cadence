@@ -21,7 +21,7 @@ Population sizes and wiring determine which states and errors each patch reads.
 All populations form one connected graph and repair together. Adding an
 intermediate population changes the paths in that graph; it does not select a
 new kind of brain. Optional error readback uses the same patch law and solve.
-See the [experimental boundary](../../docs/equilibrium/EXPERIMENTAL.md) for behavioral claims.
+See the [scope and limits](../../docs/equilibrium/index.md#scope-and-limits) for behavioral claims.
 
 `settle` and `predict` are pure queries, `step` retains qualified activity, and
 `observe` learns from supplied output targets. Check `qualified` or `accepted`;
@@ -109,7 +109,7 @@ Batch size changes the learning objective per update. Treat a batch comparison
 as a learning-and-throughput comparison, and check both accuracy and work.
 Parallel bootstrapping runs separate lives; it does not merge brains or make
 one brain accept concurrent experiences. See
-[bootstrapping](../../docs/equilibrium/BOOTSTRAP.md) and
+[brain design](../../docs/equilibrium/BRAIN_DESIGN.md) and
 [acceleration](../../docs/equilibrium/ACCELERATION.md).
 
 ## Run from the repository root
@@ -121,8 +121,19 @@ PYTHONPATH=src python examples/equilibrium/layout_cost.py --out /tmp/cadence-lay
 PYTHONPATH=src python examples/equilibrium/batch_bootstrap.py --devices python --batch-size 8 --repeats 1
 PYTHONPATH=src python examples/equilibrium/parallel_bootstrap.py --lives 4 --workers 2
 PYTHONPATH=src python examples/equilibrium/live_learning.py --seeds 0 2 7
-PYTHONPATH=src python examples/equilibrium/temporal_credit.py --out /tmp/cadence-temporal-credit.json
+PYTHONPATH=src python examples/equilibrium/temporal_credit.py --seeds 2 7 --out /tmp/cadence-temporal-credit.json
 ```
+
+`live_learning.py` runs each of `--seeds` (default `0 2 7`).
+`temporal_credit.py` takes one to eight nonnegative `--seeds` (default `2 7`)
+and runs this schedule per seed:
+
+| Fixture | Cases | Schedule | Passes when |
+| --- | --- | --- | --- |
+| Memory | delays 2, 4 and 8; ordinary and observer layouts | `History` window of delay + 1 frames; bootstrap up to 40 epochs, batch size 4, development error at most 0.15 | bootstrap passes, no refusal, saved and resumed runs agree, and with the history window every held-out cue is recalled within 0.2 (removed-history controls are recorded, not gated) |
+| Credit | delays 0, 2, 4 and 8 (1, 3, 5 and 9 transitions); each action as the preferred one; modes `td_replay`, `no_bootstrap`, `frozen` | 60 learning episodes, then 40 evaluation episodes; exploration 0.4, discount 0.8 (0 for `no_bootstrap`), capacity 256, batch size 8 | no refusal, saved and resumed learners agree, and `td_replay` succeeds in at least 0.65 of evaluation episodes |
+
+The tests in `tests/equilibrium/test_temporal_credit.py` run seed 0.
 
 Choose a fresh output path for `layout_cost.py`; it refuses to overwrite a
 receipt and records its protocol before measurement. Learning examples can
