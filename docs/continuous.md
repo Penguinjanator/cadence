@@ -32,7 +32,7 @@ wanting.
 
 ```python
 import numpy as np
-from cadence import Arousal, Brain
+from cadence import Brain
 
 cues = np.eye(4)
 observation, following = cues[[0]], cues[[1]]
@@ -260,20 +260,38 @@ moments in between through `live` and leave the credit to eligibility.
 
 ## Reset and save
 
-`reset(*, keep_memory=False)` starts every stream afresh. It clears activity,
-eligibility, any pending action, reward centering, the working trace, the efference
-copy, the heard history and the episodic context, plus `last_learning`,
+`reset(*, keep_memory=False, keep_arousal=False)` starts every stream afresh. It clears
+activity, eligibility, any pending action, reward centering, the working trace, the
+efference copy, the heard history and the episodic context, plus `last_learning`,
 `last_settlement` and `last_arousal`. It keeps parameters and associative records;
 recall slots survive only with `keep_memory=True` ([recall](recall.md)). Arousal
 starts calm with its references cleared and its age kept, as after
 `retune(reset_arousal=True)`, so an adult at `need=0` is roused only by surprise and
-can stay calm in a world that stopped paying. Restore the arousal state, set a
-positive `need`, or keep living without the reset.
+can stay calm in a world that stopped paying. `keep_arousal=True` keeps the arousal
+state as it is: its level, its recent and long-run reward, its usual errors, its reward
+scale, their counts, its age and its work counts carry into the new stream, as when the
+state saved before the reset with `brain.arousal.to_dict()` is restored after it with
+`Arousal.from_dict`, and a brain aroused when it was reset begins the new stream
+aroused. Where the world may stop paying, reset with `keep_arousal=True`, set a positive
+`need`, or keep living without the reset.
+
+In a two-armed bandit with one constant observation whose paying arm moved after 300
+moments (`Brain.compose(1, 2, modules=(16,), arousal=True)`, seeds 0 to 4), adults reset
+by default chose the newly paying arm at none of the next 120 moments. Reset with
+`keep_arousal=True`, they fell short of the income they were used to, woke and chose as
+they did living on without the reset at every one of the 120 moments, the newly paying
+arm at each of the last 40; uniform random chooses it at half the moments. Reset into a
+stream that paid as before, they kept their arm, calm, at all 120 moments; into one
+whose arm paid 2.0 in place of 1.0, they were aroused at 9 of 600 moments and at none of
+the last 40 of any seed, and the adults living on without the reset at 6 of 600. Either
+reset starts the neural state afresh: in the stream that paid as before, the first 6 to
+14 moments after a reset settled from rest at 32 sweeps each, and the continuing stream
+needed no sweep.
 
 ```python
 state = brain.arousal.to_dict()
-brain.reset()
-brain.arousal = Arousal.from_dict(state)
+brain.reset(keep_arousal=True)                   # the arousal state carries on as it is
+assert brain.arousal.to_dict() == state
 brain.save("continuing-brain.npz")
 resumed = Brain.load("continuing-brain.npz")
 ```
@@ -287,9 +305,12 @@ pending outcome once and save the environment separately.
 
 `predict(observations)`, `accuracy(observations, labels)` and `fit(observations,
 labels, *, epochs=30, batch=32)` treat rows as independent samples: qualified cold
-solves that read no trace or associative memory. `fit` resets stream state and returns
-training accuracy per epoch; a refused score keeps accepted lessons. Use them as
-controls on a separate instance; greedy `act` on a loaded copy measures the
+solves that read no trace or associative memory. `fit` resets stream state, arousal
+included, so a live adult taught with `fit` starts its next stream with no income or
+error references; for a brain that keeps living, save `brain.arousal.to_dict()` before
+`fit` and restore it with `Arousal.from_dict` after, the state `reset(keep_arousal=True)`
+keeps. `fit` returns training accuracy per epoch; a refused score keeps accepted lessons.
+Use them as controls on a separate instance; greedy `act` on a loaded copy measures the
 memory-aware response.
 
 ```python
