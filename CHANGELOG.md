@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- `Brain.reset(keep_arousal=True)` (opt-in) keeps the arousal state as it is: its level, the
+  counts, the recent and long-run reward, the usual errors, the reward scale, the age and
+  the work counts carry into the new stream, as when the state saved before the reset
+  (`Arousal.to_dict`) is restored after it (`Arousal.from_dict`). In the two-armed bandit
+  whose paying arm moved, adults reset this way woke and chose as they did living on
+  without the reset, at every one of 120 moments in 5 of 5 seeds, the newly paying arm at
+  each of the last 40; a default reset left them at none of the 120. Reset into a stream
+  that paid as before they kept their arm calm at all 120 moments in 5 of 5 seeds. The
+  keyword must be a boolean, checked before anything changes; a brain without arousal
+  resets as it does without it. At the default, `keep_arousal=False`, every brain resets,
+  acts and saves as in 0.84.3.
+
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain

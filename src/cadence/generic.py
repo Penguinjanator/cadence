@@ -1836,8 +1836,8 @@ class Brain:
         Wiring, initialization and enabling/disabling components are construction
         choices. ``reset_arousal=True`` explicitly resets the arousal level and
         reward references, retaining its age and work counters; no other state
-        is reset. Its arousal is then left as ``reset`` leaves it: an adult brain (its
-        youth over) has no income or error references and, at the founder ``need=0``,
+        is reset. Its arousal is then left as a default ``reset()`` leaves it: an adult
+        brain (its youth over) has no income or error references and, at the founder ``need=0``,
         no want, so only a surprise at its own forecasts can rouse it, and a world that
         stops paying may leave it calm on a lapsed habit. Where its world may stop paying,
         leave ``reset_arousal`` off or give it a positive ``need``. Returns this same brain.
@@ -2134,7 +2134,14 @@ class Brain:
         epochs: int = 30,
         batch: int = 32,
     ) -> list[float]:
-        """Teach independent samples; return qualified training accuracy after each epoch."""
+        """Teach independent samples; return qualified training accuracy after each epoch.
+
+        ``fit`` begins with ``reset()``: every stream starts afresh, arousal included, so a
+        live adult brain (its youth over) taught with ``fit`` starts its next stream with no
+        income or error references, as after a default reset. For a brain that keeps living,
+        save its arousal state before ``fit`` (``state = brain.arousal.to_dict()``) and
+        restore it after (``brain.arousal = Arousal.from_dict(state)``): the state that
+        ``reset(keep_arousal=True)`` keeps."""
         drive = self.stimulus(observations, memory=False)
         labels = self.learner._labels(np.asarray(labels))
         if len(labels) != len(drive):
@@ -3467,24 +3474,33 @@ class Brain:
         else:
             recall.reset(batch, rows=rows)
 
-    def reset(self, *, keep_memory: bool = False) -> None:
-        """Start every stream afresh; hippocampal records are kept. A brain with arousal
-        begins the new stream calm, with what it was used to forgotten and its age kept.
+    def reset(self, *, keep_memory: bool = False, keep_arousal: bool = False) -> None:
+        """Start every stream afresh; hippocampal records are kept. By default a brain with
+        arousal begins the new stream calm, with what it was used to forgotten and its age kept.
         ``keep_memory=True`` keeps the recall memory's slots too: each stream ends an episode
         there (``Recall.end``), its slots read by the next streams of the same batch, and
         everything else starts afresh as without it; a brain without a recall memory resets
         as it does without the keyword.
 
-        After a reset, also with ``keep_memory=True``, an adult brain (its youth over) has no
-        income or error references and, at the founder ``need=0``, no want: only a surprise
-        at its own forecasts can rouse it, measured against the usual error the new stream's
-        first outcome sets, and a world that stops paying may leave it calm on a lapsed
-        habit. Where its world may stop paying, restore its arousal state after the reset
-        (``state = brain.arousal.to_dict()`` before it,
-        ``brain.arousal = Arousal.from_dict(state)`` after it), give it a positive
-        ``need``, or let it keep living without the reset."""
+        ``keep_arousal=True`` keeps the arousal state as it is: its level, its recent and
+        long-run reward, its usual errors, its reward scale, their counts, its age and its
+        work counts carry into the new stream, as when the state saved before the reset
+        (``state = brain.arousal.to_dict()``) is restored after it
+        (``brain.arousal = Arousal.from_dict(state)``). A brain that was aroused when it was
+        reset begins the new stream aroused. A brain without arousal resets as it does
+        without the keyword.
+
+        After a reset without ``keep_arousal``, also with ``keep_memory=True``, an adult brain
+        (its youth over) has no income or error references and, at the founder ``need=0``, no
+        want: only a surprise at its own forecasts can rouse it, measured against the usual
+        error the new stream's first outcome sets, and a world that stops paying may leave it
+        calm on a lapsed habit. Where its world may stop paying, reset it with
+        ``keep_arousal=True``, give it a positive ``need``, or let it keep living without the
+        reset (``docs/continuous.md#reset-and-save``)."""
         if not isinstance(keep_memory, bool):
             raise ValueError("keep_memory must be boolean")
+        if not isinstance(keep_arousal, bool):
+            raise ValueError("keep_arousal must be boolean")
         self.basal_ganglia.reset()
         if self.working_memory is not None:
             self.working_memory.reset(0)
@@ -3507,7 +3523,7 @@ class Brain:
         self._context = None
         self._decision = None
         self._paths = []
-        if self.arousal is not None:
+        if self.arousal is not None and not keep_arousal:
             self.arousal.reset()
 
     def parameters(self) -> int:

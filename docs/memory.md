@@ -14,7 +14,10 @@ working trace, efference copy, heard history, recall slots and actor eligibility
 resets: the associative and episodic records and the recall address map. Permanent until
 learning changes them: the learned weights. The per-stream traces advance at every moment;
 under [`live`](continuous.md#routine-and-repair-live) a calm brain reads its records and
-weights and changes neither, and an aroused one learns and writes.
+weights and changes neither, and an aroused one learns and writes. `reset()` also clears
+arousal's income and error references, which decide when a `live` brain wakes, and
+`reset(keep_arousal=True)` keeps the arousal state as it is
+([reset and save](continuous.md#reset-and-save)).
 
 ## Memory in the composed brain
 
