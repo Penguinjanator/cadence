@@ -26,9 +26,8 @@ A brain with an associative memory also forecasts the outcome of the action it c
 the record it holds for that action in that situation; the error of that record against
 the outcome is a second surprise with its own usual size, and the moment's surprise is the
 larger of the two, each weighted by its gene (``value_surprise``, ``record_surprise``).
-The founders weigh the record's surprise at zero: on the odour nursery's development seeds
-it woke the brain sooner and left more lives searching too briefly, so the value forecast
-remains the control and the record's channel is left to selection.
+The founder weighs the record's surprise at zero, so only the value forecast can surprise
+a brain until ``record_surprise`` is set above zero.
 Only the outcome of the brain's own best guess can surprise it and enters its usual
 forecast error. Every actual outcome enters the recent and long-run reward: exploring
 does not stop the brain from noticing what its life pays. The brain is aroused while
@@ -40,17 +39,17 @@ rewards, errors and the need are multiplied by one positive number, away from it
 every outcome establishes the reward reference before its spread forms. A need is a
 level of reward, and shifting the rewards changes what is unmet.
 
-Arousal gates learning; it does not protect particular acquired responses during an update.
-Continued learning can interfere with earlier behaviour. Raising ``threshold`` can reduce
-learning opportunities after youth, but youth and a level at or above the threshold still
-rouse the brain. A smaller actor step is a control to measure for retention and adaptation,
-not a guarantee of either. The reward guide links the bounded arena evidence in issue #169.
+Arousal gates learning and protects no acquired response, so continued learning can
+interfere with earlier behaviour. Raising ``threshold`` can reduce learning after youth;
+youth and a level at or above the threshold always rouse the brain. A smaller actor step
+reduces interference without retaining a skill
+(``docs/reward.md#traps-with-their-measurements``).
 
-Every constant of the law is a gene of ``ArousalConfig``. The values here are hand-set
-founders and stay as the control; ``ArousalConfig.space()`` declares the space for
+Every constant of the law is a gene of ``ArousalConfig``. The defaults are hand-set
+founders and serve as the control; ``ArousalConfig.space()`` declares the space for
 ``cadence.genes``. The law is a broadcast signal computed from the brain's own dopamine
-and reward, like the dopamine itself; it is not a settled patch state and holds no
-learned parameter.
+and reward, like the dopamine itself; it holds no settled patch state and no learned
+parameter.
 """
 
 from __future__ import annotations
@@ -372,15 +371,16 @@ class Arousal:
         config = values["config"]
         genes = set(ArousalConfig.__slots__)
         if "format" not in values and set(config) == genes - {"need"}:
-            # Before need existed every saved life used the zero-need law. A marker
-            # on new saves distinguishes that legacy schema from a missing new gene.
+            # An unversioned save without ``need`` holds the zero-need law. The format
+            # marker distinguishes that schema from a save missing a gene.
             config = {**config, "need": 0.0}
         if set(config) != genes:
             raise ValueError("invalid or incomplete saved arousal config")
         try:
             arousal = cls(ArousalConfig(**config))
-            # Older laws admitted only own outcomes to income. Keep those accumulated
-            # readings and their count; future actual outcomes use the repaired law.
+            # A cadence-arousal/1 or unversioned save counted only own outcomes in its income.
+            # Its readings load as saved, its reward count defaults to its outcome count, and
+            # further outcomes enter by the current law.
             rewards = (
                 values["rewards"]
                 if values.get("format") == _SAVED_FORMAT

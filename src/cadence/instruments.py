@@ -7,8 +7,7 @@ onset at which half the capture is reached; the *return* is the number of frames
 event until the gain is back within a fifth of the capture of its level before. Over the
 events of a kind, the *habituation curve* is the capture of the first events against the
 last. *Dishabituation* is the capture of one kind's events just before and just after an event
-of a consequential kind. The night nursery measured rung 4 with these; every rung that reads a
-gain's response to an event reads the same numbers.
+of a consequential kind.
 """
 
 from __future__ import annotations
@@ -43,8 +42,9 @@ def orienting(
     start, length, baseline, peak, capture, latency, return), and per kind: the count, the
     capture of the first and of the last ``bins`` events, the curve of captures in
     consecutive groups of ``bins``, the mean capture, latency shares (at the onset, one frame
-    after, none) and the mean latency of the events that captured, the mean return and the
-    mean baseline. A return is ``None`` if no positive capture occurred or it
+    after, none) and the mean latency of the events that captured, the mean return, the
+    count of censored returns, the mean baseline and the mean peak; ``pre`` and ``post``
+    are returned as used. A return is ``None`` if no positive capture occurred or it
     was not observed to return within the available post-event frames; the
     latter case has ``return_censored=True``. Partial final curve bins are kept."""
     g = np.asarray(gain, dtype=float)

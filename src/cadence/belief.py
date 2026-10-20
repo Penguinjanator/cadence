@@ -12,20 +12,23 @@ with the store read at the expected belief and nothing observed; imagination nev
     p[t]    = g * z[t-1] + (1 - g) * tanh(T [z[t-1]; a[t-1]] + t_b),  g = sigmoid(G [z; a] + g_b)
     e[t]    = gain[block] * tanh(port(o[t]) + e_b)                    the evidence, gained per block
     z(0)    = p[t]
-    m(k)    = read(code([e[t], z(k)]))                                 the store, a coded residual
+    m(k)    = read(code([sqrt(n) e[t] / s, z(k)]))                     the store, a coded residual
     z(k+1)      = (1 - alpha) z(k) + alpha tanh(F [z(k); e[t]; p[t]; m(k); 1] + f_b)
     y[t]        = C z(K) + c + decode(m(K))
+
+Here ``n`` is the encoded width and ``s`` a running mean of the evidence norm that each store
+write moves.
 
 Learning is one backward scan over a chunk through every iteration and the transition; the
 record read is treated as given (no gradient reaches the store), as in the record patch. The
 gain of each observation-port block multiplies that block's encoded evidence before the repair
 map and the store read see it, so it acts in every iteration; the scan also returns the
-gradient into each gain. The store holds the residual of the slow readout at the code of the
-final reading, written once per observed moment. ``imagine`` leaves parameters,
-records and live state unchanged, consumes no new observation, and counts its
-computational work. ``readback`` evaluates a supplied reading without changing
-those fields or counters. The last damped repair move is a diagnostic, not a
-certificate that these fixed-budget iterations reached an equilibrium.
+gradient into each gain. With ``observe(..., write=True)`` the store holds the residual of the
+slow readout at the code of the final reading, written once per observed moment. ``imagine``
+leaves parameters, records and live state unchanged, consumes no new observation, and counts
+its computational work. ``readback`` evaluates a supplied reading without changing those
+fields or counters. The last damped repair move is a diagnostic; it does not
+certify that these fixed-budget iterations reached an equilibrium.
 """
 
 from __future__ import annotations
@@ -640,7 +643,8 @@ class BeliefPatch:
         gains: np.ndarray | None = None,
     ) -> BeliefPath:
         """A private continuation under declared actions from the live belief (or ``state``):
-        the transition alone, the store read at the expectation, no observation, no change.
+        the transition alone, the store read at the expectation, no observation, and no change
+        to parameters, records or the live state.
         ``gains`` are carried on the path; with nothing observed they act on nothing."""
         _, a, mask = self._check(None, actions, None)
         n, t = a.shape[:2]
@@ -696,10 +700,9 @@ class BeliefPatch:
         keep_live: bool = False,
     ) -> BeliefObservation:
         """Learn one chunk of witnessed moments and, with ``write=True``, write their outcomes
-        into the store (in every rung demo so far the store paid nothing and was left unwritten,
-        so the default is off). ``state`` starts the chunk from a given boundary instead of the
-        live belief; the final belief under the chunk becomes the live state unless
-        ``keep_live=True``.
+        into the store (off by default). ``state`` starts the chunk from a given boundary
+        instead of the live belief; the final belief under the chunk becomes the live state
+        unless ``keep_live=True``.
 
         ``loss_weight`` weighs each moment's error, ``(time,)`` or ``(batch, time)``, normalized
         by its sum; a moment of weight zero is neither taught nor written. ``output_gradient``
@@ -967,7 +970,7 @@ class BeliefPatch:
                 )
         return written
 
-    # ------------------------------------------------------------------ custody
+    # ------------------------------------------------------------------ checkpoints
     def snapshot(self) -> dict[str, np.ndarray]:
         meta = {
             "format": FORMAT,

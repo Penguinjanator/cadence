@@ -3,8 +3,7 @@
 A record patch's gate sees only the present input. It can hold a word, but it cannot tell
 the subject of a sentence from a noun inside a later phrase, because both arrive as the same
 input. A second patch that reads the first patch's context as an input has a gate that
-sees what came before, and that is enough: on subject-verb agreement across two
-distracting nouns one patch scored 0.03 and the stack 1.00 (the composition is described in
+sees what came before, so it can separate the two (the composition is described in
 ``docs/record-patch.md#two-patches-in-depth``).
 
 The lower patch is a context alone::

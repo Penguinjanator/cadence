@@ -1,7 +1,7 @@
 """Private input planning with the same centered equilibrium detuning rule.
 
-The action gradient is a finite-beta contrast, not a guarantee of a global
-optimum. Every accepted action path is evaluated by target-free causal replay.
+The action gradient is a finite-beta contrast and gives no guarantee of a
+global optimum. Every accepted action path is evaluated by target-free causal replay.
 Planning does not execute actions, admit observations or change the learner.
 """
 
@@ -205,8 +205,9 @@ def plan_inputs(
             contrast_beta *= 0.5
 
     # A quasi-Newton estimate of the inverse curvature over the controlled
-    # entries, built from accepted steps; it is dropped whenever a step is
-    # clipped, fails the curvature condition or gives no decrease.
+    # entries, built from accepted steps. A step that fails the curvature
+    # condition leaves it unchanged. It is dropped when a step is clipped,
+    # when its direction does not descend, or when that direction gives no decrease.
     controlled = int(mask.sum())
     curvature: np.ndarray | None = None
     last_step: tuple[np.ndarray, np.ndarray] | None = None

@@ -145,9 +145,8 @@ class LearningProgress:
 
     ``rate`` in (0, 1] updates the error mean as ``m' = m + rate * (error-m)``.
     ``update`` returns ``max(0, m-m') / max(1, m)`` in [0, 1], or zero for a
-    new context. Error units therefore matter. This is a heuristic, not
-    information gain, a reward learner, or numerical settlement qualification.
-    Noisy downward fluctuations can also produce a positive score.
+    new context. Error units therefore matter. The score is a heuristic, and
+    noisy downward fluctuations can also produce a positive score.
 
     ``capacity`` bounds context means (1..4096); the least recently updated
     context is evicted when full. Keys are nonempty strings of at most 256
@@ -181,7 +180,7 @@ class LearningProgress:
 
         Error must be finite and nonnegative. Validation occurs before any
         update or eviction. New contexts and constant/increasing errors score
-        zero; random fluctuations are not evidence of acquired capability.
+        zero.
         """
         key, error = _key(key), _error(error)
         previous = self._errors.get(key)

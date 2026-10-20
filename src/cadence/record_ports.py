@@ -4,20 +4,20 @@ The building block is the record patch, unchanged. A port is a declared seam bet
 them: a band of the source cortex's scaled context ``r * h`` (the unit its records read it in,
 and the unit ``RecordPatchStack`` hands upward) is an input of the target cortex in the same
 moment. The joint energy is the sum of every cortex's seam energy and, per port,
-``1/2 |p[t] - S r h_source[t]|^2``. A simultaneous solution would make every seam zero. At a moment the
-coupled equations are iterated for ``rounds`` Jacobi rounds from the previous moment's contexts:
-round one is the delayed port (each cortex hears the other's context of the moment before),
-and each further round re-reads the other's context of this moment. After the last round every
-temporal seam is exactly zero (``damping`` one) and the port seams hold what remains: the seam
-residual, logged per moment and per round as the fourth instrument. The slow gradient is one
-backward scan through the moments and the rounds; with ``cross_adjoint`` the adjoint crosses
-every port (the gradient of the target's loss reaches the source's context), without it the port
-is a plain input. Records are read at the last-round readings after the scan and written after the
+``1/2 |p[t] - S r h_source[t]|^2``. A simultaneous solution would make every seam zero. At a
+moment the coupled equations are iterated for ``rounds`` Jacobi rounds from the previous
+moment's contexts: round one is the delayed port (each cortex hears the other's context of the
+moment before), and each further round re-reads the other's context of this moment. After the
+last round every temporal seam is exactly zero (``damping`` one) and the port seams hold what
+remains: the seam residual, logged per moment and per round. The slow gradient is one backward
+scan through the moments and the rounds; with ``cross_adjoint`` the adjoint crosses every port
+(the gradient of the target's loss reaches the source's context), without it the port is a
+plain input. Records are read at the last-round readings after the scan and written after the
 path, outside the gradient, exactly as in the record patch. With damping one and a single
 one-way port, two rounds reach the fixed point; longer chains need more rounds. In general
 the returned finite-round path need not be an equilibrium. The recorded movements and port
-seam residuals are diagnostics, not convergence, contraction or uniqueness certificates.
-The adjoint differentiates this finite computation, not an implicit equilibrium limit.
+seam residuals are diagnostics and certify neither convergence, contraction nor uniqueness.
+The adjoint differentiates this finite computation rather than an implicit equilibrium limit.
 
 Snapshot and branch isolation: every cortex keeps its own parameters, records, running
 statistics and live context; a snapshot is the list of the cortices' snapshots plus the
@@ -441,7 +441,7 @@ class JointRecordPatches:
             if not isinstance(meta, dict) or meta.get("format") != FORMAT:
                 raise ValueError("unsupported record-ports checkpoint")
             count = _integer("cortices", meta["cortices"], 1)
-            cut = meta.get("cut", False)  # Older checkpoints always restored connected ports.
+            cut = meta.get("cut", False)  # a checkpoint without "cut" has connected ports
             if not isinstance(cut, bool):
                 raise ValueError("cut must be a boolean")
             nets = []

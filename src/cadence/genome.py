@@ -1,16 +1,15 @@
 """Where a connectome comes from: a genome, developed into a brain, selected over generations.
 
 The connectomes in this library are designed (``layered``, ``embedded``, ``stateful``) or read
-from a measured connectome, which evolution designed. An animal's specialised parts are
+from a measured animal connectome. An animal's specialised parts are
 a mix: the genome lays down which regions exist, how large they are, which project to
 which and with what sign and density; learning and development do the rest. This module is
 the simplest version of that first step. A ``Genome`` is a handful of numbers per
 region and per projection; ``develop`` turns it into a ``Connectome`` with named populations,
 the same deterministic way every time for a given seed (development); ``mutate`` perturbs it; and
 ``evolve`` keeps, over generations, the genomes whose developed brains score best under a
-fitness the caller supplies (a protocol score, a learning curve, a held-out accuracy).
-Nothing here is a sixth primitive: the result is a connectome, and everything after it is
-settling under the same neuron model.
+fitness the caller supplies. The result is a connectome, and everything after it is settling
+under the same neuron model.
 """
 
 from __future__ import annotations

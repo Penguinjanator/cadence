@@ -57,27 +57,28 @@ def bootstrap(
     ``examples`` and ``checks`` are nonempty finite sequences of
     ``(input_mapping, target_mapping)`` pairs. All samples are validated and
     copied before work. Only examples are admitted; checks are repeatedly used
-    for readiness, so they are a development set, not an untouched final test.
+    for readiness, so they form a development set. Keep a separate final test.
 
     A local seeded RNG shuffles examples each epoch. Before teaching and after
     each complete epoch, pure ``settle`` queries measure maximum absolute error
     against each unique targeted patch coordinate. Readiness requires every
     query to qualify and both recall and checks to meet ``max_error`` in output
     units. ``epochs=0`` only assesses readiness. No inputs or targets are scaled.
+    ``budget`` overrides the brain's ``settle_budget`` for every query and update.
 
-    Any refusal stops the helper with ``passed=False``. Earlier accepted
-    witnesses remain committed; the whole bootstrap call is not one transaction.
-    Each minibatch is atomic. The report
-    retains work, presentation counts, validation history and failure details.
-    Replays are counted as presentations, not newly collected experiences.
-    The same brain continues into the live phase without a mode change.
+    Any refusal stops the helper with ``passed=False`` and ``reason="refused"``;
+    running out of epochs gives ``reason="epochs"``. Earlier accepted witnesses
+    remain committed: each minibatch is atomic, the whole call is not. The
+    report keeps work, presentation counts, validation history and failure
+    details. Replays count as presentations. The same brain continues into the
+    live phase without a mode change.
 
     ``batch_size=1`` uses ordered ``observe`` calls. Larger positive sizes group
     each shuffled epoch into atomic ``observe_batch`` calls (including a shorter
     last batch), preserving live activity. ``presentations`` and ``accepted``
     count examples; ``updates`` counts committed calls. Batching minimizes mean
-    example energy with one parameter anchor per batch, so it changes the
-    learning trajectory rather than emulating sequential admissions.
+    example energy with one parameter anchor per batch, so its learning
+    trajectory differs from that of sequential admissions.
     """
     if not isinstance(brain, Brain):
         raise ValueError("brain must be a Brain")

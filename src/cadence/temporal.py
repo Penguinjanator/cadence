@@ -1,9 +1,9 @@
 """Temporal residual patches, bounded activity and centered equilibrium detuning.
 
-The residual-energy construction is a predictive-coding/EP abstraction, not a
-novel learning theorem. Adjacent temporal patches exchange dense hidden-width
-precision messages. This is block-local computation, not scalar-synapse-only
-computation. No derivative through the solver is used for learning.
+The residual-energy construction is a predictive-coding and equilibrium-propagation
+abstraction. Adjacent temporal patches exchange dense hidden-width precision messages,
+so the computation is local to adjacent blocks of hidden units. Learning uses no
+derivative through the solver.
 """
 
 from __future__ import annotations
@@ -113,8 +113,8 @@ def contrast_asymmetry(free: TemporalPhase, plus: TemporalPhase, minus: Temporal
     proportional to beta on a sufficiently smooth branch when its first-order
     response is nonzero. A large ratio can signal nonlinear response or a
     branch change; a small ratio does not certify gradient accuracy or branch
-    identity. This is a diagnostic, not an error bound. Coincident phases report
-    zero only when they also coincide with the free path; otherwise infinity.
+    identity. Coincident phases report zero only when they also coincide with
+    the free path; otherwise infinity.
     """
     spread = float(np.linalg.norm(plus.hidden - minus.hidden))
     midpoint_error = float(np.linalg.norm(plus.hidden + minus.hidden - 2.0 * free.hidden))
@@ -211,7 +211,7 @@ class TemporalPatchNet:
 
     def _detuning_weights(self, beta: float, horizon: int) -> float | np.ndarray:
         scale = beta / (horizon * self.outputs)
-        # Preserve the audited default kernel's scalar arithmetic exactly.
+        # All-ones precision returns a scalar, so the default path uses scalar arithmetic.
         if np.all(self._output_precision == 1.0):
             return scale
         return np.asarray(scale * self._output_precision)
@@ -361,7 +361,7 @@ class TemporalPatchNet:
         lam = b / (1.0 + b)
         diagonal = np.broadcast_to(np.eye(width), (batch, horizon, width, width)).copy()
         if isinstance(b, float):
-            # Exact compatibility with the all-ones frozen reference kernel.
+            # All-ones precision: the scalar form of the same derivatives.
             qt = (activity @ self._C.T - target) @ self._C
             gradient = e + lam * first * qt
             diagonal += lam * first[:, :, :, None] * (self._C.T @ self._C) * first[:, :, None, :]
@@ -621,7 +621,7 @@ class TemporalPatchNet:
         Returned predictions are ordinary free rollouts, never target-nudged
         outputs. Planning neither executes the action nor trains on its goal.
         Each contrast must pass the same symmetry check as ``observe``; beta
-        halves up to ``max_halvings`` times within one proposal. ``method``
+        halves up to ``max_halvings`` times within one plan call. ``method``
         selects the search direction: ``"steepest"`` (the projected contrast
         scaled by ``rate``) or ``"bfgs"`` (a quasi-Newton direction from the
         accepted steps, with the same line search and causal replay).
@@ -699,13 +699,13 @@ class TemporalPatchNet:
         A contrast that stays off center is refused with the reason
         ``contrast_asymmetric``; the result reports the beta of its last
         contrast and the number of halvings. An infinite tolerance disables
-        the check and reproduces the unguarded update.
+        the check.
 
         With ``backtrack=True``, test up to sixteen successively halved rates
         against target-free predictions from the original initial state. A
         finite decrease in the observed precision-weighted half-MSE is required
         before committing. This guards the current observation, not old skills
-        or unseen data. The default preserves the fixed-rate update.
+        or unseen data. The default ``backtrack=False`` applies the fixed-rate update.
         """
         if not isinstance(backtrack, (bool, np.bool_)):
             raise ValueError("backtrack must be a boolean")

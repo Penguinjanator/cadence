@@ -1,7 +1,7 @@
-"""Continuous observations on the existing nonlinear, reciprocal neural core.
+"""Continuous observations on the nonlinear, reciprocal neural core.
 
 Fast activity is carried between real observations; efficacy and bias are learned
-by the existing local free/nudged contrast. There is no separate fact store,
+by the local free/nudged contrast. There is no separate fact store,
 importance detector, replay, or weight-consolidation potential here. A small
 equation residual certifies neither a minimum nor a unique normal form. The
 gradient interpretation additionally needs a smooth stable equilibrium branch
@@ -74,17 +74,17 @@ class PatchNet:
     Opt-in ``context_strength`` adds a quadratic overlap with the preceding
     free activity on ``context_mask`` (default: the supplied hidden ports).
     That preceding value is fixed across all phases of one observation, not
-    updated at each numerical step. It is a temporal boundary, not a witnessed
-    target. The update does not differentiate through prior observations.
+    updated at each numerical step. It acts as a temporal boundary and never as
+    a witnessed target. The update does not differentiate through prior observations.
     Fresh or reset streams use an explicit zero-activity boundary.
-    Strength zero preserves the original warm-start-only dynamics. Positive
-    strength can slow forgetting but does not guarantee useful memory; large
-    values may need a smaller integration step to settle.
+    Strength zero gives warm-start-only dynamics. Positive strength can slow
+    forgetting but does not guarantee useful memory; large values may need a
+    smaller integration step to settle.
 
     ``solver="hybrid"`` optionally refines the local result using a global
     energy solver on supported smooth CPU brains. It additionally checks local
     energy curvature, without certifying uniqueness or a global energy minimum.
-    The default ``"local"`` path retains the original numerical rule.
+    The default ``"local"`` path uses the ``Brain.equilibrate`` result unrefined.
     """
 
     def __init__(
@@ -264,7 +264,7 @@ class PatchNet:
         ``coupling / 2`` (default 0.5). This initialization bound need not survive
         learning and does not qualify arbitrary nudges or temporal anchors.
         The usual full equation checks still decide whether a phase converged.
-        Widths and couplings are supplied candidate genes, not learned roles.
+        Widths and couplings are supplied by the caller; learning does not set them.
         Construction uses synapse lists, with storage proportional to contacts.
         """
         def width(name: str, value: object) -> int:

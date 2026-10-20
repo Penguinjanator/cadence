@@ -5,25 +5,26 @@ number of steps from rest, or from a given state, under a stimulus. Two
 backends do the same arithmetic:
 
 * ``"cpu"``: NumPy in float64. The transport is one segmented sum per
-  step, a scatter of every synapse's message into its neuron's synaptic input; for
+  step, a scatter of every synapse's message into its neuron's synaptic input, or a
+  SciPy CSR product when SciPy is installed (``cadence.sparse``). For
   connectomes whose dense blocks fit (at most ``dense_limit`` squared entries,
   see ``cadence.blocks``) the same sum is done as block matrix products,
-  reusing the product of every range of neurons that did not move since
-  the previous step, which is far faster when the interpreter overhead of
-  the scatter would dominate and lets a settling step cost what its
-  moving neurons cost rather than what the whole net does. This is the
-  receipt-grade backend: deterministic, exact to rounding, and the one the
-  neuron-by-neuron reference is compared against.
-* ``"torch"``: the same scatter with ``index_add_`` on whatever device
-  torch offers, CUDA in float64, Apple silicon in float32 (MPS has no
-  float64), CPU in float64. Use it for interactive work and for very large
-  connectomes, and keep a conformance check against ``"cpu"``; the fly brain
-  has neurons on knife edges where float32 flips a bistable readout.
+  reusing the products of every source range whose activation did not change since
+  the previous step. Blocks are far faster when the interpreter overhead of
+  the scatter would dominate. This is the receipt-grade backend:
+  deterministic, exact to rounding, and the one the neuron-by-neuron
+  reference is compared against.
+* ``"torch"``: the same block products when the blocks fit, else a scatter with
+  ``index_add_``, on whatever device torch offers; by default CUDA in float64,
+  Apple silicon in float32 (MPS has no float64) and CPU in float64. Use it for
+  interactive work and for very large connectomes, and keep a conformance
+  check against ``"cpu"``; the fly brain has neurons on knife edges where
+  float32 flips a bistable readout.
 
 Three kinds of parameter sit on a brain, all defaulting to the connectome:
 ``efficacy``, one signed number per synapse (the connectome's sign unless a
 learner has moved it); ``log_gain``, one per neuron on its outgoing
-synapses, how a lane declares a stimulus rate or a region's gain; and
+synapses, how a caller declares a stimulus rate or a region's gain; and
 ``bias``, one per neuron. The effective drive of synapse ``e`` per unit
 presynaptic activation is ``gain * count[e] * efficacy[e] *
 exp(log_gain[pre[e]])``.
@@ -295,8 +296,8 @@ class RefinementReport:
     curvature evaluations or line-search trials. ``min_curvature`` is the
     smallest eigenvalue of the reduced activity-space energy Hessian at the
     returned state. Combined with a small full residual, a positive value is a
-    numerical local-stability check, not a certified global minimum, uniqueness
-    theorem or gradient-branch guarantee between free and nudged phases.
+    numerical local-stability check. It certifies no global minimum, no uniqueness
+    and no shared gradient branch between free and nudged phases.
 
     ``status`` is ``local`` or ``refined`` on a qualified row; any other value
     explains why refinement did not qualify it. Failed rows must not be acted on
@@ -314,7 +315,7 @@ class Equilibrium:
     """A bounded solve and its measured equation error, one entry per batch row.
 
     ``steps`` counts local sweeps in this call. ``state.steps`` is the last chunk's count.
-    Convergence here means a small residual, not uniqueness, stability or task quality.
+    Convergence here means a small residual; ``Brain.residual`` says what that certifies.
     Optional refinement diagnostics add a local-curvature admission check;
     ``qualified`` combines it with the full residual without changing ``converged``.
     """
@@ -541,8 +542,9 @@ class Brain:
     ) -> Brain:
         """A new brain on the same connectome with some parameters replaced.
 
-        On the host, new efficacies and biases alone make a copy whose derived arrays
-        (the weights, the blocks) are remade on first use, not a rebuilt brain.
+        On the ``"cpu"`` backend, new efficacies and biases alone make a shallow copy with
+        the new weights, whose blocks are remade on first use. A new ``log_gain``, or
+        another backend, builds a new brain.
         """
         if self.backend == "cpu" and log_gain is None:
             new = copy.copy(self)
@@ -589,7 +591,7 @@ class Brain:
     def dense(self) -> np.ndarray:
         """The synapse matrix ``W[pre, post]``: the synaptic input of a batch ``s`` is ``s @ W``.
 
-        Built on demand; this is what a page that settles the net in a browser embeds.
+        Built on demand, for exporting the net to another runtime such as a browser page.
         """
         dense = np.zeros((self.connectome.n, self.connectome.n))
         np.add.at(dense, (self.connectome.pre, self.connectome.post), self._weights)
@@ -700,8 +702,8 @@ class Brain:
         for successively halved integration steps. Two consecutive repeated
         complete-state checkpoints at rounding precision end an unqualified
         attempt early, leaving its unused sweeps for the remaining attempts.
-        Every attempt checks the original equations; this changes the numerical
-        method, not the model. Repetition never qualifies an answer.
+        Every attempt checks the original equations; a halved step changes only the
+        numerical method. Repetition never qualifies an answer.
         """
         for name, value, minimum in (
             ("budget", budget, 0), ("chunk", chunk, 1), ("damping", damping, 0)
@@ -831,7 +833,7 @@ class Brain:
                 for value in (current.v, current.activation, current.adaptation)
             ):
                 # A divergent numerical state is not a valid warm start for
-                # another chunk. Keep its failed diagnostic, not a new exception.
+                # another chunk. Return its failed diagnostic instead of raising.
                 break
             previous = current
             current = self.settle_batch(
@@ -975,8 +977,9 @@ class Brain:
     ) -> tuple[np.ndarray, np.ndarray] | None:
         """``sum_b s+ s+ - s- s-`` per synapse and ``sum_b (s+ - s-)`` per neuron, on the device.
 
-        Returns ``None`` when either state does not carry this brain's device
-        handle; the learner then reads the activations on the host.
+        Returns ``None`` when the brain has no device block layout or either state does
+        not carry this brain's device handle; the learner then reads the activations on
+        the host.
         """
         kernel = self._torch if self.backend == "torch" else self._mlx
         if kernel is None or kernel.layout is None or plus.device is None or minus.device is None:
@@ -1004,8 +1007,8 @@ class Brain:
         the actual potential projection of ``settle_batch``; ablated neurons
         must have zero potential, and their adaptation must decay to zero.
 
-        A small residual certifies these equations at this state, not stability,
-        uniqueness, or convergence from another start. Activation-movement
+        A small residual certifies these equations at this state only; it says nothing
+        about stability, uniqueness or convergence from another start. Activation-movement
         tolerance and reaching a step cap do not provide this certificate.
         The calculation performs one transport. An unread resident float64 Torch state
         is checked on its device, returning only one scalar per row. Other states use
@@ -1173,7 +1176,10 @@ class Brain:
 
 
 class _TorchKernel:
-    """Gather-scatter settling on a torch device; float32 on MPS, float64 elsewhere."""
+    """Settling on a torch device, by block products when the blocks fit, else gather-scatter.
+
+    The default precision is float32 on MPS and float64 elsewhere; ``precision`` overrides it.
+    """
 
     def __init__(
         self,
@@ -1287,7 +1293,7 @@ class _TorchKernel:
         return held[key]
 
     def _synaptic_input(self, s: Any, previous: Any, cache: list[Any]) -> Any:
-        """The block transport on the device, reusing the products of still ranges."""
+        """The block transport on the device; on a CPU device it reuses still source ranges."""
         torch, lay = self.torch, self.layout
         assert lay is not None
         out = torch.zeros_like(s)
@@ -1481,7 +1487,7 @@ class _TorchKernel:
         return edges, neurons
 
     def contrast(self, s_plus: Any, s_minus: Any) -> tuple[np.ndarray, np.ndarray]:
-        """The block Gram contrast on the device; only the per-synapse result comes back."""
+        """The block Gram contrast on the device; the per-synapse and per-neuron sums come back."""
         edges, neurons = self.contrast_tensors(s_plus, s_minus)
         return edges.cpu().double().numpy(), neurons.cpu().double().numpy()
 
@@ -1634,7 +1640,7 @@ class _MlxKernel:
         return mx.concatenate(parts, axis=1)
 
     def contrast(self, s_plus: Any, s_minus: Any) -> tuple[np.ndarray, np.ndarray]:
-        """The block Gram contrast on the device; only the per-synapse result comes back."""
+        """The block Gram contrast on the device; the per-synapse and per-neuron sums come back."""
         mx, lay = self.mx, self.layout
         pieces = []
         for k in range(lay.pairs):

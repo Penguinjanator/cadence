@@ -1,7 +1,7 @@
 """Input ports of a record patch: how the inputs reach the context channels.
 
-The dense port is the record patch as published: every context channel reads every input
-through its own row. A structured port reads a declared layout of the inputs through
+The dense port is the default: every context channel reads every input through its own
+row. A structured port reads a declared layout of the inputs through
 blocks: a *map* block is a tied local kernel over a grid of the input (a convolution, the
 same kernel at every position, so a thing is the same thing wherever it appears), whose
 output is a grid of channels laid out as retinotopic maps; a *dense* block is a plain

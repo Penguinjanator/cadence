@@ -1,24 +1,23 @@
 """A life: one continuing loop in which a governor reads the brain's own signals
 and returns its mode, habit, imagine or learn.
 
-Rung 1 of the ladder. The brain is a ``BeliefPatch`` or a ``Steered`` cortex; the application
-supplies its body and its cheap policy. Every decision: the life reads the brain's own signals into
+The brain is a ``BeliefPatch`` or a ``Steered`` cortex; the application supplies its body and
+its cheap policy. Every decision: the life reads the brain's own signals into
 a readback of seven channels (the last surprise over its baseline, log-compressed; a slow average of
 the same; the repair residual over its routine median; the last mode as three flags; a constant).
 The governor settles on that readback and names the mode. The action is the habit's or the best
 candidate imagined over a horizon under the belief's private continuation. The moment is
 assimilated, and the outcome the world returns is measured against what the brain expected: the
 surprise. When the governor says learn, the executed window is replayed from its boundary and one
-admitted step is taken per pass; a window whose loss did not fall is undone. The baseline of the
-surprise follows the quiet moments, with a floor, and habituates when a learn call was undone.
+admitted step is taken per pass; with ``LifeConfig.rollback``, a window whose loss did not fall
+below ``validity`` times its starting loss is undone. The baseline of the surprise follows the
+quiet moments, with a floor, and habituates when a learn call was undone.
 
-The governor is a settling patch whose every synapse is a gene (``PatchGovernor``, the dozing cat's
-fourteen neurons), with the hand-set threshold rule as the control (``ThresholdGovernor``) and the
-two ends of the switch (``AlwaysAwake``, ``NeverWakes``). The cost of a decision is what the brain
-computed: the moments of the patch (assimilated, imagined, observed, replayed) and the governor's
-settling steps converted to moments by its synapse count.
-
-The room with the heater and the dozing cat wrote this loop before it was here.
+The governor is a settling patch whose every synapse is a gene (``PatchGovernor``: seven readback,
+``cortex`` hidden and three motor units), with the hand-set threshold rule as the control
+(``ThresholdGovernor``) and the two ends of the switch (``AlwaysAwake``, ``NeverWakes``). The cost
+of a decision is what the brain computed: the moments of the patch (assimilated, imagined,
+observed, replayed) and the governor's settling steps converted to moments by its synapse count.
 """
 
 from __future__ import annotations
@@ -81,7 +80,7 @@ class Governor:
 
 
 class NeverWakes(Governor):
-    """The habit every decision: the brain below rung 1."""
+    """The habit every decision: the switch held off, never imagining or learning."""
 
     def settle(self, signals: Signals) -> tuple[str, int]:
         return "habit", 0
@@ -91,7 +90,8 @@ class ThresholdGovernor(Governor):
     """The hand-designed control: a spike of the surprise above ``k_imagine`` baselines recruits
     imagination for ``imagine_budget`` decisions (renewed by a new spike if ``renew``); a
     learn call needs the surprise above ``k_learn`` baselines on at least ``persist_share`` of
-    the last ``persist`` decisions and no cooldown. Every constant is a gene."""
+    the last ``persist`` decisions, no cooldown, and ``signals.can_learn``. Every constant is a
+    gene."""
 
     HAND_SET: dict[str, Any] = {
         "k_imagine": 8.0,
@@ -174,7 +174,8 @@ class PatchGovernor(Governor):
     readback to cortex, ``rm_i_k`` readback to motor, ``cm_j_k`` cortex to motor, biases
     ``cb_j`` and ``mb_k``, one lateral weight within the cortex and one within the motor);
     the settled motor state is the mode; nothing in it learns within a life. ``warm`` starts
-    each settle from the last (hysteresis as a gene). This graph solve is separate
+    each settle from the last (hysteresis as a gene). A settle that does not converge within
+    ``budget`` returns the habit. This graph solve is separate
     from the belief cortex's finite repair and does not form a joint equilibrium."""
 
     def __init__(
@@ -245,9 +246,9 @@ class PatchGovernor(Governor):
 
     @classmethod
     def hand_set(cls, cortex: int = 4) -> dict[str, Any]:
-        """The threshold rule written as synapses: a spike drives the imagine unit, the mode
-        feeds itself back, the slow average drives the learn unit, the habit unit rests on the
-        constant, the motor units compete. The dozing cat's wiring."""
+        """The threshold rule written as synapses: a spike drives the imagine unit, the imagine
+        flag feeds itself back, the slow average drives the learn unit, the constant drives the
+        habit unit and holds the learn unit down, the motor units compete."""
         g: dict[str, Any] = {"warm": False, "lateral_cortex": -0.5, "lateral_motor": -1.0}
         for i in range(len(READBACK)):
             for j in range(cortex):
@@ -270,7 +271,7 @@ class PatchGovernor(Governor):
     @classmethod
     def space(cls, cortex: int = 4) -> dict[str, tuple[Any, ...]]:
         """The genome's space for ``genes``: every synapse and bias linear in [-2.5, 2.5], the
-        laterals, and ``warm``."""
+        two laterals in [-2.5, 0], and ``warm``."""
         keys = [
             k for k in cls.hand_set(cortex) if k not in ("warm", "lateral_cortex", "lateral_motor")
         ]
@@ -293,8 +294,8 @@ class PatchGovernor(Governor):
         self.converged = bool(result.converged.all())
         self.residual = float(np.max(result.residual))
         if not self.converged:
-            # A capped numerical attempt is not a settled neural mode. The
-            # declared fallback is the cheap habit, not its provisional argmax.
+            # An unconverged settle names no mode; the declared fallback is the
+            # cheap habit and the provisional argmax is ignored.
             return "habit", int(result.steps)
         self.state = result.state
         self.activation = np.asarray(result.state.activation[0]).copy()

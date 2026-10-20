@@ -8,11 +8,11 @@ the previous inputs:
 
     c <- decay * c + (1 - decay) * h
 
-so the state reverberates and fades over about ``1 / (1 - decay)`` inputs rather than
-vanishing at once. The context neurons hear nothing (they are a source range of the block
-transport, so their product is computed once per settling run) and their synapses into the
-hidden neurons learn under the same free/nudged rule as every other synapse. Credit does not
-flow back through time: the trace is a stimulus the rule sees, not a path it differentiates.
+so the state reverberates and fades over about ``1 / (1 - decay)`` inputs. The context
+neurons hear nothing (they are a source range of the block transport, so their product is
+computed once per settling run) and their synapses into the hidden neurons learn under the
+same free/nudged rule as every other synapse. Credit does not flow back through time: the
+rule sees the trace as a stimulus and does not differentiate through it.
 ``stateful`` builds the connectome, ``Echo`` keeps the trace for a batch of streams.
 """
 
@@ -253,8 +253,7 @@ class Afterglow(Trace):
 
 @dataclass
 class Efference(Trace):
-    """The corollary discharge: a Trace written from the command the brain issued, not from
-    a settled activation.
+    """The corollary discharge: a Trace written from the command the brain issued.
 
     One ``efference`` neuron per motor neuron carries the fading one-hot of the actions the
     stream executed, and the next moment reads it through the plastic projection from the
@@ -518,9 +517,9 @@ class Recall:
         "context", "context_decay",
     )
     CONSTRUCTION = ("capacity", "value", "next")
-    # options beside the founder memory: a memory at their founders describes and saves itself
-    # as before, and a saved memory without one takes its founder; each is runtime but the
-    # key and the window, which shape the memory
+    # options beside the founder memory: a memory describes and saves an option only where it
+    # differs from its founder, and a saved memory without one takes its founder; each is
+    # runtime except the key and the window, which shape the memory
     OPTIONS = (
         "address_step", "write", "null", "address_reward", "episodes", "key", "window",
         "window_decay",
@@ -1303,9 +1302,9 @@ class Recall:
             "neurons": self.neurons,
             "writes": int(self.writes),
         }
-        if self.inputs:  # a memory on the source range's observations describes itself as before
+        if self.inputs:  # only a memory keyed on a code of the observation records its width
             out["inputs"] = self.inputs
-        # an option at its founder is left out: the founder memory describes itself as before
+        # an option at its founder is left out of the description
         founders = self.options()
         out.update(
             {name: getattr(self, name) for name in self.OPTIONS
@@ -1345,6 +1344,11 @@ class PatternSeparator:
     It needs ``fan_in`` within the channels, ``cover * 2 * inputs`` within
     ``expansion * fan_in`` and ``cover`` within ``expansion``. The founder ``cover=0`` draws
     the signed sparse weights over the inputs independently, as above.
+
+    The projection is drawn once from the seed and never learns. A brain's ``code=units``
+    observation code and its episodic ``memory_expansion`` separators (sparse when
+    ``memory_fan_in`` is set) are such fixed random codes. A learned code is work in progress in
+    https://github.com/muellerberndt/cadence/issues/211.
     """
 
     inputs: int
@@ -1514,9 +1518,9 @@ class PatternSeparator:
             "seed": self.seed,
             "center": self.center,
         }
-        if self.fan_in:  # the dense founder's description is as it was
+        if self.fan_in:  # a dense separator leaves fan_in out of its description
             out["fan_in"] = int(self.fan_in)
-        if self.cover:  # and the independent sparse draw's
+        if self.cover:  # and a separator without cover leaves cover out
             out["cover"] = int(self.cover)
         return out
 
@@ -1525,12 +1529,12 @@ class PatternSeparator:
 class FastSynapses:
     """A bounded associative memory between two ranges, one matrix per stream.
 
-    ``rule="hebb"`` adds an outer product, preserving the original behaviour.
+    ``rule="hebb"`` (the default) adds an outer product.
     ``rule="delta"`` reads before writing: for a unit key ``k``,
     ``M += rate * outer(k, value - k @ M)``. Repeated evidence then stops changing
     a correct prediction. A rate-one write corrects this key's unscaled prediction; other
-    nonorthogonal keys can interfere. This is the established delta/LMS rule,
-    not a guarantee of unlimited capacity or learned memory addressing.
+    nonorthogonal keys can interfere. This is the delta/LMS rule. Its capacity is bounded,
+    and its addressing is fixed: the key itself, or the separator's code of it.
 
     ``observe``/``recall`` operate directly on key/value ports. ``update``/``read``
     adapt the same operations to settled states and full drives. Key normalisation
@@ -1607,7 +1611,7 @@ class FastSynapses:
 
     @staticmethod
     def _unit(x: np.ndarray) -> np.ndarray:
-        # Preserve the original Hebbian normalisation, including its small-norm floor.
+        # The Hebbian normalisation, with a small-norm floor.
         return np.asarray(x / np.maximum(np.linalg.norm(x, axis=-1, keepdims=True), 1e-12))
 
     @staticmethod
@@ -1727,7 +1731,9 @@ class FastSynapses:
         write: np.ndarray | None = None,
         post: np.ndarray | None = None,
     ) -> None:
-        """After settling: strengths fade; the rows in ``write`` add their outer product.
+        """After settling: strengths fade once; the rows in ``write`` store the settled pre
+        activity as the key and the post activity as the value (``observe``). With
+        ``write=None`` no row writes.
 
         ``post`` replaces the post neurons' activations for the write, ``(batch, post)``: what
         actually followed (the next symbols read) rather than what the net settled on.

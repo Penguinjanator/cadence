@@ -13,8 +13,8 @@ def assemble(
 
     Region names identify complete neuron populations; child populations become
     ``region/population``. Pass the returned connectome to a single ``Brain``, with one
-    concatenated drive and state. Regions do not run independently. Convergence/optimality requires
-    properties of the combined system, not merely each isolated region.
+    concatenated drive and state. Regions do not run independently: convergence is a
+    property of the combined system and does not follow from each region in isolation.
     """
     if not regions or any(not name or "/" in name for name in regions):
         raise ValueError("nonempty region names without '/' required")

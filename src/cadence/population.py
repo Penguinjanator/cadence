@@ -7,12 +7,12 @@ streams, every settle one batched product.
 record stores, so a whole population of brains, each in many worlds, settles, reads,
 writes and takes its slow step in a handful of tensor operations per moment. Nothing
 crosses an instance, a stream or a moment: the slow step of each instance is the adjoint of
-its own one-moment loss (autograd computes it; the NumPy patch's adjoint is the reference
-and a parity test holds both to rounding; the adjoint is written out, the numbers autograd
-gives at a fraction of its cost on a device), the records are the delta rule at the code,
-and no gradient reaches the store or another patch. ``from_patch`` copies a NumPy patch's
-parameters, projection, offsets and running statistics into every instance, which is how
-the parity is checked and how a schooled patch is broadcast into a population.
+its own one-moment loss, written out (the numbers autograd gives, at a fraction of its cost
+on a device; a parity test holds it to the NumPy patch's adjoint), the records are the
+delta rule at the code, and no gradient reaches the store or another patch.
+``from_patch`` copies a NumPy patch's parameters, projection, offsets and running
+statistics into every instance, which is how the parity is checked and how a schooled
+patch is broadcast into a population.
 
 What batches: instances, streams and, through several ``PopulationPatch`` objects, the
 patches of a brain. What does not: the moments of one stream, which a temporal patch
@@ -402,8 +402,8 @@ class PopulationPatch:
         one stream land by the delta rule against the store as it stood before the call (a
         batched write, the NumPy patch's ``write_batch``). ``weight`` (outputs,) or
         (instances, outputs), summing to the outputs, reweights the squared errors of a
-        linear readout: a patch that predicts a wide reading of which a few ports matter
-        counts them by their weight rather than one in eight hundred.
+        linear readout, so a patch that predicts a wide reading of which a few ports matter
+        counts those ports by their weight.
 
         Every change is staged and checked before any is committed. The inputs must be
         finite, and the targets finite on the unmasked moments (a masked-out moment's

@@ -1,20 +1,20 @@
-"""Experimental fixed connectivity over the existing temporal energy and solver.
+"""Experimental fixed connectivity over the temporal energy and solver.
 
 Components are coordinate groups of one jointly repaired recurrent state. The
-mask is supplied architecture, not learned specialization. All connections are
-one-time-step recurrent connections; this helper adds no same-time implicit
-coupling, clock, composer policy, new energy or learning direction.
+masks are supplied wiring; nothing learns them. All connections are one-step
+recurrent connections; this helper adds no same-time implicit coupling, clock,
+composer policy, new energy or learning direction.
 
-Masked gradients are computed BEFORE public parameter backtracking admission.
-Snapshots retain masks in additional metadata. The core's private base-class
-replay may ignore that metadata safely because it only evaluates already legal
-candidate arrays. Restore through this subclass to preserve future enforcement.
+Parameter gradients are masked before parameter backtracking admits a step.
+Snapshots carry the masks in additional metadata. The base class's private
+replay may ignore that metadata because it only evaluates candidate arrays that
+are legal by construction. Restore through this subclass to keep enforcing the
+masks on later updates.
 
-TemporalMemory.observe explicitly rejects this subclass before mutation.
-TemporalMemory.protect can collect response constraints, but that does not make
-protected learning compatible with these masks. No combined transaction is
-provided. Fixed routing is an experimental capacity control, not evidence of
-learned specialization or a behavioral advantage.
+``TemporalMemory.protect`` can collect response constraints from this net, but
+``TemporalMemory.observe`` refuses this subclass before any mutation, so
+protected learning and masks do not combine. Fixed routing is an experimental
+capacity control.
 """
 
 from __future__ import annotations
@@ -157,9 +157,9 @@ def two_group_masks(
     """Declared two-group wiring: separate input access, motor-only readout.
 
     Within-group recurrence is dense. Cross-coupling enables both delayed
-    recurrent directions; it is not a hand-written semantic plan. Input sets
-    can overlap for a genuinely shared observation. Empty sets are allowed.
-    The returned masks are ordinary explicit arrays, not new runtime state.
+    recurrent directions between the groups. Input sets may overlap when an
+    observation is shared, and may be empty. The result is a plain dict of
+    boolean arrays to pass as ``masks``.
     """
     for name, value in [
         ("context_hidden", context_hidden),

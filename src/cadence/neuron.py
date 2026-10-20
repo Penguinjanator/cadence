@@ -1,6 +1,6 @@
 """The neuron model: what one neuron does with what arrives over its synapses.
 
-The graded rate model is the one every connectome lane uses. A neuron
+Every neuron of a ``Brain`` runs this graded rate model. A neuron
 holds a potential ``v`` and publishes an activation ``s(v)``; each step it
 moves ``v`` toward the sum of its synaptic input, its stimulus, and its bias:
 
@@ -9,9 +9,10 @@ moves ``v`` toward the sum of its synaptic input, its stimulus, and its bias:
     s(v) = rectified sigmoid, exactly zero at rest
 
 With ``leak`` above zero a neuron below rest publishes a small negative
-activation, ``-leak`` at most, so the learning rule can still tell a
-silent neuron from a dead one; rest stays an exact zero. Connectome lanes
-leave it at zero. ``a`` is an optional adaptation variable, one per neuron, following its own
+activation, ``-leak`` at most, so the learning rule can tell a
+silent neuron from a dead one; rest stays an exact zero. ``NeuronModel``
+defaults ``leak`` to zero; ``learning_neuron_model``, which ``Brain`` uses, sets
+0.1. ``a`` is an optional adaptation variable, one per neuron, following its own
 activation with a slow time constant. It is what lets a connectome with mutual
 inhibition produce rhythm instead of a fixed point. It is off by default.
 """

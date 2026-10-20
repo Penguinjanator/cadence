@@ -1,8 +1,11 @@
-"""Named overrides for the existing composed-brain configurations.
+"""Named overrides for the composed-brain configurations.
 
-These are interface names and validation, not another set of founder values or
-learning laws. The owning dataclasses continue to define their valid domains.
-Mutation search spaces deliberately need not cover every valid configuration.
+A public setting name is a prefix and a field, such as ``learning_beta``,
+``actor_eta`` or ``arousal_threshold``, for ``LearnerConfig``,
+``ActorCriticConfig`` and ``ArousalConfig``; ``temperature`` is accepted for
+``learning_temperature``. This module resolves the names and checks scalar
+kinds; the dataclasses define the defaults and valid domains. Mutation search
+spaces need not cover every valid configuration.
 """
 
 from __future__ import annotations
@@ -74,7 +77,7 @@ def configured(base: Config, changes: Mapping[str, Any], prefix: str) -> Config:
     if unknown:
         raise TypeError(f"unknown {prefix} setting: {sorted(unknown)[0]!r}")
     # Config constructors validate ranges and relationships. Validate scalar kinds
-    # here too: several legacy constructors accept bools as Python numbers.
+    # here too: several constructors accept bools as Python numbers.
     for name in _FIELDS[prefix]:
         value = updates.get(name, getattr(base, name))
         qualified = f"{prefix}_{name}"
@@ -108,7 +111,7 @@ def arousal_config(
     current: ArousalConfig | None = None,
     retuning: bool = False,
 ) -> ArousalConfig | None:
-    """At birth a mapping starts from founders; in life it patches current genes."""
+    """Build an arousal configuration; a mapping overlays ``current`` or the defaults."""
     if value is None:
         if changes:
             raise ValueError("arousal settings require arousal=True or an arousal configuration")

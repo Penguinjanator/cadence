@@ -25,16 +25,16 @@ optional lateral inhibition among the outputs, and named populations for the
 layers.
 
 The rule is exact in a limit. With symmetric effective recurrent weights and a
-smooth stable equilibrium
-branch, converged phases give a gradient in the small-nudge limit. The
-raw contrast concerns effective weights; efficacy derivatives also need
-the contact/gain factor. The cross-entropy nudge uses T times that loss.
-See docs/learning.md for the parameter convention and finite-step limits. Two
-things break that in practice, and ``learning_neuron_model`` is chosen so they do
-not: a neuron below rest with a hard rectifier publishes nothing and cannot
-be moved (hence a small ``leak``), and a neuron on a steep sigmoid sits
-either silent or saturated (hence unit slope). The equilibrium tests check
-the alignment of the rule against finite differences.
+smooth stable equilibrium branch, converged phases give a gradient in the
+small-nudge limit. The raw contrast concerns effective weights; efficacy
+derivatives also need the contact/gain factor. The cross-entropy nudge uses T
+times that loss. See docs/learning.md for the parameter convention and
+finite-step limits. Two things break that in practice, and
+``learning_neuron_model`` is chosen to avoid them: a neuron below rest with a
+hard rectifier publishes nothing and cannot be moved (hence a small ``leak``),
+and a neuron on a steep sigmoid sits either silent or saturated (hence unit
+slope). The equilibrium tests check the alignment of the rule against finite
+differences.
 """
 
 from __future__ import annotations
@@ -108,7 +108,7 @@ class LearnerConfig:
             elif isinstance(value, np.floating):
                 object.__setattr__(self, name, float(value))
         if self.eta_bias is None:
-            # The bias rate follows the synapse rate unless chosen: issue 126.
+            # Unless chosen, the bias rate follows the synapse rate.
             if not np.isfinite(self.eta) or self.eta < 0:
                 raise ValueError(
                     "beta must be finite and positive; learning rates finite and nonnegative"
@@ -591,7 +591,7 @@ class Learner:
         """A contrast pairs the same streams, never NumPy's broadcast rows.
 
         Read resident tensor shapes without fetching activations from a device.
-        This is a shape contract, not an equilibrium or provenance certificate.
+        The check covers shapes only; it certifies neither equilibrium nor provenance.
         """
         shapes = []
         for state in (free, nudged) if opposite is None else (free, nudged, opposite):
@@ -925,13 +925,13 @@ class Learner:
             raise ValueError("phase contrasts must be finite")
         raw_synapse, raw_neuron = synapse_term, neuron_term
         count = self.contrast_updates + 1  # only this optimizer's own history
-        if cfg.momentum > 0:  # still local: a synapse accumulates only its own contrast
+        if cfg.momentum > 0:  # local: a synapse accumulates only its own contrast
             m = cfg.momentum
             self.velocity = m * self.velocity + (1 - m) * synapse_term
             self.velocity_bias = m * self.velocity_bias + (1 - m) * neuron_term
             correction = 1.0 - m**count  # a short history is an average over fewer updates
             synapse_term, neuron_term = self.velocity / correction, self.velocity_bias / correction
-        if cfg.normalize > 0:  # still local: a synapse reads only its own history
+        if cfg.normalize > 0:  # local: a synapse reads only its own history
             rho = cfg.normalize
             self.second_moment = rho * self.second_moment + (1 - rho) * raw_synapse**2
             self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_neuron**2
@@ -1018,8 +1018,8 @@ class Learner:
             report.update(_taught_report(taught, batch))
             return LearnedState(free, nudged, opposite, taught), report
         free = self.free(drive, warm)
-        # Finite phases retain the original update law. Their post-solve
-        # diagnostics count additional work and do not certify the lesson.
+        # Finite phases get post-solve residual diagnostics. They count additional
+        # work and do not certify the lesson.
         phases = {
             "free": Equilibrium(free, self.brain.residual(drive, free), free.steps,
                                 cfg.tolerance if cfg.tolerance is not None else 0.0,
@@ -1028,7 +1028,7 @@ class Learner:
         # Finite teaching updates from whatever state the budget reached. A free
         # phase that used its entire budget usually did not reach the movement
         # stop; the lesson was then learned from a state that may not have
-        # settled. Count it and say so instead of hiding it (issue 127).
+        # settled. The report counts it and a warning says so.
         exhausted = cfg.tolerance is not None and free.steps >= cfg.free_steps > 0
         taught = judged if judged is not None else self._taught(free, labels)
         if taught is not None and not taught.any():
@@ -1147,11 +1147,11 @@ class Learner:
         """Choose the sampled gain whose free output operating point is nearest the target.
 
         Left unset, the target is competitive: the mean over rows and output
-        slots of the highest output activation, at 0.5 — one choice up, the
+        slots of the highest output activation, at 0.5: one choice up, the
         others wherever the competition puts them. An explicit ``level``
         instead targets the mean over every output neuron, which on a readout
         of n choices pushes all n toward that level together and saturates a
-        competitive readout well before the winner is useful (issue 125).
+        competitive readout well before the winner is useful.
 
         The default grid tries the current gain first, then its powers-of-two
         multiples from 1/256 to 256. An explicit grid retains its order and
@@ -1383,7 +1383,8 @@ class Learner:
 
 
 def _moment_property(name: str) -> property:
-    """Keep the existing mutable NumPy attributes while avoiding per-step transfers."""
+    """An optimizer moment as a mutable NumPy attribute, copied from the device only when
+    read or assigned, so device updates make no per-step transfer."""
 
     def get(learner: Learner) -> np.ndarray:
         learner._host_moments()
@@ -1446,8 +1447,8 @@ def layered(
     among the outputs carry ``lateral`` (negative: winner takes most); with
     ``skip`` every input also reaches every output directly. ``skip_init`` overrides
     the initialization scale of only those direct projections; ``None`` uses ``init``.
-    Zero keeps the new projections trainable while preserving the original effective
-    weights and initial predictions.
+    Zero starts them at zero: they are trainable, and the initial effective weights and
+    predictions equal those of the same net without ``skip``.
     Forward synapses start with random signs and fan-scaled magnitudes times
     ``init`` (positive only when ``excitatory_forward``); each feedback
     synapse starts equal to its forward partner scaled by ``feedback``, so a
@@ -1680,10 +1681,10 @@ def calibrate_bias(
     Numerical qualification does not guarantee that the targets are reached.
 
     This is the operating point a connectome does not carry: the wiring says who talks to
-    whom, not how excitable each cell is. A threshold cannot tame a runaway loop (the fly's
-    antennal lobe stayed ignited at a bias of -6: that needs a gain, ``Brain(log_gain=...)``
-    selected by protocol). A qualified responsive candidate can put a readout in
-    the range where a nudge has a slope; inspect its final means and target gaps.
+    whom, not how excitable each cell is. A threshold cannot tame a runaway excitatory loop;
+    that needs a gain, ``Brain(log_gain=...)`` selected by protocol. A qualified responsive
+    candidate can put a readout in the range where a nudge has a slope; inspect its final
+    means and target gaps.
     """
     for name, value, minimum in (
         ("rounds", rounds, 1), ("iterations", iterations, 1),
@@ -1870,8 +1871,8 @@ def naive_efficacy(connectome: Connectome, plastic: np.ndarray) -> np.ndarray:
     On the plastic set the efficacy is the class's sign times the set's mean count over the
     class's own count, so ``gain * count * efficacy`` is one number for every class; the
     other synapses keep their sign. A specimen's synapse counts at a memory site are that
-    specimen's memories (the fly's Kenyon-cell-to-MBON counts made one odour aversive and the
-    other attractive before any lesson); a lesson that should start naive starts here.
+    specimen's memories, and they can favour one stimulus before any lesson; a lesson that
+    should start naive starts here.
     """
     plastic = np.asarray(plastic, dtype=bool)
     if plastic.shape != (connectome.synapses,):
@@ -1890,9 +1891,8 @@ def seam_report(
 
     ``coverage_pre`` is the fraction of pre neurons with a class onto some post neuron,
     ``classes_per_post`` the number of classes into each post neuron (by index). A seam
-    thinned by custody shows here: a synapse floor that removes noise elsewhere removes a
-    distributed memory, whose synapses are many and weak (the fly's floor of five kept 231
-    of 1,079 Kenyon cell classes onto one output neuron and 14 of 336 onto the other).
+    thinned by custody shows here: a synapse floor that removes noise elsewhere also removes
+    a distributed memory, whose synapses are many and weak.
     """
 
     def members(who: str | Sequence[int]) -> np.ndarray:
@@ -1935,8 +1935,7 @@ def preflight(
     """The checks a lesson needs before its first decision, each with the block that repairs it.
 
     The brain settles under ``drives`` (rows of stimulus drive, the situations it will decide
-    in) and three conditions are read, the ones that stopped the fruit fly from learning a
-    discrimination on its measured wiring:
+    in) and four conditions are read:
 
     - a readout in ``outputs`` within ``saturation`` of 0 or 1 under every drive has no slope
       for a nudge, so no lesson moves it: ``calibrate_bias``;
@@ -1948,9 +1947,8 @@ def preflight(
       drive leaves the lesson almost no eligibility there: the seam is thin, most often cut by
       a synapse floor in custody (``seam_report``);
     - two drives whose driven neurons overlap beyond ``shared_max`` of their union are the
-      same situation to the brain before it settles anything: the senses, not the wiring, are
-      to be told apart (the fly's two odours reached both receptor classes near saturation at
-      either fruit, from one wide odour field).
+      same situation to the brain before it settles anything; the senses must tell them
+      apart.
 
     Returns ``{"outputs", "shared", "inputs", "eligibility", "warnings"}``: the readings and one
     warning per finding, in words, naming the remedy. An empty ``warnings`` list is what a

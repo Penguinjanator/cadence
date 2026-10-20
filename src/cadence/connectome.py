@@ -105,8 +105,9 @@ class Connectome:
     ) -> Connectome:
         """Build from synapse lists; ``count`` defaults to 1 and ``sign`` to +1 everywhere.
 
-        Synapses with fewer than ``min_count`` contacts are dropped, and
-        parallel synapses between the same pair are merged by summing counts.
+        Self-synapses and synapses with fewer than ``min_count`` contacts are dropped.
+        Parallel synapses between the same pair are merged: their counts sum and the
+        merged sign is the count-weighted mean of their signs.
         """
         if not np.isfinite(min_count) or min_count < 0:
             raise ValueError("min_count must be finite and nonnegative")
@@ -157,7 +158,7 @@ class Connectome:
         return tuple(sorted(out))
 
     def digest(self) -> str:
-        """SHA-256 of the sorted synapse arrays and the named populations."""
+        """SHA-256 of the neuron count, the sorted synapse arrays and the named populations."""
         h = sha256()
         h.update(str(self.n).encode())
         for array in (self.pre, self.post, self.count, self.sign):

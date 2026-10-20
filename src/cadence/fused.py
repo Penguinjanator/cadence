@@ -5,9 +5,10 @@ and pays interpreter and memory traffic for each. This kernel does the same
 arithmetic, in the same order and the same float64, in one compiled loop:
 transport as the block products of ``cadence.blocks`` (a block whose source
 range did not move since the previous step is reused), then every neuron's
-update, activation, adaptation, and nudge in place. It is used by ``Brain`` on the CPU
-backend when the connectome is dense and no trajectory is requested; the
-conformance check and ``settle_neuron_by_neuron`` remain the reference it is
+update, activation, adaptation, and nudge in place. ``Brain`` uses it on the CPU backend
+when Numba is installed, the connectome's blocks fit ``dense_limit``, and no trajectory or
+settlement recording is requested (``CADENCE_FUSED=0`` forces the NumPy loop); the
+conformance check and ``settle_neuron_by_neuron`` are the reference it is
 measured against. Nothing a neuron could not see enters: the kernel reads
 the same synaptic input, stimulus, bias, and nudge the reference reads.
 """
@@ -317,7 +318,7 @@ def fused_settle(
 ) -> tuple[np.ndarray, int, np.ndarray]:
     """Run the fused kernel in place on ``v`` and ``a``; returns ``(s, taken, activity_change)``.
 
-    ``activation`` is accepted for compatibility. Publication is recomputed
+    ``activation`` is accepted and ignored. Publication is recomputed
     from ``v`` under the current mask, since cached readback may use an old mask.
     """
     assert njit is not None

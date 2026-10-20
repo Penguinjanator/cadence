@@ -4,9 +4,9 @@ Everything in ``Brain`` is a vectorized scatter. This module is the
 slow, literal version: neurons are rows, a transport carries one transmission
 per declared synapse into a synaptic input, and every neuron updates from its own
 row and its synaptic input slice alone. A ledger counts transmissions. Comparing a
-backend against this reference is how a lane certifies that it settles by
-neuron-local dynamics only: if the fast path computed anything the neurons
-could not, the two would part.
+backend against this reference checks that it settles by neuron-local dynamics
+only: if the fast path computed anything the neurons could not, the two would
+diverge.
 """
 
 from __future__ import annotations

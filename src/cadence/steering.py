@@ -3,9 +3,8 @@
 The cortex is a ``BeliefPatch`` with a gain per block of its observation port. The steering patch is
 a second ``BeliefPatch`` whose observation is the cortex's readback of the moment: what each sense
 says and how far the belief disagrees with it. A weighing turns its outputs into the gains the
-cortex's repair runs under. Two patches, a seam, and one admitted parameter step.
-Readback, steering and cortex execute sequentially; they do not jointly solve
-one observer-observed fixed point. The adjoint treats recorded readbacks as given.
+cortex's repair runs under. Readback, steering and cortex execute sequentially; they do not
+jointly solve one observer-observed fixed point. The adjoint treats recorded readbacks as given.
 
     r[t]      = [probe_b; surprise_b; residual[t-1]; output[t-1]; evidence_b; extra[t]]
     y_s[t]    = steering(r[t])                       the steering patch's moment
@@ -22,9 +21,6 @@ patch's adjoint under it gives its deltas; one joint step is admitted by a repla
 steering patch on the recorded readbacks, taken as given, the cortex under the gains it then
 returns), halved while the objective does not fall by the Armijo margin, starting from twice the
 last admitted step. The cortex can sleep while the steering patch learns.
-
-Three demos wrote this composition before it was here: the ventriloquist (rung 2), the lighthouse
-keeper (rung 3) and the night nursery (rung 4).
 """
 
 from __future__ import annotations
@@ -76,8 +72,7 @@ class Weighing:
 
 class Softmax(Weighing):
     """Gains that sum to the number of blocks, ``blocks * softmax(span * tanh(y))``: the
-    weighing moves weight from one sense to another and cannot amplify all of them. The
-    ventriloquist's and the night nursery's."""
+    weighing moves weight from one sense to another and cannot amplify all of them."""
 
     def __init__(self, blocks: int, *, span: float = 1.0) -> None:
         self.blocks = _integer("blocks", blocks, 2)
@@ -111,8 +106,7 @@ class Gaze(Weighing):
     that falls as the window widens (``min(1, lamp / sigma)``). The centre is the weighing's
     state and travels in the boundary. ``price`` prices the turn, ``0.5 * price * mean(turn^2)``,
     in the objective the joint step is admitted on. The pull is local in time: the dependence
-    of later centres on an earlier turn is not propagated, as in the lighthouse keeper, whose
-    beam this is."""
+    of later centres on an earlier turn is not propagated."""
 
     def __init__(
         self,
@@ -197,7 +191,7 @@ class Gaze(Weighing):
 
 class Rule:
     """A hand-written map from the readback ``(batch, channels)`` to the gains ``(batch,
-    blocks)``: the control of a rung, never a result. It has no steering patch and learns
+    blocks)``, the control arm for a learned weighing. It has no steering patch and learns
     nothing; the cortex under it learns by its own admitted step."""
 
     def __init__(self, fn: Callable[[np.ndarray], np.ndarray], *, macs: int = 0) -> None:
@@ -275,8 +269,8 @@ class SteeredPath:
 
 
 class Steered:
-    """A cortex weighed by a steering patch, a rule, or nothing (fixed gains of one: the brain
-    below rung 2). ``reads_output`` adds the previous moment's outputs to the readback,
+    """A cortex weighed by a steering patch, a rule, or nothing (fixed gains of one).
+    ``reads_output`` adds the previous moment's outputs to the readback,
     ``evidence`` the encoded evidence of the named blocks, ``extra`` a callable from the
     moment (readback, previous output, previous residual) to further channels ``(batch, k)``
     with ``extra_channels`` of them. The steering patch's port must read exactly the
@@ -602,7 +596,7 @@ class Steered:
 
     def _ablate(self, g: np.ndarray) -> np.ndarray:
         """The test-time ablation of the gains: ``"cut"`` sets them to one, a callable maps them
-        (the ventriloquist's shuffle, ``g[:, ::-1]``); the steering patch still runs and counts."""
+        (a shuffle such as ``g[:, ::-1]``); the steering patch still runs and counts."""
         if self.ablation is None:
             return g
         if self.ablation == "cut":
@@ -1100,8 +1094,8 @@ class Steered:
                 if result.steering is not None and live.steering is not None:
                     result.steering._state = live.steering.copy()
             else:
-                # Older checkpoints carried patch states but no composition
-                # boundary. They can restore parameters, not a continuation.
+                # A checkpoint without a live boundary restores the parameters
+                # and starts the composition from a fresh boundary.
                 result.reset()
             return result
         except (KeyError, TypeError, IndexError) as error:

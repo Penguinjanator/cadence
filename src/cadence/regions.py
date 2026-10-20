@@ -21,13 +21,13 @@ The standard regions are engineering analogues named for their intended function
 * ``prefrontal_cortex``: a working-memory population with one neuron per neuron of the region
   it holds, driven by a ``Trace`` of that region's activity.
 
-Three cortices keep their state outside the connectome. The records cortex (``Records``) codes
-a mean-free reading sparsely and keeps one record per cell for every predicted field, read
-through the active cells and written by the delta rule, as in the cerebellum and the dentate
-gyrus. The basal ganglia (``ActorCritic``) read cortex through learned corticostriatal weights
-and broadcast a dopamine prediction error. The hippocampus (``FastSynapses``) keeps one-trial
-associations per stream. ``Brain`` composes the regions, the basal ganglia and the
-hippocampus into one ready brain.
+Three parts of a brain keep their state outside the connectome. The records cortex
+(``Records``) codes a mean-free reading sparsely and keeps one record per cell for every
+predicted field, read through the active cells and written by the delta rule, as in the
+cerebellum and the dentate gyrus. The basal ganglia (``ActorCritic``) read cortex through
+learned corticostriatal weights and broadcast a dopamine prediction error. The hippocampus
+(``FastSynapses``) keeps one-trial associations per stream. ``Brain`` composes the regions,
+the basal ganglia and the hippocampus into one ready brain.
 """
 
 from __future__ import annotations
@@ -145,9 +145,10 @@ def slot_sizes(actions: int, slots: int | Sequence[int]) -> list[int]:
 def cortex(size: int, *, lateral: float = 0.0, name: str = "association") -> Region:
     """A cortical area of ``size`` neurons.
 
-    With ``lateral`` zero it is a blank region whose size a genome may evolve; a negative
-    ``lateral`` connects every pair of its neurons both ways with that inhibitory weight, the
-    providing subtractive competition and fixing the size. No cortical layers are modeled.
+    With ``lateral`` zero it is a blank region whose size a genome may evolve. A nonzero
+    ``lateral`` connects every pair of its neurons both ways with that weight and fixes the
+    size; a negative weight is lateral inhibition, a subtractive competition. No cortical
+    layers are modeled.
     """
     Region(name, size)  # validate capacity even when a designed lateral circuit is requested
     if not np.isfinite(lateral):

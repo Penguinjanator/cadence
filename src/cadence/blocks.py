@@ -15,7 +15,7 @@ range, an outgoing product is reused only when its activation is bit-for-bit
 what it was at the previous step. Products from ranges that receive feedback
 are recomputed. Nothing changes in what a neuron reads: the
 synaptic input is the same sum of the same messages, in a different association order,
-and the conformance check against the neuron-by-neuron reference still holds to
+and the conformance check against the neuron-by-neuron reference holds to
 rounding. The same blocks give the learning rule its contrast as one small
 Gram product per block instead of one over the whole net.
 """
@@ -100,7 +100,7 @@ def layout(connectome: Connectome, *, max_pairs: int = 256) -> Layout:
     """Cut the neurons at the boundaries of the connectome's contiguous sets and pair the ranges.
 
     A connectome with no contiguous sets, or one whose sets fragment it into more than
-    ``max_pairs`` blocks, gets one block: the full matrix, as before.
+    ``max_pairs`` blocks, gets one range and, when it has synapses, one block over the full matrix.
     """
     n = connectome.n
     cuts = {0, n}

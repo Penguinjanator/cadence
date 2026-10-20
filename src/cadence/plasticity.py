@@ -1,23 +1,24 @@
 """Three factors: a trace at every synapse, a critic, and a dopamine neuron.
 
-Learning from reward in a body is not a nudge at the end of a rollout. Every
+Learning from reward happens online, at every step of one life. Every
 synapse keeps an eligibility trace, the recent history of what it would have
 moved by for the actions that were taken; a critic population reads the
 settled state and learns to predict return; and a dopamine neuron broadcasts
-the temporal-difference error of that prediction. The three multiply, at
-every synapse, every step:
+the temporal-difference error of that prediction. The trace and the dopamine
+multiply at every synapse, every step:
 
     e[e]     <- gamma * lam * e[e] + contrast[e]        (the action's eligibility)
     delta    =  r + gamma * V(s') - V(s)                 (the dopamine signal)
     scale[e] += eta * delta * e[e]
 
-There is no buffer and no epoch: one life, one pass. The contrast is the
-free/nudged difference the learner already computes, per row, with the
-nudge's target the action that was taken, so the eligibility is the score of
-that action and the goal still enters only through the nudge. The critic is a
-linear reading of the neurons named for it, trained by its own trace and the
+There is no buffer and no epoch. The contrast is the difference between the
+two nudged phases (at +beta and -beta), per row, with the nudge's target the
+action that was taken, so the eligibility is the score of that
+action and the goal enters only through the nudge. The critic is a linear
+reading of the neurons named for it, trained by its own trace and the
 prediction error selected by ``critic_signal``. Use ``"td"`` to fit return in
-reward units; ``"modulated"`` retains the bounded legacy critic update.
+reward units; ``"modulated"`` trains the critic on the actor's dopamine, capped at
+``dopamine_cap`` and centred when ``dopamine_center`` is set.
 ``normalize`` divides each synapse's step by the running RMS of its own
 steps, the local counterpart of an adaptive optimiser. A ``memory`` with learned
 parameters of its own (``contrast_rows``, ``propose`` and ``accept``, as ``Recall`` has)
@@ -165,7 +166,7 @@ class ActorCriticConfig:
     gamma: float = 0.99  # discount
     lam: float = 0.9  # trace decay of the actor's eligibility
     eta: float = 0.5  # actor step per unit dopamine per unit trace
-    eta_bias: float | None = None  # bias step; None derives eta / 10 at construction (issue 143)
+    eta_bias: float | None = None  # bias step; None derives eta / 10 at construction
     eta_critic: float = 0.05
     normalize: float = 0.0  # >0: forgetting factor of the per-synapse RMS that divides its step
     # >0: each synapse steps on a running average of its own steps, so sign noise cancels before
@@ -178,19 +179,20 @@ class ActorCriticConfig:
     # >0: the centred signal within this many scales of its mean is nothing; the dopamine is
     # quiet while the reward is what it usually is and speaks only for a surprise
     dopamine_floor: float = 0.0
-    # the centred signal divided by its running scale (a unit signal whatever the reward's
-    # size) or left in the reward's own units, so a stage cleared is ten coins, not one
+    # True: the centred signal is divided by its running scale (a unit signal whatever the
+    # reward's size); False: it stays in the reward's own units
     center_scale: bool = True
     critic_normalize: bool = (
         True  # the critic's step is divided by its trace's energy, so its step size is scale-free
     )
 
-    # Legacy modulation can stabilize control, but does not generally fit mean return.
-    # "auto": the raw error ("td") whenever the dopamine is centred, the modulated one otherwise;
-    # a critic fed the centred signal chases a moving target and its value runs away.
+    # "modulated" (the actor's bounded dopamine) can stabilize control but in general does not
+    # fit mean return. "auto": the raw error ("td") whenever the dopamine is centred, the
+    # modulated one otherwise; a critic fed the centred signal chases a moving target and its
+    # value runs away.
     critic_signal: Literal["modulated", "td", "auto"] = "auto"
-    # Reward credit uses finite nudged phases, independently of a supervised
-    # learner's qualification budget. None keeps standalone learner inheritance.
+    # settle steps of the two nudged phases that score a sampled action; None uses the
+    # learner's nudged_steps
     eligibility_steps: int | None = None
 
     @property
@@ -217,8 +219,8 @@ class ActorCriticConfig:
         ):
             raise ValueError("eligibility_steps must be a nonnegative integer, or None")
         if self.eta_bias is None:
-            # The bias rate follows the synapse rate unless chosen: issue 143, the rule of
-            # issue 126 for the actor. Under RMS normalization both are absolute steps.
+            # The bias rate follows the synapse rate unless chosen. Under RMS normalization
+            # both are absolute steps.
             if not np.isfinite(self.eta) or self.eta < 0:
                 raise ValueError("eta must be finite and nonnegative")
             object.__setattr__(self, "eta_bias", self.eta / 10.0)
@@ -331,9 +333,8 @@ class ActorCritic:
         self.velocity = np.zeros(self.synapses)
         self.velocity_bias = np.zeros(self.n)
         self._valence: Valence | None = None
-        # (batch, neurons): each synapse's eligibility is weighted by its pre neuron's salience,
-        # when
-        # set before ``learn`` (a ``Trace.ringing``: what is still ringing is what gets written)
+        # (batch, neurons): when set before ``learn``, each synapse's eligibility is weighted by
+        # its pre neuron's salience (a ``Trace.ringing``: what is still ringing gets written)
         self.salience: np.ndarray | None = None
         self._drive: np.ndarray | None = None
         self._free: BrainState | None = None
@@ -911,8 +912,8 @@ class ActorCritic:
         assert critic_trace is not None
         if cfg.critic_normalize:
             critic_trace = critic_trace / (1.0 + (critic_trace**2).sum(axis=1, keepdims=True))
-        # Calibrated TD retains reward units; legacy mode uses the same bounded
-        # signal as the actor. Modulation can change the critic's fixed point.
+        # "td" keeps reward units; "modulated" uses the same bounded signal as the
+        # actor, which can change the critic's fixed point.
         critic_delta = (
             np.where(observed, td_error / observed.mean(), 0.0)
             if cfg.critic_target == "td"

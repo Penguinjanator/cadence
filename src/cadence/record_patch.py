@@ -135,10 +135,12 @@ class RecordPatchNet:
         l[t] = sigmoid(s[t])                    per-channel retention in (0, 1)
         z[t] = tanh(B u[t] + b)                 the input port
         h[t] = l[t] * h[t-1] + (1 - l[t]) * z[t]
-        m[t] = read(code([u[t], r * h[t]]))     the record read, a port value
+        m[t] = read(code([a u[t], r * h[t]]))   the record read, a port value
         y[t] = C h[t] + c + m[t]
 
-    ``r`` is the fixed per-channel unit of a context deviation. The context
+    ``a = sqrt(inputs) / s`` scales the input block, where ``s`` is the
+    running mean of witnessed input norms (1 before any write), and ``r`` is
+    the fixed per-channel unit of a context deviation. The context
     is a convex combination, so ``|h| <= max(|h[-1]|, 1)``. The
     seam residual ``h[t] - l[t] h[t-1] - (1 - l[t]) z[t]`` is linear in the
     context path: the energy is quadratic and the free path is its unique
@@ -149,7 +151,7 @@ class RecordPatchNet:
     record read never enters it. A record holds what the slow readout got
     wrong at its reading: the write target is ``y_obs[t] - C h[t] - c``. A
     reading the slow parameters have learned leaves a record near zero, so
-    the store holds only what the slow model does not yet know, and the
+    the store holds only what the slow model does not know, and the
     prediction ``y[t]`` is right as soon as either knows it. Records are read
     with the tables as they stood when the call began and written after the
     path, so a prediction is a function of the parameters, the records and
@@ -248,8 +250,9 @@ class RecordPatchNet:
         )
         # The reading gives the input block and the context block comparable say: the
         # context is read in units of each channel's fluctuation, and the input block is
-        # scaled by its witnessed rms norm to unit variance per unit, so the drive of a
-        # cell has unit scale and its fixed offset stays a small preference.
+        # scaled by sqrt(inputs) over the running mean of its witnessed norms, about unit
+        # variance per unit, so the drive of a cell has unit scale and its fixed offset
+        # stays a small preference.
         self._input_norm = 1.0
         self._state: np.ndarray | None = None
         self.updates = 0
@@ -548,15 +551,18 @@ class RecordPatchNet:
         backtrack: bool = False,
         write: bool = True,
     ) -> RecordObservation:
-        """Learn one finite observed path and write its observed outputs into the records.
+        """Learn one finite observed path and write the slow readout's errors into the records.
 
         The prediction uses the records as they stood at the start of the
         call. The slow parameters move against the adjoint gradient of the
-        precision-weighted half mean squared error; with ``backtrack=True`` a
-        step is admitted only after target-free replay from the original
-        boundary lowers that loss, trying up to sixteen halved rates. The
-        observed outputs are then written into the records of the readings
-        that produced the prediction. ``write=False`` learns without writing.
+        precision-weighted half mean squared error (the weighted cross-entropy
+        for categorical ports); with ``backtrack=True`` a step is admitted only
+        after target-free replay from the original boundary lowers that loss,
+        trying up to sixteen halved rates. The slow readout's residuals
+        (``target - C h - c``, or the target minus each group's softmax for
+        categorical ports), taken against the parameters that made the
+        prediction, are written into the records of the readings that produced
+        it. ``write=False`` learns without writing.
         The final free context becomes the live state. A failed record write
         restores the records and leaves the live context unchanged.
         """

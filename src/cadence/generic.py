@@ -70,10 +70,9 @@ _REWARD_ARRAYS = (
 )
 
 
-# The default motor lateral inhibition, and the widest readout that keeps it.
-# Measured on composed brains (issue 124): up to 8 actions, -0.5 settles in the
-# same 32 sweeps as 0.0; from 12 actions the free solve needs damping and about
-# nine times the sweeps, and the undamped teaching free phase does not settle.
+# The default motor lateral inhibition, and the widest readout that keeps it. Up to 8
+# actions, -0.5 settles in as many sweeps as 0.0; on wider readouts the free solve needs
+# damping and many more sweeps, and the undamped teaching free phase does not settle.
 _LATERAL_DEFAULT = -0.5
 _LATERAL_ACTION_LIMIT = 8
 
@@ -113,9 +112,8 @@ def _learning() -> LearnerConfig:
 
 
 def _reward() -> ActorCriticConfig:
-    # The composed actor keeps its measured bias rate, 0.05 at eta 1.0: the release matrices
-    # and the application evidence were taken with it. A bare ActorCriticConfig derives
-    # eta / 10 (issue 143).
+    # The composed actor's bias rate is 0.05 at eta 1.0; a bare ActorCriticConfig derives
+    # eta / 10.
     return ActorCriticConfig(
         gamma=0.9, lam=0.8, eta=1.0, eta_bias=0.05, eta_critic=0.3, eligibility_steps=12
     )
@@ -137,7 +135,7 @@ def _validate_resting_bias(value: Any) -> float:
 
 def _validate_efference_amplitude(value: Any) -> float:
     """The read gain of the efference copy: a finite nonnegative real scalar; zero is the
-    released brain without one."""
+    brain without one."""
     if (
         isinstance(value, (bool, np.bool_))
         or not isinstance(value, (int, float, np.integer, np.floating))
@@ -375,7 +373,7 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
     expected = {"inputs", "actions", "modules", "observers", "slots", "lateral",
                 "sensory_scale", "seed"}
     if isinstance(value, dict) and set(value) == expected:
-        # saved before 0.82.0, whose composition read the trace at the fixed scale 12
+        # provenance without a working_memory_scale was composed at the fixed scale 12
         value = {**value, "working_memory_scale": 12.0}
     if not isinstance(value, dict) or set(value) - {
         "history_scale", "recall_scale", "image", "code"
@@ -496,14 +494,14 @@ def _load_memory(
         if np.any(post < 0) or np.any(post >= neurons):
             raise ValueError("saved memory outputs exceed the connectome")
         separator = None
-        spec = metadata.get("separator")  # Older unseparated checkpoints omitted this field.
+        spec = metadata.get("separator")  # An unseparated memory may omit this field.
         if spec is None:
             if any(key.startswith(prefix + "separator/") for key in data):
                 raise ValueError("saved separator arrays require separator metadata")
         else:
             if not isinstance(spec, dict):
                 raise ValueError("invalid separator metadata")
-            # a sparse separator names its fan-in; the dense one's metadata is as it was
+            # a sparse separator names its fan-in; a dense one's metadata may omit it
             if set(spec) - {"fan_in"} != {"inputs", "expansion", "winners", "seed", "center"}:
                 raise ValueError("incomplete or unsupported separator metadata")
             for name in ("inputs", "expansion", "winners", "seed", "fan_in"):
@@ -1031,8 +1029,10 @@ class Brain:
     signed observation reaches the code in both signs; a nonnegative one leaves the OFF
     channels silent. The code's seed is drawn from ``seed`` on a stream of its own
     (``SeedSequence([seed, 7103])``). Left unset, the memories key on the observation
-    whatever its width; a code of 1,024 units is the recommended setting above 1,024 inputs,
-    with the episodic memory's ``memory_fan_in`` 32 above 256 uncoded key values. With
+    whatever its width. The code is a fixed random sparse code and learns nothing; it bounds
+    the size of keys on wide observations, and ``memory_fan_in`` bounds an uncoded episodic
+    separation the same way. A learned code is work in progress in
+    https://github.com/muellerberndt/cadence/issues/211. With
     ``inputs`` (the width of the observations) the sensory region is the code: every
     observation is coded before the drive, and ``inputs`` must then be named beside a
     ``code`` of the region's width.
@@ -1515,7 +1515,7 @@ class Brain:
         width, channels)`` as in ``genome``: the sensory region is then a ``visual_cortex``
         of the image (``features`` maps of ``field`` by ``field`` receptive fields), whose
         feature maps project to the first module as the sensory region does.
-        ``compose(inputs=int)`` is as before. The memories key on the observation code
+        The memories key on the observation code
         (``observation_code``): the observation itself, or with ``code=units`` the brain's
         sparse code of it (each input read through an ON and an OFF channel, every channel by
         two units at least, with positive weights, 32 channels per unit or more, one unit in
@@ -1523,8 +1523,9 @@ class Brain:
         ``code=units`` makes a vector brain's sensory region that code: every observation is
         coded before the drive, so 12,824 inputs reach the cortex as 1,024 units through
         1,024 x 64 sensory synapses in place of 12,824 x 64, and the memories key on the same
-        code; the founder leaves the cortex and the memories on the observation. A code of
-        1,024 units is the recommended setting above 1,024 inputs. For an image brain
+        code; the founder leaves the cortex and the memories on the observation. The code is
+        fixed and random and learns nothing; a learned code is work in progress in
+        https://github.com/muellerberndt/cadence/issues/211. For an image brain
         ``code`` names the memories' code alone, the cortex reading the pixels through the
         visual cortex.
 
@@ -1539,10 +1540,8 @@ class Brain:
         Zero removes those lateral synapses, preserving motor/association feedback.
         Left unset, it is -0.5 up to 8 actions and 0.0 above: lateral inhibition
         sharpens a small competing action menu, while on a wider readout it stops
-        the undamped free solve from settling and slows damped answers about
-        ninefold (issue 124). Select alternatives against the default on
-        development tasks; changing inhibition does not itself establish a
-        responsive or useful learner.
+        the undamped free solve from settling and slows damped answers several
+        times over. Select alternatives against the default on development tasks.
 
         ``slots`` groups the motor neurons into several readouts that settle
         together, one softmax each: a count of equal groups, or one size per group
@@ -1550,20 +1549,16 @@ class Brain:
         lateral inhibition stays within a slot, and the unset ``lateral`` follows
         the largest slot. One slot is one choice over every action.
 
-        This reuses the existing trace, synaptic memory and learning mechanisms.
-        Observer wiring is an experiment, not evidence of learned self-reflection.
+        Observer wiring is experimental.
         Inputs are fixed external drives; their neural representations can vary.
-        ``sensory_scale`` sets the initial sensory projection's magnitude;
-        its founder value 1.0 preserves the existing wiring. It is a construction
-        setting, not a gain that can be retuned after learning.
+        ``sensory_scale`` sets the initial sensory projection's magnitude (founder 1.0).
+        It is a construction setting; ``retune`` refuses it.
         ``working_memory_scale`` sets the initial magnitude of the plastic projection
         through which the prefrontal region feeds the carried interpretation back to the
         association region. The prefrontal region holds the copy at
-        ``working_memory_amplitude`` (3.0); the founder scale 1.2 starts its influence on
-        the next settle where amplitude 0.3 at the earlier fixed scale 12 did, and
-        learning strengthens it where the past predicts the outcome. Releases before
-        0.82.0 used 12; pass it to rebuild their composition. It is a construction
-        setting, like ``sensory_scale``.
+        ``working_memory_amplitude`` (3.0); the founder scale is 1.2, and learning
+        strengthens the projection where the past predicts the outcome. It is a
+        construction setting, like ``sensory_scale``.
         ``options`` accepts the constructor's memory settings and every existing
         configuration field as ``learning_<field>``, ``actor_<field>`` or
         ``arousal_<field>``. ``temperature`` aliases ``learning_temperature``.
@@ -1575,8 +1570,7 @@ class Brain:
         neuron per motor neuron, driven by the fading one-hot of the command the
         stream issued (``efference_decay``) and read by the association region
         through a plastic projection of founder scale 12. The founder
-        value zero builds the brain without it, byte-identical to the released
-        composition; the copy is a gene to select against that control.
+        value zero builds the brain without it, the control to select the copy against.
         A nonempty ``history_decays`` adds the heard history: a ``history`` region of one
         block of ``inputs`` neurons per decay, each block a fading trace of the observations
         as heard (the values the sensory neurons were stimulated with, before settling) at
@@ -1585,8 +1579,7 @@ class Brain:
         initialized like the working trace's. After each act the blocks take in the
         observation the brain acted on, so at a decision the history holds the past and the
         sensory drive the present. The founder ``history_decays=()`` builds the brain
-        without it, byte-identical to the composition before the option; the history is a
-        gene to select against that control. ``history_scale`` is a construction setting.
+        without it. ``history_scale`` is a construction setting.
         ``recall=True`` adds the recall memory, an index of the stream's own recent moments:
         a ``recall`` and a ``next`` region (one neuron per value coordinate each), read by
         the association region through plastic projections of initial magnitude
@@ -1631,15 +1624,14 @@ class Brain:
         key, ``recall_heard`` times the event of the previous moment and the one-hot of the
         command the stream issued last, zeros at a stream's first moment and after an
         episode ends: a key of ``2 * code + actions`` values in place of ``code``, the address
-        and the map's outputs as wide, the values and nexts still the events.
+        and the map's outputs as wide, the values and nexts the events.
         ``recall_window`` k above 1 (construction, with ``recall_window_decay`` d in (0, 1])
         makes every key an ordered window of the stream's last k events, ``[heard * x_t, d *
         heard * x_(t-1), ..., d^(k-1) * heard * x_(t-k+1)]``, each position on coordinates of
         its own, zeros before a stream's first moment and after an episode ends: a key of
         ``k * code`` values (the predecessor key's blocks follow it), the address and the map's
         outputs as wide; ``recall_context`` adds its fading sum on the present event's block.
-        The founder ``recall=False`` builds the brain without it, byte-identical to the
-        composition before the option; the memory is a gene to select against that control.
+        The founder ``recall=False`` builds the brain without it.
         ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next``,
         ``recall_key``, ``recall_window`` and ``recall_window_decay`` are construction
         settings; the keys, the event values and the address map follow the observation code's
@@ -1671,12 +1663,12 @@ class Brain:
         (``memory_expansion`` 1,024 cells, ``memory_winners`` 24; a coded brain keys on its
         code as it is, with no separation). ``memory_fan_in`` above zero makes the separation
         sparse: each of its cells reads that many of the key's values, chosen at random, so
-        its size follows the cells and the fan-in alone; the founder 0 keeps it dense, and 32
-        is the recommended setting above 256 key values. Each setting can be passed
-        beside ``memory_choice=True``. The founder ``memory_choice=False`` keeps the
-        hippocampus of earlier releases, keyed by the senses and read into the motor drive;
-        ``episodic=False`` builds none. On fresh seeds the episodic memory scored below the
-        earlier hippocampus on a continuing bandit whose history does not matter.
+        its size follows the cells and the fan-in alone; the founder 0 keeps it dense, one
+        weight per cell and key value. Dense or sparse, the separation is a fixed random
+        projection. Each setting can be passed beside ``memory_choice=True``. The founder
+        ``memory_choice=False`` keeps the consolidating hippocampus, keyed by the observation
+        code and read into the motor drive; ``episodic=False`` builds none. Where the history
+        does not matter, compare the episodic memory against the founder on the task.
         Use ``genome``/``Genome`` for custom ports, sparsity and named wiring.
         """
 
@@ -1846,10 +1838,9 @@ class Brain:
         reward references, retaining its age and work counters; no other state
         is reset. Its arousal is then left as ``reset`` leaves it: an adult brain (its
         youth over) has no income or error references and, at the founder ``need=0``,
-        no want, so only a surprise at its own forecasts can rouse it; in a two-armed
-        bandit whose paying arm moved, none did, and the brain chose the newly paying arm
-        at none of 120 moments in 5 of 5 seeds. Where its world may stop paying, leave
-        ``reset_arousal`` off or give it a positive ``need``. Returns this same brain.
+        no want, so only a surprise at its own forecasts can rouse it, and a world that
+        stops paying may leave it calm on a lapsed habit. Where its world may stop paying,
+        leave ``reset_arousal`` off or give it a positive ``need``. Returns this same brain.
         """
         if not isinstance(reset_arousal, bool):
             raise ValueError("reset_arousal must be boolean")
@@ -2125,7 +2116,7 @@ class Brain:
             # the moment's address, before its settle, reads the stream's slots
             drive = self.recall.stimulate(drive, code)
         if memory and self.hippocampus is not None and not self.memory_choice:
-            # the released call for a brain without a code (an instrument may wrap it)
+            # without a code the call reads the drive itself (an instrument may wrap it)
             drive = (
                 self.hippocampus.stimulate(drive)
                 if self.sparse_code is None
@@ -3050,8 +3041,8 @@ class Brain:
         decision's own temporal key (``_decision_key``, read before the decision moves the
         context on), joins the readout before each slot's softmax and the most probable
         action is taken, as ``_choose`` and ``ActorCritic.act`` do for a greedy act; without
-        it the choice is the most active motor neuron of every slot, the readout's argmax as
-        0.84.0 read it, which differs from a greedy act's softmax argmax only at an exact tie
+        it the choice is the most active motor neuron of every slot, the readout's argmax,
+        which differs from a greedy act's softmax argmax only at an exact tie
         of two motor activations. Pure: the records are read and nothing changes. The
         surprise lesson judges by this choice, ``live`` decides from it whether an issued
         action was the brain's own best guess, and an imagined branch issues it."""
@@ -3444,7 +3435,7 @@ class Brain:
         ``known``, only for the streams where it is set. The hippocampus unless ``memory``."""
         memory = self.hippocampus if memory is None else memory
         assert memory is not None
-        # Every stream writes when ``known`` is unset: the released write, without a mask.
+        # Every stream writes when ``known`` is unset: a write without a mask.
         write = None if known is None else np.asarray(known, bool)
         if write is not None and not write.any():
             return
@@ -3487,9 +3478,8 @@ class Brain:
         After a reset, also with ``keep_memory=True``, an adult brain (its youth over) has no
         income or error references and, at the founder ``need=0``, no want: only a surprise
         at its own forecasts can rouse it, measured against the usual error the new stream's
-        first outcome sets. In a two-armed bandit whose paying arm moved, none did, and the
-        reset brain chose the newly paying arm at none of 120 moments in 5 of 5 seeds. Where
-        its world may stop paying, restore its arousal state after the reset
+        first outcome sets, and a world that stops paying may leave it calm on a lapsed
+        habit. Where its world may stop paying, restore its arousal state after the reset
         (``state = brain.arousal.to_dict()`` before it,
         ``brain.arousal = Arousal.from_dict(state)`` after it), give it a positive
         ``need``, or let it keep living without the reset."""
@@ -3542,7 +3532,7 @@ class Brain:
         heard history, the recall memory (its slots, address map and code), eligibility, the
         current free phase, any pending action's nudged states and the state ``wait`` sensed
         since that action was chosen.
-        ``Learner.save`` remains available for the slow learned response alone.
+        ``Learner.save`` saves the slow learned response alone.
         """
         from .checkpoint import _learner_data, _write
         from .receipts import canonical_json

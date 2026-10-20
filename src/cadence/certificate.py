@@ -9,13 +9,14 @@ effective weight sum of any neuron, the step contracts the sup norm by
 whenever ``L rho < 1``. Then the equilibrium is unique, ``k`` steps from any start leave at
 most ``q^k / (1 - q)`` times the first movement, the last observed movement bounds the
 remaining error by ``movement / (1 - q)``, and a warm start after a stimulus change of size
-``delta`` needs about ``log(dt delta / ((1 - q) tol)) / log(1 / q)`` steps. These statements
-are proved for the library's activation in the flagship paper's Lean library.
+``delta`` needs about ``log(dt delta / ((1 - q) tol)) / log(1 / q)`` steps. These follow from
+the Banach fixed-point theorem.
 
-The certificate applies to the free phase without adaptation. A nudge adds a term, and
-adaptation adds a slow variable; neither is covered, and the residual (``Brain.residual``)
-stays the only check for them. A brain that is not certified may settle in practice; the
-certificate then says nothing, one way or the other.
+The certificate applies to the free phase without adaptation. A nudge adds a term and
+adaptation adds a slow variable; neither is covered. For them, ``Brain.residual`` and
+``Brain.equilibrate`` check the equations at the measured state, without a uniqueness or
+convergence guarantee. A brain that is not certified may settle in practice; the certificate
+then says nothing either way.
 """
 
 from __future__ import annotations

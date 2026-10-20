@@ -4,7 +4,7 @@ From the repository with Cadence installed::
 
     python examples/equilibrium/batch_bootstrap.py --devices python cpu mps --batch-size 8
 
-Optional tensor devices require the ``gpu`` extra and working hardware. This
+Optional tensor devices require the ``accel`` extra and working hardware. This
 is a small continuous relation, not a game benchmark or a depth comparison.
 All backends receive identical examples, starting seeds and readiness criteria.
 Startup/warmup, bootstrap and fresh-test times are recorded separately. Changing

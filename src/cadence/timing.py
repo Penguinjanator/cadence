@@ -1,12 +1,12 @@
 """Timing a settling run: latency per decision, its spread, and what the machine was doing.
 
-A wall-clock number in a receipt is a fact about a program on a machine on a
-day. This module records enough of the machine to read it: how many threads
-the arithmetic libraries were allowed, which cores the process was pinned to
-when the platform can say, the load average, and how many times the scheduler
-took the core away during the measurement. ``latency`` times one warm
-settling run per decision, many times, and reports the distribution rather than
-a mean, because a controller in a body cares about the slow tail.
+A wall-clock time depends on the machine that produced it. This module records
+enough of the machine to read one: how many threads the arithmetic libraries
+were allowed, which cores the process was pinned to when the platform can say,
+the load average, and how many times the scheduler took the core away during
+the measurement. ``latency`` times one warm settling run per decision, many
+times, and reports percentiles next to the mean, because a controller in a body
+cares about the slow tail.
 """
 
 from __future__ import annotations

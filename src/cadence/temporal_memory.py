@@ -1,8 +1,8 @@
 """Compressed local response constraints for explicitly protected experiences.
 
 This is an exact-arithmetic nullspace construction, related to orthogonal weight
-modification. A caller selects which learned responses to preserve. It does not
-discover importance, certify truth, or supply unlimited plastic capacity.
+modification. The caller selects which learned responses to preserve, and every
+protected direction consumes plastic capacity.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ __all__ = ["TemporalMemory", "ConstraintReport"]
 
 @dataclass(frozen=True)
 class ConstraintReport:
-    """Numerical constraint residuals and consumed presynaptic dimensions."""
+    """Consumed presynaptic dimensions per block, stored bytes and the largest residual."""
 
     ranks: dict[str, int]
     bytes: int
@@ -37,11 +37,11 @@ class TemporalMemory:
     nor a runtime lookup table. A/B/C responses along protected causal paths
     are consequently unchanged in exact arithmetic by induction on time.
 
-    Protection is explicit and applies to the supplied initial boundary and
-    inputs. It is not protection for every nearby cue or arbitrary task. Once
-    a basis spans its input space that connection block cannot change. There
-    is no automatic relevance selection, decay, contradiction resolution or
-    guarantee of retaining outputs after an unconstrained parameter change.
+    Protection is explicit and covers the supplied initial boundary and inputs
+    only; nearby cues are unprotected. Once a basis spans its input space that
+    connection block cannot change. Nothing is selected, decayed or reconciled
+    automatically. After ``protect``, ``project`` or ``observe`` the memory binds
+    the resulting parameters; any other change makes its next call refuse.
     """
 
     def __init__(self, *, relative_tolerance: float = 1e-12) -> None:
@@ -182,16 +182,16 @@ class TemporalMemory:
         carry only the valid free activity, as TemporalPatchNet.observe does,
         and leave the memory binding unchanged. Returned delta is the raw EP
         derivative before projection; committed weights obey the constraints.
-        This single-threaded transaction does not promise concurrent mutation
-        safety. Subclasses require their own complete state transaction.
+        The transaction is single-threaded. ``net`` must be exactly a
+        ``TemporalPatchNet``; a subclass is refused.
 
         Positive readout_damping opts into a local C update metric. With free
         activities X, protected basis Q, P=I-QQ.T and S=X.T@X/(batch*time), use
         -rate*delta_C*P*(P*S*P+readout_damping*I)^-1*P; A/B stay ordinary EP.
-        S omits the loss's output-count divisor and teaching precisions: it
-        is an explicitly selected geometry, not the full loss Hessian. No
-        optimizer state or old examples are retained. Default None preserves
-        the original update path.
+        S is a selected geometry: it omits the output-count divisor and the
+        teaching precisions that the full loss Hessian carries. No optimizer
+        state or old examples are retained. None (the default) projects the
+        ordinary EP update of all three blocks.
 
         The metric candidate must pass a protected-map residual check and one
         actual free replay from the ORIGINAL boundary. Weighted half-MSE must

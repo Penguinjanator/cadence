@@ -1,15 +1,15 @@
 """The belief patch on torch: the same slow half for learning at scale, with export to the
-library's patch, which keeps the records, the night and the custody.
+library's ``BeliefPatch``, which keeps the record store and the checkpoints.
 
 ``TorchBelief`` holds the encoder port, the transition, the repair map and the readout of a
 ``BeliefPatch`` as a module and computes the same forward pass with autograd for the
-gradient (the NumPy adjoint is the reference; a parity test checks both). The record read
+gradient (the NumPy adjoint is the reference; a parity test compares the two). The record read
 is supplied as given (zero, or a read taken from a NumPy patch), never learned through.
 The forward takes the library's ``gains`` per observation-port block and the per-row
 ``observed`` mask; a weighted loss, an admitted step and an external output gradient are
 the caller's loss and optimiser here, and the readback of a moment stays on the library's
-path. Batches of streams train with an ordinary optimiser; ``export`` returns the
-six-plus-four arrays in the library's packing and ``load`` takes them.
+path. Batches of streams train with an ordinary optimiser; ``export`` returns the ten
+parameter arrays of ``BeliefPatch.parameters`` in the library's packing and ``load`` takes them.
 """
 
 from __future__ import annotations

@@ -30,8 +30,8 @@ from .receipts import canonical_json
 
 FORMAT = "cadence-checkpoint/2"
 FIRST_FORMAT = "cadence-checkpoint/1"
-# Written by 0.81 for a learner with the readout's intrinsic plasticity on; 0.82.0 removed
-# that gene, so such a file is refused instead of loaded without it.
+# A learner saved with the readout's intrinsic plasticity on (homeostasis_rate above 0).
+# This version has no such setting, so such a file is refused instead of loaded without it.
 HOMEOSTASIS_FORMAT = "cadence-checkpoint/3"
 
 __all__ = ["FORMAT", "load", "save"]
@@ -118,8 +118,8 @@ def save(learner: Learner, path: str | Path, *, compressed: bool = True) -> Path
 
 
 def _known_config(saved: dict[str, Any]) -> dict[str, Any]:
-    """The saved config's fields that this version still has: a checkpoint written by an
-    earlier release loads, its retired knobs (the consolidation of 0.7) silently dropped."""
+    """The saved config's fields that ``LearnerConfig`` has; any other saved field is dropped
+    silently, so a checkpoint carrying settings this version lacks loads without them."""
     fields = {f.name for f in dataclasses.fields(LearnerConfig)}
     return {k: v for k, v in saved.items() if k in fields}
 

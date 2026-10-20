@@ -27,8 +27,8 @@ active task; the plain code and the consequence records stay shared by every tas
 earned under one goal is then written into cells no other goal reads, and a cue learned for
 one task survives the rewards of the tasks that follow.
 
-The projection is drawn from ``Mulberry32``, the generator of ``brain_scan.js``, so a page
-rebuilds the same cells from the seed.
+The projection is drawn from ``Mulberry32``, a 32-bit generator that is short to reimplement,
+so a program outside Python (a web page, for example) rebuilds the same cells from the seed.
 """
 
 from __future__ import annotations
@@ -44,7 +44,7 @@ M32 = 0xFFFFFFFF
 
 
 class Mulberry32:
-    """The 32-bit generator of ``brain_scan.js`` (``mulberry``): uniform draws in [0, 1)."""
+    """The Mulberry32 32-bit generator: uniform draws in [0, 1)."""
 
     def __init__(self, seed: int) -> None:
         self.state = int(seed) & M32
@@ -219,7 +219,7 @@ class Records:
         return allowed
 
     def _winners(self, x: np.ndarray, allowed: np.ndarray | None, out: np.ndarray) -> None:
-        """Writes the k-winner code of the drives ``x @ projection + offset`` into ``out``."""
+        """Writes the k-winner code of the drives ``x @ projection + offset + boost``."""
         drive = x @ self.projection + self.offset + self.boost
         if allowed is not None:
             drive = np.where(allowed, drive, -np.inf)
@@ -405,8 +405,9 @@ class Records:
     def witness(self, readings: np.ndarray) -> None:
         """Move the running mean and pathway norms by witnessed readings, without coding them.
 
-        Exactly the side effect of ``code(readings, adapt=True)``, for a caller that codes
-        the readings after the outcome is known and writes into those codes."""
+        The side effect of ``code(readings, adapt=True)``, plus, with ``homeostasis``, the move
+        of the cells' tracked shares and offsets. It serves a caller that codes the readings
+        after the outcome is known and writes into those codes."""
         x = np.atleast_2d(np.asarray(readings, dtype=float))
         if x.ndim != 2 or x.shape[1] != self.inputs or not np.isfinite(x).all():
             raise ValueError(f"readings must be a finite (batch, {self.inputs}) array")
@@ -444,7 +445,9 @@ class Records:
 
     def state(self) -> dict[str, np.ndarray]:
         """The learned state as arrays: every table, the running mean, the readings seen,
-        the pathway norms and the write count. ``to_dict`` holds the fixed configuration."""
+        the pathway norms, the write count, the code mass written into each cell, the cells'
+        tracked shares, the homeostatic offsets and the drive scale. ``to_dict`` holds the
+        fixed configuration."""
         result = {
             "mean": self.mean.copy(),
             "seen": np.array(self.seen, dtype=np.int64),

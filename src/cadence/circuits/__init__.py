@@ -1,7 +1,6 @@
 """Circuits: a reflex arc, bounded futures and a self-reading monitor.
 
-These use the graded neuron model. They are engineered patterns, not
-claims of biological universality, autonomous world-model learning or consciousness.
+These are engineered patterns on the graded neuron model.
 """
 
 from __future__ import annotations
@@ -57,7 +56,7 @@ class ActivityMonitor:
     This six-neuron monitor observes normalized activity change, option ambiguity,
     budget pressure and their integration. Its readout can request more work;
     an application must connect that output to its actual compute budget. The
-    signal is a heuristic, not a calibrated probability or a consciousness test.
+    signal is an uncalibrated heuristic.
     """
 
     def __init__(self) -> None:
