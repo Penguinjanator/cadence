@@ -524,6 +524,7 @@ class IndexBrain(tb.ContentBrain):
                 projections.append(Projection("next", "association",
                                               scale=genes["recall_scale"], reciprocal=False))
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
+        options = {**tb.RELEASED_TEACHING, **options}  # the family's teaching law (issue 215)
         brain = cls(develop(genome, seed=seed), seed=seed, slots=slots, **options)
         if genes is not None:
             populations = brain.connectome.populations

@@ -414,6 +414,7 @@ def test_the_memory_is_the_instrument_index_memory_moment_for_moment(
     lib = cd.Brain.compose(
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
         learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
+        **RELEASED_TEACHING,
     )
     for name in ("pre", "post", "count", "sign"):
         np.testing.assert_array_equal(
@@ -1212,6 +1213,7 @@ def _option_lives(extra, seed=2, rounds=8):
     lib = cd.Brain.compose(
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
         learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
+        **RELEASED_TEACHING,
     )
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
@@ -1580,7 +1582,8 @@ def test_aroused_writes_are_the_instruments_moment_for_moment():
     inst = ir.IndexBrain.build(seed, read=dict(_declared(ir), write="aroused"),
                                learning_surprise=True)
     lib = cd.Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL,
-                           seed=seed, learning_surprise=True, recall=True, recall_write="aroused")
+                           seed=seed, learning_surprise=True, recall=True, recall_write="aroused",
+                           **RELEASED_TEACHING)
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
     for _ in range(3):

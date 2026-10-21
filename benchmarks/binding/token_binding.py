@@ -202,6 +202,15 @@ def revalue(trials: dict[str, np.ndarray], rng: np.random.Generator) -> dict[str
     return {"names": trials["names"].copy(), "values": values, "query": trials["query"].copy()}
 
 
+# The binding family's teaching law: the composed teaching founder before issue 215 normalized it.
+# Every binding brain is built with it unless a caller sets these genes itself, so the family's
+# readings and the recall report's levels keep their recorded meaning (issue 215).
+RELEASED_TEACHING = {
+    "learning_eta": 0.5, "learning_eta_bias": 0.05,
+    "learning_normalize": 0.0, "learning_normalize_floor": 1e-3,
+}
+
+
 # -- the composed brain, with and without the content memory
 
 
@@ -244,6 +253,7 @@ class ContentBrain(Brain):
                 Projection("recall", "association", scale=content["scale"], reciprocal=False)
             )
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
+        options = {**RELEASED_TEACHING, **options}
         brain = cls(develop(genome, seed=seed), seed=seed, slots=1, **options)
         if content is not None:
             brain.recall_index = np.asarray(

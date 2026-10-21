@@ -181,6 +181,7 @@ class ReadBrain(tb.ContentBrain):
                 Projection("recall", "association", scale=read.get("recall_scale", RECALL_SCALE)),
             ]
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
+        options = {**tb.RELEASED_TEACHING, **options}  # the family's teaching law (issue 215)
         brain = cls(develop(genome, seed=seed), seed=seed, slots=1, **options)
         if read is not None:
             populations = brain.connectome.populations

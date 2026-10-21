@@ -20,8 +20,12 @@
   differently from the same brain in 0.84.3, so comparisons that assume identical defaults across
   releases read differently by design. The teaching instruments in `benchmarks/` that use the
   composed defaults move in both directions: acquisition controls and the successor read gain,
-  and the token-binding content arms lose held-out accuracy and gate passes (the pull request
-  gives the readings). The tests that pin recorded bytes of composed lives pass the earlier
+  and the token-binding content arms lose held-out accuracy and gate passes at the new defaults
+  (the pull request gives the readings; issue 218 follows it). The binding family
+  (`benchmarks/binding`) builds every brain with the earlier teaching law
+  (`token_binding.RELEASED_TEACHING`, a caller's genes take precedence), so its protocols, the
+  recall report's levels and the library's moment-for-moment comparisons with its instruments
+  keep their recorded meaning. The tests that pin recorded bytes of composed lives pass the earlier
   teaching law explicitly; the tests that pin the defaults read the new values. The learning
   guide gives the measurement, the lesson size of about 32 rows and the working-trace
   amplitude's effect on teaching.

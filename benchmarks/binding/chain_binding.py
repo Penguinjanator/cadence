@@ -189,6 +189,7 @@ class ContentChainBrain(tb.ContentBrain):
             Projection("recall", "association", scale=tb.CONTENT["scale"], reciprocal=False),
         ]
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
+        options = {**tb.RELEASED_TEACHING, **options}  # the family's teaching law (issue 215)
         brain = cls(develop(genome, seed=seed), seed=seed, slots=1, **options)
         brain.recall_index = np.asarray(brain.connectome.populations["recall"], dtype=np.int64)
         brain.content = FastSynapses(brain.sensory_index, brain.recall_index, decay=1.0,
