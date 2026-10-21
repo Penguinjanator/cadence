@@ -115,6 +115,15 @@
   partitioned guides. `Brain.compose` never had a transition model and used none of them;
   every composed brain, checkpoint and composed life is byte-identical. Learned transitions,
   bounded planning and response protection live on in release 0.84.3.
+- Remove `PatchNet` and the hybrid Newton refinement (`patch.py` and `_refine.py`, 1,047
+  lines; the exports `PatchNet`, `PatchObservation` and `RefinementReport`; the `refinement`
+  argument of `Equilibrium`, whose `qualified` rows are now always its converged rows), with 4
+  test files, the PatchNet cases of 3 more, and the PatchNet and recursive-settlement guides.
+  `_copy_state`, which the composed brain borrowed from `patch.py`, moves unchanged to
+  `brain.py`; the tests of the `Nudge` anchor stay, in `tests/test_nudge_anchor.py`. Every
+  composed brain, checkpoint and composed life is byte-identical. Observer populations on
+  `Brain.compose(observers=...)` remain the System 2 path; `PatchNet.recursive` and the hybrid
+  solver live on in release 0.84.3.
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
