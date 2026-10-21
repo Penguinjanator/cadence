@@ -633,7 +633,7 @@ class ActorCritic:
             if self.config.eligibility_steps is None
             else self.config.eligibility_steps,
             state=free,
-            nudge=self.learner.bounded(nudge),
+            nudge=nudge,
             tolerance=cfg.tolerance,
         )
 

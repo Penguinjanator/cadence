@@ -13,21 +13,19 @@
   activation in units of one full input), the dictionary's Gram matrix as its lateral
   inhibition, a predictor from the prefrontal region (the working trace) as its
   top-down boundary, each unit's threshold as its bias, and a standing quadratic boundary
-  (`Learner.standing`, the solver's anchor toward zero at gain `learned_code_top_down` on
-  the code units, carried by every phase) that with the predictor's drive is the pull
-  toward the prediction. A moment's settle runs the
+  in the region's own phase (the anchor toward zero at gain `learned_code_top_down` on the
+  code units) that with the predictor's drive is the pull toward the prediction. A moment's settle runs the
   region's phase first, by the brain's solver policy to the learner's tolerance, addresses
   the memories on the rectified settled code at unit length, and settles the whole graph
   warm from it; `last_settlement` reports `code_steps`, `code_residual` and
-  `code_halvings`. The brain integrates every phase at the step the settled code's
-  competition is stable under (the model's step halved as `LearnedCode.stability` reports,
-  with the step budgets scaled to keep each phase's time), so a dictionary whose columns
-  come to overlap strongly settles instead of oscillating under the synchronous sweep; a
+  `code_halvings`. The region's phase runs at the step the settled code's competition is
+  stable under (the model's step halved as `LearnedCode.stability` reports, with its budget
+  scaled to keep the phase's time), so a dictionary whose columns come to overlap strongly
+  settles instead of oscillating under the synchronous sweep; the rest of the brain keeps
+  the model's step; a
   phase that does not settle at the brain's step is settled once more at the step the
   dictionary's coupling allows over every state (`LearnedCode.rest_stability`) before the
-  moment is refused, so a world of one input settles from its first moment; a brain that
-  steps with its code scales its learner's tolerance with the step as it scales the
-  budgets, so a settle stops at the same activation movement per unit time. The
+  moment is refused, so a world of one input settles from its first moment. The
   region learns at every accepted moment, from the moment's free settle alone, by local
   rules (Hebbian on the reconstruction residual, the delta rule on the prediction's
   residual normalized by the context's energy, homeostatic thresholds whose share reads
@@ -40,12 +38,8 @@
   unexplained before the row repairs: it lowers the thresholds of its silent units, at the
   founder level a row whose code is silent) and `learned_code_silence` (10, how many
   under-active rows a silent unit counts as in such a row, so no observation is left
-  without a unit; the thresholds have no ceiling), `learned_code_held` (`True`: the code
-  units are
-  held at the code phase's fixed point through the whole settle, a source to the cortex, so
-  the rest of the brain keeps the model's step and its learning phases as without the
-  region, and the region's phase steps alone; `False` settles them with the whole graph at
-  the code's step), `learned_code_fields` (`None`: one field; a
+  without a unit; the thresholds have no ceiling), `learned_code_fields` (`None`: one
+  field; a
   sequence of field widths shares the units among the observation's fields, each unit
   reading its field alone, the competition block-diagonal), `learned_code_active` (0.05: a unit
   firing below this activation counts as under-active in the thresholds' share) and

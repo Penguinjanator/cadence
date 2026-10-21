@@ -35,7 +35,7 @@ other synapse is:
 | the Gram matrix of the dictionary | every ordered pair of code units, `-(Phi_j . Phi_k)` | lateral competition: units whose columns overlap inhibit each other |
 | predictor `W`, `units` by the association width | one way from the prefrontal region, scaled by `learned_code_top_down` | the top-down boundary: the working trace's prediction of the code, `p = W s_prefrontal` |
 | thresholds `t`, one per unit | the units' biases, `-t_j` | how much drive a unit needs before it publishes |
-| the standing boundary | the solver's quadratic anchor toward zero at gain `learned_code_top_down` on the code units, carried by every phase (`brain.learner.standing`) | the restoring term `-top_down * s_j`; with the predictor's drive it is the pull `top_down * (p_j - s_j)` toward the prediction, the gradient of `top_down / 2 * |s - p|^2` |
+| the standing boundary | the region's quadratic anchor toward zero at gain `learned_code_top_down` on its units, carried by its own phase (`LearnedCode.standing`) | the restoring term `-top_down * s_j`; with the predictor's drive it is the pull `top_down * (p_j - s_j)` toward the prediction, the gradient of `top_down / 2 * |s - p|^2` |
 
 A code unit settles under the brain's neuron model to
 
@@ -62,12 +62,11 @@ settles warm from the stream's state with the sensory, prefrontal and code poten
 fixed points, qualified by the one residual over every neuron. The code units receive in the
 whole settle the input they settled under in the phase, so they stay where the phase left
 them. `last_settlement` reports the phase as `code_steps`, `code_residual` and
-`code_halvings` beside the whole graph's `steps`. With the code held (`learned_code_held`,
-the founder) the code units are a source in the whole settle: their synapses in the whole
-graph carry nothing, the moment's drive is the phase's potential less their bias, and they
+`code_halvings` beside the whole graph's `steps`. The code is held: its units are a source
+in the whole settle, their synapses in the whole graph carry nothing, the moment's drive is the phase's potential less their bias, and they
 publish the phase's code exactly through the free settle and every lesson's phase, so the
 rest of the brain integrates at the model's step with its budgets, its adaptation and its
-finite learning phases as a brain without the region has them; the step halvings below then
+finite learning phases as a brain without the region has them; the step halvings below
 apply to the region's own phase alone. A code phase that does not qualify at the
 brain's step is settled once more at the step the dictionary's coupling allows over every
 state the region can reach (`LearnedCode.rest_stability`: every unit active, every slope at
@@ -83,16 +82,9 @@ overlapping columns are active together (the sweep contracts only while `dt * (1
 stays below 2, `mu_min` the smallest eigenvalue of the slope-weighted lateral coupling).
 After each phase the region reports the halvings of the step its settled code needs
 (`LearnedCode.stability`, keeping `dt * (1 - mu_min)` at or below 1.5, the restoring term
-on the coupling's diagonal), and the brain
-integrates every phase of the moment at that step, the lessons' and the actor's phases
-included, with the step budgets (`learning_free_steps`, `learning_nudged_steps`,
-`actor_eligibility_steps`, an imagined branch's budget) scaled by the same power of two so
-that every phase covers the same time; `describe()` reports the configurations as given, and
-`learned_code["stepping"]` the level in effect. At `learned_code_top_down` 4 the restoring
-term alone asks for the halved step wherever a unit sits near its threshold, so a life with
-the region runs at level 1 for the most part; a dictionary whose columns come to overlap
-strongly, as in a world of a few frames, raises it to 2 or 3, and the settles cost that
-many times the sweeps.
+on the coupling's diagonal), and the region's next phase runs at that step with its budget
+scaled by the same power of two; `learned_code["stepping"]` reports the level in effect.
+The rest of the brain keeps the model's step.
 
 The top-down boundary reads the working trace, the settled association activity of the moment
 before, and never the association region of the moment: the recall memory addresses the moment
@@ -150,7 +142,6 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
 | `learned_code_repair` | 1.0 | retune | the share of a row's input energy its code may leave unexplained, in (0, 1], before the row lowers the thresholds of its silent units: at 1 a row whose code is silent (or worse than nothing); lower, a row the code reconstructs poorly |
 | `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone; `brain.learned_code.work["repairs"]` counts the unit-rows it lowered |
-| `learned_code_held` | `True` | construction | the code units held at the code phase's fixed point through the whole settle, a source to the cortex as the sensory neurons are (nothing leads into them in the whole graph; the moment's drive holds them), so the rest of the brain integrates at the model's step with its learning phases as configured and the region's phase steps alone; `False` settles the code units with the whole graph and integrates the whole brain at the step the code's competition needs |
 | `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit's dictionary column reads its field alone through every learning step, and the competition among the units (the Gram) is block-diagonal, so a recombination of fields is a recombination of their codes and a second input in another field keeps its own code |
 | `learned_code_active` | 0.05 | retune | the activation a unit must reach to count as active in the thresholds' share: a unit firing below it counts as under-active, so the homeostasis does not fade every unit of a frequent observation toward zero; 0 counts any firing |
 | `learned_code_identity` | 0.9 | construction | the weight of the observation's own identity in the memories' key, in [0, 1); the key width is `units + inputs`, or `units` at 0 |
@@ -174,7 +165,8 @@ key; a key at unit length lost the binding family's continuing task) and
 `learned_code_place` (the associative store and the episodic place records key on the
 context-free code) and `learned_code_reads` (the cortex and the memories read the
 context-free code; the code in context lost the embedding chamber's fresh founders, 7 of 12
-at .90 against 11 of 12).
+at .90 against 11 of 12) and `learned_code_held` (the code is held as a source; settling it
+with the whole graph at the code's step lost the binding family and delayed cues).
 
 ## When to declare fields
 

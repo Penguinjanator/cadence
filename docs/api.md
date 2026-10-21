@@ -304,7 +304,7 @@ contiguous index.
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=2.0, rate=0.125, predictor=0.0625,
             threshold=0.1, threshold_rate=0.000625, target=0.1, repair=1.0, silence=10.0,
-            identity=0.9, held=True, fields=None, active=0.05)
+            identity=0.9, fields=None, active=0.05)
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
@@ -369,7 +369,7 @@ LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, centered=True, free_steps=100,
               damping=3, surprise=False)
 Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None,
         plastic_neurons=None, reciprocal=True, tie_groups=None,
-        synapse_rate=None, slots=1, updates=0, contrast_updates=0, standing=None)
+        synapse_rate=None, slots=1, updates=0, contrast_updates=0)
 ```
 
 Every field is explained in [every knob](learning.md#7-every-knob). `eta_bias=None` derives
@@ -383,7 +383,6 @@ when `normalize > 0` with a rate above 0.05
 | --- | --- |
 | `step(drive, labels, warm=None, weight=None, *, answer=None) -> (LearnedState, report)` | Free phase, nudged phase(s), one update. A refused qualified phase raises `LearningPhaseError` and changes nothing. |
 | `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)`, `targets(labels)`, `nudge_for(target, beta, weight=None)` | One phase; the per-neuron target; the `Nudge`. |
-| `standing`, `bounded(nudge)` | A standing boundary every phase carries (a `Nudge` whose anchor terms are held fixed through each solve; a composed brain's learned code sets it), and a phase's nudge with those terms joined; `None` without one. |
 | `contrast(free, nudged, opposite=None)`, `contrast_rows(...)`, `update(free, nudged, opposite=None)`, `apply(delta_scale, delta_bias)` | The contrast, per row, and an update through masks, rates, tying, decay and the cap. `update` does not check qualification. |
 | `calibrate(drive, *, level=None, grid=None) -> float` | Picks the global gain by the free output operating point; reports in `last_calibration`; raises `RuntimeError` without a usable candidate and changes nothing ([calibration](learning.md#calibrating-the-operating-point)). |
 | `predict(drive)`, `accuracy(drive, labels, batch=256)`, `parameters()`, `to_dict()` | Readout, score, plastic parameter count. |

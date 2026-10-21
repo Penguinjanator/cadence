@@ -266,7 +266,7 @@ def test_a_founder_with_the_region_lives_its_recorded_life(tmp_path, name):
 
 # the settings the readings retired, each with a value it once took
 REMOVED = {"cortex": "code", "output": "unit", "floor": 0.0, "scale": "observation",
-           "place": "free", "reads": "free"}
+           "place": "free", "reads": "free", "held": True}
 
 
 def test_the_settings_the_readings_retired_are_refused_by_name():
@@ -374,7 +374,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "identity": 0.9,
-        "held": True, "fields": None, "active": 0.05,
+        "fields": None, "active": 0.05,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
         composed(learned_code_fields=(20, 30))
@@ -382,10 +382,6 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         composed(learned_code_fields=(53, 0))
     with pytest.raises(ValueError, match="two units per field"):
         composed(units=4, learned_code_fields=(20, 20, 13))
-    with pytest.raises(ValueError, match="needed the code in context"):
-        composed(learned_code_held=False)
-    with pytest.raises(ValueError, match="held is True or False"):
-        composed(learned_code_held="yes")
     with pytest.raises(ValueError, match="identity must lie in"):
         composed(learned_code_identity=1.0)
     with pytest.raises(ValueError, match="repair must lie in"):
@@ -476,8 +472,6 @@ def test_the_code_is_a_fixed_point_of_the_whole_settle_and_the_memories_key():
     state = brain.basal_ganglia.state
     graph = brain.brain
     total = graph._synaptic_input(np.atleast_2d(state.activation)) + drive + graph.bias
-    if brain.learner.standing is not None:  # the code units' restoring term, every phase's
-        total = total + brain.learner.standing.drive(np.atleast_2d(state.activation))
     residual = np.abs(total - np.atleast_2d(state.v))[:, brain.code_index].max()
     assert residual <= brain.learner.config.tolerance
     # the code phase's own fixed point: settled again under the same stimulus it stays
@@ -725,7 +719,7 @@ def test_a_code_phase_that_cannot_settle_refuses_the_moment_before_anything_chan
     # the phase at the brain's step and once more at the step the dictionary allows, both
     # capped; the brain's step is left as it was
     assert brain.learned_code.work["capped"] == 2 and brain.learned_code.work["updates"] == 0
-    assert brain._stepping == 0 and brain.brain.neuron_model.dt == 1.0
+    assert brain.brain.neuron_model.dt == 1.0
     assert brain.last_settlement is None
 
 
@@ -756,7 +750,7 @@ def test_a_one_input_world_settles_at_the_step_its_dictionary_allows():
             reward = None if moment == 0 else [float(rng.random() < 0.7)]
             brain.live(np.ones((1, 1)), reward=reward)  # never refused
         # the code's phase steps alone; the brain keeps the model's step
-        assert code.halvings >= 3 and brain._stepping == 0
+        assert code.halvings >= 3 and brain.brain.neuron_model.dt == 1.0
         assert brain.brain.neuron_model.dt == 1.0
     # the bound over every state holds at states the region reaches and at random ones
     code = composed(seed=3).learned_code
@@ -986,7 +980,6 @@ def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
     no standing boundary acts on the whole graph, and a checkpoint continues the life."""
     brain = composed(seed=3, recall=True, learned_code_top_down=4.0)  # a stepping phase
     code = brain.learned_code
-    assert code.held and brain.learner.standing is None
     for name in ("dictionary", "lateral", "predictor"):
         synapses = brain._code_synapses[name][0]
         assert not brain.brain.efficacy[synapses].any()
@@ -994,7 +987,7 @@ def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
     for _ in range(4):
         brain.act(x, greedy=True)
     assert code.halvings >= 1  # the phase stepped
-    assert brain._stepping == 0 and brain.brain.neuron_model.dt == 1.0
+    assert brain.brain.neuron_model.dt == 1.0
     assert brain.learner.config.free_steps == 1024
     held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
     np.testing.assert_allclose(np.maximum(held, 0.0), code.last["free"], rtol=0, atol=1e-12)
@@ -1003,7 +996,7 @@ def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
     held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
     np.testing.assert_allclose(np.maximum(held, 0.0), code.last["free"], rtol=0, atol=1e-12)
     twin = cd.Brain.load(brain.save(tmp_path / "held.npz"))
-    assert twin.learned_code.halvings == code.halvings and twin._stepping == 0
+    assert twin.learned_code.halvings == code.halvings
     assert twin.describe() == brain.describe()
     np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
 

@@ -146,8 +146,7 @@ class LearnedCode:
     ``threshold_rate`` and ``target`` (the share of rows a unit should be active in),
     ``repair`` (the share of a row's input energy its code may leave unexplained before the
     row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
-    silent unit in such a row counts as), ``held`` (the code units held at the code
-    phase's fixed point through the whole settle, a construction setting), ``fields`` (the
+    silent unit in such a row counts as), ``fields`` (the
     widths of the observation's fields, each unit reading one, a construction setting),
     ``active`` (the activation a unit must reach to count as active in the thresholds'
     share) and ``identity``
@@ -171,7 +170,6 @@ class LearnedCode:
     repair: float = 1.0
     silence: float = 10.0
     identity: float = 0.9
-    held: bool = True
     fields: tuple[int, ...] | None = None
     active: float = 0.05
     dictionary: np.ndarray = field(init=False, repr=False)
@@ -181,13 +179,12 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "identity", "held",
-        "fields", "active",
+        "silence", "identity", "fields", "active",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
     )
-    CONSTRUCTION = ("threshold", "identity", "held", "fields")
+    CONSTRUCTION = ("threshold", "identity", "fields")
     # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
     # worst mode of the synchronous sweep contracts by at least a half per sweep
     STEP_MARGIN = 1.5
@@ -201,6 +198,8 @@ class LearnedCode:
         "context-free code",
         "reads": "the cortex and the memories read the context-free code; the region learns "
         "from the code in context",
+        "held": "the code units are held at the code phase's fixed point through the whole "
+        "settle, and the rest of the brain keeps the model's step",
     }
 
     @classmethod
@@ -210,7 +209,6 @@ class LearnedCode:
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "identity": 0.9,
-            "held": True,
             "fields": None, "active": 0.05,
         }
 
@@ -233,10 +231,6 @@ class LearnedCode:
             if number <= 0 or number >= 1:
                 raise ValueError("target must lie in (0, 1)")
             return number
-        if name == "held":
-            if not isinstance(value, (bool, np.bool_)):
-                raise ValueError("held is True or False")
-            return bool(value)
         if name == "fields":
             if value is None:
                 return None
@@ -273,11 +267,6 @@ class LearnedCode:
         self.seed = int(self.seed)
         for name in self.GENES:
             setattr(self, name, self.setting(name, getattr(self, name)))
-        if not self.held:
-            raise ValueError(
-                "held=False settled the code with the whole graph and needed the code in "
-                "context; the cortex and the memories read the context-free code"
-            )
         # the fields: each unit reads one field of the observation's coordinates
         self.mask: np.ndarray | None = None
         self.field_units: tuple[int, ...] = (self.units,)

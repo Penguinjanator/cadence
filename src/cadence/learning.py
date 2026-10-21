@@ -333,10 +333,6 @@ class Learner:
     slots: int | Sequence[int] = 1
     updates: int = 0
     contrast_updates: int = 0  # optimizer history excludes externally applied reward updates
-    # a standing boundary every phase carries: a ``Nudge`` whose anchor terms are held fixed
-    # through each solve and joined to the phase's own nudge (a learned code's restoring
-    # term); None for a learner without one
-    standing: Nudge | None = None
     velocity: np.ndarray = field(init=False, repr=False)
     velocity_bias: np.ndarray = field(init=False, repr=False)
     second_moment: np.ndarray = field(init=False, repr=False)
@@ -474,16 +470,6 @@ class Learner:
 
     # -- phases
 
-    def bounded(self, nudge: Nudge | None) -> Nudge | None:
-        """``nudge`` with the standing boundary's anchor terms joined to it; the boundary
-        alone without a nudge; None without either."""
-        standing = self.standing
-        if standing is None:
-            return nudge
-        if nudge is None:
-            return standing
-        return replace(nudge, anchor=standing.anchor, anchor_gain=standing.anchor_gain)
-
     def free(self, drive: np.ndarray, warm: BrainState | None = None) -> BrainState:
         """Settle with the input stimulated and nothing else: the net's own answer.
 
@@ -499,8 +485,7 @@ class Learner:
                 raise LearningPhaseError("free", {"free": phase})
             return replace(phase.state, steps=phase.steps)
         return self.brain.settle_batch(
-            drive, steps=cfg.free_steps, state=warm, tolerance=cfg.tolerance,
-            nudge=self.bounded(None),
+            drive, steps=cfg.free_steps, state=warm, tolerance=cfg.tolerance
         )
 
     def nudge_for(self, target: np.ndarray, beta: float, weight: np.ndarray | None = None) -> Nudge:
@@ -545,7 +530,7 @@ class Learner:
             drive,
             steps=cfg.nudged_steps,
             state=free,
-            nudge=self.bounded(self.nudge_for(target, sign * cfg.beta, weight)),
+            nudge=self.nudge_for(target, sign * cfg.beta, weight),
             tolerance=cfg.tolerance,
         )
 
@@ -569,7 +554,7 @@ class Learner:
             raise ValueError("qualified learning requires a finite residual tolerance")
         return self.brain.equilibrate(
             drive, state=state, budget=budget, tolerance=cfg.tolerance,
-            nudge=self.bounded(nudge), damping=cfg.damping,
+            nudge=nudge, damping=cfg.damping,
         )
 
     def _labels(self, labels: np.ndarray) -> np.ndarray:
@@ -1036,8 +1021,7 @@ class Learner:
         # Finite phases get post-solve residual diagnostics. They count additional
         # work and do not certify the lesson.
         phases = {
-            "free": Equilibrium(free, self.brain.residual(drive, free, nudge=self.bounded(None)),
-                                free.steps,
+            "free": Equilibrium(free, self.brain.residual(drive, free), free.steps,
                                 cfg.tolerance if cfg.tolerance is not None else 0.0,
                                 residual_checks=1),
         }
@@ -1063,14 +1047,14 @@ class Learner:
         )
         phases["nudged"] = Equilibrium(
             nudged, self.brain.residual(drive, nudged,
-                nudge=self.bounded(self.nudge_for(target, cfg.beta, weight))),
+                nudge=self.nudge_for(target, cfg.beta, weight)),
             nudged.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
             residual_checks=1,
         )
         if opposite is not None:
             phases["opposite"] = Equilibrium(
                 opposite, self.brain.residual(drive, opposite,
-                    nudge=self.bounded(self.nudge_for(target, -cfg.beta, weight))),
+                    nudge=self.nudge_for(target, -cfg.beta, weight)),
                 opposite.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
                 residual_checks=1,
             )
