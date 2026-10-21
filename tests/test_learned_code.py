@@ -246,7 +246,7 @@ def tokens(*indices: int) -> np.ndarray:
 
 
 def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
-    brain = composed(learned_code_held=False)  # the tables in the whole graph's synapses
+    brain = composed(learned_code_held=False, learned_code_reads="context")  # the tables in the whole graph's synapses
     populations = brain.connectome.populations
     assert list(populations)[:3] == ["sensory", "code", "association"]
     assert len(populations["code"]) == UNITS and brain.code_width == UNITS + INPUTS
@@ -298,7 +298,7 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
     assert described["initialization"]["composition"]["learned_code"] == UNITS
     assert {k: v for k, v in described["genes"].items() if k.startswith("learned_code")} == {
         f"learned_code_{name}": value
-        for name, value in {**cd.LearnedCode.founders(), "held": False}.items()
+        for name, value in {**cd.LearnedCode.founders(), "held": False, "reads": "context"}.items()
     }
     assert brain.parameters() >= code.parameters()
 
@@ -308,7 +308,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9, "cortex": "code",
-        "scale": "observation", "held": True, "reads": "context",
+        "scale": "observation", "held": True, "reads": "free",
     }
     with pytest.raises(ValueError, match="reads is one of"):
         composed(learned_code_reads="both")
@@ -427,7 +427,7 @@ def test_the_code_is_a_fixed_point_of_the_whole_settle_and_the_memories_key():
 
 
 def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_thresholds():
-    brain = composed(learned_code_held=False)  # the graph takes the tables as synapses
+    brain = composed(learned_code_held=False, learned_code_reads="context")  # the graph takes the tables as synapses
     code = brain.learned_code
     before = {name: value.copy() for name, value in code.arrays().items()}
     x = tokens(1, 2, 5, 9)
@@ -678,7 +678,7 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     settled code needs, the brain re-steps its graph and scales the step budgets, the
     description keeps the configurations as given, and a checkpoint carries the level."""
     brain = composed(seed=8, units=24, recall=True, learned_code_top_down=4.0,
-                     learned_code_held=False)  # the brain steps with the code
+                     learned_code_held=False, learned_code_reads="context")  # the brain steps with the code
     code = brain.learned_code
     assert brain._stepping == 0 and brain.learner.standing is not None
     # just above threshold (slope .5) the restoring term alone asks for the halved step at
@@ -782,7 +782,7 @@ def test_a_configuration_assigned_after_compose_holds_through_a_change_of_step()
     from dataclasses import replace
 
     brain = cd.Brain.compose(1, 2, arousal=True, learned_code=64, seed=0,
-                             learned_code_held=False)  # the brain steps with the code
+                             learned_code_held=False, learned_code_reads="context")  # the brain steps with the code
     brain.basal_ganglia.config = replace(
         brain.basal_ganglia.config, eta=0.1, eta_bias=0.01, lam=0.95, gamma=0.95,
         eta_critic=5.0, eligibility_steps=12,
@@ -804,12 +804,12 @@ def test_a_configuration_assigned_after_compose_holds_through_a_change_of_step()
 
 def test_a_halved_step_stops_a_settle_at_the_same_movement_per_unit_time():
     """A settle stops once no activation moves more than the tolerance in one step, so a
-    brain that steps with its code (``learned_code_held=False``) scales its learner's tolerance
+    brain that steps with its code (``learned_code_held=False, learned_code_reads="context"``) scales its learner's tolerance
     with the step as it scales the budgets; the description keeps the tolerance as configured.
     A brain without the region integrated at a quarter of the step with the tolerance so
     scaled stops at the first step whose movement per unit time falls below the tolerance,
     the rule its own step follows."""
-    brain = composed(seed=2, learned_code_held=False)
+    brain = composed(seed=2, learned_code_held=False, learned_code_reads="context")
     base = brain.learner.config
     brain._restep(2)
     assert brain.learner.config.tolerance == base.tolerance / 4
@@ -861,7 +861,8 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     the observation settled alone; the recall slots and the context records on the moment's
     code in its context; ``learned_code_place="context"`` keys the place stores on the
     moment's code; the place phase is reported and costs nothing without a place store."""
-    brain = composed(seed=9, recall=True, memory_choice=True, arousal=True)
+    brain = composed(seed=9, recall=True, memory_choice=True, arousal=True,
+                     learned_code_reads="context")  # the keying split under the context read
     code = brain.learned_code
     assert code.place == "free"
     # a predictor with weight: at birth it is zero and the two keys coincide
@@ -902,14 +903,16 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     assert not np.array_equal(again[1], key)
     # without a place store the context-free phase still runs for the thresholds' share,
     # and the place key is the moment's key; with the stores keyed in context the same
-    bare = composed(seed=9, episodic=False)
+    bare = composed(seed=9, episodic=False, learned_code_reads="context")
     bare.act(token, greedy=True)
     assert bare.last_settlement["context_free_steps"] > 0
     assert bare._coded_moment[3] is bare._coded_moment[1]
-    frozen = composed(seed=9, episodic=False, learned_code_threshold_rate=0.0)
+    frozen = composed(seed=9, episodic=False, learned_code_threshold_rate=0.0,
+                      learned_code_reads="context")
     frozen.act(token, greedy=True)  # thresholds frozen, no place store: no second phase
     assert "context_free_steps" not in frozen.last_settlement
-    in_context = composed(seed=9, learned_code_place="context", arousal=True)
+    in_context = composed(seed=9, learned_code_place="context", arousal=True,
+                          learned_code_reads="context")
     in_context.live(context)
     in_context.live(token, reward=[0.0])
     assert in_context._coded_moment[3] is in_context._coded_moment[1]
@@ -1124,7 +1127,8 @@ def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
     settle and a lesson's phases they publish the phase's code exactly, the brain integrates
     at the model's step with its budgets as configured while the region's phase steps alone,
     no standing boundary acts on the whole graph, and a checkpoint continues the life."""
-    brain = composed(seed=3, recall=True, learned_code_top_down=4.0)  # a stepping phase
+    brain = composed(seed=3, recall=True, learned_code_top_down=4.0,  # a stepping phase
+                     learned_code_reads="context")  # held at the code in context
     code = brain.learned_code
     assert code.held and brain.learner.standing is None
     for name in ("dictionary", "lateral", "predictor"):
@@ -1242,7 +1246,7 @@ def test_the_thresholds_share_reads_the_context_free_code():
 
 
 def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():
-    brain = composed(seed=7, learned_code_held=False)  # the predictor in the graph's synapses
+    brain = composed(seed=7, learned_code_held=False, learned_code_reads="context")  # the predictor in the graph's synapses
     brain.act(tokens(3), greedy=True)
     brain.learned_code.weights[:] = 0.1
     brain.retune(learned_code_top_down=2.0, learned_code_target=0.2)

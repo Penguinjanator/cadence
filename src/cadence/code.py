@@ -167,7 +167,7 @@ class LearnedCode:
     cortex: str = "code"
     scale: str = "observation"
     held: bool = True
-    reads: str = "context"
+    reads: str = "free"
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
@@ -213,7 +213,7 @@ class LearnedCode:
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9,
-            "cortex": "code", "scale": "observation", "held": True, "reads": "context",
+            "cortex": "code", "scale": "observation", "held": True, "reads": "free",
         }
 
     @staticmethod
