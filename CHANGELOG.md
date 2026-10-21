@@ -41,10 +41,7 @@
   founder level a row whose code is silent) and `learned_code_silence` (10, how many
   under-active rows a silent unit counts as in such a row, so no observation is left
   without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`),
-  `learned_code_floor` (0: the first module reads the rectified code at unit length, every
-  code that is not silent; above 0 a code weaker than that many full inputs' activation is
-  read as it is over that norm, so a blank moment held up by the prediction alone is not
-  raised to full length), `learned_code_scale`
+  `learned_code_scale`
   (`"observation"`:
   the memories' key takes the norm the observation itself would have as a key, the scale
   the recall's temperature was set for; `"unit"` keeps it at unit length), `learned_code_held` (`True`: the code units are

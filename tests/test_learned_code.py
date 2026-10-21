@@ -265,7 +265,7 @@ def test_a_founder_with_the_region_lives_its_recorded_life(tmp_path, name):
 
 
 # the settings the readings retired, each with a value it once took
-REMOVED = {"cortex": "code", "output": "unit"}
+REMOVED = {"cortex": "code", "output": "unit", "floor": 0.0}
 
 
 def test_the_settings_the_readings_retired_are_refused_by_name():
@@ -367,7 +367,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "floor": 0.0, "identity": 0.95,
+        "place": "free", "identity": 0.95,
         "scale": "observation", "held": True, "reads": "free", "fields": None, "active": 0.05,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
@@ -1115,26 +1115,8 @@ def test_the_module_reads_the_code_at_unit_length():
     np.testing.assert_allclose(s, phase, atol=1e-3)  # the code units hold its fixed point
     assert terms and brain.last_settlement["qualified"]
     read = s @ weights.T + terms[0]  # the code's synaptic input plus the term
-    expected = brain.learned_code.output_of(phase) @ weights.T
+    expected = brain.learned_code.code_of(phase) @ weights.T
     np.testing.assert_allclose(read, expected, atol=1e-3)
-
-
-def test_the_unit_read_does_not_raise_a_weak_code():
-    """A token's code is read at unit length; a code weaker than the floor (one full
-    input's activation, times ``learned_code_floor``) is read as it is over the floor, so a
-    blank moment held up by the prediction alone stays weak; at floor 0 every code that is
-    not silent is read at unit length."""
-    code = composed(seed=2, learned_code_floor=1.0).learned_code
-    least = float(code.model.activation(np.array([1.0]))[0])
-    strong = np.zeros((1, UNITS))
-    strong[0, :3] = [0.4, 0.3, 0.2]
-    weak = 0.05 * strong
-    np.testing.assert_allclose(np.linalg.norm(code.output_of(strong)), 1.0)
-    np.testing.assert_allclose(code.output_of(weak), weak / least)
-    assert np.linalg.norm(code.output_of(weak)) < 0.1
-    assert not code.output_of(np.zeros((1, UNITS))).any()
-    code.floor = 0.0
-    np.testing.assert_allclose(np.linalg.norm(code.output_of(weak)), 1.0)
 
 
 def test_the_key_takes_the_observations_norm_when_set():
