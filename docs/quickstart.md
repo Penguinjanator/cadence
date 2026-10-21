@@ -106,7 +106,7 @@ Observers read from and return influence to the processing regions, the motor
 region and earlier observers, inside the same settlement and the same `live` and
 `step` calls. They attach to any module count; this project adds them to a developed
 two-module System 1 by convention. Any task advantage they bring has to be learned
-and measured. [Recursive observers](recursive-settlement.md) covers depth and widths.
+and measured. [Compose a brain](brain.md#brain) covers modules and observers.
 
 ## Specialist guides
 
@@ -116,6 +116,5 @@ and measured. [Recursive observers](recursive-settlement.md) covers depth and wi
 - Learning and reward: [the free/nudged rule](learning.md) and
   [learning from reward](reward.md).
 - Build and wire: [write a cortex](cortex.md) and [evolve a brain](evolution.md).
-- Other model families: [reciprocal patches](patchnet.md).
 - Evaluate: [evaluate a brain](evaluation.md).
 - Reference: [API reference](api.md).

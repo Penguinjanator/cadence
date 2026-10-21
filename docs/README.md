@@ -63,8 +63,6 @@ composition of families ([contracts](contracts.md)).
 | | [Write a cortex](cortex.md) | regions, projections, ports |
 | | [Connectomes](connectomes.md) | a measured wiring diagram as one `NeuralGraph` |
 | | [Evolution](evolution.md) | genomes, mutation and selection |
-| Other model families | [PatchNet](patchnet.md) | reciprocal patches on continuous observations |
-| | [Recursive settlement](recursive-settlement.md) | observer populations in one graph |
 | Evaluate | [Evaluate a brain](evaluation.md) | task design, baselines, controls |
 | | [Protocols](protocols.md) | held-out predicate tests |
 | | [Receipts](receipts.md) | outcomes bound to source hashes |

@@ -147,10 +147,9 @@ archive and confirmation-audit tests.
 A change to a guide's code is a change to a test. The
 [minimal-install job](https://github.com/muellerberndt/cadence/blob/main/.github/workflows/ci.yml)
 builds the wheel with NumPy alone
-and runs 12 pages without optional backends: `README.md` and, under `docs/`,
-`world-model.md`, `patchnet.md`, `quickstart.md`, `memory.md`, `recall.md`,
-`build.md`, `recursive-settlement.md`, `api.md`, `learning.md`, `protocols.md`
-and `receipts.md`. It also executes `examples/continuing_brain.py`. For changes
+and runs 10 pages without optional backends: `README.md` and, under `docs/`,
+`world-model.md`, `quickstart.md`, `memory.md`, `recall.md`, `build.md`, `api.md`,
+`learning.md`, `protocols.md` and `receipts.md`. It also executes `examples/continuing_brain.py`. For changes
 to these guides or examples, run `python -m pytest -q tests/test_documentation.py`
 and `ruff check examples/continuing_brain.py tests/test_documentation.py`.
 

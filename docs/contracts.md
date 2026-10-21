@@ -11,7 +11,6 @@ learning rule.
 | --- | --- | --- | --- |
 | `NeuralGraph`, `Learner` | Rate neurons exchange activity over a directed graph ([concepts](concepts.md#settling-and-equilibrium)). | `equilibrate` checks the full fixed-point equations; `settle` alone may run a fixed budget or stop on activity movement. | Free/nudged local contrast, finite phases by default; optional reward traces. The gradient reading needs symmetric effective weights, a smooth stable branch and a small nudge ([certificate](certificate.md#equilibrium-propagation-scope)). |
 | `Brain` (composed) | One recurrent graph, with System 2 observers in the same equations and held trace, record and recall input. | `act`, `predict`, `accuracy` and `wait` need the full potential/adaptation residual below `learning.tolerance` within `learning.free_steps`; exhaustion refuses the answer. | The learner's contrast and the actor-critic's reward eligibility (always finite phases, `reward.eligibility_steps`), plus explicit trace and synaptic-memory writes. |
-| `PatchNet` | The reciprocal graph core with persistent free activity and explicit evidence ports. | Free and nudged phases (two when `centered`, the default) must pass the equation residual. | Commits only when every phase qualifies; no replay-loss check ([PatchNet](patchnet.md#observed-ports-and-local-detuning)). |
 
 ### Component limits
 
@@ -31,8 +30,7 @@ A small residual shows the state satisfies the equations within tolerance; uniqu
 stability and useful behaviour need their own tests.
 
 Numerical qualification, parameter commitment and measured learning improvement are three
-separate facts. `PatchNet.observe` qualifies its phases before it updates and does not
-replay the update; a qualified update establishes neither retention on earlier tasks nor
+separate facts. A qualified update establishes neither retention on earlier tasks nor
 generalization; [evaluation](evaluation.md) covers those measurements. Eligibility, reward
 and source identity stay attached to the action that was actually executed.
 
@@ -80,5 +78,5 @@ check when changing device or precision ([backends](backends.md), [API](api.md),
 ## Recursive observation
 
 An observer belongs to the same equilibrium as the system it observes only when its state
-and feedback enter the same coupled equations and stopping check; the
-[recursive-settlement example](recursive-settlement.md) builds one with `PatchNet`.
+and feedback enter the same coupled equations and stopping check;
+`Brain.compose(observers=...)` builds one ([compose a brain](brain.md#brain)).

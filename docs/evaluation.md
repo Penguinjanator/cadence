@@ -164,13 +164,13 @@ For a transformer, an MLP or a recurrent network as the comparison:
 2. **Qualify the whole solution.** Report the maximum equation defect over every
    state component, per-level residuals, budgets and nonfinite outcomes. Failed
    cases stay in the denominator with their work charged.
-3. **Name the training rule.** `PatchNet.observe` uses qualified free and
-   nudged phases with local contrasts. A finite unroll with a backward scan and
-   an implicit equilibrium gradient are separate arms, each with its own check.
+3. **Name the training rule.** `Learner` contrasts free and nudged phases
+   locally, qualified under `LearnerConfig(qualified=True)`. A finite unroll
+   with a backward scan and an implicit equilibrium gradient are separate arms,
+   each with its own check.
 4. **Test causal participation.** Perturb base and observer populations both
    ways, cut feedback, freeze the observer's readback and compare with a
-   sequential observer; only target-free activity is carried ([inspect the
-   mechanism](recursive-settlement.md#inspect-the-mechanism-explicitly)).
+   sequential observer; only target-free activity is carried.
 5. **Match the experiment.** Same information, labels, masks, splits, history
    and pinned revisions; selection apart from held-out evaluation; parameter-
    and compute-matched arms with comparable tuning and seeds. Count settling,

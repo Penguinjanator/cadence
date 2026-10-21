@@ -69,14 +69,12 @@ The certificate covers the free phase without adaptation. A nudge adds a drive t
 omits, adaptation adds a slow variable, and records are read and written without settling. For
 those, and above the limit, `residual` and `equilibrate` qualify the equations at the measured
 state and say nothing about uniqueness or convergence. A failed certificate means only that
-this sufficient argument does not apply. [PatchNet](patchnet.md)'s `solver="hybrid"` adds a
-separate local qualification without uniqueness.
+this sufficient argument does not apply.
 
 ## Using it
 
 - Report `cert.to_dict()` in every receipt next to the residual.
-- Recompute `certificate(brain)` after learning. `PatchNet.recursive(..., coupling=...)` bounds
-  only the initial row mass.
+- Recompute `certificate(brain)` after learning.
 - Keep learned brains under the limit where you can: bound efficacies, scale the gain by the
   fan-in and watch `row_mass` over a life. `LearnerConfig.scale_cap` (default 8) clips each
   plastic efficacy separately, which does not bound a row sum.

@@ -66,7 +66,6 @@ def test_continuing_brain_example():
 PAGES = [
     "README.md",
     "docs/world-model.md",
-    "docs/patchnet.md",
     "docs/quickstart.md",
     "docs/concepts.md",
     "docs/memory.md",
@@ -81,7 +80,6 @@ PAGES = [
     "docs/records.md",
     "docs/evolution.md",
     "docs/build.md",
-    "docs/recursive-settlement.md",
     "docs/api.md",
     "docs/backends.md",
     "docs/learning.md",

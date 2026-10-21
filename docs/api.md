@@ -12,7 +12,7 @@ keyword.
 | [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence`, `Bins` |
 | [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `RefinementReport`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
 | [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Protocol`, `Row`, `Receipt`, timing |
-| [PatchNet](#patchnet-cadencepatch), [compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step) | `PatchNet`, `cadence.circuits`, `record_settlements` |
+| [Compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step) | `cadence.circuits`, `record_settlements` |
 
 `cadence.__version__` is the installed release string.
 
@@ -583,37 +583,6 @@ cadence.timing.environment() -> dict
 microseconds, the mean, `jitter` (p99 over p50 minus one) and context switches.
 `environment` reports machine, cores, Python, thread limits, pinned cores, load and library
 versions ([timing a decision](backends.md#timing-a-decision)).
-
-## PatchNet (`cadence.patch`)
-
-```text
-PatchNet(learner, *, input_index=None, steps=512, chunk=32, tolerance=1e-5,
-         source_capacity=256, context_strength=0.0, context_mask=None,
-         solver="local", refinement_steps=64)
-PatchNet.create(inputs, hidden, outputs, *, seed=0, density=0.3, init=1.0,
-                config=None, backend="cpu", device=None, **runtime_options)
-PatchNet.recursive(inputs, layers, outputs, *, seed=0, coupling=1.0, config=None,
-                   backend="cpu", device=None, **runtime_options)
-```
-
-A reciprocal graph and `Learner` for continuing observations on declared ports.
-`runtime_options` are the constructor keywords after `learner`: phase budget `steps`, `chunk`
-and `tolerance`, the evidence-ID window `source_capacity`, temporal overlap
-`context_strength` and `context_mask`, and `solver`. `solver="hybrid"` follows the local
-budget with up to `refinement_steps` Newton steps per unresolved row and refuses unsupported
-configurations ([the hybrid solver](patchnet.md#the-hybrid-solver)). `recursive` adds observer
-layers connected both ways to all earlier neurons; `coupling` sets the initial maximum
-absolute row sum ([recursive observers](recursive-settlement.md)).
-
-| Member | Behaviour |
-| --- | --- |
-| `stimulus(inputs, *, amplitude=1.0)`, `settle(drive) -> Equilibrium`, `read(phase_or_state=None)` | Drive construction; live free settle; output ports. |
-| `observe(drive, target, *, observed=None, weight=None, source_id=None) -> PatchObservation` | Free and nudged phases and an update (`reason="updated"`). No commit for `duplicate` (a `source_id` seen with the same evidence; different evidence raises), `no_observations`, `free_unconverged`, `free_unqualified`, `nudge_unconverged`, `nudge_unqualified`. |
-| `imagine(drives, *, state=None) -> tuple[Equilibrium, ...]` | Consecutive private free equilibria. |
-| `reset()`, `state`, `snapshot()`, `brain`, `output_index` | `reset` keeps parameters, optimizer history and the evidence window. |
-| `save(path, *, compressed=True)`, `PatchNet.load(path, *, backend="cpu", device=None, precision=None)` | `cadence-patch/3` with the solver and refinement budget; `/2` loads with the local solver, `/1` also without temporal overlap. |
-
-`PatchObservation(free, plus, minus, updated, reason, metrics)`. Guide: [PatchNet](patchnet.md).
 
 ## Optional task compositions (`cadence.circuits`)
 

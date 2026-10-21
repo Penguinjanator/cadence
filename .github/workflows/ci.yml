@@ -31,9 +31,8 @@ jobs:
           import tempfile
           from pathlib import Path
 
-          for name in ("README.md", "docs/world-model.md", "docs/patchnet.md", "docs/quickstart.md",
-                       "docs/memory.md", "docs/recall.md",
-                       "docs/build.md", "docs/recursive-settlement.md",
+          for name in ("README.md", "docs/world-model.md", "docs/quickstart.md",
+                       "docs/memory.md", "docs/recall.md", "docs/build.md",
                        "docs/api.md", "docs/learning.md",
                        "docs/protocols.md", "docs/receipts.md"):
               page = Path(name).read_text(encoding="utf-8")

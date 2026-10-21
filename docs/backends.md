@@ -38,13 +38,13 @@ and a float32 backend refuses a neuron rule whose constants float32 cannot repre
 ## What runs where
 
 `backend=` (default `"cpu"`) and `device=` (default `None`, the best device) are construction
-arguments of `NeuralGraph`, `Brain.compose`, `PatchNet.create` and `PatchNet.recursive`;
-`Brain.retune` refuses them. `precision=` (`"float64"` or `"float32"`, read by torch, default
-by device) is an argument of `NeuralGraph`, `Brain.load`, `Learner.load` and `PatchNet.load`
-only, so a composed brain runs at its device's default precision until it is saved and loaded
-with another. Loads default to the saved precision; `Brain.load` and `PatchNet.load` default to
-`backend="cpu"`, `Learner.load` to the saved backend. `Learner.load(path, backend="cpu")`
-brings a checkpoint learned on any device back to the float64 receipt backend.
+arguments of `NeuralGraph` and `Brain.compose`; `Brain.retune` refuses them. `precision=`
+(`"float64"` or `"float32"`, read by torch, default by device) is an argument of
+`NeuralGraph`, `Brain.load` and `Learner.load` only, so a composed brain runs at its device's
+default precision until it is saved and loaded with another. Loads default to the saved
+precision; `Brain.load` defaults to `backend="cpu"`, `Learner.load` to the saved backend.
+`Learner.load(path, backend="cpu")` brings a checkpoint learned on any device back to the
+float64 receipt backend.
 
 The composed brain's memory stores are read on the host inside a device brain too.
 
