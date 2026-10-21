@@ -95,11 +95,13 @@ their bindings: the key joins the code to the observation's own identity, so a b
 readable while the code moves, and the binding family (`benchmarks/binding/`) reads within
 .05 of a brain without the region on every task.
 
-The region has costs. A life computes the code's own phase at every moment (about 33 sweeps
-of the region's units), and the code is dense, about 28 of 64 units active per observation
-in context. A cue held across a delay through the episodic memory takes about twice the
-experience to master. At camera width the code alone does not yet bind what a camera
-observes: there the key's identity part, the frame itself, carries the binding.
+The region has costs. A life computes the code's own phase at every moment, twice at a
+moment the region learns from (about 33 sweeps of the region's units per phase in the
+embedding chamber, 34 to 120 per moment in the small worlds of continuous interaction), and
+the code is dense, about 28 of 64 units active per observation in context. A cue held across
+a delay through the episodic memory takes about twice the experience to master. At camera
+width the code alone does not yet bind what a camera observes: there the key's identity
+part, the frame itself, carries the binding.
 
 ### What the region is
 
@@ -265,11 +267,14 @@ it leaves the weights.
 The region adds `units` neurons, `inputs * units` dictionary synapses, `units * (units - 1)`
 lateral synapses and `width * units` predictor synapses, and replaces the `inputs * width`
 sensory synapses of the first module by `units * width`: `compose(53, 4, learned_code=64)` has
-20,236 synapses against 8,716 without the region. Each moment costs the code phase's sweeps
-(about 33, twice at a moment the region learns from) and one learning step of
-`2 * inputs * units + units * width` multiply-adds; in the embedding chamber a life costs
-about three times the processor time of the brain without the region. The dictionary is
-stored dense, `inputs * units` values, with fields as well.
+20,236 synapses against 8,012 without the region. Each moment costs the code phase's sweeps
+(about 33 per phase in the embedding chamber, twice at a moment the region learns from, and 34
+to 120 per moment in the small worlds of continuous interaction) and one learning step of
+`2 * inputs * units + units * width` multiply-adds. In the embedding chamber a life costs
+about three times the processor time of the brain without the region; in the small worlds of
+continuous interaction (the odour nursery, the key door, the cue task) a moment costs about
+four to six times the time of the brain without it. The dictionary is stored dense,
+`inputs * units` values, with fields as well.
 
 ### Retired settings
 
