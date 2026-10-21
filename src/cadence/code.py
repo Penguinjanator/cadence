@@ -146,10 +146,8 @@ class LearnedCode:
     ``threshold_rate`` and ``target`` (the share of rows a unit should be active in),
     ``repair`` (the share of a row's input energy its code may leave unexplained before the
     row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
-    silent unit in such a row counts as), ``place`` (what the place stores key on) and
-    ``output`` (what the module reads of the code: the activations, the rectified code
-    at unit length as the memories key on it, or that code at the norm of the sensory
-    activation the observation gives), ``floor`` (the norm, in units of the
+    silent unit in such a row counts as), ``place`` (what the place stores key on),
+    ``floor`` (the norm, in units of the
     activation one full input gives its unit, below which the unit read does not raise a
     code), ``scale`` (the memories' key at unit length or at the norm of the
     observation itself, a construction setting), ``held`` (the code units held at the code
@@ -179,7 +177,6 @@ class LearnedCode:
     repair: float = 1.0
     silence: float = 10.0
     place: str = "free"
-    output: str = "unit"
     floor: float = 0.0
     identity: float = 0.95
     scale: str = "observation"
@@ -194,24 +191,18 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place", "output", "floor", "identity", "scale", "held", "reads",
+        "silence", "place", "floor", "identity", "scale", "held", "reads",
         "fields", "active",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
-        "place", "output", "floor",
+        "place", "floor",
     )
     CONSTRUCTION = ("threshold", "identity", "scale", "held", "reads", "fields")
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
     PLACES = ("free", "context")
-    # what the module reads of the code: the units' activations as they are (``"raw"``),
-    # the rectified code at unit length, the key the memories use (``"unit"``), the region's
-    # output gain ``1 / |a|`` per stream entered as a drive on the module from the phase,
-    # or that code at the norm of the moment's sensory activation (``"observation"``), the
-    # loudness the observation itself drives the module with in a brain without the region
-    OUTPUTS = ("raw", "unit", "capped", "observation")
     # the memories' key at unit length (``"unit"``), or at the norm the observation itself
     # would have as a key (``"observation"``), the scale the recall's temperature reads
     SCALES = ("unit", "observation")
@@ -226,6 +217,7 @@ class LearnedCode:
     # settings the readings retired, refused by name with what the region does instead
     REMOVED = {
         "cortex": "the first module reads the code alone",
+        "output": "the first module reads the rectified code at unit length",
     }
 
     @classmethod
@@ -234,7 +226,7 @@ class LearnedCode:
         return {
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-            "place": "free", "output": "unit", "floor": 0.0, "identity": 0.95,
+            "place": "free", "floor": 0.0, "identity": 0.95,
             "scale": "observation", "held": True, "reads": "free",
             "fields": None, "active": 0.05,
         }
@@ -261,10 +253,6 @@ class LearnedCode:
         if name == "place":
             if not isinstance(value, str) or value not in LearnedCode.PLACES:
                 raise ValueError(f"place is one of {LearnedCode.PLACES}")
-            return value
-        if name == "output":
-            if not isinstance(value, str) or value not in LearnedCode.OUTPUTS:
-                raise ValueError(f"output is one of {LearnedCode.OUTPUTS}")
             return value
         if name == "scale":
             if not isinstance(value, str) or value not in LearnedCode.SCALES:
@@ -505,35 +493,16 @@ class LearnedCode:
             self.work["capped"] += 1
         return phase
 
-    def output_of(
-        self, activation: np.ndarray, sensory: np.ndarray | None = None
-    ) -> np.ndarray:
+    def output_of(self, activation: np.ndarray) -> np.ndarray:
         """What the first module reads of the code, ``a`` the rectified activation and
         ``n = floor * f(1)`` (``f(1)`` the activation one full input gives the unit whose
-        column matches it, before its threshold): with ``output`` ``"unit"`` ``a / max(|a|,
-        n)``, a code at least that strong read at unit length and a weaker one (a blank
-        moment's, held up only by the prediction) as it is over ``n``; with ``"capped"`` ``a *
-        min(1, n / |a|)``, the code as it is with its norm capped at one full input's, so that
-        it drives the module at most as a one-hot observation does; with ``"observation"``
-        the unit read times ``|f|``, the norm of the moment's sensory activation
-        ``sensory`` per row: the code's synapses into the module are drawn at the sensory
-        projection's scale, so the module's input is as loud as the observation makes it in a
-        brain without the region, and a blank moment reads nothing; with ``"raw"`` ``a``."""
+        column matches it, before its threshold): ``a / max(|a|, n)``, a code at least that
+        strong read at unit length and a weaker one (a blank moment's, held up only by the
+        prediction) as it is over ``n``; a silent code reads nothing."""
         a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
-        if self.output == "raw":
-            return a
         least = self.floor * float(np.asarray(self.model.activation(np.array([1.0]))).item())
         norm = np.linalg.norm(a, axis=1, keepdims=True)
-        if self.output == "capped":
-            return np.asarray(a * np.minimum(1.0, least / np.where(norm > 0.0, norm, 1.0)))
         scale = np.maximum(norm, least)
-        if self.output == "observation":
-            if sensory is None:
-                raise ValueError("the observation read needs the moment's sensory activation")
-            loudness = np.linalg.norm(
-                np.atleast_2d(np.asarray(sensory, dtype=float)), axis=1, keepdims=True
-            )
-            return np.asarray(a / np.where(scale > 0.0, scale, 1.0) * loudness)
         return np.asarray(a / np.where(scale > 0.0, scale, 1.0))
 
     def code_of(self, activation: np.ndarray) -> np.ndarray:

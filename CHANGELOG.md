@@ -40,15 +40,11 @@
   unexplained before the row repairs: it lowers the thresholds of its silent units, at the
   founder level a row whose code is silent) and `learned_code_silence` (10, how many
   under-active rows a silent unit counts as in such a row, so no observation is left
-  without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`) and
-  `learned_code_output` (`"unit"`: the first module reads the rectified code at unit
-  length; `"observation"` reads it at the norm of the moment's sensory activation, as
-  loud as the observation drives the first module in a brain without the region;
-  `"raw"` reads the activations as they are), `learned_code_floor` (0: every code
-  that is not silent is read at unit length; above 0 a code weaker than that many full
-  inputs' activation is read as it is over that norm, so a blank moment held up by the
-  prediction alone is not raised to full length; `"capped"` reads
-  the code as it is with its norm capped at one full input's), `learned_code_scale`
+  without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`),
+  `learned_code_floor` (0: the first module reads the rectified code at unit length, every
+  code that is not silent; above 0 a code weaker than that many full inputs' activation is
+  read as it is over that norm, so a blank moment held up by the prediction alone is not
+  raised to full length), `learned_code_scale`
   (`"observation"`:
   the memories' key takes the norm the observation itself would have as a key, the scale
   the recall's temperature was set for; `"unit"` keeps it at unit length), `learned_code_held` (`True`: the code units are

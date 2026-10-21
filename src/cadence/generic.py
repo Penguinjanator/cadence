@@ -1693,12 +1693,10 @@ class Brain:
         """The drive with the code's terms from the moment's phase. With the code held
         (``learned_code_held``), the code units' drive is the phase's potential less their
         bias: nothing leads into them in the whole graph, so they sit at the phase's fixed
-        point through the settle, a source to the cortex as the sensory neurons are. With
-        ``learned_code_output`` ``"unit"``, ``"capped"`` or ``"observation"``, the
-        association neurons' term that makes them read the code as
-        ``LearnedCode.output_of`` gives it in place of the code units' activations: the
-        region's output gain per stream, at ``"observation"`` from the sensory activation
-        the observations give."""
+        point through the settle, a source to the cortex as the sensory neurons are. And
+        the association neurons' term that makes them read the code as
+        ``LearnedCode.output_of`` gives it, at unit length, in place of the code units'
+        activations: the region's output gain per stream."""
         code = self.learned_code
         assert code is not None
         coded = self._coded_moment
@@ -1714,15 +1712,7 @@ class Brain:
         if code.held:
             v = np.atleast_2d(np.asarray(phase.v, dtype=float))
             out[:, self.code_index] = v - self.brain.bias[self.code_index]
-        if code.output == "raw":
-            return out
-        sensory = None
-        if code.output == "observation":
-            model = self.brain.neuron_model
-            sensory = model.activation(
-                x * model.stimulus_amplitude + self.brain.bias[self.sensory_index]
-            )
-        unit = code.output_of(s, sensory)
+        unit = code.output_of(s)
         synapses, j, m = self._code_forward
         weights = np.zeros((len(self.association_index), code.units))
         weights[m, j] = self.brain.efficacy[synapses]
@@ -2868,7 +2858,7 @@ class Brain:
             self._sensed(x, code) * self.brain.neuron_model.stimulus_amplitude
         )
         region = self.learned_code
-        if region is not None and (region.output != "raw" or region.held):
+        if region is not None:
             drive = self._unit_read(x, drive, memory=memory)
         if memory and self.working_memory is not None:
             drive = self.working_memory.stimulate(drive)

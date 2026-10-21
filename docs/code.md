@@ -158,7 +158,6 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_reads` | `"free"` | construction | what the cortex and the memories read of a held code: the context-free code (the founder; the embedding chamber reads held-out members at .97 and 5 of 6 development founders with it, .92 and 4 of 6 with the code in context), or with `"context"` the moment's code in its context, or with `"free"` the context-free code (the observation's code settled alone, the region's second phase), while the code in context, with the prediction's pull, is what the dictionary and the predictor learn from; `"free"` needs `learned_code_held` |
 | `learned_code_scale` | `"observation"` | construction | the memories' key at the norm the observation itself would have as a key (the founder), or with `"unit"` at unit length; with `"observation"` at the norm the observation itself would have as a key, the scale the recall's temperature was set for: an observation of several inputs then addresses its slots as sharply as without the region |
 | `learned_code_identity` | 0.95 | construction | the weight of the observation's own identity in the memories' key, in [0, 1); the key width is `units + inputs`, or `units` at 0 |
-| `learned_code_output` | `"unit"` | retune | what the first module reads of the code: the rectified code at unit length, the code the memories key on (the region's output gain `1 / \|a\|` per stream, entered as a drive on the module from the moment's phase); with `"capped"` the code as it is with its norm capped at one full input's (times the floor), so it drives the module at most as a one-hot observation does; with `"observation"` the code at unit length times the norm of the moment's sensory activation, the loudness the observation itself drives the module with in a brain without the region (the code's synapses into the module are drawn at the sensory projection's scale; one full input's activation is .46 of unit length under the founder neuron model), so a blank moment reads nothing and an observation of several inputs reads louder than one; with `"raw"` the units' activations as they are, whose norm changes with the code's density and thresholds |
 
 Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], an
 identity weight outside [0, 1), a `learned_code_*` gene without the region,
@@ -169,7 +168,9 @@ without a `code` population and the complete dictionary, lateral and predictor s
 or whose sensory neurons project anywhere but to the code region. A setting the readings
 retired is refused by name with what the region does instead: `learned_code_cortex` (the
 first module reads the code alone; the observation read beside the code lost the
-embedding chamber's held-out members).
+embedding chamber's held-out members) and `learned_code_output` (the first module reads
+the rectified code at unit length; the activations as they are lost the embedding
+chamber, and a read at the observation's own loudness lost delayed cues).
 
 ## When to declare fields
 
