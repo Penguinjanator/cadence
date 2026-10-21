@@ -91,20 +91,17 @@ class Genome:
 
     @staticmethod
     def observation_width(
-        inputs: Any,
-        code: int | None = None,
-        learned_code: int | None = None,
-        learned_code_identity: float | None = None,
+        inputs: Any, code: int | None = None, learned_code: int | None = None
     ) -> int:
         """The width of the observation code of a brain with these ``inputs`` (a vector
         length or an image shape), this ``code`` and this ``learned_code`` (as
-        ``Brain.compose`` takes them; ``learned_code_identity`` as given, the founder
-        otherwise), before the brain is built: with ``recall=True`` a custom anatomy's
-        ``recall`` and ``next`` regions hold that many neurons. A learned code's key is its
-        units, plus the inputs when the key joins the observation's identity."""
+        ``Brain.compose`` takes them), before the brain is built: with ``recall=True`` a
+        custom anatomy's ``recall`` and ``next`` regions hold that many neurons. A learned
+        code's key is its units and the inputs, the code joined to the observation's
+        identity."""
         from .generic import _observation_width
 
-        return _observation_width(inputs, code, learned_code, learned_code_identity)
+        return _observation_width(inputs, code, learned_code)
 
     def region(self, name: str) -> Region:
         for r in self.regions:

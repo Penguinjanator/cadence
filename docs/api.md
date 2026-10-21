@@ -38,10 +38,8 @@ code of that many units and, for a vector brain, makes the sensory region that c
 ([the observation code](senses.md#the-observation-code)). `learned_code=units` (a vector
 brain, without `code`) adds a `code` region of that many neurons that settles with the brain
 to a learned sparse code of the observation, read by the cortex and keyed on by the
-memories, with the genes `learned_code_top_down`, `learned_code_rate`,
-`learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate`,
-`learned_code_target`, `learned_code_repair`, `learned_code_silence`,
-`learned_code_place`, `learned_code_output` and `learned_code_identity` ([the learned code](senses.md#the-learned-code)). `scales` maps
+memories, with the one setting `learned_code_fields`
+([the learned code](senses.md#the-learned-code)). `scales` maps
 `"sensory"`, `"trace"`, `"history"` and `"recall"` to the initial magnitudes of the projections
 from those regions (founders 1.0, 1.2, 1.2, 1.2; a name left out keeps its founder), fixed at
 construction. `teaching` is the teaching point of the lesson's learner, `"founder"` (unset) or
@@ -86,18 +84,18 @@ history, with `recall=True` the `recall` and `next` regions, and with `learned_c
 `code` population of that many neurons with its complete dictionary, lateral and predictor
 synapses ([the learned code](senses.md#the-learned-code)).
 `inputs` names the observation width when the sensory region is a `code` of that width.
-`genes` carries the `recall_*` and `learned_code_*` settings. `learning` and `reward` default to the composed
+`genes` carries the `recall_*` settings and `learned_code_fields`. `learning` and `reward` default to the composed
 `LearnerConfig` and `ActorCriticConfig`; `arousal` is `True`, a field mapping or an
 `ArousalConfig`. With `memory_choice=True`, `compose` fills in `memory_context=0.5`,
 `memory_rate=0.5`, `memory_replay=8`, `memory_demonstrations=1.0`, `memory_expansion=1024`
-(0 with a code) and `memory_winners=24`; the constructor keeps its own defaults above, so
-pass these here or use `compose` ([episodic settings](memory.md#episodic-settings)).
+(0 with a fixed `code`) and `memory_winners=24`; the constructor keeps its own defaults
+above, so pass these here or use `compose` ([episodic settings](memory.md#episodic-settings)).
 
 | Rule | Raised |
 | --- | --- |
 | `memory_choice` needs `episodic=True` | `ValueError` |
 | `memory_context`, `memory_replay`, `memory_demonstrations`, `memory_expansion` need `memory_choice` | `ValueError` |
-| `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a coded brain (`code` or `learned_code`) refuses both | `ValueError` |
+| `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a brain with a fixed `code` refuses both | `ValueError` |
 | `learned_code` at least 2; a `learned_code_*` gene without it, `code` beside it, an image brain, a backend other than `cpu`, or a connectome without the region's populations and complete synapses | `ValueError` |
 | `memory_context` in `[0, 1)`; `working_memory_decay`, `efference_decay` in `[0, 1)` | `ValueError` |
 | a missing population that a switched-on component needs | `ValueError` |
@@ -342,10 +340,7 @@ cadence.stream.columns(index) -> slice | ndarray
 ## The learned code (`cadence.code`)
 
 ```text
-LearnedCode(inputs, units, context, model, seed=0, top_down=2.0, rate=0.125, predictor=0.0625,
-            threshold=0.1, threshold_rate=0.000625, target=0.1, repair=1.0, silence=10.0,
-            place="free", output="unit", floor=0.0, identity=0.9, cortex="code",
-            scale="observation", held=True, reads="free")
+LearnedCode(inputs, units, context, model, seed=0, fields=None)
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
@@ -356,9 +351,8 @@ the model), the lateral `connectome`
 and `graph` of the units (the sub-network a moment's code phase settles). `lateral()`,
 `lateral_efficacy()`, `gram()`; `stimulus(sensory, context)`, `prediction(context)`,
 `settle(stimulus, warm, *, budget, tolerance, damping=3) -> Equilibrium`,
-`code_of(activation)` (the rectified code at unit length), `output_of(activation)` (what the
-module reads with the unit read: the rectified code over its norm or over the floor), `residuals(sensory, activation,
-context)`; `standing() -> Nudge | None` (the region's quadratic boundary toward zero at gain
+`code_of(activation)` (the rectified code at unit length, what the memories key on and the
+first module reads), `residuals(sensory, activation, context)`; `standing() -> Nudge | None` (the region's quadratic boundary toward zero at gain
 `top_down` over its units); `stability(v) -> int` (the halvings of the step the settled
 code's competition is stable under), `rest_stability() -> int` (the same over every state
 the region can reach, from the dictionary alone) and `restep(halvings)`, `halvings`; `learn(sensory,
@@ -368,8 +362,14 @@ and whose residual the repair reads), `install()`,
 `take(dictionary, weights, thresholds)`;
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
 capped settles, updates, and `repairs`, the unit-rows the repair lowered), `last` (the latest phase's sensory activation, context, activation,
-prediction and, at a learned moment, the context-free code `free`). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
-validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them. Guide:
+prediction and, at a learned moment, the context-free code `free`); the constants
+`TOP_DOWN`, `RATE`, `PREDICTOR`, `THRESHOLD`, `THRESHOLD_RATE`, `TARGET`, `REPAIR`,
+`SILENCE`, `ACTIVE` and `IDENTITY`, held as the instance's attributes of the same names in
+lower case, `learning` (False holds every table still) and `top_down` (0 is the control
+without the top-down boundary) the two a reading or a control changes on a copy.
+`LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and validate the one
+setting, `fields`; `GENES`, `RUNTIME` and `CONSTRUCTION` name it, and `REMOVED` the
+settings the readings retired with what the region does instead. Guide:
 [the learned code](senses.md#the-learned-code).
 
 ## Learning (`cadence.learning`)
@@ -381,7 +381,7 @@ LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, free_steps=100, nudged_steps=50,
               damping=3, surprise=False)
 Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None,
         plastic_neurons=None, reciprocal=True, tie_groups=None,
-        synapse_rate=None, slots=1, updates=0, contrast_updates=0, standing=None)
+        synapse_rate=None, slots=1, updates=0, contrast_updates=0)
 ```
 
 Every field is explained in [every knob](settling.md#7-every-knob). `eta_bias=None` derives
@@ -395,7 +395,6 @@ when `normalize > 0` with a rate above 0.05
 | --- | --- |
 | `step(drive, labels, warm=None, weight=None, *, answer=None) -> (LearnedState, report)` | Free phase, nudged phase(s), one update. A refused qualified phase raises `LearningPhaseError` and changes nothing. |
 | `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)`, `targets(labels)`, `nudge_for(target, beta, weight=None)` | One phase; the per-neuron target; the `Nudge`. |
-| `standing`, `bounded(nudge)` | A standing boundary every phase carries (a `Nudge` whose anchor terms are held fixed through each solve; a composed brain's learned code sets it), and a phase's nudge with those terms joined; `None` without one. |
 | `contrast(free, nudged, opposite=None)`, `contrast_rows(...)`, `update(free, nudged, opposite=None)`, `apply(delta_scale, delta_bias)` | The contrast, per row, and an update through masks, rates, tying and the cap. `update` does not check qualification. |
 | `calibrate(drive, *, level=None, grid=None) -> float` | Picks the global gain by the free output operating point; reports in `last_calibration`; raises `RuntimeError` without a usable candidate and changes nothing ([calibration](settling.md#calibrating-the-operating-point)). |
 | `predict(drive)`, `accuracy(drive, labels, batch=256)`, `parameters()`, `to_dict()` | Readout, score, plastic parameter count. |
@@ -601,8 +600,7 @@ not divide or add up to `actions`. `prefrontal_cortex` has one neuron per neuron
 Projection(pre, post, density=1.0, sign=0.0, scale=1.0, count=1.0, reciprocal=True)
 Genome(regions, projections, label="genome")
 Genome.composed(inputs, actions, **settings) -> Genome
-Genome.observation_width(inputs, code=None, learned_code=None,
-                         learned_code_identity=None) -> int
+Genome.observation_width(inputs, code=None, learned_code=None) -> int
 develop(genome, seed=0) -> Connectome
 cadence.genome.mutate(genome, rng, *, size_step=0.25, fixed=(), tied=()) -> Genome
 genes(space, *, rate=1.0) -> mutation
