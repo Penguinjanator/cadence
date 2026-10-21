@@ -307,7 +307,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5, "cortex": "code",
+        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.5, "cortex": "code",
         "scale": "unit", "held": True, "reads": "context",
     }
     with pytest.raises(ValueError, match="reads is one of"):
@@ -1058,7 +1058,7 @@ def test_the_unit_read_does_not_raise_a_weak_code():
     input's activation, times ``learned_code_floor``) is read as it is over the floor, so a
     blank moment held up by the prediction alone stays weak; at floor 0 every code that is
     not silent is read at unit length."""
-    code = composed(seed=2).learned_code
+    code = composed(seed=2, learned_code_floor=1.0).learned_code
     least = float(code.model.activation(np.array([1.0]))[0])
     strong = np.zeros((1, UNITS))
     strong[0, :3] = [0.4, 0.3, 0.2]
@@ -1179,7 +1179,7 @@ def test_the_cortex_and_the_memories_may_read_the_context_free_code():
 def test_the_capped_read_holds_a_code_to_one_full_inputs_norm():
     """With ``learned_code_output="capped"`` a code stronger than one full input is read
     at that input's norm and a weaker one as it is."""
-    code = composed(seed=2, learned_code_output="capped").learned_code
+    code = composed(seed=2, learned_code_output="capped", learned_code_floor=1.0).learned_code
     least = float(code.model.activation(np.array([1.0]))[0])
     strong = np.zeros((1, UNITS))
     strong[0, :3] = [0.6, 0.5, 0.4]

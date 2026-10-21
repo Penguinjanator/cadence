@@ -162,7 +162,7 @@ class LearnedCode:
     silence: float = 10.0
     place: str = "free"
     output: str = "unit"
-    floor: float = 1.0
+    floor: float = 0.0
     identity: float = 0.5
     cortex: str = "code"
     scale: str = "unit"
@@ -212,7 +212,7 @@ class LearnedCode:
         return {
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-            "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
+            "place": "free", "output": "unit", "floor": 0.0, "identity": 0.5,
             "cortex": "code", "scale": "unit", "held": True, "reads": "context",
         }
 

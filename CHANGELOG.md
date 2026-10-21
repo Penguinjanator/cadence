@@ -42,9 +42,10 @@
   under-active rows a silent unit counts as in such a row, so no observation is left
   without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`) and
   `learned_code_output` (`"unit"`: the first module reads the rectified code at unit
-  length; `"raw"` reads the activations as they are), `learned_code_floor` (1.0: a code
-  weaker than one full input's activation is read as it is over that norm, so a blank
-  moment held up by the prediction alone is not raised to full length; `"capped"` reads
+  length; `"raw"` reads the activations as they are), `learned_code_floor` (0: every code
+  that is not silent is read at unit length; above 0 a code weaker than that many full
+  inputs' activation is read as it is over that norm, so a blank moment held up by the
+  prediction alone is not raised to full length; `"capped"` reads
   the code as it is with its norm capped at one full input's), `learned_code_cortex`
   (`"code"`; with `"both"` the first module reads the observation as a brain without the
   region does and the code beside it), `learned_code_scale` (`"unit"`; with `"observation"`
