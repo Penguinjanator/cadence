@@ -2721,7 +2721,8 @@ class Brain:
         hear without a code)."""
         region = self.learned_code
         if region is not None and region.identity:
-            return np.atleast_2d(code)[:, : region.units] / np.sqrt(1.0 - region.identity)
+            part = np.atleast_2d(code)[:, : region.units]
+            return np.asarray(part / np.sqrt(1.0 - region.identity))
         return code if self.coded_cortex or region is not None else x
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
@@ -4508,6 +4509,7 @@ class Brain:
             # a memory keyed on the code numbers its key coordinates from zero: the code's
             # width bounds them, with the motor neurons after it for the context records
             neurons = learner.brain.connectome.n
+            coded: int | None
             if learned:  # the key width: the units, joined to the observation's identity
                 joined = float(meta["learned_code"]["identity"]) > 0
                 coded = learned + (len(populations["sensory"]) if joined else 0)
