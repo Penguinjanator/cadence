@@ -1,8 +1,8 @@
-"""``Brain.reset(keep_arousal=True)``: a reset that keeps what an adult brain was used to.
+"""``Brain.reset(keep=("arousal",))``: a reset that keeps what an adult brain was used to.
 
 The arousal state carries into the new stream as it is (its level, the counts, the recent and
 long-run reward, the usual errors, the reward scale, the age and the work counts), as when the
-state saved before the reset is restored after it. At the default, ``keep_arousal=False``,
+state saved before the reset is restored after it. At the default, ``keep=()``,
 every brain resets and acts as in 0.84.3 and saves what 0.84.3 saved but the record channel
 it no longer has: the founders, their checkpoints and the composed lives pinned below were
 recorded on 0.84.3.
@@ -98,13 +98,13 @@ Moment = tuple[int, bool, bool, int]
 
 def stream_life(path: Path, issued: tuple[int, bool], arm: str, stream: str) -> list[Moment]:
     """120 moments of a new stream for the saved adult: living on from the action it issued
-    (``none``), after a default reset (``reset``) or after ``reset(keep_arousal=True)``
+    (``none``), after a default reset (``reset``) or after ``reset(keep=("arousal",))``
     (``keep``). A reset stream starts with ``live(OBS)``, which takes no outcome."""
     pays = PAYS[stream]
     brain = cd.Brain.load(path)
     action, aroused = issued
     if arm != "none":
-        brain.reset(keep_arousal=arm == "keep")
+        brain.reset(keep=("arousal",) if arm == "keep" else ())
         action = int(brain.live(OBS)[0])
         aroused = reading(brain)["mode"] == "aroused"
     moments: list[Moment] = []
@@ -132,7 +132,7 @@ def bandit(tmp_path_factory: pytest.TempPathFactory) -> dict[tuple[str, str, int
     return lives
 
 
-# -- Brain.reset(keep_arousal=True)
+# -- Brain.reset(keep=("arousal",))
 
 
 def woken_adult() -> cd.Brain:
@@ -149,8 +149,10 @@ def woken_adult() -> cd.Brain:
     return brain
 
 
-def test_keep_arousal_keeps_the_whole_arousal_state_level_included(tmp_path: Path) -> None:
-    """The arousal is the only thing ``keep_arousal`` keeps, and it keeps all of it: an adult
+def test_keeping_the_arousal_keeps_the_whole_arousal_state_level_included(
+    tmp_path: Path,
+) -> None:
+    """The arousal is the only thing ``keep=("arousal",)`` keeps, and it keeps all of it: an adult
     aroused when it is reset begins the new stream aroused. The rest of the brain resets as
     the default reset resets it."""
     brain = woken_adult()
@@ -158,7 +160,7 @@ def test_keep_arousal_keeps_the_whole_arousal_state_level_included(tmp_path: Pat
     assert arousal is not None
     before = arousal.to_dict()
     default = twin(brain, tmp_path / "twin")
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     default.reset()
     kept = brain.arousal
     assert kept is not None and kept.to_dict() == before
@@ -172,15 +174,15 @@ def test_keep_arousal_keeps_the_whole_arousal_state_level_included(tmp_path: Pat
     )
 
 
-def test_keep_arousal_continues_as_the_documented_restore(tmp_path: Path) -> None:
-    """A reset with ``keep_arousal=True`` continues as a default reset after which the arousal
+def test_keeping_the_arousal_continues_as_the_documented_restore(tmp_path: Path) -> None:
+    """A reset with ``keep=("arousal",)`` continues as a default reset after which the arousal
     state saved before it is restored: the same acts, readings and checkpoint, here for an
     adult aroused when it is reset."""
     brain = woken_adult()
     restored = twin(brain, tmp_path / "restored")
     assert restored.arousal is not None
     state = restored.arousal.to_dict()
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     restored.reset()
     restored.arousal = cd.Arousal.from_dict(state)
     lives = []
@@ -196,11 +198,11 @@ def test_keep_arousal_continues_as_the_documented_restore(tmp_path: Path) -> Non
     assert_same_checkpoint(brain.save(tmp_path / "a"), restored.save(tmp_path / "b"))
 
 
-def test_keep_arousal_false_is_the_default_reset(tmp_path: Path) -> None:
+def test_keeping_nothing_is_the_default_reset(tmp_path: Path) -> None:
     brain = bandit_adult(seed=2, moments=120)
     other = twin(brain, tmp_path / "other")
-    brain.reset()
-    other.reset(keep_arousal=False)
+    brain.reset(keep=())
+    other.reset()
     for b in (brain, other):
         b.live(OBS)
         for _ in range(5):
@@ -213,7 +215,7 @@ def test_a_brain_without_arousal_resets_as_without_the_keyword(tmp_path: Path) -
     brain.step(CUE)
     brain.step(GO, reward=[1.0])
     other = twin(brain, tmp_path / "other")
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     other.reset()
     assert brain.arousal is None
     for b in (brain, other):
@@ -222,9 +224,9 @@ def test_a_brain_without_arousal_resets_as_without_the_keyword(tmp_path: Path) -
     assert_same_checkpoint(brain.save(tmp_path / "a"), other.save(tmp_path / "b"))
 
 
-def test_keep_arousal_with_keep_memory_keeps_both(tmp_path: Path) -> None:
-    """Together the keywords keep the recall memory's slots and the arousal state; the brain
-    then continues as one reset with ``keep_memory=True`` whose arousal state, saved before
+def test_keeping_the_slots_and_the_arousal_keeps_both(tmp_path: Path) -> None:
+    """Together the two names keep the recall memory's slots and the arousal state; the brain
+    then continues as one reset with ``keep=("slots",)`` whose arousal state, saved before
     the reset, is restored after it."""
     brain = cd.Brain.compose(4, 2, modules=(8,), seed=5, recall=True,
                              arousal=cd.ArousalConfig(youth=6))
@@ -236,10 +238,10 @@ def test_keep_arousal_with_keep_memory_keeps_both(tmp_path: Path) -> None:
     state = brain.arousal.to_dict()
     restored = twin(brain, tmp_path / "restored")
     forgotten = twin(brain, tmp_path / "forgotten")
-    brain.reset(keep_memory=True, keep_arousal=True)
-    restored.reset(keep_memory=True)
+    brain.reset(keep=("slots", "arousal"))
+    restored.reset(keep=("slots",))
     restored.arousal = cd.Arousal.from_dict(state)
-    forgotten.reset(keep_memory=True)
+    forgotten.reset(keep=("slots",))
     np.testing.assert_array_equal(brain.recall.keys, keys)
     assert brain.recall.ended.all()
     assert brain.arousal.to_dict() == state
@@ -258,9 +260,11 @@ def test_keep_arousal_with_keep_memory_keeps_both(tmp_path: Path) -> None:
     assert_same_checkpoint(brain.save(tmp_path / "a"), restored.save(tmp_path / "b"))
 
 
-def test_a_checkpoint_after_a_keep_arousal_reset_continues_as_the_brain(tmp_path: Path) -> None:
+def test_a_checkpoint_after_a_reset_keeping_the_arousal_continues_as_the_brain(
+    tmp_path: Path,
+) -> None:
     brain = bandit_adult(seed=3, moments=130)
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     copy = twin(brain, tmp_path / "reset")
     assert copy.arousal is not None and brain.arousal is not None
     assert copy.arousal.to_dict() == brain.arousal.to_dict()
@@ -278,16 +282,17 @@ def test_a_checkpoint_after_a_keep_arousal_reset_continues_as_the_brain(tmp_path
     assert_same_checkpoint(end, mid.save(tmp_path / "mid-end"))
 
 
-@pytest.mark.parametrize("value", [1, 0, "yes", None, np.bool_(True)])
-def test_keep_arousal_must_be_boolean_and_a_refused_reset_changes_nothing(
+@pytest.mark.parametrize("value", [1, True, "yes", ("arousal", "level"), None, (None,)])
+def test_keep_names_slots_and_arousal_and_a_refused_reset_changes_nothing(
     tmp_path: Path, value: Any
 ) -> None:
     brain = bandit_adult(seed=4, moments=110)
     before = brain.save(tmp_path / "before")
-    with pytest.raises(ValueError, match="keep_arousal"):
-        brain.reset(keep_arousal=value)
-    with pytest.raises(ValueError, match="keep_memory"):
-        brain.reset(keep_memory=value, keep_arousal=True)
+    with pytest.raises(ValueError, match="'slots' and 'arousal'"):
+        brain.reset(keep=value)
+    for name in ("keep_arousal", "keep_memory"):  # the keywords of 0.84.3, renamed
+        with pytest.raises(TypeError, match=name):
+            brain.reset(**{name: True})
     assert brain.pending_feedback
     assert_same_checkpoint(before, brain.save(tmp_path / "after"))
 
@@ -301,7 +306,7 @@ def test_a_reset_adult_learns_the_moved_arm_when_it_keeps_what_it_was_used_to(
 ) -> None:
     """An adult reset by default has no income or error references: it is never roused and
     chooses the newly paying arm (arm 1) at none of 120 moments. Reset with
-    ``keep_arousal=True`` it falls short of the income it is used to, wakes and learns the new
+    ``keep=("arousal",)`` it falls short of the income it is used to, wakes and learns the new
     arm."""
     default, kept = bandit[("moved", "reset", seed)], bandit[("moved", "keep", seed)]
     assert [sum(m[i] for m in default) for i in range(3)] == [0, 0, 0]
@@ -404,7 +409,7 @@ def _streams(brain: cd.Brain) -> tuple[str, list[dict[str, Any]]]:
         if start == 14:
             brain.reset()
         elif start == 22:
-            brain.reset(keep_memory=True)
+            brain.reset(keep=("slots",))
         if start and brain.arousal is not None:
             left.append(brain.arousal.to_dict())
         for t in range(start, start + length):
@@ -558,12 +563,12 @@ def _filled(brain: cd.Brain) -> None:
             brain.wait(GO)
 
 
-@pytest.mark.parametrize("keep_memory", [False, True])
+@pytest.mark.parametrize("slots", [False, True])
 @pytest.mark.parametrize("name", ["composed", "episodic"])
-def test_keep_arousal_resets_every_other_store_as_the_default_reset(
-    tmp_path: Path, name: str, keep_memory: bool
+def test_keeping_the_arousal_resets_every_other_store_as_the_default_reset(
+    tmp_path: Path, name: str, slots: bool
 ) -> None:
-    """The recall slots (emptied, or kept with ``keep_memory``), the heard history, the
+    """The recall slots (emptied, or kept with ``"slots"``), the heard history, the
     efference copy and the episodic context and path: a reset that keeps the arousal resets
     each of them as the default reset does."""
     brain = _build(FOUNDERS[name])
@@ -576,17 +581,17 @@ def test_keep_arousal_resets_every_other_store_as_the_default_reset(
         held = set(saved(brain.save(tmp_path / "held"))[1])
         assert {f"memories/episodic/{name}" for name in ("context", "decision", "path/lengths")} <= held
     default = twin(brain, tmp_path / "default")
-    brain.reset(keep_memory=keep_memory, keep_arousal=True)
-    default.reset(keep_memory=keep_memory)
+    brain.reset(keep=("slots", "arousal") if slots else ("arousal",))
+    default.reset(keep=("slots",) if slots else ())
     assert_same_checkpoint(
         brain.save(tmp_path / "kept"), default.save(tmp_path / "reset"), but=("arousal",)
     )
     if brain.recall is not None:
-        assert (brain.recall.slots > 0) == keep_memory
+        assert (brain.recall.slots > 0) == slots
 
 
 @pytest.mark.parametrize("name", ["composed", "episodic"])
-def test_keep_arousal_continues_as_the_documented_restore_with_every_store(
+def test_keeping_the_arousal_continues_as_the_documented_restore_with_every_store(
     tmp_path: Path, name: str
 ) -> None:
     """With recall, heard history and efference copy, or with the episodic memory, a reset
@@ -597,7 +602,7 @@ def test_keep_arousal_continues_as_the_documented_restore_with_every_store(
     restored = twin(brain, tmp_path / "restored")
     assert restored.arousal is not None
     state = restored.arousal.to_dict()
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     restored.reset()
     restored.arousal = cd.Arousal.from_dict(state)
     lives = []

@@ -16,7 +16,7 @@ learning changes them: the learned weights. The per-stream traces advance at eve
 under [`live`](continuous.md#routine-and-repair-live) a calm brain reads its records and
 weights and changes neither, and an aroused one learns and writes. `reset()` also clears
 arousal's income and error references, which decide when a `live` brain wakes, and
-`reset(keep_arousal=True)` keeps the arousal state as it is
+`reset(keep=("arousal",))` keeps the arousal state as it is
 ([reset and save](continuous.md#reset-and-save)).
 
 ## Memory in the composed brain
@@ -233,7 +233,7 @@ assert chooser.act(place, greedy=True)[0] == 1    # the records vote for the act
 `recall=True` keeps each stream's recent moments as slots of key (the event heard), value (the
 event) and next (the moment that followed). Before each settle an address, the key plus a
 learned map that teacher lessons move, weighs the slots by a softmax, and the recalled value
-and next drive a `recall` and a `next` region through the settle. `reset(keep_memory=True)`
+and next drive a `recall` and a `next` region through the settle. `reset(keep=("slots",))`
 keeps the slots. Every `recall_*` setting, the cost and the limits are on
 [recall.md](recall.md), with the settings of 0.84.3 that left in this version and their
 readings ([removed in this version](recall.md#removed-in-this-version)).

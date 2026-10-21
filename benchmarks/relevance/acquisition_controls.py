@@ -345,10 +345,10 @@ def job(
         "task": task, "brain": brain_name, "modules": BRAINS[brain_name], "rounds": rounds,
         "seed": seed, "neutral_events": NEUTRAL_EVENTS, "teaching": teaching, "exposed": exposed,
         "learning_eta": eta, "trace_genes": trace, "resolved_working_memory": {
-            k: v for k, v in brain.describe()["working_memory"].items()
+            k: v for k, v in brain.describe()["memories"]["working_memory"].items()
             if k in ("decay", "amplitude", "scale")
         }, "resolved_learning": {
-            k: v for k, v in brain.describe()["learning"].items() if k in ("eta", "eta_bias")
+            k: v for k, v in brain.learner.config.to_dict().items() if k in ("eta", "eta_bias")
         },
         "training": trained, "evaluation": evaluation,
     }

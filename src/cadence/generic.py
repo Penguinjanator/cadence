@@ -45,6 +45,7 @@ from typing import Any
 import numpy as np
 
 from ._configuration import (
+    TEACHING,
     arousal_config,
     configured,
     plain,
@@ -2319,7 +2320,7 @@ class Brain:
         carries the lesson's rate, so at 1.0 a unit of dopamine moves the map by one lesson's
         step, and ``recall_address=0`` leaves the map as it is under reward too.
         When an episode ends the stream's slots are emptied with its working trace;
-        ``Brain.reset(keep_memory=True)`` keeps the slots across a reset.
+        ``Brain.reset(keep=("slots",))`` keeps the slots across a reset.
         ``recall_window`` k above 1 (construction, with ``recall_window_decay`` d in (0, 1])
         makes every key an ordered window of the stream's last k events, ``[heard * x_t, d *
         heard * x_(t-1), ..., d^(k-1) * heard * x_(t-k+1)]``, each position on coordinates of
@@ -2331,10 +2332,8 @@ class Brain:
         address map follow the observation code's width, a brain's ``code`` among the ways
         to bound it. The settings of 0.84.3 that this version removed (``recall_write``,
         ``recall_key``, ``recall_episodes``, ``recall_value``, ``recall_context``,
-        ``recall_context_decay`` and ``recall_recency=None``) are refused by name, and
-        ``describe()`` reports ``recall_value``, ``recall_context`` and
-        ``recall_context_decay`` at their one value, as before; the CHANGELOG gives each one's
-        reading.
+        ``recall_context_decay`` and ``recall_recency=None``) are refused by name; the
+        CHANGELOG gives each one's reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -2454,7 +2453,7 @@ class Brain:
             result._composition["learned_code"] = learned
         return result
 
-    def retune(self, *, reset_arousal: bool = False, **genes: Any) -> Brain:
+    def retune(self, **genes: Any) -> Brain:
         """Change named settings together, preserving the acquired continuing brain.
 
         Uses the same ``learning_``, ``actor_`` and ``arousal_`` names as
@@ -2477,18 +2476,13 @@ class Brain:
         composed at 0.
 
         Wiring, initialization and enabling/disabling components are construction
-        choices. ``reset_arousal=True`` explicitly resets the arousal level and
-        reward references, retaining its age and work counters; no other state
-        is reset. Its arousal is then left as a default ``reset()`` leaves it: an adult
-        brain (its youth over) has no income or error references and no reward scale, so at
-        the founder ``need=0`` it has no want (a positive ``need_scale`` wants nothing until
-        outcomes enter the new stream's scale), only a surprise at its own forecasts can rouse
-        it, and a world that stops paying may leave it calm on a lapsed habit. Where its world
-        may stop paying, leave ``reset_arousal`` off or give it a positive ``need``. Returns
-        this same brain.
+        choices. ``retune`` resets nothing; ``brain.arousal.reset()`` resets the arousal level
+        and reward references and keeps its age and work counters. Returns this same brain.
         """
-        if not isinstance(reset_arousal, bool):
-            raise ValueError("reset_arousal must be boolean")
+        if "reset_arousal" in genes:
+            raise ValueError(
+                "reset_arousal was removed in this version: call brain.arousal.reset()"
+            )
         options = dict(genes)
         construction = {
             "inputs", "actions", "modules", "observers", "lateral", "scales", "slots", "seed",
@@ -2517,8 +2511,6 @@ class Brain:
         arousal = options.pop("arousal", current_arousal)
         if "arousal" in genes and (self.arousal is None or arousal is None):
             raise ValueError("retune cannot enable or disable arousal; compose it at construction")
-        if reset_arousal and self.arousal is None:
-            raise ValueError("reset_arousal requires an existing arousal component")
 
         memory_fields = {
             "working_memory_decay": (self.working_memory, "decay"),
@@ -2616,8 +2608,6 @@ class Brain:
         if self.arousal is not None:
             assert arousal is not None
             self.arousal.config = arousal
-            if reset_arousal:
-                self.arousal.reset()
         for component, field, value in memory_changes:
             setattr(component, field, value)
         if self.learned_code is not None and any(
@@ -2635,23 +2625,42 @@ class Brain:
         return self
 
     def describe(self) -> dict[str, Any]:
-        """Describe effective settings and layout without changing live state.
+        """Describe the brain without changing live state: four sections.
 
-        ``genes`` contains the named runtime settings of existing components.
-        ``initialization`` records, for composed brains, the wiring choices including
-        sensory scale. These initial choices are provenance, not a description of
-        subsequently learned weights.
-        Config and memory sections report the objects currently in use; the
-        returned mapping is detached and JSON serializable. No lazy state is
-        initialized, no random values are drawn and no settlement is performed.
+        - ``layout``: the inputs, actions, regions, slots, neurons, synapses and populations;
+          ``code``, what the memories key on; ``learned_code``, a learned code's settings and
+          counts; and ``composition``, the construction choices of a composed brain (None for
+          a custom anatomy), provenance rather than a description of learned weights.
+        - ``genes``: every setting by the name ``compose`` and ``retune`` take, the teaching
+          point as ``teaching`` (``"custom"`` for steps that ``learning=LearnerConfig(...)``
+          set outside both points).
+        - ``memories``: one entry per member of ``brain.memories``, its ``to_dict()``.
+        - ``pending``: whether an issued action owns the next real outcome.
+
+        The returned mapping is detached and JSON serializable. No lazy state is initialized,
+        no random values are drawn and no settlement is performed.
         """
         # the configurations as given: with a learned code the learner and the actor run
         # them with their budgets scaled to the brain's step
         learning = self._learning_base.to_dict()
         actor = self._reward_base.to_dict()
         arousal = None if self.arousal is None else self.arousal.config.to_dict()
-        # the nudge is a standalone Learner's choice; a composed brain's is the cross-entropy
-        genes = {f"learning_{name}": value for name, value in learning.items() if name != "nudge"}
+        steps = {
+            name: learning[name] for name in ("eta", "eta_bias", "normalize", "normalize_floor")
+        }
+        teaching = next(
+            (point for point, values in TEACHING.items() if values == steps), "custom"
+        )
+        # the nudge is a standalone Learner's choice, a composed brain's the cross-entropy; the
+        # steps and their normalization are the teaching point's
+        genes: dict[str, Any] = {"teaching": teaching}
+        genes.update(
+            {
+                f"learning_{name}": value
+                for name, value in learning.items()
+                if name != "nudge" and name not in steps
+            }
+        )
         genes.update({f"actor_{name}": value for name, value in actor.items()})
         if arousal is not None:
             genes.update({f"arousal_{name}": value for name, value in arousal.items()})
@@ -2691,41 +2700,32 @@ class Brain:
                 "neurons": self.connectome.n,
                 "synapses": self.connectome.synapses,
                 "populations": {name: len(members) for name, members in populations.items()},
+                # what the memories key on: the observation, the brain's sparse code of it or
+                # its learned code, what the cortex reads, and the episodic separation of an
+                # uncoded key
+                "code": {
+                    "kind": "learned" if learned is not None
+                    else ("observation" if self.sparse_code is None else "code"),
+                    "inputs": int(self.inputs),
+                    "width": int(self.code_width),
+                    "units": int(learned.units) if learned is not None
+                    else (0 if self.sparse_code is None else int(self.sparse_code.expansion)),
+                    "fan_in": 0 if self.sparse_code is None else int(self.sparse_code.fan_in),
+                    "winners": 0 if self.sparse_code is None else int(self.sparse_code.winners),
+                    "cortex": (
+                        "observation and code" if learned is not None and learned.cortex == "both"
+                        else "code" if self.coded_cortex or learned is not None else "observation"
+                    ),
+                    "separator": None
+                    if self.hippocampus is None or self.hippocampus.separator is None
+                    else ("sparse" if self.hippocampus.separator.fan_in else "dense"),
+                },
+                **({} if learned is None else {"learned_code": learned.to_dict()}),
+                "composition": self._composition,
             },
             "genes": genes,
-            "learning": learning,
-            "actor": actor,
-            "arousal": arousal,
-            "working_memory": None if self.working_memory is None
-            else self.working_memory.to_dict(),
-            "efference": None if self.efference is None else self.efference.to_dict(),
-            "history": None if self.history is None else self.history.to_dict(),
-            "recall": None if self.recall is None else self.recall.to_dict(),
-            "memory": None if self.hippocampus is None else self.hippocampus.to_dict(),
-            # what the memories key on: the observation, the brain's sparse code of it or its
-            # learned code, what the cortex reads, and the episodic separation of an uncoded key
-            "observation_code": {
-                "kind": "learned" if learned is not None
-                else ("observation" if self.sparse_code is None else "code"),
-                "inputs": int(self.inputs),
-                "width": int(self.code_width),
-                "units": int(learned.units) if learned is not None
-                else (0 if self.sparse_code is None else int(self.sparse_code.expansion)),
-                "fan_in": 0 if self.sparse_code is None else int(self.sparse_code.fan_in),
-                "winners": 0 if self.sparse_code is None else int(self.sparse_code.winners),
-                "cortex": (
-                    "observation and code" if learned is not None and learned.cortex == "both"
-                    else "code" if self.coded_cortex or learned is not None else "observation"
-                ),
-                "separator": None
-                if self.hippocampus is None or self.hippocampus.separator is None
-                else ("sparse" if self.hippocampus.separator.fan_in else "dense"),
-            },
-            **({} if learned is None else {"learned_code": learned.to_dict()}),
-            # construction settings of an episodic memory whose records vote in the choice
-            "episodic": None if self._episodic is None else self._episodic.to_dict(),
-            "initialization": {"composition": self._composition},
-            "pending_feedback": self.pending_feedback,
+            "memories": {name: memory.to_dict() for name, memory in self.memories.items()},
+            "pending": self.pending_feedback,
         }
         return dict(plain(result))
 
@@ -2999,12 +2999,9 @@ class Brain:
     ) -> list[float]:
         """Teach independent samples; return qualified training accuracy after each epoch.
 
-        ``fit`` begins with ``reset()``: every stream starts afresh, arousal included, so a
-        live adult brain (its youth over) taught with ``fit`` starts its next stream with no
-        income or error references, as after a default reset. For a brain that keeps living,
-        save its arousal state before ``fit`` (``state = brain.arousal.to_dict()``) and
-        restore it after (``brain.arousal = Arousal.from_dict(state)``): the state that
-        ``reset(keep_arousal=True)`` keeps."""
+        ``fit`` begins with ``reset(keep=("arousal",))``: every stream starts afresh and the
+        arousal state stays as it is, since a control on independent samples does not change
+        a life."""
         drive = self.stimulus(observations, memory=False)
         labels = self.learner._labels(np.asarray(labels))
         if len(labels) != len(drive):
@@ -3017,7 +3014,7 @@ class Brain:
             ):
                 raise ValueError(f"{name} must be an integer >= {minimum}")
         # Supervision changes the parameters under any previously cached decision.
-        self.reset()
+        self.reset(keep=("arousal",))
         history = []
         for _ in range(epochs):
             order = self.rng.permutation(len(labels))
@@ -4031,40 +4028,48 @@ class Brain:
             self.hippocampus, keys, action, reward, importance, None, self.learner.slot_offsets
         )
 
-    def reset(self, *, keep_memory: bool = False, keep_arousal: bool = False) -> None:
-        """Start every stream afresh; hippocampal records are kept. By default a brain with
-        arousal begins the new stream calm, with what it was used to forgotten and its age kept.
-        ``keep_memory=True`` keeps the recall memory's slots too: each stream ends an episode
-        there (``Recall.end``), its slots read by the next streams of the same batch, and
-        everything else starts afresh as without it; a brain without a recall memory resets
-        as it does without the keyword.
+    def reset(self, *, keep: Any = (), **renamed: Any) -> None:
+        """Start every stream afresh; the stores' records are kept. By default a brain with
+        arousal begins the new stream calm, with what it was used to forgotten and its age
+        kept. ``keep`` names what else carries over, a name or a sequence of names:
 
-        ``keep_arousal=True`` keeps the arousal state as it is: its level, its recent and
-        long-run reward, its usual errors, its reward scale, their counts, its age and its
-        work counts carry into the new stream, as when the state saved before the reset
-        (``state = brain.arousal.to_dict()``) is restored after it
-        (``brain.arousal = Arousal.from_dict(state)``). A brain that was aroused when it was
-        reset begins the new stream aroused. A brain without arousal resets as it does
-        without the keyword.
+        - ``"slots"``: the recall memory's slots. Each stream ends an episode there
+          (``Recall.end``), its slots read by the next streams of the same batch, and
+          everything else starts afresh; a brain without a recall memory resets as without it.
+        - ``"arousal"``: the arousal state as it is. Its level, its recent and long-run
+          reward, its usual errors, its reward scale, their counts, its age and its work
+          counts carry into the new stream, as when the state saved before the reset
+          (``state = brain.arousal.to_dict()``) is restored after it
+          (``brain.arousal = Arousal.from_dict(state)``); a brain that was aroused when it
+          was reset begins the new stream aroused. A brain without arousal resets as without
+          it.
 
-        After a reset without ``keep_arousal``, also with ``keep_memory=True``, an adult brain
-        (its youth over) has no income or error references and no reward scale, so at the
-        founder ``need=0`` it has no want, and a positive ``need_scale`` wants nothing until
-        outcomes enter the new stream's scale: only a surprise at its own forecasts can rouse
-        it, measured against the usual error the new stream's first outcome sets, and a world
-        that stops paying may leave it calm on a lapsed habit. Where its world may stop paying,
-        reset it with ``keep_arousal=True`` (the scale and the scaled need carry over), give it
-        a positive ``need``, or let it keep living without the reset
+        After a reset that does not keep ``"arousal"``, an adult brain (its youth over) has no
+        income or error references and no reward scale, so at the founder ``need=0`` it has
+        no want, and a positive ``need_scale`` wants nothing until outcomes enter the new
+        stream's scale: only a surprise at its own forecasts can rouse it, measured against
+        the usual error the new stream's first outcome sets, and a world that stops paying
+        may leave it calm on a lapsed habit. Where its world may stop paying, keep
+        ``"arousal"`` (the scale and the scaled need carry over), give it a positive
+        ``need``, or let it keep living without the reset
         (``docs/continuous.md#reset-and-save``)."""
-        if not isinstance(keep_memory, bool):
-            raise ValueError("keep_memory must be boolean")
-        if not isinstance(keep_arousal, bool):
-            raise ValueError("keep_arousal must be boolean")
+        for name in renamed:
+            if name in ("keep_memory", "keep_arousal"):
+                what = "slots" if name == "keep_memory" else "arousal"
+                raise TypeError(f"{name}=True is reset(keep=({what!r},)) in this version")
+            raise TypeError(f"reset() got an unexpected keyword argument {name!r}")
+        names = (keep,) if isinstance(keep, str) else keep
+        try:
+            kept = set(names)
+        except TypeError as exc:
+            raise ValueError("keep names 'slots' and 'arousal'") from exc
+        if not all(isinstance(name, str) for name in kept) or kept - {"slots", "arousal"}:
+            raise ValueError("keep names 'slots' and 'arousal'")
         self.basal_ganglia.reset()
         for memory in self.memories.values():
-            # the streams begin afresh; the stores' records stay, and with keep_memory the
-            # recall memory's slots
-            memory.begin(keep=keep_memory)
+            # the streams begin afresh; the stores' records stay, and kept, the recall
+            # memory's slots
+            memory.begin(keep="slots" in kept)
         self._moment = None
         self._moment_code = None
         self._coded_moment = None
@@ -4077,7 +4082,7 @@ class Brain:
         self._lived = None
         self._last_arousal = None
         self._awaiting = None
-        if self.arousal is not None and not keep_arousal:
+        if self.arousal is not None and "arousal" not in kept:
             self.arousal.reset()
 
     def parameters(self) -> int:

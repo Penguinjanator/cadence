@@ -111,7 +111,7 @@ def test_the_episodic_memory_takes_a_fan_in_and_continues_exactly(tmp_path):
     brain = cd.Brain.compose(20, 2, seed=31, arousal=True, memory_choice=True, memory_fan_in=16)
     for memory in (brain.hippocampus, brain.context_memory):
         assert memory.separator.fan_in == 16 and memory.separator.projection is None
-    assert brain.describe()["memory"]["separator"]["fan_in"] == 16
+    assert brain.describe()["memories"].get("hippocampus")["separator"]["fan_in"] == 16
     for t in range(5):
         brain.step(one_hot(t % 3, 20), reward=None if t == 0 else [float(t == 3)],
                    teacher=[1] if t == 2 else None)

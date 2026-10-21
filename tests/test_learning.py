@@ -279,7 +279,8 @@ def test_a_composed_brain_learns_with_the_cross_entropy_nudge(tmp_path) -> None:
     with pytest.raises(ValueError, match="cross-entropy nudge"):
         brain.retune(learning=quadratic)
     assert "learning_nudge" not in brain.describe()["genes"]
-    assert brain.describe()["learning"]["nudge"] == "cross_entropy"
+    assert brain.learner.config.nudge == "cross_entropy"
+    assert "learning_nudge" not in brain.describe()["genes"]
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as saved:
         arrays = {name: saved[name].copy() for name in saved.files}

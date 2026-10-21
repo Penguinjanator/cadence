@@ -315,7 +315,7 @@ def test_the_scaled_need_survives_a_reset_that_keeps_the_arousal_and_a_default_r
     want, scale, state = arousal.want, arousal.scale, arousal.to_dict()
     default = twin(brain, tmp_path / "default")
     restored = twin(brain, tmp_path / "restored")
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     default.reset()
     kept, left = brain.arousal, default.arousal
     assert kept is not None and left is not None
@@ -328,9 +328,9 @@ def test_the_scaled_need_survives_a_reset_that_keeps_the_arousal_and_a_default_r
     default.live(OBS)
     default.live(OBS, reward=[0.0])
     assert reading(default)["want"] == 0.0
-    # retune(reset_arousal=True) leaves the arousal as the default reset does
+    # brain.arousal.reset() leaves the arousal as the default reset does
     retuned = twin(restored, tmp_path / "retuned")
-    retuned.retune(reset_arousal=True)
+    retuned.arousal.reset()
     assert retuned.arousal is not None and retuned.arousal.config.need_scale == 0.5
     assert retuned.arousal.scale == 0.0 and retuned.arousal.want == 0.0
     assert retuned.arousal.age == kept.age and retuned.arousal.to_dict() == after_default
@@ -412,7 +412,7 @@ def test_compose_retune_and_describe_carry_the_gene(tmp_path: Path) -> None:
     assert brain.arousal is not None and brain.arousal.config.need_scale == 0.2
     described = brain.describe()
     assert described["genes"]["arousal_need_scale"] == 0.2
-    assert described["arousal"]["need_scale"] == 0.2
+    assert described["genes"]["arousal_need_scale"] == 0.2
     mapped = cd.Brain.compose(3, 2, modules=(8,), seed=3, arousal={"need_scale": 0.2})
     assert mapped.arousal is not None and mapped.arousal.config == brain.arousal.config
     assert_same_checkpoint(brain.save(tmp_path / "named"), mapped.save(tmp_path / "mapped"))
@@ -486,7 +486,7 @@ def bandit(brain: cd.Brain) -> tuple[str, list[dict[str, Any]]]:
     acts.append(int(brain.live(OBS)[0]))
     for _ in range(30):
         acts.append(int(brain.live(OBS, reward=[float(acts[-1] == 1)])[0]))
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     left.append(brain.arousal.to_dict())
     acts.append(int(brain.live(OBS)[0]))
     for _ in range(20):
@@ -504,9 +504,9 @@ def streams(brain: cd.Brain) -> tuple[str, list[dict[str, Any]]]:
         if kind == "reset":
             brain.reset()
         elif kind == "memory":
-            brain.reset(keep_memory=True)
+            brain.reset(keep=("slots",))
         elif kind == "arousal":
-            brain.reset(keep_arousal=True)
+            brain.reset(keep=("arousal",))
         if start:
             left.append(brain.arousal.to_dict())
         for t in range(start, start + length):
@@ -530,7 +530,7 @@ LIVES: dict[str, tuple[tuple[int, int, dict[str, Any]], Life]] = {
     "episodic": ((4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
                  streams),
 }
-# Recorded on main at c7dc2f0 (0.84.3 with ``reset(keep_arousal=True)``): each life's acts,
+# Recorded on main at c7dc2f0 (0.84.3 with ``reset(keep=("arousal",))``): each life's acts,
 # what its resets left the arousal and the arousal at the end (digests of the saved states),
 # and the format, the member and metadata names and the contents of every array of the
 # checkpoint it saves. Where the library later removed a setting that was inert at its

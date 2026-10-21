@@ -182,13 +182,13 @@ def test_compose_wraps_a_custom_anatomy_with_the_composed_founders():
     wrapped = Brain.compose(6, 3, connectome=develop(genome, seed=3), **options)
     np.testing.assert_array_equal(wrapped.brain.efficacy, composed.brain.efficacy)
     np.testing.assert_array_equal(wrapped.brain.bias, composed.brain.bias)
-    assert wrapped.describe()["episodic"] == composed.describe()["episodic"]
+    assert wrapped.describe()["memories"].get("episodic") == composed.describe()["memories"].get("episodic")
     plain = Brain(develop(genome, seed=3), memory_choice=True, recall=True, seed=3)
     assert plain.memory_context == 0.0 < wrapped.memory_context  # only compose fills them in
     x = np.eye(6)[[1]]
     for _ in range(3):
         np.testing.assert_array_equal(wrapped.step(x), composed.step(x))
-    assert wrapped.describe()["initialization"]["composition"] is None  # its own anatomy
+    assert wrapped.describe()["layout"]["composition"] is None  # its own anatomy
     with pytest.raises(ValueError, match="own layout"):
         Brain.compose(6, 3, connectome=develop(genome, seed=3), modules=(8,))
     with pytest.raises(ValueError, match="sensory and motor"):

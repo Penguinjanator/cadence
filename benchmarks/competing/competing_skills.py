@@ -211,7 +211,10 @@ def enter_ring(brain: cd.Brain, arm: str, stages: dict[str, Any]) -> None:
         return
     genes = dict(stages[arm])
     reset = bool(genes.pop("reset_arousal", False))
-    brain.retune(reset_arousal=reset, **genes)
+    brain.retune(**genes)
+    if reset:  # the arousal's reset, which retune took as reset_arousal up to 0.84.3
+        assert brain.arousal is not None
+        brain.arousal.reset()
 
 
 REGIONS = ("sensory", "module_0", "association", "prefrontal", "motor")
@@ -517,9 +520,10 @@ def run_life(
     groups = synapse_groups(brain)
     enter_ring(brain, arm, protocol["stages"])
     row["door"] = {
-        "actor": brain.describe()["actor"],
-        "arousal": brain.describe()["arousal"],
-        "learning": brain.describe()["learning"],
+        # the configurations as the receipt has always held them
+        "actor": brain.basal_ganglia.config.to_dict(),
+        "arousal": None if brain.arousal is None else brain.arousal.config.to_dict(),
+        "learning": brain.learner.config.to_dict(),
         "owed": owed,
     }
     reference = (brain.brain.efficacy.copy(), brain.brain.bias.copy())

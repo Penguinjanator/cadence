@@ -99,8 +99,8 @@ def test_bounded_run_records_matched_exposure_frozen_parameters_and_verifiable_a
         work = arm["training"]["work"]
         assert work["actions"] == 4 and work["action_rows"] == 64
         assert work["presentations"] == (0 if name == "frozen" else 16)
-        assert arm["resolved"]["memory"] is None
-        assert arm["resolved"]["episodic"] is None
+        assert "hippocampus" not in arm["resolved"]["memories"]
+        assert "episodic" not in arm["resolved"]["memories"]
     path = receipt.write(tmp_path / "receipt.json")
     assert Receipt.verify(path, sources=instrument.sources(), check=instrument.check)[0]
     assert not founder["acquisition_control_passed"]

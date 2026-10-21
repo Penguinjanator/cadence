@@ -284,7 +284,7 @@ def test_recall_false_builds_the_brain_without_the_option_byte_identically(tmp_p
     assert meta["format"] != "cadence-generic/8" and "recall" not in meta
     assert "recall_scale" not in meta["composition"]
     described = founder.describe()
-    assert described["recall"] is None
+    assert "recall" not in described["memories"]
     assert not any(name.startswith("recall_") for name in described["genes"])
     assert described == control.describe()
 
@@ -294,7 +294,7 @@ def test_the_founders_are_the_declared_genes():
         "amplitude": 3.0, "temperature": 0.25, "heard": 1.0, "recency": 0.25,
         "address": 0.01, "address_temperature": 0.1, "capacity": 64, "next": True,
     }
-    assert composed().describe()["initialization"]["composition"]["recall_scale"] == 1.2
+    assert composed().describe()["layout"]["composition"]["recall_scale"] == 1.2
     assert inspect.signature(cd.Brain).parameters["recall"].default is False
     described = composed().describe()["genes"]
     assert {k: v for k, v in described.items() if k.startswith("recall_")} == {
@@ -337,7 +337,7 @@ def test_the_projections_start_at_their_scale_like_the_working_trace():
     np.testing.assert_allclose(
         np.asarray(loud.connectome.sign)[rows], 10.0 * np.asarray(quiet.connectome.sign)[rows]
     )
-    assert quiet.describe()["initialization"]["composition"]["recall_scale"] == 1.2
+    assert quiet.describe()["layout"]["composition"]["recall_scale"] == 1.2
 
 
 def test_a_custom_connectome_needs_regions_of_the_value_width():
@@ -1133,7 +1133,7 @@ def test_an_unknown_recall_gene_is_refused_as_a_typo():
 
 def test_describe_reports_the_memory_and_parameters_count_its_address_map():
     brain = composed()
-    assert brain.describe()["recall"] == brain.recall.to_dict()
+    assert brain.describe()["memories"].get("recall") == brain.recall.to_dict()
     assert brain.parameters() == brain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4
 
 
@@ -1754,7 +1754,7 @@ def test_a_null_slot_whose_logit_is_not_finite_is_refused(tmp_path):
 
 
 def test_a_reset_that_keeps_the_memory_keeps_the_slots_and_starts_the_rest_afresh():
-    """``Brain.reset(keep_memory=True)`` keeps the recall memory's slots: each stream ends an
+    """``Brain.reset(keep=("slots",))`` keeps the recall memory's slots: each stream ends an
     episode there, the next moment of the same batch reads the slots and the latest one
     learns no successor from it. Everything else starts afresh, and a plain reset empties the
     slots."""
@@ -1762,7 +1762,7 @@ def test_a_reset_that_keeps_the_memory_keeps_the_slots_and_starts_the_rest_afres
     for x in (FACT, GO):
         brain.act(x, greedy=True)
     keys = brain.recall.keys.copy()
-    brain.reset(keep_memory=True)
+    brain.reset(keep=("slots",))
     recall = brain.recall
     np.testing.assert_array_equal(recall.keys, keys)
     assert recall.ended.all() and not recall.previous.any()
@@ -1775,13 +1775,15 @@ def test_a_reset_that_keeps_the_memory_keeps_the_slots_and_starts_the_rest_afres
     np.testing.assert_array_equal(recall.nexts[0, 0], GO[0])
     brain.reset()
     assert recall.slots == 0
-    with pytest.raises(ValueError, match="keep_memory"):
-        brain.reset(keep_memory=1)
+    with pytest.raises(ValueError, match="'slots' and 'arousal'"):
+        brain.reset(keep=1)
+    with pytest.raises(TypeError, match="keep_memory"):  # the keyword of 0.84.3, renamed
+        brain.reset(keep_memory=True)
 
 
 def test_ended_marks_in_a_checkpoint_are_read_back_and_a_float_mark_is_refused(tmp_path):
     """The loader reads ``recall/ended``, the streams whose latest slot closed an episode
-    (``Recall.end``, which ``reset(keep_memory=True)`` calls): the loaded twin's marked slot
+    (``Recall.end``, which ``reset(keep=("slots",))`` calls): the loaded twin's marked slot
     learns no successor from its stream's next moment, as the live memory's ``end`` leaves
     it, and the other stream goes on. A float-valued mark is refused."""
     brain = composed(seed=5)
@@ -2020,7 +2022,7 @@ def test_the_keys_the_last_release_wrote_load_at_their_one_value(tmp_path):
         assert not set(cd.Recall.FORMAT) & set(saved["memories"]["recall"])
         assert "memories/recall/history" not in data.files
     described = brain.describe()
-    assert not set(cd.Recall.FORMAT) & set(described["recall"])
+    assert not set(cd.Recall.FORMAT) & set(described["memories"]["recall"])
     assert not {f"recall_{k}" for k in cd.Recall.FORMAT} & set(described["genes"])
     arrays = saved_arrays(path)
     meta = metadata(arrays)

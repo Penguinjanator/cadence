@@ -40,12 +40,12 @@ def consolidated(brain: cd.Brain, x: np.ndarray, action: int) -> float:
 
 
 def test_the_episodic_memory_is_an_opt_in_preset_of_the_composed_brain():
-    assert cd.Brain.compose(3, 2, seed=1).describe()["episodic"] is None
+    assert cd.Brain.compose(3, 2, seed=1).describe()["memories"].get("episodic") is None
     brain = episodic(3, 2, seed=1)
     for memory in (brain.hippocampus, brain.context_memory):
         # the stream's record moves halfway at once and fades; the shared record consolidates
         assert memory.rate == 0.5 and memory.decay == 0.9 and memory.consolidation == 0.05
-    described = brain.describe()["episodic"]
+    described = brain.describe()["memories"].get("episodic")
     names = ("choice", "context", "replay", "demonstrations")
     assert {key: described[key] for key in names} == {
         "choice": True,
@@ -61,7 +61,7 @@ def test_the_episodic_memory_is_an_opt_in_preset_of_the_composed_brain():
         assert memory.separator.expansion == 1024 and memory.separator.winners == 24
     assert episodic(3, 2, seed=1, memory_context=0.0).context_memory is None
     released = cd.Brain.compose(3, 2, seed=1)
-    assert released.describe()["episodic"] is None and released.context_memory is None
+    assert released.describe()["memories"].get("episodic") is None and released.context_memory is None
     np.testing.assert_array_equal(released.hippocampus.pre, released.sensory_index)
     assert released.hippocampus.separator is None and released.hippocampus.rate == 1.0
     for field in ("pre", "post", "sign"):
@@ -313,7 +313,7 @@ def test_a_saved_episodic_brain_continues_exactly(tmp_path):
         brain.step(one_hot(t % 3, 3), reward=None if t == 0 else [0.0])
     path = brain.save(tmp_path / "brain.npz")
     copy = cd.Brain.load(path)
-    assert copy.describe()["episodic"] == brain.describe()["episodic"]
+    assert copy.describe()["memories"].get("episodic") == brain.describe()["memories"].get("episodic")
     np.testing.assert_array_equal(copy.memories["episodic"].context, brain.memories["episodic"].context)
     np.testing.assert_array_equal(copy.memories["episodic"].decision, brain.memories["episodic"].decision)
     assert len(copy.memories["episodic"].paths[0]) == len(brain.memories["episodic"].paths[0])

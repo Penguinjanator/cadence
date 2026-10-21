@@ -146,7 +146,7 @@ FOUNDERS: dict[str, dict] = {
         "format": "cadence-brain/1",
         "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
         "checkpoint": "06fbd6687d87a6fd4fd821dc7decaf7fac71295bb1c076c6b73f0d6763b9bf11",
-        "describe": "1bf73099c7ecf9cbf546180de2606cc08b9e4411917a0bf3e206de288670a205",
+        "describe": "c2d9ac325779947f7d47dce0368ec883e24fbe4f3d69fd54ec099ece68e035a0",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True}),
@@ -156,7 +156,7 @@ FOUNDERS: dict[str, dict] = {
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
         "checkpoint": "e76edb77fd4f5563d4263044651f3b40ae0310856a9e3921b999f501847c8a2a",
-        "describe": "884a3d720c951931cf210fa69e2edb24047628201cb58b1c80a89608c21d8876",
+        "describe": "4d2c1dc3e67a67c110696972927f22ac87f1bf37b0700dcabc9214b68d63c32e",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -168,7 +168,7 @@ FOUNDERS: dict[str, dict] = {
         "format": "cadence-brain/1",
         "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
         "checkpoint": "2ebe2c6747753e8d43bcc3de872204882532103b497cda757a7db2654084c783",
-        "describe": "00819f2d8a2e9b1bc32965cca94c53ea7b6e841d07852f1ef41bf1790fbdaf35",
+        "describe": "cbca7ef58ecf8211c3837c68e5f05e9992e0fe09225a2d19e528843635295347",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -179,7 +179,7 @@ FOUNDERS: dict[str, dict] = {
         "format": "cadence-brain/1",
         "names": "0aab0d179b44428d742d358f48b22b0571e9fd78c4cefa76ad52551d9920c16e",
         "checkpoint": "02581d0933e39c23ef22db165c6d03196a0da00ddbd33b44ba35aa4bb7d42358",
-        "describe": "86c0805b8b0a8567253dd0fe46efada219397445f83ee823d6cfbf91c34d1932",
+        "describe": "9bab0cf60ca52c678d63272c176b76dcd12ef5c46c090be01b308b8335b6bd3f",
     },
     "wide": {
         "build": (2_000, 3, {"modules": (8,), "seed": 13, "memory_choice": True,
@@ -190,7 +190,7 @@ FOUNDERS: dict[str, dict] = {
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
         "checkpoint": "0277fcdf466243c9f0e805bd7c8d0c648d8cb8f3380972882f4ddac3b99cb154",
-        "describe": "3dcfe786b5990da748b4ad427185ef8667f7071209025099bcf1b1006c737f70",
+        "describe": "23476fccc4a08d78891a9814d8ba3548ebf6533320edba0c4b980ea47d75fafa",
     },
 }
 
@@ -233,7 +233,7 @@ def test_learned_code_none_is_the_founder_and_the_width_is_as_before():
     for value in (None, 0):
         brain = cd.Brain.compose(53, 4, modules=(8,), seed=2, learned_code=value)
         assert brain.learned_code is None and brain.code_width == 53
-        assert "learned_code" not in brain.describe()["initialization"]["composition"]
+        assert "learned_code" not in brain.describe()["layout"]["composition"]
 
 
 # -- the region
@@ -295,12 +295,12 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
     # the memories key on the code
     np.testing.assert_array_equal(brain.hippocampus.pre, np.arange(UNITS + INPUTS))
     described = brain.describe()
-    assert described["observation_code"] == {
+    assert described["layout"]["code"] == {
         "kind": "learned", "inputs": INPUTS, "width": UNITS + INPUTS, "units": UNITS, "fan_in": 0,
         "winners": 0, "cortex": "code", "separator": None,
     }
-    assert described["learned_code"]["units"] == UNITS
-    assert described["initialization"]["composition"]["learned_code"] == UNITS
+    assert described["layout"]["learned_code"]["units"] == UNITS
+    assert described["layout"]["composition"]["learned_code"] == UNITS
     assert {k: v for k, v in described["genes"].items() if k.startswith("learned_code")} == {
         f"learned_code_{name}": value
         for name, value in {**cd.LearnedCode.founders(), "held": False, "reads": "context"}.items()
@@ -714,9 +714,9 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     assert brain.learner.config.nudged_steps == base.nudged_steps << level
     assert brain.basal_ganglia.config.eligibility_steps == 12 << level
     described = brain.describe()
-    assert described["learning"]["free_steps"] == base.free_steps == 1024
-    assert described["actor"]["eligibility_steps"] == 12
-    assert described["learned_code"]["stepping"] == level
+    assert described["genes"]["learning_free_steps"] == base.free_steps == 1024
+    assert described["genes"]["actor_eligibility_steps"] == 12
+    assert described["layout"]["learned_code"]["stepping"] == level
     # a lesson and an outcome run at the stepped budgets and leave the level's bookkeeping
     brain.lesson(x, [1, 2])
     brain.step(x)
@@ -803,8 +803,10 @@ def test_a_configuration_assigned_after_compose_holds_through_a_change_of_step()
     assert actor.eligibility_steps == 12 << level
     assert brain.learner.config.eta == 0.25 and brain.learner.config.free_steps == 512 << level
     described = brain.describe()
-    assert described["actor"]["eligibility_steps"] == 12 and described["actor"]["eta"] == 0.1
-    assert described["learning"]["free_steps"] == 512 and described["learning"]["eta"] == 0.25
+    genes = described["genes"]
+    assert genes["actor_eligibility_steps"] == 12 and genes["actor_eta"] == 0.1
+    assert genes["learning_free_steps"] == 512 and genes["teaching"] == "custom"
+    assert brain._learning_base.eta == 0.25
 
 
 def test_a_halved_step_stops_a_settle_at_the_same_movement_per_unit_time():
@@ -819,7 +821,7 @@ def test_a_halved_step_stops_a_settle_at_the_same_movement_per_unit_time():
     brain._restep(2)
     assert brain.learner.config.tolerance == base.tolerance / 4
     assert brain.learner.config.free_steps == base.free_steps * 4
-    assert brain.describe()["learning"]["tolerance"] == base.tolerance
+    assert brain.describe()["genes"]["learning_tolerance"] == base.tolerance
     brain._restep(0)
     assert brain.learner.config == base
     plain = cd.Brain.compose(INPUTS, ACTIONS, modules=(16,), seed=2)
@@ -1092,7 +1094,7 @@ def test_the_cortex_reads_the_observation_beside_the_code():
     assert beside.sum() == INPUTS * 64
     assert brain.learner.plastic_synapses[beside].all()
     assert len(brain._code_synapses["dictionary"][0]) == INPUTS * UNITS
-    assert brain.describe()["observation_code"]["cortex"] == "observation and code"
+    assert brain.describe()["layout"]["code"]["cortex"] == "observation and code"
     x = tokens(2, 6)
     brain.act(x, greedy=True)
     efficacy = brain.brain.efficacy[beside].copy()

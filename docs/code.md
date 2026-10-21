@@ -87,8 +87,8 @@ on the coupling's diagonal), and the brain
 integrates every phase of the moment at that step, the lessons' and the actor's phases
 included, with the step budgets (`learning_free_steps`, `learning_nudged_steps`,
 `actor_eligibility_steps`, an imagined branch's budget) scaled by the same power of two so
-that every phase covers the same time; `describe()` reports the configurations as given, and
-`learned_code["stepping"]` the level in effect. At `learned_code_top_down` 4 the restoring
+that every phase covers the same time; `describe()` reports the settings as given, and
+`describe()["layout"]["learned_code"]["stepping"]` the level in effect. At `learned_code_top_down` 4 the restoring
 term alone asks for the halved step wherever a unit sits near its threshold, so a life with
 the region runs at level 1 for the most part; a dictionary whose columns come to overlap
 strongly, as in a world of a few frames, raises it to 2 or 3, and the settles cost that
@@ -192,8 +192,8 @@ A brain with the region saves, in checkpoint format `cadence-brain/1`, the `lear
 metadata (units, widths, seed, genes, work counts) and the tables `learned_code/dictionary`,
 `learned_code/weights` and `learned_code/thresholds`, with `moment/code` and `lived/code` for
 a decision awaiting its outcome. `Brain.load` installs the saved tables and refuses a
-checkpoint whose saved synapses disagree with them. `describe()` reports `observation_code`
-with kind `"learned"`, the genes as `learned_code_*` and a `learned_code` section; `parameters()`
+checkpoint whose saved synapses disagree with them. `describe()` reports the layout's
+`code` with kind `"learned"`, the genes as `learned_code_*` and the layout's `learned_code`; `parameters()`
 counts the three tables; `reset()` leaves them as it leaves the weights.
 
 The region adds `units` neurons, `inputs * units` dictionary synapses, `units * (units - 1)`

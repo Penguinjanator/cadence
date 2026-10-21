@@ -234,7 +234,7 @@ def test_a_vector_or_image_brain_is_the_composition_before_the_observation_code(
         meta = json.loads(str(data["brain"]))
         assert not any(name.startswith("code/") for name in data.files)
     assert meta["format"] == spec["format"] and "code" not in meta
-    described = brain.describe()["observation_code"]
+    described = brain.describe()["layout"]["code"]
     assert described == {
         "kind": "observation", "inputs": inputs, "width": inputs, "units": 0, "fan_in": 0,
         "winners": 0, "cortex": "observation",
@@ -304,7 +304,7 @@ def test_the_code_and_the_sparse_separation_are_opt_in():
     def keyed(inputs, **options):
         brain = cd.Brain.compose(inputs, 2, modules=(8,), memory_choice=True, recall=True,
                                  **options)
-        described = brain.describe()["observation_code"]
+        described = brain.describe()["layout"]["code"]
         return (described["kind"], described["width"], described["cortex"],
                 described["separator"], brain.hippocampus.separator is not None
                 and brain.hippocampus.separator.fan_in, len(brain.connectome.populations["recall"]))
@@ -491,7 +491,7 @@ def test_compose_can_make_the_sensory_region_the_code():
     assert raw.inputs == coded.inputs == 12_824
     assert len(raw.sensory_index) == 12_824 and len(coded.sensory_index) == 1024
     assert raw.sparse_code is None and not raw.coded_cortex  # the founder keys on the observation
-    assert coded.coded_cortex and coded.describe()["observation_code"]["cortex"] == "code"
+    assert coded.coded_cortex and coded.describe()["layout"]["code"]["cortex"] == "code"
 
     def sensory_synapses(brain):
         pre = np.asarray(brain.connectome.pre)
@@ -510,8 +510,8 @@ def test_compose_can_make_the_sensory_region_the_code():
     )
     assert coded.act(x, greedy=True).shape == (2,)
     assert coded.describe()["layout"]["inputs"] == 12_824
-    assert coded.describe()["initialization"]["composition"]["code"] == 1024
-    assert "code" not in raw.describe()["initialization"]["composition"]
+    assert coded.describe()["layout"]["composition"]["code"] == 1024
+    assert "code" not in raw.describe()["layout"]["composition"]
     with pytest.raises(ValueError, match="need 12824 values"):
         coded.act(np.zeros((1, 1024)))
     heard = cd.Brain.compose(12_824, 3, modules=(8,), seed=1, code=256, history_decays=(0.5,),
@@ -540,7 +540,7 @@ def test_the_memories_key_on_the_code_as_it_is():
     for memory in (brain.hippocampus, brain.context_memory):
         assert memory.separator is None and memory.strength.shape[1] == len(memory.pre)
     assert brain.coded_cortex and brain.recall.inputs == 0  # the sensory range is the code
-    assert brain.recall.key_width == 1024 and "inputs" not in brain.describe()["recall"]
+    assert brain.recall.key_width == 1024 and "inputs" not in brain.describe()["memories"].get("recall")
     x = frames(2_000, 1, 4, density=0.1)
     code = brain.observation_code(x)
     key = brain.memories["episodic"].key(code)
@@ -944,8 +944,8 @@ def test_compose_takes_an_image_shape_like_genome():
     assert forward.sum() == 128 * 8 and np.isin(pre[forward], populations["visual/output"]).all()
     assert not (np.isin(pre, populations["visual/input"]) & ~np.isin(post, populations["visual"])).any()
     assert brain.describe()["layout"]["inputs"] == 36
-    assert brain.describe()["initialization"]["composition"]["image"] == [6, 6, 1]
-    assert brain.describe()["initialization"]["composition"]["inputs"] == 36
+    assert brain.describe()["layout"]["composition"]["image"] == [6, 6, 1]
+    assert brain.describe()["layout"]["composition"]["inputs"] == 36
     assert brain.sparse_code is None  # 36 pixels: the memories key on the pixels themselves
     assert len(cd.Brain.compose((6, 6), 2, modules=(8,), features=2, field=2).connectome.populations["visual/output"]) == 2 * 25
     colour = cd.Brain.compose((4, 4, 3), 2, modules=(8,), seed=2)

@@ -13,9 +13,9 @@ import cadence as cd
 
 def test_the_composed_brain_holds_its_last_interpretation_clearly_and_reads_it_quietly():
     brain = cd.Brain.compose(inputs=3, actions=2, seed=1, arousal=True)
-    memory = brain.describe()["working_memory"]
+    memory = brain.describe()["memories"].get("working_memory")
     assert memory["amplitude"] == 3.0 and memory["decay"] == 0.0
-    assert brain.describe()["initialization"]["composition"]["working_memory_scale"] == 1.2
+    assert brain.describe()["layout"]["composition"]["working_memory_scale"] == 1.2
 
 
 def test_the_default_trace_is_exactly_the_last_interpretation():
@@ -139,7 +139,7 @@ def test_a_saved_brain_keeps_the_trace_it_was_built_with(tmp_path):
     path = earlier.save(tmp_path / "earlier.npz")
     again = cd.Brain.load(path)
     assert again.working_memory.amplitude == 0.3 and again.working_memory.decay == 0.2
-    assert again.describe()["initialization"]["composition"]["working_memory_scale"] == 12.0
+    assert again.describe()["layout"]["composition"]["working_memory_scale"] == 12.0
     assert np.array_equal(again.working_memory.trace, earlier.working_memory.trace)
 
 
@@ -154,7 +154,7 @@ def test_provenance_saved_before_0_82_reads_as_the_fixed_scale_12(tmp_path):
     older = tmp_path / "older.npz"
     np.savez(older, **arrays)
     loaded = cd.Brain.load(older)
-    assert loaded.describe()["initialization"]["composition"]["working_memory_scale"] == 12.0
+    assert loaded.describe()["layout"]["composition"]["working_memory_scale"] == 12.0
     meta["composition"]["working_memory_scale"] = -1.0
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(older, **arrays)
@@ -180,7 +180,7 @@ def test_the_readout_homeostasis_gene_is_gone():
     with pytest.raises((TypeError, ValueError)):
         cd.Brain.compose(inputs=3, actions=2, learning_homeostasis_rate=0.1)
     report = cd.Brain.compose(inputs=3, actions=2, seed=4)
-    assert "homeostasis_rate" not in report.describe()["learning"]
+    assert "learning_homeostasis_rate" not in report.describe()["genes"]
 
 
 def test_a_checkpoint_saved_at_the_genes_founder_still_loads(tmp_path):

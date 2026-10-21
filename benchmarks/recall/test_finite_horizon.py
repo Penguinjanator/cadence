@@ -422,7 +422,7 @@ def test_the_history_protocol_adds_the_heard_history_to_the_composed_trace():
     assert len(vanished.connectome.populations["history"]) == 3 * inputs.INPUTS
     for brain in (vanished, default):
         assert (brain.working_memory.decay, brain.working_memory.amplitude) == (0.0, 3.0)
-        assert brain.describe()["initialization"]["composition"]["working_memory_scale"] == 1.2
+        assert brain.describe()["layout"]["composition"]["working_memory_scale"] == 1.2
     np.testing.assert_array_equal(vanished.brain.efficacy, history.brain.efficacy)
     # the founder part of the vanished brain is the default brain: the history is appended
     added = np.isin(vanished.connectome.pre, vanished.connectome.populations["history"])

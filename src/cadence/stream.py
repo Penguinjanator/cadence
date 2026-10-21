@@ -374,7 +374,7 @@ class Recall:
     streams, and an empty stream reads silence. ``end`` ends their episodes and keeps their
     slots: the latest slot of each learns no successor from the next episode's first moment,
     and the moment before begins afresh; the brain ends an episode so under
-    ``Brain.reset(keep_memory=True)`` and empties the stream when an episode ends in a life.
+    ``Brain.reset(keep=("slots",))`` and empties the stream when an episode ends in a life.
 
     With ``window`` k above 1 (a construction setting, with ``window_decay`` d) the key's
     fixed part is an ordered window of the stream's last k events, ``[heard * x_t, d * heard

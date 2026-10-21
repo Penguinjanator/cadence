@@ -78,7 +78,7 @@ as the map's eligibility. The actor holds it in a trace of its own (decaying by
 Each stream has its own slots. A plain `reset()` empties them and keeps the address map. When
 an episode ends, that stream's slots are emptied with its working trace and heard history,
 and the cortex of the moment before, the history and the window begin afresh.
-`brain.reset(keep_memory=True)` keeps the slots across a reset: each stream ends an episode
+`brain.reset(keep=("slots",))` keeps the slots across a reset: each stream ends an episode
 there (`Recall.end`), and the ended episode's last slot learns no successor from the next
 stream's first moment.
 
@@ -154,7 +154,7 @@ Settings of 0.84.3 that left in this version, each refused by name with a messag
   where it was read, and the window key and the efference copy carry the same information.
 - `recall_episodes="keep"`, slots kept across an ended episode: it lowered success by .108 on
   a crafting chain whose observation names the stage; an ended episode empties the slots, and
-  `reset(keep_memory=True)` keeps them across a reset as before.
+  `reset(keep=("slots",))` keeps them across a reset as before.
 - `recall_recency=None`, the power-law age charge `r * log(1 + age)`: it failed its
   confirmation on the camera task's founders; a number keeps the linear charge
   `recency * age`.

@@ -81,11 +81,14 @@ tuned = Brain.compose(
 )
 settings = tuned.describe()
 assert settings["genes"]["actor_eta"] == 0.1
-assert settings["initialization"]["composition"]["sensory_scale"] == 2.0
+assert settings["layout"]["composition"]["sensory_scale"] == 2.0
 ```
 
-`describe()` returns JSON-safe `layout`, the effective `genes`, the resolved
-configurations and `initialization` (construction choices, not current weights).
+`describe()` returns four JSON-safe sections: `layout` (the regions; `code`, what the
+memories key on; `composition`, the construction choices, not current weights), `genes`
+(every setting by the name `compose` and `retune` take, `teaching` among them), `memories`
+(each member of `brain.memories` with its settings and counts) and `pending` (whether an
+issued action owns the next outcome).
 
 | Setting | Composed founder | Changed at | Home |
 | --- | --- | --- | --- |
@@ -158,11 +161,10 @@ above zero the same holds for `recall_address`, `recall_address_step` and
 left in this version are refused by name, at `compose` and `retune` alike
 ([removed in this version](recall.md#removed-in-this-version)).
 
-`reset_arousal=True` resets the arousal level and reward references and keeps its age
-and work counters. An adult brain at the founder `need=0` is then roused only by
-surprise at its own forecasts, and a positive `need_scale` wants nothing until outcomes
-enter the new stream's reward scale; where the world may stop paying, leave it off or
-set a positive `need` ([reset and save](continuous.md#reset-and-save)).
+`retune` resets nothing. `brain.arousal.reset()` resets the arousal level and reward
+references and keeps its age and work counters; an adult brain at the founder `need=0` is
+then roused only by surprise at its own forecasts, and a positive `need_scale` wants nothing
+until outcomes enter the new stream's reward scale ([reset and save](continuous.md#reset-and-save)).
 
 ## Choose settings for the application
 

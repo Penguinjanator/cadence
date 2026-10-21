@@ -84,9 +84,10 @@ def test_brain_arms_change_only_what_they_declare(protocol):
     small = chamber.make_brain(
         chamber.arm_point(protocol["brain"], "small", protocol["stages"]), 0, world, need
     )
-    assert gene.describe()["actor"]["eta"] == 0.03 and small.describe()["actor"]["eta"] == 0.003
+    assert gene.describe()["genes"]["actor_eta"] == 0.03
+    assert small.describe()["genes"]["actor_eta"] == 0.003
     assert np.array_equal(gene.brain.efficacy, small.brain.efficacy)
-    assert gene.describe()["arousal"]["need"] == pytest.approx(need)
+    assert gene.describe()["genes"]["arousal_need"] == pytest.approx(need)
 
 
 def test_a_short_run_writes_a_verifiable_receipt(tmp_path):

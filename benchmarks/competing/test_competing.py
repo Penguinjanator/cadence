@@ -128,9 +128,9 @@ def test_brain_overrides_reach_the_memory_and_the_founders_keep_it(protocol):
     founders (rate 1.0, episodic on) are the arena founder's."""
     point = dict(protocol["brain"])
     brain = chamber.make_brain(point, 0)
-    assert brain.hippocampus is not None and brain.describe()["memory"]["rate"] == 1.0
+    assert brain.hippocampus is not None and brain.describe()["memories"].get("hippocampus")["rate"] == 1.0
     averaged = chamber.make_brain({**point, "memory_rate": 0.2}, 0)
-    assert averaged.describe()["memory"]["rate"] == 0.2
+    assert averaged.describe()["memories"].get("hippocampus")["rate"] == 0.2
     assert chamber.make_brain({**point, "episodic": False}, 0).hippocampus is None
 
 
@@ -141,20 +141,25 @@ def test_the_arms_change_only_what_they_declare(protocol):
         before = brain.describe()
         chamber.enter_ring(brain, arm, stages)
         after = brain.describe()
-        actor, arousal = after["actor"], after["arousal"]
+        genes, earlier = after["genes"], before["genes"]
+
+        def part(described: dict, prefix: str) -> dict:
+            return {k: v for k, v in described.items() if k.startswith(prefix)}
+
+        actor, arousal = part(genes, "actor_"), part(genes, "arousal_")
         if arm in ("gene", "frozen", "random"):
             assert after == before
         elif arm == "small":
-            assert (actor["eta"], actor["eta_bias"]) == (0.003, 0.0003)
-            assert arousal == before["arousal"]
+            assert (actor["actor_eta"], actor["actor_eta_bias"]) == (0.003, 0.0003)
+            assert arousal == part(earlier, "arousal_")
         elif arm == "smallest":
-            assert (actor["eta"], actor["eta_bias"]) == (0.001, 0.0001)
+            assert (actor["actor_eta"], actor["actor_eta_bias"]) == (0.001, 0.0001)
         elif arm == "calm":
-            assert arousal["threshold"] == 0.5 and actor == before["actor"]
+            assert arousal["arousal_threshold"] == 0.5 and actor == part(earlier, "actor_")
         elif arm == "stage":
-            assert (actor["eta"], actor["eta_bias"]) == (0.001, 0.0001)
-            assert arousal["need"] == 0.0 and arousal["heat"] == 0.0
-            assert after["learning"]["temperature"] == 0.2
+            assert (actor["actor_eta"], actor["actor_eta_bias"]) == (0.001, 0.0001)
+            assert arousal["arousal_need"] == 0.0 and arousal["arousal_heat"] == 0.0
+            assert genes["learning_temperature"] == 0.2
             assert brain.arousal is not None and brain.arousal.level == 0.0
 
 
@@ -255,11 +260,11 @@ def test_a_tampered_receipt_fails_verification(small_receipt, tmp_path):
 
 def test_learning_overrides_reach_the_brain_and_the_founder_has_none(protocol):
     brain = chamber.make_brain(protocol["brain"], 0)
-    assert brain.describe()["learning"]["scale_cap"] == 8.0
+    assert brain.describe()["genes"]["learning_scale_cap"] == 8.0
     point = {**protocol["brain"], "learning": {"scale_cap": 4.0, "momentum": 0.5}}
     brain = chamber.make_brain(point, 0)
-    learning = brain.describe()["learning"]
-    assert (learning["scale_cap"], learning["momentum"]) == (4.0, 0.5)
+    genes = brain.describe()["genes"]
+    assert (genes["learning_scale_cap"], genes["learning_momentum"]) == (4.0, 0.5)
 
 
 def test_the_arena_founder_brain_is_the_declared_one(protocol):

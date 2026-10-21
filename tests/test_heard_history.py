@@ -66,7 +66,7 @@ def test_the_founder_builds_the_composition_without_a_history_byte_identically(t
     assert meta["format"] != "cadence-generic/7" and "history" not in meta
     assert "history_scale" not in meta["composition"]
     described = founder.describe()
-    assert described["history"] is None and "history_decays" not in described["genes"]
+    assert "history" not in described["memories"] and "history_decays" not in described["genes"]
     assert described == control.describe()
 
 
@@ -99,7 +99,7 @@ def test_the_projection_starts_at_its_scale_like_the_working_trace():
     np.testing.assert_allclose(
         np.asarray(loud.connectome.sign)[rows], 10.0 * np.asarray(quiet.connectome.sign)[rows]
     )
-    assert quiet.describe()["initialization"]["composition"]["history_scale"] == 1.2
+    assert quiet.describe()["layout"]["composition"]["history_scale"] == 1.2
 
 
 @pytest.mark.parametrize("greedy", [True, False])

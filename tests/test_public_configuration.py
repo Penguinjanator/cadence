@@ -54,7 +54,7 @@ def test_plain_compose_keeps_the_released_founders():
     assert brain.working_memory.amplitude == 3.0
     assert brain.working_memory.decay == 0.0  # 0.2 before 0.82.0
     # the projection that reads the carried interpretation back: 12 before 0.82.0
-    assert brain.describe()["initialization"]["composition"]["working_memory_scale"] == 1.2
+    assert brain.describe()["layout"]["composition"]["working_memory_scale"] == 1.2
 
 
 @pytest.mark.parametrize("arousal", [True, {}, {"need": 2.0}])
@@ -107,7 +107,7 @@ def test_multi_module_composition_description_survives_sorted_checkpoint_metadat
     )
     restored = cd.Brain.load(brain.save(tmp_path / "multi-module"))
     assert restored.describe() == brain.describe()
-    assert restored.describe()["initialization"]["composition"]["modules"] == [9, 6]
+    assert restored.describe()["layout"]["composition"]["modules"] == [9, 6]
 
 
 @pytest.mark.parametrize(
@@ -183,10 +183,10 @@ def test_retune_matches_the_existing_stage_operation_and_preserves_pending_credi
             temperature=0.3,
             actor_eta=0.003,
             actor_eta_bias=0.0003,
-            reset_arousal=True,
         )
         is brain
     )
+    brain.arousal.reset()
     assert brain.basal_ganglia._pending is pending
     after = archive(brain, tmp_path, "after-stage")
     for name in before:
@@ -259,7 +259,7 @@ def test_description_is_detached_observational_and_survives_checkpoints(tmp_path
     description = brain.describe()
     json.dumps(description, allow_nan=False)
     assert description["genes"]["actor_eta"] == 0.03
-    assert description["genes"]["learning_eta"] == 0.5
+    assert description["genes"]["teaching"] == "founder"
     description["genes"]["actor_eta"] = 999
     assert brain.basal_ganglia.config.eta == 0.03
     acquire(brain)
@@ -323,7 +323,7 @@ def test_the_resting_bias_of_0843_is_refused_by_name_and_its_record_loads(tmp_pa
     brain = small()
     with pytest.raises(ValueError, match="resting_bias was removed.*0.84.3"):
         brain.retune(resting_bias=0.5)
-    assert "resting_bias" not in brain.describe()["initialization"]
+    assert "resting_bias" not in brain.describe()["layout"]["composition"]
     path = brain.save(tmp_path / "recorded.npz")
     with np.load(path, allow_pickle=False) as saved:
         arrays = earlier({name: saved[name].copy() for name in saved.files})
@@ -364,7 +364,7 @@ def test_scales_name_the_projection_magnitudes_and_keep_their_founders():
         scales={"sensory": 1.0, "trace": 1.2, "history": 1.2, "recall": 1.2},
     )
     np.testing.assert_array_equal(named.brain.efficacy, founder.brain.efficacy)
-    composition = founder.describe()["initialization"]["composition"]
+    composition = founder.describe()["layout"]["composition"]
     assert (
         composition["sensory_scale"], composition["working_memory_scale"],
         composition["history_scale"], composition["recall_scale"],
@@ -373,3 +373,46 @@ def test_scales_name_the_projection_magnitudes_and_keep_their_founders():
                      ("history_scale", "history"), ("recall_scale", "recall")):
         with pytest.raises(ValueError, match=f"scales={{'{key}'"):
             cd.Brain.compose(3, 2, **{old: 1.0})
+
+
+def test_the_description_has_four_sections_and_names_every_gene_as_compose_takes_it():
+    brain = cd.Brain.compose(
+        4, 2, modules=(8,), seed=2, arousal=True, recall=True, memory_choice=True,
+        history_decays=(0.5,), efference_amplitude=1.0, scales={"trace": 2.0},
+    )
+    described = brain.describe()
+    assert list(described) == ["layout", "genes", "memories", "pending"]
+    assert described["layout"]["composition"]["working_memory_scale"] == 2.0
+    assert described["layout"]["code"]["kind"] == "observation"
+    assert list(described["memories"]) == list(brain.memories)
+    assert described["memories"]["episodic"] == brain.memories["episodic"].to_dict()
+    assert described["pending"] is False
+    genes = described["genes"]
+    assert genes["teaching"] == "founder"
+    assert not {"learning_eta", "learning_eta_bias", "learning_normalize",
+                "learning_normalize_floor", "learning_nudge"} & set(genes)
+    # every runtime gene goes back into retune as it is
+    brain.retune(**{k: v for k, v in genes.items() if not k.startswith(
+        ("recall_capacity", "recall_next", "history_decays"))})
+    assert brain.describe()["genes"] == genes
+    brain.retune(teaching="normalized")
+    assert brain.describe()["genes"]["teaching"] == "normalized"
+    brain.retune(learning=replace(brain.learner.config, eta=0.2))
+    assert brain.describe()["genes"]["teaching"] == "custom"
+
+
+def test_fit_keeps_the_arousal_of_a_life_and_retune_resets_nothing():
+    brain = cd.Brain.compose(4, 2, modules=(8,), seed=5, arousal={"youth": 3})
+    x = np.eye(4)[[0]]
+    brain.live(x)
+    for t in range(8):
+        brain.live(np.eye(4)[[t % 4]], reward=[float(t % 2)])
+    state = brain.arousal.to_dict()
+    brain.fit(np.eye(4), np.array([0, 1, 0, 1]), epochs=1, batch=4)
+    assert brain.arousal.to_dict() == state  # a control on independent samples
+    brain.retune(arousal_heat=1.5)
+    assert {k: v for k, v in brain.arousal.to_dict().items() if k != "config"} == {
+        k: v for k, v in state.items() if k != "config"
+    }
+    with pytest.raises(ValueError, match="brain.arousal.reset"):
+        brain.retune(reset_arousal=True)

@@ -376,7 +376,12 @@ def run_life(
         "seed": seed,
         "world": world,
         "need": need,
-        "describe": {k: brain.describe()[k] for k in ("actor", "arousal", "learning")},
+        # the configurations as the receipt has always held them
+        "describe": {
+            "actor": brain.basal_ganglia.config.to_dict(),
+            "arousal": None if brain.arousal is None else brain.arousal.config.to_dict(),
+            "learning": brain.learner.config.to_dict(),
+        },
         "probes": probes,
         "totals": totals.summary(),
         "final": probes[-1]["readings"],
