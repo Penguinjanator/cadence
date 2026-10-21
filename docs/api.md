@@ -131,6 +131,7 @@ trace's `working_memory_scale` founder is 1.2.
 | `observation_code(observations) -> (batch, code_width)` | The unit-length key every memory reads and writes; with a learned code, the code the observations settle to without a context. | [the observation code](memory.md#the-observation-code), [the learned code](code.md) |
 | `stimulus(observations, *, memory=True) -> drive` | The drive of a batch; with `memory` the trace, copy, history, recall and hippocampal reads are added, and the recall address is fixed for the moment. | [memory](memory.md) |
 | `parameters() -> int` | Actor and critic parameters, the consolidated memory matrix, a recall address map and a learned code's tables. | |
+| `copy.deepcopy(brain)` | An independent copy: every array, store, state and random generator copied, the immutable connectomes shared. |
 | `save(path) -> Path`, `Brain.load(path, *, backend="cpu", device=None, precision=None)` | The whole continuation, written atomically ([formats](#checkpoint-formats)). `Brain.load` refuses a learner-only file; `Learner.load` reads either. | [reset and save](continuous.md#reset-and-save) |
 
 Observations are a nonempty finite batch `(streams, inputs)`, images flattened per row or in

@@ -36,6 +36,7 @@ designed region can replace any of them.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
@@ -1172,6 +1173,19 @@ class Brain:
     coordinates from zero (``pre``) and is never read from the drive; the code is its
     separation, so the episodic stores take no separator of their own.
     """
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Brain:
+        """An independent copy: every array, store, state and random generator copied, the
+        immutable connectomes shared, the read-only reports copied as read-only reports."""
+        twin = type(self).__new__(type(self))
+        memo[id(self)] = twin
+        for name, value in vars(self).items():
+            if isinstance(value, MappingProxyType):
+                value = MappingProxyType(deepcopy(dict(value), memo))
+            else:
+                value = deepcopy(value, memo)
+            setattr(twin, name, value)
+        return twin
 
     def __init__(
         self,

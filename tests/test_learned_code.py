@@ -4,6 +4,7 @@ to a sparse code of the observation, the memories key on it, and it learns every
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -755,6 +756,30 @@ def test_a_one_input_world_settles_at_the_step_its_dictionary_allows():
     code = composed(seed=3).learned_code
     for v in np.random.default_rng(4).normal(0.0, 0.5, (20, 1, UNITS)):
         assert code.stability(v) <= code.rest_stability()
+
+
+def test_a_brain_with_the_region_deep_copies_and_imagines():
+    """``copy.deepcopy`` of a brain with the region: the copy shares the immutable
+    connectomes and holds its own tables, state and generators, acts as the original acts,
+    learns apart from it, and imagines."""
+    brain = composed(seed=5, recall=True, arousal=True, memory_choice=True)
+    x = tokens(3, 9)
+    brain.act(x, greedy=True)
+    twin = copy.deepcopy(brain)
+    assert twin.connectome is brain.connectome
+    assert twin.learned_code is not brain.learned_code
+    assert twin.learned_code.connectome is brain.learned_code.connectome
+    assert twin.learned_code.dictionary is not brain.learned_code.dictionary
+    assert dict(twin.last_settlement) == dict(brain.last_settlement)
+    np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
+    before = brain.learned_code.dictionary.copy()
+    twin.act(tokens(7, 11), greedy=True)  # the copy learns; the original does not move
+    np.testing.assert_array_equal(brain.learned_code.dictionary, before)
+    phases = twin.imagine([tokens(5, 6), tokens(8, 2)])
+    assert len(phases) == 2 and all(np.all(phase.qualified) for phase in phases)
+    plain = cd.Brain.compose(INPUTS, ACTIONS, modules=(8,), seed=1)  # and without the region
+    plain.act(x, greedy=True)
+    np.testing.assert_array_equal(copy.deepcopy(plain).act(x, greedy=True), plain.act(x, greedy=True))
 
 
 def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_moments():

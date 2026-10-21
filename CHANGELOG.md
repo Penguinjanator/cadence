@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `copy.deepcopy(brain)` works: a brain copies every array, store, state and random
+  generator and shares its immutable connectomes (`Connectome` copies as itself), with the
+  learned code region or without it; instruments that forked brains by hand no longer need
+  to.
 - `Brain.compose(..., learned_code=units)` (opt-in) adds a `code` region of the brain's own
   neurons between the sensory region and the first module: a learned sparse code of the
   observation, settled with the rest of the brain under the brain's neuron model, with the
