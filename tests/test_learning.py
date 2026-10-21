@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import dataclasses
+import json
 
 import numpy as np
 import pytest
@@ -244,10 +245,12 @@ def test_tie_groups_share_one_scale_across_positions() -> None:
     assert learner.parameters() == 5 * 2 + (3 * 2) * 4 + 4 * 2 + connectome.n
 
 
-def test_decay_fades_synapses_that_are_not_relearned() -> None:
+def test_an_update_at_rate_zero_leaves_every_synapse_as_it_was() -> None:
+    """No leak: what is not relearned keeps its efficacy. The leak (``decay``) and the
+    one-sided teaching law (``centered=False``) of 0.84.3 are not settings."""
     connectome = cd.layered(4, 3, 2, density=1.0, seed=0)
     brain = cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0))
-    config = cd.LearnerConfig(eta=0.0, eta_bias=0.0, decay=0.1)
+    config = cd.LearnerConfig(eta=0.0, eta_bias=0.0)
     learner = cd.Learner(brain, connectome.populations["output"], config)
     before = learner.brain.efficacy.copy()
     drive = brain.stimulus_levels(np.zeros((2, connectome.n)))
@@ -255,14 +258,38 @@ def test_decay_fades_synapses_that_are_not_relearned() -> None:
     target = learner.targets(np.array([0, 1]))
     nudged = learner.nudged(drive, free, target)
     learner.update(free, nudged, learner.nudged(drive, free, target, sign=-1.0))
-    # no contrast step at eta 0, only the leak
-    assert np.allclose(learner.brain.efficacy, before * 0.9)
-    try:
-        cd.LearnerConfig(decay=1.0)
-    except ValueError:
-        pass
-    else:
-        raise AssertionError("decay of 1 would erase the net every update and must be refused")
+    assert np.array_equal(learner.brain.efficacy, before)
+    for name, value in (("decay", 0.1), ("centered", False)):
+        with pytest.raises(TypeError):
+            cd.LearnerConfig(**{name: value})
+        with pytest.raises(ValueError, match=f"learning_{name} was removed.*0.84.3"):
+            cd.Brain.compose(4, 2, modules=(8,), **{f"learning_{name}": value})
+
+
+def test_a_composed_brain_learns_with_the_cross_entropy_nudge(tmp_path) -> None:
+    """The quadratic nudge is a standalone learner's: a composed brain refuses it by name, in
+    its learning configuration, through retune and in a checkpoint, and describes no nudge
+    gene."""
+    with pytest.raises(ValueError, match="learning_nudge was removed.*0.84.3"):
+        cd.Brain.compose(4, 2, modules=(8,), learning_nudge="quadratic")
+    quadratic = cd.LearnerConfig(nudge="quadratic")
+    with pytest.raises(ValueError, match="cross-entropy nudge"):
+        cd.Brain.compose(4, 2, modules=(8,), learning=quadratic)
+    brain = cd.Brain.compose(4, 2, modules=(8,))
+    with pytest.raises(ValueError, match="cross-entropy nudge"):
+        brain.retune(learning=quadratic)
+    assert "learning_nudge" not in brain.describe()["genes"]
+    assert brain.describe()["learning"]["nudge"] == "cross_entropy"
+    path = brain.save(tmp_path / "brain.npz")
+    with np.load(path, allow_pickle=False) as saved:
+        arrays = {name: saved[name].copy() for name in saved.files}
+    meta = json.loads(str(arrays["meta"]))
+    meta["config"]["nudge"] = "quadratic"
+    arrays["meta"] = np.array(json.dumps(meta))
+    np.savez(path, **arrays)
+    with pytest.raises(ValueError, match="learning_nudge='quadratic'.*0.84.3"):
+        cd.Brain.load(path)
+    assert cd.Learner.load(path).config.nudge == "quadratic"  # a standalone learner keeps it
 
 
 def test_trainable_masks_leave_the_rest_of_the_net_alone() -> None:
@@ -272,7 +299,7 @@ def test_trainable_masks_leave_the_rest_of_the_net_alone() -> None:
     synapses[: connectome.synapses // 2] = True
     neurons = np.zeros(connectome.n, dtype=bool)
     neurons[list(connectome.populations["output"])] = True
-    config = cd.LearnerConfig(eta=0.5, eta_bias=0.5, decay=0.1)
+    config = cd.LearnerConfig(eta=0.5, eta_bias=0.5)
     learner = cd.Learner(
         brain,
         connectome.populations["output"],

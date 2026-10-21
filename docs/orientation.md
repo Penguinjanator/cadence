@@ -32,7 +32,7 @@ The composed brain's memories key on the observation or on the fixed sparse code
 
 - **The settling brain uses no backward pass through time.**
   The free settle is the answer. A second settle with the outputs nudged by `beta`
-  toward the target (and, centered, a third nudged away) gives every synapse the
+  toward the target and a third nudged away give every synapse the
   product of its two neurons in each phase; the difference over `2 beta` is the
   update. On a smooth stable equilibrium with symmetric effective weights the contrast
   tends to the loss gradient as `beta` tends to zero
@@ -90,10 +90,10 @@ its work.
   ([contracts](contracts.md)). A residual says nothing about task success.
 - **Certificate.** The contraction bound that says settling has a unique equilibrium
   and how far the last step's movement leaves the state from it.
-- **Free phase, nudged phase, beta, centered.** The settle under the inputs alone; the
-  settle with the outputs pulled toward (or away from) the target with strength `beta`
-  (default 0.1), where smaller is closer to the gradient and weaker; `centered` (default
-  on) contrasts the plus and minus `beta` phases over `2 beta`.
+- **Free phase, nudged phase, beta.** The settle under the inputs alone; the settle with
+  the outputs pulled toward (or away from) the target with strength `beta` (default 0.1),
+  where smaller is closer to the gradient and weaker; the plus and minus `beta` phases are
+  contrasted over `2 beta`.
 - **Detuning, contrast.** Perturbing an equilibrium and reading the difference between
   the perturbed and the free state; the learning signal of the settling brain.
 - **Code.** The fixed random expansion of an observation onto `expansion` units, of which

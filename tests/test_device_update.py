@@ -26,7 +26,7 @@ def test_device_update_matches_host_update(freeze: bool) -> None:
     connectome, tie = _net()
     rng = np.random.default_rng(1)
     config = cd.LearnerConfig(
-        eta=0.5, eta_bias=0.05, tolerance=1e-6, free_steps=200, nudged_steps=200, decay=0.01
+        eta=0.5, eta_bias=0.05, tolerance=1e-6, free_steps=200, nudged_steps=200
     )
     host = cd.Learner(
         cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0)),

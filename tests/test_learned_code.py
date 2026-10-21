@@ -143,8 +143,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
         "format": "cadence-generic/2",
         "names": "4d36d84e68feb73b1b2eedc4de6c9e70769defa7231704e42b9531303f837703",
-        "checkpoint": "69ab413fddf5ba51b7dc5dc1bf7067e64dc4e377aa610b72ff94564eb1ce4617",
-        "describe": "e24eac16a59953cdae5c69e12b1ad2a8062b1aee4de35013850f2115c6dda224",
+        "checkpoint": "b68e0b45ff6121e4aaf95a2a838f43885c64dc0619ea66ddfde032c9f39dff1f",
+        "describe": "917601aa724267fba1394ef6bcadcec6762ce8ebf92bffbcd92ebb0dd64bdad4",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True}),
@@ -153,8 +153,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
         "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "38ef0a8627492dc8f10ac0593f06431102a3d6260c068e2d1d2c2d982b414491",
-        "describe": "b2823d7c26ac22e445b2e8dde6a33cb16a3f2c74d862a9f3dc04318e46ccce30",
+        "checkpoint": "46ba532d6b3ae90be4e04f1fd7a7e0d845c5cc125702f9e78220d66c40bb29c1",
+        "describe": "e03336ae3a4581cabf7b8cceb9d46af333d615a4d7554e718b5084082ce188dd",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -165,8 +165,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-generic/8",
         "names": "393dca0a0f621fb76646cfbfdfdf08399395f1b502050a75717c05690fc986c5",
-        "checkpoint": "e09f1728dc7bc2a0ff440e8ba68d446b4d3707a8e2c0e55212e49717076ec945",
-        "describe": "7490ad2d5b8d73656a752fcb73c16b9cb485dae8bb595be6aaca13b72aeeea89",
+        "checkpoint": "5b11ae382296cb43242a25973c514d5d8af3fa4854af663e4993277e69d9ac70",
+        "describe": "644f3f69c1dca92352d97eb373885f97b3c6e795234697be9064a3ff94b78e0d",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -176,8 +176,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [4, 7, 1, 0, 0, 4, 4, 4, 0, 4, 4, 4, 0, 0, 7, 3, 0, 0, 7, 4, 0, 0, 7, 4, 1, 0, 0, 4, 3, 0, 0, 1, 0, 6, 0, 7, 0, 0, 0, 1],
         "format": "cadence-generic/8",
         "names": "a9ef26d3e531960b8bb7887fcbd6bbbb86d5d09b8fc96868a0e39682f841dedd",
-        "checkpoint": "f282c333d2dc79f37f72e19bb4ede7e21b4e65ab14b332a8aa7aa83f4b3bbc14",
-        "describe": "87ef3e7f6ad867d6647306ca633fb3879c0fde416c173c4b4a4dbbf432392f34",
+        "checkpoint": "79f62a5d9f25547e3fb74985dabb59543f89d0a7f5c3c2863b7d05db1213353b",
+        "describe": "89d8aaa71be0e881282db362b543243f4d466901ed8b46733a5f2a9257e77a09",
     },
     "wide": {
         "build": (2_000, 3, {"modules": (8,), "seed": 13, "memory_choice": True,
@@ -187,8 +187,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-generic/6",
         "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "f6d45402daf52b8295d4646fe2ca50fbc9dbb1a86dbf1dad5335739f9cd5f117",
-        "describe": "599006f952b2581e5b41f63720b729984f6dda3c4b4f801a173ea40068043868",
+        "checkpoint": "2c7d257c0795d48b28ea0a4742962a4b57c0c7e6b5d8f74da6a6d2ec76859794",
+        "describe": "3411aa04619b7a1fbfb44eb20375f3259c1ca24bffe437608283c1286b47483b",
     },
 }
 

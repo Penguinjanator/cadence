@@ -470,7 +470,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         ],
         "format": "cadence-generic/3",
         "names": "0d66da3365c3dd3eb20a818ae910b0f42f38b2e957d8667100322412a62c03f9",
-        "checkpoint": "58d9db655115efbecbbb851ae28dc4ae16d206cb28eb82ad06a7cc45ef66f74d",
+        "checkpoint": "85b4c416e0dc9fed3d7647ef199f0348f4cb400833adadcb72d4ec1c8b31c523",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
@@ -485,7 +485,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         ],
         "format": "cadence-generic/8",
         "names": "0624617ac2a8160b04cfb478001ed82f9eb982d92ece84789974ae64108db965",
-        "checkpoint": "497e3e91c715848bc1f3cb60e68cd3169a339f2a2a0793c559e6742c94af49fe",
+        "checkpoint": "e0eee013ab679734700854b81bf73a750be56e79bf60419757f07c12b00c772e",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
@@ -498,7 +498,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         ],
         "format": "cadence-generic/6",
         "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "2386f2511bbd43f9e8cb34ab3d825a0f88c3403da5af0a88f91bcea71bc59f4b",
+        "checkpoint": "7b401621b57f19d0bdc6479c969fccfc0e118faa8976a45ae05d8658390beb24",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
@@ -508,7 +508,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "left": [],
         "format": "cadence-generic/2",
         "names": "4d36d84e68feb73b1b2eedc4de6c9e70769defa7231704e42b9531303f837703",
-        "checkpoint": "061982f7b1ea471e24ec22d38aa2e1e570d0debfd2fcb8b983c1e5497adccbf7",
+        "checkpoint": "977597b71ca497f3e3fb65da13ea1dcc2795c33d0e60dfa2c092261302ecabe1",
     },
 }
 

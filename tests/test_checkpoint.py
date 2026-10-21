@@ -12,7 +12,7 @@ import cadence as cd
 
 def trained_learner(seed: int = 0) -> tuple[cd.Learner, np.ndarray]:
     connectome = cd.layered(6, 5, 3, density=1.0, seed=seed).with_populations(extra=[0, 1])
-    config = cd.LearnerConfig(eta=0.4, eta_bias=0.1, momentum=0.5, normalize=0.5, decay=1e-3)
+    config = cd.LearnerConfig(eta=0.4, eta_bias=0.1, momentum=0.5, normalize=0.5)
     tie = np.full(connectome.synapses, -1, dtype=np.int64)
     tie[:4] = 0
     learner = cd.Learner(

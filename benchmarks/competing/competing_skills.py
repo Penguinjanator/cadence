@@ -884,7 +884,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="*",
         default=[],
         metavar="FIELD=VALUE",
-        help="override LearnerConfig fields of the brain, e.g. decay=0.01",
+        help="override LearnerConfig fields of the brain, e.g. scale_cap=4.0",
     )
     parser.add_argument(
         "--contingency",

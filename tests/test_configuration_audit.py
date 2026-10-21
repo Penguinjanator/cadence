@@ -88,24 +88,30 @@ def test_numpy_scalar_brain_config_resumes_pending_feedback(tmp_path):
         )
 
 
-@pytest.mark.parametrize("value", [None, 0, 1, "false", np.bool_(False)])
-def test_centered_is_a_boolean_choice_of_teaching_law(value):
-    with pytest.raises(ValueError, match="centered must be boolean"):
-        cd.LearnerConfig(centered=value)
-
-
 @pytest.mark.parametrize("kind", ["learner", "brain"])
-@pytest.mark.parametrize("value", [None, 0, 1, "false"])
-def test_checkpoint_rejects_corrupt_centered_configuration(tmp_path, kind, value):
+@pytest.mark.parametrize(
+    "name,value",
+    [("centered", None), ("centered", 0), ("centered", 1), ("centered", False),
+     ("centered", "false"), ("decay", 0.1), ("decay", None)],
+)
+def test_checkpoint_refuses_a_removed_teaching_setting_away_from_its_law(
+    tmp_path, kind, name, value
+):
+    """The settings of 0.84.3 that this version removed load at the value whose law is the
+    law of this version (centered True, decay 0) and are refused otherwise, naming 0.84.3."""
     brain = cd.Brain.compose(2, 2, modules=(4,))
     owner = brain if kind == "brain" else brain.learner
     path = owner.save(tmp_path / kind)
     with np.load(path, allow_pickle=False) as saved:
         arrays = {key: saved[key].copy() for key in saved.files}
     metadata = json.loads(str(arrays["meta"]))
-    metadata["config"]["centered"] = value
+    loader = cd.Brain.load if kind == "brain" else cd.Learner.load
+    metadata["config"].update(centered=True, decay=0.0)  # a founder saved by 0.84.3 loads
     arrays["meta"] = np.array(json.dumps(metadata))
     np.savez(path, **arrays)
-    loader = cd.Brain.load if kind == "brain" else cd.Learner.load
-    with pytest.raises(ValueError, match="centered must be boolean"):
+    assert loader(path).learner.config if kind == "brain" else loader(path).config
+    metadata["config"][name] = value
+    arrays["meta"] = np.array(json.dumps(metadata))
+    np.savez(path, **arrays)
+    with pytest.raises(ValueError, match=f"{name}=.*0.84.3"):
         loader(path)

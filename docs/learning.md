@@ -62,9 +62,9 @@ certificate, since saturation or a tiny `dt` can stall a neuron far from rest;
 
     nudge[i] = beta · weight · (target[i] - p[i]),   p = softmax(s[outputs] / T)
 
-This is a cross-entropy nudge. `weight` is 1 for a label and the advantage for a reward. With
-`centered=True` two phases run from `s⁰`, at `+beta` (`s⁺`) and `-beta` (`s⁻`). With several
-output `slots`, each slot is its own softmax and carries `beta / slots`.
+This is a cross-entropy nudge. `weight` is 1 for a label and the advantage for a reward. Two
+phases run from `s⁰`, at `+beta` (`s⁺`) and `-beta` (`s⁻`). With several output `slots`, each
+slot is its own softmax and carries `beta / slots`.
 
 **Update.** Every synapse reads its two endpoints in the two phases:
 
@@ -72,8 +72,9 @@ output `slots`, each slot is its own softmax and carries `beta / slots`.
     bias_term[i] = mean_batch( s⁺[i] - s⁻[i] ) / (2 beta)
     efficacy[e] += eta · contrast[e];   bias[i] += eta_bias · bias_term[i]
 
-With `centered=False`, `s⁰` replaces `s⁻` and `beta` replaces `2 beta`. With `reciprocal=True` a
-synapse and its reverse share one efficacy and move by their mean contrast. Plastic efficacies
+Supplied states without the `-beta` phase (`update(free, nudged)`) contrast against `s⁰`, with
+`beta` in place of `2 beta`. With `reciprocal=True` a synapse and its reverse share one efficacy
+and move by their mean contrast. Plastic efficacies
 are clipped to `±scale_cap`. No backward computation graph is kept.
 
 ## 4. One observation repairs a settled prediction
@@ -208,13 +209,12 @@ Fit scaling and encodings on training data. The `Learner` operations:
 | `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)` | one phase; `sign=-1.0` is the opposite phase; `targets(labels)` builds the per-neuron target |
 | `contrast(free, nudged, opposite=None)`, `contrast_rows(...)` | the per-synapse and per-neuron terms divided by `beta` or `2 beta`, batch mean or per row |
 | `update(free, nudged, opposite=None)` | momentum, normalization and the step from supplied states |
-| `apply(delta_scale, delta_bias)` | a precomputed step through masks, synapse rates, tying, decay and the cap |
+| `apply(delta_scale, delta_bias)` | a precomputed step through masks, synapse rates, tying and the cap |
 | `predict(drive)`, `accuracy(drive, labels, batch=256)` | most active output per slot after a free phase; fraction correct over rows and slots |
 
-`LearnedState` holds the `free`, `nudged` and `opposite` states (`opposite` is `None` when not
-centered) and `taught`. A `warm` state starts the free phase from an earlier state: within one
-basin this saves steps, across attractors it can change the answer. A centered update costs
-three settles. A finite warm phase that stops at its step cap keeps its transients and need not
+`LearnedState` holds the `free`, `nudged` and `opposite` states and `taught`. A `warm` state
+starts the free phase from an earlier state: within one basin this saves steps, across
+attractors it can change the answer. An update costs three settles. A finite warm phase that stops at its step cap keeps its transients and need not
 be an equilibrium; reset at independent episode boundaries and compare warm and cold settles on
 changing inputs.
 
@@ -254,7 +254,7 @@ assert second.brain is first.brain and second.holder is first.holder
 
 An update replaces `holder.brain` once every check passes; assigning `learner.brain` replaces
 it for every learner on the holder. Each learner keeps its own optimizer history. Disjoint
-`plastic_synapses` and `plastic_neurons` masks keep one's decay off the other's
+`plastic_synapses` and `plastic_neurons` masks keep one's updates off the other's
 ([write a cortex](cortex.md#which-synapses-a-head-owns)). `Learner.load` and
 `dataclasses.replace` give a holder of its own; `copy.copy` shares it.
 
@@ -311,14 +311,12 @@ unless set again or passed as `None`. Select rates on development data and freez
 |---|---|---|---|
 | `beta` | `LearnerConfig` | nudge strength; smaller is closer to the gradient | 0.1 |
 | `eta`, `eta_bias` | `LearnerConfig` | efficacy and bias steps; an `eta_bias` above `eta` warns | 0.2, `None` (`eta / 10`) |
-| `centered` | `LearnerConfig` | `+beta` against `-beta` instead of against the free state | `True` |
 | `free_steps`, `nudged_steps` | `LearnerConfig` | sweep caps of the free and nudged phases; [settle budgets](#qualified-teaching-budgets) when qualified | 100, 50 |
 | `tolerance` | `LearnerConfig` | movement stop for finite phases, equation residual when qualified; `None` fixes the length | 1e-4 |
-| `nudge` | `LearnerConfig` | `"cross_entropy"` or `"quadratic"` | `"cross_entropy"` |
+| `nudge` | `LearnerConfig` | `"cross_entropy"` or `"quadratic"`, the latter for a standalone learner of pattern targets; a composed brain refuses it | `"cross_entropy"` |
 | `temperature` | `LearnerConfig` | softmax temperature `T` of the cross-entropy nudge; in a composed brain also the sampled policy's base temperature | 0.2 |
 | `momentum` | `LearnerConfig` | in `[0, 1)`: step on a bias-corrected running mean of each contrast | 0.0 |
 | `normalize`, `normalize_floor` | `LearnerConfig` | forgetting factor in `[0, 1)` of a running RMS that divides each step, plus a floor ([below](#rates-under-normalization)) | 0.0 (off), 1e-3 |
-| `decay` | `LearnerConfig` | in `[0, 1)`: shrink every plastic efficacy and bias by this fraction per update | 0.0 |
 | `scale_cap` | `LearnerConfig` | largest plastic efficacy magnitude; smaller keeps readouts out of saturation | 8.0 |
 | `qualified`, `damping` | `LearnerConfig` | require full-equation phases; most `dt` halvings per phase | `False`, 3 |
 | `surprise` | `LearnerConfig` | [teach only differing rows](#lessons-only-where-the-answer-differs) | `False` |
@@ -347,7 +345,7 @@ plastic efficacies (a pair or group once) plus plastic biases. `updates` counts 
 ## Rates under normalization
 
 With `normalize > 0` each plastic efficacy and bias keeps a running second moment of its raw
-signal. Before masks, synapse rates, tying, decay and clipping, the increment is
+signal. Before masks, synapse rates, tying and clipping, the increment is
 
 ```text
 increment = rate * signal / (sqrt(bias_corrected_second_moment) + floor)

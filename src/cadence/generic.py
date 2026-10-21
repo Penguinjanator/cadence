@@ -2501,7 +2501,8 @@ class Brain:
         learning = self._learning_base.to_dict()
         actor = self._reward_base.to_dict()
         arousal = None if self.arousal is None else self.arousal.config.to_dict()
-        genes = {f"learning_{name}": value for name, value in learning.items()}
+        # the nudge is a standalone Learner's choice; a composed brain's is the cross-entropy
+        genes = {f"learning_{name}": value for name, value in learning.items() if name != "nudge"}
         genes.update({f"actor_{name}": value for name, value in actor.items()})
         if arousal is not None:
             genes.update({f"arousal_{name}": value for name, value in arousal.items()})
@@ -4528,6 +4529,11 @@ class Brain:
                 raise ValueError("missing hippocampus metadata")
             resting_bias = _validate_resting_bias(meta.get("resting_bias", 0.0))
             learner = Learner.load(path, backend=backend, device=device, precision=precision)
+            if learner.config.nudge != "cross_entropy":
+                raise ValueError(
+                    "this checkpoint was saved with learning_nudge='quadratic', which a composed "
+                    "brain no longer takes; load it with cadence-net 0.84.3"
+                )
             composition = _load_composition(meta.get("composition"), learner)
             populations = learner.brain.connectome.populations
             code = _load_code(

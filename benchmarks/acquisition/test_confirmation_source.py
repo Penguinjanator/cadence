@@ -118,7 +118,6 @@ def test_half_step_changes_only_selected_learning_rates(scripts):
     assert selected["qualified"] is True
     assert selected["tolerance"] == 0.003
     assert selected["damping"] == 3
-    assert selected["centered"] is True
     assert selected["normalize"] == selected["momentum"] == 0.0
     assert_same_initial_graph(candidate, canonical)
 

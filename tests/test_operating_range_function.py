@@ -65,7 +65,6 @@ def test_optional_resting_bias_acquires_retains_and_continues_same_graph(
         normalize_floor=0.001,
         momentum=0.0,
         beta=0.1,
-        centered=True,
         free_steps=4096,
         nudged_steps=4096,
         qualified=True,

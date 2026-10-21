@@ -17,7 +17,7 @@ FOUNDERS = {
 # Settings a later library removed, with the value at which the recorded law is the law of that
 # library: a checkpoint it writes cannot carry them, so the record names them at that value.
 REMOVED: dict[str, dict] = {
-    "learning": {},
+    "learning": {"centered": True, "decay": 0.0},
     "reward": {
         "dopamine_center": 0.0,
         "dopamine_floor": 0.0,

@@ -163,7 +163,7 @@ Heads with disjoint masks share one graph. Build the first head on the `NeuralGr
 further head with `Learner.sharing(first, outputs, **options)`, where `options` are the
 `Learner` fields after `outputs`. The heads share one holder, so each update replaces the graph
 every head reads ([two learners on one graph](learning.md#two-learners-on-one-graph)). Disjoint
-masks also keep one head's decay off the other's synapses.
+masks also keep one head's updates off the other's synapses.
 
 `Learner.step(drive, labels)` settles a free phase, the nudged phases toward the labelled
 outputs and one update. The phase operations `free`, `nudged` and `update` take an explicit

@@ -255,11 +255,11 @@ def test_a_tampered_receipt_fails_verification(small_receipt, tmp_path):
 
 def test_learning_overrides_reach_the_brain_and_the_founder_has_none(protocol):
     brain = chamber.make_brain(protocol["brain"], 0)
-    assert brain.describe()["learning"]["decay"] == 0.0
-    point = {**protocol["brain"], "learning": {"decay": 0.01, "momentum": 0.5}}
+    assert brain.describe()["learning"]["scale_cap"] == 8.0
+    point = {**protocol["brain"], "learning": {"scale_cap": 4.0, "momentum": 0.5}}
     brain = chamber.make_brain(point, 0)
     learning = brain.describe()["learning"]
-    assert (learning["decay"], learning["momentum"]) == (0.01, 0.5)
+    assert (learning["scale_cap"], learning["momentum"]) == (4.0, 0.5)
 
 
 def test_the_arena_founder_brain_is_the_declared_one(protocol):

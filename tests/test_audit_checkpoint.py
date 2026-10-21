@@ -61,7 +61,7 @@ def test_learner_round_trip_keeps_every_array_and_count(backend: str, tmp_path) 
     learner = cd.Learner(
         brain,
         c.populations["output"],
-        cd.LearnerConfig(momentum=0.9, normalize=0.99, tolerance=1e-4, decay=0.001),
+        cd.LearnerConfig(momentum=0.9, normalize=0.99, tolerance=1e-4),
         plastic_synapses=mask,
         plastic_neurons=neurons,
         tie_groups=tie,

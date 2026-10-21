@@ -127,7 +127,6 @@ def make_brain(name, seed, args, *, lateral=-0.5):
         beta=0.1,
         eta=gene["eta"],
         eta_bias=0.02,
-        centered=True,
         free_steps=args.phase_steps,
         nudged_steps=args.phase_steps,
         tolerance=args.tolerance,

@@ -155,7 +155,6 @@ def recipe_configuration(recipe, args):
         beta=0.1,
         eta=0.5,
         eta_bias=0.02,
-        centered=True,
         free_steps=1024,
         nudged_steps=12,
         tolerance=0.003,
@@ -544,7 +543,8 @@ def main():
     parser.add_argument("--free-steps", type=int, default=1024)
     parser.add_argument("--nudged-steps", type=int, default=12)
     parser.add_argument("--damping", type=int, default=3)
-    parser.add_argument("--nudge", choices=("cross_entropy", "quadratic"), default="cross_entropy")
+    # a composed brain learns with the cross-entropy nudge
+    parser.add_argument("--nudge", choices=("cross_entropy",), default="cross_entropy")
     parser.add_argument(
         "--rate", type=float, default=0.5,
         help="qualified synaptic rate; fixed-lateral-local-rms uses .005, lateral0-small-rms .003",

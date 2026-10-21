@@ -28,7 +28,7 @@ _KINDS = {
     "arousal": ArousalConfig,
 }
 _FIELDS = {prefix: {field.name for field in fields(kind)} for prefix, kind in _KINDS.items()}
-_BOOLEAN = {"centered", "qualified", "surprise"}
+_BOOLEAN = {"qualified", "surprise"}
 _INTEGER = {"free_steps", "nudged_steps", "damping", "eligibility_steps", "youth"}
 _STRING = {"nudge"}
 _OPTIONAL = {"eta_bias", "tolerance", "eligibility_steps"}
@@ -43,6 +43,9 @@ _REMOVED = {
     "actor_critic_normalize",
     "actor_normalize",
     "actor_momentum",
+    "learning_centered",
+    "learning_decay",
+    "learning_nudge",
 }
 
 
@@ -121,9 +124,15 @@ def configured(base: Config, changes: Mapping[str, Any], prefix: str) -> Config:
             if name in updates:
                 updates[name] = number
     try:
-        return replace(base, **updates) if updates else base
+        result = replace(base, **updates) if updates else base
     except (ValueError, TypeError) as exc:
         raise ValueError(f"invalid {prefix} configuration: {exc}") from exc
+    if isinstance(result, LearnerConfig) and result.nudge != "cross_entropy":
+        raise ValueError(
+            "a composed brain learns with the cross-entropy nudge; the quadratic nudge is a "
+            "standalone Learner's (cadence-net 0.84.3 composes it)"
+        )
+    return result
 
 
 def arousal_config(

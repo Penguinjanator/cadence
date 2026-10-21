@@ -65,7 +65,7 @@ def test_ending_one_stream_does_not_resettle_other_streams(backend):
 
 
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
-def test_frozen_large_synapse_survives_decay_and_clipping(backend):
+def test_frozen_large_synapse_survives_clipping(backend):
     if backend not in cd.available_backends():
         pytest.skip(backend)
     agent = controller(backend)
@@ -74,7 +74,7 @@ def test_frozen_large_synapse_survives_decay_and_clipping(backend):
     scale[0] = 12.0
     learner.brain = learner.brain.with_parameters(efficacy=scale)
     learner.plastic_synapses[0] = False
-    learner.config = cd.LearnerConfig(decay=0.1)
+    learner.config = cd.LearnerConfig()
     if backend == "cpu":
         learner.apply(np.zeros_like(scale), np.zeros(agent.n))
     else:

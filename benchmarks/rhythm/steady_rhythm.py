@@ -135,10 +135,20 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def learner_config(values: dict) -> LearnerConfig:
+    """A frozen recipe's learner as the library takes it. The recipes name the teaching law's
+    centred contrast and its leak at their founders (True and 0), the law without the two
+    settings, which the library removed after 0.84.3; other values need that release."""
+    values = dict(values)
+    if values.pop("centered", True) is not True or values.pop("decay", 0.0) != 0.0:
+        raise ValueError("an uncentred contrast or a leak needs cadence-net 0.84.3")
+    return LearnerConfig(**values)
+
+
 def make_brain(seed: int, protocol: dict, recipe: str = "selected") -> Brain:
     """The declared System 1: one processing module, working trace, no associative store."""
     spec = protocol["recipes"][recipe]
-    learning = LearnerConfig(**spec["learning"])
+    learning = learner_config(spec["learning"])
     return Brain.compose(
         inputs.INPUTS,
         inputs.ACTIONS,

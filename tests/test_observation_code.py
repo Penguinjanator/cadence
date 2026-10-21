@@ -125,7 +125,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
         "format": "cadence-generic/2",
         "names": "4d36d84e68feb73b1b2eedc4de6c9e70769defa7231704e42b9531303f837703",
-        "checkpoint": "69ab413fddf5ba51b7dc5dc1bf7067e64dc4e377aa610b72ff94564eb1ce4617",
+        "checkpoint": "b68e0b45ff6121e4aaf95a2a838f43885c64dc0619ea66ddfde032c9f39dff1f",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -135,7 +135,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
         "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "38ef0a8627492dc8f10ac0593f06431102a3d6260c068e2d1d2c2d982b414491",
+        "checkpoint": "46ba532d6b3ae90be4e04f1fd7a7e0d845c5cc125702f9e78220d66c40bb29c1",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -170,7 +170,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-generic/6",
         "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "f6d45402daf52b8295d4646fe2ca50fbc9dbb1a86dbf1dad5335739f9cd5f117",
+        "checkpoint": "2c7d257c0795d48b28ea0a4742962a4b57c0c7e6b5d8f74da6a6d2ec76859794",
     },
     "image": {
         # an image shape through Brain.build: the hippocampus of earlier releases keyed on
@@ -182,7 +182,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
         "format": "cadence-generic/2",
         "names": "b27e958dfa827537e7d90084b281bdcd8cd4355f2ccdab2e45818342277b18d0",
-        "checkpoint": "6ec776929861a8ba29f8e1393a91e86969641c33089da54b3353bb59a6352456",
+        "checkpoint": "53b96fda82bd281fe1ec5e606bac7c8d603eea6a903a2ca0807628f71fa3d6a9",
     },
 }
 

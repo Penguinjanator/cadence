@@ -118,11 +118,11 @@ def test_bias_correction_continues_after_a_checkpoint_and_ignores_external_updat
     assert np.array_equal(steady.second_moment_bias, resumed.second_moment_bias)
 
 
-def test_cap_and_decay_never_touch_a_frozen_synapse_on_host_or_device() -> None:
+def test_the_cap_never_touches_a_frozen_synapse_on_host_or_device() -> None:
     torch = pytest.importorskip("torch")
     c, tie = _net()
     rng = np.random.default_rng(2)
-    config = cd.LearnerConfig(eta=50.0, eta_bias=5.0, decay=0.05, tolerance=1e-6)
+    config = cd.LearnerConfig(eta=50.0, eta_bias=5.0, tolerance=1e-6)
     frozen = np.zeros(c.synapses, dtype=bool)
     frozen[::4] = True
     frozen_neurons = np.zeros(c.n, dtype=bool)
@@ -152,7 +152,7 @@ def test_cap_and_decay_never_touch_a_frozen_synapse_on_host_or_device() -> None:
         for backend, learner in learners.items():
             learner.step(d, labels)
             efficacy = learner.brain.efficacy
-            assert np.array_equal(efficacy[frozen], start[frozen]), backend  # no clip, no decay
+            assert np.array_equal(efficacy[frozen], start[frozen]), backend  # no clip
             assert np.abs(efficacy[~frozen]).max() <= SCALE_CAP, backend
             capped[backend] |= bool((np.abs(efficacy[~frozen]) == SCALE_CAP).any())
             assert not learner.brain.bias[frozen_neurons].any(), backend

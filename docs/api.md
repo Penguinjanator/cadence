@@ -336,10 +336,9 @@ validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them. Guide:
 ## Learning (`cadence.learning`)
 
 ```text
-LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, centered=True, free_steps=100,
-              nudged_steps=50, tolerance=1e-4, nudge="cross_entropy",
-              temperature=0.2, normalize=0.0, normalize_floor=1e-3,
-              momentum=0.0, decay=0.0, scale_cap=8.0, qualified=False,
+LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, free_steps=100, nudged_steps=50,
+              tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0,
+              normalize_floor=1e-3, momentum=0.0, scale_cap=8.0, qualified=False,
               damping=3, surprise=False)
 Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None,
         plastic_neurons=None, reciprocal=True, tie_groups=None,
@@ -358,7 +357,7 @@ when `normalize > 0` with a rate above 0.05
 | `step(drive, labels, warm=None, weight=None, *, answer=None) -> (LearnedState, report)` | Free phase, nudged phase(s), one update. A refused qualified phase raises `LearningPhaseError` and changes nothing. |
 | `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)`, `targets(labels)`, `nudge_for(target, beta, weight=None)` | One phase; the per-neuron target; the `Nudge`. |
 | `standing`, `bounded(nudge)` | A standing boundary every phase carries (a `Nudge` whose anchor terms are held fixed through each solve; a composed brain's learned code sets it), and a phase's nudge with those terms joined; `None` without one. |
-| `contrast(free, nudged, opposite=None)`, `contrast_rows(...)`, `update(free, nudged, opposite=None)`, `apply(delta_scale, delta_bias)` | The contrast, per row, and an update through masks, rates, tying, decay and the cap. `update` does not check qualification. |
+| `contrast(free, nudged, opposite=None)`, `contrast_rows(...)`, `update(free, nudged, opposite=None)`, `apply(delta_scale, delta_bias)` | The contrast, per row, and an update through masks, rates, tying and the cap. `update` does not check qualification. |
 | `calibrate(drive, *, level=None, grid=None) -> float` | Picks the global gain by the free output operating point; reports in `last_calibration`; raises `RuntimeError` without a usable candidate and changes nothing ([calibration](learning.md#calibrating-the-operating-point)). |
 | `predict(drive)`, `accuracy(drive, labels, batch=256)`, `parameters()`, `to_dict()` | Readout, score, plastic parameter count. |
 | `save(path, *, compressed=True)`, `Learner.load(path, ...)` | [Checkpoints](#checkpoints-cadencecheckpoint). |
