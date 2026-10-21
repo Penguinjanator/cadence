@@ -50,6 +50,12 @@ moments whose raw inputs overlap. Design keys, memories and applications for a
 learned code; the library's learned code is work in progress in
 [#211](https://github.com/muellerberndt/cadence/issues/211).
 
+Map every capability that makes a transformer effective to its settlement form before adding a
+mechanism, and remove or fold what was tested and did not work: an option whose readings were
+negative or never confirmed leaves the library or moves to `benchmarks/` with its receipt.
+Document by situation, which part to use for which task and with which settings, and keep the
+interface as simple as possible for users.
+
 ## Goal and mechanism
 
 **Fixed foundation and default hypotheses.** Every addition must remain within

@@ -50,6 +50,14 @@ embedding table is a control. The released memories key on the observation or on
 random code of it; the learned code is work in progress in
 [#211](https://github.com/muellerberndt/cadence/issues/211).
 
+**The transformer's parts, settled.** Everything that makes a transformer effective has its
+settlement and repair-network version here: the embedding is a learned code of meaning, the
+residual stream is the settling cortex, attention is a recall memory over the brain's own
+moments with a learned address and keys that stay current, and the logits are the motor
+population inside the settle. What was tested and did not work is removed or folded into what
+did. The documentation says which part to use in which situation, and the interface stays as
+simple as possible for the people who use it.
+
 **System 1 is the default; System 2 is optional.** System 1 is acquired competence in the
 reciprocal graph with memory, plasticity, private imagination and action. System 2 is
 observing regions that read the graph and return their influence into the same
