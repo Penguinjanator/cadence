@@ -3519,7 +3519,8 @@ class Brain:
         without writes. The recall memory's live slots are read and none is written;
         the cortex of the moment before and the history follow the branch privately.
         Parameters, live activity, random generators and pending
-        real outcomes are unchanged. Motor responses are at ``motor_index`` in
+        real outcomes are unchanged, and so are a learned code's step, work counts and
+        latest phase. Motor responses are at ``motor_index`` in
         each returned state's activation. A refused phase ends the branch and
         remains in the result; inspect ``qualified`` before using a response.
 
@@ -3568,40 +3569,56 @@ class Brain:
         # the stream's moved on privately by the branch's acts
         issues = echo is not None
         episodic = branch.get("episodic")
+        # the learned code's live state stays as it was: an imagined moment settles the region
+        # as a real one does, at the step its competition needs, and the branch leaves the
+        # region's step, its work counts and its latest phase, and the moment's code, as it
+        # found them
+        region = self.learned_code
+        moment, settlement = self._coded_moment, self._code_settlement
+        held = None if region is None else (
+            region.halvings, region.graph, region.last, dict(region.work)
+        )
         phases = []
-        for value in sequence:
-            self._prepare(value, trace=trace)  # a learned code in the branch's own context
-            drive = self.stimulus(value, memory=False)
-            code = self._coded(value)
-            place = self._placed(value)
-            drive = branch.stimulus(drive, self._read_moment(value, code, place))
-            phase = self._equilibrate(
-                drive, current, budget=budget, tolerance=tolerance
-            )
-            phases.append(phase)
-            if not np.all(phase.qualified):
-                break
-            current = _copy_state(phase.state)
-            if trace is not None:
-                trace.update(phase.state)
-            command = None
-            if issues:
-                # the imagined branch issues, privately, the act the brain would issue: its
-                # complete greedy choice, the readout with the episodic vote under the branch's
-                # own key, after which the branch's context moves on
-                key = None if episodic is None else episodic.key(code)
-                choice = self._greedy(phase.state, place, key)
-                if episodic is not None and key is not None:
-                    episodic.move(key, choice)
-                command = self._command(choice)
-            if echo is not None:
-                assert command is not None
-                echo.issue(command)
-            if heard is not None:
-                # the imagined observation, as the cortex read it, joins the private history
-                heard.hear(self._heard(value, code))
-            if recalled is not None:
-                recalled.witness(code, phase.state)  # the branch's cortex moves on
+        try:
+            for value in sequence:
+                self._prepare(value, trace=trace)  # a learned code in the branch's own context
+                drive = self.stimulus(value, memory=False)
+                code = self._coded(value)
+                place = self._placed(value)
+                drive = branch.stimulus(drive, self._read_moment(value, code, place))
+                phase = self._equilibrate(
+                    drive, current, budget=budget, tolerance=tolerance
+                )
+                phases.append(phase)
+                if not np.all(phase.qualified):
+                    break
+                current = _copy_state(phase.state)
+                if trace is not None:
+                    trace.update(phase.state)
+                command = None
+                if issues:
+                    # the imagined branch issues, privately, the act the brain would issue: its
+                    # complete greedy choice, the readout with the episodic vote under the branch's
+                    # own key, after which the branch's context moves on
+                    key = None if episodic is None else episodic.key(code)
+                    choice = self._greedy(phase.state, place, key)
+                    if episodic is not None and key is not None:
+                        episodic.move(key, choice)
+                    command = self._command(choice)
+                if echo is not None:
+                    assert command is not None
+                    echo.issue(command)
+                if heard is not None:
+                    # the imagined observation, as the cortex read it, joins the private history
+                    heard.hear(self._heard(value, code))
+                if recalled is not None:
+                    recalled.witness(code, phase.state)  # the branch's cortex moves on
+        finally:
+            self._coded_moment, self._code_settlement = moment, settlement
+            if region is not None and held is not None:
+                region.halvings, region.graph, region.last, work = held
+                region.work.clear()
+                region.work.update(work)
         return tuple(phases)
 
     def act(

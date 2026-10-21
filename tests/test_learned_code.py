@@ -245,7 +245,9 @@ def region_digest(brain: cd.Brain, acts: list[int], path: Path) -> str:
 # Where the library later removed state that was inert at these founders (the actor's
 # moments, the valence statistics, the recall memory's empty context history), the digests
 # were re-recorded after the acts, the region's work and every other array matched the
-# recording.
+# recording; since an imagined branch leaves the region's work counts as they were, the
+# second founder's digest was re-recorded after its acts and every array matched, its work
+# short of the six settles of the three imagined moments that ends its life.
 REGION_FOUNDERS: dict[str, dict] = {
     "region": {
         "build": (16, 8, {"modules": (24,), "seed": 5, "learned_code": 16, "recall": True}),
@@ -257,7 +259,7 @@ REGION_FOUNDERS: dict[str, dict] = {
                           "learned_code_fields": (8, 8), "memory_choice": True,
                           "arousal": True}),
         "life": lived,
-        "digest": "e50cd67c97f121e64c8d6a8b179d4b90b76afbef9bcc4671df12ad8d28b81e1b",
+        "digest": "c77cd58b26f0f5474a5bc00df3cb87a72500e49b575e99137dde136275a86359",
     },
 }
 
@@ -784,6 +786,56 @@ def test_a_brain_with_the_region_deep_copies_and_imagines():
     plain = cd.Brain.compose(INPUTS, ACTIONS, modules=(8,), seed=1)  # and without the region
     plain.act(x, greedy=True)
     np.testing.assert_array_equal(copy.deepcopy(plain).act(x, greedy=True), plain.act(x, greedy=True))
+
+
+def test_an_imagined_branch_leaves_the_region_and_the_checkpoint_as_they_were(tmp_path):
+    """An imagined branch settles the region as a real moment does, at the step its
+    competition needs, and leaves the region's step, its work counts and its latest phase as
+    it found them: the checkpoint saved after the branch is the one saved before it, byte for
+    byte, and the brain lives on as its copy that did not imagine. Three streams of a small
+    brain, at the step of its life and at a step the imagined moments do not need."""
+    rewards = [1.0, 0.0, -1.0, 0.0, 1.0, 0.5, 0.0, -0.5, 0.25, 0.0, 1.0, 0.0]
+
+    def moment(m: int) -> np.ndarray:  # a token per stream and a little noise
+        x = np.zeros((3, 12))
+        for row in range(3):
+            x[row, (m + 3 * row) % 12] = 1.0
+        return x + 0.01 * np.random.default_rng(1000 + m).random((3, 12))
+
+    def live(brain: cd.Brain, start: int, end: int) -> list:
+        acts = []
+        for m in range(start, end):
+            if m == 0:
+                acts.append(brain.step(moment(m)).tolist())
+                continue
+            reward = [rewards[(m + 5 * row) % 12] for row in range(3)]
+            done = [(m + 2 * row) % 7 == 6 for row in range(3)]
+            acts.append(brain.step(moment(m), reward=reward, done=done).tolist())
+        return acts
+
+    brain = cd.Brain.compose(12, 4, learned_code=16, memory_choice=True, recall=True,
+                             history_decays=(0.2, 0.8), efference_amplitude=1.0, seed=5)
+    live(brain, 0, 13)
+    region = brain.learned_code
+    for level in (region.halvings, region.halvings + 3):
+        brain._step_region(level)
+        twin = copy.deepcopy(brain)
+        before = brain.save(tmp_path / "before.npz").read_bytes()
+        described, last, steps = region.to_dict(), region.last, []
+        def spy(halvings: int, steps: list = steps, restep=brain._step_region) -> None:
+            steps.append(halvings)  # every step the branch's code phases take
+            restep(halvings)
+
+        brain._step_region = spy
+        try:
+            phases = brain.imagine([moment(100 + k) for k in range(3)])
+        finally:
+            del brain._step_region
+        assert len(phases) == 3 and all(np.all(phase.qualified) for phase in phases)
+        assert region.to_dict() == described and region.last is last
+        assert brain.save(tmp_path / "after.npz").read_bytes() == before
+    assert steps and any(step != region.halvings for step in steps)  # the branch moved it
+    assert live(brain, 13, 18) == live(twin, 13, 18)
 
 
 def test_every_memory_keys_on_the_context_free_code():

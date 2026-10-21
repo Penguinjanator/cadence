@@ -46,9 +46,11 @@
   read the continuing task at .770 against .935), `learned_code_place`,
   `learned_code_reads` (the code in context read 7 of 12 fresh founders at .90 against 11
   of 12), `learned_code_held` (settling the code with the whole graph lost the binding
-  family) and the constants' names. The checkpoint carries the tables and the two switches
-  as its `learned_code` group; `describe`, `parameters` and `observation_code` cover the
-  region; `LearnedCode` is exported. With the founder `learned_code=None` every brain,
+  family) and the constants' names. An imagined branch settles the region as a real moment
+  does and leaves its step, its work counts and its latest phase as it found them. The
+  checkpoint carries the tables and the two switches as its `learned_code` group;
+  `describe`, `parameters` and `observation_code` cover the region; `LearnedCode` is
+  exported. With the founder `learned_code=None` every brain,
   checkpoint and life is the one of the library without the region
   (`tests/test_learned_code.py`).
 - Settings of the recall memory that 0.84.3 took are removed, each refused by name at
