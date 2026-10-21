@@ -44,7 +44,9 @@ The brain computes, and indexes its memories, on learned compressed
 representations of meaning; raw observations are its input. A memory keyed on
 raw observations, or on a fixed random code of them (`code=units`), finds only
 moments whose raw inputs overlap. Design keys, memories and applications for a
-learned code; the library's learned code is work in progress in
+learned code. The library's learned code is opt-in (`learned_code=units`;
+[the learned code](docs/senses.md#the-learned-code) states its costs and limits); a learned
+code that binds by itself at camera width is open in
 [#211](https://github.com/muellerberndt/cadence/issues/211).
 
 Map every capability that makes a transformer effective to its settlement form before adding a

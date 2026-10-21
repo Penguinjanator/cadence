@@ -1198,8 +1198,8 @@ class PatternSeparator:
 
     The projection is drawn once from the seed and never learns. A brain's ``code=units``
     observation code and its episodic ``memory_expansion`` separators (sparse when
-    ``memory_fan_in`` is set) are such fixed random codes. A learned code is work in progress in
-    https://github.com/muellerberndt/cadence/issues/211.
+    ``memory_fan_in`` is set) are such fixed random codes; a brain's learned code is the
+    region ``learned_code=units`` adds (``cadence.code.LearnedCode``).
     """
 
     inputs: int

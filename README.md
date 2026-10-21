@@ -170,9 +170,11 @@ separates these cases.
 | --- | --- | --- |
 | Settling brain (`Genome`, `develop`, `NeuralGraph`, `Learner`) | A continuous Hopfield or energy-based recurrent network trained by [equilibrium propagation](https://arxiv.org/abs/1602.05179): rate neurons relax to a fixed point, and the gradient is the contrast of a free and a nudged fixed point. | Any wiring, including a measured connectome. Reciprocal learning ties paired weights; an arbitrary directed import need not satisfy the gradient contract. A [certificate](https://github.com/muellerberndt/cadence/blob/main/docs/settling.md#the-settling-certificate) says when settling is a contraction and how far the answer is from the equilibrium. Reward learns through eligibility traces and one broadcast prediction error. |
 
-The composed brain's memories key on the observation or on the fixed sparse code
-`code=units` ([the observation code](https://github.com/muellerberndt/cadence/blob/main/docs/senses.md#the-observation-code)), described under
-*Code* in the glossary. `evolve` mutates and selects genomes across lives
+The composed brain's memories key on the observation, on the fixed sparse code
+`code=units` ([the observation code](https://github.com/muellerberndt/cadence/blob/main/docs/senses.md#the-observation-code)),
+or, opt-in, on a code the brain learns while it lives (`learned_code=units`,
+[the learned code](https://github.com/muellerberndt/cadence/blob/main/docs/senses.md#the-learned-code)),
+both described under *Code* in the glossary. `evolve` mutates and selects genomes across lives
 ([evolution](https://github.com/muellerberndt/cadence/blob/main/docs/anatomy.md#evolve-a-brain)).
 
 ### Where the learning signal comes from
@@ -245,7 +247,10 @@ its work.
   the perturbed and the free state; the learning signal of the settling brain.
 - **Code.** The fixed random expansion of an observation onto `expansion` units, of which
   the `winners` strongest positive entries stay (`code=units`, `PatternSeparator`); the
-  sparse key of a store.
+  sparse key of a store. The learned code (`learned_code=units`, `LearnedCode`) is a region
+  of the brain's own neurons that settles to a sparse code of the observation and learns it
+  by local rules while the brain lives; the cortex reads it, and every memory keys on it
+  joined to the observation's own identity.
 - **Readback.** The detached state, residuals, counters and revision of a patch, as
   observations an application or another patch's port can read.
 - **Genome, develop, region, cortex, projection.** The declaration of a settling

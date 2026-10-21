@@ -1446,8 +1446,9 @@ class Brain:
     (``SeedSequence([seed, 7103])``). Left unset, the memories key on the observation
     whatever its width. The code is a fixed random sparse code and learns nothing; it bounds
     the size of keys on wide observations, and ``memory_fan_in`` bounds an uncoded episodic
-    separation the same way. A learned code is work in progress in
-    https://github.com/muellerberndt/cadence/issues/211. With
+    separation the same way. ``learned_code=units`` (opt-in, without ``code``) learns the
+    code instead: a region of the brain's own neurons (``LearnedCode``) whose code the cortex
+    reads and every memory keys on. With
     ``inputs`` (the width of the observations) the sensory region is the code: every
     observation is coded before the drive, and ``inputs`` must then be named beside a
     ``code`` of the region's width.
