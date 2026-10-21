@@ -65,11 +65,10 @@ task](memory.md#which-memory-for-which-task). No memory holds a state the observ
 
 **What survives `reset()`?** Records, the recall address map and learned weights. The working
 trace, efference copy, heard history, episodic context and recall slots are cleared
-(`reset(keep=("slots",))` keeps the slots). An adult brain starts calm with no income or error
+(`reset(keep=("slots", "arousal"))` keeps the slots too). The arousal state carries on as it
+is by default; after `reset(keep=())` an adult brain starts calm with no income or error
 references and no reward scale, so at `need=0` only a surprise at its own forecasts rouses it
-and a positive `need_scale` wants nothing until outcomes enter the new scale;
-`reset(keep=("arousal",))` keeps its arousal state as it is. Where its world may stop paying,
-reset it keeping the arousal, give it a positive `need`, or keep it living without the reset
+and the scaled need wants nothing until outcomes enter the new scale
 ([reset and save](start.md#reset-and-save)).
 
 **Stored keys do not match a brain built with another `code`.** Keys are valid only under the

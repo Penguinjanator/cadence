@@ -154,14 +154,14 @@ def test_keeping_the_arousal_keeps_the_whole_arousal_state_level_included(
 ) -> None:
     """The arousal is the only thing ``keep=("arousal",)`` keeps, and it keeps all of it: an adult
     aroused when it is reset begins the new stream aroused. The rest of the brain resets as
-    the default reset resets it."""
+    ``keep=()`` resets it."""
     brain = woken_adult()
     arousal = brain.arousal
     assert arousal is not None
     before = arousal.to_dict()
     default = twin(brain, tmp_path / "twin")
     brain.reset(keep=("arousal",))
-    default.reset()
+    default.reset(keep=())
     kept = brain.arousal
     assert kept is not None and kept.to_dict() == before
     assert kept.mode == "aroused" and not brain.pending_feedback
@@ -198,10 +198,10 @@ def test_keeping_the_arousal_continues_as_the_documented_restore(tmp_path: Path)
     assert_same_checkpoint(brain.save(tmp_path / "a"), restored.save(tmp_path / "b"))
 
 
-def test_keeping_nothing_is_the_default_reset(tmp_path: Path) -> None:
+def test_keeping_the_arousal_is_the_default_reset(tmp_path: Path) -> None:
     brain = bandit_adult(seed=2, moments=120)
     other = twin(brain, tmp_path / "other")
-    brain.reset(keep=())
+    brain.reset(keep=("arousal",))
     other.reset()
     for b in (brain, other):
         b.live(OBS)
@@ -345,7 +345,7 @@ def test_the_documented_bandit_counts(bandit: dict[tuple[str, str, int], list[Mo
     assert counts("more", "keep", 1, last=40) == [0] * 5
 
 
-# -- at the default every brain is the brain of 0.84.3
+# -- the founders' lives with the default reset, which keeps the arousal
 
 
 def _checkpoint_digest(path: Path) -> str:
@@ -463,6 +463,7 @@ def _compact(state: dict[str, Any]) -> list[float]:
 # checkpoint digests were re-recorded after every other value matched the recording.
 # Re-recorded with the unset motor lateral at 0.0 (issue 220), which every founder here meets,
 # and at the founder need scale 0.1 (issue 198) where a founder has arousal.
+# Re-recorded with the default reset keeping the arousal (issue 213).
 FOUNDERS: dict[str, dict[str, Any]] = {
     "adult": {
         "build": (1, 2, {"modules": (16,), "seed": 0, "arousal": True}),
@@ -471,14 +472,14 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "acts": (
             "10000000000000000000000000110000000000000000000000000000000000000000000000000100"
             "00000000000100110100000000000000000000000000000000000000000000000000000000000000"
-            "0000000000000000000000"
+            "1011010111010111101100"
         ),
         "left": [
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3296, 544],
+            [0.0034539743906799613, 142, 150, 106, 0.028762852226372478, 0.9859539727985247, 0.5020542546498477, 0.29108554865201863, 151, 46, 105, 128, 3296, 544],
         ],
         "format": "cadence-brain/1",
-        "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
-        "checkpoint": "69440d6135e4963598cfd415ab1a85d7ee5f226b7e48011f3e2a53bdfd276118",
+        "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
+        "checkpoint": "efae085bd5d1c6288381463d39627b10ef57e3e65a5520304b40c65fcf6df35b",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
@@ -486,14 +487,14 @@ FOUNDERS: dict[str, dict[str, Any]] = {
                          "efference_amplitude": 1.0}),
         "life": _streams,
         "digest": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
-        "acts": "111101100100011000000000000000010",
+        "acts": "111101100100011101101111111001011",
         "left": [
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 256, 140],
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 256, 140],
+            [1.0124686448349702, 9, 13, 13, 0.011089548956681777, 0.15307902426660647, 0.019458901389501283, 0.016780853750205795, 14, 0, 14, 0, 256, 140],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 448, 206],
         ],
         "format": "cadence-brain/1",
-        "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
-        "checkpoint": "699531391bd37f105d2be6329dc2bb3a0e1b1cdbea14ce8b90c2ef83ae1d1f70",
+        "names": "e78b45e964572a6df43fb29ef5d436b89ce341e486e4f55a1708b355cacefd00",
+        "checkpoint": "f2fdcd9ab7b3985fea0495bd3025f3ae9d23247b5741284a78a126cc3a70eedc",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
@@ -501,12 +502,12 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "digest": "dcbc0983cda21c93c39ec2e5f75b9deebe3af815e53bdd9e9af7befbc7afac53",
         "acts": "111111011111111111111111111111111",
         "left": [
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 256, 196],
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 480, 295],
+            [0.2489490507255386, 10, 13, 13, 0.011089548956681777, 0.15307902426660647, 0.019458901389501283, 0.016346162123862428, 14, 0, 14, 0, 256, 196],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 480, 294],
         ],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "40ca5e982c17c9ad39b197edf1051a2bfc76b972909b364a674d6cf5d7968d5a",
+        "checkpoint": "905782491bb02f68bf3956d935623ba5e53e9ec7389921cfa7682c185f9dcb58",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
@@ -527,7 +528,7 @@ def _build(spec: dict[str, Any]) -> cd.Brain:
 
 
 @pytest.mark.parametrize("name", sorted(FOUNDERS))
-def test_the_default_reset_lives_as_in_0_84_3(tmp_path: Path, name: str) -> None:
+def test_the_default_reset_lives_as_recorded(tmp_path: Path, name: str) -> None:
     """On every backend: the founder's connectome and parameters, and the checkpoint's
     format, members and metadata keys after its life."""
     spec = FOUNDERS[name]

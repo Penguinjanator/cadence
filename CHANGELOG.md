@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- `Brain.reset()` keeps the arousal state by default: its `keep` is `("arousal",)`, so a reset
+  stream begins with the level, the reward references and the reward scale the brain was
+  used to ([#213](https://github.com/muellerberndt/cadence/issues/213)). `reset(keep=())` is
+  the reset of 0.84.3 (the arousal calm, its references and scale cleared, its age kept), and
+  `keep=("slots",)` keeps the recall slots and clears the arousal as before; name both to keep
+  both. In a two-armed bandit whose paying arm moved after 300 moments
+  (`Brain.compose(1, 2, modules=(16,), arousal=True)`, seeds 0 to 4), adults reset with
+  `keep=()` chose the newly paying arm at none of the next 120 moments, while adults reset
+  keeping the arousal woke and chose it at each of the last 40, as adults living on without
+  the reset did. Founders change for every brain with arousal that is reset in a life.
 - The scaled need is a founder: `ArousalConfig.need_scale` (`arousal_need_scale`) is 0.1, so a
   composed brain with arousal wants at least the unmet share of a tenth of its learned reward
   spread once its youth is over and an outcome has entered the spread

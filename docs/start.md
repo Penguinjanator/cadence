@@ -521,26 +521,25 @@ integrates no learned model of the world's consequences.
 
 ### Reset and save
 
-`reset(*, keep=())` starts every stream afresh. It clears activity, eligibility, any
-pending action, the working trace, the efference copy, the heard history
-and the episodic context, plus `last_learning`, `last_settlement` and `last_arousal`. It
-keeps parameters and associative records; recall slots survive only with
-`keep=("slots",)` ([recall](memory.md#the-recall-memory-in-full)). Arousal starts calm with its references cleared
-and its age kept, as after `brain.arousal.reset()`, so an adult at `need=0` is roused only
-by surprise and can stay calm in a world that stopped paying; its reward scale is cleared
-too, so a positive `need_scale` wants nothing until outcomes enter the new stream's scale.
-`keep=("arousal",)` keeps the arousal state as it is: its level, its recent and long-run
-reward, its usual errors, its reward scale (and with it the scaled need), their counts,
-its age and its work counts carry into the new stream, as when the state saved before
-the reset with `brain.arousal.to_dict()` is restored after it with `Arousal.from_dict`,
-and a brain aroused when it was reset begins the new stream aroused. Where the world may
-stop paying, reset keeping the arousal, set a positive `need`, or keep living without the
-reset.
+`reset(*, keep=("arousal",))` starts every stream afresh. It clears activity, eligibility,
+any pending action, the working trace, the efference copy, the heard
+history and the episodic context, plus `last_learning`, `last_settlement` and
+`last_arousal`. It keeps parameters and associative records; recall slots survive only
+with `"slots"` in `keep` ([recall](memory.md#the-recall-memory-in-full)). By default the
+arousal state carries on as it is: its level, its recent and long-run reward, its usual
+errors, its reward scale (and with it the scaled need), their counts, its age and its work
+counts carry into the new stream, as when the state saved before the reset with
+`brain.arousal.to_dict()` is restored after it with `Arousal.from_dict`, and a brain aroused
+when it was reset begins the new stream aroused. A reset that does not keep `"arousal"`
+(`keep=()`, or `keep=("slots",)`) starts the arousal calm with its references cleared and
+its age kept, as after `brain.arousal.reset()`, so an adult at `need=0` is roused only by
+surprise and can stay calm in a world that stopped paying, and the scaled need wants
+nothing until outcomes enter the new stream's scale.
 
 In a two-armed bandit with one constant observation whose paying arm moved after 300
 moments (`Brain.compose(1, 2, modules=(16,), arousal=True)`, seeds 0 to 4), adults reset
-by default chose the newly paying arm at none of the next 120 moments. Reset with
-`keep=("arousal",)`, they fell short of the income they were used to, woke and chose as
+with `keep=()` chose the newly paying arm at none of the next 120 moments. Reset keeping
+the arousal, they fell short of the income they were used to, woke and chose as
 they did living on without the reset at every one of the 120 moments, the newly paying
 arm at each of the last 40; uniform random chooses it at half the moments. Reset into a
 stream that paid as before, they kept their arm, calm, at all 120 moments; into one
@@ -552,7 +551,7 @@ needed no sweep.
 
 ```python
 state = brain.arousal.to_dict()
-brain.reset(keep=("arousal",))                   # the arousal state carries on as it is
+brain.reset()                                    # the arousal state carries on as it is
 assert brain.arousal.to_dict() == state
 brain.save("continuing-brain.npz")
 resumed = Brain.load("continuing-brain.npz")

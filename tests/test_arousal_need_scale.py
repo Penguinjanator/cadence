@@ -309,7 +309,7 @@ def test_a_composed_brain_with_the_gene_lives_as_the_reference_subclass(tmp_path
     assert state_without_config(state) == state_without_config(other)
 
 
-def test_the_scaled_need_survives_a_reset_that_keeps_the_arousal_and_a_default_reset_zeroes_it(
+def test_the_scaled_need_survives_the_default_reset_and_a_reset_without_the_arousal_zeroes_it(
     tmp_path: Path,
 ) -> None:
     brain = sparse_adult(0.5)
@@ -319,8 +319,8 @@ def test_the_scaled_need_survives_a_reset_that_keeps_the_arousal_and_a_default_r
     want, scale, state = arousal.want, arousal.scale, arousal.to_dict()
     default = twin(brain, tmp_path / "default")
     restored = twin(brain, tmp_path / "restored")
-    brain.reset(keep=("arousal",))
-    default.reset()
+    brain.reset()  # the default keeps the arousal
+    default.reset(keep=())
     kept, left = brain.arousal, default.arousal
     assert kept is not None and left is not None
     assert kept.to_dict() == state and kept.scale == scale and kept.want == want
@@ -332,14 +332,14 @@ def test_the_scaled_need_survives_a_reset_that_keeps_the_arousal_and_a_default_r
     default.live(OBS)
     default.live(OBS, reward=[0.0])
     assert reading(default)["want"] == 0.0
-    # brain.arousal.reset() leaves the arousal as the default reset does
+    # brain.arousal.reset() leaves the arousal as reset(keep=()) does
     retuned = twin(restored, tmp_path / "retuned")
     retuned.arousal.reset()
     assert retuned.arousal is not None and retuned.arousal.config.need_scale == 0.5
     assert retuned.arousal.scale == 0.0 and retuned.arousal.want == 0.0
     assert retuned.arousal.age == kept.age and retuned.arousal.to_dict() == after_default
     # the kept reset continues as the documented restore of the state saved before it
-    restored.reset()
+    restored.reset(keep=())
     assert restored.arousal is not None
     restored.arousal = cd.Arousal.from_dict(state)
     lives = [sparse_life(b, 40, start=300) for b in (brain, restored)]
@@ -541,47 +541,48 @@ LIVES: dict[str, tuple[tuple[int, int, dict[str, Any]], Life]] = {
 # founder, the state, names and checkpoint digests were re-recorded after every other value
 # matched the recording.
 # Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
-# 8 motor neurons in a slot, and at the founder need scale 0.1 (issue 198).
+# 8 motor neurons in a slot, at the founder need scale 0.1 (issue 198) and with the default
+# reset keeping the arousal (issue 213).
 PINS: dict[str, dict[str, str]] = {
     "adult": {
         "acts": (
             "10000000000000000000000000110000000000000000000000000000000000000000000000000100"
             "00000000000100110100000000000000000000000000000000000000000000000000000000000000"
-            "0000000000000000000000000000000000000000000"
+            "1011010111010111101100110110011100110010101"
         ),
         "format": "cadence-brain/1",
-        "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
-        "checkpoint": "4a318dac443b6800cd91743edf1a8ac581b0fde3c0a826f143686cccf9128120",
-        "left": "592745fbe88ba3f4b044f08ea408bb472e2555be71e911e09f6901418883939a",
-        "arousal": "e43016560008a6bd8c4a413122500c68b9569adadc934e2225f1488c841c7b9a",
+        "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
+        "checkpoint": "0f9e5412a909cb88e6460251437d293b63585c93ed9fd54679a1caf75eae2d3c",
+        "left": "5f79c8b45764809288b904afc4ae6b05a763a93cef04a8847dffc9af4fa16743",
+        "arousal": "c56a59bdad35f5e2292cda162dbe8986030f70046022ae5546da328f44ef1012",
     },
     "needy": {
         "acts": (
             "00100000000000001000000000000000000000000000000000000001000000000000000000001000"
-            "00000000001000000000000000000000000000000000000000000000000000000000000000001111"
-            "0111111111111111111111111111111111111111100"
+            "00000000001000000000000000000000000000000000000000000000000000000000000000000001"
+            "0110011001111101101111110101110111000001100"
         ),
         "format": "cadence-brain/1",
         "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
-        "checkpoint": "c3536b17c2fda043741695e5b50e72c1f8e85e1c3ecb70944442fdc61b18e7dc",
-        "left": "f6fc1d01755b4d1565adbee8d28abc2460005bc661aa13eb956d02ea52e1ac49",
-        "arousal": "c3074c80a0171b4f44b32b1e44bbeed77d090c7537831ebf2e97118f5346c18a",
+        "checkpoint": "523fd0a98d765fbbf955cad2a4851c65a39700ff9fa17356d31cb6d2712bac6e",
+        "left": "c75f0293027614944aa9d0608f246d469b2b6af9b2ed7b14aa1a094d7565fb55",
+        "arousal": "71851b18074b65d04c13e784544931015393b8b28d2bbef9d3961fb7ba5af855",
     },
     "composed": {
-        "acts": "11110110010001100110010001000100010001",
+        "acts": "11110110010001110110111110111111111110",
         "format": "cadence-brain/1",
-        "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
-        "checkpoint": "d3175fda262eb60b71bd91c6a2794dbd86c16db79275d8ae11b01b0949ba6d95",
-        "left": "a5816dace14c3fa3a92ecfd845392eb759268ad2a87f5e8eaa8f0d75e55e4b51",
-        "arousal": "99ca73ee34e4ec704e25feac903773cac366cdf698ae9eef11e92818931815fe",
+        "names": "e78b45e964572a6df43fb29ef5d436b89ce341e486e4f55a1708b355cacefd00",
+        "checkpoint": "08d591c45e3c00a3e1e73600cb86d086e00ce7a05387d6533607ed3e4eff4278",
+        "left": "4111a55fd31b33dcd98d117cb9dd7054943833aaa07a1be5f5e317e353e6eb5c",
+        "arousal": "0c85926f0929b8310648d68b84e0e231f5d6d859de2406d83a047684944f2ba5",
     },
     "episodic": {
         "acts": "11111101111111111111111111111111111110",
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "6bf6fca1d1bfa15cd20603f3a6eba6153ba26e46da26a2b23e1b2f1a022afbe8",
-        "left": "91eb38d1ee3513c435225cf7cb0e5c3f7890dfe0db1850f8934231ebd93aaa90",
-        "arousal": "87cc1f9ebcd102a0a5dfa17801137d2f04072d8c5d7e7821ec489c20c3c79173",
+        "checkpoint": "bce0c3d4da4b569366bb2ddc32459e00a98a22a168e7ae90cbe9caf8e02a042b",
+        "left": "844dcf60629037dc09b7eaf1ef9b3b398da1175584cc4e6f53236cbba33191f3",
+        "arousal": "1e053bb33b0496101f7a205c5dd5491ae1cdb5871def277b6731785621266aeb",
     },
 }
 

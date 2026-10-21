@@ -219,7 +219,7 @@ result together points to goal selection.
 `predict(observations)`, `accuracy(observations, labels)` and `fit(observations,
 labels, *, epochs=30, batch=32)` treat rows as independent samples: qualified cold
 solves that read no trace or associative memory. `fit` resets stream state and keeps
-the arousal state as it is (`reset(keep=("arousal",))`): a control on independent samples
+the arousal state as it is (`reset()`, which keeps it): a control on independent samples
 does not change a life. `fit` returns training accuracy per epoch; a refused score keeps
 accepted lessons.
 Use them as controls on a separate instance; greedy `act` on a loaded copy measures the

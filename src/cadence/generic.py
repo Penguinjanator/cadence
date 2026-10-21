@@ -3901,10 +3901,11 @@ class Brain:
             self.hippocampus, keys, action, reward, importance, None, self.learner.slot_offsets
         )
 
-    def reset(self, *, keep: Any = (), **renamed: Any) -> None:
+    def reset(self, *, keep: Any = ("arousal",), **renamed: Any) -> None:
         """Start every stream afresh; the stores' records are kept. By default a brain with
-        arousal begins the new stream calm, with what it was used to forgotten and its age
-        kept. ``keep`` names what else carries over, a name or a sequence of names:
+        arousal carries its arousal state into the new stream (``keep=("arousal",)``).
+        ``keep`` names what carries over, a name or a sequence of names; ``keep=()`` keeps
+        neither:
 
         - ``"slots"``: the recall memory's slots. Each stream ends an episode there
           (``Recall.end``), its slots read by the next streams of the same batch, and
@@ -3917,15 +3918,13 @@ class Brain:
           was reset begins the new stream aroused. A brain without arousal resets as without
           it.
 
-        After a reset that does not keep ``"arousal"``, an adult brain (its youth over) has no
-        income or error references and no reward scale, so at the founder ``need=0`` it has
-        no want, and a positive ``need_scale`` wants nothing until outcomes enter the new
-        stream's scale: only a surprise at its own forecasts can rouse it, measured against
-        the usual error the new stream's first outcome sets, and a world that stops paying
-        may leave it calm on a lapsed habit. Where its world may stop paying, keep
-        ``"arousal"`` (the scale and the scaled need carry over), give it a positive
-        ``need``, or let it keep living without the reset
-        (``docs/start.md#reset-and-save``)."""
+        After a reset that does not keep ``"arousal"`` (``keep=()`` or ``keep=("slots",)``),
+        the arousal begins calm with its references cleared and its age kept, as after
+        ``brain.arousal.reset()``: an adult brain (its youth over) has no income or error
+        references and no reward scale, so at ``need=0`` it has no want, and the scaled need
+        wants nothing until outcomes enter the new stream's scale; only a surprise at its own
+        forecasts can rouse it, and a world that stops paying may leave it calm on a lapsed
+        habit (``docs/start.md#reset-and-save``)."""
         for name in renamed:
             if name in ("keep_memory", "keep_arousal"):
                 what = "slots" if name == "keep_memory" else "arousal"
