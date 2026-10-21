@@ -2664,14 +2664,20 @@ class Brain:
         ``learned_code_identity``, so that a binding stays readable by the identity part
         while the code part moves as the region learns; the code alone at ``w`` 0."""
         region = self.learned_code
-        if region is None or not region.identity:
+        if region is None:
             return code
-        weight = region.identity
-        identity = _unit_rows(np.atleast_2d(np.asarray(x, dtype=float)))
-        joined = np.concatenate(
-            [np.sqrt(1.0 - weight) * np.atleast_2d(code), np.sqrt(weight) * identity], axis=1
-        )
-        return _unit_rows(joined)
+        key = np.atleast_2d(code)
+        if region.identity:
+            weight = region.identity
+            identity = _unit_rows(np.atleast_2d(np.asarray(x, dtype=float)))
+            key = _unit_rows(
+                np.concatenate([np.sqrt(1.0 - weight) * key, np.sqrt(weight) * identity], axis=1)
+            )
+        if region.scale == "observation":
+            # the norm the observation itself would have as a key: the recall's temperature
+            # reads the keys' dot products at that scale
+            key = key * np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)[:, None]
+        return np.asarray(key)
 
     def _settle_code(
         self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None,
@@ -2795,10 +2801,13 @@ class Brain:
         code part at unit length (the identity part is the observation the history would
         hear without a code)."""
         region = self.learned_code
-        if region is not None and region.identity:
-            part = np.atleast_2d(code)[:, : region.units]
-            return np.asarray(part / np.sqrt(1.0 - region.identity))
-        return code if self.coded_cortex or region is not None else x
+        if region is not None:
+            part = np.atleast_2d(code)[:, : region.units] / np.sqrt(1.0 - region.identity)
+            if region.scale == "observation":
+                norm = np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)
+                part = part / np.where(norm > 0.0, norm, 1.0)[:, None]
+            return np.asarray(part)
+        return code if self.coded_cortex else x
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
         """The drive of a batch of observations: the sensory neurons stimulated, plus the

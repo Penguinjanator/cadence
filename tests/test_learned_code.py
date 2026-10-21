@@ -307,7 +307,10 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5, "cortex": "code",
+        "scale": "unit",
     }
+    with pytest.raises(ValueError, match="scale is one of"):
+        composed(learned_code_scale="raw")
     with pytest.raises(ValueError, match="cortex is one of"):
         composed(learned_code_cortex="sensory")
     with pytest.raises(ValueError, match="output is one of"):
@@ -1055,6 +1058,24 @@ def test_the_cortex_reads_the_observation_beside_the_code():
     founder = composed(seed=4)
     with pytest.raises(ValueError, match="disagrees with the connectome"):
         cd.Brain(founder.connectome, learned_code=UNITS, learned_code_cortex="both")
+
+
+def test_the_key_takes_the_observations_norm_when_set():
+    """With ``learned_code_scale="observation"`` the memories' key is the joined key times the
+    observation's norm, the norm the observation would have as a key: a two-hot observation's
+    key has norm sqrt(2), a one-hot one's is as at unit scale, and the history still hears the
+    code at unit length."""
+    x = tokens(3, 9)
+    x[1, 20] = 1.0  # the second stream: two inputs at once
+    unit = composed(seed=6, recall=True, history_decays=(0.5,))
+    scaled = composed(seed=6, recall=True, history_decays=(0.5,), learned_code_scale="observation")
+    unit.act(x, greedy=True)
+    scaled.act(x, greedy=True)
+    keys = scaled.recall.keys[:, -1, :]
+    np.testing.assert_allclose(np.linalg.norm(keys, axis=1), [1.0, np.sqrt(2.0)], atol=1e-9)
+    np.testing.assert_allclose(keys[0], unit.recall.keys[0, -1, :], atol=1e-9)
+    np.testing.assert_allclose(keys[1], np.sqrt(2.0) * unit.recall.keys[1, -1, :], atol=1e-9)
+    np.testing.assert_allclose(scaled.history.trace, unit.history.trace, atol=1e-9)
 
 
 def test_the_capped_read_holds_a_code_to_one_full_inputs_norm():
