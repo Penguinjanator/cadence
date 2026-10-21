@@ -1356,6 +1356,7 @@ class Brain:
                 **{name: learned[name] for name in LearnedCode.GENES},
             )
             self._code_synapses = self._learned_code_synapses()
+            self._code_forward = self._learned_code_forward()
             brain = self._installed(brain)
             plastic_synapses = np.ones(connectome.synapses, dtype=bool)
             for synapses, _, _ in self._code_synapses.values():
@@ -1650,6 +1651,44 @@ class Brain:
             synapses = np.flatnonzero(mask)
             source = {"dictionary": sensory, "lateral": codes, "predictor": prefrontal}[name]
             out[name] = (synapses, source[pre[synapses]], codes[post[synapses]])
+        return out
+
+    def _learned_code_forward(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The synapses from the code units to the association neurons: the synapse
+        indices and the local coordinates of their ends (code ``j``, association ``m``)."""
+        connectome = self.connectome
+        pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+        codes = -np.ones(connectome.n, dtype=np.int64)
+        codes[self.code_index] = np.arange(len(self.code_index))
+        targets = -np.ones(connectome.n, dtype=np.int64)
+        targets[self.association_index] = np.arange(len(self.association_index))
+        synapses = np.flatnonzero((codes[pre] >= 0) & (targets[post] >= 0))
+        return synapses, codes[pre[synapses]], targets[post[synapses]]
+
+    def _unit_read(self, x: np.ndarray, drive: np.ndarray, *, memory: bool) -> np.ndarray:
+        """With ``learned_code_output="unit"``: the drive with the term that makes the
+        association neurons read the rectified code at unit length, the key the memories
+        use, in place of the code units' activations: the region's output gain ``1 / |a|``
+        per stream, entered as a drive from the moment's phase (the code units hold their
+        fixed point through the settle, as nothing in the graph leads back into them)."""
+        code = self.learned_code
+        assert code is not None
+        coded = self._coded_moment
+        if coded is not None and coded[0] is x and coded[2] is not None:
+            s = np.atleast_2d(np.asarray(coded[2].activation, dtype=float))
+        else:
+            s = np.atleast_2d(
+                np.asarray(self._settle_code(x, context=memory, report=False).state.activation,
+                           dtype=float)
+            )
+        if len(s) != len(drive):
+            return drive
+        unit = code.code_of(s)
+        synapses, j, m = self._code_forward
+        weights = np.zeros((len(self.association_index), code.units))
+        weights[m, j] = self.brain.efficacy[synapses]
+        out = drive.copy()
+        out[:, self.association_index] += (unit - s) @ weights.T
         return out
 
     def _installed(self, graph: NeuralGraph) -> NeuralGraph:
@@ -2676,6 +2715,8 @@ class Brain:
         drive[:, self.sensory_index] = (
             self._sensed(x, code) * self.brain.neuron_model.stimulus_amplitude
         )
+        if self.learned_code is not None and self.learned_code.output == "unit":
+            drive = self._unit_read(x, drive, memory=memory)
         if memory and self.working_memory is not None:
             drive = self.working_memory.stimulate(drive)
         if memory and self.efference is not None:

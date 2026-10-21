@@ -124,7 +124,9 @@ class LearnedCode:
     ``threshold_rate`` and ``target`` (the share of rows a unit should be active in),
     ``repair`` (the share of a row's input energy its code may leave unexplained before the
     row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
-    silent unit in such a row counts as), ``place`` (what the place stores key on).
+    silent unit in such a row counts as), ``place`` (what the place stores key on) and
+    ``output`` (what the module reads of the code: the activations, or the rectified code
+    at unit length as the memories key on it).
     Validation refuses a value outside its domain before anything is built.
     """
 
@@ -142,6 +144,7 @@ class LearnedCode:
     repair: float = 1.0
     silence: float = 10.0
     place: str = "free"
+    output: str = "raw"
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
@@ -149,17 +152,21 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place",
+        "silence", "place", "output",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
-        "place",
+        "place", "output",
     )
     CONSTRUCTION = ("threshold",)
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
     PLACES = ("free", "context")
+    # what the module reads of the code: the units' activations as they are (``"raw"``) or
+    # the rectified code at unit length, the key the memories use (``"unit"``), the region's
+    # output gain ``1 / |a|`` per stream entered as a drive on the module from the phase
+    OUTPUTS = ("raw", "unit")
     # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
     # worst mode of the synchronous sweep contracts by at least a half per sweep
     STEP_MARGIN = 1.5
@@ -170,7 +177,7 @@ class LearnedCode:
         return {
             "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
             "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
-            "place": "free",
+            "place": "free", "output": "raw",
         }
 
     @staticmethod
@@ -193,6 +200,10 @@ class LearnedCode:
         if name == "place":
             if not isinstance(value, str) or value not in LearnedCode.PLACES:
                 raise ValueError(f"place is one of {LearnedCode.PLACES}")
+            return value
+        if name == "output":
+            if not isinstance(value, str) or value not in LearnedCode.OUTPUTS:
+                raise ValueError(f"output is one of {LearnedCode.OUTPUTS}")
             return value
         raise TypeError(f"unknown learned code setting: {name!r}")
 

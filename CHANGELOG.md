@@ -31,7 +31,9 @@
   unexplained before the row repairs: it lowers the thresholds of its silent units, at the
   founder level a row whose code is silent) and `learned_code_silence` (10, how many
   under-active rows a silent unit counts as in such a row, so no observation is left
-  without a unit; the thresholds have no ceiling) and `learned_code_place` (`"free"`); the lesson's contrast and the dopamine leave
+  without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`) and
+  `learned_code_output` (`"raw"`; with `"unit"` the first module reads the rectified code
+  at unit length, the key the memories use); the lesson's contrast and the dopamine leave
   its synapses alone. The recall slots and the episodic context records key on the moment's code in its
   context; the associative store and the episodic place records key on the context-free
   code (a second code phase, `context_free_steps`), so a known situation is found again along a

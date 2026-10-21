@@ -303,8 +303,10 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
         "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free",
+        "place": "free", "output": "raw",
     }
+    with pytest.raises(ValueError, match="output is one of"):
+        composed(learned_code_output="norm")
     with pytest.raises(ValueError, match="repair must lie in"):
         composed(learned_code_repair=0.0)
     with pytest.raises(ValueError, match="repair"):
@@ -862,6 +864,31 @@ def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained(
     assert (code.thresholds[~fired] < code.threshold).all()
     assert code.work["repairs"] == int(repair.sum()) > 0
     assert strict.learned_code.work["repairs"] == 0  # no row was silent at the strict level
+
+
+def test_the_module_reads_the_code_at_unit_length_when_set():
+    """With ``learned_code_output="unit"`` the association neurons' input from the code
+    units is the code at unit length through the forward synapses; with the founder
+    ``"raw"`` it is the activations as they are and the drive carries no such term."""
+    for output in ("unit", "raw"):
+        brain = composed(seed=6, learned_code_output=output)
+        x = tokens(3, 8)
+        brain.act(x, greedy=True)
+        state = brain.basal_ganglia.state
+        synapses, j, m = brain._code_forward
+        assert len(synapses) == UNITS * 64
+        weights = np.zeros((64, UNITS))
+        weights[m, j] = brain.brain.efficacy[synapses]
+        s = np.atleast_2d(state.activation)[:, brain.code_index]
+        drive = brain.stimulus(x)[:, brain.association_index]
+        read = s @ weights.T + drive  # the code's synaptic input plus the moment's drive
+        if output == "unit":
+            expected = brain.learned_code.code_of(s) @ weights.T
+            assert brain.last_settlement["qualified"]
+        else:
+            expected = s @ weights.T
+            np.testing.assert_array_equal(drive, 0.0)
+        np.testing.assert_allclose(read, expected, atol=1e-5)
 
 
 def test_the_region_learns_from_the_moments_free_settle_alone():
