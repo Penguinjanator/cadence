@@ -153,9 +153,8 @@ and runs 19 pages without optional backends: `README.md` and, under `docs/`,
 `partitioned.md`, `record-patch.md`, `build.md`, `belief.md`, `steering.md`,
 `recursive-settlement.md`, `api.md`, `learning.md`,
 `protocols.md` and `receipts.md`. It also executes
-`examples/continuing_brain.py`, `examples/memory_imagination.py` and
-`examples/equilibrium/layout_learning.py`. For changes to these guides or
-examples, run `python -m pytest -q tests/test_documentation.py` and
+`examples/continuing_brain.py` and `examples/memory_imagination.py`. For
+changes to these guides or examples, run `python -m pytest -q tests/test_documentation.py` and
 `ruff check examples/continuing_brain.py tests/test_documentation.py`.
 
 Mathematical claims must state their assumptions and connect them to the
@@ -181,12 +180,10 @@ For gain selection, bias calibration, backend continuation and motor wiring:
 python -m pytest -q tests/test_learner_calibration.py tests/test_calibration_backends.py tests/test_bias_qualification.py tests/test_composed_lateral.py
 ```
 
-Run the default foundation and preserved population solver separately to locate
-slow cases. These two commands together retain the complete test inventory:
+To locate slow cases, run the complete test inventory with durations:
 
 ```bash
-python -m pytest -q --ignore=tests/equilibrium --durations=10
-python -m pytest -q tests/equilibrium --durations=10
+python -m pytest -q --durations=10
 ```
 
 A fresh NumPy-only environment avoids optional accelerator startup and runs
@@ -197,7 +194,7 @@ The environment below is inside the ignored `.venv/` directory:
 ```bash
 python -m venv .venv/numpy-only
 .venv/numpy-only/bin/python -m pip install -e . pytest
-.venv/numpy-only/bin/python -m pytest -q tests --ignore=tests/equilibrium -rs --durations=10
+.venv/numpy-only/bin/python -m pytest -q tests -rs --durations=10
 ```
 
 Focused runs and a NumPy-only run provide partial coverage. Report optional
@@ -253,11 +250,8 @@ The [memory/planning example](examples/memory_imagination.py) separately exercis
 `TemporalPatchNet` and finite response protection. Do not present those distinct
 model equations as an already integrated `Brain.compose` world model.
 
-The preserved population solver lives in `cadence.experimental.equilibrium`,
-with guides in `docs/equilibrium`, examples in `examples/equilibrium` and tests
-in `tests/equilibrium`. Test it separately from the default foundation when
-changing either API or numerical rule. The default runtime requires NumPy;
-optional backends do not make it dependency-free.
+The default runtime requires NumPy; optional backends do not make it
+dependency-free.
 
 Keep [GPL-3.0](LICENSE) as the current package license and preserve historical
 attribution and license notices with their source.

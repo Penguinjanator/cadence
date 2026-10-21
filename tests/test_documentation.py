@@ -123,10 +123,7 @@ def test_introductory_python_snippets(page, tmp_path, monkeypatch):
 
 def test_every_python_block_is_run_or_marked_illustrative():
     """A new page with python blocks must join PAGES, or mark each block ``<!-- not-run -->``."""
-    # The preserved engine has its own executable-documentation parametrization.
-    # Read that owner's actual inventory so adding an untested page still fails.
-    experimental = runpy.run_path(str(ROOT / "tests/equilibrium/test_documentation.py"))
-    covered = set(PAGES) | {path.relative_to(ROOT).as_posix() for path in experimental["DOCUMENTS"]}
+    covered = set(PAGES)
     unrun = [
         page.relative_to(ROOT).as_posix()
         for page in sorted((ROOT / "docs").rglob("*.md"))

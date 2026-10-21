@@ -81,9 +81,3 @@ mypy_path = "src"
 [[tool.mypy.overrides]]
 module = ["torch", "torch.*", "numba", "numba.*", "mlx", "mlx.*"]
 ignore_missing_imports = true
-
-# Preserved byte-for-byte from the separately tested, untyped solver prototype.
-# Strict typing continues to cover the restored foundation and composition API.
-[[tool.mypy.overrides]]
-module = ["cadence.experimental.equilibrium", "cadence.experimental.equilibrium.*"]
-ignore_errors = true
