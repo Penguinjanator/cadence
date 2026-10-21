@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+- `Brain.compose(..., learned_code=units)` (opt-in) adds a `code` region of the brain's own
+  neurons between the sensory region and the first module: a learned sparse code of the
+  observation, settled with the rest of the brain under the brain's neuron model, with the
+  dictionary as its synapses from the sensory neurons, the dictionary's Gram matrix as its
+  lateral inhibition, a predictor from the prefrontal region (the working trace) as its
+  top-down boundary and each unit's threshold as its bias. A moment's settle runs the
+  region's phase first, by the brain's solver policy to the learner's tolerance, addresses
+  the memories on the rectified settled code at unit length, and settles the whole graph
+  warm from it; `last_settlement` reports `code_steps`, `code_residual` and
+  `code_damping_halvings`. The region learns at every accepted moment by local rules
+  (Hebbian on the reconstruction residual, the delta rule on the prediction's residual,
+  homeostatic thresholds), its genes `learned_code_top_down` (4.0), `learned_code_rate`
+  (0.125), `learned_code_predictor` (0.03), `learned_code_threshold` (0.1),
+  `learned_code_threshold_rate` (0.001) and `learned_code_target` (0.1); the lesson's
+  contrast and the dopamine leave its synapses alone. The heard history holds the code and
+  the recall memory's event values are codes; a decision keeps the code it was keyed on
+  until its outcome. Checkpoint format `cadence-generic/10` carries the tables; `describe`,
+  `parameters` and `retune` cover the region; `LearnedCode` is exported. With the founder
+  `learned_code=None` every brain, checkpoint and life is the one of 0.84.3 byte for byte
+  (`tests/test_learned_code.py`).
 - `Brain.reset(keep_arousal=True)` (opt-in) keeps the arousal state as it is: its level, the
   counts, the recent and long-run reward, the usual errors, the reward scale, the age and
   the work counts carry into the new stream, as when the state saved before the reset

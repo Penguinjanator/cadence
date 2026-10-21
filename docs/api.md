@@ -26,8 +26,8 @@ keyword.
 ```text
 Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None,
               sensory_scale=1.0, working_memory_scale=1.2, history_scale=1.2,
-              recall_scale=1.2, features=8, field=3, code=None, seed=0, slots=1,
-              **options) -> Brain
+              recall_scale=1.2, features=8, field=3, code=None, learned_code=None,
+              seed=0, slots=1, **options) -> Brain
 ```
 
 The composed System 1 brain, with optional System 2 `observers` in the same graph.
@@ -39,7 +39,12 @@ the weight between motor neurons of one slot (unset: -0.5 up to 8 actions in the
 slot, else 0.0); `slots` is a count of equal motor groups or one size per group, each read
 as its own softmax. `code=units` keys the memories on a fixed sparse
 code of that many units and, for a vector brain, makes the sensory region that code
-([the observation code](memory.md#the-observation-code)). The `*_scale` arguments are initial
+([the observation code](memory.md#the-observation-code)). `learned_code=units` (a vector
+brain, without `code`) adds a `code` region of that many neurons that settles with the brain
+to a learned sparse code of the observation, read by the cortex and keyed on by the
+memories, with the genes `learned_code_top_down`, `learned_code_rate`,
+`learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate` and
+`learned_code_target` ([the learned code](code.md)). The `*_scale` arguments are initial
 projection magnitudes, fixed at construction. `options` takes every constructor keyword below
 and every `learning_<field>`, `actor_<field>` and `arousal_<field>` name; with
 `memory_choice=True` it fills in the episodic founders. The region map and the founder table
@@ -57,7 +62,7 @@ Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None,
 Brain.genome(inputs, actions, *, hidden=64, density=1.0, lateral=None,
              working_memory=False, memory_scale=12.0, features=8, field=3,
              seed=0, slots=1) -> Genome
-Brain.observation_width(inputs, code=None) -> int
+Brain.observation_width(inputs, code=None, learned_code=None) -> int
 ```
 
 `genome` returns the single-region layout (`sensory` or `visual`, `association`, `motor`, and
@@ -75,15 +80,18 @@ Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9,
       working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0,
       history_decays=(), history_amplitude=3.0, recall=False, learning=None,
       reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0,
-      backend="cpu", device=None, inputs=None, code=None, **genes)
+      backend="cpu", device=None, inputs=None, code=None, learned_code=None, **genes)
 ```
 
 Wraps any connectome with populations `association`, `motor` and `sensory` (or
 `visual/input`). It uses `prefrontal` for a working trace, `efference` (one neuron per motor
 neuron) for an efference copy, `history` (one sensory-width block per entry of
-`history_decays`) for a heard history, and with `recall=True` the `recall` and `next` regions.
+`history_decays`; one block of `learned_code` units with a learned code) for a heard
+history, with `recall=True` the `recall` and `next` regions, and with `learned_code=units` a
+`code` population of that many neurons with its complete dictionary, lateral and predictor
+synapses ([the learned code](code.md)).
 `inputs` names the observation width when the sensory region is a `code` of that width.
-`genes` carries the `recall_*` settings. `learning` and `reward` default to the composed
+`genes` carries the `recall_*` and `learned_code_*` settings. `learning` and `reward` default to the composed
 `LearnerConfig` and `ActorCriticConfig`; `arousal` is `True`, a field mapping or an
 `ArousalConfig`. With `memory_choice=True`, `compose` fills in `memory_context=0.5`,
 `memory_rate=0.5`, `memory_replay=8`, `memory_demonstrations=1.0`, `memory_expansion=1024`
@@ -94,7 +102,8 @@ pass these here or use `compose` ([episodic settings](episodic.md#settings)).
 | --- | --- |
 | `memory_choice` needs `episodic=True` | `ValueError` |
 | `memory_context`, `memory_replay`, `memory_demonstrations`, `memory_expansion` need `memory_choice` | `ValueError` |
-| `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a coded brain refuses both | `ValueError` |
+| `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a coded brain (`code` or `learned_code`) refuses both | `ValueError` |
+| `learned_code` at least 2; a `learned_code_*` gene without it, `code` beside it, an image brain, a backend other than `cpu`, or a connectome without the region's populations and complete synapses | `ValueError` |
 | `memory_context` in `[0, 1)`; `working_memory_decay`, `efference_decay` in `[0, 1)` | `ValueError` |
 | `resting_bias` a finite nonnegative real scalar; booleans and arrays refused | `ValueError` |
 | a missing population that a switched-on component needs | `ValueError` |
@@ -117,9 +126,9 @@ trace's `working_memory_scale` founder is 1.2.
 | `retune(*, reset_arousal=False, **genes) -> Brain` | Changes mutable settings in the same life, atomically. Refuses construction settings, absent components, and `learning_beta` (or the recall address genes under `recall_address_reward`) while a sampled action awaits feedback. | [retune the same life](brain.md#retune-the-same-life) |
 | `reset(*, keep_memory=False, keep_arousal=False)` | Clears per-stream state, eligibility and reward centering; keeps records and weights. Arousal begins the new stream calm and keeps its age; `keep_arousal=True` keeps the whole arousal state, its level included, as saving `brain.arousal.to_dict()` before the reset and restoring it with `Arousal.from_dict` after it does. `keep_memory=True` keeps the recall slots and ends each stream's episode. Both keywords must be booleans, checked before anything changes. | [reset and save](continuous.md#reset-and-save) |
 | `describe() -> dict` | JSON-safe `layout`, effective `genes`, resolved configurations, memory settings, `initialization` and `pending_feedback`. | [defaults](brain.md#defaults-and-expert-overrides) |
-| `observation_code(observations) -> (batch, code_width)` | The unit-length key every memory reads and writes. | [the observation code](memory.md#the-observation-code) |
+| `observation_code(observations) -> (batch, code_width)` | The unit-length key every memory reads and writes; with a learned code, the code the observations settle to without a context. | [the observation code](memory.md#the-observation-code), [the learned code](code.md) |
 | `stimulus(observations, *, memory=True) -> drive` | The drive of a batch; with `memory` the trace, copy, history, recall and hippocampal reads are added, and the recall address is fixed for the moment. | [memory](memory.md) |
-| `parameters() -> int` | Actor and critic parameters, the consolidated memory matrix and a recall address map. | |
+| `parameters() -> int` | Actor and critic parameters, the consolidated memory matrix, a recall address map and a learned code's tables. | |
 | `save(path) -> Path`, `Brain.load(path, *, backend="cpu", device=None, precision=None)` | The whole continuation, written atomically ([formats](#checkpoint-formats)). `Brain.load` refuses a learner-only file; `Learner.load` reads either. | [reset and save](continuous.md#reset-and-save) |
 
 Observations are a nonempty finite batch `(streams, inputs)`, images flattened per row or in
@@ -135,13 +144,14 @@ their shape. Keep row identities fixed until `reset()`.
 | `hippocampus` | the associative `SynapticMemory` (with `memory_choice` the episodic place records), or `None` with `episodic=False` |
 | `context_memory` | the episodic context records with `memory_choice` and a positive `memory_context`, else `None` |
 | `sparse_code`, `code_width`, `coded_cortex`, `inputs` | the `PatternSeparator` of `code=units` or `None`; the key width; whether the sensory region is the code; the observation width |
+| `learned_code`, `code_index`, `prefrontal_index` | the `LearnedCode` of `learned_code=units` or `None`; neuron indices of the `code` and `prefrontal` populations (empty without them) |
 | `sensory_index`, `association_index`, `motor_index` | neuron indices of those populations |
 | `memory_choice`, `memory_context`, `memory_replay`, `memory_demonstrations`, `resting_bias` | the resolved construction settings |
 | `arousal` | the stream's `Arousal`, or `None` |
 | `pending_feedback` | read-only: the issued action awaits its outcome (`wait` keeps it) |
 | `decision_id` | read-only: the `arousal.age` at which `live` issued the awaited action, or `None`; saved and restored ([feedback ownership in the population solver](equilibrium/LIVE.md#preserve-execution-and-feedback-ownership) is the stricter contract) |
 | `last_arousal` | immutable snapshot of the latest `live` moment; `None` after construction, reset or load ([fields](continuous.md#routine-and-repair-live)) |
-| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
+| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks`, and with a learned code `code_steps`, `code_residual`, `code_damping_halvings` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
 | `last_learning` | the latest transition's learning report, teaching under `demonstration_*` keys |
 | `rng` | the brain's `numpy.random.Generator` |
 
@@ -161,6 +171,7 @@ than its own and a format name without its component; it also reads `cadence-gen
 | `cadence-generic/7` | a heard history |
 | `cadence-generic/8` | a recall memory: slots, `held`, `previous`, `history`, the address map, and where set `recall/trace`, `recall/pending`, `recall/ended`, `recall/before`, `recall/command`, `recall/past`; a window of another length is refused |
 | `cadence-generic/9` | a `code=units` code (`code/index`, `code/weight`); record and recall key widths are checked against it, and tables that do not read every ON and OFF channel twice with positive weights are refused; a code whose metadata lacks the `cover` field is refused with a message naming that field |
+| `cadence-generic/10` | a learned code (`learned_code/dictionary`, `learned_code/weights`, `learned_code/thresholds`, and `moment/code`, `lived/code` for a decision awaiting its outcome); the key widths are checked against its units, and tables that disagree with the saved synapses and biases of the code region are refused |
 
 ## Arousal (`cadence.arousal`)
 
@@ -284,6 +295,28 @@ cadence.stream.columns(index) -> slice | ndarray
 
 `stateful` is `embedded` plus a `context` range for a `Trace`; `columns` returns a slice for a
 contiguous index.
+
+## The learned code (`cadence.code`)
+
+```text
+LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, predictor=0.03,
+            threshold=0.1, threshold_rate=0.001, target=0.1)
+```
+
+The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
+and held as `brain.learned_code`: `dictionary` `(inputs, units)` with unit-length columns,
+`weights` `(units, context)` the predictor, `thresholds` `(units,)`, the lateral `connectome`
+and `graph` of the units (the sub-network a moment's code phase settles). `lateral()`,
+`lateral_efficacy()`, `gram()`; `stimulus(sensory, context)`, `prediction(context)`,
+`settle(stimulus, warm, *, budget, tolerance, damping=3) -> Equilibrium`,
+`code_of(activation)` (the rectified code at unit length), `residuals(sensory, activation,
+context)`; `learn(sensory, activation, context) -> bool` (one step of every table from a
+settled moment, each row an event), `install()`, `take(dictionary, weights, thresholds)`;
+`arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
+capped settles, updates), `last` (the latest phase's sensory activation, context, activation
+and prediction). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
+validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them. Guide:
+[the learned code](code.md).
 
 ## Records (`cadence.records`)
 

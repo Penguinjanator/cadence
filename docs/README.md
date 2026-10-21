@@ -62,6 +62,7 @@ composition of families ([contracts](contracts.md)).
 | Memory | [Memory](memory.md) | every memory type and when to use it |
 | | [Episodic memory](episodic.md) | `memory_choice=True` records that vote in the choice |
 | | [Recall memory](recall.md) | `recall=True` slots and the learned address |
+| | [The learned code](code.md) | `learned_code=units`: a code region settled with the brain, the memories keyed on it |
 | | [Standalone stores](records.md) | `Records`, `FastSynapses` and other stores used directly |
 | Learning and reward | [Learning](learning.md) | the free/nudged rule and teaching budgets |
 | | [Reward](reward.md) | three-factor rule, critic, dopamine, `ActorCritic` |

@@ -25,7 +25,8 @@ The composed graph, in the order its regions are developed:
 
 | Region | Neurons | Wiring | Home |
 | --- | --- | --- | --- |
-| `sensory`, or `visual` for an image | `inputs`, the `code=units` code, or the visual cortex | Projects to the first module; initial scale `sensory_scale` | [image inputs](#image-inputs) |
+| `sensory`, or `visual` for an image | `inputs`, the `code=units` code, or the visual cortex | Projects to the first module (to `code` with a learned code); initial scale `sensory_scale` | [image inputs](#image-inputs) |
+| `code` | `learned_code` units | With `learned_code=units`: the dictionary from `sensory`, lateral inhibition through its Gram matrix, the predictor from `prefrontal`; projects to the first module at `sensory_scale` | [the learned code](code.md) |
 | `module_0` ... | `modules[:-1]` | A chain of reciprocal projections | this page |
 | `association` | `modules[-1]` | Reciprocal with `motor` | this page |
 | `prefrontal` | one per association neuron | The working trace of the settled association, held at `working_memory_amplitude` 3.0, read through a plastic projection of initial scale `working_memory_scale` 1.2 | [memory](memory.md#working-trace) |
