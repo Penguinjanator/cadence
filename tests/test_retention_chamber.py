@@ -86,9 +86,12 @@ def test_independent_masked_memory_math_and_input_purity(chamber, consolidation,
 def test_constructor_preserves_the_ordinary_declared_gene(chamber):
     candidate = chamber.make_brain(0)
     # the chamber froze the working trace of its release (amplitude 3, retention 0.2, scale 12)
+    # and its teaching law (eta 0.5 without normalization, the founder before issue 215)
     ordinary = cd.Brain.compose(8, 2, modules=(32,), lateral=-0.5, seed=0,
                                 working_memory_amplitude=3.0, working_memory_decay=0.2,
-                                working_memory_scale=12.0)
+                                working_memory_scale=12.0, learning_eta=0.5,
+                                learning_eta_bias=0.05, learning_normalize=0.0,
+                                learning_normalize_floor=1e-3)
     left, right = chamber.model_identity(candidate), chamber.model_identity(ordinary)
     assert left == right
     assert left["learner"]["normalize"] == left["actor"]["normalize"] == 0

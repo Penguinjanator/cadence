@@ -92,10 +92,10 @@ configurations and `initialization` (construction choices, not current weights).
 | `modules`, `observers` | `(64,)`, `()` | construction | [map](#brain) |
 | `lateral`, `slots`, `resting_bias` | -0.5 up to 8 actions and 0.0 above, `1`, `0.0` | construction | [motor competition](#operating-point-and-motor-competition) |
 | `sensory_scale`, `features`, `field`, `seed` | `1.0`, `8`, `3`, `0` | construction | [image inputs](#image-inputs) |
-| `learning_beta`, `learning_eta`, `learning_eta_bias`, `temperature` | `0.1`, `0.5`, `0.05`, `0.2` | retune | [learning](learning.md#7-every-knob) |
+| `learning_beta`, `learning_eta`, `learning_eta_bias`, `temperature` | `0.1`, `0.003`, `0.0003`, `0.2` | retune | [learning](learning.md#7-every-knob) |
 | `learning_free_steps`, `learning_nudged_steps`, `learning_tolerance`, `learning_qualified`, `learning_damping` | `1024`, `12`, `0.003`, `False`, `3` | retune | [learning](learning.md#qualified-teaching-budgets) |
 | `learning_centered`, `learning_nudge`, `learning_decay`, `learning_scale_cap`, `learning_surprise` | `True`, `"cross_entropy"`, `0.0`, `8.0`, `False` | retune | [learning](learning.md#7-every-knob) |
-| `learning_normalize`, `learning_normalize_floor`, `learning_momentum` | `0.0`, `0.001`, `0.9` | retune | [learning](learning.md#rates-under-normalization) |
+| `learning_normalize`, `learning_normalize_floor`, `learning_momentum` | `0.99`, `0.0001`, `0.9` | retune | [learning](learning.md#rates-under-normalization) |
 | `actor_gamma`, `actor_lam`, `actor_eligibility_steps`, `actor_eta`, `actor_eta_bias`, `actor_eta_critic` | `0.9`, `0.8`, `12`, `1.0`, `0.05`, `0.3` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `actor_normalize`, `actor_momentum` | `0.0`, `0.0` | retune | [reward](reward.md#rates-under-normalization) |
 | `actor_dopamine_cap`, `actor_dopamine_center`, `actor_dopamine_floor`, `actor_center_scale`, `actor_critic_normalize`, `actor_critic_signal` | `1.0`, `0.0`, `0.0`, `True`, `True`, `"auto"` | retune | [reward](reward.md#centered-dopamine-and-selective-activity) |

@@ -358,8 +358,90 @@ first update is `rate * g / (abs(g) + floor)`, so a consistent signal well above
 by about the rate whatever its size; changing signals can step above it. Momentum with RMS is an
 Adam-style update.
 
-The composed rates (`eta=0.5` teaching, 1.0 actor) are unnormalized; normalized at those rates,
-steps can dwarf the raw signals and saturate the outputs. Retune `eta` and `eta_bias` together;
-a development sweep might start at `eta` 0.001 to 0.003, checked against acquisition, retention
-and actual step sizes. `LearnerConfig` warns when `normalize > 0` and `eta` or `eta_bias` exceeds
-0.05; smaller rates can also fail. The actor's case is in [reward](reward.md#rates-under-normalization).
+`Brain.compose` teaches under normalization: its teaching founder is `normalize=0.99`,
+`normalize_floor=1e-4`, `eta=0.003`, `eta_bias=0.0003` (`eta / 10`) and `momentum=0.9`. The
+composed actor keeps unnormalized rates (`eta=1.0`, `eta_bias=0.05`). Normalized at rates of that
+size, steps can dwarf the raw signals and saturate the outputs. Retune `eta` and `eta_bias`
+together; a development sweep might start at `eta` 0.001 to 0.003, checked against acquisition,
+retention and actual step sizes. `LearnerConfig` warns when `normalize > 0` and `eta` or
+`eta_bias` exceeds 0.05; smaller rates can also fail. A named `learning_eta` keeps the current bias
+rate, and `learning_normalize=0` with `learning_eta` and `learning_eta_bias` returns a composed
+brain to raw steps. `learning=LearnerConfig(...)` replaces the whole teaching configuration.
+
+The teaching founder comes from a copy measurement. A composed brain with one region of 256
+neurons (`Brain.compose(260, 3, modules=(256,))`) learned the moves of a three-move look-ahead
+demonstrator in a light-cycle game on a 24 x 24 grid: 260 inputs of an egocentric view, three
+actions, about 124,000 labelled moments from 1,400 games, and 100 further games held out. The
+moments came in random order through `brain.learner.step(brain.stimulus(x, memory=False),
+labels)` and were scored cold with `predict`. The reference is a network with one hidden layer of
+256 trained by backpropagation with Adam (rate 1e-3) on the same samples in the same order and
+batch size. Each arm ran two seeds; the table gives the agreement with the demonstrator on the
+held-out moments after 240,000 samples.
+
+| Learner | All held-out moves | Moves where the demonstrator turned |
+| --- | --- | --- |
+| backpropagation with Adam, batch 8 | 0.874 / 0.888 | 0.690 / 0.804 |
+| previous composed founder (`eta=0.5`, unnormalized), batch 8 | 0.81 at 80,000 samples | 0.55 at 80,000 samples |
+| `normalize=0.99`, `eta=0.003`, batch 32 | 0.868 / 0.866 | 0.740 / 0.722 |
+| `normalize=0.99`, `eta=0.003`, 48 nudged steps, batch 32 | 0.869 / 0.863 | 0.760 / 0.678 |
+| `normalize=0.99`, `eta=0.001`, batch 8 | 0.865 / 0.869 | 0.701 / 0.701 |
+
+At 720,000 samples backpropagation reached 0.900 / 0.903 on all moves and the normalized brain
+0.886. Training agreement equalled held-out agreement in every arm. Lessons of about 32 rows or
+more reduce the noise of each normalized update; with lessons of 8 rows the rate 0.001 reached
+the same agreement. Normalization at `eta=0.01` overshot.
+
+The working trace lowers teaching fidelity at its composed amplitude. In a continuing stream
+school of the same task (32 streams watching the demonstrator, a greedy `act` and then a `lesson`
+at each moment, the working trace on), the same teaching founder agreed with the demonstrator on
+0.86 of all moves at 240,000 samples with a `working_memory_amplitude` of 0 or 0.3, and on 0.80 at
+the composed amplitude of 3.0. Applications that bootstrap by imitation may lower
+`working_memory_amplitude`.
+
+A normalized founder for both composed learners was measured and declined in 0.73.0
+([issue 131](https://github.com/muellerberndt/cadence/issues/131)). At `eta=0.003`,
+`normalize=0.99` and `momentum=0.9` for teaching and the actor together, supervised acquisition
+contracts passed and the reward stream's re-adaptation after a contingency change reached 0.486
+against its 0.9 contract: absolute per-synapse steps of that size do not overturn an established
+policy quickly. The normalized founder therefore covers teaching alone, and the actor keeps its
+unnormalized rates. The actor's case is in [reward](reward.md#rates-under-normalization).
+
+## Teach on the brain's own path
+
+A brain that only watches a demonstrator learns the states the demonstrator visits. Once it
+acts, its own small errors lead it to states no lesson covered, and the errors compound over an
+episode. Labels on the states the brain itself reaches cover exactly those. The recipe is DAgger
+(Ross, Gordon and Bagnell 2011). After a bootstrap by watching, the brain acts and its own move
+is executed with `brain.act(observation, greedy=True)`, the demonstrator labels that same
+observation, and `brain.lesson(observation, label)` teaches it. A greedy act holds nothing for
+reward, so the lesson is legal; `lesson` refuses while a sampled action awaits its outcome. Each
+batch row below is one stream:
+
+```python
+def observe(position):  # a one-hot position on a line of five cells
+    return np.eye(5)[position]
+
+def demonstrator(position):  # the policy the brain watches: 1 steps right, 0 steps left
+    return (position < 2).astype(np.int64)
+
+def move(position, action):
+    return np.clip(position + np.where(action == 1, 1, -1), 0, 4)
+
+pupil = cd.Brain.compose(inputs=5, actions=2, seed=0)
+position = np.random.default_rng(0).integers(0, 5, 32)  # 32 streams, one per batch row
+for moment in range(8):  # bootstrap by watching: the demonstrator's moves are executed
+    label = demonstrator(position)
+    pupil.lesson(observe(position), label)
+    position = move(position, label)
+for moment in range(8):  # then the brain's own path
+    shown = observe(position)
+    action = pupil.act(shown, greedy=True)  # its own move is executed; nothing awaits reward
+    pupil.lesson(shown, demonstrator(position))  # the demonstrator labels the state reached
+    position = move(position, action)
+```
+
+The labels must come from the demonstrator the brain watched: corrections from a different
+policy pull the brain away from what it copied. Teach many rows at once with the normalized
+teaching founder [above](#rates-under-normalization); the measurements are in
+[issue 215](https://github.com/muellerberndt/cadence/issues/215). A caregiver's corrected
+stretches in a nursery follow this protocol.

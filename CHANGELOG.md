@@ -2,6 +2,33 @@
 
 ## Unreleased
 
+- The composed teaching learner steps under per-synapse normalization
+  ([issue 215](https://github.com/muellerberndt/cadence/issues/215)). The new composed teaching
+  defaults are `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003`
+  and the derived `learning_eta_bias=0.0003`, with `learning_momentum=0.9` as before; they
+  replace `learning_eta=0.5`, `learning_eta_bias=0.05` without normalization. The earlier
+  teaching law is reachable with `learning_eta=0.5`, `learning_eta_bias=0.05`,
+  `learning_normalize=0.0` and `learning_normalize_floor=1e-3`, or with a full
+  `learning=LearnerConfig(...)`, which still replaces the whole teaching configuration; brains
+  built with an explicit configuration act and save as before. The actor's reward optimizer
+  keeps its rates and stays unnormalized, the case measured and declined for both learners in
+  issue 131. In a copy task of 260 inputs and three actions, the composed brain with one region
+  of 256 neurons agreed with a demonstrator on 0.868 / 0.866 of held-out moves after 240,000
+  samples in lessons of 32 rows (two seeds), against 0.874 / 0.888 for a backpropagation network
+  with one hidden layer of 256 trained with Adam on the same samples, and 0.81 at 80,000 samples
+  for the previous defaults. A composed brain that is taught now learns, acts and saves
+  differently from the same brain in 0.84.3, so comparisons that assume identical defaults across
+  releases read differently by design. The teaching instruments in `benchmarks/` that use the
+  composed defaults move in both directions: acquisition controls and the successor read gain,
+  and the token-binding content arms lose held-out accuracy and gate passes (the pull request
+  gives the readings). The tests that pin recorded bytes of composed lives pass the earlier
+  teaching law explicitly; the tests that pin the defaults read the new values. The learning
+  guide gives the measurement, the lesson size of about 32 rows and the working-trace
+  amplitude's effect on teaching.
+- The learning guide's new section "Teach on the brain's own path" gives the DAgger recipe for a
+  brain that bootstraps by watching: its own greedy move is executed, the same demonstrator
+  labels the observation it reached, and `lesson` teaches it, with a runnable snippet.
+
 - `Brain.reset(keep_arousal=True)` (opt-in) keeps the arousal state as it is: its level, the
   counts, the recent and long-run reward, the usual errors, the reward scale, the age and
   the work counts carry into the new stream, as when the state saved before the reset

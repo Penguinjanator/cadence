@@ -207,7 +207,9 @@ def test_dominating_bias_rate_warns_and_zero_eta_stays_silent():
 
 def test_composed_default_bias_rate_follows_the_composed_eta():
     config = cd.Brain.compose(inputs=4, actions=2, modules=(4,), seed=0).learner.config
-    assert config.eta == 0.5 and config.eta_bias == pytest.approx(0.05)
+    # issue 215: the composed teaching founder steps under normalization at eta 0.003
+    assert config.eta == 0.003 and config.eta_bias == pytest.approx(0.0003)
+    assert config.normalize == 0.99 and config.normalize_floor == 1e-4
 
 
 # -- issue 127: a finite free phase that uses its whole budget says so

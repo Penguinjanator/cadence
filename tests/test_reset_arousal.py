@@ -30,6 +30,13 @@ BYTES_REASON = (
     "acts and array contents were recorded on the NumPy solver; this run uses the compiled "
     "dense kernel (CADENCE_FUSED=0 selects the NumPy loop)"
 )
+# The teaching law of the releases that recorded these bytes: issue 215 normalized the composed
+# teaching founder, and the recorded lives keep the earlier law as an explicit recipe.
+RELEASED_TEACHING = {
+    "learning_eta": 0.5, "learning_eta_bias": 0.05,
+    "learning_normalize": 0.0, "learning_normalize_floor": 1e-3,
+}
+
 OBS = np.array([[1.0]])  # the bandit's one constant observation
 CUE = np.array([[1.0, 0.0, 0.5, 0.0]])
 GO = np.array([[0.0, 0.0, 0.0, 1.0]])
@@ -515,7 +522,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
 
 def _build(spec: dict[str, Any]) -> cd.Brain:
     inputs, actions, options = spec["build"]
-    return cd.Brain.compose(inputs, actions, **options)
+    return cd.Brain.compose(inputs, actions, **options, **RELEASED_TEACHING)
 
 
 @pytest.mark.parametrize("name", sorted(FOUNDERS))

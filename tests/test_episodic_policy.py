@@ -122,7 +122,7 @@ def test_a_surprise_lesson_corrects_an_act_the_memory_made_wrong(tmp_path):
 def test_an_act_the_memory_makes_right_is_no_surprise_and_gets_no_lesson():
     brain, x, cortical = misled()
     shown = 1 - cortical  # what the brain does, by its memory against its cortex
-    brain.retune(learning_eta=0.5, learning_eta_bias=0.05)  # the cortex could learn again
+    brain.retune(learning_eta=0.003, learning_eta_bias=0.0003)  # the founder's teaching rates
     graph = brain.brain
     parameters = [np.array(getattr(graph, name), copy=True) for name in ("efficacy", "bias")]
     writes = brain.hippocampus.writes, brain.context_memory.writes

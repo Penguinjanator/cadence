@@ -28,6 +28,13 @@ BYTES_REASON = (
     "acts and array contents were recorded on the NumPy solver; this run uses the compiled "
     "dense kernel (CADENCE_FUSED=0 selects the NumPy loop)"
 )
+# The teaching law of the releases that recorded these bytes: issue 215 normalized the composed
+# teaching founder, and the recorded lives keep the earlier law as an explicit recipe.
+RELEASED_TEACHING = {
+    "learning_eta": 0.5, "learning_eta_bias": 0.05,
+    "learning_normalize": 0.0, "learning_normalize_floor": 1e-3,
+}
+
 CUE = np.array([[1.0, 0.0, 0.5, 0.0]])
 GO = np.array([[0.0, 0.0, 0.0, 1.0]])
 FACT = np.array([[1.0, 0.0, 0.0, 1.0]])  # a name (coordinate 0) stated with a value (3)
@@ -259,7 +266,7 @@ def test_the_founder_lives_as_the_composition_before_the_option(tmp_path, name):
 def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, name):
     spec = FOUNDERS[name]
     inputs, actions, options = spec["build"]
-    brain = cd.Brain.compose(inputs, actions, **options)
+    brain = cd.Brain.compose(inputs, actions, **options, **RELEASED_TEACHING)
     assert spec["life"](brain) == spec["acts"]
     assert _checkpoint_digest(brain.save(tmp_path / "founder")) == spec["checkpoint"]
 
