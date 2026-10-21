@@ -4643,6 +4643,10 @@ class Brain:
                     recall.command = data["recall/command"].astype(float)
                 recall.writes = int(recalled["writes"])
             result.learner = learner
+            if result.learned_code is None:
+                # the configurations as saved are the base (the region's scaling reads them)
+                result._learning_base = learner.config
+                result._reward_base = result.basal_ganglia.config
             # Initialization provenance is separate from the saved, possibly learned bias.
             result.resting_bias = resting_bias
             result._composition = composition
