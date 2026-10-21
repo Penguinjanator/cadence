@@ -7,12 +7,16 @@ import cadence as cd
 
 
 def test_checkpoint_cannot_silently_replace_a_missing_arousal_gene_with_its_default():
-    arousal = cd.Arousal(cd.ArousalConfig(youth=7, heat=3.0))
-    for missing in arousal.config.to_dict():
-        saved = arousal.to_dict()
-        del saved["config"][missing]
-        with pytest.raises(ValueError, match="incomplete saved arousal config"):
-            cd.Arousal.from_dict(saved)
+    # a save at the founder need scale of zero leaves that gene out (cadence-arousal/2); a save
+    # above zero carries it (cadence-arousal/3), and either save misses no other gene
+    for config in (cd.ArousalConfig(youth=7, heat=3.0),
+                   cd.ArousalConfig(youth=7, heat=3.0, need_scale=0.2)):
+        arousal = cd.Arousal(config)
+        for missing in arousal.to_dict()["config"]:
+            saved = arousal.to_dict()
+            del saved["config"][missing]
+            with pytest.raises(ValueError, match="incomplete saved arousal config"):
+                cd.Arousal.from_dict(saved)
 
 
 def test_a_positive_rate_below_machine_epsilon_keeps_bias_corrected_readings_finite():

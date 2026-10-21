@@ -38,7 +38,9 @@ def snapshot(brain: cd.Brain) -> dict[str, np.ndarray]:
 
 def test_arousal_genes_are_validated_and_declare_their_space():
     config = cd.ArousalConfig()
-    assert set(config.to_dict()) == set(cd.ArousalConfig.space())
+    # need_scale is a gene of the law and not of the space, so the founder's seeded
+    # mutations draw as they did before it
+    assert set(config.to_dict()) == set(cd.ArousalConfig.space()) | {"need_scale"}
     assert cd.ArousalConfig(**config.to_dict()) == config
     for bad in (
         {"threshold": -0.1},
@@ -274,7 +276,7 @@ def test_legacy_arousal_without_need_migrates_without_changing_its_saved_state()
         corrupt = {**legacy, "config": {k: v for k, v in legacy["config"].items() if k != gene}}
         with pytest.raises(ValueError, match="incomplete saved arousal config"):
             cd.Arousal.from_dict(corrupt)
-    for format in (None, "cadence-arousal/0", "cadence-arousal/3"):
+    for format in (None, "cadence-arousal/0", "cadence-arousal/4"):
         with pytest.raises(ValueError, match="arousal format"):
             cd.Arousal.from_dict({**legacy, "format": format})
 

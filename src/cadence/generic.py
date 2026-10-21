@@ -1837,10 +1837,12 @@ class Brain:
         choices. ``reset_arousal=True`` explicitly resets the arousal level and
         reward references, retaining its age and work counters; no other state
         is reset. Its arousal is then left as a default ``reset()`` leaves it: an adult
-        brain (its youth over) has no income or error references and, at the founder ``need=0``,
-        no want, so only a surprise at its own forecasts can rouse it, and a world that
-        stops paying may leave it calm on a lapsed habit. Where its world may stop paying,
-        leave ``reset_arousal`` off or give it a positive ``need``. Returns this same brain.
+        brain (its youth over) has no income or error references and no reward scale, so at
+        the founder ``need=0`` it has no want (a positive ``need_scale`` wants nothing until
+        outcomes enter the new stream's scale), only a surprise at its own forecasts can rouse
+        it, and a world that stops paying may leave it calm on a lapsed habit. Where its world
+        may stop paying, leave ``reset_arousal`` off or give it a positive ``need``. Returns
+        this same brain.
         """
         if not isinstance(reset_arousal, bool):
             raise ValueError("reset_arousal must be boolean")
@@ -3491,12 +3493,14 @@ class Brain:
         without the keyword.
 
         After a reset without ``keep_arousal``, also with ``keep_memory=True``, an adult brain
-        (its youth over) has no income or error references and, at the founder ``need=0``, no
-        want: only a surprise at its own forecasts can rouse it, measured against the usual
-        error the new stream's first outcome sets, and a world that stops paying may leave it
-        calm on a lapsed habit. Where its world may stop paying, reset it with
-        ``keep_arousal=True``, give it a positive ``need``, or let it keep living without the
-        reset (``docs/continuous.md#reset-and-save``)."""
+        (its youth over) has no income or error references and no reward scale, so at the
+        founder ``need=0`` it has no want, and a positive ``need_scale`` wants nothing until
+        outcomes enter the new stream's scale: only a surprise at its own forecasts can rouse
+        it, measured against the usual error the new stream's first outcome sets, and a world
+        that stops paying may leave it calm on a lapsed habit. Where its world may stop paying,
+        reset it with ``keep_arousal=True`` (the scale and the scaled need carry over), give it
+        a positive ``need``, or let it keep living without the reset
+        (``docs/continuous.md#reset-and-save``)."""
         if not isinstance(keep_memory, bool):
             raise ValueError("keep_memory must be boolean")
         if not isinstance(keep_arousal, bool):

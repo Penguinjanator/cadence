@@ -10,7 +10,9 @@ it explores. ``Brain.live`` runs this loop for a composed brain.
 The law, per outcome of the stream's preceding action::
 
     surprise = log(|error| / (tolerance * usual + floor * scale))   when positive, else 0
-    want     = max(clip((longrun - recent) / scale, 0, 1), clip((need - recent) / need, 0, 1))
+    want     = max(clip((longrun - recent) / scale, 0, 1),
+                   clip((need - recent) / need, 0, 1),
+                   clip((need_scale * scale - recent) / (need_scale * scale), 0, 1))
     level    = decay * level + (1 - decay) * (surprise + want)
 
 ``error`` is the temporal-difference error against the forecast made before the outcome;
@@ -22,6 +24,13 @@ still wants. The need's want is measured against the need and not against the sp
 because a reward that comes rarely has a spread far above its mean: a brain fed once in
 ``L`` moments that loses its food falls short of its long-run reward by only ``1 / sqrt(L)``
 spreads, while it is short of its whole need. A need of zero has no want of its own.
+``need_scale`` is a need in units of that spread: at every outcome the want is also at
+least the unmet share of ``need_scale * scale``, with the scale as it stood before the
+outcome entered it, and the exploration heat reads the want with the scale as it stands.
+It applies after youth and once an outcome has entered the scale; a scale of zero, as
+after a default reset, leaves it at zero. A need is a level of reward and a scaled need
+a share of what the life's rewards spread over, so a life that pays rarely wants once its
+income falls below that share of its spread. A need scale of zero has no want of its own.
 A brain with an associative memory also forecasts the outcome of the action it chose, from
 the record it holds for that action in that situation; the error of that record against
 the outcome is a second surprise with its own usual size, and the moment's surprise is the
@@ -35,9 +44,10 @@ does not stop the brain from noticing what its life pays. The brain is aroused w
 its policy, with one uniformly chosen motor slot at ``1 + heat * want`` times the base
 temperature; other slots keep the base temperature. The law is unchanged when
 rewards, errors and the need are multiplied by one positive number, away from its absolute
-``1e-12`` surprise guard. Reward shifts also preserve the law when the need is zero:
-every outcome establishes the reward reference before its spread forms. A need is a
-level of reward, and shifting the rewards changes what is unmet.
+``1e-12`` surprise guard. Reward shifts also preserve the law when the need and the need
+scale are zero: every outcome establishes the reward reference before its spread forms. A
+need is a level of reward and a scaled need a share of the spread around the reference,
+and shifting the rewards changes what either leaves unmet.
 
 Arousal gates learning and protects no acquired response, so continued learning can
 interfere with earlier behaviour. Raising ``threshold`` can reduce learning after youth;
@@ -63,7 +73,9 @@ __all__ = ["Arousal", "ArousalConfig"]
 
 MODES = ("routine", "aroused")
 _TINY = 1e-12  # keeps the unit of surprise positive in a world that has paid nothing yet
-_SAVED_FORMAT = "cadence-arousal/2"
+_SAVED_FORMAT = "cadence-arousal/2"  # the law at the founder need scale of zero
+_SCALED_FORMAT = "cadence-arousal/3"  # a save that carries a positive ``need_scale``
+_FORMATS = ("cadence-arousal/1", _SAVED_FORMAT, _SCALED_FORMAT)
 
 
 def _log_ratio(error: float, unit: float) -> float:
@@ -102,6 +114,7 @@ class ArousalConfig:
     value_surprise: float = 1.0  # weight of the surprise at a contradicted value forecast
     record_surprise: float = 0.0  # weight of the surprise at a contradicted action record
     need: float = 0.0  # the reward per moment the body requires; the unmet share is a want
+    need_scale: float = 0.0  # a need in reward scales, need_scale * scale, after youth
 
     def __post_init__(self) -> None:
         # A scalar's Python/NumPy origin must not change continuation arithmetic.
@@ -124,6 +137,7 @@ class ArousalConfig:
         _real("value_surprise", self.value_surprise, low=0.0)
         _real("record_surprise", self.record_surprise, low=0.0)
         _real("need", self.need, low=0.0)
+        _real("need_scale", self.need_scale, low=0.0)
         if (
             isinstance(self.youth, (bool, np.bool_))
             or not isinstance(self.youth, (int, np.integer))
@@ -143,8 +157,11 @@ class ArousalConfig:
         ``fast`` at ``slow`` removes the long-run want, a large ``tolerance`` removes surprise,
         ``heat`` at zero removes the wider exploration, either surprise weight at zero
         removes that channel and ``need`` at zero removes the need's want: the controls are
-        inside the space. A mutation that leaves
-        ``fast`` below ``slow`` is refused at construction."""
+        inside the space. A mutation that leaves ``fast`` below ``slow`` is refused at
+        construction. ``need_scale`` is left out, so a seeded mutation of the founder draws
+        as it did before the gene and copies the founder zero to the child; to select on it,
+        add it to the space, as ``{**ArousalConfig.space(), "need_scale": ("linear", 0.02,
+        0.0, 1.0)}``."""
         return {
             "threshold": ("log", 0.3, 0.02, 2.0),
             "decay": ("linear", 0.05, 0.0, 0.99),
@@ -228,8 +245,9 @@ class Arousal:
         return self._reading(self._usual_record, self.config.slow, self.records)
 
     def _want(self, longrun: float, recent: float, scale: float) -> float:
-        """The shortfall of the recent reward below the long-run reward in reward scales, or
-        below the body's need as a share of that need, whichever is larger."""
+        """The shortfall of the recent reward below the long-run reward in reward scales,
+        below the body's need as a share of that need, or below the need of ``need_scale``
+        reward scales as a share of that need, whichever is largest."""
         want = 0.0 if scale <= 0.0 else float(np.clip((longrun - recent) / scale, 0.0, 1.0))
         need = float(self.config.need)
         if need > 0.0:
@@ -237,12 +255,21 @@ class Arousal:
             # the ratio, and a large need can overflow the subtraction.
             unmet = 1.0 if recent <= 0.0 else (0.0 if recent >= need else (need - recent) / need)
             want = max(want, unmet)
+        share = float(self.config.need_scale)
+        if share > 0.0 and scale > 0.0 and self.age >= self.config.youth:
+            # The need in reward scales, measured against the scale this call reads: in
+            # ``outcome`` the scale before the outcome enters it, in ``want`` the scale as it
+            # stands. Youth, and a scale no outcome has entered, leave the founder need.
+            need = share * scale
+            unmet = 1.0 if recent <= 0.0 else (0.0 if recent >= need else (need - recent) / need)
+            want = max(want, unmet)
         return want
 
     @property
     def want(self) -> float:
         """The shortfall of the recent reward below the long-run reward, in reward scales,
-        or below the body's need, as a share of the need."""
+        below the body's need, as a share of the need, or below the need of ``need_scale``
+        reward scales, as a share of that need; the scale as it stands."""
         return self._want(self.longrun, self.recent, self.scale)
 
     @property
@@ -342,9 +369,16 @@ class Arousal:
     # -- continuation
 
     def to_dict(self) -> dict[str, Any]:
+        """The complete state. A positive ``need_scale`` is saved under ``cadence-arousal/3``;
+        at the founder zero the gene is left out and the save is the ``cadence-arousal/2``
+        save of the law without it."""
+        config = self.config.to_dict()
+        scaled = config["need_scale"] > 0.0
+        if not scaled:
+            del config["need_scale"]
         return {
-            "format": _SAVED_FORMAT,
-            "config": self.config.to_dict(),
+            "format": _SCALED_FORMAT if scaled else _SAVED_FORMAT,
+            "config": config,
             "level": float(self.level),
             "age": int(self.age),
             "outcomes": int(self.outcomes),
@@ -366,14 +400,22 @@ class Arousal:
         """Restore a saved arousal, rejecting incomplete or invalid state."""
         if not isinstance(values, dict) or not isinstance(values.get("config"), dict):
             raise ValueError("invalid saved arousal")
-        if "format" in values and values["format"] not in (_SAVED_FORMAT, "cadence-arousal/1"):
+        if "format" in values and values["format"] not in _FORMATS:
             raise ValueError("invalid saved arousal format")
         config = values["config"]
         genes = set(ArousalConfig.__slots__)
-        if "format" not in values and set(config) == genes - {"need"}:
+        if "format" not in values and set(config) == genes - {"need", "need_scale"}:
             # An unversioned save without ``need`` holds the zero-need law. The format
             # marker distinguishes that schema from a save missing a gene.
             config = {**config, "need": 0.0}
+        if values.get("format") != _SCALED_FORMAT:
+            # A save under an earlier format holds the founder need scale of zero, left out
+            # or written as zero; a save that carries a positive one is marked
+            # cadence-arousal/3.
+            if config.get("need_scale", 0.0) != 0.0:
+                raise ValueError("a scaled need belongs to saved arousal format cadence-arousal/3")
+            if "need_scale" not in config and set(config) == genes - {"need_scale"}:
+                config = {**config, "need_scale": 0.0}
         if set(config) != genes:
             raise ValueError("invalid or incomplete saved arousal config")
         try:
@@ -383,7 +425,7 @@ class Arousal:
             # further outcomes enter by the current law.
             rewards = (
                 values["rewards"]
-                if values.get("format") == _SAVED_FORMAT
+                if values.get("format") in (_SAVED_FORMAT, _SCALED_FORMAT)
                 else values.get("rewards", values["outcomes"])
             )
             if isinstance(rewards, bool) or not isinstance(rewards, int) or rewards < 0:
