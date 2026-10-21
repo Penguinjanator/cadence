@@ -304,8 +304,8 @@ contiguous index.
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=2.0, rate=0.125, predictor=0.0625,
             threshold=0.1, threshold_rate=0.000625, target=0.1, repair=1.0, silence=10.0,
-            place="free", identity=0.95, scale="observation", held=True, reads="free",
-            fields=None, active=0.05)
+            place="free", identity=0.95, held=True, reads="free", fields=None,
+            active=0.05)
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`

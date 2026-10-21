@@ -155,7 +155,6 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit's dictionary column reads its field alone through every learning step, and the competition among the units (the Gram) is block-diagonal, so a recombination of fields is a recombination of their codes and a second input in another field keeps its own code |
 | `learned_code_active` | 0.05 | retune | the activation a unit must reach to count as active in the thresholds' share: a unit firing below it counts as under-active, so the homeostasis does not fade every unit of a frequent observation toward zero; 0 counts any firing |
 | `learned_code_reads` | `"free"` | construction | what the cortex and the memories read of a held code: the context-free code (the founder; the embedding chamber reads held-out members at .97 and 5 of 6 development founders with it, .92 and 4 of 6 with the code in context), or with `"context"` the moment's code in its context, or with `"free"` the context-free code (the observation's code settled alone, the region's second phase), while the code in context, with the prediction's pull, is what the dictionary and the predictor learn from; `"free"` needs `learned_code_held` |
-| `learned_code_scale` | `"observation"` | construction | the memories' key at the norm the observation itself would have as a key (the founder), or with `"unit"` at unit length; with `"observation"` at the norm the observation itself would have as a key, the scale the recall's temperature was set for: an observation of several inputs then addresses its slots as sharply as without the region |
 | `learned_code_identity` | 0.95 | construction | the weight of the observation's own identity in the memories' key, in [0, 1); the key width is `units + inputs`, or `units` at 0 |
 
 Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], an
@@ -171,7 +170,9 @@ embedding chamber's held-out members) and `learned_code_output` (the first modul
 the rectified code at unit length; the activations as they are lost the embedding
 chamber, and a read at the observation's own loudness lost delayed cues) and
 `learned_code_floor` (every code that is not silent is read at unit length; a floor of
-one full input's activation lost the embedding chamber's held-out members).
+one full input's activation lost the embedding chamber's held-out members) and
+`learned_code_scale` (the memories' key takes the norm the observation itself has as a
+key; a key at unit length lost the binding family's continuing task).
 
 ## When to declare fields
 

@@ -2685,7 +2685,9 @@ class Brain:
         (the rectified settled code at unit length): the code joined to the observation's
         own identity, ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])`` with ``w`` the gene
         ``learned_code_identity``, so that a binding stays readable by the identity part
-        while the code part moves as the region learns; the code alone at ``w`` 0."""
+        while the code part moves as the region learns; the code alone at ``w`` 0. The key
+        takes the norm the observation itself would have as a key: the recall's
+        temperature reads the keys' dot products at that scale."""
         region = self.learned_code
         if region is None:
             return code
@@ -2696,10 +2698,7 @@ class Brain:
             key = _unit_rows(
                 np.concatenate([np.sqrt(1.0 - weight) * key, np.sqrt(weight) * identity], axis=1)
             )
-        if region.scale == "observation":
-            # the norm the observation itself would have as a key: the recall's temperature
-            # reads the keys' dot products at that scale
-            key = key * np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)[:, None]
+        key = key * np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)[:, None]
         return np.asarray(key)
 
     def _settle_code(
@@ -2831,10 +2830,8 @@ class Brain:
         region = self.learned_code
         if region is not None:
             part = np.atleast_2d(code)[:, : region.units] / np.sqrt(1.0 - region.identity)
-            if region.scale == "observation":
-                norm = np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)
-                part = part / np.where(norm > 0.0, norm, 1.0)[:, None]
-            return np.asarray(part)
+            norm = np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)
+            return np.asarray(part / np.where(norm > 0.0, norm, 1.0)[:, None])
         return code if self.coded_cortex else x
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:

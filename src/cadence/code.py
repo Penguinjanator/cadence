@@ -147,8 +147,7 @@ class LearnedCode:
     ``repair`` (the share of a row's input energy its code may leave unexplained before the
     row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
     silent unit in such a row counts as), ``place`` (what the place stores key on),
-    ``scale`` (the memories' key at unit length or at the norm of the
-    observation itself, a construction setting), ``held`` (the code units held at the code
+    ``held`` (the code units held at the code
     phase's fixed point through the whole settle, a construction setting), ``fields`` (the
     widths of the observation's fields, each unit reading one, a construction setting),
     ``active`` (the activation a unit must reach to count as active in the thresholds'
@@ -176,7 +175,6 @@ class LearnedCode:
     silence: float = 10.0
     place: str = "free"
     identity: float = 0.95
-    scale: str = "observation"
     held: bool = True
     reads: str = "free"
     fields: tuple[int, ...] | None = None
@@ -188,21 +186,18 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place", "identity", "scale", "held", "reads",
+        "silence", "place", "identity", "held", "reads",
         "fields", "active",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
         "place",
     )
-    CONSTRUCTION = ("threshold", "identity", "scale", "held", "reads", "fields")
+    CONSTRUCTION = ("threshold", "identity", "held", "reads", "fields")
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
     PLACES = ("free", "context")
-    # the memories' key at unit length (``"unit"``), or at the norm the observation itself
-    # would have as a key (``"observation"``), the scale the recall's temperature reads
-    SCALES = ("unit", "observation")
     # what the cortex and the memories read of a held code: the moment's code in its
     # context (``"context"``), or the context-free code (``"free"``), the observation's code
     # settled alone, while the code in context, with the prediction's pull, is what the
@@ -216,6 +211,7 @@ class LearnedCode:
         "cortex": "the first module reads the code alone",
         "output": "the first module reads the rectified code at unit length",
         "floor": "every code that is not silent is read at unit length",
+        "scale": "the memories' key takes the norm the observation itself has as a key",
     }
 
     @classmethod
@@ -225,7 +221,7 @@ class LearnedCode:
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "identity": 0.95,
-            "scale": "observation", "held": True, "reads": "free",
+            "held": True, "reads": "free",
             "fields": None, "active": 0.05,
         }
 
@@ -251,10 +247,6 @@ class LearnedCode:
         if name == "place":
             if not isinstance(value, str) or value not in LearnedCode.PLACES:
                 raise ValueError(f"place is one of {LearnedCode.PLACES}")
-            return value
-        if name == "scale":
-            if not isinstance(value, str) or value not in LearnedCode.SCALES:
-                raise ValueError(f"scale is one of {LearnedCode.SCALES}")
             return value
         if name == "held":
             if not isinstance(value, (bool, np.bool_)):

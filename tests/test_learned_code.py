@@ -265,7 +265,7 @@ def test_a_founder_with_the_region_lives_its_recorded_life(tmp_path, name):
 
 
 # the settings the readings retired, each with a value it once took
-REMOVED = {"cortex": "code", "output": "unit", "floor": 0.0}
+REMOVED = {"cortex": "code", "output": "unit", "floor": 0.0, "scale": "observation"}
 
 
 def test_the_settings_the_readings_retired_are_refused_by_name():
@@ -368,7 +368,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free", "identity": 0.95,
-        "scale": "observation", "held": True, "reads": "free", "fields": None, "active": 0.05,
+        "held": True, "reads": "free", "fields": None, "active": 0.05,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
         composed(learned_code_fields=(20, 30))
@@ -380,8 +380,6 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         composed(learned_code_reads="both")
     with pytest.raises(ValueError, match="needs the held code"):
         composed(learned_code_reads="free", learned_code_held=False)
-    with pytest.raises(ValueError, match="scale is one of"):
-        composed(learned_code_scale="raw")
     with pytest.raises(ValueError, match="held is True or False"):
         composed(learned_code_held="yes")
     with pytest.raises(ValueError, match="identity must lie in"):
@@ -1119,22 +1117,18 @@ def test_the_module_reads_the_code_at_unit_length():
     np.testing.assert_allclose(read, expected, atol=1e-3)
 
 
-def test_the_key_takes_the_observations_norm_when_set():
-    """With ``learned_code_scale="observation"`` the memories' key is the joined key times the
-    observation's norm, the norm the observation would have as a key: a two-hot observation's
-    key has norm sqrt(2), a one-hot one's is as at unit scale, and the history still hears the
-    code at unit length."""
+def test_the_key_takes_the_observations_norm():
+    """The memories' key is the joined key times the observation's norm, the norm the
+    observation would have as a key: a two-hot observation's key has norm sqrt(2), a
+    one-hot one's norm 1, and the history hears the code at unit length."""
     x = tokens(3, 9)
     x[1, 20] = 1.0  # the second stream: two inputs at once
-    unit = composed(seed=6, recall=True, history_decays=(0.5,), learned_code_scale="unit")
-    scaled = composed(seed=6, recall=True, history_decays=(0.5,), learned_code_scale="observation")
-    unit.act(x, greedy=True)
-    scaled.act(x, greedy=True)
-    keys = scaled.recall.keys[:, -1, :]
+    brain = composed(seed=6, recall=True, history_decays=(0.5,))
+    brain.act(x, greedy=True)
+    keys = brain.recall.keys[:, -1, :]
     np.testing.assert_allclose(np.linalg.norm(keys, axis=1), [1.0, np.sqrt(2.0)], atol=1e-9)
-    np.testing.assert_allclose(keys[0], unit.recall.keys[0, -1, :], atol=1e-9)
-    np.testing.assert_allclose(keys[1], np.sqrt(2.0) * unit.recall.keys[1, -1, :], atol=1e-9)
-    np.testing.assert_allclose(scaled.history.trace, unit.history.trace, atol=1e-9)
+    heard = brain._heard(x, brain.observation_code(x))
+    np.testing.assert_allclose(np.linalg.norm(heard, axis=1), [1.0, 1.0], atol=1e-9)
 
 
 def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
