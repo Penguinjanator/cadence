@@ -143,14 +143,15 @@ of the listed guides in order and checks that every local link and anchor in `RE
 `MANIFESTO.md`, `CONTRIBUTING.md`, `AGENTS.md` and `docs/` resolves. Default pytest
 collection also includes the acquisition, recall, rhythm, reversal
 and key-door instruments, including their provenance, refusal, source-admission,
-archive and confirmation-audit tests.
+archive and confirmation-audit tests, and the protocol and timing instruments of
+`benchmarks/instruments`.
 A change to a guide's code is a change to a test. The
 [minimal-install job](https://github.com/muellerberndt/cadence/blob/main/.github/workflows/ci.yml)
 builds the wheel with NumPy alone
-and runs 10 pages without optional backends: `README.md` and, under `docs/`,
+and runs 9 pages without optional backends: `README.md` and, under `docs/`,
 `world-model.md`, `quickstart.md`, `memory.md`, `recall.md`, `build.md`, `api.md`,
-`learning.md`, `protocols.md` and `receipts.md`. It also executes `examples/continuing_brain.py`. For changes
-to these guides or examples, run `python -m pytest -q tests/test_documentation.py`
+`learning.md` and `receipts.md`. It also executes `examples/continuing_brain.py`. For
+changes to these guides or examples, run `python -m pytest -q tests/test_documentation.py`
 and `ruff check examples/continuing_brain.py tests/test_documentation.py`.
 
 Mathematical claims must state their assumptions and connect them to the

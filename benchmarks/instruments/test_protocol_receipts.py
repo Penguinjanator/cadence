@@ -2,14 +2,33 @@
 
 from __future__ import annotations
 
+import importlib.util
+import sys
 from pathlib import Path
 
 import numpy as np
 import pytest
 
 import cadence as cd
-from cadence.protocol import PREDICATES, Levels
 from cadence.receipts import canonical_sha256, source_manifest
+
+HERE = Path(__file__).resolve().parent
+
+
+def _load(name: str):
+    """The instrument module ``name`` of this folder, loaded once under its own module name."""
+    key = "instruments_" + name
+    if key not in sys.modules:
+        spec = importlib.util.spec_from_file_location(key, HERE / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[key] = module
+        spec.loader.exec_module(module)
+    return sys.modules[key]
+
+
+instrument = _load("protocol")
+PREDICATES, Levels = instrument.PREDICATES, instrument.Levels
 
 
 def reading(mean: float, fraction: float) -> dict[str, float]:
@@ -18,17 +37,17 @@ def reading(mean: float, fraction: float) -> dict[str, float]:
 
 def test_every_predicate_evaluates() -> None:
     high, low = reading(0.9, 0.9), reading(0.05, 0.02)
-    assert cd.evaluate_predicate("active", high, low)
-    assert cd.evaluate_predicate("inactive", low, high)
-    assert cd.evaluate_predicate("reduced", low, high)
-    assert cd.evaluate_predicate("retained", high, high)
-    assert cd.evaluate_predicate("released", high, low)
-    assert cd.evaluate_predicate("exceeds", high, low, levels=Levels())
-    assert cd.evaluate_predicate("lateralized", high, low)
+    assert instrument.evaluate_predicate("active", high, low)
+    assert instrument.evaluate_predicate("inactive", low, high)
+    assert instrument.evaluate_predicate("reduced", low, high)
+    assert instrument.evaluate_predicate("retained", high, high)
+    assert instrument.evaluate_predicate("released", high, low)
+    assert instrument.evaluate_predicate("exceeds", high, low, levels=Levels())
+    assert instrument.evaluate_predicate("lateralized", high, low)
     sparse, dense = reading(0.5, 0.01), reading(0.5, 0.5)
-    assert cd.evaluate_predicate("sparse", sparse, dense)
-    assert cd.evaluate_predicate("densified", dense, sparse)
-    assert not cd.evaluate_predicate("active", low, high)
+    assert instrument.evaluate_predicate("sparse", sparse, dense)
+    assert instrument.evaluate_predicate("densified", dense, sparse)
+    assert not instrument.evaluate_predicate("active", low, high)
     assert set(PREDICATES) >= {
         "active",
         "inactive",
@@ -41,10 +60,10 @@ def test_every_predicate_evaluates() -> None:
         "densified",
     }
     with pytest.raises(KeyError):
-        cd.evaluate_predicate("levitates", high, low)
+        instrument.evaluate_predicate("levitates", high, low)
 
 
-def ring_protocol() -> tuple[cd.Connectome, cd.Protocol]:
+def ring_protocol() -> tuple[cd.Connectome, instrument.Protocol]:
     n = 8
     connectome = cd.Connectome.from_synapses(
         n,
@@ -54,9 +73,9 @@ def ring_protocol() -> tuple[cd.Connectome, cd.Protocol]:
         populations={"head": [0, 1], "tail": [6, 7], "none": []},
     )
     rows = [
-        cd.Row("head drives tail", "touch", "tail", "active"),
-        cd.Row("quiet stays quiet", "rest", "tail", "inactive"),
-        cd.Row(
+        instrument.Row("head drives tail", "touch", "tail", "active"),
+        instrument.Row("quiet stays quiet", "rest", "tail", "inactive"),
+        instrument.Row(
             "cut head, tail drops",
             "touch",
             "tail",
@@ -65,7 +84,7 @@ def ring_protocol() -> tuple[cd.Connectome, cd.Protocol]:
             ablate=("head",),
         ),
     ]
-    protocol = cd.Protocol(
+    protocol = instrument.Protocol(
         stimuli={"touch": ("head",), "rest": ("none",)},
         rows=rows,
         training=[("touch", "head", "active")],
@@ -83,23 +102,22 @@ def test_protocol_scores_and_shuffled_control_and_gain_selection() -> None:
     assert protocol.neurons_for(connectome, "touch") == (0, 1)
     d = protocol.to_dict()
     assert len(d["rows"]) == 3
-    gain, table = cd.select_gain(
+    gain, table = instrument.select_gain(
         lambda g: cd.NeuralGraph(connectome, cd.NeuronModel(gain=g, dt=0.5)),
         protocol,
         [0.01, 0.03, 0.1],
         sparsity_cap=1.0,
     )
     assert gain in (0.01, 0.03, 0.1) and len(table) == 3
-    control = cd.shuffled(connectome, seed=0)
+    control = instrument.shuffled(connectome, seed=0)
     assert control.synapses == connectome.synapses
-    assert protocol.score(cd.NeuralGraph(control, cd.NeuronModel(gain=gain, dt=0.5)))["passed"] <= len(
-        protocol.rows
-    )
+    shuffled_brain = cd.NeuralGraph(control, cd.NeuronModel(gain=gain, dt=0.5))
+    assert protocol.score(shuffled_brain)["passed"] <= len(protocol.rows)
 
 
 def test_gain_selection_breaks_ties_by_gain_not_grid_order() -> None:
     connectome, protocol = ring_protocol()
-    gain, table = cd.select_gain(
+    gain, table = instrument.select_gain(
         lambda g: cd.NeuralGraph(connectome, cd.NeuronModel(gain=g, dt=0.5)),
         protocol,
         [0.1, 0.03, 0.01],
@@ -114,9 +132,9 @@ def test_readout_comparison_uses_readout_when_stimulus_has_the_same_name(predica
     connectome = cd.Connectome.from_synapses(
         2, pre=[], post=[], populations={"left": [0], "right": [1]}
     )
-    protocol = cd.Protocol(
+    protocol = instrument.Protocol(
         stimuli={"trial": ("right",), "left": ("right",)},
-        rows=[cd.Row("compare", "trial", "right", predicate, relative_to="left")],
+        rows=[instrument.Row("compare", "trial", "right", predicate, relative_to="left")],
         steps=10,
     )
     result = protocol.score(cd.NeuralGraph(connectome, cd.NeuronModel(dt=1.0)))["rows"][0]
@@ -126,9 +144,9 @@ def test_readout_comparison_uses_readout_when_stimulus_has_the_same_name(predica
 
 def test_protocol_rejects_unknown_explicit_reference() -> None:
     connectome = cd.Connectome.from_synapses(2, pre=[], post=[], populations={"right": [1]})
-    protocol = cd.Protocol(
+    protocol = instrument.Protocol(
         stimuli={"trial": ("right",)},
-        rows=[cd.Row("retained", "trial", "right", "retained", relative_to="missing")],
+        rows=[instrument.Row("retained", "trial", "right", "retained", relative_to="missing")],
         steps=10,
     )
     with pytest.raises(KeyError, match="missing"):
@@ -142,9 +160,9 @@ def test_gain_selection_rejects_an_empty_or_inadmissible_grid() -> None:
         return cd.NeuralGraph(connectome, cd.NeuronModel(gain=gain, dt=0.5))
 
     with pytest.raises(ValueError, match="empty"):
-        cd.select_gain(make_brain, protocol, [])
+        instrument.select_gain(make_brain, protocol, [])
     with pytest.raises(ValueError, match="sparsity cap"):
-        cd.select_gain(make_brain, protocol, [0.01, 0.03, 0.1], sparsity_cap=0.0)
+        instrument.select_gain(make_brain, protocol, [0.01, 0.03, 0.1], sparsity_cap=0.0)
 
 
 @pytest.mark.parametrize("n", [3, 4, 8])
@@ -157,7 +175,7 @@ def test_shuffled_preserves_endpoint_multiset_and_attached_edge_data(n: int) -> 
         sign=np.linspace(-1.0, 1.0, n),
     )
     for seed in range(20):
-        shuffled = cd.shuffled(connectome, seed)
+        shuffled = instrument.shuffled(connectome, seed)
         np.testing.assert_array_equal(shuffled.in_degree(), connectome.in_degree())
         np.testing.assert_array_equal(shuffled.out_degree(), connectome.out_degree())
         assert np.all(shuffled.pre != shuffled.post)
@@ -174,7 +192,7 @@ def test_shuffled_keeps_selected_edges_and_validates_mask_shape() -> None:
     connectome = cd.layered(6, 4, 2, density=0.6, seed=2)
     keep = np.zeros(connectome.synapses, dtype=bool)
     keep[::2] = True
-    shuffled = cd.shuffled(connectome, seed=0, keep=keep)
+    shuffled = instrument.shuffled(connectome, seed=0, keep=keep)
     original = list(
         zip(
             connectome.pre[keep],
@@ -189,7 +207,7 @@ def test_shuffled_keeps_selected_edges_and_validates_mask_shape() -> None:
         result.remove(edge)
     np.testing.assert_array_equal(shuffled.in_degree(), connectome.in_degree())
     with pytest.raises(ValueError, match="keep"):
-        cd.shuffled(connectome, seed=0, keep=np.zeros(2, dtype=bool))
+        instrument.shuffled(connectome, seed=0, keep=np.zeros(2, dtype=bool))
 
 
 def test_receipt_build_write_read_verify(tmp_path: Path) -> None:

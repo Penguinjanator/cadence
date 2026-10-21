@@ -119,13 +119,13 @@ synapse floor; rebuild the fixture keeping that seam.
 ## Connectomes
 
 **A predicate over a large population fails.** `active` asks the mean over every member to reach
-0.5; use `sparse` for a subset and `lateralized` for a left-right pair ([protocols](protocols.md)).
+0.5; use `sparse` for a subset and `lateralized` for a left-right pair ([protocols](../benchmarks/instruments/README.md)).
 
 **A gate passes on the whole brain, fails on the sub-net.** Recruit more hops or lower the
 synapse floor, and keep the closure receipt ([connectomes](connectomes.md)).
 
 **The brain ignites or is silent at every gain.** Use a gain per cell class, selected by
-protocol ([gain selection](protocols.md#gain-selection-under-a-sparsity-cap)).
+protocol ([gain selection](../benchmarks/instruments/README.md#gain-selection-under-a-sparsity-cap)).
 
 ## Where to ask
 

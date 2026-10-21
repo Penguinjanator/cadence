@@ -45,7 +45,6 @@ from .plasticity import (
     Bins,
     Valence,
 )
-from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
 from .receipts import Receipt, canonical_json
 from .recording import SettlementRecord, record_settlements
 from .reference import conformance
@@ -96,11 +95,9 @@ __all__ = [
     "LearnerConfig",
     "LearningPhaseError",
     "Nudge",
-    "Protocol",
     "Receipt",
     "SettlementRecord",
     "record_settlements",
-    "Row",
     "NeuralGraph",
     "BrainState",
     "Equilibrium",
@@ -112,7 +109,6 @@ __all__ = [
     "develop",
     "evolve",
     "genes",
-    "evaluate_predicate",
     "layered",
     "learning_neuron_model",
     "calibrate_bias",
@@ -121,8 +117,6 @@ __all__ = [
     "seam_report",
     "load",
     "save",
-    "select_gain",
-    "shuffled",
     "stateful",
 ]
 

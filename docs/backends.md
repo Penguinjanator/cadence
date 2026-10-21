@@ -143,30 +143,3 @@ elementwise neuron update, the softmax over the nudged group, an equality check 
 ranges and the largest movement for the tolerance. Check a new one against the
 neuron-by-neuron reference through `conformance`; `tests/test_brain.py` holds the tests every
 kernel passes.
-
-## Timing a decision
-
-`cadence.timing.latency(decide, repeats=1000, warmup=20)` runs `decide()` `warmup` times, then
-times `repeats` calls (an integer of at least 1; `warmup` at least 0) and returns `repeats`,
-`p50_us`, `p90_us`, `p99_us`, `max_us`, `mean_us`, `jitter` (`(p99 - p50) / p50`),
-`voluntary_switches` and `involuntary_switches` from `getrusage`, and `environment`.
-`cadence.timing.environment()` records machine, system, cores, Python version, BLAS thread
-limits, CPU affinity on Linux, load average and the NumPy, Numba and torch versions. On
-Windows the load and switch counts are `None`.
-
-```python
-from cadence.timing import latency
-graph = cd.NeuralGraph(connectome, neuron_model)
-inputs = [{int(i): 1.0} for i in connectome.populations["input"]]
-life = {"t": 0, "state": None}
-def decide():  # a new input each call, continuing from the previous state
-    life["t"] += 1
-    life["state"] = graph.settle(inputs[life["t"] % len(inputs)], steps=30, state=life["state"])
-    return life["state"].activation
-report = latency(decide, repeats=50, warmup=5)
-print(round(report["p50_us"]), report["environment"]["cores"])
-```
-
-`decide()` must advance a changing input and carry or reset state as the deployment would
-(one unchanged warm input times a stable-state fast path) and synchronize accelerator work.
-Report cold and warm results, output quality and residuals with the time.

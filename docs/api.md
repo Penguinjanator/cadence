@@ -11,7 +11,7 @@ keyword.
 | [Streams](#streams-cadencestream) | `Trace`, `Echo`, `Afterglow`, `Efference`, `History`, `Recall`, `FastSynapses`, `SynapticMemory`, `PatternSeparator`, `stateful` |
 | [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence`, `Bins` |
 | [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
-| [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Protocol`, `Row`, `Receipt`, timing |
+| [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Receipt` |
 | [Compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step) | `cadence.circuits`, `record_settlements` |
 
 `cadence.__version__` is the installed release string.
@@ -537,26 +537,6 @@ deterministic in the seed. `evolve` scores `fitness(grown, seed)` per life, requ
 scores and returns `cadence.genome.Lineage` (`generations`, `best`, `best_fitness`). Guide:
 [evolve a brain](evolution.md).
 
-## Protocols (`cadence.protocol`)
-
-```text
-Row(id, stimulus, readout, predicate, reference="", ablate=(), relative_to="",
-    tier="experiment", versus="")
-Protocol(stimuli, rows, training=(), levels=Levels(), steps=60)
-cadence.protocol.Levels(active=0.5, inactive=0.2, margin=0.15, sparse_min=0.005,
-    sparse_max=0.2, densify_margin=0.05, specific_max=0.25, code_level=0.5)
-evaluate_predicate(predicate, value, reference, levels=None) -> bool
-shuffled(connectome, seed, *, keep=None) -> Connectome
-select_gain(make_brain, protocol, grid, *, sparsity_cap=0.05) -> (gain, table)
-cadence.protocol.shared_code(activation, other, members, level) -> float
-```
-
-`Protocol.score(brain)`, `neurons_for(connectome, stimulus)`, `to_dict()`; `stimuli` maps a
-name to the populations it drives. `versus` names the second stimulus a `specific` row holds
-apart. `PREDICATES` maps each predicate to its definition. `shuffled` is the control.
-`select_gain` maximizes training facts passed among admissible candidates, smallest on a tie;
-an empty grid or no admissible candidate raises `ValueError`. Guide: [protocols](protocols.md).
-
 ## Receipts (`cadence.receipts`)
 
 ```text
@@ -570,18 +550,6 @@ cadence.receipts.source_manifest(files) -> dict
 
 `Receipt(kind, body, source, digest)` with `write(path)` and `to_dict()`. Guide:
 [receipts](receipts.md).
-
-## Timing (`cadence.timing`)
-
-```text
-cadence.timing.latency(decide, *, repeats=1000, warmup=20) -> dict
-cadence.timing.environment() -> dict
-```
-
-`latency` times `decide()` and reports the median, 90th and 99th percentiles and maximum in
-microseconds, the mean, `jitter` (p99 over p50 minus one) and context switches.
-`environment` reports machine, cores, Python, thread limits, pinned cores, load and library
-versions ([timing a decision](backends.md#timing-a-decision)).
 
 ## Optional task compositions (`cadence.circuits`)
 

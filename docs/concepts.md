@@ -202,11 +202,11 @@ the table, store or critic has learned consequences.
 
 ## Controls and when to add machinery
 
-A [protocol](protocols.md) declares stimuli, readouts, interventions and predicates. A
-[shuffled connectome](protocols.md#the-shuffled-control) tests whether a response depends on
-the particular connections; gain selection can
-[cap the active fraction](protocols.md#gain-selection-under-a-sparsity-cap) so high gains do
-not saturate an excitatory circuit.
+A [protocol](../benchmarks/instruments/README.md#protocols-held-out-tests-with-preconditions) declares stimuli, readouts,
+interventions and predicates. A [shuffled connectome](../benchmarks/instruments/README.md#the-shuffled-control) tests
+whether a response depends on the particular connections; gain selection can
+[cap the active fraction](../benchmarks/instruments/README.md#gain-selection-under-a-sparsity-cap) so high gains do
+not saturate an excitatory circuit. Both are benchmark instruments of a source checkout.
 `cd.conformance(brain, stimulus)` compares a trajectory with the neuron-by-neuron
 reference. A [receipt](receipts.md) binds stored results to their sources.
 

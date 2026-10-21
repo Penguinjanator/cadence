@@ -7,6 +7,9 @@ cannot pass "no response after ablation" vacuously. The control is the
 same protocol on a connectome whose postsynaptic endpoints were permuted with
 every count and sign kept: if the connectome predicts the held-out facts and
 the permuted connectome does not, the prediction came from the connectome.
+
+This is a benchmark instrument of a source checkout, not part of the installed package:
+put ``benchmarks/instruments`` on ``sys.path`` and ``import protocol``.
 """
 
 from __future__ import annotations
@@ -17,8 +20,8 @@ from typing import Any
 
 import numpy as np
 
-from .brain import Brain
-from .connectome import Connectome
+from cadence.brain import Brain
+from cadence.connectome import Connectome
 
 __all__ = ["Row", "Protocol", "evaluate_predicate", "shuffled", "select_gain", "PREDICATES"]
 

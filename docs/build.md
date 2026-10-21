@@ -115,7 +115,7 @@ To draw it, record the settlings of a solve and hand them to a page of your own
 - Selection sizes the regions: `evolve` over the genome across lives
   ([evolve a brain](evolution.md)); any hand-set constant can be a gene.
 - A measured connectome: `Connectome.from_synapses`, then a protocol with a shuffled
-  control ([protocols](protocols.md)).
+  control ([the protocol instrument](../benchmarks/instruments/README.md)).
 - Speed: `NeuralGraph(..., backend="torch")` for a large blocked connectome
   ([backends](backends.md)).
 

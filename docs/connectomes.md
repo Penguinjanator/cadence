@@ -85,9 +85,11 @@ Select the global gain (`NeuronModel(gain=)`) with `select_gain` from two or thr
 facts from the physiology literature, and score the held-out rest. Each shuffled wiring (same
 neurons and counts, receiving endpoints permuted) selects its own gain as the control. A mean
 over a large readout cannot reach 0.5, so large readouts need the `sparse` predicate, and
-left-right sets need `lateralized`. Write the facts with their sources before the run. [Protocols](protocols.md) owns `Protocol`, the predicates,
-[the shuffled control](protocols.md#the-shuffled-control) and
-[gain selection under a sparsity cap](protocols.md#gain-selection-under-a-sparsity-cap).
+left-right sets need `lateralized`. Write the facts with their sources before the run. The
+[protocol instrument](../benchmarks/instruments/README.md) owns `Protocol`, the predicates,
+[the shuffled control](../benchmarks/instruments/README.md#the-shuffled-control) and
+[gain selection under a sparsity cap](../benchmarks/instruments/README.md#gain-selection-under-a-sparsity-cap); it is a
+module of a source checkout, imported with `benchmarks/instruments` on `sys.path`.
 
 ## 4. A gain per cell class
 
@@ -98,8 +100,7 @@ outgoing synapses (weight = `gain * count * efficacy * exp(log_gain[pre])`), and
 picks a class's value the same way as the global gain:
 
 ```python
-from cadence import Protocol, select_gain
-from cadence.protocol import Levels
+from protocol import Levels, Protocol, select_gain   # benchmarks/instruments on sys.path
 
 def make(attenuation):  # the candidate: minus the log gain of the local neurons
     log_gain = np.zeros(C.n)

@@ -16,7 +16,7 @@ guides. Read the owning guide, [numerical contracts](docs/contracts.md) and
 | Manage streams, outcomes and memory | [Continuous interaction](docs/continuous.md), [memory](docs/memory.md), [episodic memory](docs/episodic.md), [recall memory](docs/recall.md), [reward](docs/reward.md), [world model](docs/world-model.md) |
 | Diagnose learning or settling work | [Learning](docs/learning.md), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
 | Add optional recursive observation | [Composition](docs/brain.md#brain) (`observers=`), [cortical regions](docs/cortex.md) |
-| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [protocols](docs/protocols.md), [receipts](docs/receipts.md) |
+| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [instruments](benchmarks/instruments/README.md), [receipts](docs/receipts.md) |
 
 ## What Cadence is, and is not
 

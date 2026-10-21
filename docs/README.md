@@ -64,7 +64,7 @@ composition of families ([contracts](contracts.md)).
 | | [Connectomes](connectomes.md) | a measured wiring diagram as one `NeuralGraph` |
 | | [Evolution](evolution.md) | genomes, mutation and selection |
 | Evaluate | [Evaluate a brain](evaluation.md) | task design, baselines, controls |
-| | [Protocols](protocols.md) | held-out predicate tests |
+| | [Instruments](../benchmarks/instruments/README.md) | held-out predicate tests and decision timing, in a source checkout |
 | | [Receipts](receipts.md) | outcomes bound to source hashes |
 | | [Troubleshooting](troubleshooting.md) | symptom to remedy |
 | Reference | [Contracts](contracts.md) | numerical and learning guarantee per family |
@@ -74,7 +74,7 @@ composition of families ([contracts](contracts.md)).
 
 ## Evaluate and contribute
 
-Design a claim with [evaluation](evaluation.md), test it with [protocols](protocols.md) and
+Design a claim with [evaluation](evaluation.md), test it with [the protocol instrument](../benchmarks/instruments/README.md) and
 report it with [receipts](receipts.md). [CONTRIBUTING.md](../CONTRIBUTING.md) lists the checks,
 [CHANGELOG.md](../CHANGELOG.md) the releases, the [paper](https://philpapers.org/rec/MUECAP-2)
 the hypothesis and [cadence-demos](https://github.com/muellerberndt/cadence-demos) the

@@ -329,15 +329,6 @@ def test_genome_rejects_colliding_region_names_and_changed_ports():
         )
 
 
-def test_protocol_stimulates_all_neurons_of_a_two_neuron_brain():
-    graph = cd.Connectome.from_synapses(2, pre=[], post=[], populations={"all": [0, 1]})
-    brain = cd.NeuralGraph(graph, cd.learning_neuron_model(stimulus_amplitude=3))
-    protocol = cd.Protocol({"on": ("all",)}, [cd.Row("all-on", "on", "all", "active")])
-    report = protocol.score(brain)
-    assert report["passed"] == 1
-    assert report["rows"][0]["reading"]["fraction"] == 1
-
-
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
 def test_complete_brain_checkpoint_resumes_learning_and_memory(tmp_path, backend):
     if backend not in cd.available_backends():
@@ -424,18 +415,6 @@ def test_bins_probabilities_normalize_each_action_dimension():
     probabilities = agent.probabilities(state)
     assert probabilities.shape == (4, 2, 3)
     np.testing.assert_allclose(probabilities.sum(axis=-1), 1)
-
-
-def test_timing_without_unix_process_statistics(monkeypatch):
-    from cadence import timing
-
-    monkeypatch.setattr(timing, "resource", None)
-    monkeypatch.delattr(timing.os, "getloadavg", raising=False)
-    result = timing.latency(lambda: None, repeats=2, warmup=0)
-    assert result["involuntary_switches"] is None
-    assert result["environment"]["load_average"] is None
-    with pytest.raises(ValueError, match="repeats"):
-        timing.latency(lambda: None, repeats=0)
 
 
 def test_corrupt_optimizer_state_is_rejected_on_load(tmp_path):

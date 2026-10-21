@@ -33,8 +33,7 @@ jobs:
 
           for name in ("README.md", "docs/world-model.md", "docs/quickstart.md",
                        "docs/memory.md", "docs/recall.md", "docs/build.md",
-                       "docs/api.md", "docs/learning.md",
-                       "docs/protocols.md", "docs/receipts.md"):
+                       "docs/api.md", "docs/learning.md", "docs/receipts.md"):
               page = Path(name).read_text(encoding="utf-8")
               blocks = re.findall(r"(<!-- not-run[^\n]*-->\n)?```python\n(.*?)```", page, re.S)
               code = "\n\n".join(block for marker, block in blocks if not marker)

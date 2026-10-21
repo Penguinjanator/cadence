@@ -1,8 +1,28 @@
-"""Direct tests for cadence.timing: environment() and latency()."""
+"""Direct tests for the timing instrument: environment() and latency()."""
+
+import importlib.util
+import sys
+from pathlib import Path
 
 import pytest
 
-from cadence.timing import environment, latency
+HERE = Path(__file__).resolve().parent
+
+
+def _load(name: str):
+    """The instrument module ``name`` of this folder, loaded once under its own module name."""
+    key = "instruments_" + name
+    if key not in sys.modules:
+        spec = importlib.util.spec_from_file_location(key, HERE / f"{name}.py")
+        assert spec is not None and spec.loader is not None
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[key] = module
+        spec.loader.exec_module(module)
+    return sys.modules[key]
+
+
+timing = _load("timing")
+environment, latency = timing.environment, timing.latency
 
 # ------------------------------------------------------------------ environment
 
@@ -95,3 +115,13 @@ def test_environment_does_not_swallow_unexpected_errors(monkeypatch) -> None:
     monkeypatch.setattr(importlib, "import_module", broken)
     with pytest.raises(RuntimeError, match="a bug"):
         environment()
+
+
+def test_timing_without_unix_process_statistics(monkeypatch):
+    monkeypatch.setattr(timing, "resource", None)
+    monkeypatch.delattr(timing.os, "getloadavg", raising=False)
+    result = timing.latency(lambda: None, repeats=2, warmup=0)
+    assert result["involuntary_switches"] is None
+    assert result["environment"]["load_average"] is None
+    with pytest.raises(ValueError, match="repeats"):
+        timing.latency(lambda: None, repeats=0)

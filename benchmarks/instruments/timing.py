@@ -7,6 +7,9 @@ the load average, and how many times the scheduler took the core away during
 the measurement. ``latency`` times one warm settling run per decision, many
 times, and reports percentiles next to the mean, because a controller in a body
 cares about the slow tail.
+
+This is a benchmark instrument of a source checkout, not part of the installed package:
+put ``benchmarks/instruments`` on ``sys.path`` and ``import timing``.
 """
 
 from __future__ import annotations

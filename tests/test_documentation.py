@@ -14,6 +14,8 @@ NOT_RUN = "<!-- not-run"
 BLOCK = re.compile(r"(<!-- not-run[^\n]*-->\n)?```python\n(.*?)```", re.S)
 # pages whose blocks need an optional dependency
 REQUIRES = {"docs/backends.md": "torch"}
+# pages whose blocks import a benchmark instrument, a module of a source checkout
+INSTRUMENTS = {"benchmarks/instruments/README.md", "docs/connectomes.md"}
 
 
 def snippets(page: str) -> list[str]:
@@ -83,8 +85,8 @@ PAGES = [
     "docs/api.md",
     "docs/backends.md",
     "docs/learning.md",
-    "docs/protocols.md",
     "docs/receipts.md",
+    "benchmarks/instruments/README.md",
 ]
 
 
@@ -93,6 +95,8 @@ def test_introductory_python_snippets(page, tmp_path, monkeypatch):
     if page in REQUIRES:
         pytest.importorskip(REQUIRES[page])
     monkeypatch.chdir(tmp_path)
+    if page in INSTRUMENTS:
+        monkeypatch.syspath_prepend(str(ROOT / "benchmarks/instruments"))
     blocks = snippets(page)
     assert blocks, f"{page} has no runnable python block; drop it from PAGES"
     # a reader runs the page as a script of their own; ``__file__`` names it

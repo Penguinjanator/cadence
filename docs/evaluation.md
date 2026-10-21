@@ -46,7 +46,7 @@ when the task depends on them.
 | Fitted linear predictor | Gains a linear map over the same inputs reaches |
 | Tabular learner | Gains from memorising discrete states |
 | Online recurrent actor-critic ([`benchmarks/competitors.py`](../benchmarks/competitors.py)) | Gains any recurrent learner with the same information reaches |
-| Shuffled labels, cues or wiring ([the shuffled control](protocols.md#the-shuffled-control)) | Gains that do not depend on the claimed relation |
+| Shuffled labels, cues or wiring ([the shuffled control](../benchmarks/instruments/README.md#the-shuffled-control)) | Gains that do not depend on the claimed relation |
 | One memory switched off ([check that a memory does the work](memory.md#check-that-a-memory-does-the-work)) | Credit given to the wrong memory |
 
 Give every arm the same information, replay policy, update count and compute
