@@ -664,10 +664,45 @@ def code_report(life: Life, held: np.ndarray, seed: int, *,
     report["free_active_per_code"] = float((free > 0).sum(axis=1).mean())
     report["free_silent"] = int(np.sum(~(free > 0).any(axis=1)))
     report["free_codes"] = free
+    report["remapping"] = remapping(copy_, free)
     if before is not None:
         report["drift_cosine"] = float(np.mean(np.sum(cr.unit_rows(free)
                                                       * cr.unit_rows(before), axis=1)))
     return report
+
+
+def remapping(life: Life, free: np.ndarray) -> dict[str, float]:
+    """The soft form of a remapping switch: every member's code in context after a context
+    token of its own group (A), after the group's other context token (a small change) and
+    after a context token of another group (a large change), as mean cosines to the code
+    under A; the context-free code's cosine to A beside them. On a copy with the code's
+    learning off, one stream per member."""
+    members = np.arange(GROUPS * MEMBERS)
+    groups = members // MEMBERS
+
+    def after(pre_tokens: np.ndarray) -> np.ndarray:
+        twin = fork(life)
+        twin.freeze()
+        twin.reset()
+        twin.hear(onehot(pre_tokens))
+        out = twin.hear(onehot(members))
+        if out is None or not twin.last:
+            return np.full((len(members), UNITS), np.nan)
+        return np.asarray(twin.last["a"], dtype=float)
+
+    own = after(PRE0 + groups * PRE)
+    small = after(PRE0 + groups * PRE + (PRE - 1))
+    large = after(PRE0 + ((groups + 1) % GROUPS) * PRE)
+
+    def cosine(u: np.ndarray, v: np.ndarray) -> float:
+        return float(np.nanmean(np.sum(cr.unit_rows(u) * cr.unit_rows(v), axis=1)))
+
+    return {
+        "small_change": cosine(own, small),
+        "large_change": cosine(own, large),
+        "context_free": cosine(own, free),
+        "active_in_context": float(np.nanmean((own > 0).sum(axis=1))),
+    }
 
 
 def change_report(life: Life, held: np.ndarray, seed: int) -> dict[str, Any]:

@@ -19,10 +19,14 @@
   (Hebbian on the reconstruction residual, the delta rule on the prediction's residual,
   homeostatic thresholds), its genes `learned_code_top_down` (4.0), `learned_code_rate`
   (0.125), `learned_code_predictor` (0.03), `learned_code_threshold` (0.1),
-  `learned_code_threshold_rate` (0.001) and `learned_code_target` (0.1); the lesson's
-  contrast and the dopamine leave its synapses alone. The heard history holds the code and
-  the recall memory's event values are codes; a decision keeps the code it was keyed on
-  until its outcome. Checkpoint format `cadence-generic/10` carries the tables; `describe`,
+  `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1) and
+  `learned_code_place` (`"free"`); the lesson's contrast and the dopamine leave its synapses
+  alone. The recall slots and the episodic context records key on the moment's code in its
+  context; the associative store and the episodic place records key on the context-free
+  code (a second code phase, `place_steps`), so a known situation is found again along a
+  new path. The heard history holds the code and the recall memory's event values are
+  codes; a decision keeps the key it was taken under until its outcome. Checkpoint format
+  `cadence-generic/10` carries the tables; `describe`,
   `parameters` and `retune` cover the region; `LearnedCode` is exported. With the founder
   `learned_code=None` every brain, checkpoint and life is the one of 0.84.3 byte for byte
   (`tests/test_learned_code.py`).

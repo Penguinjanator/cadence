@@ -299,7 +299,7 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
 def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
-        "threshold_rate": 0.001, "target": 0.1,
+        "threshold_rate": 0.001, "target": 0.1, "place": "free",
     }
     with pytest.raises(ValueError, match="at least 2 units"):
         composed(units=1)
@@ -689,6 +689,75 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     np.savez(tmp_path / "wrong.npz", **arrays)
     with pytest.raises(ValueError, match="stepping disagrees with the saved step"):
         cd.Brain.load(tmp_path / "wrong.npz")
+
+
+def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_moments():
+    """The associative store and the episodic place records key on the context-free code,
+    the observation settled alone; the recall slots and the context records on the moment's
+    code in its context; ``learned_code_place="context"`` keys the place stores on the
+    moment's code; the place phase is reported and costs nothing without a place store."""
+    brain = composed(seed=9, recall=True, memory_choice=True, arousal=True)
+    code = brain.learned_code
+    assert code.place == "free"
+    # a predictor with weight: at birth it is zero and the two keys coincide
+    code.weights[:] = 0.2 * np.random.default_rng(3).random(code.weights.shape)
+    code.install()
+    brain.learner.brain = brain._installed(brain.brain)
+    # the tables held still, so the moment's place key and a later context-free settle agree
+    brain.retune(learned_code_rate=0.0, learned_code_predictor=0.0,
+                 learned_code_threshold_rate=0.0)
+    context, token = tokens(40), tokens(3)
+    brain.live(context)
+    before = brain._context.copy()
+    brain.live(token, reward=[0.0])
+    report = brain.last_settlement
+    assert report["place_steps"] >= 0 and "code_steps" in report
+    coded = brain._coded_moment
+    assert coded is not None and coded[0] is not None
+    key, place = coded[1], coded[3]
+    np.testing.assert_allclose(place, brain.observation_code(token), atol=5e-3)
+    assert not np.array_equal(key, place)  # the context predicted the token's units
+    np.testing.assert_array_equal(brain.recall.keys[0, -1], key[0])  # the slot: in context
+    np.testing.assert_array_equal(brain._lived[7], place)  # the decision's place key
+    np.testing.assert_array_equal(brain._paths[0][-1][2], place[0])  # the path: the place key
+    np.testing.assert_allclose(  # the context key: the moment's key with the history
+        brain._decision[0, :UNITS], 0.5 * before[0, :UNITS] + 0.5 * key[0], atol=1e-12
+    )
+    brain.live(tokens(44), reward=[1.0])  # the outcome wakes the brain and is recorded
+    assert brain.hippocampus.writes >= 1
+    assert np.abs(brain.hippocampus.recall(place)).max() > 0
+    assert np.abs(brain.hippocampus.recall(place)).max() >= np.abs(brain.hippocampus.recall(key)).max()
+    # the same token in another context: the place key is the same, the moment's key differs
+    brain.live(tokens(41), reward=[0.0])
+    brain.live(token, reward=[0.0])
+    again = brain._coded_moment
+    np.testing.assert_allclose(again[3], brain.observation_code(token), atol=5e-3)
+    np.testing.assert_allclose(again[3], place, atol=5e-3)
+    assert not np.array_equal(again[1], key)
+    # without a place store no place phase runs; with the stores keyed in context the place
+    # key is the moment's key
+    bare = composed(seed=9, episodic=False)
+    bare.act(token, greedy=True)
+    assert "place_steps" not in bare.last_settlement
+    assert bare._coded_moment[3] is bare._coded_moment[1]
+    in_context = composed(seed=9, learned_code_place="context", arousal=True)
+    in_context.live(context)
+    in_context.live(token, reward=[0.0])
+    assert in_context._coded_moment[3] is in_context._coded_moment[1]
+    assert "place_steps" not in in_context.last_settlement
+    in_context.retune(learned_code_place="free")
+    in_context.live(tokens(44), reward=[0.0])
+    assert "place_steps" in in_context.last_settlement
+    with pytest.raises(ValueError, match="place is one of"):
+        composed(learned_code_place="route")
+    # a step, its outcome and a lesson under the split keys
+    taught = composed(seed=10, memory_choice=True)
+    taught.step(tokens(1, 2))
+    np.testing.assert_allclose(taught._moment_code, taught.observation_code(tokens(1, 2)), atol=5e-3)
+    taught.step(tokens(3, 4), reward=[1.0, 0.0])
+    taught.act(tokens(5, 6), greedy=True)  # a greedy act replaces the pending one
+    taught.lesson(tokens(5, 6), [1, 2])
+    assert taught.hippocampus.writes >= 2
 
 
 def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():

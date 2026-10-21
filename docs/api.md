@@ -43,8 +43,9 @@ code of that many units and, for a vector brain, makes the sensory region that c
 brain, without `code`) adds a `code` region of that many neurons that settles with the brain
 to a learned sparse code of the observation, read by the cortex and keyed on by the
 memories, with the genes `learned_code_top_down`, `learned_code_rate`,
-`learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate` and
-`learned_code_target` ([the learned code](code.md)). The `*_scale` arguments are initial
+`learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate`,
+`learned_code_target` and `learned_code_place` ([the learned code](code.md)). The `*_scale`
+arguments are initial
 projection magnitudes, fixed at construction. `options` takes every constructor keyword below
 and every `learning_<field>`, `actor_<field>` and `arousal_<field>` name; with
 `memory_choice=True` it fills in the episodic founders. The region map and the founder table
@@ -151,7 +152,7 @@ their shape. Keep row identities fixed until `reset()`.
 | `pending_feedback` | read-only: the issued action awaits its outcome (`wait` keeps it) |
 | `decision_id` | read-only: the `arousal.age` at which `live` issued the awaited action, or `None`; saved and restored ([feedback ownership in the population solver](equilibrium/LIVE.md#preserve-execution-and-feedback-ownership) is the stricter contract) |
 | `last_arousal` | immutable snapshot of the latest `live` moment; `None` after construction, reset or load ([fields](continuous.md#routine-and-repair-live)) |
-| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks`, and with a learned code `code_steps`, `code_residual`, `code_halvings` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
+| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks`, and with a learned code `code_steps`, `code_residual`, `code_halvings` and, for a brain with a place store, `place_steps` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
 | `last_learning` | the latest transition's learning report, teaching under `demonstration_*` keys |
 | `rng` | the brain's `numpy.random.Generator` |
 
@@ -300,7 +301,7 @@ contiguous index.
 
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, predictor=0.03,
-            threshold=0.1, threshold_rate=0.001, target=0.1)
+            threshold=0.1, threshold_rate=0.001, target=0.1, place="free")
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`

@@ -1485,7 +1485,9 @@ class Brain:
         # the validated observations a settle is being prepared for and their code, computed
         # once per moment: ``stimulus`` given that same array reads it, ``_choose`` takes it;
         # with a learned code also the code region's settled state, the whole graph's warm start
-        self._coded_moment: tuple[np.ndarray, np.ndarray, BrainState | None] | None = None
+        self._coded_moment: (
+            tuple[np.ndarray, np.ndarray, BrainState | None, np.ndarray] | None
+        ) = None
         self._moment: tuple[np.ndarray, np.ndarray] | None = None
         # with a learned code, the code the pending action was keyed on, settled at its moment
         self._moment_code: np.ndarray | None = None
@@ -1869,7 +1871,9 @@ class Brain:
         memories key on the rectified settled code at unit length. Its genes
         ``learned_code_top_down`` (4.0), ``learned_code_rate`` (0.125),
         ``learned_code_predictor`` (0.03), ``learned_code_threshold`` (0.1, construction),
-        ``learned_code_threshold_rate`` (0.001) and ``learned_code_target`` (0.1) are passed
+        ``learned_code_threshold_rate`` (0.001), ``learned_code_target`` (0.1) and
+        ``learned_code_place`` ("free": the associative store and the episodic place
+        records key on the context-free code; "context": on the moment's code) are passed
         beside it; the founder ``learned_code=None`` builds the brain without the region.
 
         ``modules`` specifies a chain of reciprocally connected processing
@@ -2489,14 +2493,26 @@ class Brain:
     ) -> np.ndarray:
         """The code of the moment being settled, computed once and kept with the
         observations (``_coded_moment``): ``stimulus`` given that same array reads it, and
-        with a learned code the region's settled state is the whole graph's warm start."""
+        with a learned code the region's settled state is the whole graph's warm start. The
+        record holds the moment's key (its code in the stream's context, what the context
+        records and the recall slots key on) and its place key (the context-free code with
+        ``learned_code_place="free"``, what the associative store and the place records key
+        on; a second code phase, reported as ``place_steps``), the same array without a
+        learned code or without a place store."""
         if self.learned_code is None:
             key = self._code(x)
-            self._coded_moment = (x, key, None)
+            self._coded_moment = (x, key, None, key)
             return key
+        code = self.learned_code
         phase = self._settle_code(x, context=context, trace=trace)
-        key = self._moment_key(x, self.learned_code.code_of(phase.state.activation))
-        self._coded_moment = (x, key, phase.state)
+        key = self._moment_key(x, code.code_of(phase.state.activation))
+        place = key
+        if context and self.hippocampus is not None and code.place == "free":
+            free = self._settle_code(x, context=False, report=False)
+            place = self._moment_key(x, code.code_of(free.state.activation))
+            assert self._code_settlement is not None
+            self._code_settlement["place_steps"] = int(free.steps)
+        self._coded_moment = (x, key, phase.state, place)
         return key
 
     def _moment_key(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
@@ -2506,14 +2522,16 @@ class Brain:
         return code
 
     def _settle_code(
-        self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None
+        self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None,
+        report: bool = True,
     ) -> Equilibrium:
         """The code phase of a moment's settle: the learned code's region settled under the
         dictionary's read of the sensory activation the observations give and, with
         ``context``, the predictor's read of the prefrontal activation the working trace
         (or ``trace``, an imagined branch's) gives, warm from the stream's code, by the
         brain's solver policy to the learner's tolerance within its free budget. A phase
-        that does not qualify refuses the moment before anything changes."""
+        that does not qualify refuses the moment before anything changes. With ``report``
+        the phase is the moment's: it sets the brain's step and the settlement report."""
         code = self.learned_code
         assert code is not None
         cfg = self.learner.config
@@ -2552,6 +2570,8 @@ class Brain:
                 f"residual={float(np.max(phase.residual)):.6g}, tolerance={cfg.tolerance:g}; "
                 "no action issued"
             )
+        if not report:
+            return phase
         # the step every phase of this moment integrates at: the one the settled code's
         # competition is stable under
         self._restep(code.stability(phase.state.v))
@@ -2643,7 +2663,7 @@ class Brain:
             drive = (
                 self.hippocampus.stimulate(drive)
                 if not self._coded_keys
-                else self.hippocampus.stimulate(drive, key=code)
+                else self.hippocampus.stimulate(drive, key=self._placed(x))
             )
         return drive
 
@@ -2927,6 +2947,7 @@ class Brain:
         self._prepare(x)
         drive = self.stimulus(x)
         code = self._coded(x)
+        place = self._placed(x)
         key = self._decision_key(code)  # of the decision the lesson is shown for
         answer = None
         if self.learner.config.surprise:
@@ -2934,7 +2955,7 @@ class Brain:
             # settle its act reads, warm from the stream, with the episodic vote under the
             # decision's own key; a row that answer already gives as shown is no surprise
             answer = self._greedy(
-                self._qualified(drive, self._activity(), operation="act"), code, key
+                self._qualified(drive, self._activity(), operation="act"), place, key
             )
         try:
             # the lesson's free phase starts from rest, with a learned code's phase in it
@@ -2961,7 +2982,7 @@ class Brain:
         if (self.memory_choice and self.memory_demonstrations
                 and self.hippocampus is not None and shown.any()):
             value = np.full(batch, self.memory_demonstrations)
-            self._remember(code, key, labels, value, shown)
+            self._remember(place, key, labels, value, shown)
         self._prepared = None
         self.basal_ganglia._drive = None
         self.last_learning["demonstrations"] = float(batch)
@@ -3136,10 +3157,11 @@ class Brain:
                 temperatures = np.full(slot_count, self.learner.config.temperature)
                 temperatures[heated_slot] = temperature
         code = self._coded(x)  # computed by the settle of this moment
+        place = self._placed(x)
         # the brain's own best guess, read at issue time before the decision moves the
         # temporal context on: the act it would issue greedily, the readout with the episodic
         # vote under the decision's own key, one choice per slot
-        guessed = self._greedy(answer[1], code, self._decision_key(code))
+        guessed = self._greedy(answer[1], place, self._decision_key(code))
         best = [int(choice) for choice in np.atleast_1d(guessed[0])]
         action = self._choose(x, *answer, greedy=not aroused, temperature=temperatures)
         state = agent.state
@@ -3154,8 +3176,8 @@ class Brain:
             aroused,
             state,
             best == chosen,
-            self._recorded(code, chosen),
-            code.copy() if self.learned_code is not None else None,
+            self._recorded(place, chosen),
+            place.copy() if self.learned_code is not None else None,
         )
         self._last_arousal = MappingProxyType(
             {
@@ -3411,6 +3433,7 @@ class Brain:
             self._prepare(value, trace=trace)  # a learned code in the branch's own context
             drive = self.stimulus(value, memory=False)
             code = self._coded(value)
+            place = self._placed(value)
             if trace is not None:
                 drive = trace.stimulate(drive)
             if echo is not None:
@@ -3424,7 +3447,7 @@ class Brain:
                 drive = (
                     self.hippocampus.stimulate(drive)
                     if not self._coded_keys
-                    else self.hippocampus.stimulate(drive, key=code)
+                    else self.hippocampus.stimulate(drive, key=place)
                 )
             phase = self._equilibrate(
                 drive, current, budget=budget << self._stepping, tolerance=tolerance
@@ -3441,7 +3464,7 @@ class Brain:
                 # complete greedy choice, the readout with the episodic vote under the branch's
                 # own key, after which the branch's context moves on
                 key = None if self.context_memory is None else self._keyed(code, context)
-                choice = self._greedy(phase.state, code, key)
+                choice = self._greedy(phase.state, place, key)
                 if key is not None:
                     context = self._following(key, choice)
                 command = self._command(choice)
@@ -3505,6 +3528,18 @@ class Brain:
         coded = self._coded_moment
         return coded[1] if coded is not None and coded[0] is x else self._code(x)
 
+    def _placed(self, x: np.ndarray) -> np.ndarray:
+        """The code the place stores key on (the associative store, the episodic place
+        records): the moment's, kept by ``_prepare``; of any other observations, the
+        context-free code with ``learned_code_place="free"``, else their observation code."""
+        coded = self._coded_moment
+        if coded is not None and coded[0] is x:
+            return coded[3]
+        code = self.learned_code
+        if code is not None and code.place == "free":
+            return self._code(x, context=False)
+        return self._code(x)
+
     def _choose(
         self,
         x: np.ndarray,
@@ -3521,10 +3556,11 @@ class Brain:
         self._prepared = None
         self._awaiting = None
         code = self._coded(x)  # the memories key on the observation code
+        place = self._placed(x)  # the place stores on the place key
         key = bias = None
         if self.memory_choice and self.hippocampus is not None:
             key = self._decision_key(code)
-            bias = self._vote(code, key)
+            bias = self._vote(place, key)
         action = self.basal_ganglia.act(drive, greedy=greedy, temperature=temperature, bias=bias)
         state = self.basal_ganglia.state
         if self.learned_code is not None and state is not None:
@@ -3561,17 +3597,18 @@ class Brain:
                     guess = (picked / np.maximum(p.max(axis=-1), 1e-12)).mean(axis=1)
                 else:
                     guess = p[rows, action] / np.maximum(p.max(axis=-1), 1e-12)
-                self._extend_paths(code, key, action, np.minimum(guess, 1.0))
+                self._extend_paths(place, key, action, np.minimum(guess, 1.0))
         self._moment = None if greedy else (x.copy(), action.copy())
-        # with a learned code the key the decision was taken under, settled at this moment
+        # with a learned code the place key the decision was taken under, settled at this moment
         self._moment_code = (
-            None if greedy or self.learned_code is None else np.array(code, copy=True)
+            None if greedy or self.learned_code is None else np.array(place, copy=True)
         )
         return action
 
     def _vote(self, code: np.ndarray, key: np.ndarray | None) -> np.ndarray:
-        """The records' vote for every motor neuron: the mean of the place read of the
-        observation code and the context read of the decision's key."""
+        """The records' vote for every motor neuron: the mean of the place read of the place
+        key (the observation code, or a learned code's context-free code) and the context
+        read of the decision's key."""
         memory = self.hippocampus
         assert memory is not None
         place = np.asarray(memory.recall(np.asarray(code, dtype=float)), dtype=float)

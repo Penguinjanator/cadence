@@ -125,6 +125,7 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_threshold` | 0.1 | construction | every unit's initial threshold |
 | `learned_code_threshold_rate` | 0.001 | retune | the homeostatic rate per row |
 | `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
+| `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
 
 Refused with `ValueError`: `learned_code` below 2, a `learned_code_*` gene without the region,
 `code` beside `learned_code` (a key that joins the observation's own identity to its meaning
@@ -134,13 +135,20 @@ without a `code` population and the complete dictionary, lateral and predictor s
 
 ## What the memories key on
 
-With the region, `brain.code_width` is `units`, and the associative store, the episodic place
-and context records and the recall memory key on the rectified settled code at unit length:
-the code of the moment in the stream's context. A decision keeps the code it was keyed on
-until its outcome is recorded. `brain.observation_code(x)` returns the code the observation
-settles to on its own, without a context; `stimulus(..., memory=False)`, `fit`, `predict` and
-`accuracy` settle that context-free code too. The heard history holds the code, in blocks of
-`units` per decay, and the recall memory's event values are codes.
+With the region, `brain.code_width` is `units`, and every memory keys on a rectified settled
+code at unit length. Two codes of a moment stand apart. The moment's key is its code in the
+stream's context, the one the cortex reads: the recall slots (keys and event values) and the
+episodic context records key on it, since their job is to tell apart what looks the same by
+its history. The place key is the context-free code, the observation settled alone with a
+zero prediction, what `brain.observation_code(x)` returns: the associative store and the
+episodic place records key on it, since their job is to answer a known situation reached
+along a new path, and a code in context would split one situation across the histories it
+was reached by. The place key is a second code phase of the moment, taken only for brains
+with a place store and reported as `place_steps`; `learned_code_place="context"` keys the
+place stores on the moment's key instead. A decision keeps the place key it was taken under
+until its outcome is recorded. `stimulus(..., memory=False)`, `fit`, `predict` and
+`accuracy` settle the context-free code alone. The heard history holds the moment's code, in
+blocks of `units` per decay.
 
 ## Save, load, describe, cost
 

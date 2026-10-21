@@ -106,13 +106,18 @@ class LearnedCode:
     threshold: float = 0.1
     threshold_rate: float = 0.001
     target: float = 0.1
+    place: str = "free"
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
 
-    GENES = ("top_down", "rate", "predictor", "threshold", "threshold_rate", "target")
-    RUNTIME = ("top_down", "rate", "predictor", "threshold_rate", "target")
+    GENES = ("top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "place")
+    RUNTIME = ("top_down", "rate", "predictor", "threshold_rate", "target", "place")
     CONSTRUCTION = ("threshold",)
+    # what the place stores key on: the context-free code (``"free"``, the observation
+    # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
+    # context (``"context"``, the key of the context records and the recall slots)
+    PLACES = ("free", "context")
     # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
     # worst mode of the synchronous sweep contracts by at least a half per sweep
     STEP_MARGIN = 1.5
@@ -122,11 +127,11 @@ class LearnedCode:
         """The founder value of every gene."""
         return {
             "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
-            "threshold_rate": 0.001, "target": 0.1,
+            "threshold_rate": 0.001, "target": 0.1, "place": "free",
         }
 
     @staticmethod
-    def setting(name: str, value: Any) -> float:
+    def setting(name: str, value: Any) -> Any:
         """One gene, validated and converted."""
         if name in ("top_down", "rate", "predictor", "threshold", "threshold_rate"):
             return real(name, value, low=0)
@@ -135,6 +140,10 @@ class LearnedCode:
             if number <= 0 or number >= 1:
                 raise ValueError("target must lie in (0, 1)")
             return number
+        if name == "place":
+            if not isinstance(value, str) or value not in LearnedCode.PLACES:
+                raise ValueError(f"place is one of {LearnedCode.PLACES}")
+            return value
         raise TypeError(f"unknown learned code setting: {name!r}")
 
     def __post_init__(self) -> None:
@@ -366,8 +375,8 @@ class LearnedCode:
     def nbytes(self) -> int:
         return int(self.dictionary.nbytes + self.weights.nbytes + self.thresholds.nbytes)
 
-    def genes(self) -> dict[str, float]:
-        return {name: float(getattr(self, name)) for name in self.GENES}
+    def genes(self) -> dict[str, Any]:
+        return {name: getattr(self, name) for name in self.GENES}
 
     def to_dict(self) -> dict[str, Any]:
         return {
