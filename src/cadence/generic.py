@@ -817,8 +817,6 @@ def _validate_life_state(
             raise ValueError("invalid saved lived action indices")
         if learned:
             array("lived/code", (1, code_width))
-    if "lived/code" in data and (not learned or "lived" not in meta):
-        raise ValueError("a saved lived code belongs to a lived action of a learned code")
         if was_sampled:
             if (
                 not np.array_equal(observations, array("moment/observations", (1, observed)))
@@ -826,6 +824,8 @@ def _validate_life_state(
                 or float(forecast) != float(array("pending/value", (1,))[0])
             ):
                 raise ValueError("saved lived action must match its pending feedback")
+    if "lived/code" in data and (not learned or "lived" not in meta):
+        raise ValueError("a saved lived code belongs to a lived action of a learned code")
     awaiting = meta.get("awaiting")
     if meta.get("format") == "cadence-generic/5" and "awaiting" not in meta:
         raise ValueError("format cadence-generic/5 carries a sensed state awaiting an outcome")
