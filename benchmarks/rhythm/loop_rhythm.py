@@ -123,12 +123,31 @@ def continuation(period: int, prime: np.ndarray, rows: int) -> np.ndarray:
 # -- brains
 
 
+def resting(brain: Brain, value: float) -> Brain:
+    """The resting bias the composed brain took up to 0.84.3 (``resting_bias``): ``value`` as
+    the initial bias of every processing neuron, the modules, the observers and the
+    association region, with the boundary regions (sensory, visual, prefrontal, motor,
+    efference, history, recall, next and code) at zero. The arrays are those the option
+    built."""
+    populations = brain.connectome.populations
+    boundary = {"sensory", "visual", "prefrontal", "motor", "efference", "history", "recall",
+                "next", "code"}
+    selected = np.zeros(brain.connectome.n, dtype=bool)
+    excluded = np.zeros(brain.connectome.n, dtype=bool)
+    for name, members in populations.items():
+        target = excluded if name.split("/", 1)[0] in boundary else selected
+        target[np.asarray(members, dtype=np.int64)] = True
+    bias = np.asarray(brain.brain.bias, dtype=float).copy()
+    bias[selected & ~excluded] = value
+    brain.learner.brain = brain.learner.brain.with_parameters(bias=bias)
+    return brain
+
+
 def make_brain(seed: int, protocol: dict, arm: str) -> Brain:
     recipe = protocol["recipe"]
     options: dict[str, Any] = {
         "episodic": False,
         "lateral": recipe["lateral"],
-        "resting_bias": recipe["resting_bias"],
         "working_memory_amplitude": recipe["trace_amplitude"],
         "working_memory_decay": recipe["trace_decay"],
         # the composition of releases before 0.82.0 read the trace back at scale 12
@@ -138,7 +157,8 @@ def make_brain(seed: int, protocol: dict, arm: str) -> Brain:
     if arm in ("copy", "own", "frozen"):
         options["efference_amplitude"] = protocol["copy"]["amplitude"]
         options["efference_decay"] = protocol["copy"]["decay"]
-    return Brain.compose(INPUTS, 2, modules=tuple(recipe["modules"]), seed=seed, **options)
+    brain = Brain.compose(INPUTS, 2, modules=tuple(recipe["modules"]), seed=seed, **options)
+    return resting(brain, recipe["resting_bias"]) if recipe["resting_bias"] else brain
 
 
 class Work:

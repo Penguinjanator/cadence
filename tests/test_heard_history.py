@@ -323,13 +323,6 @@ def test_a_custom_connectome_needs_one_block_of_sensory_width_per_decay():
         )
 
 
-def test_the_resting_bias_leaves_the_history_neurons_at_rest():
-    brain = composed(decays=(0.5,), resting_bias=0.5)
-    history = np.asarray(brain.connectome.populations["history"])
-    assert not np.asarray(brain.brain.bias)[history].any()
-    assert np.asarray(brain.brain.bias)[brain.association_index].min() == 0.5
-
-
 def test_a_surprise_lesson_reads_the_history_its_act_reads_and_the_act_then_hears():
     brain = composed(decays=(0.5,), learning_surprise=True)
     brain.act(CUE, greedy=True)

@@ -196,8 +196,8 @@ FOUNDERS = {
         "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1],
         "format": "cadence-generic/2",
-        "names": "4d36d84e68feb73b1b2eedc4de6c9e70769defa7231704e42b9531303f837703",
-        "checkpoint": "06ae15ca3ad8abfb595d2db0222795db4c24bd241458009c1c091a1cbbd17c9a",
+        "names": "5250f3eb53958993b3e08c854c440f93a182b0ee08d7fae95332092e9c4503f2",
+        "checkpoint": "bbd92e90538d1bc57a9dde5490ea3c3faceb88c427b7dd4130ea74ee4a3f74c7",
     },
     "lived": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True,
@@ -207,8 +207,8 @@ FOUNDERS = {
         "digest": "b66e821b4d3c975000dc59663c7ce2babaf0473d232af438a689f12b9fbbee67",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1],
         "format": "cadence-generic/7",
-        "names": "d9a13187b54d4db5679756b67d3a09cc62346b25c9dd1aac6996220f093e912a",
-        "checkpoint": "3dbf930314f6162a113d61e7b6cf65a09d33ba99d16ac70de0ddd102457f6bbd",
+        "names": "dc2ca1c1600c42b51a1d19ae0dcf538a2d144a32dbf9a304e885d2dba9fb5d3c",
+        "checkpoint": "fd1f0943175aa1ce1a2b126495fa712d498462fc2cfad96c0322b186045df762",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -217,8 +217,8 @@ FOUNDERS = {
         "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
-        "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "62d9aea41ac57727e4228c8158a5e500d6f2c07e25e3a8ecd1ab7b1142e8d9b0",
+        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
+        "checkpoint": "fe1d1a050aeafd64f0166a6646890fc0791c512d6033ac38d05c1c10d143fbb2",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -229,8 +229,8 @@ FOUNDERS = {
                  0, 1, 0, 0, 0, 0, 2, 2, 6, 3, 0, 0, 4, 4, 0, 0, 0, 0, 7, 4, 0, 4, 1, 3, 0, 0,
                  4, 0, 6, 4, 4, 0, 0, 4],
         "format": "cadence-generic/2",
-        "names": "7ba6a31166839d5b4447a0b33d50b9428d9b0c70901217acbbc14dba50b575e9",
-        "checkpoint": "0aba250eb3c3b25a315a3a3da97455af13947bc8555cc5c38fbcc0f2265e38b3",
+        "names": "8595fd2276b9ca3051f96e70da15efa6779415d2389290c44557bbf66a45e070",
+        "checkpoint": "7c07c051872ca3a21f29f1c1ca5220cfd5a04379cbf13b234113907c25537e63",
     },
 }
 
@@ -360,18 +360,6 @@ def test_a_custom_connectome_needs_regions_of_the_value_width():
                     recall_next=False).recall is not None
     # without the option, populations of those names are ordinary ones
     assert cd.Brain(graph(3), episodic=False).recall is None
-
-
-def test_the_resting_bias_leaves_the_memory_neurons_at_rest():
-    brain = composed(resting_bias=0.5)
-    recall, following = regions(brain)
-    bias = np.asarray(brain.brain.bias)
-    assert not bias[np.r_[recall, following]].any()
-    assert bias[brain.association_index].min() == 0.5
-    # an instrument's own regions of those names keep the bias, as before the option
-    plain = instrument("index_read").IndexBrain.build(1, read={}, resting_bias=0.5)
-    assert plain.recall is None
-    assert np.asarray(plain.brain.bias)[plain.index_recall].min() == 0.5
 
 
 # -- the instrument

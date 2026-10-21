@@ -78,12 +78,15 @@ def make_brain(seed, source="sensory", protocol=None):
         connectome,
         episodic=False,
         seed=seed,
-        resting_bias=original.resting_bias,
         learning=original.learner.config,
         reward=original.basal_ganglia.config,
         working_memory_amplitude=protocol["recipe"]["trace_amplitude"],
         working_memory_decay=protocol["recipe"]["trace_decay"],
         slots=original.learner.slot_sizes.tolist(),
+    )
+    # the initial biases of the recipe's resting bias
+    brain.learner.brain = brain.learner.brain.with_parameters(
+        bias=np.asarray(original.brain.bias, dtype=float).copy()
     )
     for key, value in initial_arrays(original).items():
         np.testing.assert_array_equal(value, initial_arrays(brain)[key])

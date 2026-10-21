@@ -47,6 +47,7 @@ _REMOVED = {
     "learning_decay",
     "learning_nudge",
     "working_memory_focus",
+    "resting_bias",
 }
 
 

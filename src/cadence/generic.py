@@ -118,20 +118,6 @@ def _reward() -> ActorCriticConfig:
     )
 
 
-def _validate_resting_bias(value: Any) -> float:
-    if isinstance(value, (bool, np.bool_)) or not isinstance(
-        value, (int, float, np.integer, np.floating)
-    ):
-        raise ValueError("resting_bias must be a finite nonnegative real scalar")
-    try:
-        bias = float(value)
-    except OverflowError as exc:
-        raise ValueError("resting_bias must be a finite nonnegative real scalar") from exc
-    if not np.isfinite(bias) or bias < 0:
-        raise ValueError("resting_bias must be a finite nonnegative real scalar")
-    return bias
-
-
 def _validate_efference_amplitude(value: Any) -> float:
     """The read gain of the efference copy: a finite nonnegative real scalar; zero is the
     brain without one."""
@@ -1249,7 +1235,6 @@ class Brain:
         recall: bool = False,
         learning: LearnerConfig | None = None,
         reward: ActorCriticConfig | None = None,
-        resting_bias: float = 0.0,
         slots: int | Sequence[int] = 1,
         arousal: ArousalConfig | Mapping[str, Any] | bool | None = None,
         seed: int = 0,
@@ -1366,32 +1351,12 @@ class Brain:
         if working_memory_decay >= 1 or efference_decay >= 1:
             raise ValueError("working_memory_decay and efference_decay must lie in [0, 1)")
         working_memory_amplitude = real("working_memory_amplitude", working_memory_amplitude)
-        resting_bias = _validate_resting_bias(resting_bias)
         efference_amplitude = _validate_efference_amplitude(efference_amplitude)
         history_decays = _history_decays(history_decays)
         history_amplitude = real("history_amplitude", history_amplitude, low=0)
-        bias = None
-        if resting_bias:
-            # Select named processing populations; boundary exclusions take precedence
-            # over overlapping aliases in custom connectomes. This is only an initial
-            # operating-point candidate: learning may subsequently change every bias.
-            bias = np.zeros(connectome.n)
-            selected = np.zeros(connectome.n, dtype=bool)
-            excluded = np.zeros(connectome.n, dtype=bool)
-            for name, members in populations.items():
-                head = name.split("/", 1)[0]
-                boundary = head in (
-                    "sensory", "visual", "prefrontal", "motor", "efference", "history"
-                ) or (bool(recalled) and head in ("recall", "next")) or (
-                    bool(learned) and head == "code"
-                )
-                target = excluded if boundary else selected
-                target[np.asarray(members, dtype=np.int64)] = True
-            bias[selected & ~excluded] = resting_bias
         brain = NeuralGraph(
-            connectome, learning_neuron_model(dt=1.0), backend=backend, device=device, bias=bias
+            connectome, learning_neuron_model(dt=1.0), backend=backend, device=device
         )
-        self.resting_bias = resting_bias
         self._composition: dict[str, Any] | None = None  # construction provenance, not parameters
         # The learned code's tables are the brain's synapses and biases: the dictionary from
         # the sensory neurons, the lateral weights among the code units and the predictor
@@ -2053,8 +2018,6 @@ class Brain:
         ``arousal_<field>``. ``temperature`` aliases ``learning_temperature``.
         ``arousal=True`` enables the founder arousal config; a mapping patches
         those founders. Supplied config objects remain full replacements.
-        ``resting_bias`` initializes processing-region biases to a selected nonnegative
-        value; it does not guarantee responsive activity or successful acquisition.
         A positive ``efference_amplitude`` adds the efference copy: one ``efference``
         neuron per motor neuron, driven by the fading one-hot of the command the
         stream issued (``efference_decay``) and read by the association region
@@ -2356,7 +2319,7 @@ class Brain:
         options = dict(genes)
         construction = {
             "inputs", "actions", "modules", "observers", "lateral", "sensory_scale",
-            "working_memory_scale", "resting_bias", "slots", "seed", "episodic", "backend",
+            "working_memory_scale", "slots", "seed", "episodic", "backend",
             "device", "connectome", "history_decays", "history_scale", *_EPISODIC_SETTINGS,
             "recall", "recall_scale", *(f"recall_{name}" for name in Recall.CONSTRUCTION),
             *(f"recall_{name}" for name in Recall.CONSTRUCTION_OPTIONS), "code",
@@ -2492,9 +2455,9 @@ class Brain:
         """Describe effective settings and layout without changing live state.
 
         ``genes`` contains the named runtime settings of existing components.
-        ``initialization`` records the original resting bias and, for composed
-        brains, wiring choices including sensory scale. These initial choices
-        are provenance, not a description of subsequently learned weights.
+        ``initialization`` records, for composed brains, the wiring choices including
+        sensory scale. These initial choices are provenance, not a description of
+        subsequently learned weights.
         Config and memory sections report the objects currently in use; the
         returned mapping is detached and JSON serializable. No lazy state is
         initialized, no random values are drawn and no settlement is performed.
@@ -2588,7 +2551,7 @@ class Brain:
                 if self.context_memory is None
                 else self.context_memory.to_dict(),
             },
-            "initialization": {"resting_bias": self.resting_bias, "composition": self._composition},
+            "initialization": {"composition": self._composition},
             "pending_feedback": self.pending_feedback,
         }
         return dict(plain(result))
@@ -4285,7 +4248,6 @@ class Brain:
         data = _learner_data(self.learner)
         metadata: dict[str, Any] = {
             "format": "cadence-generic/2",
-            "resting_bias": _validate_resting_bias(self.resting_bias),
             "reward": agent.config.to_dict(),
             "rng": self.rng.bit_generator.state,
             "actor_rng": agent.rng.bit_generator.state,
@@ -4530,7 +4492,8 @@ class Brain:
             arousal = Arousal.from_dict(meta["arousal"]) if "arousal" in meta else None
             if "hippocampus" not in meta:
                 raise ValueError("missing hippocampus metadata")
-            resting_bias = _validate_resting_bias(meta.get("resting_bias", 0.0))
+            # the resting bias 0.84.3 recorded was the initial bias of the processing regions,
+            # provenance only: the saved biases hold whatever it and learning made of them
             learner = Learner.load(path, backend=backend, device=device, precision=precision)
             if learner.config.nudge != "cross_entropy":
                 raise ValueError(
@@ -4645,8 +4608,6 @@ class Brain:
                     recall.past = data["recall/past"].astype(float)
                 recall.writes = int(recalled["writes"])
             result.learner = learner
-            # Initialization provenance is separate from the saved, possibly learned bias.
-            result.resting_bias = resting_bias
             result._composition = composition
             agent = result.basal_ganglia
             agent.learner = learner

@@ -43,7 +43,8 @@ numerical damping.
 from the Transcribe keyword control; this school has different inputs,
 architecture, rates and data. `--gene lateral0-resting` additionally initializes
 processing-region bias to `0.5`, with sensory, working-memory and motor biases
-still zero. Neither gene changes library defaults. The effective configuration
+still zero; the chamber sets these biases itself (`resting`), the arrays the composed
+brain's `resting_bias` built up to 0.84.3. Neither gene changes library defaults. The effective configuration
 of every recipe is frozen in `protocol.json`, alongside requested arguments.
 
 The [2026-10-03 source-era runs](https://github.com/muellerberndt/cadence/issues/110#issuecomment-5967884860)

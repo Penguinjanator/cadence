@@ -1,4 +1,5 @@
-"""Functional response/retention for the published optional initialization.
+"""Functional response/retention for the resting bias the acquisition chamber applies to the
+processing regions.
 
 The historical <=0 activity-fraction assertion and strict xfail remain intact in
 `test_audit_bias.py`. Signed activity is not a dead-neuron predicate. This assay
@@ -54,9 +55,9 @@ def test_optional_resting_bias_acquires_retains_and_continues_same_graph(
     relations = helpers["relations"]
     curriculum = helpers["online_curriculum"].curriculum
     independent_residual = helpers["run"].independent_residual
-    brain = cd.Brain.compose(
-        650, 36, modules=(32, 16), observers=(), lateral=0, seed=0, resting_bias=resting_bias
-    )
+    brain = cd.Brain.compose(650, 36, modules=(32, 16), observers=(), lateral=0, seed=0)
+    if resting_bias:
+        helpers["run"].resting(brain, resting_bias)
     brain.learner.config = replace(
         brain.learner.config,
         eta=0.003,
@@ -190,7 +191,6 @@ def test_optional_resting_bias_acquires_retains_and_continues_same_graph(
     assert brain.hippocampus.writes == 0
     saved = brain.save(tmp_path / "acquired.npz")
     restored = cd.Brain.load(saved)
-    assert restored.resting_bias == resting_bias
     _same_arrays(saved, restored.save(tmp_path / "loaded.npz"))
     np.testing.assert_array_equal(
         read(brain, final_panel)["predictions"], read(restored, final_panel)["predictions"]

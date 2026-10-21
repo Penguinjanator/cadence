@@ -200,14 +200,35 @@ def recipe_configuration(recipe, args):
     }
 
 
+def resting(brain: Brain, value: float) -> Brain:
+    """The resting bias the composed brain took up to 0.84.3 (``resting_bias``): ``value`` as
+    the initial bias of every processing neuron, the modules, the observers and the
+    association region, with the boundary regions (sensory, visual, prefrontal, motor,
+    efference, history, recall, next and code) at zero. The arrays are those the option
+    built."""
+    populations = brain.connectome.populations
+    boundary = {"sensory", "visual", "prefrontal", "motor", "efference", "history", "recall",
+                "next", "code"}
+    selected = np.zeros(brain.connectome.n, dtype=bool)
+    excluded = np.zeros(brain.connectome.n, dtype=bool)
+    for name, members in populations.items():
+        target = excluded if name.split("/", 1)[0] in boundary else selected
+        target[np.asarray(members, dtype=np.int64)] = True
+    bias = np.asarray(brain.brain.bias, dtype=float).copy()
+    bias[selected & ~excluded] = value
+    brain.learner.brain = brain.learner.brain.with_parameters(bias=bias)
+    return brain
+
+
 def make_brain(recipe, seed, args):
     effective = recipe_configuration(recipe, args)
     cfg = LearnerConfig(**effective["learning"])
-    options = {"resting_bias": effective["resting_bias"]} if effective["resting_bias"] else {}
     brain = Brain.compose(
         inputs=650, actions=36, modules=(32, 16), observers=(), seed=seed, learning=cfg,
-        lateral=effective["lateral"], **options,
+        lateral=effective["lateral"],
     )
+    if effective["resting_bias"]:
+        resting(brain, effective["resting_bias"])
     if effective["freeze_motor_lateral"]:
         graph = brain.brain
         bias = graph.bias.copy()

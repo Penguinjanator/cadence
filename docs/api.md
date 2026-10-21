@@ -78,7 +78,7 @@ Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9,
       working_memory_decay=0.0, working_memory_amplitude=3.0,
       efference_decay=0.2, efference_amplitude=0.0,
       history_decays=(), history_amplitude=3.0, recall=False, learning=None,
-      reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0,
+      reward=None, slots=1, arousal=None, seed=0,
       backend="cpu", device=None, inputs=None, code=None, learned_code=None, **genes)
 ```
 
@@ -104,7 +104,6 @@ pass these here or use `compose` ([episodic settings](episodic.md#settings)).
 | `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a coded brain (`code` or `learned_code`) refuses both | `ValueError` |
 | `learned_code` at least 2; a `learned_code_*` gene without it, `code` beside it, an image brain, a backend other than `cpu`, or a connectome without the region's populations and complete synapses | `ValueError` |
 | `memory_context` in `[0, 1)`; `working_memory_decay`, `efference_decay` in `[0, 1)` | `ValueError` |
-| `resting_bias` a finite nonnegative real scalar; booleans and arrays refused | `ValueError` |
 | a missing population that a switched-on component needs | `ValueError` |
 
 The efference projection into `association` has the fixed initial scale 12.0; the working
@@ -146,7 +145,7 @@ their shape. Keep row identities fixed until `reset()`.
 | `sparse_code`, `code_width`, `coded_cortex`, `inputs` | the `PatternSeparator` of `code=units` or `None`; the key width; whether the sensory region is the code; the observation width |
 | `learned_code`, `code_index`, `prefrontal_index` | the `LearnedCode` of `learned_code=units` or `None`; neuron indices of the `code` and `prefrontal` populations (empty without them) |
 | `sensory_index`, `association_index`, `motor_index` | neuron indices of those populations |
-| `memory_choice`, `memory_context`, `memory_replay`, `memory_demonstrations`, `resting_bias` | the resolved construction settings |
+| `memory_choice`, `memory_context`, `memory_replay`, `memory_demonstrations` | the resolved construction settings |
 | `arousal` | the stream's `Arousal`, or `None` |
 | `pending_feedback` | read-only: the issued action awaits its outcome (`wait` keeps it) |
 | `decision_id` | read-only: the `arousal.age` at which `live` issued the awaited action, or `None`; saved and restored |

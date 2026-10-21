@@ -90,7 +90,7 @@ configurations and `initialization` (construction choices, not current weights).
 | Setting | Composed founder | Changed at | Home |
 | --- | --- | --- | --- |
 | `modules`, `observers` | `(64,)`, `()` | construction | [map](#brain) |
-| `lateral`, `slots`, `resting_bias` | -0.5 up to 8 actions and 0.0 above, `1`, `0.0` | construction | [motor competition](#operating-point-and-motor-competition) |
+| `lateral`, `slots` | -0.5 up to 8 actions and 0.0 above, `1` | construction | [motor competition](#operating-point-and-motor-competition) |
 | `sensory_scale`, `features`, `field`, `seed` | `1.0`, `8`, `3`, `0` | construction | [image inputs](#image-inputs) |
 | `learning_beta`, `learning_eta`, `learning_eta_bias`, `temperature` | `0.1`, `0.5`, `0.05`, `0.2` | retune | [learning](learning.md#7-every-knob) |
 | `learning_free_steps`, `learning_nudged_steps`, `learning_tolerance`, `learning_qualified`, `learning_damping` | `1024`, `12`, `0.003`, `False`, `3` | retune | [learning](learning.md#qualified-teaching-budgets) |
@@ -193,15 +193,13 @@ chosen = chord.act(observation, temperature=[0.5, 0.1])
 assert chosen.shape == (1, 2)
 ```
 
-`resting_bias` (finite, nonnegative, default `0.0`) initializes the bias of the
-modules, association, observers and other named populations. The `sensory`, `visual`,
-`prefrontal`, `efference`, `history` and `motor` families stay at zero, as do `recall`
-and `next` with `recall=True`, even where another population aliases them. A positive
-bias can reduce silence under some random drives; compare it against zero. Biases stay
-plastic: `brain.resting_bias` records the choice, `brain.brain.bias` holds the learned
-values, and loading restores them. A signed neuron below rest responds to input and
-contributes to teaching, so the share of nonpositive emissions is an activity
-diagnostic (`tests/test_operating_range_function.py`).
+Every bias starts at zero and is plastic: `brain.brain.bias` holds the learned values,
+and loading restores them. An initial bias of your own on the processing neurons is
+`brain.learner.brain = brain.learner.brain.with_parameters(bias=bias)` before the first
+lesson (the acquisition chamber's `resting` sets 0.5 on the modules, the observers and the
+association region). A signed neuron below rest responds to input and contributes to
+teaching, so the share of nonpositive emissions is an activity diagnostic
+(`tests/test_operating_range_function.py`).
 
 ## One experience step by hand
 

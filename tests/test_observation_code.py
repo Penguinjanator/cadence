@@ -124,8 +124,8 @@ FOUNDERS: dict[str, dict] = {
         "parameters": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
         "format": "cadence-generic/2",
-        "names": "4d36d84e68feb73b1b2eedc4de6c9e70769defa7231704e42b9531303f837703",
-        "checkpoint": "e7c63a42cf7392c7e7ebeb91fd63813e5bc1cdaa3581966fee033f332a500ffc",
+        "names": "5250f3eb53958993b3e08c854c440f93a182b0ee08d7fae95332092e9c4503f2",
+        "checkpoint": "a0dcc969fce2873266c7f43e3b123f9d481ae0167ff1095b587fe74ac7df8046",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -134,8 +134,8 @@ FOUNDERS: dict[str, dict] = {
         "parameters": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
-        "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "7d00502e0f88db3c766de2640fd65680dc74cfe8ac9e287df0ccd5bf8e456648",
+        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
+        "checkpoint": "e2f57737198dfe7fcb9a763973eb1461220ee3867e52acabb6cd90c07d58f2ed",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -145,7 +145,7 @@ FOUNDERS: dict[str, dict] = {
         "parameters": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-generic/8",
-        "names": "393dca0a0f621fb76646cfbfdfdf08399395f1b502050a75717c05690fc986c5",
+        "names": "9229351194ebb4351621bbd66ccb8db2eb23bfb28b1df81c39da18b3c6c6b059",
         "checkpoint": None,
     },
     "boundary": {
@@ -157,7 +157,7 @@ FOUNDERS: dict[str, dict] = {
         "parameters": "938905bbc2dc39c354f2f53443948e0bc4b5f06dfe132306fa4d31062ada966a",
         "acts": [2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-generic/8",
-        "names": "0d891c0b55e646cdc6dc95406f04fc4f434a31d83f0ac2b751d8d0bc27763575",
+        "names": "872b89a8d4c6c7ed302221b6e4278ff1fded70b327ac29e7e9a913a8d38d5606",
         "checkpoint": None,
     },
     "wide": {
@@ -169,8 +169,8 @@ FOUNDERS: dict[str, dict] = {
         "parameters": "63de06ff41d1403e4e706fbf3095c48d555682191afc24b659c5e7e90d28acf3",
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-generic/6",
-        "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "5ec3ae0c7e5690a03894902ace185ec2d248c7d59802a5e859e2a57c50365ef9",
+        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
+        "checkpoint": "5a2ec0f8a6db9ad3445a9148508e1d0a2714e6501159bc60d83aee8c92597b77",
     },
     "image": {
         # an image shape through Brain.build: the hippocampus of earlier releases keyed on
@@ -181,8 +181,8 @@ FOUNDERS: dict[str, dict] = {
         "parameters": "aecb598d8fbf5218c210bd2ad264206e9aae0e706105a6e1255a5c44316abe54",
         "acts": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
         "format": "cadence-generic/2",
-        "names": "b27e958dfa827537e7d90084b281bdcd8cd4355f2ccdab2e45818342277b18d0",
-        "checkpoint": "53b96fda82bd281fe1ec5e606bac7c8d603eea6a903a2ca0807628f71fa3d6a9",
+        "names": "d96005267d77512ad6d9bc682ca9b33727cf49d4bcdd330fb3c4a703af34b625",
+        "checkpoint": "6eb98bd94afbaa9754f77e69341709e924c9bdfa9b89812a6922f04c02fa6449",
     },
 }
 

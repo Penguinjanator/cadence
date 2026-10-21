@@ -87,7 +87,7 @@ def runtime():
 
 def make_brain(seed):
     return Brain.compose(
-        8, 2, modules=(32,), lateral=-0.5, seed=seed, resting_bias=0, backend="cpu",
+        8, 2, modules=(32,), lateral=-0.5, seed=seed, backend="cpu",
         learning=LearnerConfig(eta=0.5, eta_bias=0.05, beta=0.1, temperature=0.2,
                                free_steps=1024, nudged_steps=12, tolerance=0.003,
                                momentum=0.9, normalize=0, qualified=False, damping=3),

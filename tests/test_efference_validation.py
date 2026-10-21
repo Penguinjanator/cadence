@@ -10,18 +10,6 @@ import cadence as cd
 DRIVE = np.array([[1.0, 0.0, 0.0, 0.0]])
 
 
-def test_resting_bias_does_not_invent_a_command_before_the_first_action():
-    options = dict(modules=(8,), seed=0, episodic=False, resting_bias=0.5)
-    control = cd.Brain.compose(4, 2, **options)
-    candidate = cd.Brain.compose(4, 2, efference_amplitude=1.0, **options)
-    np.testing.assert_array_equal(
-        control.act(DRIVE, greedy=True), candidate.act(DRIVE, greedy=True)
-    )
-    neurons = np.asarray(candidate.connectome.populations["efference"])
-    np.testing.assert_array_equal(candidate.brain.bias[neurons], 0.0)
-    np.testing.assert_array_equal(candidate.basal_ganglia.state.activation[:, neurons], 0.0)
-
-
 @pytest.mark.parametrize(
     "tamper",
     [
