@@ -51,7 +51,7 @@
   sequence of field widths shares the units among the observation's fields, each unit
   reading its field alone, the competition block-diagonal), `learned_code_active` (0.05: a unit
   firing below this activation counts as under-active in the thresholds' share) and
-  `learned_code_identity` (0.95: the memories' key is the rectified code
+  `learned_code_identity` (0.9: the memories' key is the rectified code
   at unit length joined to the observation's own identity, `unit([sqrt(1 - w) code,
   sqrt(w) unit(x)])`, of width `units + inputs`, so a binding stays readable by the
   identity part while the code part moves; at 0 the code alone); the lesson's contrast and the dopamine leave

@@ -241,14 +241,14 @@ REGION_FOUNDERS: dict[str, dict] = {
     "region": {
         "build": (16, 8, {"modules": (24,), "seed": 5, "learned_code": 16, "recall": True}),
         "life": taught,
-        "digest": "94d206f3e577543af81f32d1c179ba5cf76832c08ae89738db92b0737afc4538",
+        "digest": "704d6867b54a4bd0f8fe2aed3dd364b15b7dfa2623efda7510539a68fa2cf266",
     },
     "region_fields": {
         "build": (16, 4, {"modules": (24,), "seed": 6, "learned_code": 16,
                           "learned_code_fields": (8, 8), "memory_choice": True,
                           "arousal": True}),
         "life": lived,
-        "digest": "00a610c314122517765fad6faf1ea185f7707d09ec1a7e06e0b7f4585650868b",
+        "digest": "09476f076a63600bac9fba62272a926ea2e2d39434a00318c2dc96e032a36586",
     },
 }
 
@@ -368,7 +368,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "identity": 0.95,
+        "identity": 0.9,
         "held": True, "reads": "free", "fields": None, "active": 0.05,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
