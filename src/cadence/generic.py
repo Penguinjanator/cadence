@@ -208,8 +208,8 @@ def _learned_code_genes(learned_code: Any, genes: dict[str, Any]) -> dict[str, A
 
 
 _LEARNED_CODE_TOGETHER = (
-    "code and learned_code together need the key that joins identity and meaning, which "
-    "this version does not build; name one of them"
+    "code and learned_code together are not built: the learned code's key joins the "
+    "observation itself as its identity (learned_code_identity); name one of them"
 )
 
 
@@ -691,8 +691,9 @@ def _validate_life_state(
     sensory = len(populations.get("sensory", populations.get("visual/input", ())))
     observed = sensory if code is None else code[0]
     code_width = sensory if code is None else code[1].expansion
-    if learned:
-        code_width = learned
+    if learned:  # the memories' key: the code, joined to the observation's identity when weighted
+        joined = float(meta["learned_code"]["identity"]) > 0
+        code_width = learned + (sensory if joined else 0)
 
     def array(name: str, shape: tuple[int, ...] | None = None) -> np.ndarray:
         if name not in data:
@@ -1263,8 +1264,10 @@ class Brain:
             if "prefrontal" in populations
             else np.zeros(0, np.int64)
         )
-        if learned:
-            self.code_width = learned["units"]
+        if learned:  # the key: the code, joined to the observation's identity when weighted
+            self.code_width = learned["units"] + (
+                self.inputs if float(learned["identity"]) > 0 else 0
+            )
         # whether the memories key on a code of the observation (fixed or learned) rather
         # than on the observation itself
         self._coded_keys = bool(units) or bool(learned)
@@ -1780,16 +1783,26 @@ class Brain:
 
     @staticmethod
     def observation_width(
-        inputs: int | Sequence[int], code: int | None = None, learned_code: int | None = None
+        inputs: int | Sequence[int], code: int | None = None, learned_code: int | None = None,
+        learned_code_identity: float | None = None,
     ) -> int:
         """The width of the observation code of a brain with these ``inputs`` (a vector
         length or an image shape), this ``code`` and this ``learned_code`` (as the
-        constructor takes them), before the brain is built: with ``recall=True`` and event
-        values a custom anatomy's ``recall`` and ``next`` regions hold that many neurons (the
-        association width with ``recall_value="cortex"``)."""
+        constructor takes them; ``learned_code_identity`` as given, the founder otherwise),
+        before the brain is built: with ``recall=True`` and event values a custom anatomy's
+        ``recall`` and ``next`` regions hold that many neurons (the association width with
+        ``recall_value="cortex"``). A learned code's key is its units, plus the inputs when
+        the key joins the observation's identity."""
         image = _image_shape(inputs)
         width = int(np.prod(image)) if image is not None else _count("inputs", inputs, low=1)
-        return _learned_code_units(learned_code) or _code_units(code) or width
+        units = _learned_code_units(learned_code)
+        if units:
+            founder = LearnedCode.founders()["identity"]
+            weight = LearnedCode.setting(
+                "identity", founder if learned_code_identity is None else learned_code_identity
+            )
+            return units + (width if weight > 0 else 0)
+        return _code_units(code) or width
 
     @staticmethod
     def genome(
@@ -2099,8 +2112,11 @@ class Brain:
         # the sensory region is the code when a vector brain asks for one
         coded_cortex = bool(units) and image is None
         sensory_width = units if coded_cortex else inputs
-        code_width = learned or units or inputs
-        heard_width = learned or sensory_width  # what the history hears: what the cortex reads
+        joined = bool(learned) and LearnedCode.setting(
+            "identity", options.get("learned_code_identity", LearnedCode.founders()["identity"])
+        ) > 0
+        code_width = (learned + (inputs if joined else 0)) if learned else (units or inputs)
+        heard_width = learned or sensory_width  # what the history hears: the code it reads
         sensory_scale = real("sensory_scale", sensory_scale, low=0)
         working_memory_scale = real("working_memory_scale", working_memory_scale, low=0)
         history_scale = real("history_scale", history_scale, low=0)
@@ -2582,10 +2598,20 @@ class Brain:
         return key
 
     def _moment_key(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
-        """The key the memories use for observations ``x`` whose learned code is ``code``:
-        the code itself. The one place a key that joins the observation's own identity to
-        its meaning would be formed."""
-        return code
+        """The key the memories use for observations ``x`` whose learned code is ``code``
+        (the rectified settled code at unit length): the code joined to the observation's
+        own identity, ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])`` with ``w`` the gene
+        ``learned_code_identity``, so that a binding stays readable by the identity part
+        while the code part moves as the region learns; the code alone at ``w`` 0."""
+        region = self.learned_code
+        if region is None or not region.identity:
+            return code
+        weight = region.identity
+        identity = _unit_rows(np.atleast_2d(np.asarray(x, dtype=float)))
+        joined = np.concatenate(
+            [np.sqrt(1.0 - weight) * np.atleast_2d(code), np.sqrt(weight) * identity], axis=1
+        )
+        return _unit_rows(joined)
 
     def _settle_code(
         self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None,
@@ -2692,8 +2718,13 @@ class Brain:
 
     def _heard(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
         """What the heard history takes in: what the cortex reads, the observations or their
-        code."""
-        return code if self.coded_cortex or self.learned_code is not None else x
+        code; with a learned code whose key joins the observation's identity, the key's
+        code part at unit length (the identity part is the observation the history would
+        hear without a code)."""
+        region = self.learned_code
+        if region is not None and region.identity:
+            return np.atleast_2d(code)[:, : region.units] / np.sqrt(1.0 - region.identity)
+        return code if self.coded_cortex or region is not None else x
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
         """The drive of a batch of observations: the sensory neurons stimulated, plus the
@@ -4479,7 +4510,11 @@ class Brain:
             # a memory keyed on the code numbers its key coordinates from zero: the code's
             # width bounds them, with the motor neurons after it for the context records
             neurons = learner.brain.connectome.n
-            coded = learned or (None if code is None else code[1].expansion)
+            if learned:  # the key width: the units, joined to the observation's identity
+                joined = float(meta["learned_code"]["identity"]) > 0
+                coded = learned + (len(populations["sensory"]) if joined else 0)
+            else:
+                coded = None if code is None else code[1].expansion
             memory = _load_memory(meta["hippocampus"], data, neurons, keys=coded)
             heard = meta.get("history")
             recalled = meta.get("recall")

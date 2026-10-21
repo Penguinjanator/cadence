@@ -17,8 +17,9 @@ token = np.eye(53)[[3]]                              # one token, its own coordi
 brain.act(token, greedy=True)                        # the code settles with the brain
 report = brain.last_settlement
 assert report["qualified"] and report["code_steps"] > 0    # the code phase, then the whole graph
-key = brain.observation_code(token)                  # what the memories key on
-assert key.shape == (1, 64) and (key >= 0).all() and np.isclose(np.linalg.norm(key), 1.0)
+key = brain.observation_code(token)                  # what the memories key on: the code
+assert key.shape == (1, 64 + 53)                     # joined to the token's own identity
+assert (key >= 0).all() and np.isclose(np.linalg.norm(key), 1.0)
 code = brain.learned_code                            # the tables the region learns
 assert code.dictionary.shape == (53, 64) and code.work["updates"] == 1
 ```
@@ -118,7 +119,7 @@ sentence = [np.eye(53)[[k]] for k in (40, 3, 44)]   # a context, a token, a cont
 for x in sentence:
     teacher.act(x, greedy=True)                      # three moments, three steps
 assert teacher.learned_code.work["updates"] == 3
-assert teacher.recall.keys.shape == (1, 3, 64)      # the slots hold the moments' codes
+assert teacher.recall.keys.shape == (1, 3, 64 + 53) # the slots hold the moments' keys
 teacher.lesson(sentence[1], [2])                     # a lesson moves the plastic synapses alone
 assert teacher.learned_code.work["updates"] == 3
 teacher.retune(learned_code_rate=0.0)                # the dictionary stays from here on
@@ -138,10 +139,11 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_repair` | 1.0 | retune | the share of a row's input energy its code may leave unexplained, in (0, 1], before the row lowers the thresholds of its silent units: at 1 a row whose code is silent (or worse than nothing); lower, a row the code reconstructs poorly |
 | `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone; `brain.learned_code.work["repairs"]` counts the unit-rows it lowered |
 | `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
+| `learned_code_identity` | 0.5 | construction | the weight of the observation's own identity in the memories' key, in [0, 1); the key width is `units + inputs`, or `units` at 0 |
 | `learned_code_output` | `"raw"` | retune | what the first module reads of the code: the units' activations as they are, or with `"unit"` the rectified code at unit length, the key the memories use (the region's output gain `1 / \|a\|` per stream, entered as a drive on the module from the moment's phase) |
 
-Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], a
-`learned_code_*` gene without the region,
+Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], an
+identity weight outside [0, 1), a `learned_code_*` gene without the region,
 `code` beside `learned_code` (a key that joins the observation's own identity to its meaning
 is not built in this version), an image brain, `memory_expansion` or `memory_fan_in` (the
 memories key on the code as it is), a backend other than `cpu`, and a custom connectome
@@ -149,8 +151,11 @@ without a `code` population and the complete dictionary, lateral and predictor s
 
 ## What the memories key on
 
-With the region, `brain.code_width` is `units`, and every memory keys on a rectified settled
-code at unit length. Two codes of a moment stand apart. The moment's key is its code in the
+With the region, every memory keys on the rectified settled code at unit length joined to
+the observation's own identity, `unit([sqrt(1 - w) code, sqrt(w) unit(x)])` with `w` the
+gene `learned_code_identity` (0.5; at 0 the code alone), so `brain.code_width` is
+`units + inputs` (`units` at 0): the identity part keeps a binding readable while the code
+part moves as the region learns. Two codes of a moment stand apart. The moment's key is its code in the
 stream's context, the one the cortex reads: the recall slots (keys and event values) and the
 episodic context records key on it, since their job is to tell apart what looks the same by
 its history. The place key is the context-free code, the observation settled alone with a

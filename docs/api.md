@@ -45,7 +45,7 @@ to a learned sparse code of the observation, read by the cortex and keyed on by 
 memories, with the genes `learned_code_top_down`, `learned_code_rate`,
 `learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate`,
 `learned_code_target`, `learned_code_repair`, `learned_code_silence`,
-`learned_code_place` and `learned_code_output` ([the learned code](code.md)). The `*_scale` arguments are initial
+`learned_code_place`, `learned_code_output` and `learned_code_identity` ([the learned code](code.md)). The `*_scale` arguments are initial
 projection magnitudes, fixed at construction. `options` takes every constructor keyword below
 and every `learning_<field>`, `actor_<field>` and `arousal_<field>` name; with
 `memory_choice=True` it fills in the episodic founders. The region map and the founder table
@@ -63,7 +63,8 @@ Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None,
 Brain.genome(inputs, actions, *, hidden=64, density=1.0, lateral=None,
              working_memory=False, memory_scale=12.0, features=8, field=3,
              seed=0, slots=1) -> Genome
-Brain.observation_width(inputs, code=None, learned_code=None) -> int
+Brain.observation_width(inputs, code=None, learned_code=None,
+                        learned_code_identity=None) -> int
 ```
 
 `genome` returns the single-region layout (`sensory` or `visual`, `association`, `motor`, and
@@ -302,7 +303,7 @@ contiguous index.
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, predictor=0.03,
             threshold=0.1, threshold_rate=0.001, target=0.1, repair=1.0, silence=10.0,
-            place="free", output="raw")
+            place="free", output="raw", identity=0.5)
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`

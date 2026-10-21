@@ -123,7 +123,8 @@ LIBRARY_ARMS = ("library", "library_bottom_up")  # the library's region, inside 
 # prototype's predictor closed its whole gap per update on a unit-length context with a
 # bias input (rate 0.5 at energy 2), so the library's share per row is 1 / BATCH
 LIBRARY = {"rate": 2.0 / BATCH, "predictor": 1.0 / BATCH, "threshold": 0.1,
-           "threshold_rate": 0.01 / BATCH, "target": 0.1}
+           "threshold_rate": 0.01 / BATCH, "target": 0.1,
+           "identity": 0.0}  # the chamber reads the code's own transfer: the key is the code
 SCHEDULE_SEED, HOLDOUT_SEED, PANEL_SEED, GRU_SEED, UNIFORM_SEED, CHANGE_SEED, SHUFFLE_SEED = (
     51101, 51102, 51103, 51104, 51105, 51106, 51107,
 )

@@ -65,7 +65,10 @@ no table, as the contrast and the dopamine enter no synapse of the region
 
 While the code fits, the residuals are small and nothing moves. The rates are genes
 (``learned_code_<name>``); zero freezes a part. The memories key on the rectified settled
-code at unit length (``Brain.observation_code``).
+code at unit length joined to the observation's own identity, ``unit([sqrt(1 - w) code,
+sqrt(w) unit(x)])`` with ``w`` the gene ``identity`` (``Brain.observation_code``): the
+identity part keeps a binding readable while the code part moves as the region learns;
+at ``identity`` 0 the key is the code alone.
 
 The code's fixed points are stable equilibria of the neuron equations (the lateral weights
 are minus a Gram matrix, so the coupling's eigenvalues stay below the unit's slope), but the
@@ -126,7 +129,9 @@ class LearnedCode:
     row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
     silent unit in such a row counts as), ``place`` (what the place stores key on) and
     ``output`` (what the module reads of the code: the activations, or the rectified code
-    at unit length as the memories key on it).
+    at unit length as the memories key on it) and ``identity`` (the weight of the
+    observation's own identity in the memories' key, a construction setting: the key width
+    follows it).
     Validation refuses a value outside its domain before anything is built.
     """
 
@@ -145,6 +150,7 @@ class LearnedCode:
     silence: float = 10.0
     place: str = "free"
     output: str = "raw"
+    identity: float = 0.5
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
@@ -152,13 +158,13 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place", "output",
+        "silence", "place", "output", "identity",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
         "place", "output",
     )
-    CONSTRUCTION = ("threshold",)
+    CONSTRUCTION = ("threshold", "identity")
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
@@ -177,7 +183,7 @@ class LearnedCode:
         return {
             "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
             "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
-            "place": "free", "output": "raw",
+            "place": "free", "output": "raw", "identity": 0.5,
         }
 
     @staticmethod
@@ -205,6 +211,11 @@ class LearnedCode:
             if not isinstance(value, str) or value not in LearnedCode.OUTPUTS:
                 raise ValueError(f"output is one of {LearnedCode.OUTPUTS}")
             return value
+        if name == "identity":
+            number = real(name, value, low=0, high=1)
+            if number >= 1:
+                raise ValueError("identity must lie in [0, 1)")
+            return number
         raise TypeError(f"unknown learned code setting: {name!r}")
 
     def __post_init__(self) -> None:

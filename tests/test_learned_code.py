@@ -221,7 +221,8 @@ def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, 
 
 def test_learned_code_none_is_the_founder_and_the_width_is_as_before():
     assert cd.Brain.observation_width(53) == 53 and cd.Brain.observation_width(53, 24) == 24
-    assert cd.Brain.observation_width(53, None, 16) == 16
+    assert cd.Brain.observation_width(53, None, 16) == 16 + 53  # the key joins the identity
+    assert cd.Brain.observation_width(53, None, 16, learned_code_identity=0.0) == 16
     for value in (None, 0):
         brain = cd.Brain.compose(53, 4, modules=(8,), seed=2, learned_code=value)
         assert brain.learned_code is None and brain.code_width == 53
@@ -246,7 +247,7 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
     brain = composed()
     populations = brain.connectome.populations
     assert list(populations)[:3] == ["sensory", "code", "association"]
-    assert len(populations["code"]) == UNITS and brain.code_width == UNITS
+    assert len(populations["code"]) == UNITS and brain.code_width == UNITS + INPUTS
     code = brain.learned_code
     assert isinstance(code, cd.LearnedCode)
     assert code.inputs == INPUTS and code.units == UNITS and code.context == 64
@@ -285,10 +286,10 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
     assert not brain.learner.plastic_neurons[brain.code_index].any()
     assert brain.learner.plastic_neurons.sum() == brain.connectome.n - UNITS
     # the memories key on the code
-    np.testing.assert_array_equal(brain.hippocampus.pre, np.arange(UNITS))
+    np.testing.assert_array_equal(brain.hippocampus.pre, np.arange(UNITS + INPUTS))
     described = brain.describe()
     assert described["observation_code"] == {
-        "kind": "learned", "inputs": INPUTS, "width": UNITS, "units": UNITS, "fan_in": 0,
+        "kind": "learned", "inputs": INPUTS, "width": UNITS + INPUTS, "units": UNITS, "fan_in": 0,
         "winners": 0, "cortex": "code", "separator": None,
     }
     assert described["learned_code"]["units"] == UNITS
@@ -303,10 +304,12 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
         "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "raw",
+        "place": "free", "output": "raw", "identity": 0.5,
     }
     with pytest.raises(ValueError, match="output is one of"):
         composed(learned_code_output="norm")
+    with pytest.raises(ValueError, match="identity must lie in"):
+        composed(learned_code_identity=1.0)
     with pytest.raises(ValueError, match="repair must lie in"):
         composed(learned_code_repair=0.0)
     with pytest.raises(ValueError, match="repair"):
@@ -319,7 +322,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         cd.Brain.compose(53, 4, modules=(8,), learned_code_rate=0.1)
     with pytest.raises(TypeError, match="unknown brain setting"):
         composed(learned_code_speed=0.1)
-    with pytest.raises(ValueError, match="joins identity and meaning"):
+    with pytest.raises(ValueError, match="joins the observation itself"):
         composed(code=64)
     with pytest.raises(ValueError, match="a vector brain"):
         cd.Brain.compose((8, 8), 2, modules=(8,), learned_code=32)
@@ -351,7 +354,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     complete = develop(Genome(tuple(regions), (*projections, Projection(
         "prefrontal", "code", scale=0.0, reciprocal=False))), seed=1)
     custom = cd.Brain(complete, learned_code=6)
-    assert custom.learned_code is not None and custom.code_width == 6
+    assert custom.learned_code is not None and custom.code_width == 6 + 8
     with pytest.raises(ValueError, match="is not the learned code of 5 units"):
         cd.Brain(complete, learned_code=5)
 
@@ -372,9 +375,11 @@ def test_the_code_is_a_fixed_point_of_the_whole_settle_and_the_memories_key():
     assert report["code_residual"] <= brain.learner.config.tolerance
     code = brain.learned_code
     s = settled_code(brain)
-    key = code.code_of(s)
-    assert (key >= 0).all() and np.allclose(np.linalg.norm(key, axis=1), 1.0)
-    assert ((key > 0).sum(axis=1) >= 1).all() and ((key > 0).sum(axis=1) < UNITS // 2).all()
+    sparse = code.code_of(s)
+    assert (sparse >= 0).all() and np.allclose(np.linalg.norm(sparse, axis=1), 1.0)
+    assert ((sparse > 0).sum(axis=1) >= 1).all() and ((sparse > 0).sum(axis=1) < UNITS // 2).all()
+    key = brain._moment_key(x, sparse)  # joined to the observation's identity
+    assert key.shape == (3, UNITS + INPUTS) and np.allclose(np.linalg.norm(key, axis=1), 1.0)
     np.testing.assert_allclose(brain.recall.keys[:, -1, :], key, atol=1e-3)
     np.testing.assert_allclose(brain.recall.values[:, -1, :], key, atol=1e-3)
     # the whole graph's equations hold on the code units at the settled state
@@ -498,12 +503,13 @@ def test_the_lesson_and_the_outcome_leave_the_region_to_its_own_rule():
 
 def test_the_key_of_a_decision_is_its_moments_code_and_the_history_hears_the_code():
     brain = composed(recall=True, history_decays=(0.5,), arousal=True, memory_choice=True)
-    assert len(brain.connectome.populations["history"]) == UNITS
+    assert len(brain.connectome.populations["history"]) == UNITS  # it hears the code part
     x = tokens(5)
     brain.live(x)
-    first = brain.learned_code.code_of(settled_code(brain))  # (1, units)
+    first = brain._moment_key(x, brain.learned_code.code_of(settled_code(brain)))
     key = brain.recall.keys[0, 0]  # the moment's key: the phase's code in the stream's context
-    np.testing.assert_allclose(brain.history.trace, 0.5 * key[None, :], atol=1e-9)
+    heard = key[:UNITS] / np.sqrt(0.5)  # the history hears the key's code part at unit length
+    np.testing.assert_allclose(brain.history.trace, 0.5 * heard[None, :], atol=1e-9)
     assert brain._lived[7] is not None
     # the keys are the phase's code; the whole settle moves the code units within tolerance
     np.testing.assert_allclose(brain._lived[7], first, atol=1e-3)
@@ -515,7 +521,7 @@ def test_the_key_of_a_decision_is_its_moments_code_and_the_history_hears_the_cod
     # a sampled act keeps the code it was keyed on until its outcome
     stepped = composed(seed=4)
     stepped.step(tokens(1, 2))
-    assert stepped._moment_code is not None and stepped._moment_code.shape == (2, UNITS)
+    assert stepped._moment_code is not None and stepped._moment_code.shape == (2, UNITS + INPUTS)
     stepped.step(tokens(3, 4), reward=[1.0, 0.0])
     assert stepped._moment_code is not None  # the next sampled act's
 
@@ -532,11 +538,11 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
     meta = json.loads(str(arrays["generic"]))
     assert meta["format"] == "cadence-generic/10"
     assert meta["learned_code"]["units"] == UNITS and meta["composition"]["learned_code"] == UNITS
-    assert meta["history"]["source"] == "code" and meta["recall"]["inputs"] == UNITS
+    assert meta["history"]["source"] == "code" and meta["recall"]["inputs"] == UNITS + INPUTS
     assert arrays["learned_code/dictionary"].shape == (INPUTS, UNITS)
     assert arrays["learned_code/weights"].shape == (UNITS, 64)
     assert arrays["learned_code/thresholds"].shape == (UNITS,)
-    assert arrays["lived/code"].shape == (1, UNITS)
+    assert arrays["lived/code"].shape == (1, UNITS + INPUTS)  # the moment's key
     twin = cd.Brain.load(path)
     assert twin.describe() == brain.describe()
     for name, value in brain.learned_code.arrays().items():
@@ -755,8 +761,9 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     np.testing.assert_array_equal(brain.recall.keys[0, -1], key[0])  # the slot: in context
     np.testing.assert_array_equal(brain._lived[7], place)  # the decision's place key
     np.testing.assert_array_equal(brain._paths[0][-1][2], place[0])  # the path: the place key
+    width = brain.code_width
     np.testing.assert_allclose(  # the context key: the moment's key with the history
-        brain._decision[0, :UNITS], 0.5 * before[0, :UNITS] + 0.5 * key[0], atol=1e-12
+        brain._decision[0, :width], 0.5 * before[0, :width] + 0.5 * key[0], atol=1e-12
     )
     brain.live(tokens(44), reward=[1.0])  # the outcome wakes the brain and is recorded
     assert brain.hippocampus.writes >= 1
@@ -818,7 +825,7 @@ def test_a_long_stream_leaves_the_code_alive(tmp_path):
         x = tokens(token)
         brain.act(x, greedy=True)
         in_context = np.maximum(code.last["activation"], 0.0)
-        free = brain.observation_code(x)
+        free = brain.observation_code(x)[:, :32]  # the key's code part
         assert (in_context > 0).sum() >= 1 and (free > 0).sum() >= 1
         used |= (free > 0)[0]
     assert used.sum() >= 6
@@ -864,6 +871,28 @@ def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained(
     assert (code.thresholds[~fired] < code.threshold).all()
     assert code.work["repairs"] == int(repair.sum()) > 0
     assert strict.learned_code.work["repairs"] == 0  # no row was silent at the strict level
+
+
+def test_the_key_joins_the_code_to_the_observations_identity():
+    """The memories' key is ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])``: the identity
+    part is the observation at unit length weighted by ``sqrt(w)``, the code part the
+    rectified settled code; at ``learned_code_identity=0`` the key is the code alone and
+    the width ``units``."""
+    brain = composed(seed=2, recall=True)
+    x = tokens(4, 9, 9)
+    brain.act(x, greedy=True)
+    key = brain.recall.keys[:, -1, :]
+    assert key.shape == (3, UNITS + INPUTS)
+    np.testing.assert_allclose(key[:, UNITS:], np.sqrt(0.5) * x, atol=1e-12)
+    np.testing.assert_allclose(np.linalg.norm(key[:, :UNITS], axis=1), np.sqrt(0.5), atol=1e-3)
+    np.testing.assert_allclose(key[1], key[2], atol=1e-3)  # the same token, the same key
+    alone = composed(seed=2, recall=True, learned_code_identity=0.0)
+    alone.act(x, greedy=True)
+    assert alone.code_width == UNITS and alone.recall.keys.shape[-1] == UNITS
+    np.testing.assert_allclose(
+        alone.recall.keys[:, -1, :], alone.learned_code.code_of(settled_code(alone)), atol=1e-3
+    )
+    assert brain.observation_code(x).shape == (3, UNITS + INPUTS)
 
 
 def test_the_module_reads_the_code_at_unit_length_when_set():
