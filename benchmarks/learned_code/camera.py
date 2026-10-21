@@ -200,8 +200,8 @@ def learned_life(spec: dict[str, Any]) -> dict[str, Any]:
 
 
 def generic_life(spec: dict[str, Any]) -> dict[str, Any]:
-    """``index_runs``' camera life with the generic code, as the index lanes ran it, plus its
-    memory in bytes."""
+    """``index_runs``' camera life with the generic code, as the index chamber's runs took it,
+    plus its memory in bytes."""
     out = runs.camera_life(spec)
     camera = runs.Camera(int(spec["seed"]))
     stage = runs.GenericCode(camera.inputs, camera.pixels, GENERIC["units"], 32,
