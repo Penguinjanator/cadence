@@ -256,3 +256,42 @@ def test_the_memories_are_one_ordered_family_under_one_contract():
     assert brain.recall.slots == 0
     with pytest.raises(ValueError, match="unknown memory"):
         Memories({"cortex": brain.working_memory})
+
+
+def test_the_episodic_records_are_the_last_member_and_save_as_their_group(tmp_path):
+    """With ``memory_choice`` the episodic records are the member ``episodic``: they read the
+    associative store and keep the context records, add nothing to the drive (their vote
+    joins after the settle), give a branch its own temporal context, and save as the group
+    ``memories/episodic/`` from their own settings and arrays."""
+    import json
+
+    from cadence.memories import EpisodicRecords, Moment
+
+    brain = cd.Brain.compose(4, 2, modules=(8,), seed=3, memory_choice=True)
+    records = brain.memories["episodic"]
+    assert isinstance(records, EpisodicRecords) and list(brain.memories)[-1] == "episodic"
+    assert records.place is brain.hippocampus and records.temporal is brain.context_memory
+    assert (brain.memory_context, brain.memory_replay, brain.memory_demonstrations) == (
+        records.share, records.steps, records.demonstrations
+    )
+    assert "episodic" not in cd.Brain.compose(4, 2, modules=(8,), seed=3).memories
+    x = np.eye(4)[[0]]
+    brain.step(x)
+    for reward in (0.0, 1.0):
+        brain.step(np.eye(4)[[int(reward) + 1]], reward=np.array([reward]))
+    drive = np.ones((1, brain.connectome.n))
+    assert records.stimulus(drive, Moment(x, x, None, False)) is drive
+    branch = records.branch()
+    assert branch.place is records.place and branch.temporal is records.temporal
+    branch.move(branch.key(x), np.array([1]))
+    assert not np.array_equal(branch.context, records.context)  # the branch's own context
+    saved = np.load(brain.save(tmp_path / "brain.npz"))
+    meta = json.loads(str(saved["brain"]))
+    assert meta["memories"]["episodic"] == records.to_dict()
+    group = {k[len("memories/episodic/"):] for k in saved.files if k.startswith("memories/episodic/")}
+    assert group == set(records.arrays())
+    loaded = cd.Brain.load(tmp_path / "brain.npz").memories["episodic"]
+    np.testing.assert_array_equal(loaded.context, records.context)
+    assert len(loaded.paths[0]) == len(records.paths[0])
+    brain.reset()
+    assert records.context is None and records.decision is None and records.paths == []

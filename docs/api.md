@@ -223,11 +223,12 @@ loads without its readings, and one weighed above zero is refused with a message
 ```text
 Memories(members)
 Moment(observations, code, place, stores=True)
+EpisodicRecords(place, temporal, *, width, offsets, share, steps, demonstrations)
 ```
 
 `brain.memories` is a `Memories`: a read-only mapping from a memory's name to the memory, the
 present ones only, in the order `working_memory`, `efference`, `history`, `recall`,
-`hippocampus`. Every member keeps the contract `Memory`:
+`hippocampus`, `episodic`. Every member keeps the contract `Memory`:
 
 | Member | Behaviour |
 | --- | --- |
@@ -238,6 +239,18 @@ present ones only, in the order `working_memory`, `efference`, `history`, `recal
 | `to_dict()`, `arrays()` | the settings and counts, and the arrays a checkpoint keeps under `memories/<name>/` |
 
 `Memories.stimulus(drive, moment)` applies every member in order.
+
+With `memory_choice=True` the member `episodic` is an `EpisodicRecords`. `place` is the
+associative store (`brain.hippocampus`) and `temporal` the context records
+(`brain.context_memory`, None at `memory_context=0`); `share`, `steps` and `demonstrations`
+are `memory_context`, `memory_replay` and `memory_demonstrations`. Per stream it holds
+`context` (the temporal context after the last decision), `decision` (that decision's key)
+and `paths` (the recent decisions, one per situation left). `vote(code, key)` is the mean of
+the place read and the context read that joins the motor readout; `key(code)` is the key of a
+decision taken now; `outcome(...)` records a known outcome and replays a reward along the
+path; `remember(...)` writes both kinds of record; `reset(batch, rows)` begins the next
+attempt of `rows` with no context and no path. Its `stimulus` returns the drive unchanged:
+the vote joins after the settle.
 
 ## Streams (`cadence.stream`)
 

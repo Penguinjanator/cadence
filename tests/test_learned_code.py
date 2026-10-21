@@ -879,7 +879,7 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
                  learned_code_threshold_rate=0.0)
     context, token = tokens(40), tokens(3)
     brain.live(context)
-    before = brain._context.copy()
+    before = brain.memories["episodic"].context.copy()
     brain.live(token, reward=[0.0])
     report = brain.last_settlement
     assert report["context_free_steps"] >= 0 and "code_steps" in report
@@ -890,10 +890,10 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     assert not np.array_equal(key, place)  # the context predicted the token's units
     np.testing.assert_array_equal(brain.recall.keys[0, -1], key[0])  # the slot: in context
     np.testing.assert_array_equal(brain._lived[6], place)  # the decision's place key
-    np.testing.assert_array_equal(brain._paths[0][-1][2], place[0])  # the path: the place key
+    np.testing.assert_array_equal(brain.memories["episodic"].paths[0][-1][2], place[0])  # the path: the place key
     width = brain.code_width
     np.testing.assert_allclose(  # the context key: the moment's key with the history
-        brain._decision[0, :width], 0.5 * before[0, :width] + 0.5 * key[0], atol=1e-12
+        brain.memories["episodic"].decision[0, :width], 0.5 * before[0, :width] + 0.5 * key[0], atol=1e-12
     )
     brain.live(tokens(44), reward=[1.0])  # the outcome wakes the brain and is recorded
     assert brain.hippocampus.writes >= 1

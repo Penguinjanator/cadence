@@ -539,16 +539,16 @@ def test_the_memories_key_on_the_code_as_it_is():
     assert brain.recall.key_width == 1024 and "inputs" not in brain.describe()["recall"]
     x = frames(2_000, 1, 4, density=0.1)
     code = brain.observation_code(x)
-    key = brain._episode_key(code)
+    key = brain.memories["episodic"].key(code)
     assert key.shape == (1, 1027)
     np.testing.assert_array_equal(key[0, :1024], 0.5 * code[0])
     brain.step(x, teacher=[1])  # shown once, under the code
-    assert brain._context.shape == (1, 1027) and brain._paths[0][-1][2].shape == (1024,)
+    assert brain.memories["episodic"].context.shape == (1, 1027) and brain.memories["episodic"].paths[0][-1][2].shape == (1024,)
     assert brain.recall.keys.shape == (1, 1, 1024)
     np.testing.assert_array_equal(brain.recall.keys[0, 0], code[0])
     alike = x.copy()
     alike[0, :100] = 0.0
-    votes = brain._vote(brain.observation_code(alike), brain._episode_key(brain.observation_code(alike)))
+    votes = brain.memories["episodic"].vote(brain.observation_code(alike), brain.memories["episodic"].key(brain.observation_code(alike)))
     assert votes[0, 1] > 0 and votes[0, 1] > votes[0, 0]  # found again under an observation alike
     brain.step(x, reward=[1.0])
     assert brain.hippocampus.writes >= 1

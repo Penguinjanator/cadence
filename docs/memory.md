@@ -41,8 +41,10 @@ learned weights, and `fit` starts with a `reset()`. Test a memory through `act`,
 included, and `Brain.load` continues the stream where it stopped.
 
 `brain.memories` holds the present memories by name, in the order the brain reads them before
-a settle and writes them after it: `working_memory`, `efference`, `history`, `recall` and
-`hippocampus`; `brain.memories["recall"]` is `brain.recall`. Every member keeps one contract
+a settle and writes them after it: `working_memory`, `efference`, `history`, `recall`,
+`hippocampus` and, with `memory_choice=True`, `episodic` (the episodic records: their vote,
+the temporal context and the paths a reward is replayed along); `brain.memories["recall"]` is
+`brain.recall`. Every member keeps one contract
 (`cadence.memories`): `stimulus(drive, moment)` adds what it holds to the drive of a moment,
 `branch()` gives an imagined branch a private copy, `begin(keep=False)` starts its streams
 afresh as `reset` does, `reset(batch, rows=None)` and `keep(rows)` act on streams, and
@@ -326,7 +328,7 @@ assert forgetting.act(place, greedy=True)[0] == 0   # without them the newborn a
 
 | Memory | Erase it on a copy |
 | --- | --- |
-| Any member of `brain.memories` | `brain.memories[name].reset(1)` empties its stream: the trace, the history, the recall memory's slots, the associative store's `F` |
+| Any member of `brain.memories` | `brain.memories[name].reset(1)` empties its stream: the trace, the history, the recall memory's slots, the associative store's `F`, the episodic context and path |
 | Associative store | `brain.hippocampus.clear()` erases `C` too |
 | Episodic memory | `brain.hippocampus.clear()` and `brain.context_memory.clear()` ([episodic](episodic.md#check-that-the-memory-does-the-work)) |
 | Any memory read | `brain.retune(<memory>_amplitude=0.0)` silences it and keeps what it holds |

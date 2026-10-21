@@ -30,8 +30,8 @@ def place(brain: cd.Brain, x: np.ndarray, action: int) -> float:
 def vote(brain: cd.Brain, x: np.ndarray, key: np.ndarray | None = None) -> np.ndarray:
     """The records' vote on the observations, for the stream's present context."""
     if key is None and brain.context_memory is not None:
-        key = brain._episode_key(x)
-    return brain._vote(x, key)
+        key = brain.memories["episodic"].key(x)
+    return brain.memories["episodic"].vote(x, key)
 
 
 def consolidated(brain: cd.Brain, x: np.ndarray, action: int) -> float:
@@ -115,9 +115,9 @@ def test_the_vote_is_the_mean_of_the_place_and_the_context_records():
     brain = episodic(3, 2, seed=3)
     x = one_hot(0, 3)
     brain.step(x, teacher=[1])
-    key = brain._episode_key(x)
+    key = brain.memories["episodic"].key(x)
     expected = 0.5 * (brain.hippocampus.recall(x) + brain.context_memory.recall(key))
-    np.testing.assert_allclose(brain._vote(x, key), expected)
+    np.testing.assert_allclose(brain.memories["episodic"].vote(x, key), expected)
 
 
 def test_a_demonstration_outlives_a_zero_outcome_in_the_middle_of_an_attempt():
@@ -157,7 +157,7 @@ def test_only_known_outcomes_write_and_a_calm_moment_writes_nothing():
 
 def context(brain: cd.Brain, key: np.ndarray, action: int) -> float:
     """The context record of an action under a decision key, in reward units."""
-    return float(brain._held(None, key[None, :], np.array([action]), brain.context_memory)[0])
+    return float(brain.memories["episodic"].held(None, key[None, :], np.array([action]), brain.context_memory)[0])
 
 
 def test_an_attempt_that_ends_in_reward_is_replayed_whole_into_both_records():
@@ -166,11 +166,11 @@ def test_an_attempt_that_ends_in_reward_is_replayed_whole_into_both_records():
     for situation, action in plan:
         x = one_hot(situation, 4)
         brain.act(x)
-        entry = brain._paths[0][-1]
-        brain._paths[0][-1] = (entry[0], np.array(action), x[0], 0.0, True, 0.5)  # came to nothing
+        entry = brain.memories["episodic"].paths[0][-1]
+        brain.memories["episodic"].paths[0][-1] = (entry[0], np.array(action), x[0], 0.0, True, 0.5)  # came to nothing
         brain._moment = (x, np.array([action]))
-    assert [int(np.argmax(entry[2])) for entry in brain._paths[0]] == [0, 1, 2]
-    assert [int(entry[1]) for entry in brain._paths[0]] == [0, 2, 2]
+    assert [int(np.argmax(entry[2])) for entry in brain.memories["episodic"].paths[0]] == [0, 1, 2]
+    assert [int(entry[1]) for entry in brain.memories["episodic"].paths[0]] == [0, 2, 2]
     stalled = place(brain, one_hot(0, 4), 1)
     writes = brain.hippocampus.writes, brain.context_memory.writes
     brain.learn(np.ones(1), np.ones(1, bool), one_hot(3, 4))  # paid, and the attempt ended
@@ -182,7 +182,7 @@ def test_an_attempt_that_ends_in_reward_is_replayed_whole_into_both_records():
     assert place(brain, one_hot(0, 4), 1) == pytest.approx(stalled)  # nothing wrote action 1
     # discounted per step of the path: one step back holds more than two
     assert consolidated(brain, one_hot(1, 4), 2) > consolidated(brain, one_hot(0, 4), 0) > 0
-    assert brain._paths[0] == []
+    assert brain.memories["episodic"].paths[0] == []
 
 
 def test_a_supplied_salience_marks_an_outcome_known_and_consolidates_it_faster():
@@ -212,9 +212,9 @@ def continuing(seed: int, expected: dict[tuple[int, int], float]):
     def decide(situation: int, action: int, reward: float, following: int) -> None:
         x = one_hot(situation, 4)
         brain.act(x)
-        entry = brain._paths[0][-1]
+        entry = brain.memories["episodic"].paths[0][-1]
         guess = expected.get((situation, action), 1.0)
-        brain._paths[0][-1] = (entry[0], np.array(action), entry[2], 0.0, False, guess)
+        brain.memories["episodic"].paths[0][-1] = (entry[0], np.array(action), entry[2], 0.0, False, guess)
         keys[situation, action] = entry[0]
         brain._moment = (x, np.array([action]))
         brain.learn(np.array([reward]), np.zeros(1, bool), one_hot(following, 4))
@@ -227,8 +227,8 @@ def test_a_reward_in_a_continuing_life_credits_the_context_back_to_the_last_know
     plan = [(0, 1), (0, 0), (1, 2), (2, 2)]  # a stall at situation 0, then onwards
     for index, (situation, action) in enumerate(plan[:-1]):
         decide(situation, action, 0.0, plan[index + 1][0])
-    assert [int(np.argmax(entry[2])) for entry in brain._paths[0]] == [0, 1]
-    assert [int(entry[1]) for entry in brain._paths[0]] == [0, 2]
+    assert [int(np.argmax(entry[2])) for entry in brain.memories["episodic"].paths[0]] == [0, 1]
+    assert [int(entry[1]) for entry in brain.memories["episodic"].paths[0]] == [0, 2]
     stalled = context(brain, keys[0, 1], 1)
     writes = brain.hippocampus.writes, brain.context_memory.writes
     decide(2, 2, 1.0, 3)  # paid; nothing ended
@@ -246,7 +246,7 @@ def test_a_reward_in_a_continuing_life_credits_the_context_back_to_the_last_know
     decide(3, 1, 0.0, 1)
     decide(1, 0, 1.0, 0)  # paid again: the replay stops at the earlier reward
     assert brain.context_memory.writes == writes + 2
-    assert len(brain._paths[0]) == 5  # nothing ended: the path goes on
+    assert len(brain.memories["episodic"].paths[0]) == 5  # nothing ended: the path goes on
 
 
 def test_an_exploration_that_led_to_a_surprising_reward_also_gains_its_place_record():
@@ -264,10 +264,10 @@ def test_replay_credits_the_surprise_of_a_reward_and_an_expected_one_replays_not
     def replayed(surprise: float) -> float:
         brain = episodic(3, 2, seed=7, actor_gamma=0.9)
         brain.act(one_hot(0, 3))
-        entry = brain._paths[0][-1]
-        brain._paths[0][-1] = (entry[0], np.array(0), entry[2], 0.0, True, 1.0)  # came to nothing
+        entry = brain.memories["episodic"].paths[0][-1]
+        brain.memories["episodic"].paths[0][-1] = (entry[0], np.array(0), entry[2], 0.0, True, 1.0)  # came to nothing
         brain.act(one_hot(1, 3))  # the paid decision, in a continuing life
-        brain._replay(np.ones(1), np.array([surprise]), np.zeros(1, bool), np.ones(1, bool))
+        brain.memories["episodic"].replay(np.ones(1), np.array([surprise]), np.zeros(1, bool), np.ones(1, bool), gamma=brain.basal_ganglia.config.gamma)
         assert place(brain, one_hot(0, 3), 0) == 0.0  # a best guess: context only
         return context(brain, entry[0], 0)
 
@@ -293,18 +293,18 @@ def test_the_temporal_context_recalls_a_cue_that_is_gone():
         assert int(brain.act(go, greedy=True)[0]) == cue
     # the place records alone cannot tell the two moments at go apart
     places = episodic(3, 2, seed=8, memory_context=0.0)
-    assert places.context_memory is None and places._context is None
+    assert places.context_memory is None and places.memories["episodic"].context is None
 
 
 def test_what_the_stream_did_enters_its_context():
     brain = episodic(2, 3, seed=9)
     x = one_hot(0, 2)
     action = int(brain.act(x)[0])
-    context = brain._context[0]
+    context = brain.memories["episodic"].context[0]
     assert context[2 + action] == pytest.approx(0.5)
     assert context[0] == pytest.approx(0.5)
     brain.learn(np.zeros(1), np.ones(1, bool), x)
-    assert not brain._context.any() and brain._paths == [[]]
+    assert not brain.memories["episodic"].context.any() and brain.memories["episodic"].paths == [[]]
 
 
 def test_a_saved_episodic_brain_continues_exactly(tmp_path):
@@ -314,9 +314,9 @@ def test_a_saved_episodic_brain_continues_exactly(tmp_path):
     path = brain.save(tmp_path / "brain.npz")
     copy = cd.Brain.load(path)
     assert copy.describe()["episodic"] == brain.describe()["episodic"]
-    np.testing.assert_array_equal(copy._context, brain._context)
-    np.testing.assert_array_equal(copy._decision, brain._decision)
-    assert len(copy._paths[0]) == len(brain._paths[0])
+    np.testing.assert_array_equal(copy.memories["episodic"].context, brain.memories["episodic"].context)
+    np.testing.assert_array_equal(copy.memories["episodic"].decision, brain.memories["episodic"].decision)
+    assert len(copy.memories["episodic"].paths[0]) == len(brain.memories["episodic"].paths[0])
     for t in range(6):
         reward, done = [float(t == 5)], [t == 5]
         np.testing.assert_array_equal(
@@ -346,7 +346,7 @@ def test_a_calm_brain_records_the_outcome_that_woke_it():
     for _ in range(5):  # outcomes as forecast: routine
         brain.live(x, reward=[0.0])
     assert brain.last_arousal["mode"] == "routine"
-    action, key = int(brain._lived[1][0]), brain._decision.copy()
+    action, key = int(brain._lived[1][0]), brain.memories["episodic"].decision.copy()
     before = vote(brain, x, key)[0, action]
     brain.live(x, reward=[5.0])  # far beyond the forecast: it wakes the calm brain
     assert brain.last_arousal["recorded"]
@@ -356,9 +356,9 @@ def test_a_calm_brain_records_the_outcome_that_woke_it():
 def test_waiting_drifts_the_context():
     brain = episodic(3, 2, seed=12, arousal=True)
     brain.live(one_hot(0, 3))
-    before = brain._context.copy()
+    before = brain.memories["episodic"].context.copy()
     brain.wait(one_hot(1, 3))
-    np.testing.assert_allclose(brain._context, 0.5 * before + 0.5 * np.r_[one_hot(1, 3)[0], 0, 0])
+    np.testing.assert_allclose(brain.memories["episodic"].context, 0.5 * before + 0.5 * np.r_[one_hot(1, 3)[0], 0, 0])
 
 
 def test_slots_take_the_records_vote_per_slot():

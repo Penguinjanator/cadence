@@ -38,7 +38,7 @@ def assert_same_checkpoint(first, second):
 def path(brain: cd.Brain) -> list[tuple[int, float, bool]]:
     """The stream's replay path: each decision's observation, its outcome and whether the
     outcome was received."""
-    return [(int(np.argmax(entry[2])), entry[3], entry[4]) for entry in brain._paths[0]]
+    return [(int(np.argmax(entry[2])), entry[3], entry[4]) for entry in brain.memories["episodic"].paths[0]]
 
 
 def cued(seed: int, **options) -> tuple[cd.Brain, dict[int, np.ndarray], np.ndarray]:
@@ -199,7 +199,7 @@ def test_an_aroused_brain_owns_the_samples_of_its_complete_greedy_choice():
         assert brain.last_arousal["mode"] == "aroused"
         state = brain.basal_ganglia.state
         # the most probable action of the readout with the place records' vote
-        greedy = int(np.argmax(brain.basal_ganglia.probabilities(state, bias=brain._vote(x, None))))
+        greedy = int(np.argmax(brain.basal_ganglia.probabilities(state, bias=brain.memories["episodic"].vote(x, None))))
         overruled += greedy != int(brain._choices(state)[0])
         assert brain._lived[5] == (action == greedy)
         assert int(brain._greedy(state, x, None)[0]) == greedy
@@ -255,7 +255,7 @@ def test_an_outcome_at_an_unchanged_observation_bounds_the_next_replay(outcome, 
     brain.step(x[[1]], reward=[outcome])  # the outcome at 1, and the next decision at 1 again
     assert path(brain) == [(0, 0.0, True), (1, outcome, True), (1, 0.0, False)]
     brain.step(x[[2]], reward=[0.0])
-    keys = [entry[0].copy() for entry in brain._paths[0]]
+    keys = [entry[0].copy() for entry in brain.memories["episodic"].paths[0]]
     written = []
     observe = brain.context_memory.observe
 
