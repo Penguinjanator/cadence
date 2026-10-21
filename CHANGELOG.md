@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
+  its settlement and repair-network version in Cadence (the embedding as a learned code of
+  meaning, the residual stream as the settling cortex, attention as a recall memory over the
+  brain's own moments, the logits as the motor population inside the settle), that what was
+  tested and did not work is removed or folded into what did, and that the documentation is
+  organized by situation with the interface kept as simple as possible for users.
 - The episodic memory guide states a limit of `memory_choice=True` in a continuing life: a
   record that paid is not extinguished by failures that pay nothing, since a zero outcome in
   the middle of an attempt writes nothing and replay only adds credit, so after a reversal
