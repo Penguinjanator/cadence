@@ -60,8 +60,7 @@ Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None,
 Brain.genome(inputs, actions, *, hidden=64, density=1.0, lateral=None,
              working_memory=False, memory_scale=12.0, features=8, field=3,
              seed=0, slots=1) -> Genome
-Brain.observation_width(inputs, code=None, learned_code=None,
-                        learned_code_identity=None) -> int
+Brain.observation_width(inputs, code=None, learned_code=None) -> int
 ```
 
 `genome` returns the single-region layout (`sensory` or `visual`, `association`, `motor`, and
@@ -90,7 +89,7 @@ history, with `recall=True` the `recall` and `next` regions, and with `learned_c
 `code` population of that many neurons with its complete dictionary, lateral and predictor
 synapses ([the learned code](code.md)).
 `inputs` names the observation width when the sensory region is a `code` of that width.
-`genes` carries the `recall_*` and `learned_code_*` settings. `learning` and `reward` default to the composed
+`genes` carries the `recall_*` settings and `learned_code_fields`. `learning` and `reward` default to the composed
 `LearnerConfig` and `ActorCriticConfig`; `arousal` is `True`, a field mapping or an
 `ArousalConfig`. With `memory_choice=True`, `compose` fills in `memory_context=0.5`,
 `memory_rate=0.5`, `memory_replay=8`, `memory_demonstrations=1.0`, `memory_expansion=1024`

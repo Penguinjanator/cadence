@@ -1,12 +1,11 @@
 # The learned code
 
 `Brain.compose(..., learned_code=units)` adds a `code` region of that many neurons between the
-sensory region and the first module. The region settles with the rest of the brain to a sparse
-code of the observation, the cortex reads the code in place of the observation, the memories
-key on it, and the region learns at every accepted moment by local rules. The founder
-`learned_code=None` builds the brain without it and keys the memories on
-[the observation code](memory.md#the-observation-code) as before; `code=units`, the fixed
-random code, is the control at matched width.
+sensory region and the first module. The region learns a compressed code of the observation
+by local rules at every accepted moment; the cortex computes on that code and every memory
+keys on it, joined to the observation's own identity. The founder `learned_code=None` builds
+the brain without it and keys the memories on [the observation code](memory.md#the-observation-code)
+as before; `code=units`, the fixed random code, is the control at matched width.
 
 ```python
 import numpy as np
@@ -24,18 +23,36 @@ code = brain.learned_code                            # the tables the region lea
 assert code.dictionary.shape == (53, 64) and code.work["updates"] == 1
 ```
 
+## What the code is for
+
+A code learned from the contexts an observation occurs in places observations that occur in
+the same contexts near each other, and what is taught about some of them reaches the rest.
+In the embedding chamber (`benchmarks/learned_code/embedding.py`) members of a group are
+heard in the same sentence contexts, lessons come only for some members, and the held-out
+members are asked: a brain with the region answers them at 1.000 on 6 of 6 development
+founders and 12 of 12 fresh ones, where the raw observation and the fixed random code give
+an untaught member nothing in common with its group and answer at chance. The memories keep
+their bindings: the key joins the code to the observation's own identity, so a binding stays
+readable while the code moves, and the binding family (`benchmarks/binding/`) reads within
+.05 of a brain without the region on every task.
+
+The region has costs. A life computes the code's own phase at every moment (about 33 sweeps
+of the region's units), and the code is dense, about 28 of 64 units active per observation
+in context. A cue held across a delay through the episodic memory takes about twice the
+experience to master. At camera width the code alone does not yet bind what a camera
+observes: there the key's identity part, the frame itself, carries the binding.
+
 ## What the region is
 
-The region's tables are the brain's own synapses and biases, read in every sweep as every
-other synapse is:
+The region's tables are the code units' synapses and biases:
 
 | Table | Synapses | Role |
 | --- | --- | --- |
-| dictionary `Phi`, `inputs` by `units`, unit-length columns | one way from the sensory neurons to the code units, at the read gain `1 / f(A)` (`f` the neuron's activation, `A` the model's stimulus amplitude): the region reads the sensory activation in units of one full input, `x' = s_sensory / f(A)` | the bottom-up boundary: code unit `j` is driven by `Phi_j . x'`; one input at amplitude 1 drives the unit whose column matches it by one |
+| dictionary `Phi`, `inputs` by `units`, unit-length columns | from the sensory neurons to the code units, at the read gain `1 / f(A)` (`f` the neuron's activation, `A` the model's stimulus amplitude): the region reads the sensory activation in units of one full input, `x' = s_sensory / f(A)` | the bottom-up boundary: code unit `j` is driven by `Phi_j . x'`; one input at amplitude 1 drives the unit whose column matches it by one |
 | the Gram matrix of the dictionary | every ordered pair of code units, `-(Phi_j . Phi_k)` | lateral competition: units whose columns overlap inhibit each other |
-| predictor `W`, `units` by the association width | one way from the prefrontal region, scaled by `learned_code_top_down` | the top-down boundary: the working trace's prediction of the code, `p = W s_prefrontal` |
+| predictor `W`, `units` by the association width | from the prefrontal region, scaled by the top-down weight | the top-down boundary: the working trace's prediction of the code, `p = W s_prefrontal` |
 | thresholds `t`, one per unit | the units' biases, `-t_j` | how much drive a unit needs before it publishes |
-| the standing boundary | the region's quadratic anchor toward zero at gain `learned_code_top_down` on its units, carried by its own phase (`LearnedCode.standing`) | the restoring term `-top_down * s_j`; with the predictor's drive it is the pull `top_down * (p_j - s_j)` toward the prediction, the gradient of `top_down / 2 * |s - p|^2` |
+| the standing boundary | the region's quadratic anchor toward zero at the top-down weight on its units, in its own phase (`LearnedCode.standing`) | the restoring term `-top_down * s_j`; with the predictor's drive it is the pull `top_down * (p_j - s_j)` toward the prediction |
 
 A code unit settles under the brain's neuron model to
 
@@ -44,79 +61,58 @@ v_j = Phi_j . (x' - Phi s) + s_j + top_down * (p_j - s_j) - t_j,    s_j = f(v_j)
 ```
 
 the sparse state that reconstructs the sensory activation, as read, through the dictionary
-as far as the thresholds allow, drawn toward what the context predicts. The sensory neurons project to
-the code region alone, and nothing leads back into it, so its fixed point depends on the
-observation and the working trace alone. The boundary is held fixed through every solve and
-is part of the residual that qualifies a state, as the temporal boundary of `PatchNet` is;
-at `learned_code_top_down=0` there is none.
+as far as the thresholds allow, drawn toward what the context predicts. The sensory neurons
+project to the code region alone, and nothing leads back into it.
 
 ## How a moment settles
 
 A moment's settle has a code phase first: the region's sub-network (its units, its lateral
-synapses, its biases, the same neuron model) settles under the dictionary's read of the
-sensory activation and the predictor's read of the prefrontal activation, by the brain's
-solver policy (the fast repair at the model's step, then halved steps within the same budget)
-to the learner's tolerance within its free budget, warm from the stream's code. The memories
-then address the moment on the rectified settled code at unit length, and the whole graph
-settles warm from the stream's state with the sensory, prefrontal and code potentials at their
-fixed points, qualified by the one residual over every neuron. The code units receive in the
-whole settle the input they settled under in the phase, so they stay where the phase left
-them. `last_settlement` reports the phase as `code_steps`, `code_residual` and
-`code_halvings` beside the whole graph's `steps`. The code is held: its units are a source
-in the whole settle, their synapses in the whole graph carry nothing, the moment's drive is the phase's potential less their bias, and they
-publish the phase's code exactly through the free settle and every lesson's phase, so the
-rest of the brain integrates at the model's step with its budgets, its adaptation and its
-finite learning phases as a brain without the region has them; the step halvings below
-apply to the region's own phase alone. A code phase that does not qualify at the
-brain's step is settled once more at the step the dictionary's coupling allows over every
-state the region can reach (`LearnedCode.rest_stability`: every unit active, every slope at
-its largest), and refuses the moment with `RuntimeError` before anything changes when it
-does not qualify there either, as a refused free solve does. A world of one input needs
-this from its first moment: every column of the dictionary is then plus or minus the same
-vector, every pair of units competes at full strength, and the code settles at a sixteenth
-of the model's step.
+synapses, its biases, the same neuron model) settles by the brain's solver policy to the
+learner's tolerance, warm from the stream's code. At a moment the region learns from it
+settles twice: in the stream's context (the predictor's read of the working trace), the code
+the region learns from, and on the observation alone, the context-free code the cortex reads
+and every memory keys on (reported as `context_free_steps`). The code is held: in the whole
+settle its units are a source, their synapses in the whole graph carry nothing, and the
+moment's drive holds them at the phase's fixed point, so the rest of the brain integrates at
+the model's step with its budgets, its adaptation and its learning phases as a brain without
+the region has them. `last_settlement` reports the phase as `code_steps`, `code_residual` and
+`code_halvings` beside the whole graph's `steps`.
 
-The code's fixed points are stable equilibria of the neuron equations, but the brain's
-synchronous sweep at the model's step can oscillate around one when several units with
-overlapping columns are active together (the sweep contracts only while `dt * (1 - mu_min)`
-stays below 2, `mu_min` the smallest eigenvalue of the slope-weighted lateral coupling).
-After each phase the region reports the halvings of the step its settled code needs
-(`LearnedCode.stability`, keeping `dt * (1 - mu_min)` at or below 1.5, the restoring term
-on the coupling's diagonal), and the region's next phase runs at that step with its budget
-scaled by the same power of two; `learned_code["stepping"]` reports the level in effect.
-The rest of the brain keeps the model's step.
+The code's fixed points are stable equilibria of the neuron equations, but a synchronous sweep
+at the model's step can oscillate around one when units with overlapping columns are active
+together. After each phase the region reports the halvings of the step its settled code needs
+(`LearnedCode.stability`), and its next phase runs at that step with its budget scaled by the
+same power of two. A phase that does not qualify is settled once more at the step the
+dictionary's coupling allows over every state (`LearnedCode.rest_stability`), and refuses the
+moment with `RuntimeError` before anything changes when it does not qualify there either, as a
+refused free solve does. A world of one input needs this from its first moment.
 
 The top-down boundary reads the working trace, the settled association activity of the moment
-before, and never the association region of the moment: the recall memory addresses the moment
-before its settle on the code, and a code that read the association region would depend on
-what the moment recalls; a prediction read from the moment's own association activity would
-copy the code it reads.
+before, and never the association region of the moment: a prediction read from the moment's
+own association activity would copy the code it reads.
 
 ## How it learns
 
 At every accepted moment (each `act`, `step` and `live` answer, and each moment `wait` senses)
-the region takes one step from the moment's free settle, each row of the batch one event;
-the lesson's nudged phases, the outcome's eligibility phases, the imagined branches and
-the readings taken on copies enter no table, as the contrast and the dopamine enter no
-synapse of the region. With `a` the rectified code, `a_free` the moment's context-free code
-(the region settled on the observation alone, a second code phase, `context_free_steps`), `x'` the sensory activation as read (at the gain above), `z` the
-prefrontal activation and `p = W z`:
+the region takes one step from the moment's settle, each row of the batch one event; the
+lesson's nudged phases, the outcome's eligibility phases, the imagined branches and the
+readings taken on copies enter no table, as the contrast and the dopamine enter no synapse of
+the region. With `a` the rectified code in context, `a_free` the context-free code, `x'` the
+sensory activation as read, `z` the prefrontal activation and `p = W z`:
 
 | Table | Rule | Constant |
 | --- | --- | --- |
 | dictionary | `Phi += rate * sum_rows (x' - Phi a) a^T`, each column scaled back to unit length | `RATE` 0.125 |
 | lateral weights | recomputed from the dictionary | with the dictionary |
-| predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = predictor / max(\|z\|^2, predictor^2)`: a row closes the share `predictor` of its own gap whatever its context's energy (the prefrontal activation is small in the brain's units); a context fainter than `\|z\| = predictor` is counted at that energy, so no row commands a synaptic step above its gap | `PREDICTOR` 0.0625 |
-| thresholds | `t += threshold_rate * sum_rows ((a_free > 0) - target)`: a unit's share is the share of the observations that drive it on their own, so what the context predicts may recruit a unit without raising its threshold and the context-free code keeps the target share by construction; floored at 0; the repair: a row whose code leaves at least the share `repair` of its input's energy unexplained (`\|x' - Phi a\|^2 >= repair * \|x'\|^2`; at the founder level 1 a row whose code is silent or worse than nothing), in context or context-free where the place key is settled, lowers the threshold of every unit silent in it by `threshold_rate * silence`; a unit that fires, and a row the code reconstructs, are left to the share rule; there is no ceiling | `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `REPAIR` 1.0, `SILENCE` 10, `ACTIVE` 0.05 |
+| predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = predictor / max(\|z\|^2, predictor^2)`: a row closes the share `predictor` of its own gap whatever its context's energy | `PREDICTOR` 0.0625 |
+| thresholds | `t += threshold_rate * sum_rows (counted(a_free) - target)`: a unit's share is the share of the observations that drive it on their own; the strongest unit of each field in a row counts only above the active floor, so a frequent observation keeps its best unit; floored at 0, no ceiling; the repair: a row whose code leaves at least the share `repair` of its input's energy unexplained lowers the threshold of every unit silent in it by `threshold_rate * silence` | `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `ACTIVE` 0.05, `REPAIR` 1.0, `SILENCE` 10 |
 
-The brain's graph takes the new tables at once. While the code fits, the residuals are small
-and nothing moves. The lesson's contrast and the dopamine leave the region's synapses and
-biases alone (the learner's plastic masks exclude them), and lessons, `fit`, `predict` and
-`imagine` take no step. Under `live` a calm brain learns nothing from its outcome and writes
-no record; the region still takes its step, as the traces advance at every moment.
-`brain.learned_code.learning = False` holds every table still (a reading on a copy), and
-`brain.learned_code.top_down = 0` takes the prediction off the region (the control without
-the top-down boundary); a deep copy and a checkpoint keep both.
+While the code fits, the residuals are small and nothing moves. The lesson's contrast and the
+dopamine leave the region's synapses and biases alone (the learner's plastic masks exclude
+them), and lessons, `fit`, `predict` and `imagine` take no step. Two attributes of the region
+are for readings and controls: `brain.learned_code.learning = False` holds every table still
+(a reading on a copy), and `brain.learned_code.top_down = 0` takes the prediction off the
+region (the control without the top-down boundary); a deep copy and a checkpoint keep both.
 
 ```python
 teacher = Brain.compose(inputs=53, actions=4, seed=1, learned_code=64, recall=True)
@@ -135,39 +131,20 @@ teacher.learned_code.learning = False               # the tables stay from here 
 | Setting | Founder | When | What it sets |
 | --- | --- | --- | --- |
 | `learned_code` | `None` | construction | the region, of that many units (at least 2); `None` builds nothing |
-| `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit's dictionary column reads its field alone through every learning step, and the competition among the units (the Gram) is block-diagonal, so a recombination of fields is a recombination of their codes and a second input in another field keeps its own code |
+| `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit reads its field alone, and the competition among the units is block-diagonal |
 
 Every other part of the region is a constant of it, the value the readings selected:
-`LearnedCode.TOP_DOWN` 2.0 (the prediction's weight on the code units and the gain of the
-pull toward it), `RATE` 0.125, `PREDICTOR` 0.0625, `THRESHOLD` 0.1 (every unit's initial
-threshold), `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `REPAIR` 1.0, `SILENCE` 10, `ACTIVE`
-0.05 (the activation the strongest unit of each field in a row must reach to count as
-active in the thresholds' share) and `IDENTITY` 0.9 (the weight of the observation's own
-identity in the memories' key).
+`LearnedCode.TOP_DOWN` 2.0 (the prediction's weight on the code units and the gain of the pull
+toward it), `RATE` 0.125, `PREDICTOR` 0.0625, `THRESHOLD` 0.1 (every unit's initial
+threshold), `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `ACTIVE` 0.05, `REPAIR` 1.0, `SILENCE` 10
+and `IDENTITY` 0.9 (the weight of the observation's own identity in the memories' key).
 
 Refused with `ValueError`: `learned_code` below 2, `learned_code_fields` without the region,
-`code` beside `learned_code` (a key that joins the observation's own identity to its meaning
-is not built in this version), an image brain, a backend other than `cpu`, and a custom
-connectome
-without a `code` population and the complete dictionary, lateral and predictor synapses,
-or whose sensory neurons project anywhere but to the code region. A setting the readings
-retired is refused by name with what the region does instead: `learned_code_cortex` (the
-first module reads the code alone; the observation read beside the code lost the
-embedding chamber's held-out members) and `learned_code_output` (the first module reads
-the rectified code at unit length; the activations as they are lost the embedding
-chamber, and a read at the observation's own loudness lost delayed cues) and
-`learned_code_floor` (every code that is not silent is read at unit length; a floor of
-one full input's activation lost the embedding chamber's held-out members) and
-`learned_code_scale` (the memories' key takes the norm the observation itself has as a
-key; a key at unit length lost the binding family's continuing task) and
-`learned_code_place` (the associative store and the episodic place records key on the
-context-free code) and `learned_code_reads` (the cortex and the memories read the
-context-free code; the code in context lost the embedding chamber's fresh founders, 7 of 12
-at .90 against 11 of 12) and `learned_code_held` (the code is held as a source; settling it
-with the whole graph at the code's step lost the binding family and delayed cues). The
-constants are refused by name as settings: `learned_code_top_down`, `_rate`, `_predictor`,
-`_threshold`, `_threshold_rate`, `_target`, `_repair`, `_silence`, `_active` and
-`_identity`.
+fields that do not sum to the inputs or leave a field fewer than two units, `code` beside
+`learned_code`, an image brain, a backend other than `cpu`, and a custom connectome without a
+`code` population and the complete dictionary, lateral and predictor synapses, or whose
+sensory neurons project anywhere but to the code region. The settings the readings retired
+are refused by name ([retired settings](#retired-settings)).
 
 ## When to declare fields
 
@@ -179,14 +156,13 @@ whole scenes wants.
 
 When the observation is a combination of independent channels, declare one field per
 channel: the coordinates of a sentence's word slots, of who acts, what is held and where,
-of a pouch beside the cell a creature stands in, of the patches of an image. Give
-`learned_code_fields` the channels' widths in the order of the observation's coordinates
-(they sum to `inputs`). Each unit then reads one channel, the units of a channel compete
-among themselves alone, and a moment's code is the union of its channels' codes. A
-combination never seen before is then read as channels already known, and a second input
-in another channel keeps its own code. With one field the same combination arrives as an
-unfamiliar whole, and a second input is merged into the code of the first, distinguished
-only by the code's strength.
+of a pouch beside the cell a creature stands in. Give `learned_code_fields` the channels'
+widths in the order of the observation's coordinates (they sum to `inputs`). Each unit then
+reads one channel, the units of a channel compete among themselves alone, and a moment's
+code is the union of its channels' codes. A combination never seen before is then read as
+channels already known, and a second input in another channel keeps its own code. With one
+field the same combination arrives as an unfamiliar whole, and a second input is merged into
+the code of the first, distinguished only by the code's strength.
 
 ```python
 from cadence import Brain
@@ -207,32 +183,46 @@ world never fires belong in the field of a channel it fires.
 With the region, every memory keys on the context-free code: the observation settled alone
 with a zero prediction, the rectified code at unit length that `brain.observation_code(x)`
 returns, joined to the observation's own identity, `unit([sqrt(1 - w) code, sqrt(w)
-unit(x)])` with `w` the gene `learned_code_identity` (0.9; at 0 the code alone), and taken
-at the norm the observation itself would have as a key. `brain.code_width` is `units +
-inputs` (`units` at 0). The identity part keeps a binding readable while the code part moves
-as the region learns, and a known situation is found again along a new path. The cortex
-reads the same context-free code. A moment the region learns from settles twice: in the
-stream's context, the code the dictionary and the predictor learn from, and on the
-observation alone, reported as `context_free_steps`. A decision keeps the key it was taken
-under until its outcome is recorded. `stimulus(..., memory=False)`, `fit`, `predict` and
-`accuracy` settle the context-free code alone. The heard history holds the code, in blocks
-of `units` per decay.
+unit(x)])` with `w` the constant `IDENTITY` (0.9), and taken at the norm the observation
+itself would have as a key. `brain.code_width` is `units + inputs`. The identity part keeps a
+binding readable while the code part moves as the region learns, and a known situation is
+found again along a new path. With `memory_choice=True` the episodic stores separate these
+keys as an observation's (`memory_expansion` 1,024 cells, `memory_winners` 24). A decision
+keeps the key it was taken under until its outcome is recorded. `stimulus(..., memory=False)`,
+`fit`, `predict` and `accuracy` settle the context-free code alone. The heard history holds
+the code, in blocks of `units` per decay.
 
 ## Save, load, describe, cost
 
 A brain with the region saves checkpoint format `cadence-generic/10`: the `learned_code`
-metadata (units, widths, seed, genes, work counts) and the tables `learned_code/dictionary`,
-`learned_code/weights` and `learned_code/thresholds`, with `moment/code` and `lived/code` for
-a decision awaiting its outcome. `Brain.load` installs the saved tables and refuses a
-checkpoint whose saved synapses disagree with them. `describe()` reports `observation_code`
-with kind `"learned"`, the genes as `learned_code_*` and a `learned_code` section; `parameters()`
-counts the three tables; `reset()` leaves them as it leaves the weights.
+metadata (units, widths, seed, fields, the step level, the two switches, work counts) and the
+tables `learned_code/dictionary`, `learned_code/weights` and `learned_code/thresholds`, with
+`moment/code` and `lived/code` for a decision awaiting its outcome. `Brain.load` installs the
+saved tables and refuses a checkpoint whose saved synapses disagree with them. `describe()`
+reports `observation_code` with kind `"learned"`, `learned_code_fields` among the genes and a
+`learned_code` section; `parameters()` counts the three tables; `reset()` leaves them as it
+leaves the weights.
 
 The region adds `units` neurons, `inputs * units` dictionary synapses, `units * (units - 1)`
 lateral synapses and `width * units` predictor synapses, and replaces the `inputs * width`
-sensory synapses of the first module by `units * width`: `compose(53, 4, learned_code=64)`
-has 20,236 synapses against 8,716 without the region. Each moment costs the code phase's
-sweeps (about 32 at rest; more under a strong prediction, where the halved step settles it)
-and one learning step of `2 * inputs * units + units * width` multiply-adds. The dictionary
-is dense, so at camera width it costs `inputs * units` values; a bounded fan-in per unit is
-not built.
+sensory synapses of the first module by `units * width`: `compose(53, 4, learned_code=64)` has
+20,236 synapses against 8,716 without the region. Each moment costs the code phase's sweeps
+(about 33, twice at a moment the region learns from) and one learning step of
+`2 * inputs * units + units * width` multiply-adds; in the embedding chamber a life costs
+about three times the processor time of the brain without the region. The dictionary is
+stored dense, `inputs * units` values, with fields as well.
+
+## Retired settings
+
+Settings the readings retired are refused by name with what the region does instead:
+
+| Name | What the region does | The reading that retired it |
+| --- | --- | --- |
+| `learned_code_cortex` | the first module reads the code alone | with the observation read beside the code the embedding chamber read held-out members at .24 on 0 of 6 founders |
+| `learned_code_output` | the first module reads the rectified code at unit length | the activations as they are read .48 on 0 of 6; a read at the observation's own loudness lost delayed cues |
+| `learned_code_floor` | every code that is not silent is read at unit length | a floor of one full input's activation read .61 on 0 of 6 |
+| `learned_code_scale` | the key takes the norm the observation itself has as a key | a key at unit length read the binding family's continuing task at .770 against .935 |
+| `learned_code_place` | every memory keys on the context-free code | no reading ran the code in context as the place key |
+| `learned_code_reads` | the cortex and the memories read the context-free code | the code in context read the chamber's fresh founders at .90 on 7 of 12, against 11 of 12 |
+| `learned_code_held` | the code is held as a source; the brain keeps the model's step | settling the code with the whole graph lost the binding family (continuing .185) |
+| `learned_code_top_down`, `_rate`, `_predictor`, `_threshold`, `_threshold_rate`, `_target`, `_repair`, `_silence`, `_active`, `_identity` | constants of the region (above) | the values the readings selected; a control sets `brain.learned_code.top_down`, a reading on a copy `brain.learned_code.learning` |
