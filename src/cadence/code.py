@@ -149,7 +149,7 @@ class LearnedCode:
     repair: float = 1.0
     silence: float = 10.0
     place: str = "free"
-    output: str = "raw"
+    output: str = "unit"
     identity: float = 0.5
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
@@ -183,7 +183,7 @@ class LearnedCode:
         return {
             "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
             "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
-            "place": "free", "output": "raw", "identity": 0.5,
+            "place": "free", "output": "unit", "identity": 0.5,
         }
 
     @staticmethod
