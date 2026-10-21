@@ -308,7 +308,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free", "output": "unit", "floor": 0.0, "identity": 0.95, "cortex": "code",
-        "scale": "observation", "held": True, "reads": "free", "fields": None, "active": 0.0,
+        "scale": "observation", "held": True, "reads": "free", "fields": None, "active": 0.05,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
         composed(learned_code_fields=(20, 30))
@@ -463,7 +463,7 @@ def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_t
     # within the solver's tolerance), and the repair what both codes leave unexplained
     free = last["free"]
     np.testing.assert_allclose(free, a, atol=1e-5)
-    share = (free > 0).sum(axis=0) - 4 * code.target
+    share = (free > code.active).sum(axis=0) - 4 * code.target
     x_read = code.read * last["sensory"]
     repair = code.unexplained(x_read, a) + code.unexplained(x_read, free)
     np.testing.assert_allclose(
@@ -982,7 +982,7 @@ def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained(
     strict.act(x, greedy=True)
     code = strict.learned_code
     free = code.last["free"]
-    share = (free > 0).sum(axis=0) - len(x) * code.target
+    share = (free > code.active).sum(axis=0) - len(x) * code.target
     np.testing.assert_allclose(
         code.thresholds, np.maximum(code.threshold + code.threshold_rate * share, 0.0)
     )
@@ -997,7 +997,7 @@ def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained(
     x_read = code.read * code.last["sensory"]
     repair = code.unexplained(x_read, a) + code.unexplained(x_read, free)
     np.testing.assert_array_equal(code.unexplained(x_read, a), (rows[:, None] & ~(a > 0)).sum(0))
-    share = (free > 0).sum(axis=0) - len(x) * code.target
+    share = (free > code.active).sum(axis=0) - len(x) * code.target
     expected = code.threshold + code.threshold_rate * (share - code.silence * repair)
     np.testing.assert_allclose(code.thresholds, np.maximum(expected, 0.0))
     fired = (a > 0).any(axis=0)
@@ -1237,7 +1237,7 @@ def test_a_unit_below_the_active_floor_counts_as_under_active():
     step = code.threshold_rate
     assert np.isclose(code.thresholds[0], before[0] - step * 2 * code.target)  # under-active
     assert np.isclose(code.thresholds[1], before[1] + step * 2 * (1 - code.target))
-    plain = composed(seed=5).learned_code
+    plain = composed(seed=5, learned_code_active=0.0).learned_code
     plain.learn(x, a, None, free=a)
     assert np.isclose(plain.thresholds[0], before[0] + step * 2 * (1 - plain.target))
 
@@ -1295,7 +1295,7 @@ def test_the_thresholds_share_reads_the_context_free_code():
     a = np.maximum(code.last["activation"], 0.0)
     free = code.last["free"]
     assert (a > 0).sum() > (free > 0).sum()  # the context recruited units
-    share = (free > 0).sum(axis=0) - 2 * code.target
+    share = (free > code.active).sum(axis=0) - 2 * code.target
     repair = code.unexplained(code.read * code.last["sensory"], a) + code.unexplained(
         code.read * code.last["sensory"], free
     )

@@ -187,7 +187,7 @@ class LearnedCode:
     held: bool = True
     reads: str = "free"
     fields: tuple[int, ...] | None = None
-    active: float = 0.0
+    active: float = 0.05
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
@@ -235,7 +235,7 @@ class LearnedCode:
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 0.0, "identity": 0.95,
             "cortex": "code", "scale": "observation", "held": True, "reads": "free",
-            "fields": None, "active": 0.0,
+            "fields": None, "active": 0.05,
         }
 
     @staticmethod
