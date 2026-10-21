@@ -13,12 +13,11 @@ neurons hear nothing (they are a source range of the block transport, so their p
 computed once per settling run) and their synapses into the hidden neurons learn under the
 same free/nudged rule as every other synapse. Credit does not flow back through time: the
 rule sees the trace as a stimulus and does not differentiate through it.
-``stateful`` builds the connectome, ``Echo`` keeps the trace for a batch of streams.
+``Trace`` keeps the trace for a batch of streams.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from copy import copy
 from dataclasses import dataclass, field, fields
 from typing import Any, NamedTuple
@@ -29,71 +28,9 @@ from ._configuration import real
 from .brain import Brain as NeuralGraph
 from .brain import BrainState
 from .connectome import Connectome
-from .learning import LearnedState, embedded
+from .learning import LearnedState
 
-__all__ = [
-    "Trace", "Afterglow", "stateful", "Echo", "FastSynapses", "History", "Recall", "columns"
-]
-
-
-def stateful(
-    vocabulary: int,
-    positions: int,
-    dim: int,
-    hidden: int,
-    outputs: int,
-    *,
-    seed: int = 0,
-    init: float = 1.0,
-    context_init: float = 1.0,
-) -> tuple[Connectome, np.ndarray]:
-    """``embedded`` plus a context range of ``hidden`` neurons connected densely to the hidden ones.
-
-    Neurons: ``positions`` blocks of ``vocabulary`` one-hot inputs, then ``hidden`` context
-    neurons, then the embedding, hidden and output neurons of ``embedded``. Sets: ``input``,
-    ``context``, ``embedding``, ``hidden``, ``output``. Returns the connectome and the tie groups
-    of the embedding (pass to ``Learner(tie_groups=...)``).
-    """
-    base, base_tie = embedded(vocabulary, positions, dim, hidden, outputs, seed=seed, init=init)
-    n_in = positions * vocabulary
-    c0 = n_in  # the context range sits right after the inputs
-    shift = hidden  # every non-input neuron of the base moves up by the context range
-
-    def moved(index: np.ndarray) -> np.ndarray:
-        return np.where(index >= n_in, index + shift, index)
-
-    rng = np.random.default_rng(seed + 1)
-    hidden_members = np.asarray(base.populations["hidden"]) + shift
-    ctx, hid = np.meshgrid(np.arange(hidden), hidden_members, indexing="ij")
-    magnitude = rng.uniform(0.0, 1.0, size=hidden * hidden) * np.sqrt(6.0 / (2 * hidden))
-    signs = rng.choice([-1.0, 1.0], size=hidden * hidden) * magnitude * context_init
-    pre = np.concatenate([moved(base.pre), c0 + ctx.ravel()])
-    post = np.concatenate([moved(base.post), hid.ravel()])
-    count = np.concatenate([base.count, np.ones(hidden * hidden)])
-    sign = np.concatenate([base.sign, signs])
-    tie = np.concatenate([base_tie, np.full(hidden * hidden, -1)])
-    populations: dict[str, Iterable[int]] = {
-        "input": range(0, n_in),
-        "context": range(c0, c0 + hidden),
-    }
-    populations.update(
-        {k: [int(i) + shift for i in v] for k, v in base.populations.items() if k != "input"}
-    )
-    connectome = Connectome.from_synapses(
-        base.n + hidden,
-        pre=pre,
-        post=post,
-        count=count,
-        sign=sign,
-        populations=populations,
-        label=f"stateful:{positions}x{vocabulary}->{dim}->{hidden}(+{hidden} context)->{outputs}",
-    )
-    key = {(int(a), int(b)): int(g) for a, b, g in zip(pre, post, tie, strict=True)}
-    groups = np.array(
-        [key[(int(a), int(b))] for a, b in zip(connectome.pre, connectome.post, strict=True)],
-        dtype=np.int64,
-    )
-    return connectome, groups
+__all__ = ["Trace", "FastSynapses", "History", "Recall", "columns"]
 
 
 def columns(index: np.ndarray) -> slice | np.ndarray:
@@ -113,7 +50,7 @@ class Trace:
     """A quantity decaying across moments, kept per stream, entering the next settling run
     as a stimulus: the memory of the moment before.
 
-    Over a range's activation it is the trace of that range (the Echo of the interpretation
+    Over a range's activation it is the trace of that range (the echo of the interpretation
     at ``focus`` 0); weighted by how much each neuron moved since the last moment (its share
     of the row's mean movement, to the power ``focus``) it is brightest where the moment
     changed, and of the input neurons it is an afterimage of the picture itself, the memory
@@ -223,31 +160,6 @@ class Trace:
             "source": self.source,
             "target": self.target,
             "neurons": int(len(self.glow)),
-        }
-
-
-@dataclass
-class Echo(Trace):
-    """The Trace of the hidden equilibria at focus 0, into the ``context`` range."""
-
-    def to_dict(self) -> dict[str, float | int | str]:
-        return {"decay": self.decay, "amplitude": self.amplitude, "context": int(len(self.glow))}
-
-
-@dataclass
-class Afterglow(Trace):
-    """The Trace with the afterglow's defaults: focused, into the ``afterglow`` range."""
-
-    focus: float = 1.0
-    target: str = "afterglow"
-
-    def to_dict(self) -> dict[str, float | int | str]:
-        return {
-            "decay": self.decay,
-            "amplitude": self.amplitude,
-            "focus": self.focus,
-            "source": self.source,
-            "afterglow": int(len(self.glow)),
         }
 
 

@@ -86,10 +86,28 @@ def hypotheses(decay: float, *arrays: np.ndarray) -> None:
 # A small real connectome and its states
 
 
+def context_graph(inputs: int, hidden: int, outputs: int, seed: int = 0) -> cd.Connectome:
+    """Inputs, a context range of one neuron per hidden neuron, hidden and output neurons: the
+    inputs and the context drive the hidden neurons, which exchange signals with the outputs."""
+    genome = cd.Genome(
+        regions=(
+            cd.Region("input", inputs),
+            cd.Region("context", hidden),
+            cd.Region("hidden", hidden),
+            cd.Region("output", outputs),
+        ),
+        projections=(
+            cd.Projection("input", "hidden", density=1.0, sign=0.0, scale=1.0, reciprocal=False),
+            cd.Projection("context", "hidden", density=1.0, sign=0.0, scale=1.0, reciprocal=False),
+            cd.Projection("hidden", "output", density=1.0, sign=0.0, scale=1.0),
+        ),
+    )
+    return cd.develop(genome, seed=seed)
+
+
 def connectome() -> cd.Connectome:
-    """Three inputs, three context, two embedding, three hidden and three output neurons."""
-    w, _ = cd.stateful(3, 1, 2, 3, 3, seed=1)
-    return w
+    """Three inputs, three context, three hidden and three output neurons."""
+    return context_graph(3, 3, 3, seed=1)
 
 
 def settled(w: cd.Connectome, batch: int, seed: int) -> cd.BrainState:
@@ -142,7 +160,7 @@ def check_one_step_focus_one() -> None:
     w = connectome()
     for batch in BATCHES:
         for decay in DECAYS:
-            trace = cd.Afterglow(w, decay=decay, focus=1.0, target="context")
+            trace = cd.Trace(w, decay=decay, focus=1.0)
             held = (np.zeros((batch, 3)), np.zeros((batch, 3)), np.ones(batch, dtype=bool))
             for seed in (3, 4, 5):
                 state = settled(w, batch, seed)

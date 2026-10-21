@@ -8,7 +8,7 @@ keyword.
 | --- | --- |
 | [Brain](#brain-cadence) | `Brain`, its methods, attributes and checkpoint formats |
 | [Arousal](#arousal-cadencearousal) | `ArousalConfig`, `Arousal` |
-| [Streams](#streams-cadencestream) | `Trace`, `Echo`, `Afterglow`, `Efference`, `History`, `Recall`, `FastSynapses`, `SynapticMemory`, `PatternSeparator`, `stateful` |
+| [Streams](#streams-cadencestream) | `Trace`, `Efference`, `History`, `Recall`, `FastSynapses`, `SynapticMemory`, `PatternSeparator` |
 | [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence`, `Bins` |
 | [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
 | [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Receipt` |
@@ -202,8 +202,6 @@ brain's memories are explained in [memory](memory.md); the standalone stores in
 
 ```text
 Trace(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="hidden", target="context")
-Echo(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="hidden", target="context")
-Afterglow(connectome, decay=0.5, amplitude=1.0, focus=1.0, source="hidden", target="afterglow")
 Efference(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="motor", target="efference")
 ```
 
@@ -278,13 +276,10 @@ and `center` outside `[0, 1)`. All three: [standalone memory stores](records.md)
 associative store: [memory](memory.md#associative-store-the-hippocampus).
 
 ```text
-stateful(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0,
-         context_init=1.0) -> (Connectome, tie_groups)
 cadence.stream.columns(index) -> slice | ndarray
 ```
 
-`stateful` is `embedded` plus a `context` range for a `Trace`; `columns` returns a slice for a
-contiguous index.
+`columns` returns a slice for a contiguous index.
 
 ## Learning (`cadence.learning`)
 

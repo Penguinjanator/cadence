@@ -50,15 +50,12 @@ from .recording import SettlementRecord, record_settlements
 from .reference import conformance
 from .regions import Region
 from .stream import (
-    Afterglow,
-    Echo,
     Efference,
     FastSynapses,
     History,
     PatternSeparator,
     Recall,
     Trace,
-    stateful,
 )
 
 __all__ = [
@@ -81,8 +78,6 @@ __all__ = [
     "regions",
     "Projection",
     "Genome",
-    "Echo",
-    "Afterglow",
     "Trace",
     "Efference",
     "History",
@@ -117,7 +112,6 @@ __all__ = [
     "seam_report",
     "load",
     "save",
-    "stateful",
 ]
 
 __version__ = "0.84.3"

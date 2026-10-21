@@ -144,11 +144,8 @@ population through `stimulate(drive)`; decays lie in `[0, 1)`.
 | Name | Defaults | Behaviour |
 |---|---|---|
 | `Trace(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="hidden", target="context")` | | `update(state)` moves the trace toward the source activation, `t <- decay t + (1 - decay) h`; `focus` above zero weights each neuron by its movement since the last moment. `ringing(floor=0.1)` gives each source neuron's share of the trace, a salience for `ActorCritic.salience`. |
-| `Echo(...)` | as `Trace` | The trace of the hidden equilibria into `context`. |
-| `Afterglow(...)` | `focus=1.0`, `target="afterglow"` | The focused trace; with `source="input"` an afterimage that reads a cue against a static background. |
 | `Efference(...)` | `source="motor"`, `target="efference"` | `issue(command)` decays toward the `(batch, motor)` one-hot of the executed action; `update` raises. |
 | `History(connectome, decays, amplitude=3.0, source="sensory", target="history")` | | One target block per decay; `hear(observations)` moves block `d` by `h = d h + (1 - d) x`. |
-| `stateful(vocabulary, positions, dim, hidden, outputs, *, seed=0, init=1.0, context_init=1.0)` | | Returns `(connectome, tie_groups)`: an embedded network plus a `context` range for an `Echo`. |
 | `cadence.stream.columns(index)` | | A slice for a contiguous range, else the index array; slices avoid gather copies on wide batches. |
 
 Inside a composed brain the working trace, efference copy and heard history are owned by
