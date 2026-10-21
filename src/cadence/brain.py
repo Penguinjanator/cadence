@@ -287,6 +287,18 @@ class BrainState:
         return int((self.row(i) >= level).sum())
 
 
+def _copy_state(state: BrainState | None) -> BrainState | None:
+    if state is None:
+        return None
+    return BrainState(
+        state.v.copy(),
+        state.activation.copy(),
+        state.adaptation.copy(),
+        state.steps,
+        activity_change=None if state.activity_change is None else state.activity_change.copy(),
+    )
+
+
 @dataclass(frozen=True)
 class RefinementReport:
     """Per-row diagnostics from optional CPU energy refinement.

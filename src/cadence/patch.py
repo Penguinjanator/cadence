@@ -19,24 +19,12 @@ from typing import Any, Literal
 
 import numpy as np
 
-from .brain import Backend, Brain, BrainState, Equilibrium, Nudge
+from .brain import Backend, Brain, BrainState, Equilibrium, Nudge, _copy_state
 from .certificate import ep_structure
 from .connectome import Connectome
 from .learning import Learner, LearnerConfig, layered, learning_neuron_model
 
 __all__ = ["PatchNet", "PatchObservation"]
-
-
-def _copy_state(state: BrainState | None) -> BrainState | None:
-    if state is None:
-        return None
-    return BrainState(
-        state.v.copy(),
-        state.activation.copy(),
-        state.adaptation.copy(),
-        state.steps,
-        activity_change=None if state.activity_change is None else state.activity_change.copy(),
-    )
 
 
 @dataclass(frozen=True)

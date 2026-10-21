@@ -30,9 +30,8 @@ import numpy as np
 
 from cadence import brain as cadence_brain
 from cadence.brain import Brain as NeuralGraph
-from cadence.brain import Equilibrium, Nudge
+from cadence.brain import Equilibrium, Nudge, _copy_state
 from cadence.genome import Genome, Projection, develop
-from cadence.patch import _copy_state
 from cadence.regions import Region, motor_cortex, prefrontal_cortex
 from cadence.stream import FastSynapses
 

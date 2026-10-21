@@ -2176,7 +2176,7 @@ class Brain:
         parameters, within the caller's exact total sweep budget.
         This numerical fallback is independent of optional observer wiring.
         """
-        from .patch import _copy_state
+        from .brain import _copy_state
 
         cfg = self.learner.config
         brain = self.brain
@@ -2834,7 +2834,7 @@ class Brain:
         """
         from copy import copy
 
-        from .patch import _copy_state
+        from .brain import _copy_state
 
         if (
             isinstance(budget, (bool, np.bool_))
