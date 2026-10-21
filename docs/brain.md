@@ -126,9 +126,9 @@ Override rules:
   no effect; `describe()` omits it and `retune` refuses it.
 - `learning=LearnerConfig(...)` and `reward=ActorCriticConfig(...)` replace the whole
   configuration, and a fresh config replaces every founder: `LearnerConfig()` has
-  `eta=0.2`, `momentum=0`, budgets `100/50` and tolerance `1e-4`; `ActorCriticConfig()`
-  has `gamma=0.99`, `lam=0.9` and rates `0.5/0.05/0.05`. Use named overrides for a
-  one-field edit.
+  `eta=0.2`, `momentum=0`, `normalize=0` (raw steps), budgets `100/50` and tolerance
+  `1e-4`; `ActorCriticConfig()` has `gamma=0.99`, `lam=0.9` and rates `0.5/0.05/0.05`.
+  Use named overrides for a one-field edit.
 
 ## Retune the same life
 

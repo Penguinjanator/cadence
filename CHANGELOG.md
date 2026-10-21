@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- The learning guide's section "Many lessons: the normalized point for imitation" recommends
+  `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003` and
+  `learning_eta_bias=0.0003` with lessons of about 32 rows for a brain that learns a
+  demonstrator's policy from many lessons
+  ([issue 215](https://github.com/muellerberndt/cadence/issues/215)). In a copy task of 260
+  inputs and three actions it agreed with the demonstrator on 0.868 / 0.866 of held-out moves
+  after 240,000 samples (two seeds), against 0.874 / 0.888 for a backpropagation network trained
+  with Adam on the same samples, where the composed founder reached 0.81 at 80,000 samples. The
+  composed founder keeps its teaching rates: with few lessons its larger steps acquire faster
+  (a taught chain from a few hundred corrections, and the token-binding content arms at long
+  budgets, [issue 218](https://github.com/muellerberndt/cadence/issues/218)). The guide also gives
+  the working-trace amplitude's effect on teaching fidelity.
+- The learning guide's new section "Teach on the brain's own path" gives the DAgger recipe for a
+  brain that bootstraps by watching: its own greedy move is executed, the same demonstrator
+  labels the observation it reached, and `lesson` teaches it, with a runnable snippet.
+- The composition guide lists `normalize=0` among a fresh `LearnerConfig()`'s values.
+
 - `Brain.reset(keep_arousal=True)` (opt-in) keeps the arousal state as it is: its level, the
   counts, the recent and long-run reward, the usual errors, the reward scale, the age and
   the work counts carry into the new stream, as when the state saved before the reset
