@@ -2,6 +2,32 @@
 
 ## Unreleased
 
+- `ArousalConfig` gains `need_scale` (`arousal_need_scale` at `compose` and `retune`; opt-in,
+  founder 0): a need in units of the reward scale the brain has learned. At every outcome the
+  want is at least the unmet share of `need_scale * scale`, the scale as it stood before the
+  outcome entered it; the want and heat read afterwards use the scale as it stands; youth and
+  a scale no outcome has entered leave it at zero, so a default `reset()` zeroes it until
+  outcomes enter the new stream's scale, and `reset(keep_arousal=True)` keeps it. A save
+  carries the gene under `cadence-arousal/3` only above zero; saves of earlier formats load
+  with `need_scale=0`, and a positive `need_scale` under an earlier format is refused. At the
+  founder every brain, checkpoint and composed life is byte-identical to the library before
+  the gene (pinned); `describe()` carries the gene at zero (`arousal_need_scale` under
+  `genes`, `need_scale` under `arousal`), and `ArousalConfig.space()` leaves it out, so seeded
+  mutations at the founder draw as before and copy the zero to the child; add it to a space
+  to select on it. At `need_scale=0.1`, with the actor step at the composed founder, against
+  the founder on fresh seeds the composed brain kept every chamber of the preservation panel:
+  key-door rule A acquired on 10 of 16 lives against 8 of 16, with fed rule-ends calm on 20
+  of 21 and unfed ones aroused (late aroused share .10 at fed rule-ends against .84 at unfed
+  ones, where the founder is calm at both, .01 and .00, with 17 of 17 fed rule-ends calm and
+  16 of 16 lives calm in every rule); the prerequisite chain collapsed onto one action on 3
+  of 12 lives against 12 of 12 and was learned on 7 of 12 against 1 of 12; the odour nursery
+  passed 8 of 12 lives in both; the two-armed bandit with reversal won 30 of 30 blocks in
+  both. The cost follows from the law: in a world whose income stays below the share the
+  want stays at the unmet share and the level settles above the threshold, so the brain
+  stays aroused and pays learning sweeps at every moment; with pay at the end of the chain,
+  5 of 6 lives stayed aroused for .60 to .67 of the life on an income of .017 to .022 per
+  moment, the sixth, earning .15 per moment, for .06, and the founder's 6 lives, all
+  collapsed, for .02. Through `step` the gene is inert.
 - The learning guide's section "Many lessons: the normalized point for imitation" recommends
   `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003` and
   `learning_eta_bias=0.0003` with lessons of about 32 rows for a brain that learns a

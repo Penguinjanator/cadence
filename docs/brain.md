@@ -101,7 +101,7 @@ configurations and `initialization` (construction choices, not current weights).
 | `actor_dopamine_cap`, `actor_dopamine_center`, `actor_dopamine_floor`, `actor_center_scale`, `actor_critic_normalize`, `actor_critic_signal` | `1.0`, `0.0`, `0.0`, `True`, `True`, `"auto"` | retune | [reward](reward.md#centered-dopamine-and-selective-activity) |
 | `arousal` | off; `True` is `ArousalConfig()` | construction (switch), retune (fields) | [continuous](continuous.md#routine-and-repair-live) |
 | `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor`, `arousal_fast`, `arousal_slow` | `0.2`, `0.9`, `2.0`, `0.1`, `0.05`, `0.005` | retune | [continuous](continuous.md#routine-and-repair-live) |
-| `arousal_heat`, `arousal_youth`, `arousal_value_surprise`, `arousal_record_surprise`, `arousal_need` | `2.0`, `100`, `1.0`, `0.0`, `0.0` | retune | [continuous](continuous.md#routine-and-repair-live) |
+| `arousal_heat`, `arousal_youth`, `arousal_value_surprise`, `arousal_record_surprise`, `arousal_need`, `arousal_need_scale` | `2.0`, `100`, `1.0`, `0.0`, `0.0`, `0.0` | retune | [continuous](continuous.md#routine-and-repair-live) |
 | `working_memory_*` | scale `1.2`, amplitude `3.0`, decay `0.0`, focus `0.0` | scale at construction | [memory](memory.md#working-trace) |
 | `efference_*` | amplitude `0.0` (absent), decay `0.2` | a positive amplitude at construction adds it | [memory](memory.md#efference-copy) |
 | `history_*` | decays `()` (absent), amplitude `3.0`, scale `1.2` | decays and scale at construction | [memory](memory.md#heard-history) |
@@ -155,8 +155,9 @@ above zero the same holds for `recall_address`, `recall_address_step` and
 
 `reset_arousal=True` resets the arousal level and reward references and keeps its age
 and work counters. An adult brain at the founder `need=0` is then roused only by
-surprise at its own forecasts; where the world may stop paying, leave it off or set a
-positive `need` ([reset and save](continuous.md#reset-and-save)).
+surprise at its own forecasts, and a positive `need_scale` wants nothing until outcomes
+enter the new stream's reward scale; where the world may stop paying, leave it off or
+set a positive `need` ([reset and save](continuous.md#reset-and-save)).
 
 ## Choose settings for the application
 

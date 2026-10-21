@@ -70,8 +70,9 @@ task](memory.md#which-memory-for-which-task). No memory holds a state the observ
 **What survives `reset()`?** Records, the recall address map and learned weights. The working
 trace, efference copy, heard history, episodic context and recall slots are cleared
 (`keep_memory=True` keeps the slots). An adult brain starts calm with no income or error
-references, so at `need=0` only a surprise at its own forecasts rouses it; `keep_arousal=True`
-keeps its arousal state as it is. Where its world may stop paying, reset it with
+references and no reward scale, so at `need=0` only a surprise at its own forecasts rouses it
+and a positive `need_scale` wants nothing until outcomes enter the new scale;
+`keep_arousal=True` keeps its arousal state as it is. Where its world may stop paying, reset it with
 `keep_arousal=True`, give it a positive `need`, or keep it living without the reset
 ([reset and save](continuous.md#reset-and-save)).
 

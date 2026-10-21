@@ -115,7 +115,7 @@ trace's `working_memory_scale` founder is 1.2.
 | `imagine(observations, *, budget=1024, tolerance=1e-6) -> tuple[Equilibrium, ...]` | A private branch over a sequence of batches: memories read, nothing written, live state unchanged. A refused phase ends the branch and is the last entry. | [private imagination](continuous.md#private-imagination) |
 | `fit(observations, labels, *, epochs=30, batch=32) -> list[float]`, `predict(observations)`, `accuracy(observations, labels)` | Independent samples, without traces or recall; `fit` resets the streams first, arousal included, and returns training accuracy per epoch. Noninteger labels and mismatched batches raise before any update. | [independent-sample controls](continuous.md#independent-sample-controls) |
 | `retune(*, reset_arousal=False, **genes) -> Brain` | Changes mutable settings in the same life, atomically. Refuses construction settings, absent components, and `learning_beta` (or the recall address genes under `recall_address_reward`) while a sampled action awaits feedback. | [retune the same life](brain.md#retune-the-same-life) |
-| `reset(*, keep_memory=False, keep_arousal=False)` | Clears per-stream state, eligibility and reward centering; keeps records and weights. Arousal begins the new stream calm and keeps its age; `keep_arousal=True` keeps the whole arousal state, its level included, as saving `brain.arousal.to_dict()` before the reset and restoring it with `Arousal.from_dict` after it does. `keep_memory=True` keeps the recall slots and ends each stream's episode. Both keywords must be booleans, checked before anything changes. | [reset and save](continuous.md#reset-and-save) |
+| `reset(*, keep_memory=False, keep_arousal=False)` | Clears per-stream state, eligibility and reward centering; keeps records and weights. Arousal begins the new stream calm, its reward scale cleared (a `need_scale` want returns once outcomes enter it), and keeps its age; `keep_arousal=True` keeps the whole arousal state, its level included, as saving `brain.arousal.to_dict()` before the reset and restoring it with `Arousal.from_dict` after it does. `keep_memory=True` keeps the recall slots and ends each stream's episode. Both keywords must be booleans, checked before anything changes. | [reset and save](continuous.md#reset-and-save) |
 | `describe() -> dict` | JSON-safe `layout`, effective `genes`, resolved configurations, memory settings, `initialization` and `pending_feedback`. | [defaults](brain.md#defaults-and-expert-overrides) |
 | `observation_code(observations) -> (batch, code_width)` | The unit-length key every memory reads and writes. | [the observation code](memory.md#the-observation-code) |
 | `stimulus(observations, *, memory=True) -> drive` | The drive of a batch; with `memory` the trace, copy, history, recall and hippocampal reads are added, and the recall address is fixed for the moment. | [memory](memory.md) |
@@ -167,12 +167,14 @@ than its own and a format name without its component; it also reads `cadence-gen
 ```text
 ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05,
               slow=0.005, heat=2.0, youth=100, value_surprise=1.0,
-              record_surprise=0.0, need=0.0)
+              record_surprise=0.0, need=0.0, need_scale=0.0)
 Arousal(config=None)
 ```
 
 `ArousalConfig` holds the genes of the law; `to_dict()` returns them and
-`ArousalConfig.space()` declares their mutation space for [`genes`](evolution.md#any-genome).
+`ArousalConfig.space()` declares their mutation space for [`genes`](evolution.md#any-genome),
+without `need_scale`, which a space of your own can add
+(`{**ArousalConfig.space(), "need_scale": ("linear", 0.02, 0.0, 1.0)}`).
 Construction refuses negative values, `decay` outside `[0, 1)`, `fast` or `slow` outside
 `(0, 1]`, `fast < slow` and a `youth` that is not a nonnegative integer. The law and the
 meaning of each gene are in [routine and repair](continuous.md#routine-and-repair-live).
@@ -183,15 +185,17 @@ meaning of each gene are in [routine and repair](continuous.md#routine-and-repai
 | --- | --- |
 | `outcome(error, reward, *, own=True, learned=True, record_error=None) -> (surprise, want)` | Applies one outcome. Only `own` outcomes can surprise and enter `usual`; every outcome moves `recent` and `longrun`; `learned` outcomes, and any in youth or that leave the stream aroused, enter `scale`. An outcome whose statistics cannot stay finite raises `ValueError` and changes nothing. |
 | `lived(sweeps, learning_sweeps=0)` | Counts one moment in `moments`, `sweeps` (per mode), `learning_sweeps` and `age`. |
-| `reset()` | Begins another stream calm; clears the averages and their counts, keeps `age` and the work counts. `Brain.reset(keep_arousal=True)` leaves the state as it is. |
-| `to_dict()`, `Arousal.from_dict(values)` | The complete state, marked `cadence-arousal/2`. |
+| `reset()` | Begins another stream calm; clears the averages and their counts, the reward scale among them (so a scaled need is zero until outcomes enter it again), keeps `age` and the work counts. `Brain.reset(keep_arousal=True)` leaves the state as it is. |
+| `to_dict()`, `Arousal.from_dict(values)` | The complete state, marked `cadence-arousal/2`; `cadence-arousal/3` carries a positive `need_scale`, which a save at the founder 0 leaves out. |
 | `level`, `age`, `moments`, `sweeps`, `learning_sweeps`, `outcomes`, `rewards`, `records`, `spreads`, `config` | State and counters: `outcomes` counts own outcomes, `rewards` all outcomes, `records` record-channel outcomes. |
 | `aroused`, `mode`, `want`, `heat`, `usual`, `usual_record`, `recent`, `longrun`, `scale` | Read-only: `aroused` while `level >= threshold` or within `youth`; `heat` is `1 + config.heat * want`. |
 
-`from_dict` reads `cadence-arousal/2`, `cadence-arousal/1` and unversioned states. It requires
-every gene and continuation field, except that an unversioned state with the gene set before
-`need` loads with `need=0`. A `cadence-arousal/1` or unversioned state without `rewards`
-takes it from `outcomes`.
+`from_dict` reads `cadence-arousal/3`, `cadence-arousal/2`, `cadence-arousal/1` and
+unversioned states. It requires every gene and continuation field, except that an unversioned
+state with the gene set before `need` loads with `need=0` and a state under a format before
+`cadence-arousal/3` loads with `need_scale=0`, left out or written as zero; a positive
+`need_scale` under an earlier format is refused. A `cadence-arousal/1` or unversioned state
+without `rewards` takes it from `outcomes`.
 
 ## Streams (`cadence.stream`)
 
