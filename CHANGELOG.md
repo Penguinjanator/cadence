@@ -58,7 +58,11 @@
   its synapses alone. The recall slots and the episodic context records key on the moment's code in its
   context; the associative store and the episodic place records key on the context-free
   code (a second code phase, `context_free_steps`), so a known situation is found again along a
-  new path. The heard history holds the code and the recall memory's event values are
+  new path. With `memory_choice=True` the episodic stores separate the learned code's keys
+  as an observation's (`memory_expansion` 1,024 cells, `memory_winners` 24): a linear store
+  fits opposite outcomes under nearly equal keys on their identity part, and its records
+  then rise above the rewards. The heard history holds the code and the recall memory's
+  event values are
   codes; a decision keeps the key it was taken under until its outcome. Checkpoint format
   `cadence-generic/10` carries the tables; `describe`,
   `parameters` and `retune` cover the region; `LearnedCode` is exported. With the founder

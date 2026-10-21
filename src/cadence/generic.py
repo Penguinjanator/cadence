@@ -1309,11 +1309,12 @@ class Brain:
         memory_expansion = _count("memory_expansion", memory_expansion)
         memory_winners = _count("memory_winners", memory_winners, low=1)
         memory_fan_in = _count("memory_fan_in", 0 if memory_fan_in is None else memory_fan_in)
-        if self._coded_keys and (memory_expansion or memory_fan_in):
-            # a coded brain's memories key on the code as it is: the code is their separation
+        if units and (memory_expansion or memory_fan_in):
+            # a brain with a fixed code keys its memories on that code as it is: the code is
+            # their separation; the learned code's stores separate their keys as without it
             raise ValueError(
-                "a coded brain's memories key on its code as it is; memory_expansion and "
-                "memory_fan_in need a brain without a code"
+                "a fixed code's memories key on the code as it is; memory_expansion and "
+                "memory_fan_in need a brain without a fixed code"
             )
         separated = bool(memory_expansion)
         if memory_choice and not episodic:
@@ -2154,8 +2155,9 @@ class Brain:
         what the memory expected of the paid decision: into each decision's context record,
         and into its place record as far as it was an exploration rather than the brain's
         best guess. Nothing has to mark the end of an attempt. Keys are separated
-        (``memory_expansion`` 1,024 cells, ``memory_winners`` 24; a coded brain keys on its
-        code as it is, with no separation). ``memory_fan_in`` above zero makes the separation
+        (``memory_expansion`` 1,024 cells, ``memory_winners`` 24; a brain with a fixed code keys
+        on that code as it is, with no separation, and a learned code's keys are separated
+        as an observation's are). ``memory_fan_in`` above zero makes the separation
         sparse: each of its cells reads that many of the key's values, chosen at random, so
         its size follows the cells and the fan-in alone; the founder 0 keeps it dense, one
         weight per cell and key value. Dense or sparse, the separation is a fixed random
@@ -2223,10 +2225,9 @@ class Brain:
             raise ValueError("episodic must be boolean")
         if options.get("episodic", True) and options.get("memory_choice") is True:
             for name, value in _EPISODIC_FOUNDERS.items():
-                # a coded brain's memories key on the code as it is: no separation of their own
-                options.setdefault(
-                    name, 0 if (units or learned) and name == "memory_expansion" else value
-                )
+                # a fixed code's memories key on the code as it is: no separation of their own;
+                # the hippocampus separates the patterns of a learned code as of an observation
+                options.setdefault(name, 0 if units and name == "memory_expansion" else value)
         if isinstance(modules, (str, bytes)) or isinstance(observers, (str, bytes)):
             raise ValueError("modules and observers must be sequences of population sizes")
         try:

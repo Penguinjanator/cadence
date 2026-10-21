@@ -97,14 +97,14 @@ synapses ([the learned code](code.md)).
 `LearnerConfig` and `ActorCriticConfig`; `arousal` is `True`, a field mapping or an
 `ArousalConfig`. With `memory_choice=True`, `compose` fills in `memory_context=0.5`,
 `memory_rate=0.5`, `memory_replay=8`, `memory_demonstrations=1.0`, `memory_expansion=1024`
-(0 with a code) and `memory_winners=24`; the constructor keeps its own defaults above, so
+(0 with a fixed `code`) and `memory_winners=24`; the constructor keeps its own defaults above, so
 pass these here or use `compose` ([episodic settings](episodic.md#settings)).
 
 | Rule | Raised |
 | --- | --- |
 | `memory_choice` needs `episodic=True` | `ValueError` |
 | `memory_context`, `memory_replay`, `memory_demonstrations`, `memory_expansion` need `memory_choice` | `ValueError` |
-| `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a coded brain (`code` or `learned_code`) refuses both | `ValueError` |
+| `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a brain with a fixed `code` refuses both | `ValueError` |
 | `learned_code` at least 2; a `learned_code_*` gene without it, `code` beside it, an image brain, a backend other than `cpu`, or a connectome without the region's populations and complete synapses | `ValueError` |
 | `memory_context` in `[0, 1)`; `working_memory_decay`, `efference_decay` in `[0, 1)` | `ValueError` |
 | `resting_bias` a finite nonnegative real scalar; booleans and arrays refused | `ValueError` |

@@ -159,8 +159,8 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], an
 identity weight outside [0, 1), a `learned_code_*` gene without the region,
 `code` beside `learned_code` (a key that joins the observation's own identity to its meaning
-is not built in this version), an image brain, `memory_expansion` or `memory_fan_in` (the
-memories key on the code as it is), a backend other than `cpu`, and a custom connectome
+is not built in this version), an image brain, a backend other than `cpu`, and a custom
+connectome
 without a `code` population and the complete dictionary, lateral and predictor synapses,
 or whose sensory neurons project anywhere but to the code region. A setting the readings
 retired is refused by name with what the region does instead: `learned_code_cortex` (the

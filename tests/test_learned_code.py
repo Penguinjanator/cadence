@@ -248,7 +248,7 @@ REGION_FOUNDERS: dict[str, dict] = {
                           "learned_code_fields": (8, 8), "memory_choice": True,
                           "arousal": True}),
         "life": lived,
-        "digest": "b9939769e80193130ad7c0a3b64b684814d73f728dcb5321467cc2b8a652eb15",
+        "digest": "00a610c314122517765fad6faf1ea185f7707d09ec1a7e06e0b7f4585650868b",
     },
 }
 
@@ -405,8 +405,11 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         composed(learned_code_target=1.0)
     with pytest.raises(ValueError, match="rate must be finite and lie in"):
         composed(learned_code_rate=-0.1)
-    with pytest.raises(ValueError, match="key on its code as it is"):
-        composed(memory_choice=True, memory_expansion=512)
+    episodic = composed(memory_choice=True)  # the stores separate the code's keys
+    assert episodic.hippocampus.separator is not None
+    assert episodic.hippocampus.separator.expansion == 1024
+    assert episodic.context_memory.separator.expansion == 1024
+    assert composed(memory_choice=True, memory_expansion=512).hippocampus.separator.expansion == 512
     brain = composed()
     with pytest.raises(ValueError, match="construction setting"):
         brain.retune(learned_code=32)
