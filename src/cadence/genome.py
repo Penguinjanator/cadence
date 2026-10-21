@@ -70,6 +70,43 @@ class Genome:
                 region = self.region(name)
                 region.neurons(population or getattr(region, side))
 
+    @classmethod
+    def composed(cls, inputs: Any, actions: int, **settings: Any) -> Genome:
+        """The layout ``Brain.compose(inputs, actions, **settings)`` develops: the sensory
+        region (an image's visual cortex), the code region with ``learned_code``, the modules
+        ending in the association region, the prefrontal region of the working trace, the
+        motor region, the observers, and the efference, history, recall and next regions its
+        memory settings add, with their projections. Settings that do not shape the layout
+        change nothing here. Mutate it with the sensory region fixed and the prefrontal region
+        tied to the association region, then wrap it with
+        ``Brain.compose(inputs, actions, connectome=develop(genome, seed=seed), seed=seed)``."""
+        from .generic import _layout
+
+        keywords = (
+            "modules", "observers", "lateral", "sensory_scale", "working_memory_scale",
+            "history_scale", "recall_scale", "features", "field", "code", "learned_code",
+            "seed", "slots",
+        )
+        layout = {name: settings.pop(name) for name in keywords if name in settings}
+        return _layout(inputs, actions, settings, **layout)[0]
+
+    @staticmethod
+    def observation_width(
+        inputs: Any,
+        code: int | None = None,
+        learned_code: int | None = None,
+        learned_code_identity: float | None = None,
+    ) -> int:
+        """The width of the observation code of a brain with these ``inputs`` (a vector
+        length or an image shape), this ``code`` and this ``learned_code`` (as
+        ``Brain.compose`` takes them; ``learned_code_identity`` as given, the founder
+        otherwise), before the brain is built: with ``recall=True`` a custom anatomy's
+        ``recall`` and ``next`` regions hold that many neurons. A learned code's key is its
+        units, plus the inputs when the key joins the observation's identity."""
+        from .generic import _observation_width
+
+        return _observation_width(inputs, code, learned_code, learned_code_identity)
+
     def region(self, name: str) -> Region:
         for r in self.regions:
             if r.name == name:

@@ -100,7 +100,7 @@ def test_checkpoint_meta_names_the_format_and_version(tmp_path) -> None:
 
 def test_generic_brain_resumes_identically(tmp_path) -> None:
     rng = np.random.default_rng(0)
-    g = cd.Brain.build(6, 3, hidden=16, working_memory=True, seed=1)
+    g = cd.Brain.compose(6, 3, modules=(16,), seed=1)
     g.step(rng.random((4, 6)))
     g.step(rng.random((4, 6)), reward=rng.normal(size=4), done=np.array([False, True, False, False]))
     g.step(rng.random((4, 6)), reward=rng.normal(size=4), teacher=np.array([0, 1, 2, 0]))

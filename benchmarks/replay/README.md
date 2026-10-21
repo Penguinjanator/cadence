@@ -180,7 +180,7 @@ The chamber's second instrument is the contextual bandit of
 `tests/test_generic.py` (four one-hot contexts, the matching action pays one) run as
 one continuing life: one stream, no resets, 600 decisions through `step` with
 `gamma=0, lam=0`, the greedy hit rate on 200 fresh contexts read from a frozen
-copy afterwards (chance 0.25). `Brain.build(4, 4)`, which has no working trace,
+copy afterwards (chance 0.25). `Brain.build(4, 4)` of release 0.84.3, which has no working trace,
 reached 0.94, 1.00 and 1.00 over three seeds; `Brain.compose(4, 4)` at its defaults
 0.33, 0.21 and 0.29. The grid below varies the composed trace and the actor rate.
 
@@ -197,7 +197,7 @@ reached 0.94, 1.00 and 1.00 over three seeds; `Brain.compose(4, 4)` at its defau
 Where the previous moment carries nothing the decision needs, the trace of the
 association cortex, at amplitude 3.0 into the prefrontal projection of scale 12, holds
 that cortex on its own history, and the actor at rate 1.0 cannot learn it away. The
-same brain with `gamma=0.9, lam=0.8` gives the same picture (`Brain.build` 1.00, 0.90,
+same brain with `gamma=0.9, lam=0.8` gives the same picture (that build 1.00, 0.90,
 1.00; the composed defaults 0.23, 0.28, 0.21; the trace off 1.00, 0.90, 1.00). This is
 one task; the [vanished-cue chamber](../recall/README.md) needs the trace the bandit
 does not, and neither selects a default.

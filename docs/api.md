@@ -21,10 +21,10 @@ keyword.
 ### Construction
 
 ```text
-Brain.compose(inputs, actions, *, modules=(64,), observers=(), lateral=None,
-              sensory_scale=1.0, working_memory_scale=1.2, history_scale=1.2,
-              recall_scale=1.2, features=8, field=3, code=None, learned_code=None,
-              seed=0, slots=1, **options) -> Brain
+Brain.compose(inputs, actions, *, connectome=None, modules=(64,), observers=(),
+              lateral=None, sensory_scale=1.0, working_memory_scale=1.2,
+              history_scale=1.2, recall_scale=1.2, features=8, field=3, code=None,
+              learned_code=None, seed=0, slots=1, **options) -> Brain
 ```
 
 The composed System 1 brain, with optional System 2 `observers` in the same graph.
@@ -53,22 +53,13 @@ Refusals: unknown names, the bare `eta` or `eta_bias`, and duplicate aliases rai
 `TypeError`; a `recall_` name without `recall=True`, a setting outside its range, and
 `arousal_*` names without `arousal` raise `ValueError`.
 
-```text
-Brain.build(inputs, actions, *, hidden=64, density=1.0, lateral=None,
-            working_memory=False, memory_scale=12.0, episodic=True, features=8,
-            field=3, seed=0, slots=1, **options) -> Brain
-Brain.genome(inputs, actions, *, hidden=64, density=1.0, lateral=None,
-             working_memory=False, memory_scale=12.0, features=8, field=3,
-             seed=0, slots=1) -> Genome
-Brain.observation_width(inputs, code=None, learned_code=None,
-                        learned_code_identity=None) -> int
-```
-
-`genome` returns the single-region layout (`sensory` or `visual`, `association`, `motor`, and
-with `working_memory` a `prefrontal` region projecting at `memory_scale`) for editing or
-evolution; `build` develops and wraps it, passing `options` to the constructor.
-`observation_width` is the key width the memories will use, the size of a custom anatomy's
-`recall` and `next` regions ([genome, development, brain](brain.md#genome-development-brain)).
+`connectome` wraps a custom anatomy with the same founders, the episodic founders filled in
+under `memory_choice=True`: its `sensory` (or `visual/input`) population holds the inputs (the
+code's units with `code=units`) and its `motor` population the actions. It brings its own
+layout, so `modules`, `observers`, `lateral`, the `*_scale` arguments, `features` and `field`
+stay at their founders (`ValueError` otherwise). `Genome.composed` returns the layout
+`compose` develops, to edit or evolve ([genome, development,
+brain](brain.md#genome-development-brain)).
 
 ```text
 Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9,
@@ -602,6 +593,9 @@ not divide or add up to `actions`. `prefrontal_cortex` has one neuron per neuron
 ```text
 Projection(pre, post, density=1.0, sign=0.0, scale=1.0, count=1.0, reciprocal=True)
 Genome(regions, projections, label="genome")
+Genome.composed(inputs, actions, **settings) -> Genome
+Genome.observation_width(inputs, code=None, learned_code=None,
+                         learned_code_identity=None) -> int
 develop(genome, seed=0) -> Connectome
 cadence.genome.mutate(genome, rng, *, size_step=0.25, fixed=(), tied=()) -> Genome
 genes(space, *, rate=1.0) -> mutation
@@ -611,7 +605,11 @@ evolve(fitness, genome, *, generations=10, population=8, keep=2, seed=0, mapper=
 
 A projection end is a region name or `region/population`; `sign` is the mean sign and
 `reciprocal` adds the reverse synapses with the same weights. `Genome` checks unique names and
-valid ends; `region(name)`, `to_dict()`, `Genome.from_dict(d, designed=None)`. `develop` is
+valid ends; `region(name)`, `to_dict()`, `Genome.from_dict(d, designed=None)`.
+`Genome.composed` is the layout `Brain.compose(inputs, actions, **settings)` develops; the
+settings that do not shape it change nothing. `Genome.observation_width` is the key width
+the memories of such a brain will use, the size of a custom anatomy's `recall` and `next`
+regions. `develop` is
 deterministic in the seed. `evolve` scores `fitness(grown, seed)` per life, requires finite
 scores and returns `cadence.genome.Lineage` (`generations`, `best`, `best_fitness`). Guide:
 [evolve a brain](evolution.md).

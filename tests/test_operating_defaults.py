@@ -50,8 +50,8 @@ def test_explicit_lateral_overrides_the_width_rule():
 
 
 def test_build_and_genome_follow_the_same_lateral_rule():
-    assert len(motor_synapses(cd.Brain.build(8, 36, hidden=8, seed=0))) == 0
-    signs = motor_synapses(cd.Brain.build(8, 4, hidden=8, seed=0))
+    assert len(motor_synapses(cd.Brain.compose(8, 36, modules=(8,), seed=0))) == 0
+    signs = motor_synapses(cd.Brain.compose(8, 4, modules=(8,), seed=0))
     assert len(signs) == 12 and np.all(signs == -0.5)
 
 

@@ -11,12 +11,11 @@ import cadence as cd
 
 
 def separated_brain(kind="consolidating", backend="cpu"):
-    brain = cd.Brain.build(
+    brain = cd.Brain.compose(
         3,
         3,
-        hidden=5,
+        modules=(5,),
         episodic=True,
-        working_memory=False,
         seed=9,
         backend=backend,
         device="cpu" if backend == "torch" else None,
@@ -99,7 +98,7 @@ def rewrite_checkpoint(path, mutate):
 @pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.parametrize("kind", ["consolidating", "fast", "none"])
 def test_legacy_unseparated_memory_keeps_its_original_rule(tmp_path, version, kind):
-    original = cd.Brain.build(3, 3, hidden=5, working_memory=False)
+    original = cd.Brain.compose(3, 3, modules=(5,))
     if kind == "fast":
         original.hippocampus = cd.FastSynapses(original.sensory_index, original.motor_index)
     elif kind == "none":

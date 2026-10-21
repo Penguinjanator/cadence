@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from anatomy import single_region
 from checkpoints import earlier, metadata
 
 import cadence as cd
@@ -174,10 +175,10 @@ FOUNDERS: dict[str, dict] = {
         "checkpoint": "0277fcdf466243c9f0e805bd7c8d0c648d8cb8f3380972882f4ddac3b99cb154",
     },
     "image": {
-        # an image shape through Brain.build: the hippocampus of earlier releases keyed on
-        # the 1,600 pixels
+        # the single-region image brain of earlier releases, wired by hand: the hippocampus
+        # keyed on the 1,600 pixels
         "build": ((40, 40), 2, {"hidden": 8, "seed": 14}),
-        "builder": "build",
+        "builder": "single",
         "life": stepped,
         "parameters": "aecb598d8fbf5218c210bd2ad264206e9aae0e706105a6e1255a5c44316abe54",
         "acts": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
@@ -188,13 +189,18 @@ FOUNDERS: dict[str, dict] = {
 }
 
 
+def make_founder(spec: dict) -> cd.Brain:
+    inputs, actions, options = spec["build"]
+    if spec.get("builder") == "single":
+        return single_region(inputs, actions, **options)
+    return cd.Brain.compose(inputs, actions, **options)
+
+
 def founder_record(tmp_path: Path) -> dict[str, dict]:
     """What the founder test checks, as recorded on the parent composition."""
     out = {}
     for name, spec in FOUNDERS.items():
-        inputs, actions, options = spec["build"]
-        builder = cd.Brain.build if spec.get("builder") == "build" else cd.Brain.compose
-        brain = builder(inputs, actions, **options)
+        brain = make_founder(spec)
         parameters = parameter_digest(brain)
         acts = spec["life"](brain)
         path = brain.save(tmp_path / f"{name}.npz")
@@ -205,9 +211,7 @@ def founder_record(tmp_path: Path) -> dict[str, dict]:
 
 
 def founder(spec: dict) -> tuple[cd.Brain, int]:
-    inputs, actions, options = spec["build"]
-    builder = cd.Brain.build if spec.get("builder") == "build" else cd.Brain.compose
-    return builder(inputs, actions, **options), int(np.prod(inputs))
+    return make_founder(spec), int(np.prod(spec["build"][0]))
 
 
 @pytest.mark.parametrize("name", sorted(FOUNDERS))
@@ -313,9 +317,9 @@ def test_the_code_and_the_sparse_separation_are_opt_in():
     assert keyed(1025, memory_fan_in=32) == ("observation", 1025, "observation", "sparse", 32, 1025)
     assert keyed(1025, code=1024) == ("code", 1024, "code", None, False, 1024)
     assert keyed(300, code=64) == ("code", 64, "code", None, False, 64)
-    assert cd.Brain.observation_width(12_824) == 12_824
-    assert cd.Brain.observation_width(300) == 300 and cd.Brain.observation_width(300, 64) == 64
-    assert cd.Brain.observation_width((40, 40)) == 1600 and cd.Brain.observation_width((8, 8), 256) == 256
+    assert cd.Genome.observation_width(12_824) == 12_824
+    assert cd.Genome.observation_width(300) == 300 and cd.Genome.observation_width(300, 64) == 64
+    assert cd.Genome.observation_width((40, 40)) == 1600 and cd.Genome.observation_width((8, 8), 256) == 256
     # a coded brain's memories key on the code as it is: a separation of their own is refused
     with pytest.raises(ValueError, match="memory_expansion and memory_fan_in need"):
         cd.Brain.compose(300, 2, modules=(8,), memory_choice=True, code=64, memory_expansion=512)
@@ -581,7 +585,7 @@ def test_a_custom_anatomy_takes_the_code_and_keeps_recall_off_unless_asked(tmp_p
     assert plain.recall is None and plain.sparse_code is None and plain.code_width == 3_230
     assert not plain.coded_cortex and plain.inputs == 3_230
     # the memories' code with the cortex on the observation: the regions sized by the code
-    assert cd.Brain.observation_width(3_230, 1024) == 1024
+    assert cd.Genome.observation_width(3_230, 1024) == 1024
     brain = cd.Brain(anatomy(3_230, 16, 1024), code=1024, recall=True, memory_choice=True,
                      memory_context=0.5, memory_replay=8, memory_demonstrations=1.0,
                      arousal=True)

@@ -53,15 +53,18 @@ that is not a region raises `KeyError`.
   its `sign` moves by `normal(0, 0.2)` within `[-1, 1]`, and its `scale` is multiplied by
   `exp(normal(0, 0.2))` within `[0.05, 20]`. `count` and `reciprocal` stay as declared.
 
-Fix the regions whose width the environment sets. In `Brain.genome` the motor cortex is
-designed and keeps its size; the `sensory` region is blank and belongs in `fixed`.
+Fix the regions whose width the environment sets. In `Genome.composed`, the layout
+`Brain.compose` develops, the motor cortex is designed and keeps its size; the `sensory`
+region is blank and belongs in `fixed`, and the `prefrontal` region of the working trace
+keeps the size of the `association` region it holds through `tied`.
 
 ```python
 import cadence as cd
 from cadence.genome import mutate
 
-genome = cd.Brain.genome(2, 2, hidden=12)
-child = mutate(genome, np.random.default_rng(3), fixed=("sensory",))
+genome = cd.Genome.composed(2, 2, modules=(12,))
+held = (("association", "prefrontal"),)
+child = mutate(genome, np.random.default_rng(3), fixed=("sensory",), tied=held)
 for parent, offspring in zip(genome.regions, child.regions):
     print(parent.name, parent.size, "->", offspring.size)
 ```
@@ -89,11 +92,12 @@ integer, when `keep` exceeds `population`, when a non-`Genome` genome comes with
 `mutate`, and when `**mutation` keywords come with a custom `mutate`.
 
 This fitness lives forty moments, learning which of two actions each cue pays for, and
-scores the reward of the last twenty moments less a small cost per synapse.
+scores the reward of the last twenty moments less a small cost per synapse. Each grown
+anatomy is wrapped with the composed founders.
 
 ```python
 def life(connectome, seed):
-    brain = cd.Brain(connectome, seed=seed)
+    brain = cd.Brain.compose(2, 2, connectome=connectome, seed=seed)
     rng = np.random.default_rng(seed)
     cue = int(rng.integers(2))
     action = brain.step([np.eye(2)[cue]])
@@ -105,7 +109,8 @@ def life(connectome, seed):
         action = brain.step([np.eye(2)[cue]], reward=[reward])
     return float(np.mean(earned[-20:])) - 1e-4 * connectome.synapses
 
-lineage = cd.evolve(life, genome, generations=3, population=4, keep=2, seed=0, fixed=("sensory",))
+lineage = cd.evolve(life, genome, generations=3, population=4, keep=2, seed=0,
+                    fixed=("sensory",), tied=held)
 for record in lineage.generations:
     print(record["generation"], round(record["best_fitness"], 3), round(record["mean_fitness"], 3))
 ```
@@ -126,7 +131,7 @@ from pathlib import Path
 
 log = Path("lineage.json")
 cd.evolve(life, genome, generations=2, population=4, keep=2, seed=0, fixed=("sensory",),
-          report=lambda so_far: log.write_text(json.dumps(so_far.generations)))
+          tied=held, report=lambda so_far: log.write_text(json.dumps(so_far.generations)))
 best = cd.Genome.from_dict(json.loads(log.read_text())[-1]["best"], designed={"motor": genome.region("motor")})
 connectome = cd.develop(best, seed=0)
 ```
@@ -182,7 +187,7 @@ from multiprocessing.pool import ThreadPool
 
 with ThreadPool(4) as pool:
     parallel = cd.evolve(life, genome, generations=3, population=4, keep=2, seed=0,
-                         fixed=("sensory",), mapper=pool.map)
+                         fixed=("sensory",), tied=held, mapper=pool.map)
 assert parallel.best == lineage.best and parallel.best_fitness == lineage.best_fitness
 ```
 

@@ -239,21 +239,24 @@ network = cd.NeuralGraph(cd.develop(genome, seed=0), cd.learning_neuron_model())
 ```
 
 This graph has no motor competition (`motor_cortex` defaults to `lateral=0.0`) and no
-Brain loop. Three entry points give one:
+Brain loop. Two entry points give one:
 
-- `Brain.genome(inputs, actions, hidden=64, density=1.0, lateral=None,
-  working_memory=False, memory_scale=12.0, features=8, field=3, seed=0, slots=1)`
-  returns the single-region default layout as a `Genome` to edit or evolve.
-- `Brain.build(...)` develops it and wraps it, adding `episodic=True` and constructor
-  options; it has no trace unless `working_memory=True` ([memory](memory.md#working-trace)).
+- `Brain.compose(inputs, actions, connectome=connectome, ...)` wraps a custom anatomy with
+  the founders of the table, the episodic founders filled in under `memory_choice=True`.
+  Its `sensory` (or `visual/input`) population holds the inputs (the code's units with
+  `code=units`), its `motor` population the actions, and it brings its own layout, so the
+  layout settings (`modules`, `observers`, `lateral`, the projection scales, `features`,
+  `field`) stay at their founders. `Genome.composed(inputs, actions, ...)` returns the
+  layout `compose` develops, to edit or evolve ([evolution](evolution.md#mutation)).
 - `Brain(connectome, ...)` wraps any connectome with `association`, `motor` and
   `sensory` (or `visual/input`) populations and takes the table's constructor options;
   `inputs=` is the observation width when the sensory population is a `code=units` code.
+  It keeps the table's learning, actor, arousal and memory founders, and with
+  `memory_choice=True` starts the episodic context, replay, demonstrations and separation
+  at zero unless you pass them ([episodic memory](episodic.md)).
 
-Both constructors keep the table's learning, actor, arousal and memory founders.
-`compose` alone fills in the episodic founders: with `Brain.build` or `Brain(...)`,
-`memory_choice=True` starts its context, replay, demonstrations and separation at
-zero unless you pass them ([episodic memory](episodic.md)).
+`Genome.observation_width(inputs, code=None, learned_code=None)` is the key width the
+memories will use, the size of a custom anatomy's `recall` and `next` regions.
 
 [Write a cortex](cortex.md) covers regions, ports and projections;
 [evolution](evolution.md) covers genomes and selection.

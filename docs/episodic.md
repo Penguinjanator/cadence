@@ -86,8 +86,9 @@ assert brain.live(x)[0] == 1               # the record votes for the shown acti
 ```
 
 `memory_choice=True` in `Brain.compose` brings the founder values in the table below; each can
-be passed beside it. `Brain(...)` and `Brain.build(...)` take the same names, but their
-defaults are 0 (and `memory_winners` 32, `memory_rate` 1.0), so name every setting there.
+be passed beside it, also with `connectome=` for a custom anatomy. `Brain(...)` takes the
+same names, but its defaults are 0 (and `memory_winners` 32, `memory_rate` 1.0), so name
+every setting there.
 `memory_choice` needs `episodic=True`.
 
 ## Settings

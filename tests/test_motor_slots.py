@@ -78,11 +78,11 @@ def test_slots_are_validated_at_composition():
             cd.Brain.compose(inputs=6, actions=25, modules=(8,), slots=bad)
 
 
-def test_build_and_genome_take_slots():
-    brain = cd.Brain.build(6, 25, hidden=8, slots=(3, 13, 9), seed=0)
+def test_compose_and_the_composed_layout_take_slots():
+    brain = cd.Brain.compose(6, 25, modules=(8,), slots=(3, 13, 9), seed=0)
     assert brain.learner.slot_sizes.tolist() == [3, 13, 9]
     assert motor_pairs(brain) == []
-    genome = cd.Brain.genome(6, 10, hidden=8, slots=2)
+    genome = cd.Genome.composed(6, 10, modules=(8,), slots=2)
     grouped = cd.Brain(cd.develop(genome, seed=0), slots=2)
     assert grouped.learner.slot_sizes.tolist() == [5, 5]
     assert len(motor_pairs(grouped)) == 2 * 5 * 4

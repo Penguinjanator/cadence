@@ -40,7 +40,7 @@ from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any, cast
+from typing import Any
 
 import numpy as np
 
@@ -1224,6 +1224,206 @@ def _validate_episodic_state(
             raise ValueError("invalid saved replay path outcomes")
 
 
+def _observation_width(
+    inputs: int | Sequence[int], code: int | None = None, learned_code: int | None = None,
+    learned_code_identity: float | None = None,
+) -> int:
+    """``Genome.observation_width``: the key width of the memories of a brain with these
+    settings."""
+    image = _image_shape(inputs)
+    width = int(np.prod(image)) if image is not None else _count("inputs", inputs, low=1)
+    units = _learned_code_units(learned_code)
+    if units:
+        founder = LearnedCode.founders()["identity"]
+        weight = LearnedCode.setting(
+            "identity", founder if learned_code_identity is None else learned_code_identity
+        )
+        return units + (width if weight > 0 else 0)
+    return _code_units(code) or width
+
+
+def _layout(
+    inputs: int | Sequence[int],
+    actions: int,
+    options: Mapping[str, Any],
+    *,
+    modules: Sequence[int] = (64,),
+    observers: Sequence[int] = (),
+    lateral: float | None = None,
+    sensory_scale: float = 1.0,
+    working_memory_scale: float = 1.2,
+    history_scale: float = 1.2,
+    recall_scale: float = 1.2,
+    features: int = 8,
+    field: int = 3,
+    code: int | None = None,
+    learned_code: int | None = None,
+    seed: int = 0,
+    slots: int | Sequence[int] = 1,
+) -> tuple[Genome, dict[str, Any]]:
+    """The layout ``Brain.compose`` develops (``Genome.composed``) and the settings it resolved.
+    ``options`` are compose's other settings; the efference copy, the heard history, the recall
+    memory and the learned code's ``cortex`` and ``identity`` add regions and projections, and
+    the rest do not change the layout."""
+
+    def size(value: Any) -> int:
+        if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
+            raise ValueError("population sizes must be positive integers")
+        if value < 1:
+            raise ValueError("population sizes must be positive integers")
+        return int(value)
+
+    image = _image_shape(inputs)
+    inputs = size(inputs) if image is None else int(np.prod(image))
+    actions = size(actions)
+    units = _code_units(code)
+    learned = _learned_code_units(learned_code)
+    if learned and units:
+        raise ValueError(_LEARNED_CODE_TOGETHER)
+    if learned and image is not None:
+        raise ValueError(
+            "a learned code needs a vector brain: an image brain's sensory region is its "
+            "visual cortex"
+        )
+    # the sensory region is the code when a vector brain asks for one
+    coded_cortex = bool(units) and image is None
+    sensory_width = units if coded_cortex else inputs
+    joined = bool(learned) and LearnedCode.setting(
+        "identity", options.get("learned_code_identity", LearnedCode.founders()["identity"])
+    ) > 0
+    code_width = (learned + (inputs if joined else 0)) if learned else (units or inputs)
+    heard_width = learned or sensory_width  # what the history hears: the code it reads
+    sensory_scale = real("sensory_scale", sensory_scale, low=0)
+    working_memory_scale = real("working_memory_scale", working_memory_scale, low=0)
+    history_scale = real("history_scale", history_scale, low=0)
+    heard = _history_decays(options.get("history_decays", ()))
+    recall_scale = real("recall_scale", recall_scale, low=0)
+    recalled = _recall_genes(
+        options.get("recall", False),
+        {name: value for name, value in options.items() if name.startswith("recall_")},
+    )
+    if lateral is None:
+        lateral = _default_lateral(max(slot_sizes(actions, slots)))
+    if (
+        isinstance(lateral, (bool, np.bool_))
+        or not isinstance(lateral, (int, float, np.integer, np.floating))
+        or not np.isfinite(lateral)
+    ):
+        raise ValueError("lateral must be a finite signed weight")
+    lateral = float(lateral)
+    if not np.isfinite(lateral):
+        raise ValueError("lateral must be a finite signed weight")
+    if (
+        isinstance(seed, (bool, np.bool_))
+        or not isinstance(seed, (int, np.integer))
+        or seed < 0
+    ):
+        raise ValueError("seed must be a nonnegative integer")
+    if isinstance(modules, (str, bytes)) or isinstance(observers, (str, bytes)):
+        raise ValueError("modules and observers must be sequences of population sizes")
+    try:
+        widths = tuple(size(value) for value in modules)
+        observer_widths = tuple(size(value) for value in observers)
+    except TypeError as exc:
+        raise ValueError("modules and observers must be sequences of population sizes") from exc
+    if not widths:
+        raise ValueError("at least one processing module is required")
+    names = [f"module_{index}" for index in range(len(widths) - 1)] + ["association"]
+    if image is None:
+        regions = [Region("sensory", sensory_width)]
+    else:
+        height, width, channels = image
+        regions = [
+            visual_cortex(
+                height, width, channels=channels, features=features, field=field, seed=seed
+            )
+        ]
+    if learned:
+        # the code region, every ordered pair of its units a lateral synapse; the
+        # dictionary, the lateral weights and the predictor take the region's own tables
+        # once the brain is built, in place of the developed draw
+        regions.append(cortex(learned, lateral=-1.0, name="code"))
+    regions.extend(Region(name, width) for name, width in zip(names, widths, strict=True))
+    regions.extend(
+        (prefrontal_cortex(widths[-1]), motor_cortex(actions, lateral=lateral, slots=slots))
+    )
+    if learned:
+        projections = [
+            Projection("sensory", "code", scale=1.0, reciprocal=False),
+            Projection("code", names[0], scale=sensory_scale, reciprocal=False),
+        ]
+        reads = LearnedCode.setting(
+            "cortex", options.get("learned_code_cortex", LearnedCode.founders()["cortex"])
+        )
+        if reads == "both":  # the observation as a brain without the region reads it
+            projections.append(
+                Projection("sensory", names[0], scale=sensory_scale, reciprocal=False)
+            )
+    else:
+        projections = [
+            Projection(regions[0].name, names[0], scale=sensory_scale, reciprocal=False)
+        ]
+    projections.extend(
+        Projection(left, right) for left, right in zip(names, names[1:], strict=False)
+    )
+    projections.extend(
+        (
+            Projection("association", "motor"),
+            Projection(
+                "prefrontal", "association", scale=working_memory_scale, reciprocal=False
+            ),
+        )
+    )
+    if learned:
+        projections.append(Projection("prefrontal", "code", scale=0.0, reciprocal=False))
+    observed = [*names, "motor"]
+    for index, width in enumerate(observer_widths):
+        name = f"observer_{index}"
+        regions.append(Region(name, width))
+        projections.extend(Projection(source, name) for source in observed)
+        observed.append(name)
+    if _validate_efference_amplitude(options.get("efference_amplitude", 0.0)):
+        # Appended last: every earlier region and projection is developed from the same
+        # random draws, so the brain with the copy is the brain without it plus the
+        # efference neurons and their one projection.
+        regions.append(Region("efference", actions))
+        projections.append(Projection("efference", "association", scale=12.0, reciprocal=False))
+    if heard:
+        # Appended last, after any efference copy: the brain with the history is the brain
+        # without it plus one block of sensory width per decay and their one projection.
+        regions.append(Region("history", len(heard) * heard_width))
+        projections.append(
+            Projection("history", "association", scale=history_scale, reciprocal=False)
+        )
+    if recalled:
+        # Appended last, after any history: the brain with the recall memory is the brain
+        # without it plus the recall and next regions, one neuron per value coordinate
+        # (the values are the events, of the code's width), and one projection from each.
+        for name in ("recall", "next") if recalled["next"] else ("recall",):
+            regions.append(Region(name, code_width))
+            projections.append(
+                Projection(name, "association", scale=recall_scale, reciprocal=False)
+            )
+    genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
+    return genome, {
+        "inputs": inputs,
+        "actions": actions,
+        "units": units,
+        "learned": learned,
+        "coded_cortex": coded_cortex,
+        "image": image,
+        "lateral": lateral,
+        "widths": widths,
+        "observer_widths": observer_widths,
+        "sensory_scale": sensory_scale,
+        "working_memory_scale": working_memory_scale,
+        "history_scale": history_scale,
+        "heard": heard,
+        "recall_scale": recall_scale,
+        "recalled": recalled,
+    }
+
+
 class Brain:
     """Senses, an association cortex, a motor cortex, basal ganglia and consolidating memory.
 
@@ -1232,9 +1432,10 @@ class Brain:
     (one neuron per motor neuron) for a copy of the issued command, ``history`` (one
     block of sensory width per entry of ``history_decays``) for the observations as heard
     and, with ``recall=True``, ``recall`` and ``next`` (one neuron per value coordinate each)
-    for the index memory of the stream's moments; ``genome`` builds one. Without
-    ``recall=True`` populations of those names are ordinary ones. Use ``Brain.compose`` for
-    the default brain with working memory.
+    for the index memory of the stream's moments; ``Genome.composed`` lays one out. Without
+    ``recall=True`` populations of those names are ordinary ones. ``Brain.compose`` builds
+    the default brain with working memory, and with ``connectome`` gives a custom anatomy
+    its founders.
 
     The memories key on the observation code, ``observation_code``: the observation itself,
     or with ``code=units`` the brain's own sparse code of it, ``units`` code neurons with
@@ -1255,7 +1456,7 @@ class Brain:
     observation is coded before the drive, and ``inputs`` must then be named beside a
     ``code`` of the region's width.
     ``sparse_code`` holds the ``PatternSeparator``, ``code_width`` the key width
-    (``observation_width`` gives it before the brain is built, to size the ``recall`` and
+    (``Genome.observation_width`` gives it before the brain is built, to size the ``recall`` and
     ``next`` regions of a custom anatomy). A memory keyed on the code numbers its key
     coordinates from zero (``pre``) and is never read from the drive; the code is its
     separation, so the episodic stores take no separator of their own.
@@ -1975,124 +2176,13 @@ class Brain:
 
     # -- construction
 
-    @staticmethod
-    def observation_width(
-        inputs: int | Sequence[int], code: int | None = None, learned_code: int | None = None,
-        learned_code_identity: float | None = None,
-    ) -> int:
-        """The width of the observation code of a brain with these ``inputs`` (a vector
-        length or an image shape), this ``code`` and this ``learned_code`` (as the
-        constructor takes them; ``learned_code_identity`` as given, the founder otherwise),
-        before the brain is built: with ``recall=True`` a custom anatomy's ``recall`` and
-        ``next`` regions hold that many neurons. A learned code's key is its units, plus the
-        inputs when the key joins the observation's identity."""
-        image = _image_shape(inputs)
-        width = int(np.prod(image)) if image is not None else _count("inputs", inputs, low=1)
-        units = _learned_code_units(learned_code)
-        if units:
-            founder = LearnedCode.founders()["identity"]
-            weight = LearnedCode.setting(
-                "identity", founder if learned_code_identity is None else learned_code_identity
-            )
-            return units + (width if weight > 0 else 0)
-        return _code_units(code) or width
-
-    @staticmethod
-    def genome(
-        inputs: int | Sequence[int],
-        actions: int,
-        *,
-        hidden: int = 64,
-        density: float = 1.0,
-        lateral: float | None = None,
-        working_memory: bool = False,
-        memory_scale: float = 12.0,
-        features: int = 8,
-        field: int = 3,
-        seed: int = 0,
-        slots: int | Sequence[int] = 1,
-    ) -> Genome:
-        """The default layout: ``inputs`` is a vector length or an image shape
-        ``(height, width)`` or ``(height, width, channels)``.
-
-        ``lateral`` left unset keeps -0.5 motor inhibition up to 8 actions and
-        removes it for wider readouts, where it stops the free solve from
-        settling; an explicit value is used as given. ``slots`` groups the motor
-        neurons into several readouts, one softmax each, with lateral inhibition
-        within a slot and the unset ``lateral`` following the largest slot."""
-        if lateral is None:
-            lateral = (
-                _default_lateral(max(slot_sizes(int(actions), slots)))
-                if isinstance(actions, (int, np.integer))
-                else 0.0
-            )
-        image = _image_shape(inputs)
-        if image is None:
-            sensory = Region("sensory", cast(int, inputs))  # a vector length; Region checks it
-            forward = Projection("sensory", "association", density=density, reciprocal=False)
-        else:
-            height, width, channels = image
-            sensory = visual_cortex(
-                height, width, channels=channels, features=features, field=field, seed=seed
-            )
-            forward = Projection("visual", "association", density=density)
-        regions = [
-            sensory,
-            Region("association", hidden),
-            motor_cortex(actions, lateral=lateral, slots=slots),
-        ]
-        projections = [forward, Projection("association", "motor")]
-        if working_memory:
-            regions.insert(1, prefrontal_cortex(hidden))
-            # the trace of a settled cortex is small; a strong projection lets it steer the next
-            # moment
-            projections.append(
-                Projection("prefrontal", "association", scale=memory_scale, reciprocal=False)
-            )
-        return Genome(tuple(regions), tuple(projections), label="generic-brain")
-
-    @classmethod
-    def build(
-        cls,
-        inputs: int | Sequence[int],
-        actions: int,
-        *,
-        hidden: int = 64,
-        density: float = 1.0,
-        lateral: float | None = None,
-        working_memory: bool = False,
-        memory_scale: float = 12.0,
-        episodic: bool = True,
-        features: int = 8,
-        field: int = 3,
-        seed: int = 0,
-        slots: int | Sequence[int] = 1,
-        **options: Any,
-    ) -> Brain:
-        """Develop the default genome and wrap it; ``options`` go to the constructor. The
-        memories key on the observation itself (an image's pixels), or with
-        ``options["code"]`` on the brain's sparse code of it."""
-        genome = cls.genome(
-            inputs,
-            actions,
-            hidden=hidden,
-            density=density,
-            lateral=lateral,
-            working_memory=working_memory,
-            memory_scale=memory_scale,
-            features=features,
-            field=field,
-            seed=seed,
-            slots=slots,
-        )
-        return cls(develop(genome, seed=seed), episodic=episodic, seed=seed, slots=slots, **options)
-
     @classmethod
     def compose(
         cls,
         inputs: int | Sequence[int],
         actions: int,
         *,
+        connectome: Connectome | None = None,
         modules: Sequence[int] = (64,),
         observers: Sequence[int] = (),
         lateral: float | None = None,
@@ -2111,7 +2201,7 @@ class Brain:
         """Compose a modular brain with working memory and consolidation.
 
         ``inputs`` is a vector length, or an image shape ``(height, width)`` or ``(height,
-        width, channels)`` as in ``genome``: the sensory region is then a ``visual_cortex``
+        width, channels)``: the sensory region is then a ``visual_cortex``
         of the image (``features`` maps of ``field`` by ``field`` receptive fields), whose
         feature maps project to the first module as the sensory region does.
         The memories key on the observation code
@@ -2266,62 +2356,22 @@ class Brain:
         ``memory_choice=False`` keeps the consolidating hippocampus, keyed by the observation
         code and read into the motor drive; ``episodic=False`` builds none. Where the history
         does not matter, compare the episodic memory against the founder on the task.
-        Use ``genome``/``Genome`` for custom ports, sparsity and named wiring.
+        ``connectome`` wraps a custom anatomy with these founders, the episodic founders
+        filled under ``memory_choice=True`` as here: its ``sensory`` (or ``visual/input``)
+        population holds the inputs (the code's units with ``code=units``), its ``motor``
+        population the actions, and it brings its own layout, so ``modules``, ``observers``,
+        ``lateral``, the projection scales, ``features`` and ``field`` stay at their founders.
+        ``Genome.composed`` returns the layout developed here, to edit or evolve;
+        ``Genome``, ``Region`` and ``Projection`` give custom ports, sparsity and named wiring.
         """
 
-        def size(value: Any) -> int:
-            if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
-                raise ValueError("population sizes must be positive integers")
-            if value < 1:
-                raise ValueError("population sizes must be positive integers")
-            return int(value)
-
-        image = _image_shape(inputs)
-        inputs = size(inputs) if image is None else int(np.prod(image))
-        actions = size(actions)
-        units = _code_units(code)
-        learned = _learned_code_units(learned_code)
-        if learned and units:
-            raise ValueError(_LEARNED_CODE_TOGETHER)
-        if learned and image is not None:
-            raise ValueError(
-                "a learned code needs a vector brain: an image brain's sensory region is its "
-                "visual cortex"
-            )
-        # the sensory region is the code when a vector brain asks for one
-        coded_cortex = bool(units) and image is None
-        sensory_width = units if coded_cortex else inputs
-        joined = bool(learned) and LearnedCode.setting(
-            "identity", options.get("learned_code_identity", LearnedCode.founders()["identity"])
-        ) > 0
-        code_width = (learned + (inputs if joined else 0)) if learned else (units or inputs)
-        heard_width = learned or sensory_width  # what the history hears: the code it reads
-        sensory_scale = real("sensory_scale", sensory_scale, low=0)
-        working_memory_scale = real("working_memory_scale", working_memory_scale, low=0)
-        history_scale = real("history_scale", history_scale, low=0)
-        heard = _history_decays(options.get("history_decays", ()))
-        recall_scale = real("recall_scale", recall_scale, low=0)
-        recalled = _recall_genes(
-            options.get("recall", False),
-            {name: value for name, value in options.items() if name.startswith("recall_")},
+        genome, layout = _layout(
+            inputs, actions, options, modules=modules, observers=observers, lateral=lateral,
+            sensory_scale=sensory_scale, working_memory_scale=working_memory_scale,
+            history_scale=history_scale, recall_scale=recall_scale, features=features,
+            field=field, code=code, learned_code=learned_code, seed=seed, slots=slots,
         )
-        if lateral is None:
-            lateral = _default_lateral(max(slot_sizes(actions, slots)))
-        if (
-            isinstance(lateral, (bool, np.bool_))
-            or not isinstance(lateral, (int, float, np.integer, np.floating))
-            or not np.isfinite(lateral)
-        ):
-            raise ValueError("lateral must be a finite signed weight")
-        lateral = float(lateral)
-        if not np.isfinite(lateral):
-            raise ValueError("lateral must be a finite signed weight")
-        if (
-            isinstance(seed, (bool, np.bool_))
-            or not isinstance(seed, (int, np.integer))
-            or seed < 0
-        ):
-            raise ValueError("seed must be a nonnegative integer")
+        units, learned = layout["units"], layout["learned"]
         if "episodic" in options and not isinstance(options["episodic"], bool):
             raise ValueError("episodic must be boolean")
         if options.get("episodic", True) and options.get("memory_choice") is True:
@@ -2330,114 +2380,58 @@ class Brain:
                 options.setdefault(
                     name, 0 if (units or learned) and name == "memory_expansion" else value
                 )
-        if isinstance(modules, (str, bytes)) or isinstance(observers, (str, bytes)):
-            raise ValueError("modules and observers must be sequences of population sizes")
-        try:
-            widths = tuple(size(value) for value in modules)
-            observer_widths = tuple(size(value) for value in observers)
-        except TypeError as exc:
-            raise ValueError("modules and observers must be sequences of population sizes") from exc
-        if not widths:
-            raise ValueError("at least one processing module is required")
-        names = [f"module_{index}" for index in range(len(widths) - 1)] + ["association"]
-        if image is None:
-            regions = [Region("sensory", sensory_width)]
+        custom = connectome is not None
+        if connectome is None:
+            connectome = develop(genome, seed=seed)
         else:
-            height, width, channels = image
-            regions = [
-                visual_cortex(
-                    height, width, channels=channels, features=features, field=field, seed=seed
+            # a custom anatomy brings its own layout; compose gives it the founders
+            if (
+                tuple(modules) != (64,)
+                or tuple(observers) != ()
+                or lateral is not None
+                or (sensory_scale, working_memory_scale, history_scale, recall_scale)
+                != (1.0, 1.2, 1.2, 1.2)
+                or (features, field) != (8, 3)
+            ):
+                raise ValueError(
+                    "a connectome brings its own layout: modules, observers, lateral, the "
+                    "projection scales, features and field are compose's layout settings"
                 )
-            ]
-        if learned:
-            # the code region, every ordered pair of its units a lateral synapse; the
-            # dictionary, the lateral weights and the predictor take the region's own tables
-            # once the brain is built, in place of the developed draw
-            regions.append(cortex(learned, lateral=-1.0, name="code"))
-        regions.extend(Region(name, width) for name, width in zip(names, widths, strict=True))
-        regions.extend(
-            (prefrontal_cortex(widths[-1]), motor_cortex(actions, lateral=lateral, slots=slots))
-        )
-        if learned:
-            projections = [
-                Projection("sensory", "code", scale=1.0, reciprocal=False),
-                Projection("code", names[0], scale=sensory_scale, reciprocal=False),
-            ]
-            reads = LearnedCode.setting(
-                "cortex", options.get("learned_code_cortex", LearnedCode.founders()["cortex"])
-            )
-            if reads == "both":  # the observation as a brain without the region reads it
-                projections.append(
-                    Projection("sensory", names[0], scale=sensory_scale, reciprocal=False)
+            populations = connectome.populations
+            sensory = populations.get("sensory", populations.get("visual/input", ()))
+            needed = units if layout["coded_cortex"] else layout["inputs"]
+            motor = len(populations.get("motor", ()))
+            if len(sensory) != needed or motor != layout["actions"]:
+                raise ValueError(
+                    f"the connectome's sensory and motor populations hold {len(sensory)} and "
+                    f"{motor} neurons, where these inputs need {needed} and these actions "
+                    f"{layout['actions']}"
                 )
-        else:
-            projections = [
-                Projection(regions[0].name, names[0], scale=sensory_scale, reciprocal=False)
-            ]
-        projections.extend(
-            Projection(left, right) for left, right in zip(names, names[1:], strict=False)
-        )
-        projections.extend(
-            (
-                Projection("association", "motor"),
-                Projection(
-                    "prefrontal", "association", scale=working_memory_scale, reciprocal=False
-                ),
-            )
-        )
-        if learned:
-            projections.append(Projection("prefrontal", "code", scale=0.0, reciprocal=False))
-        observed = [*names, "motor"]
-        for index, width in enumerate(observer_widths):
-            name = f"observer_{index}"
-            regions.append(Region(name, width))
-            projections.extend(Projection(source, name) for source in observed)
-            observed.append(name)
-        if _validate_efference_amplitude(options.get("efference_amplitude", 0.0)):
-            # Appended last: every earlier region and projection is developed from the same
-            # random draws, so the brain with the copy is the brain without it plus the
-            # efference neurons and their one projection.
-            regions.append(Region("efference", actions))
-            projections.append(Projection("efference", "association", scale=12.0, reciprocal=False))
-        if heard:
-            # Appended last, after any efference copy: the brain with the history is the brain
-            # without it plus one block of sensory width per decay and their one projection.
-            regions.append(Region("history", len(heard) * heard_width))
-            projections.append(
-                Projection("history", "association", scale=history_scale, reciprocal=False)
-            )
-        if recalled:
-            # Appended last, after any history: the brain with the recall memory is the brain
-            # without it plus the recall and next regions, one neuron per value coordinate
-            # (the values are the events, of the code's width), and one projection from each.
-            for name in ("recall", "next") if recalled["next"] else ("recall",):
-                regions.append(Region(name, code_width))
-                projections.append(
-                    Projection(name, "association", scale=recall_scale, reciprocal=False)
-                )
-        genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
         result = cls(
-            develop(genome, seed=seed), seed=seed, slots=slots, code=units,
-            inputs=inputs if coded_cortex else None, learned_code=learned or None, **options,
+            connectome, seed=seed, slots=slots, code=units,
+            inputs=layout["inputs"] if layout["coded_cortex"] else None,
+            learned_code=learned or None, **options,
         )
+        if custom:
+            return result  # a custom anatomy records no composition
         result._composition = {
-            "inputs": inputs,
-            "actions": actions,
-            "modules": list(widths),
-            "observers": list(observer_widths),
+            "inputs": layout["inputs"],
+            "actions": layout["actions"],
+            "modules": list(layout["widths"]),
+            "observers": list(layout["observer_widths"]),
             "slots": [int(width) for width in result.learner.slot_sizes],
-            "lateral": lateral,
-            "sensory_scale": sensory_scale,
-            "working_memory_scale": working_memory_scale,
+            "lateral": layout["lateral"],
+            "sensory_scale": layout["sensory_scale"],
+            "working_memory_scale": layout["working_memory_scale"],
             "seed": int(seed),
         }
-        if heard:
-            result._composition["history_scale"] = history_scale
-        if recalled:
-            result._composition["recall_scale"] = recall_scale
-        if image is not None:
-            result._composition["image"] = list(image)
-        if coded_cortex:
+        if layout["heard"]:
+            result._composition["history_scale"] = layout["history_scale"]
+        if layout["recalled"]:
+            result._composition["recall_scale"] = layout["recall_scale"]
+        if layout["image"] is not None:
+            result._composition["image"] = list(layout["image"])
+        if layout["coded_cortex"]:
             result._composition["code"] = units
         if learned:
             result._composition["learned_code"] = learned

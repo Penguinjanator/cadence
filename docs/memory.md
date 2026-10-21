@@ -103,8 +103,7 @@ assert not brain.working_memory.trace.any()
 | `working_memory_scale` | 1.2 | construction (`compose` argument) | the past must matter from the first moment, before learning | the brain repeats itself and ignores what it sees |
 | `modules` | `(64,)` | construction | more items or distractors: `modules=(128,)` | a narrow last module such as `(48, 24)` carries little |
 
-`Brain.build` has no trace unless `working_memory=True` (projection scale `memory_scale`
-12.0); `Brain(connectome, ...)` has one when the connectome has a `prefrontal` region.
+`Brain(connectome, ...)` has a trace when the connectome has a `prefrontal` region.
 `done=True` clears a stream's trace, so mark episodes only where the world restarts, and
 teach with `learning_surprise=True` so lessons touch only the moments answered wrongly
 ([learning](learning.md#lessons-only-where-the-answer-differs)). The synapses that read the
@@ -290,20 +289,22 @@ memories use it. Set it when wide observations make the episodic separators and 
 address map too large: at 12,824 inputs they take 1,532 MB uncoded with `memory_choice` and
 `recall`, and 9.8 MB with `code=1024`. A coded brain refuses `memory_expansion` and
 `memory_fan_in`, and keys stored under one code do not match another.
-`Brain.observation_width(inputs, code)` gives the key width before building, the size of a
+`Genome.observation_width(inputs, code)` gives the key width before building, the size of a
 custom anatomy's `recall` and `next` regions. The code is fixed and learns nothing.
 `learned_code=units` (opt-in, without `code`) adds a code region of the brain's own neurons
 that settles to a learned sparse code of the observation and learns every moment; the cortex
 reads it and the memories key on it ([the learned code](code.md)).
 
 ```python
+from cadence import Genome
+
 plain = Brain.compose(inputs=2048, actions=3, seed=0)
 coded = Brain.compose(inputs=2048, actions=3, seed=0, code=1024)
 x = np.random.default_rng(0).random((1, 2048))
 assert plain.observation_code(x).shape == (1, 2048)     # the observation itself
 key = coded.observation_code(x)                         # what every memory keys on
 assert key.shape == (1, 1024) and (key > 0).sum() == 102 and np.isclose(np.linalg.norm(key), 1.0)
-assert Brain.observation_width(2048, 1024) == 1024      # the key width before building
+assert Genome.observation_width(2048, 1024) == 1024     # the key width before building
 assert len(coded.connectome.populations["sensory"]) == 1024  # the cortex reads the code
 ```
 

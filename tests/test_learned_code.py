@@ -227,9 +227,9 @@ def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, 
 
 
 def test_learned_code_none_is_the_founder_and_the_width_is_as_before():
-    assert cd.Brain.observation_width(53) == 53 and cd.Brain.observation_width(53, 24) == 24
-    assert cd.Brain.observation_width(53, None, 16) == 16 + 53  # the key joins the identity
-    assert cd.Brain.observation_width(53, None, 16, learned_code_identity=0.0) == 16
+    assert cd.Genome.observation_width(53) == 53 and cd.Genome.observation_width(53, 24) == 24
+    assert cd.Genome.observation_width(53, None, 16) == 16 + 53  # the key joins the identity
+    assert cd.Genome.observation_width(53, None, 16, learned_code_identity=0.0) == 16
     for value in (None, 0):
         brain = cd.Brain.compose(53, 4, modules=(8,), seed=2, learned_code=value)
         assert brain.learned_code is None and brain.code_width == 53

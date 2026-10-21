@@ -1,5 +1,6 @@
 """Arousal and ``Brain.live``: routine changes nothing, surprise and want wake the brain."""
 
+import copy
 import json
 from dataclasses import replace
 
@@ -312,7 +313,7 @@ def test_legacy_arousal_without_need_migrates_without_changing_its_saved_state()
 
 
 def test_a_behaviour_temperature_widens_sampling_and_leaves_the_policy_alone():
-    brain = cd.Brain.build(4, 3, hidden=8, seed=0)
+    brain = cd.Brain.compose(4, 3, modules=(8,), seed=0)
     x = np.eye(4)[[0]]
     brain.act(x, greedy=True)
     agent = brain.basal_ganglia
@@ -320,8 +321,9 @@ def test_a_behaviour_temperature_widens_sampling_and_leaves_the_policy_alone():
     hot = agent.probabilities(agent.state, 5.0)
     assert np.ptp(hot) < np.ptp(own)  # flatter at a higher temperature
     np.testing.assert_allclose(agent.probabilities(agent.state, 0.2), own)
+    twin = copy.deepcopy(brain)  # the same stream: the greedy act reads no temperature
     np.testing.assert_array_equal(
-        brain.act(x, greedy=True), brain.act(x, greedy=True, temperature=9.0)
+        brain.act(x, greedy=True), twin.act(x, greedy=True, temperature=9.0)
     )
     before = agent.rng.bit_generator.state
     for bad in (0.0, -1.0, float("nan"), True, "hot"):

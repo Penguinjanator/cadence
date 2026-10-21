@@ -31,8 +31,9 @@ def bars(n_per: int = 40, seed: int = 0) -> tuple[np.ndarray, np.ndarray]:
 
 
 def test_the_generic_brain_learns_labels() -> None:
-    # defaults; ten seeds of this task all reach 1.0 on held-out samples
-    brain = cd.Brain.build(8, 2, seed=1)
+    # defaults (the single-region layout of earlier releases reached 1.0 on held-out
+    # samples on ten seeds of this task)
+    brain = cd.Brain.compose(8, 2, seed=1)
     x, y = blobs()
     history = brain.fit(x, y, epochs=4, batch=20)
     held_x, held_y = blobs(seed=7)
@@ -40,8 +41,9 @@ def test_the_generic_brain_learns_labels() -> None:
 
 
 def test_the_generic_brain_sees_bars_through_its_visual_cortex() -> None:
-    # defaults; over ten seeds the held-out accuracy has median 0.97 and minimum 0.89
-    brain = cd.Brain.build((6, 6), 2, seed=0)
+    # defaults (on the single-region layout of earlier releases the held-out accuracy over
+    # ten seeds had median 0.97 and minimum 0.89)
+    brain = cd.Brain.compose((6, 6), 2, seed=0)
     assert "visual/input" in brain.connectome.populations
     x, y = bars()
     brain.fit(x, y, epochs=30, batch=20)
@@ -50,9 +52,10 @@ def test_the_generic_brain_sees_bars_through_its_visual_cortex() -> None:
 
 
 def test_the_generic_brain_learns_a_contextual_bandit_from_dopamine() -> None:
-    # defaults with an immediate reward; ten seeds of this task all reach 1.0
+    # defaults with an immediate reward (the single-region layout of earlier releases reached
+    # 1.0 on ten seeds of this task)
     reward_config = cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0, eta_critic=0.3)
-    brain = cd.Brain.build(4, 4, seed=0, reward=reward_config)
+    brain = cd.Brain.compose(4, 4, seed=0, reward=reward_config)
     rng = np.random.default_rng(0)
 
     def contexts(k: int) -> tuple[np.ndarray, np.ndarray]:
@@ -79,8 +82,8 @@ def test_the_hippocampus_keeps_a_rewarded_choice_after_one_trial() -> None:
     """Assigned-record/readout control; actual sampled-action custody is tested separately."""
     frozen = cd.LearnerConfig(eta=0.0, eta_bias=0.0, tolerance=3e-3, nudged_steps=12)
     still = cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.0, eta_bias=0.0, eta_critic=0.0)
-    brain = cd.Brain.build(
-        4, 4, hidden=8, episodic=True, seed=3, learning=frozen, reward=still
+    brain = cd.Brain.compose(
+        4, 4, modules=(8,), episodic=True, seed=3, learning=frozen, reward=still
     )
     cue, other = np.eye(4)[[2]], np.eye(4)[[0]]
     first = int(brain.act(cue, greedy=True)[0])
@@ -95,7 +98,7 @@ def test_the_hippocampus_keeps_a_rewarded_choice_after_one_trial() -> None:
     assert int(brain.act(cue, greedy=True)[0]) == rewarded
     brain.reset()
     assert int(brain.act(other, greedy=True)[0]) == int(
-        cd.Brain.build(4, 4, hidden=8, seed=3, learning=frozen, reward=still).act(
+        cd.Brain.compose(4, 4, modules=(8,), seed=3, learning=frozen, reward=still).act(
             other, greedy=True
         )[0]
     )
@@ -130,12 +133,11 @@ def delayed_response(brain: cd.Brain, episodes: int, seed: int) -> float:
 
 
 def test_the_prefrontal_cortex_bridges_a_delay() -> None:
-    # defaults; on twelve fresh seeds (8 to 19) eleven solve the task and one stays at chance.
-    # ``build`` keeps the prefrontal projection's scale 12; since 0.82.0 the trace carries only
-    # the last interpretation (retention 0), and seeds 8 to 13 all solve it.
-    remembering = cd.Brain.build(3, 2, working_memory=True, seed=8)
+    # defaults (tests/test_context_defaults.py reads seeds 8 to 13 at 0.96 to 1.00); the same
+    # brain with its working trace silenced is the control
+    remembering = cd.Brain.compose(3, 2, seed=8)
     assert delayed_response(remembering, episodes=1500, seed=8) >= 0.9
-    forgetting = cd.Brain.build(3, 2, seed=8)
+    forgetting = cd.Brain.compose(3, 2, seed=8, working_memory_amplitude=0.0)
     assert delayed_response(forgetting, episodes=400, seed=8) < 0.75
 
 
@@ -186,12 +188,13 @@ def test_evolution_selects_a_generic_brain_genome() -> None:
     x, y = blobs(30)
 
     def fitness(connectome: cd.Connectome, seed: int) -> float:
-        brain = cd.Brain(connectome, seed=seed)
+        brain = cd.Brain.compose(8, 2, connectome=connectome, seed=seed)
         brain.fit(x, y, epochs=1, batch=20)
         return brain.accuracy(x, y) - 1e-3 * len(connectome.populations["association"])
 
-    genome = cd.Brain.genome(8, 2, hidden=6, density=0.6)
+    genome = cd.Genome.composed(8, 2, modules=(6,))
     lineage = cd.evolve(
-        fitness, genome, generations=2, population=3, keep=1, seed=0, fixed=("sensory",)
+        fitness, genome, generations=2, population=3, keep=1, seed=0, fixed=("sensory",),
+        tied=(("association", "prefrontal"),),
     )
     assert lineage.best is not None and lineage.best.region("motor").size == 2

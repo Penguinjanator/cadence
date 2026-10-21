@@ -182,7 +182,7 @@ changing the code makes the stored keys inconsistent with new addresses.
 
 `Brain(connectome, recall=True, ...)` needs a `recall` and a `next` region (or `recall` alone
 with `recall_next=False`), each with one neuron per value coordinate,
-`Brain.observation_width(inputs, code)`. Without `recall=True` populations of those names
+`Genome.observation_width(inputs, code)`. Without `recall=True` populations of those names
 are ordinary ones.
 `tests/test_recall_memory.py` checks that the library reproduces the reference memory
 `benchmarks/binding/index_read.py` moment for moment. To check that the memory does the work,
