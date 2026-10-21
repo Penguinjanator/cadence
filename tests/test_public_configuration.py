@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
@@ -179,7 +180,7 @@ def test_retune_matches_the_existing_stage_operation_and_preserves_pending_credi
     assert brain.basal_ganglia._pending is pending
     after = archive(brain, tmp_path, "after-stage")
     for name in before:
-        if name not in ("generic", "meta"):
+        if name not in ("generic", "meta", "brain"):
             np.testing.assert_array_equal(before[name], after[name], err_msg=name)
     legacy.arousal.config = replace(legacy.arousal.config, need=0.0, heat=0.0)
     legacy.learner.config = replace(legacy.learner.config, temperature=0.3)
@@ -216,7 +217,7 @@ def test_memory_and_trace_tuning_keeps_learned_contents(tmp_path):
     )
     after = archive(brain, tmp_path, "after-memory")
     for name in before:
-        if name not in ("generic", "meta"):
+        if name not in ("generic", "meta", "brain"):
             np.testing.assert_array_equal(before[name], after[name], err_msg=name)
     restored = cd.Brain.load(brain.save(tmp_path / "memory-tuned"))
     assert brain.describe() == restored.describe()
@@ -290,8 +291,8 @@ def test_the_trace_focus_of_0843_is_refused_by_name_and_read_at_zero(tmp_path):
     assert "working_memory_focus" not in brain.describe()["genes"]
     path = brain.save(tmp_path / "trace.npz")
     with np.load(path, allow_pickle=False) as saved:
-        arrays = {name: saved[name].copy() for name in saved.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: saved[name].copy() for name in saved.files})
+    meta = metadata(arrays)
     for focus, loads in ((0.0, True), (0.5, False)):
         meta["working_memory"]["focus"] = focus
         arrays["generic"] = np.array(json.dumps(meta))
@@ -315,8 +316,8 @@ def test_the_resting_bias_of_0843_is_refused_by_name_and_its_record_loads(tmp_pa
     assert "resting_bias" not in brain.describe()["initialization"]
     path = brain.save(tmp_path / "recorded.npz")
     with np.load(path, allow_pickle=False) as saved:
-        arrays = {name: saved[name].copy() for name in saved.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: saved[name].copy() for name in saved.files})
+    meta = metadata(arrays)
     meta["resting_bias"] = 0.5
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(path, **arrays)

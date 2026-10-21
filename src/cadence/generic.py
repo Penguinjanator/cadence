@@ -59,6 +59,18 @@ from .stream import Efference, FastSynapses, History, PatternSeparator, Recall, 
 
 __all__ = ["Brain"]
 
+# The checkpoint format of a brain: one group per memory (``Brain.save``). ``Brain.load`` reads
+# it and, through 0.85.x, the formats of 0.84.3 (``cadence-generic/2`` to ``/9``).
+BRAIN_FORMAT = "cadence-brain/1"
+# A memory's group in BRAIN_FORMAT and the prefix its arrays had in the formats of 0.84.3; the
+# episodic memory's arrays are the context store's and the stream's (``_earlier_layout``).
+_MEMORY_PREFIXES = {
+    "working_memory": "working/",
+    "efference": "efference/",
+    "history": "history/",
+    "recall": "recall/",
+    "hippocampus": "episodic/",
+}
 _REWARD_ARRAYS = (
     "w_critic",
     "trace",
@@ -918,14 +930,13 @@ def _validate_recall_state(
             raise ValueError("saved recall state requires recall metadata")
         return
     names = {*Recall.RUNTIME, *Recall.CONSTRUCTION}
-    # the format always wrote the keys of ``FORMAT``; the other removed settings, like the
-    # options, were saved only where they differed from their founders
+    # the format of 0.84.3 always wrote the keys of ``FORMAT``; the other removed settings,
+    # like the options, were saved only where they differed from their founders
     optional = {"inputs", *Recall.OPTIONS, *Recall.RETIRED}
     if (
         not isinstance(recalled, dict)
         or set(recalled) - optional
         != names | {"source", "target", "neurons", "writes"}
-        or set(Recall.FORMAT) - set(recalled)
         or recalled["source"] not in ("sensory", "visual/input")
         or recalled["source"] not in populations
         or recalled["target"] != "recall"
@@ -986,9 +997,10 @@ def _validate_recall_state(
     if array("held", (batch, slots)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: held")
     array("previous", (batch, association))
-    # the format of 0.84.3 wrote the context history, empty at the one value ``FORMAT`` keeps
+    # the format of 0.84.3 wrote the context history, empty at the one value of ``FORMAT``
     history = data.get("recall/history")
-    array("history", (0 if history is None or not len(history) else batch, key))
+    if history is not None:
+        array("history", (0 if not len(history) else batch, key))
     array("w_x", (key, address))
     array("w_c", (association, address))
     array("b", (address,))
@@ -1006,7 +1018,9 @@ def _validate_recall_state(
     # the streams whose latest slot closed an episode, saved while one does
     if "recall/ended" in data and array("ended", (batch,)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: ended")
-    expected = {"keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c", "b"}
+    expected = {"keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b"}
+    if history is not None:
+        expected |= {"history"}
     if window > 1:
         expected |= {"past"}
     if {name[len("recall/"):] for name in data if name.startswith("recall/")} - {
@@ -1052,6 +1066,64 @@ def _actor_config(values: Any) -> ActorCriticConfig:
                     "version removed; load it with cadence-net 0.84.3"
                 )
     return ActorCriticConfig(**values)
+
+
+def _store_arrays(memory: FastSynapses) -> dict[str, np.ndarray]:
+    """The arrays of an associative store: its ports, strengths and masses, the consolidated
+    records of a ``SynapticMemory`` and its separator's tables."""
+    arrays = {name: getattr(memory, name) for name in ("pre", "post", "strength", "mass")}
+    if memory.separator is not None:
+        arrays.update({"separator/" + k: v for k, v in memory.separator.arrays().items()})
+    if isinstance(memory, SynapticMemory):
+        arrays["consolidated"] = memory.consolidated
+    return arrays
+
+
+def _earlier_layout(
+    saved: dict[str, Any], data: Mapping[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """A ``cadence-brain/1`` file in the layout of the formats of 0.84.3, which the reader
+    validates: each memory's settings and arrays under the names those formats gave them,
+    and the format number of the latest component the file carries."""
+    memories = saved.get("memories")
+    if not isinstance(memories, dict) or set(memories) - {*_MEMORY_PREFIXES, "episodic"}:
+        raise ValueError("invalid saved memories")
+    if "actor" not in saved:
+        raise ValueError("missing saved actor config")
+    meta = {k: v for k, v in saved.items() if k not in ("memories", "actor")}
+    meta["reward"] = saved["actor"]
+    meta["working_memory"] = memories.get("working_memory")
+    meta["hippocampus"] = memories.get("hippocampus")
+    for name in ("efference", "history", "recall", "episodic"):
+        if name in memories:
+            meta[name] = memories[name]
+    level = max(
+        (number for number, present in (
+            (2, True), (3, "arousal" in meta), (4, "efference" in meta),
+            (5, "awaiting" in meta), (6, "episodic" in meta), (7, "history" in meta),
+            (8, "recall" in meta), (9, "code" in meta), (10, "learned_code" in meta),
+        ) if present),
+    )
+    meta["format"] = f"cadence-generic/{level}"
+    arrays: dict[str, Any] = {}
+    for name in data:
+        if name == "brain":
+            continue
+        if not name.startswith("memories/"):
+            arrays[name] = data[name]
+            continue
+        group, _, rest = name[len("memories/"):].partition("/")
+        if group not in memories or not rest:
+            raise ValueError("saved memory arrays require their memory's settings")
+        if group != "episodic":
+            arrays[_MEMORY_PREFIXES[group] + rest] = data[name]
+        elif rest.startswith("context_memory/"):
+            arrays["temporal/" + rest[len("context_memory/"):]] = data[name]
+        elif rest in ("context", "decision") or rest.startswith("path/"):
+            arrays["episode/" + rest] = data[name]
+        else:
+            raise ValueError("unexpected saved episodic array")
+    return meta, arrays
 
 
 def _validate_episodic_state(
@@ -2489,9 +2561,6 @@ class Brain:
                     for name in (*Recall.RUNTIME, *Recall.CONSTRUCTION)
                 }
             )
-            # the genes of 0.84.3 this version fixed at their one value are described as
-            # before, so a description is unchanged; compose refuses their names
-            genes.update({f"recall_{name}": value for name, value in Recall.FORMAT.items()})
             # an option is described where it differs from its founder
             recalled = self.recall.to_dict()
             genes.update(
@@ -4235,38 +4304,37 @@ class Brain:
     def save(self, path: str | Path) -> Path:
         """Save the complete composition, including an action awaiting its real outcome.
 
-        Includes critic, optimizer, random generators, working and episodic memories, the
-        heard history, the recall memory (its slots, address map and code), eligibility, the
-        current free phase, any pending action's nudged states and the state ``wait`` sensed
-        since that action was chosen.
-        ``Learner.save`` saves the slow learned response alone.
+        The file is ``cadence-brain/1``: the learner's checkpoint, the actor (its config,
+        critic, eligibility and random generator), the brain's random generator, the free
+        phase, a pending action's nudged states, the state ``wait`` sensed since that action
+        was chosen, the arousal, the observation code or the learned code, and one group
+        ``memories/<name>/...`` per present memory (``working_memory``, ``efference``,
+        ``history``, ``recall``, ``hippocampus``, ``episodic``) with the memory's settings
+        under ``memories`` in the metadata. ``Learner.save`` saves the slow learned response
+        alone.
         """
         from .checkpoint import _learner_data, _write
         from .receipts import canonical_json
 
         agent = self.basal_ganglia
         data = _learner_data(self.learner)
+        memories: dict[str, Any] = {}
         metadata: dict[str, Any] = {
-            "format": "cadence-generic/2",
-            "reward": agent.config.to_dict(),
+            "format": BRAIN_FORMAT,
+            "actor": agent.config.to_dict(),
             "rng": self.rng.bit_generator.state,
             "actor_rng": agent.rng.bit_generator.state,
             "updates": agent.updates,
             "b_critic": agent.b_critic,
-            "working_memory": None
-            if self.working_memory is None
-            else self.working_memory.to_dict(),
-            "hippocampus": None if self.hippocampus is None else self.hippocampus.to_dict(),
             "free_steps": None if agent.state is None else agent.state.steps,
             "free_current": agent._free_brain is self.brain,
             "pending": agent._pending is not None,
             "last_learning": self.last_learning,
+            "memories": memories,
         }
         if self._composition is not None:
             metadata["composition"] = plain(self._composition)
         if self.arousal is not None:
-            # Arousal is part of the continuation; earlier formats cannot carry it.
-            metadata["format"] = "cadence-generic/3"
             metadata["arousal"] = self.arousal.to_dict()
             lived = self._lived
             if lived is not None and agent.state is not lived[4]:
@@ -4280,83 +4348,18 @@ class Brain:
                 }
                 if lived[6] is not None:  # the code the lived action was keyed on
                     data["lived/code"] = lived[6]
-        if self.efference is not None:
-            # The copy is part of the continuation; earlier formats cannot carry it. A brain
-            # without one writes the metadata of the earlier formats unchanged.
-            metadata["format"] = "cadence-generic/4"
-            metadata["efference"] = self.efference.to_dict()
         awaited = self._awaited()
-        if awaited is not None:
-            # What the stream sensed while its outcome is awaited is part of the
-            # continuation, which earlier formats cannot carry; a stream that is not
-            # waiting writes the metadata of the earlier formats unchanged.
-            metadata["format"] = "cadence-generic/5"
+        if awaited is not None:  # what the stream sensed while its outcome is awaited
             metadata["awaiting"] = {"steps": int(awaited.steps)}
             for name in ("v", "activation", "adaptation"):
                 data["awaiting/" + name] = np.asarray(getattr(awaited, name))
-        if self.memory_choice:
-            # An episodic memory's choice and its stream state are part of the continuation;
-            # earlier formats would read its records into the drive instead.
-            metadata["format"] = "cadence-generic/6"
-            temporal = self.context_memory
-            metadata["episodic"] = {
-                "choice": True,
-                "context": float(self.memory_context),
-                "replay": int(self.memory_replay),
-                "demonstrations": float(self.memory_demonstrations),
-                "context_memory": None if temporal is None else temporal.to_dict(),
-            }
-            if temporal is not None:
-                for name in ("pre", "post", "strength", "mass", "consolidated"):
-                    data["temporal/" + name] = getattr(temporal, name)
-                if temporal.separator is not None:
-                    for name, value in temporal.separator.arrays().items():
-                        data["temporal/separator/" + name] = value
-                if self._context is not None:
-                    data["episode/context"] = self._context
-                if self._decision is not None:
-                    data["episode/decision"] = self._decision
-            if self._paths and any(self._paths):
-                data.update(self._saved_paths())
-        if self.history is not None:
-            # The heard history is part of the continuation; earlier formats cannot carry it.
-            # A brain without one writes the metadata of the earlier formats unchanged.
-            metadata["format"] = "cadence-generic/7"
-            metadata["history"] = self.history.to_dict()
-            data["history/trace"] = self.history.trace
-        recall = self.recall
-        if recall is not None:
-            # The recall memory is part of the continuation; earlier formats cannot carry it.
-            # A brain without one writes the metadata of the earlier formats unchanged.
-            metadata["format"] = "cadence-generic/8"
-            metadata["recall"] = recall.to_dict()
-            for name in ("keys", "values", "nexts", "held", "previous"):
-                data["recall/" + name] = getattr(recall, name)
-            # the format of 0.84.3 wrote the context history here, empty at its one value
-            data["recall/history"] = np.zeros((0, recall.key_width))
-            for name in ("w_x", "w_c", "b"):
-                data["recall/" + name] = getattr(recall, name)
-            if recall.ended.any():  # streams whose latest slot closed an episode
-                data["recall/ended"] = recall.ended
-            if recall.window > 1:  # the window's previous events
-                data["recall/past"] = recall.past
-            # the actor's eligibility of the address map, and the pending action's contrast
-            if agent.trace_memory is not None:
-                data["recall/trace"] = agent.trace_memory
-            if agent._pending is not None and agent._pending_memory is not None:
-                data["recall/pending"] = agent._pending_memory
         if self.sparse_code is not None:
-            # The brain's code is part of the continuation: the records have its width and the
-            # keys read its tables. A brain without one writes the earlier formats unchanged.
-            metadata["format"] = "cadence-generic/9"
+            # the records have the code's width and the keys read its tables
             metadata["code"] = {**self.sparse_code.to_dict(), "cortex": self.coded_cortex}
             tables = self.sparse_code.arrays()
             data["code/index"], data["code/weight"] = tables["index"], tables["weight"]
         if self.learned_code is not None:
-            # The learned code is part of the continuation: its tables are the brain's
-            # synapses and the memories' keys. A brain without one writes the earlier formats
-            # unchanged.
-            metadata["format"] = "cadence-generic/10"
+            # its tables are the brain's synapses and the memories' keys
             metadata["learned_code"] = self.learned_code.to_dict()
             for name, value in self.learned_code.arrays().items():
                 data["learned_code/" + name] = value
@@ -4385,22 +4388,69 @@ class Brain:
                 data["free/" + name] = np.asarray(getattr(agent.state, name))
         if self._prepared is not None:
             data["prepared"] = self._prepared
-        if self.working_memory is not None:
-            for name in ("trace", "last", "cold"):
-                data["working/" + name] = getattr(self.working_memory, name)
-        if self.efference is not None:
-            for name in ("trace", "last", "cold"):
-                data["efference/" + name] = getattr(self.efference, name)
-        if self.hippocampus is not None:
-            for name in ("pre", "post", "strength", "mass"):
-                data["episodic/" + name] = getattr(self.hippocampus, name)
-            if self.hippocampus.separator is not None:
-                for name, value in self.hippocampus.separator.arrays().items():
-                    data["episodic/separator/" + name] = value
-            if isinstance(self.hippocampus, SynapticMemory):
-                data["episodic/consolidated"] = self.hippocampus.consolidated
-        data["generic"] = np.array(canonical_json(metadata))
+        for name, (settings, arrays) in self._saved_memories().items():
+            memories[name] = settings
+            for array, value in arrays.items():
+                data[f"memories/{name}/{array}"] = value
+        data["brain"] = np.array(canonical_json(metadata))
         return _write(data, path)
+
+    def _saved_memories(self) -> dict[str, tuple[Any, dict[str, np.ndarray]]]:
+        """Each present memory's settings and arrays, in the order the brain reads them."""
+        agent = self.basal_ganglia
+        out: dict[str, tuple[Any, dict[str, np.ndarray]]] = {}
+        for name, trace in (("working_memory", self.working_memory), ("efference", self.efference)):
+            if trace is not None:
+                out[name] = (
+                    trace.to_dict(),
+                    {field: getattr(trace, field) for field in ("trace", "last", "cold")},
+                )
+        if self.history is not None:
+            out["history"] = (self.history.to_dict(), {"trace": self.history.trace})
+        recall = self.recall
+        if recall is not None:
+            arrays = {
+                field: getattr(recall, field)
+                for field in ("keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b")
+            }
+            if recall.ended.any():  # streams whose latest slot closed an episode
+                arrays["ended"] = recall.ended
+            if recall.window > 1:  # the window's previous events
+                arrays["past"] = recall.past
+            # the actor's eligibility of the address map, and the pending action's contrast
+            if agent.trace_memory is not None:
+                arrays["trace"] = agent.trace_memory
+            if agent._pending is not None and agent._pending_memory is not None:
+                arrays["pending"] = agent._pending_memory
+            out["recall"] = (recall.to_dict(), arrays)
+        if self.hippocampus is not None:
+            out["hippocampus"] = (self.hippocampus.to_dict(), _store_arrays(self.hippocampus))
+        if self.memory_choice:
+            temporal = self.context_memory
+            arrays = {}
+            if temporal is not None:
+                arrays.update(
+                    {"context_memory/" + k: v for k, v in _store_arrays(temporal).items()}
+                )
+                if self._context is not None:
+                    arrays["context"] = self._context
+                if self._decision is not None:
+                    arrays["decision"] = self._decision
+            if self._paths and any(self._paths):
+                arrays.update(
+                    {k[len("episode/"):]: v for k, v in self._saved_paths().items()}
+                )
+            out["episodic"] = (
+                {
+                    "choice": True,
+                    "context": float(self.memory_context),
+                    "replay": int(self.memory_replay),
+                    "demonstrations": float(self.memory_demonstrations),
+                    "context_memory": None if temporal is None else temporal.to_dict(),
+                },
+                arrays,
+            )
+        return out
 
     def _saved_paths(self) -> dict[str, np.ndarray]:
         """The replay paths as padded arrays, with each stream's length."""
@@ -4443,15 +4493,25 @@ class Brain:
     ) -> Brain:
         """Resume a complete saved brain, defaulting to portable CPU inference and learning.
 
-        Keep the saved batch row identities, or call ``reset`` for new episodes.
-        Cross-backend results are subject to floating-point differences.
+        Reads ``cadence-brain/1`` and, through 0.85.x, the formats of 0.84.3
+        (``cadence-generic/2`` to ``/9``); a setting of 0.84.3 that this version removed loads
+        at the value whose law this version keeps and is refused otherwise, with a message
+        naming 0.84.3. Keep the saved batch row identities, or call ``reset`` for new
+        episodes. Cross-backend results are subject to floating-point differences.
         """
         import json
 
-        with np.load(path, allow_pickle=False) as data:
-            if "generic" not in data:
+        with np.load(path, allow_pickle=False) as archive:
+            data: Mapping[str, Any] = archive
+            if "brain" in archive:
+                saved = json.loads(str(archive["brain"]))
+                if not isinstance(saved, dict) or saved.get("format") != BRAIN_FORMAT:
+                    raise ValueError("unsupported Brain checkpoint format")
+                meta, data = _earlier_layout(saved, archive)
+            elif "generic" in archive:
+                meta = json.loads(str(archive["generic"]))
+            else:
                 raise ValueError("not a Brain checkpoint; use Learner.load for a learner")
-            meta = json.loads(str(data["generic"]))
             formats = tuple(f"cadence-generic/{level}" for level in range(1, 11))
             if not isinstance(meta, dict) or meta.get("format") not in formats:
                 raise ValueError("unsupported Brain checkpoint format")

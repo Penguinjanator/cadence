@@ -164,10 +164,9 @@ Settings of 0.84.3 that left in this version, each refused by name with a messag
 - `recall_context` and `recall_context_decay`, a fading history of the earlier events added
   to every key: never read above zero in a chamber.
 
-`describe()` and a checkpoint still carry `recall_value="event"`, `recall_context=0.0` and
-`recall_context_decay=0.5`, the one value each has, under `genes` and `recall`, with the
-empty history array, so a description and a founder file of 0.84.3 are unchanged and a file
-written here reads there; the next checkpoint format drops them.
+A checkpoint of 0.84.3 carries `value="event"`, `context=0.0` and `context_decay=0.5`, the one
+value each had, with an empty history array; it loads, and neither `describe()` nor a
+checkpoint of this version carries them.
 
 ## Cost
 

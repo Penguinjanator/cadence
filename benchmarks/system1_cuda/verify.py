@@ -93,8 +93,11 @@ def verify(folder):
             )
             with np.load(directory / "acquired.npz", allow_pickle=False) as saved:
                 meta = json.loads(str(saved["meta"]))
-                generic = json.loads(str(saved["generic"]))
-            for name, effective in (("learning", meta["config"]), ("reward", generic["reward"])):
+                if "brain" in saved.files:  # one group per memory, the format since 0.85
+                    reward = json.loads(str(saved["brain"]))["actor"]
+                else:
+                    reward = json.loads(str(saved["generic"]))["reward"]
+            for name, effective in (("learning", meta["config"]), ("reward", reward)):
                 # A checkpoint written by a later library may carry settings the campaign did
                 # not declare; they must sit at that setting's founder value. The settings it
                 # removed must be recorded and requested at the value its law keeps.

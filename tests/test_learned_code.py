@@ -11,6 +11,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 from cadence import brain as cadence_brain
@@ -44,7 +45,7 @@ def checkpoint_digest(path: Path) -> str:
         for name in sorted(data.files):
             value = data[name]
             h.update(name.encode())
-            if name in ("meta", "generic"):
+            if name in ("meta", "generic", "brain"):
                 meta = json.loads(str(value))
                 meta.pop("version", None)
                 h.update(json.dumps(meta, sort_keys=True).encode())
@@ -58,7 +59,7 @@ def names_digest(path: Path) -> tuple[str, str]:
     """The checkpoint's format, and its metadata keys and member names, which no backend
     changes."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         names = json.dumps([sorted(meta), sorted(data.files)])
     return meta["format"], hashlib.sha256(names.encode()).hexdigest()
 
@@ -141,9 +142,9 @@ FOUNDERS: dict[str, dict] = {
         "life": stepped,
         "parameters": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
-        "format": "cadence-generic/2",
-        "names": "5250f3eb53958993b3e08c854c440f93a182b0ee08d7fae95332092e9c4503f2",
-        "checkpoint": "a0dcc969fce2873266c7f43e3b123f9d481ae0167ff1095b587fe74ac7df8046",
+        "format": "cadence-brain/1",
+        "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
+        "checkpoint": "06fbd6687d87a6fd4fd821dc7decaf7fac71295bb1c076c6b73f0d6763b9bf11",
         "describe": "1bf73099c7ecf9cbf546180de2606cc08b9e4411917a0bf3e206de288670a205",
     },
     "episodic": {
@@ -151,9 +152,9 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        "format": "cadence-generic/6",
-        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
-        "checkpoint": "e2f57737198dfe7fcb9a763973eb1461220ee3867e52acabb6cd90c07d58f2ed",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "e76edb77fd4f5563d4263044651f3b40ae0310856a9e3921b999f501847c8a2a",
         "describe": "884a3d720c951931cf210fa69e2edb24047628201cb58b1c80a89608c21d8876",
     },
     "recalled": {
@@ -163,10 +164,10 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
-        "format": "cadence-generic/8",
-        "names": "9229351194ebb4351621bbd66ccb8db2eb23bfb28b1df81c39da18b3c6c6b059",
-        "checkpoint": "785870cfac7c4cb18e8f732dac9ea845c8dba938cbe10f1f551fde06a50fb82c",
-        "describe": "ea3bc6f3a0162f8f1827c8ed5b6f7125c9d0a6f17169ff407116b8f51cbbf51b",
+        "format": "cadence-brain/1",
+        "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
+        "checkpoint": "2ebe2c6747753e8d43bcc3de872204882532103b497cda757a7db2654084c783",
+        "describe": "00819f2d8a2e9b1bc32965cca94c53ea7b6e841d07852f1ef41bf1790fbdaf35",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -174,10 +175,10 @@ FOUNDERS: dict[str, dict] = {
         "life": taught,
         "parameters": "1b72292d2b15754485932c2527b342353a6934c638e8e25f3da7d05e6b1e45ce",
         "acts": [4, 7, 1, 0, 0, 4, 4, 4, 0, 4, 4, 4, 0, 0, 7, 3, 0, 0, 7, 4, 0, 0, 7, 4, 1, 0, 0, 4, 3, 0, 0, 1, 0, 6, 0, 7, 0, 0, 0, 1],
-        "format": "cadence-generic/8",
-        "names": "2d7f8ad0162546172f8d7c27c688214bf998e6ad9d8774054b15ac109b57da7d",
-        "checkpoint": "38990758fb7e9a0848d826f92993ba0f8d654c0137effddae7ef7e2acccd620a",
-        "describe": "943847d6fcd6f874597591cf1d98a54431f07961c4a62fbb6bcab0ac678d1e95",
+        "format": "cadence-brain/1",
+        "names": "0aab0d179b44428d742d358f48b22b0571e9fd78c4cefa76ad52551d9920c16e",
+        "checkpoint": "02581d0933e39c23ef22db165c6d03196a0da00ddbd33b44ba35aa4bb7d42358",
+        "describe": "86c0805b8b0a8567253dd0fe46efada219397445f83ee823d6cfbf91c34d1932",
     },
     "wide": {
         "build": (2_000, 3, {"modules": (8,), "seed": 13, "memory_choice": True,
@@ -185,9 +186,9 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "63de06ff41d1403e4e706fbf3095c48d555682191afc24b659c5e7e90d28acf3",
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-        "format": "cadence-generic/6",
-        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
-        "checkpoint": "5a2ec0f8a6db9ad3445a9148508e1d0a2714e6501159bc60d83aee8c92597b77",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "0277fcdf466243c9f0e805bd7c8d0c648d8cb8f3380972882f4ddac3b99cb154",
         "describe": "3dcfe786b5990da748b4ad427185ef8667f7071209025099bcf1b1006c737f70",
     },
 }
@@ -542,8 +543,8 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
     brain.wait(x[1])
     path = brain.save(tmp_path / "learned.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name].copy() for name in data.files})
+    meta = metadata(arrays)
     assert meta["format"] == "cadence-generic/10"
     assert meta["learned_code"]["units"] == UNITS and meta["composition"]["learned_code"] == UNITS
     assert meta["history"]["source"] == "code" and meta["recall"]["inputs"] == UNITS + INPUTS
@@ -578,7 +579,7 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
 
     def tampered(name: str, mutate) -> Path:
         copy = {k: v.copy() for k, v in arrays.items()}
-        meta = json.loads(str(copy["generic"]))
+        meta = metadata(copy)
         mutate(meta, copy)
         copy["generic"] = np.array(json.dumps(meta))
         np.savez(tmp_path / f"{name}.npz", **copy)
@@ -714,7 +715,7 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     assert brain.basal_ganglia.config.eligibility_steps == 12 << brain._stepping
     path = brain.save(tmp_path / "stepped.npz")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
         saved_dt = json.loads(str(data["meta"]))["neuron_model"]["dt"]
     assert meta["learned_code"]["stepping"] == brain._stepping
     assert saved_dt == brain.brain.neuron_model.dt
@@ -734,8 +735,8 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     assert brain.learner.config.free_steps == 1024
     # a saved stepping that disagrees with the saved step is refused
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name].copy() for name in data.files})
+    meta = metadata(arrays)
     meta["learned_code"]["stepping"] = 0
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(tmp_path / "wrong.npz", **arrays)
@@ -914,7 +915,7 @@ def test_a_long_stream_leaves_the_code_alive(tmp_path):
     np.testing.assert_array_equal(brain.brain.bias[brain.code_index], -code.thresholds)
     path = brain.save(tmp_path / "alive.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     arrays["learned_code/thresholds"][0] = -0.1
     np.savez(tmp_path / "below.npz", **arrays)
     with pytest.raises(ValueError, match="thresholds are nonnegative"):

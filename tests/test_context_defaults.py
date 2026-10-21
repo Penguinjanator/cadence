@@ -6,6 +6,7 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
@@ -144,8 +145,8 @@ def test_provenance_saved_before_0_82_reads_as_the_fixed_scale_12(tmp_path):
     brain = cd.Brain.compose(inputs=3, actions=2, seed=7, working_memory_scale=12.0)
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name] for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name] for name in data.files})
+    meta = metadata(arrays)
     del meta["composition"]["working_memory_scale"]
     arrays["generic"] = np.array(json.dumps(meta))
     older = tmp_path / "older.npz"
@@ -186,7 +187,7 @@ def test_a_checkpoint_saved_at_the_genes_founder_still_loads(tmp_path):
     brain.act(np.array([[1.0, 0.0, 0.0]]))
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name] for name in data.files}
+        arrays = earlier({name: data[name] for name in data.files})
     written = 0
     for name in [n for n in arrays if n.endswith("meta") and arrays[n].dtype.kind == "U"]:
         meta = json.loads(str(arrays[name]))
@@ -206,7 +207,7 @@ def test_a_checkpoint_saved_with_the_gene_on_is_refused(tmp_path):
     brain = cd.Brain.compose(inputs=3, actions=2, seed=5)
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name] for name in data.files}
+        arrays = earlier({name: data[name] for name in data.files})
     meta_names = [name for name in arrays if name.endswith("meta") and arrays[name].dtype.kind == "U"]
     assert meta_names, "the checkpoint stores its learner metadata as a JSON string"
     for name in meta_names:

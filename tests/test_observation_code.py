@@ -9,6 +9,7 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 from cadence import brain as cadence_brain
@@ -44,7 +45,7 @@ def checkpoint_digest(path: Path) -> str:
         for name in sorted(data.files):
             value = data[name]
             h.update(name.encode())
-            if name in ("meta", "generic"):
+            if name in ("meta", "generic", "brain"):
                 meta = json.loads(str(value))
                 meta.pop("version", None)
                 h.update(json.dumps(meta, sort_keys=True).encode())
@@ -57,7 +58,7 @@ def checkpoint_digest(path: Path) -> str:
 def names_digest(path: Path) -> str:
     """The checkpoint's metadata keys and member names, which no backend changes."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         names = json.dumps([sorted(meta), sorted(data.files)])
     return hashlib.sha256(names.encode()).hexdigest()
 
@@ -123,9 +124,9 @@ FOUNDERS: dict[str, dict] = {
         "life": stepped,
         "parameters": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
-        "format": "cadence-generic/2",
-        "names": "5250f3eb53958993b3e08c854c440f93a182b0ee08d7fae95332092e9c4503f2",
-        "checkpoint": "a0dcc969fce2873266c7f43e3b123f9d481ae0167ff1095b587fe74ac7df8046",
+        "format": "cadence-brain/1",
+        "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
+        "checkpoint": "06fbd6687d87a6fd4fd821dc7decaf7fac71295bb1c076c6b73f0d6763b9bf11",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -133,9 +134,9 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        "format": "cadence-generic/6",
-        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
-        "checkpoint": "e2f57737198dfe7fcb9a763973eb1461220ee3867e52acabb6cd90c07d58f2ed",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "e76edb77fd4f5563d4263044651f3b40ae0310856a9e3921b999f501847c8a2a",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -144,8 +145,8 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
-        "format": "cadence-generic/8",
-        "names": "9229351194ebb4351621bbd66ccb8db2eb23bfb28b1df81c39da18b3c6c6b059",
+        "format": "cadence-brain/1",
+        "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
         "checkpoint": None,
     },
     "boundary": {
@@ -156,8 +157,8 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "938905bbc2dc39c354f2f53443948e0bc4b5f06dfe132306fa4d31062ada966a",
         "acts": [2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-        "format": "cadence-generic/8",
-        "names": "872b89a8d4c6c7ed302221b6e4278ff1fded70b327ac29e7e9a913a8d38d5606",
+        "format": "cadence-brain/1",
+        "names": "8fc6ffe8ac86a1d325e454c2f5b06d31316374fd1b83a5c3ee68e0cbefd5c1c2",
         "checkpoint": None,
     },
     "wide": {
@@ -168,9 +169,9 @@ FOUNDERS: dict[str, dict] = {
         "life": lived,
         "parameters": "63de06ff41d1403e4e706fbf3095c48d555682191afc24b659c5e7e90d28acf3",
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-        "format": "cadence-generic/6",
-        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
-        "checkpoint": "5a2ec0f8a6db9ad3445a9148508e1d0a2714e6501159bc60d83aee8c92597b77",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "0277fcdf466243c9f0e805bd7c8d0c648d8cb8f3380972882f4ddac3b99cb154",
     },
     "image": {
         # an image shape through Brain.build: the hippocampus of earlier releases keyed on
@@ -180,9 +181,9 @@ FOUNDERS: dict[str, dict] = {
         "life": stepped,
         "parameters": "aecb598d8fbf5218c210bd2ad264206e9aae0e706105a6e1255a5c44316abe54",
         "acts": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-        "format": "cadence-generic/2",
-        "names": "d96005267d77512ad6d9bc682ca9b33727cf49d4bcdd330fb3c4a703af34b625",
-        "checkpoint": "6eb98bd94afbaa9754f77e69341709e924c9bdfa9b89812a6922f04c02fa6449",
+        "format": "cadence-brain/1",
+        "names": "5f1e68f8add8efd7df5ddde72592d0f57cc6dd16035815256ce47ee57a92ca83",
+        "checkpoint": "5d34dd5b915cfcc8e4161a951cfaad2a75eeff5fd6e6dcb890c04d8ae6773db8",
     },
 }
 
@@ -226,7 +227,7 @@ def test_a_vector_or_image_brain_is_the_composition_before_the_observation_code(
     path = brain.save(tmp_path / "founder.npz")
     assert names_digest(path) == spec["names"]
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         assert not any(name.startswith("code/") for name in data.files)
     assert meta["format"] == spec["format"] and "code" not in meta
     described = brain.describe()["observation_code"]
@@ -277,11 +278,11 @@ def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
             checkpoint_digest(again)
         )
     with np.load(fixture, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert "seed" not in meta["recall"] and "address_prior" not in meta["recall"]
     meta["recall"]["address_prior"] = 1.0  # a retired gene is refused
     with np.load(fixture, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(tmp_path / "prior.npz", **arrays)
     with pytest.raises(ValueError, match="invalid saved recall ports"):
@@ -649,8 +650,8 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
         brain.live(x[t % 3], reward=None if t == 0 else [float(t % 2)])
     path = brain.save(tmp_path / "coded.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name].copy() for name in data.files})
+    meta = metadata(arrays)
     assert meta["format"] == "cadence-generic/9"
     assert meta["code"] == {**brain.sparse_code.to_dict(), "cortex": True}
     assert arrays["code/index"].shape == arrays["code/weight"].shape == (1024, 32)
@@ -669,7 +670,7 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     coded.live(x[0])
     coded.live(x[1], reward=[1.0])
     with np.load(coded.save(tmp_path / "cortex.npz"), allow_pickle=False) as data:
-        cortex_meta = json.loads(str(data["generic"]))
+        cortex_meta = metadata(data)
     assert cortex_meta["code"]["cortex"] is True and cortex_meta["composition"]["code"] == 256
     cortex_twin = cd.Brain.load(tmp_path / "cortex.npz")
     assert cortex_twin.coded_cortex and cortex_twin.inputs == 2_000
@@ -677,7 +678,7 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
 
     def tampered(name: str, mutate) -> Path:
         copy = {k: v.copy() for k, v in arrays.items()}
-        meta = json.loads(str(copy["generic"]))
+        meta = metadata(copy)
         mutate(meta, copy)
         copy["generic"] = np.array(json.dumps(meta))
         np.savez(tmp_path / f"{name}.npz", **copy)
@@ -821,7 +822,7 @@ def test_the_loader_bounds_the_keys_by_the_code_and_the_outputs_by_the_graph(tmp
     brain.step(frames(32, 1, 9, density=0.3))
     path = brain.save(tmp_path / "wide.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     n = brain.connectome.n
 
     def refused(name, mutate, message):
@@ -852,7 +853,7 @@ def test_the_loader_bounds_the_keys_by_the_code_and_the_outputs_by_the_graph(tmp
 def parsed(path: Path) -> tuple[dict, dict]:
     """A checkpoint's metadata entries, parsed, and its other arrays by name."""
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     meta = {name: json.loads(str(arrays.pop(name))) for name in ("generic", "meta")
             if name in arrays}
     return meta, arrays
@@ -897,8 +898,8 @@ def test_place_records_of_another_width_are_refused_by_the_loader(tmp_path):
     brain.step(x, reward=[1.0])
     path = brain.save(tmp_path / "coded.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name].copy() for name in data.files})
+    meta = metadata(arrays)
     meta["hippocampus"]["pre"] = 512
     meta["hippocampus"]["persistent_parameters"] = 512 * 3
     arrays["episodic/pre"] = np.arange(512)
@@ -920,7 +921,7 @@ def test_a_wide_brain_keyed_on_its_observation_saves_and_loads_as_before(tmp_pat
     brain.step(x, reward=[1.0])
     path = brain.save(tmp_path / "raw.npz")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] == "cadence-generic/8" and "code" not in meta
     assert meta["hippocampus"]["pre"] == 1_500
     twin = cd.Brain.load(path)

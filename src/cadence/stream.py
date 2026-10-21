@@ -351,10 +351,8 @@ class Recall:
     map by one lesson's step, and ``address=0`` leaves the map as it is under reward too.
 
     The settings of 0.84.3 that this version removed (``RETIRED``, and ``recency=None``) are
-    refused with a message naming that release. A memory still describes and saves the keys
-    its checkpoint format always wrote for them, at their one value (``FORMAT``), and the
-    brain describes the genes so, so that every description and founder file of 0.84.3 is
-    unchanged and a file written here reads there; the next checkpoint format drops them.
+    refused with a message naming that release; a checkpoint of 0.84.3 carries the keys its
+    format always wrote for three of them, which load at their one value (``FORMAT``).
     """
 
     connectome: Connectome
@@ -399,8 +397,7 @@ class Recall:
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
     RETIRED = ("write", "key", "episodes", "value", "context", "context_decay")
     # the keys the checkpoint format of 0.84.3 (``cadence-generic/8`` and ``/9``) always wrote
-    # for removed settings, described and saved at their one value: every founder file is
-    # unchanged, and a file written here reads in 0.84.3
+    # for removed settings, at the one value at which such a file loads
     FORMAT = MappingProxyType({"value": "event", "context": 0.0, "context_decay": 0.5})
 
     @classmethod
@@ -1075,12 +1072,10 @@ class Recall:
         self.w_x, self.w_c, self.b = proposal[0], proposal[1], proposal[2]
 
     def to_dict(self) -> dict[str, Any]:
-        """The memory's settings and counts: the founders, the keys of the 0.84.3 format at
-        their one value (``FORMAT``), the ports, and each option where it differs from its
-        founder."""
+        """The memory's settings and counts: the founders, the ports, and each option where it
+        differs from its founder."""
         out = {
             **{name: getattr(self, name) for name in (*self.RUNTIME, *self.CONSTRUCTION)},
-            **self.FORMAT,
             "source": self.source,
             "target": self.target,
             "neurons": self.neurons,

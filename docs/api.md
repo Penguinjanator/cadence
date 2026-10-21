@@ -128,7 +128,7 @@ trace's `working_memory_scale` founder is 1.2.
 | `stimulus(observations, *, memory=True) -> drive` | The drive of a batch; with `memory` the trace, copy, history, recall and hippocampal reads are added, and the recall address is fixed for the moment. | [memory](memory.md) |
 | `parameters() -> int` | Actor and critic parameters, the consolidated memory matrix, a recall address map and a learned code's tables. | |
 | `copy.deepcopy(brain)` | An independent copy: every array, store, state and random generator copied, the immutable connectomes shared. |
-| `save(path) -> Path`, `Brain.load(path, *, backend="cpu", device=None, precision=None)` | The whole continuation, written atomically ([formats](#checkpoint-formats)). `Brain.load` refuses a learner-only file; `Learner.load` reads either. | [reset and save](continuous.md#reset-and-save) |
+| `save(path) -> Path`, `Brain.load(path, *, backend="cpu", device=None, precision=None)` | The whole continuation, written atomically ([the format](#checkpoint-format)). `Brain.load` refuses a learner-only file; `Learner.load` reads either. | [reset and save](continuous.md#reset-and-save) |
 
 Observations are a nonempty finite batch `(streams, inputs)`, images flattened per row or in
 their shape. Keep row identities fixed until `reset()`.
@@ -154,23 +154,29 @@ their shape. Keep row identities fixed until `reset()`.
 | `last_learning` | the latest transition's learning report, teaching under `demonstration_*` keys |
 | `rng` | the brain's `numpy.random.Generator` |
 
-### Checkpoint formats
+### Checkpoint format
 
-`Brain.save` names the format of the highest component the brain holds; each format may also
-carry every component of the lower ones. `load` refuses a component under a lower format name
-than its own and a format name without its component; it also reads `cadence-generic/1`.
+`Brain.save` writes `cadence-brain/1`, one format whatever the brain holds:
 
-| Format | Introduces |
+| Members | What they hold |
 | --- | --- |
-| `cadence-generic/2` | the composition: learner, critic, optimizers, random state, traces, hippocampus, a pending action |
-| `cadence-generic/3` | arousal, with the action `live` issued and its forecast |
-| `cadence-generic/4` | an efference copy |
-| `cadence-generic/5` | the state a waiting stream sensed (needs arousal) |
-| `cadence-generic/6` | the episodic choice (`memory_choice`): context records, temporal context, replay paths |
-| `cadence-generic/7` | a heard history |
-| `cadence-generic/8` | a recall memory: slots, `held`, `previous`, `history`, the address map, and where set `recall/trace`, `recall/pending`, `recall/ended`, `recall/before`, `recall/command`, `recall/past`; a window of another length is refused |
-| `cadence-generic/9` | a `code=units` code (`code/index`, `code/weight`); record and recall key widths are checked against it, and tables that do not read every ON and OFF channel twice with positive weights are refused; a code whose metadata lacks the `cover` field is refused with a message naming that field |
-| `cadence-generic/10` | a learned code (`learned_code/dictionary`, `learned_code/weights`, `learned_code/thresholds`, and `moment/code`, `lived/code` for a decision awaiting its outcome); the key widths are checked against its units, and tables that disagree with the saved synapses and biases of the code region are refused |
+| `meta` and the unprefixed arrays | the learner's checkpoint ([checkpoints](#checkpoints-cadencecheckpoint)) |
+| `brain` | the metadata: the actor's config, both random states, the free phase and a pending action, the arousal and the action `live` issued with its forecast, the state a waiting stream sensed, a `code=units` code or a learned code, the composition, and under `memories` the settings of each memory the brain holds |
+| `actor/`, `free/`, `pending/`, `moment/`, `prepared`, `lived/`, `awaiting/` | the critic and eligibility, the free phase, a pending action's phases and decision, the action `live` issued, the sensed state |
+| `code/`, `learned_code/` | a `code=units` code's tables; a learned code's `dictionary`, `weights` and `thresholds` |
+| `memories/working_memory/`, `memories/efference/` | each trace's `trace`, `last` and `cold` |
+| `memories/history/` | the heard history's `trace` |
+| `memories/recall/` | the slots, `held`, `previous`, the address map, and where set the actor's `trace` and `pending` contrast of the map, `ended` and the window's `past` |
+| `memories/hippocampus/` | the associative store's ports, strengths, masses, consolidated records and separator |
+| `memories/episodic/` | the episodic choice (`memory_choice`): the context store (`context_memory/`), the stream's `context` and `decision`, and the replay `path/` |
+
+`Brain.load` reads it and, through 0.85.x, the formats of 0.84.3 (`cadence-generic/1` to `/9`);
+a setting of 0.84.3 that this version removed loads at the value whose law this version keeps
+and is refused otherwise with a message naming 0.84.3. Record and recall key widths are checked
+against the code; code tables that do not read every ON and OFF channel twice with positive
+weights are refused, as is a code whose metadata lacks the `cover` field; a recall window of
+another length is refused; learned-code tables that disagree with the saved synapses and
+biases of the code region are refused.
 
 ## Arousal (`cadence.arousal`)
 
@@ -265,7 +271,7 @@ settings of 0.84.3 that left in this version, each with its reading, are
 | `weights(address)`, `ages()`, `readback(graph, region, movement)`, `activity(state)` | The read's slot shares, slot ages, and the association movement read back through the recall synapses. |
 | `reset(batch, rows=None)`, `keep(rows)`, `snapshot()`, `restore(snapshot)`, `reading()`, `hold(reading)`, `imagined()` | Stream bookkeeping; `imagined()` is a copy that reads the live slots and writes none. |
 | `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)`, `Recall.removed(name)` | The always-described genes, the five options saved only where they differ, validation of one gene, the null slot's logit, the refusal of a removed setting. |
-| `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `RETIRED`, `FORMAT`, `STEPS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, the settings this version removed, the keys of the 0.84.3 format kept at their one value, and the allowed values of `address_step`. |
+| `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `RETIRED`, `FORMAT`, `STEPS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, the settings this version removed, the keys the 0.84.3 format wrote for three of them with the one value at which such a file loads, and the allowed values of `address_step`. |
 | `keys`, `values`, `nexts`, `held`, `previous`, `ended`, `past`, `w_x`, `w_c`, `b`, `address_width`, `neurons`, `streams`, `slots`, `attended`, `to_dict()` | State arrays and sizes. |
 
 Construction and `Brain.retune` refuse a `null` whose logit is not finite.

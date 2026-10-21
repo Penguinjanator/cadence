@@ -2,8 +2,10 @@
 
 import json
 
+import checkpoints
 import numpy as np
 import pytest
+from checkpoints import earlier
 
 import cadence as cd
 
@@ -87,8 +89,8 @@ def test_expanded_memory_resumes_pending_action_and_future_learning(tmp_path, ki
 
 def rewrite_checkpoint(path, mutate):
     with np.load(path, allow_pickle=False) as saved:
-        arrays = {key: saved[key].copy() for key in saved}
-    metadata = json.loads(str(arrays["generic"]))
+        arrays = earlier({key: saved[key].copy() for key in saved})
+    metadata = checkpoints.metadata(arrays)
     mutate(metadata, arrays)
     arrays["generic"] = np.array(json.dumps(metadata))
     np.savez(path, **arrays)

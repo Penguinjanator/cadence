@@ -4,6 +4,7 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
@@ -89,7 +90,7 @@ def test_invalid_lifetime_arrays_are_rejected_at_load(tmp_path, array_name):
     brain.step(np.eye(2))
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as saved:
-        data = {name: saved[name].copy() for name in saved.files}
+        data = earlier({name: saved[name].copy() for name in saved.files})
     data[array_name] = np.full_like(data[array_name], np.nan, dtype=float)
     np.savez(path, **data)
     with pytest.raises(ValueError, match="saved|checkpoint"):
@@ -150,8 +151,8 @@ def test_invalid_continuation_structure_is_rejected(tmp_path, corruption):
     brain.step(np.eye(2))
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as saved:
-        data = {name: saved[name].copy() for name in saved.files}
-    meta = json.loads(str(data["generic"]))
+        data = earlier({name: saved[name].copy() for name in saved.files})
+    meta = metadata(data)
     if corruption == "free-shape":
         data["free/activation"] = data["free/activation"][:1]
     elif corruption == "value-shape":

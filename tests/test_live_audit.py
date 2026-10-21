@@ -2,8 +2,10 @@
 
 import json
 
+import checkpoints
 import numpy as np
 import pytest
+from checkpoints import earlier
 
 import cadence as cd
 
@@ -17,8 +19,8 @@ def _brain(*, youth=0):
 
 def _rewrite(path, change):
     with np.load(path, allow_pickle=False) as saved:
-        arrays = {name: saved[name].copy() for name in saved}
-    metadata = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: saved[name].copy() for name in saved})
+    metadata = checkpoints.metadata(arrays)
     change(metadata, arrays)
     arrays["generic"] = np.array(json.dumps(metadata))
     np.savez(path, **arrays)

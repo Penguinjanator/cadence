@@ -33,6 +33,12 @@ def sources() -> list[tuple[str, Path]]:
 def checkpoint_digests(path: Path) -> tuple[str, str]:
     """Ignore archive timestamps; compare all saved state and durable learned state."""
     with np.load(path, allow_pickle=False) as saved:
+        if "brain" in saved.files:  # one group per memory, the format since 0.85
+            brain = json.loads(str(saved["brain"]))
+            store, hippocampus = "memories/hippocampus/", brain["memories"].get("hippocampus")
+        else:
+            brain = json.loads(str(saved["generic"]))
+            store, hippocampus = "episodic/", brain["hippocampus"]
         arrays = {
             name: {
                 "dtype": str(saved[name].dtype),
@@ -55,13 +61,12 @@ def checkpoint_digests(path: Path) -> tuple[str, str]:
                 "second_moment_bias",
                 "actor/w_critic",
             )
-            or name.startswith("episodic/")
+            or name.startswith(store)
         }
-        generic = json.loads(str(saved["generic"]))
         learner = json.loads(str(saved["meta"]))
-        durable["updates"] = [generic["updates"], learner["updates"], learner["contrast_updates"]]
-        durable["critic_bias"] = generic["b_critic"]
-        durable["hippocampus"] = generic["hippocampus"]
+        durable["updates"] = [brain["updates"], learner["updates"], learner["contrast_updates"]]
+        durable["critic_bias"] = brain["b_critic"]
+        durable["hippocampus"] = hippocampus
     return kd.canonical_sha256(arrays), kd.canonical_sha256(durable)
 
 

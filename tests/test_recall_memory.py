@@ -12,6 +12,7 @@ from types import MappingProxyType, SimpleNamespace
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 from cadence import brain as cadence_brain
@@ -43,7 +44,7 @@ def composed(seed=3, recall=True, **options):
 
 def saved_arrays(path):
     with np.load(path, allow_pickle=False) as data:
-        return {name: data[name].copy() for name in data.files}
+        return earlier({name: data[name].copy() for name in data.files})
 
 
 def assert_same_checkpoint(first, second):
@@ -119,7 +120,7 @@ def _checkpoint_digest(path):
         for name in sorted(data.files):
             value = data[name]
             h.update(name.encode())
-            if name in ("meta", "generic"):
+            if name in ("meta", "generic", "brain"):
                 meta = json.loads(str(value))
                 meta.pop("version", None)
                 h.update(json.dumps(meta, sort_keys=True).encode())
@@ -195,9 +196,9 @@ FOUNDERS = {
         "life": _stepped,
         "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1],
-        "format": "cadence-generic/2",
-        "names": "5250f3eb53958993b3e08c854c440f93a182b0ee08d7fae95332092e9c4503f2",
-        "checkpoint": "bbd92e90538d1bc57a9dde5490ea3c3faceb88c427b7dd4130ea74ee4a3f74c7",
+        "format": "cadence-brain/1",
+        "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
+        "checkpoint": "721c1063d17d8aa883110ca39f1c528d763f6d453f467e77495ef9d5cb7b5bfb",
     },
     "lived": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True,
@@ -206,9 +207,9 @@ FOUNDERS = {
         "life": _lived,
         "digest": "b66e821b4d3c975000dc59663c7ce2babaf0473d232af438a689f12b9fbbee67",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1],
-        "format": "cadence-generic/7",
-        "names": "dc2ca1c1600c42b51a1d19ae0dcf538a2d144a32dbf9a304e885d2dba9fb5d3c",
-        "checkpoint": "fd1f0943175aa1ce1a2b126495fa712d498462fc2cfad96c0322b186045df762",
+        "format": "cadence-brain/1",
+        "names": "73388bfd03b1d7badf6c3be759e8376562d96c9f4052822b96f76e880a7dafef",
+        "checkpoint": "793646f2d9238efe1b76b9fa8ac264911ecc3614d3b6add6203aa0d4bb207c65",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -216,9 +217,9 @@ FOUNDERS = {
         "life": _lived,
         "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        "format": "cadence-generic/6",
-        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
-        "checkpoint": "fe1d1a050aeafd64f0166a6646890fc0791c512d6033ac38d05c1c10d143fbb2",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "f7140a59b90edac254f9a1356aa1110168a176cb7589146418d0be58e8c37e9b",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -228,9 +229,9 @@ FOUNDERS = {
         "acts": [4, 0, 4, 4, 0, 0, 0, 0, 7, 7, 0, 0, 4, 7, 0, 7, 1, 0, 0, 4, 4, 5, 3, 4, 0, 1,
                  0, 1, 0, 0, 0, 0, 2, 2, 6, 3, 0, 0, 4, 4, 0, 0, 0, 0, 7, 4, 0, 4, 1, 3, 0, 0,
                  4, 0, 6, 4, 4, 0, 0, 4],
-        "format": "cadence-generic/2",
-        "names": "8595fd2276b9ca3051f96e70da15efa6779415d2389290c44557bbf66a45e070",
-        "checkpoint": "7c07c051872ca3a21f29f1c1ca5220cfd5a04379cbf13b234113907c25537e63",
+        "format": "cadence-brain/1",
+        "names": "22097597c1a2febccbca3fd13f4eb304480cee327bc4ff19339470e9ea42b49d",
+        "checkpoint": "97738feb133fef97802d58d23778a410f18f5cec4a32293c0c6e00b5a11a7179",
     },
 }
 
@@ -238,7 +239,7 @@ FOUNDERS = {
 def _names(path):
     """The checkpoint's metadata keys and member names, which no backend changes."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         names = json.dumps([sorted(meta), sorted(data.files)])
     return meta["format"], hashlib.sha256(names.encode()).hexdigest()
 
@@ -278,7 +279,7 @@ def test_recall_false_builds_the_brain_without_the_option_byte_identically(tmp_p
         brain.act(CUE, greedy=True)
     assert_same_checkpoint(control.save(tmp_path / "control"), founder.save(tmp_path / "founder"))
     with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] != "cadence-generic/8" and "recall" not in meta
     assert "recall_scale" not in meta["composition"]
     described = founder.describe()
@@ -296,8 +297,7 @@ def test_the_founders_are_the_declared_genes():
     assert inspect.signature(cd.Brain).parameters["recall"].default is False
     described = composed().describe()["genes"]
     assert {k: v for k, v in described.items() if k.startswith("recall_")} == {
-        **{f"recall_{name}": value for name, value in cd.Recall.founders().items()},
-        **{f"recall_{name}": value for name, value in cd.Recall.FORMAT.items()},
+        f"recall_{name}": value for name, value in cd.Recall.founders().items()
     }
 
 
@@ -1021,7 +1021,7 @@ def test_a_saved_memory_continues_identically_and_marks_its_format(tmp_path, opt
     assert np.abs(brain.recall.w_x).sum() > 0 and brain.recall.slots > 1
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
         assert meta["format"] == "cadence-generic/8"
         assert meta["recall"] == brain.recall.to_dict()
         assert "history" in meta and "efference" in meta and "arousal" in meta
@@ -1061,7 +1061,7 @@ def test_corrupt_saved_memories_are_refused(tmp_path, tamper):
     for x in (CUE, GO):
         brain.act(x, greedy=True)
     arrays = saved_arrays(brain.save(tmp_path / "memory"))
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     if tamper == "format_without_recall":
         del meta["recall"]
     elif tamper == "recall_without_format":
@@ -1351,7 +1351,7 @@ def test_the_address_step_is_described_saved_retuned_and_refused_when_unknown(tm
     with pytest.raises(ValueError, match="recall settings need recall=True"):
         composed(recall=False, recall_address_step="toward")
     arrays = saved_arrays(tmp_path / "toward.npz")
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     meta["recall"]["address_step"] = "newton"
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(tmp_path / "bad.npz", **arrays)
@@ -1440,7 +1440,7 @@ def test_the_options_survive_a_checkpoint_and_a_saved_memory_without_one_takes_i
     assert brain.recall.slots > 1 and np.abs(brain.recall.w_x).sum() > 0
     path = brain.save(tmp_path / "options")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] == "cadence-generic/8" and meta["recall"] == brain.recall.to_dict()
     assert {k: meta["recall"][k] for k in ("address_step", "null", "recency")} == {
         "address_step": "toward", "null": 0.5, "recency": 0.25,
@@ -1457,7 +1457,7 @@ def test_the_options_survive_a_checkpoint_and_a_saved_memory_without_one_takes_i
     assert_same_checkpoint(brain.save(tmp_path / "later"), twin.save(tmp_path / "twin"))
     # a saved memory of the present format without the options takes their founders
     arrays = saved_arrays(path)
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     for name in cd.Recall.OPTIONS:
         meta["recall"].pop(name, None)
     arrays["generic"] = np.array(json.dumps(meta))
@@ -1610,7 +1610,7 @@ def test_the_maps_trace_survives_a_checkpoint_and_the_life_continues_identically
     assert np.abs(brain.recall.w_x).sum() > 0  # no lesson: the outcomes moved it
     path = brain.save(tmp_path / "trace")
     with np.load(path, allow_pickle=False) as data:
-        assert {"recall/trace", "recall/pending"} <= set(data.files)
+        assert {"memories/recall/trace", "memories/recall/pending"} <= set(data.files)
     twin = cd.Brain.load(path)
     np.testing.assert_array_equal(twin.basal_ganglia.trace_memory, agent.trace_memory)
     np.testing.assert_array_equal(twin.basal_ganglia._pending_memory, agent._pending_memory)
@@ -1650,7 +1650,7 @@ def test_without_address_reward_nothing_is_allocated_and_no_byte_changes(tmp_pat
         assert "address_reward_step" not in brain.last_learning
     assert_same_checkpoint(founder.save(tmp_path / "founder"), named.save(tmp_path / "named"))
     with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
-        assert not {"recall/trace", "recall/pending"} & set(data.files)
+        assert not {"memories/recall/trace", "memories/recall/pending"} & set(data.files)
     assert "address_reward" not in founder.recall.to_dict()
     with pytest.raises(ValueError):
         composed(recall_address_reward=-0.1)
@@ -1741,7 +1741,7 @@ def test_a_null_slot_whose_logit_is_not_finite_is_refused(tmp_path):
     assert cd.Recall.null_logit(brain.recall.null, brain.recall.temperature) == 4e300
     brain.act(CUE, greedy=True)
     arrays = saved_arrays(brain.save(tmp_path / "null"))
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     meta["recall"]["temperature"] = 1e-10
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(tmp_path / "bad.npz", **arrays)
@@ -1914,8 +1914,9 @@ def test_the_window_survives_a_checkpoint_and_a_window_of_another_length_is_refu
     brain.live(GO)
     path = brain.save(tmp_path / "window")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
-        assert data["recall/past"].shape == (1, 2, 4) and data["recall/keys"].shape[2] == 12
+        meta = metadata(data)
+        assert data["memories/recall/past"].shape == (1, 2, 4)
+        assert data["memories/recall/keys"].shape[2] == 12
     assert (meta["recall"]["window"], meta["recall"]["window_decay"]) == (3, 0.5)
     twin = cd.Brain.load(path)
     assert twin.describe() == brain.describe()
@@ -1934,7 +1935,7 @@ def test_the_window_survives_a_checkpoint_and_a_window_of_another_length_is_refu
             composed(**genes)
     for tamper in ("shorter", "without_past"):
         arrays = saved_arrays(path)
-        meta = json.loads(str(arrays["generic"]))
+        meta = metadata(arrays)
         if tamper == "shorter":
             meta["recall"]["window"] = 2  # the saved window holds three events
         else:
@@ -1985,12 +1986,8 @@ def test_a_removed_setting_is_refused_at_compose_and_retune_naming_the_release(n
             composed(**{name: founder})
         with pytest.raises(ValueError, match=message):
             brain.retune(**{name: founder})
-        setting = name[len("recall_"):]
-        assert setting in cd.Recall.RETIRED
-        if setting in cd.Recall.FORMAT:  # described at its one value, as 0.84.3 described it
-            assert brain.describe()["genes"][name] == cd.Recall.FORMAT[setting] == founder
-        else:
-            assert name not in brain.describe()["genes"]
+        assert name[len("recall_"):] in cd.Recall.RETIRED
+        assert name not in brain.describe()["genes"]
 
 
 @pytest.mark.parametrize("name", sorted(REMOVED))
@@ -2001,7 +1998,7 @@ def test_a_saved_brain_under_a_removed_setting_is_refused_naming_the_release(tmp
     for x in (CUE, GO):
         brain.act(x, greedy=True)
     arrays = saved_arrays(brain.save(tmp_path / "founder"))
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     meta["recall"][name[len("recall_"):]] = REMOVED[name][0]
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(tmp_path / "removed.npz", **arrays)
@@ -2009,30 +2006,25 @@ def test_a_saved_brain_under_a_removed_setting_is_refused_naming_the_release(tmp
         cd.Brain.load(tmp_path / "removed.npz")
 
 
-def test_the_format_of_the_last_release_is_written_unchanged(tmp_path):
-    """The keys the 0.84.3 format always wrote for the removed settings (``Recall.FORMAT``)
-    are still written, at their one value, in the checkpoint and under ``describe()``'s
-    ``recall`` and ``genes``, so a description and a founder file are unchanged and a file
-    written here reads in 0.84.3; a file without them is refused as a format error."""
+def test_the_keys_the_last_release_wrote_load_at_their_one_value(tmp_path):
+    """The keys the format of 0.84.3 always wrote for removed settings (``Recall.FORMAT``)
+    and its empty context history leave the description and the checkpoint; a file of
+    0.84.3 that carries them at their one value loads to the same brain."""
     brain = composed()
     for x in (CUE, GO):
         brain.act(x, greedy=True)
-    arrays = saved_arrays(brain.save(tmp_path / "founder"))
-    meta = json.loads(str(arrays["generic"]))
-    assert {k: meta["recall"][k] for k in cd.Recall.FORMAT} == dict(cd.Recall.FORMAT)
-    assert arrays["recall/history"].shape == (0, 4)  # the context history, always empty
+    path = brain.save(tmp_path / "founder")
+    with np.load(path, allow_pickle=False) as data:
+        saved = json.loads(str(data["brain"]))
+        assert not set(cd.Recall.FORMAT) & set(saved["memories"]["recall"])
+        assert "memories/recall/history" not in data.files
     described = brain.describe()
-    assert {k: described["recall"][k] for k in cd.Recall.FORMAT} == dict(cd.Recall.FORMAT)
-    assert {k: described["genes"][f"recall_{k}"] for k in cd.Recall.FORMAT} == dict(
-        cd.Recall.FORMAT
-    )
-    for key in cd.Recall.FORMAT:
-        short = json.loads(str(arrays["generic"]))
-        del short["recall"][key]
-        np.savez(tmp_path / "short.npz", **{**arrays, "generic": np.array(json.dumps(short))})
-        with pytest.raises(ValueError, match="invalid saved recall ports"):
-            cd.Brain.load(tmp_path / "short.npz")
-    without = {k: v for k, v in arrays.items() if k != "recall/history"}
-    np.savez(tmp_path / "without.npz", **without)
-    with pytest.raises(ValueError, match="recall"):
-        cd.Brain.load(tmp_path / "without.npz")
+    assert not set(cd.Recall.FORMAT) & set(described["recall"])
+    assert not {f"recall_{k}" for k in cd.Recall.FORMAT} & set(described["genes"])
+    arrays = saved_arrays(path)
+    meta = metadata(arrays)
+    meta["recall"].update(cd.Recall.FORMAT)
+    arrays["generic"] = np.array(json.dumps(meta))
+    arrays["recall/history"] = np.zeros((0, 4))
+    np.savez(tmp_path / "released.npz", **arrays)
+    assert cd.Brain.load(tmp_path / "released.npz").describe() == described

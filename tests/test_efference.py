@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 from cadence.genome import Genome, Projection, develop
@@ -20,7 +21,7 @@ def composed(seed=3, echo=1.0, **options):
 
 def saved_arrays(path):
     with np.load(path, allow_pickle=False) as data:
-        return {name: data[name].copy() for name in data.files}
+        return earlier({name: data[name].copy() for name in data.files})
 
 
 def assert_same_checkpoint(first, second):
@@ -49,7 +50,7 @@ def test_the_founder_value_builds_the_released_composition_byte_identically(tmp_
     assert founder.efference is None and "efference" not in founder.connectome.populations
     assert_same_checkpoint(control.save(tmp_path / "control"), founder.save(tmp_path / "founder"))
     with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] == "cadence-generic/2" and "efference" not in meta
 
 
@@ -255,10 +256,12 @@ def test_a_saved_copy_continues_identically_and_marks_its_format(tmp_path):
         brain.act(DRIVE, greedy=True)
     path = brain.save(tmp_path / "copy")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
         assert meta["format"] == "cadence-generic/4"
         assert meta["efference"] == brain.efference.to_dict()
-        assert {"efference/trace", "efference/last", "efference/cold"} <= set(data.files)
+        assert {f"memories/efference/{name}" for name in ("trace", "last", "cold")} <= set(
+            data.files
+        )
     twin = cd.Brain.load(path)
     assert isinstance(twin.efference, cd.Efference)
     assert twin.efference.to_dict() == brain.efference.to_dict()
@@ -284,7 +287,7 @@ def test_a_life_with_the_copy_and_arousal_saves_its_pending_moment(tmp_path):
     assert brain.basal_ganglia._pending is not None
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] == "cadence-generic/4" and "arousal" in meta and "lived" in meta
     twin = cd.Brain.load(path)
     for moment in range(8):
@@ -309,7 +312,7 @@ def test_corrupt_saved_copies_are_refused(tmp_path, tamper):
     brain.act(DRIVE, greedy=True)
     path = brain.save(tmp_path / "copy")
     arrays = saved_arrays(path)
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     if tamper == "format_without_copy":
         meta["efference"] = None
     elif tamper == "copy_without_format":

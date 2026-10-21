@@ -5,6 +5,7 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 from cadence.genome import Genome, Projection, develop
@@ -21,7 +22,7 @@ def composed(seed=3, decays=(0.2, 0.8), **options):
 
 def saved_arrays(path):
     with np.load(path, allow_pickle=False) as data:
-        return {name: data[name].copy() for name in data.files}
+        return earlier({name: data[name].copy() for name in data.files})
 
 
 def assert_same_checkpoint(first, second):
@@ -61,7 +62,7 @@ def test_the_founder_builds_the_composition_without_a_history_byte_identically(t
         brain.act(CUE, greedy=True)
     assert_same_checkpoint(control.save(tmp_path / "control"), founder.save(tmp_path / "founder"))
     with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] != "cadence-generic/7" and "history" not in meta
     assert "history_scale" not in meta["composition"]
     described = founder.describe()
@@ -217,11 +218,11 @@ def test_a_saved_history_continues_identically_and_marks_its_format(tmp_path, ep
         brain.live(CUE if t % 2 else GO, reward=None if t == 0 else [float(t % 3 == 0)])
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
         assert meta["format"] == "cadence-generic/7"
         assert meta["history"] == brain.history.to_dict()
         assert ("episodic" in meta) == episodic and "efference" in meta and "arousal" in meta
-        assert "history/trace" in data.files
+        assert "memories/history/trace" in data.files
     twin = cd.Brain.load(path)
     assert isinstance(twin.history, cd.History)
     assert twin.describe() == brain.describe()
@@ -248,7 +249,7 @@ def test_corrupt_saved_histories_are_refused(tmp_path, tamper):
     brain = composed(decays=(0.2, 0.8))
     brain.act(CUE, greedy=True)
     arrays = saved_arrays(brain.save(tmp_path / "history"))
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     if tamper == "format_without_history":
         del meta["history"]
     elif tamper == "history_without_format":

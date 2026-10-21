@@ -5,6 +5,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
@@ -509,8 +510,8 @@ def test_a_legacy_saved_brain_continues_with_zero_need(tmp_path):
     assert brain.basal_ganglia._pending is not None
     path = brain.save(tmp_path / "legacy.npz")
     with np.load(path) as archive:
-        arrays = {key: archive[key] for key in archive.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({key: archive[key] for key in archive.files})
+    meta = metadata(arrays)
     meta["arousal"] = as_saved_by_0843(meta["arousal"])  # an unversioned save before ``need``
     del meta["arousal"]["format"]
     del meta["arousal"]["config"]["need"]
@@ -655,14 +656,14 @@ def test_brains_without_arousal_keep_their_checkpoint_format(tmp_path):
     plain = cd.Brain.compose(4, 2, modules=(8,), seed=0)
     plain.step(np.eye(4)[[0]])
     with np.load(plain.save(tmp_path / "plain.npz")) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
         assert meta["format"] == "cadence-generic/2" and "arousal" not in meta
         assert not any(key.startswith("lived/") for key in data.files)
     roused = calm_brain()
     roused.live(np.eye(4)[[0]])
     path = roused.save(tmp_path / "roused.npz")
     with np.load(path) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
         assert meta["format"] == "cadence-generic/3" and meta["lived"]["sampled"] is False
     loaded = cd.Brain.load(path)
     assert loaded.arousal is not None and loaded._lived is not None

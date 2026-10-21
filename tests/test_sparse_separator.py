@@ -8,6 +8,7 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
@@ -122,9 +123,9 @@ def test_the_episodic_memory_takes_a_fan_in_and_continues_exactly(tmp_path):
                 getattr(getattr(copy, name).separator, field),
                 getattr(getattr(brain, name).separator, field),
             )
-    meta = json.loads(str(np.load(path)["generic"]))
+    meta = metadata(np.load(path))
     assert meta["hippocampus"]["separator"]["fan_in"] == 16
-    assert "episodic/separator/projection" not in np.load(path).files
+    assert "memories/hippocampus/separator/projection" not in np.load(path).files
     for t in range(6):
         reward, done = [float(t == 5)], [t == 5]
         np.testing.assert_array_equal(
@@ -148,7 +149,7 @@ def test_the_fan_in_founder_keeps_the_composed_brain_byte_identical(tmp_path):
     assert sorted(left.files) == sorted(right.files)
     for name in left.files:
         np.testing.assert_array_equal(left[name], right[name], err_msg=name)
-    assert "fan_in" not in json.loads(str(left["generic"]))["hippocampus"]["separator"]
+    assert "fan_in" not in metadata(left)["hippocampus"]["separator"]
 
 
 def test_a_sensory_key_with_a_fan_in_holds_the_same_bytes_at_any_width():
@@ -185,8 +186,8 @@ def test_a_corrupt_sparse_separator_is_refused(tmp_path, tamper):
     brain.step(one_hot(0, 20))
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path) as saved:
-        data = {name: saved[name].copy() for name in saved.files}
-    meta = json.loads(str(data["generic"]))
+        data = earlier({name: saved[name].copy() for name in saved.files})
+    meta = metadata(data)
     if tamper == "outside":
         data["episodic/separator/index"][0, -1] = 64
     elif tamper == "repeated":

@@ -178,7 +178,7 @@ blocks of `units` per decay.
 
 ## Save, load, describe, cost
 
-A brain with the region saves checkpoint format `cadence-generic/10`: the `learned_code`
+A brain with the region saves, in checkpoint format `cadence-brain/1`, the `learned_code`
 metadata (units, widths, seed, genes, work counts) and the tables `learned_code/dictionary`,
 `learned_code/weights` and `learned_code/thresholds`, with `moment/code` and `lived/code` for
 a decision awaiting its outcome. `Brain.load` installs the saved tables and refuses a

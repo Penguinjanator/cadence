@@ -18,6 +18,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from checkpoints import metadata
 
 import cadence as cd
 from cadence import brain as cadence_brain
@@ -44,8 +45,8 @@ STATISTICS = ("outcomes", "rewards", "spreads", "square", "recent", "longrun", "
 def saved(path: Path) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
     """A checkpoint's metadata without the library version that wrote it, and its arrays."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
-        arrays = {name: data[name].copy() for name in data.files if name != "generic"}
+        meta = metadata(data)
+        arrays = {name: data[name].copy() for name in data.files if name not in ("generic", "brain")}
     meta.pop("version", None)
     return meta, arrays
 
@@ -350,7 +351,7 @@ def _checkpoint_digest(path: Path) -> str:
         for name in sorted(data.files):
             value = data[name]
             h.update(name.encode())
-            if name in ("meta", "generic"):
+            if name in ("meta", "generic", "brain"):
                 meta = json.loads(str(value))
                 meta.pop("version", None)
                 h.update(json.dumps(meta, sort_keys=True).encode())
@@ -375,7 +376,7 @@ def _digest(brain: cd.Brain) -> str:
 def _names(path: Path) -> tuple[str, str]:
     """The checkpoint's format and a digest of its metadata keys and member names."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         names = json.dumps([sorted(meta), sorted(data.files)])
     return str(meta["format"]), hashlib.sha256(names.encode()).hexdigest()
 
@@ -468,9 +469,9 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "left": [
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3328, 547],
         ],
-        "format": "cadence-generic/3",
-        "names": "742c64a55bbcf0f43832a4eedace99049a1a7a79cb1587086d3607f97c3e9fe0",
-        "checkpoint": "0b81cce5fc0881e7b20867f9fa72235f31ae7ba468cf3abfabd4ffe268ac882a",
+        "format": "cadence-brain/1",
+        "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
+        "checkpoint": "3433a8d344f60a36246e7b872177f8d9f16b74d06c8220f407d4b4c97e52d85c",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
@@ -483,9 +484,9 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 288, 151],
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 288, 151],
         ],
-        "format": "cadence-generic/8",
-        "names": "a3bf9c4f16a946f58ce1e35c63782f804e598a0c2708c9aae6bade65b432c6bc",
-        "checkpoint": "018606ece9b2409c8420c223dd51a2a3bdb9c7a38176ad03f5782f55e08707fb",
+        "format": "cadence-brain/1",
+        "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
+        "checkpoint": "b9a2eb0d754762d1f72c700696c79e1187666f2b05fa87e9fcd947c477249465",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
@@ -496,9 +497,9 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 320, 203],
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 544, 301],
         ],
-        "format": "cadence-generic/6",
-        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
-        "checkpoint": "7572cb013d12a3bbae5fd789b102d8c94f1392e49e503bbfc003fbd10382081a",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "d55cd4e74288887f5e41caf9899ecf4e6ceddedb3aacc31d194e0d60d3dc9b95",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
@@ -506,9 +507,9 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": "0011010000000111111101000",
         "left": [],
-        "format": "cadence-generic/2",
-        "names": "5250f3eb53958993b3e08c854c440f93a182b0ee08d7fae95332092e9c4503f2",
-        "checkpoint": "6624e976e5f80794bc2d71511a1e2f57c24400ffef4c696d7936aea3f46dc6bc",
+        "format": "cadence-brain/1",
+        "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
+        "checkpoint": "d8ceb9f406b33812b03a675f240a1f798b11ca03ab0f5805eabff5ba18530e74",
     },
 }
 
@@ -573,7 +574,7 @@ def test_keep_arousal_resets_every_other_store_as_the_default_reset(
         assert brain.efference is not None and brain.efference.trace.any()
     else:
         held = set(saved(brain.save(tmp_path / "held"))[1])
-        assert {"episode/context", "episode/decision", "episode/path/lengths"} <= held
+        assert {f"memories/episodic/{name}" for name in ("context", "decision", "path/lengths")} <= held
     default = twin(brain, tmp_path / "default")
     brain.reset(keep_memory=keep_memory, keep_arousal=True)
     default.reset(keep_memory=keep_memory)

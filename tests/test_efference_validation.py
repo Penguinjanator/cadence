@@ -2,8 +2,10 @@
 
 import json
 
+import checkpoints
 import numpy as np
 import pytest
+from checkpoints import earlier
 
 import cadence as cd
 
@@ -26,8 +28,8 @@ def test_saved_efference_cannot_change_ports_or_silently_lose_its_state(tmp_path
     brain.act(DRIVE, greedy=True)
     path = brain.save(tmp_path / "original")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
-    metadata = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name].copy() for name in data.files})
+    metadata = checkpoints.metadata(arrays)
     if tamper == "redirected_target":
         metadata["efference"]["target"] = "motor"
     elif tamper == "wrong_command_width":
@@ -55,7 +57,7 @@ def test_orphaned_efference_arrays_are_not_ignored(tmp_path):
     brain = cd.Brain.compose(4, 2, modules=(8,), episodic=False)
     path = brain.save(tmp_path / "original")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     arrays["efference/trace"] = np.zeros((0, 2))
     broken = tmp_path / "broken.npz"
     np.savez(broken, **arrays)

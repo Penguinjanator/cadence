@@ -316,8 +316,10 @@ def stage_audit(
                 "initial frozen model identity differs",
             )
     for array in (initial_arrays, final_arrays):
-        if "episodic/consolidated" in array:
-            check(not np.any(array["episodic/consolidated"]), "associative memory was written")
+        # the store's consolidated records, under the name of either checkpoint format
+        for name in ("episodic/consolidated", "memories/hippocampus/consolidated"):
+            if name in array:
+                check(not np.any(array[name]), "associative memory was written")
     if lessons and lessons[-1]["accepted"]:
         recorded = lessons[-1]["phases"]["free"].get("parameter_readback")
         if recorded:

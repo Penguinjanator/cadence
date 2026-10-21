@@ -35,8 +35,10 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Any
 
+import checkpoints
 import numpy as np
 import pytest
+from checkpoints import earlier
 
 import cadence as cd
 
@@ -460,7 +462,7 @@ def check_a_life_saved_while_waiting_continues_identically(tmp_path) -> None:
             brain.wait(frame)
         path = brain.save(tmp_path / f"waiting-{case}.npz")
         with np.load(path) as saved:
-            meta = json.loads(str(saved["generic"]))
+            meta = checkpoints.metadata(saved)
             assert meta["format"] == "cadence-generic/5" and "awaiting" in meta
             assert {"awaiting/v", "awaiting/activation", "awaiting/adaptation"} <= set(saved.files)
         twin = cd.Brain.load(path)
@@ -582,19 +584,19 @@ def test_a_life_that_never_waits_keeps_its_checkpoint_format(tmp_path):
     for efference, expected in ((0.0, "cadence-generic/3"), (0.3, "cadence-generic/4")):
         brain = _owing(youth=40, efference=efference)
         with np.load(brain.save(tmp_path / f"format-{efference}.npz")) as saved:
-            meta = json.loads(str(saved["generic"]))
+            meta = checkpoints.metadata(saved)
             assert meta["format"] == expected and "awaiting" not in meta
             assert not any(name.startswith("awaiting/") for name in saved.files)
         brain.wait(EYE[[1]])
         brain.live(EYE[[2]], reward=[0.0])  # the wait ended with its outcome
         with np.load(brain.save(tmp_path / f"after-{efference}.npz")) as saved:
-            assert json.loads(str(saved["generic"]))["format"] == expected
+            assert checkpoints.metadata(saved)["format"] == expected
 
 
 def _rewrite(path, change) -> None:
     with np.load(path, allow_pickle=False) as saved:
-        arrays = {name: saved[name].copy() for name in saved.files}
-    metadata = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: saved[name].copy() for name in saved.files})
+    metadata = checkpoints.metadata(arrays)
     change(metadata, arrays)
     arrays["generic"] = np.array(json.dumps(metadata))
     np.savez(path, **arrays)

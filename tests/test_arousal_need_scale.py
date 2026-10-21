@@ -21,6 +21,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from checkpoints import metadata
 
 import cadence as cd
 from cadence import brain as cadence_brain
@@ -99,8 +100,8 @@ def reading(brain: cd.Brain) -> dict[str, Any]:
 
 def saved(path: Path) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
-        arrays = {name: data[name].copy() for name in data.files if name != "generic"}
+        meta = metadata(data)
+        arrays = {name: data[name].copy() for name in data.files if name not in ("generic", "brain")}
     meta.pop("version", None)
     return meta, arrays
 
@@ -451,7 +452,7 @@ def checkpoint_digest(path: Path) -> str:
         for name in sorted(data.files):
             value = data[name]
             h.update(name.encode())
-            if name in ("meta", "generic"):
+            if name in ("meta", "generic", "brain"):
                 meta = json.loads(str(value))
                 meta.pop("version", None)
                 h.update(json.dumps(meta, sort_keys=True).encode())
@@ -464,7 +465,7 @@ def checkpoint_digest(path: Path) -> str:
 def names(path: Path) -> tuple[str, str]:
     """The checkpoint's format and a digest of its metadata keys and member names."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         listed = json.dumps([sorted(meta), sorted(data.files)])
     return str(meta["format"]), hashlib.sha256(listed.encode()).hexdigest()
 
@@ -542,9 +543,9 @@ PINS: dict[str, dict[str, str]] = {
             "00000000000100110100000000000000000000000000000000000000000000000000000000000000"
             "0000000000000000000000000000000000000000000"
         ),
-        "format": "cadence-generic/3",
-        "names": "742c64a55bbcf0f43832a4eedace99049a1a7a79cb1587086d3607f97c3e9fe0",
-        "checkpoint": "974d0b31b89bb129c312f7b3c53e671db0e54568f559a600ca435545ff029cf3",
+        "format": "cadence-brain/1",
+        "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
+        "checkpoint": "f4d169bc69ad32a51ea0f0dc53fc134b2d44e628bff40859ea71261651908605",
         "left": "9369e9b9ef6ea69c41ca7c9df69a3ccd1a65a94c677ea7a38287a8302da1ce9e",
         "arousal": "82930a7673513d9ce243d643a81e968e5e9d6bc52e526b78abe7356c5b31fb60",
     },
@@ -554,25 +555,25 @@ PINS: dict[str, dict[str, str]] = {
             "00000000001000000000000000000000000000000000000000000000000000000000000000001111"
             "0111111111111111111111111111111111111111100"
         ),
-        "format": "cadence-generic/3",
-        "names": "4e49aa2a6a7f1eb8586de3c737c5bbdded6434ce1bb7427275a135ef58d51b64",
-        "checkpoint": "fbefd6120bde933c764516ad0711ddffc1cac0e4a57785d5a0ca1095a3421434",
+        "format": "cadence-brain/1",
+        "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
+        "checkpoint": "21fc8b6a8dd784e2b4cc5f609fd1d88ddc1b24f6cc172b9315247300c9f588d5",
         "left": "5fe084619d8817251b331ed1f4a4ed9f13423af747216eff94e132d108af1ae6",
         "arousal": "609c15d6720de27c34cea0e220c670f9a949f5e8a3caef1fa5704501952d0ec0",
     },
     "composed": {
         "acts": "11110110010001100100010001000000000000",
-        "format": "cadence-generic/8",
-        "names": "a3bf9c4f16a946f58ce1e35c63782f804e598a0c2708c9aae6bade65b432c6bc",
-        "checkpoint": "2844377f5eb584121a7199b5f22678e5410dcd77af6e4b2912f0279c422fa970",
+        "format": "cadence-brain/1",
+        "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
+        "checkpoint": "c5e81f4acc727a4a45ae2879329599a48610fc359368b72d9cc4cd5b3c710c88",
         "left": "8330ed860dd21843e2e489451ab3781b77bf825f67c413f1fe58b977e4cc38b5",
         "arousal": "d61a624596feedda53e9a3aee2ebde66dc0f820eb4d42431759425e3fbcb9fcc",
     },
     "episodic": {
         "acts": "11111101111111111111111111111111111110",
-        "format": "cadence-generic/6",
-        "names": "af8e5d55d4bf46854c46dfd2e739bbd0bb7d81d731b8318d804b78ab8a09d78e",
-        "checkpoint": "8e8ecfb1ead34b9eaf99056e5c5f010cf018e47d5a5fbc27f34af399fde11bd3",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "532bfa7319fd222d59cf98bdf8b00c9af1dd2836e20490088c92b7e0aba2ab5e",
         "left": "75aef03fedbfcc5455e1febf4dcb7db64373faedc62d1288b23d73eca88a3ba0",
         "arousal": "cb50b5df1de334b9b8f16a0644bfd9a380fb5b620db0e54ed70523d1fa627d93",
     },

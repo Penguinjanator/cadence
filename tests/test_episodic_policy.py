@@ -10,10 +10,9 @@ the decisions taken since that outcome.
 
 from __future__ import annotations
 
-import json
-
 import numpy as np
 import pytest
+from checkpoints import metadata
 
 import cadence as cd
 
@@ -166,7 +165,7 @@ def test_a_greedy_act_the_vote_decided_is_owned_and_its_outcome_can_surprise(tmp
     assert brain._lived[5]
     saved = brain.save(tmp_path / "issued.npz")
     with np.load(saved, allow_pickle=False) as data:
-        assert json.loads(str(data["generic"]))["lived"]["own"] is True
+        assert metadata(data)["lived"]["own"] is True
     copy = cd.Brain.load(saved)
     assert copy._lived[5]
     writes = brain.hippocampus.writes

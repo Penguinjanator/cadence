@@ -6,6 +6,7 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
@@ -326,7 +327,7 @@ def test_a_saved_episodic_brain_continues_exactly(tmp_path):
         np.testing.assert_allclose(
             getattr(copy, name).consolidated, getattr(brain, name).consolidated
         )
-    meta = json.loads(str(np.load(path)["generic"]))
+    meta = metadata(np.load(path))
     assert meta["format"] == "cadence-generic/6"
     places = episodic(3, 2, seed=10, memory_context=0.0)
     places.step(one_hot(0, 3))
@@ -334,7 +335,7 @@ def test_a_saved_episodic_brain_continues_exactly(tmp_path):
     assert resumed.context_memory is None and resumed.memory_choice
     released = cd.Brain.compose(3, 2, seed=10)
     released.act(one_hot(0, 3))
-    meta = json.loads(str(np.load(released.save(tmp_path / "released.npz"))["generic"]))
+    meta = metadata(np.load(released.save(tmp_path / "released.npz")))
     assert meta["format"] == "cadence-generic/2" and "episodic" not in meta
 
 
@@ -393,8 +394,8 @@ def test_a_corrupt_episodic_checkpoint_is_refused(tmp_path, tamper):
         brain.step(one_hot(t, 3), reward=None if t == 0 else [0.0])
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path) as saved:
-        data = {name: saved[name].copy() for name in saved.files}
-    meta = json.loads(str(data["generic"]))
+        data = earlier({name: saved[name].copy() for name in saved.files})
+    meta = metadata(data)
     if tamper == "no_context_store":
         meta["episodic"]["context_memory"] = None
     elif tamper == "wide_place_key":
