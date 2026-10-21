@@ -226,7 +226,8 @@ event) and next (the moment that followed). Before each settle an address, the k
 learned map that teacher lessons move, weighs the slots by a softmax, and the recalled value
 and next drive a `recall` and a `next` region through the settle. `reset(keep_memory=True)`
 keeps the slots. Every `recall_*` setting, the cost and the limits are on
-[recall.md](recall.md).
+[recall.md](recall.md), with the settings of 0.84.3 that left in this version and their
+readings ([removed in this version](recall.md#removed-in-this-version)).
 
 ```python
 brain = Brain.compose(inputs=4, actions=2, modules=(16,), seed=1, recall=True)

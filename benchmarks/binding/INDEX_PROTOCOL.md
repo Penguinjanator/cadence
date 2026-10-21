@@ -339,3 +339,5 @@ arm and probe above, with their receipts, as the record of those readings:
   the power-law charge failed its confirmation on the camera task's founders.
 - `value="cortex"` (the library's `recall_value="cortex"`): cortex values failed all four
   binding tasks (token .06, succession .07, fresh bindings .55, camera .00).
+- `context`, `context_decay` (the library's `recall_context`, `recall_context_decay`): never
+  read above zero in a chamber.

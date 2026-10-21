@@ -32,12 +32,12 @@ assert brain.recall.slots == 0 and brain.recall.w_x.any()
 Before each settle the present moment computes its address
 
 ```text
-q = heard * x + context * h + x W_x + c W_c + b
+q = heard * x + x W_x + c W_c + b
 p = softmax(q . K / temperature - recency * age)
 ```
 
-`x` is the observation as the memory hears it, `h` the fading history of earlier events,
-`c` the settled association activity of the moment before, `K` the stored keys, and `W_x`,
+`x` is the observation as the memory hears it, `c` the settled association activity of
+the moment before, `K` the stored keys, and `W_x`,
 `W_c`, `b` a learned map that starts at zero, so before any lesson the address is the key
 and a name finds the moment it was stated in. `p` is kept in `brain.recall.attended`. The
 `recall` region is driven at
@@ -88,7 +88,7 @@ setting widens the key:
 
 | Key | Holds | Address width |
 | --- | --- | --- |
-| the founder key | `heard * x_t`, plus `context * h` | `code` |
+| the founder key | `heard * x_t` | `code` |
 | `recall_window=k` | the ordered last k events, the event j moments back weighted `recall_window_decay^j` | `k * code` |
 
 `code` is the width of the [observation code](memory.md#the-observation-code), and
@@ -112,7 +112,6 @@ map.
 | `recall_recency` | `0.25` | retune | Logit cost per moment of age |
 | `recall_address` | `0.01` | retune | Address lesson rate, bounded per row by `1 / \|z\|^2`; `0.0` freezes the map |
 | `recall_address_temperature` | `0.1` | retune | Temperature of the slots' scores in the address lesson |
-| `recall_context`, `recall_context_decay` | `0.0`, `0.5` | retune | Fading history of earlier events in a key, and its retention per moment in [0, 1) |
 | `recall_capacity` | `64` | construction | Slots per stream, oldest dropped first |
 | `recall_next` | `True` | construction | The `next` region and each slot's next |
 | `recall_scale` | `1.2` | construction | Initial magnitude of the two projections (a `compose` argument) |
@@ -162,10 +161,13 @@ Settings of 0.84.3 that left in this version, each refused by name with a messag
 - `recall_value="cortex"`, the settled association activity as a slot's value: it failed all
   four binding tasks (token .06, succession .07, fresh bindings .55, camera .00); the values
   are the events.
+- `recall_context` and `recall_context_decay`, a fading history of the earlier events added
+  to every key: never read above zero in a chamber.
 
-`describe()` and a checkpoint still carry `recall_value="event"`, the one value it has, under
-`genes` and `recall`, so a description and a founder file of 0.84.3 are unchanged and a file
-written here reads there; the next checkpoint format drops it.
+`describe()` and a checkpoint still carry `recall_value="event"`, `recall_context=0.0` and
+`recall_context_decay=0.5`, the one value each has, under `genes` and `recall`, with the
+empty history array, so a description and a founder file of 0.84.3 are unchanged and a file
+written here reads there; the next checkpoint format drops them.
 
 ## Cost
 

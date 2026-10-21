@@ -875,6 +875,7 @@ def _validate_recall_state(
     if array("held", (batch, slots)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: held")
     array("previous", (batch, association))
+    # the format of 0.84.3 wrote the context history, empty at the one value ``FORMAT`` keeps
     history = data.get("recall/history")
     array("history", (0 if history is None or not len(history) else batch, key))
     array("w_x", (key, address))
@@ -1597,9 +1598,8 @@ class Brain:
         ``recall_scale`` (1.2), appended after any history. After each act, and after each
         moment ``wait`` senses, the moment is written as one slot per stream (``Recall``):
         its key the event heard (``recall_heard`` 1.0 times the observation code, the
-        observation itself or the brain's sparse code of it, plus ``recall_context`` (0.0)
-        times a fading history of the earlier events, kept at ``recall_context_decay``
-        (0.5) per moment), its value the event, and the slot before learns it as its next.
+        observation itself or the brain's sparse code of it), its value the event, and the
+        slot before learns it as its next.
         Before each settle the moment's address, the key plus a learned map of the event and
         of the association activity of the moment before, weighs the slots by a softmax
         (``recall_temperature`` 0.25, ``recall_recency`` 0.25 per moment of age), and the
@@ -1627,16 +1627,17 @@ class Brain:
         makes every key an ordered window of the stream's last k events, ``[heard * x_t, d *
         heard * x_(t-1), ..., d^(k-1) * heard * x_(t-k+1)]``, each position on coordinates of
         its own, zeros before a stream's first moment and after an episode ends: a key of
-        ``k * code`` values, the address and the map's outputs as wide; ``recall_context`` adds
-        its fading sum on the present event's block.
+        ``k * code`` values, the address and the map's outputs as wide.
         The founder ``recall=False`` builds the brain without it.
         ``recall_scale``, ``recall_capacity``, ``recall_next``, ``recall_window`` and
         ``recall_window_decay`` are construction settings; the keys, the values and the
         address map follow the observation code's width, a brain's ``code`` among the ways
         to bound it. The settings of 0.84.3 that this version removed (``recall_write``,
-        ``recall_key``, ``recall_episodes``, ``recall_value`` and ``recall_recency=None``) are
-        refused by name, and ``describe()`` reports ``recall_value="event"``, the one value,
-        as before; the CHANGELOG gives each one's reading.
+        ``recall_key``, ``recall_episodes``, ``recall_value``, ``recall_context``,
+        ``recall_context_decay`` and ``recall_recency=None``) are refused by name, and
+        ``describe()`` reports ``recall_value``, ``recall_context`` and
+        ``recall_context_decay`` at their one value, as before; the CHANGELOG gives each one's
+        reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -3626,8 +3627,11 @@ class Brain:
             # A brain without one writes the metadata of the earlier formats unchanged.
             metadata["format"] = "cadence-generic/8"
             metadata["recall"] = recall.to_dict()
-            for name in ("keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c",
-                         "b"):
+            for name in ("keys", "values", "nexts", "held", "previous"):
+                data["recall/" + name] = getattr(recall, name)
+            # the format of 0.84.3 wrote the context history here, empty at its one value
+            data["recall/history"] = np.zeros((0, recall.key_width))
+            for name in ("w_x", "w_c", "b"):
                 data["recall/" + name] = getattr(recall, name)
             if recall.ended.any():  # streams whose latest slot closed an episode
                 data["recall/ended"] = recall.ended
@@ -3829,7 +3833,7 @@ class Brain:
             if recalled is not None:
                 recall = result.recall
                 assert recall is not None  # validated above: the populations are there
-                for name in ("keys", "values", "nexts", "previous", "history", "w_x", "w_c", "b"):
+                for name in ("keys", "values", "nexts", "previous", "w_x", "w_c", "b"):
                     setattr(recall, name, data["recall/" + name].astype(float))
                 recall.held = data["recall/held"].astype(bool)
                 recall.ended = (

@@ -33,7 +33,7 @@ GO = np.array([[0.0, 0.0, 0.0, 1.0]])
 FACT = np.array([[1.0, 0.0, 0.0, 1.0]])  # a name (coordinate 0) stated with a value (3)
 NAME = np.array([[1.0, 0.0, 0.0, 0.0]])
 STREAM = (CUE, GO, FACT, NAME)
-ARRAYS = ("keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c", "b")
+ARRAYS = ("keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b")
 
 
 def composed(seed=3, recall=True, **options):
@@ -288,8 +288,7 @@ def test_recall_false_builds_the_brain_without_the_option_byte_identically(tmp_p
 def test_the_founders_are_the_declared_genes():
     assert cd.Recall.founders() == {
         "amplitude": 3.0, "temperature": 0.25, "heard": 1.0, "recency": 0.25,
-        "address": 0.01, "address_temperature": 0.1, "context": 0.0, "context_decay": 0.5,
-        "capacity": 64, "next": True,
+        "address": 0.01, "address_temperature": 0.1, "capacity": 64, "next": True,
     }
     assert inspect.signature(cd.Brain.compose).parameters["recall_scale"].default == 1.2
     assert inspect.signature(cd.Brain).parameters["recall"].default is False
@@ -388,7 +387,7 @@ def _declared(ir):
     [
         (0, 12, {}, False),
         (1, 12, {}, False),
-        (3, 6, {"context": 0.5, "next": False}, False),
+        (3, 6, {"next": False}, False),
         (4, 16, {"capacity": 12}, True),
     ],
 )
@@ -945,7 +944,7 @@ def test_ended_streams_begin_with_empty_slots_and_a_refused_update_rolls_back(mo
     monkeypatch.setattr(brain.basal_ganglia, "learn", refused)
     with pytest.raises(RuntimeError, match="refused"):
         brain.learn(np.zeros(2), np.array([True, True]), x)
-    for name in ARRAYS[:6]:
+    for name in ARRAYS[:5]:  # the per-stream arrays the snapshot holds
         assert getattr(recall, name) is before[name]
     learned = recall.w_x.copy()
     brain.reset()
@@ -1016,7 +1015,7 @@ def test_a_fork_carries_its_own_memory():
     "options",
     [
         {},
-        {"recall_context": 0.5, "recall_capacity": 3},
+        {"recall_capacity": 3},
         {"memory_choice": True},
     ],
 )
@@ -1126,7 +1125,6 @@ def test_the_read_and_lesson_genes_retune_and_the_layout_is_a_construction_setti
         {"recall": True, "recall_temperature": 0.0},
         {"recall": True, "recall_capacity": 0},
         {"recall": True, "recall_next": 1},
-        {"recall": True, "recall_context_decay": 1.0},
         {"recall": True, "recall_recency": -0.1},
         {"recall": True, "recall_heard": float("nan")},
         {"recall": True, "recall_scale": -1.0},
@@ -1967,6 +1965,8 @@ REMOVED = {
     "recall_episodes": ("keep", "forget"),
     "recall_recency": (None, 0.25),
     "recall_value": ("cortex", "event"),
+    "recall_context": (0.5, 0.0),
+    "recall_context_decay": (0.9, 0.5),
 }
 
 
@@ -2030,6 +2030,7 @@ def test_the_format_of_the_last_release_is_written_unchanged(tmp_path):
     arrays = saved_arrays(brain.save(tmp_path / "founder"))
     meta = json.loads(str(arrays["generic"]))
     assert {k: meta["recall"][k] for k in cd.Recall.FORMAT} == dict(cd.Recall.FORMAT)
+    assert arrays["recall/history"].shape == (0, 4)  # the context history, always empty
     described = brain.describe()
     assert {k: described["recall"][k] for k in cd.Recall.FORMAT} == dict(cd.Recall.FORMAT)
     assert {k: described["genes"][f"recall_{k}"] for k in cd.Recall.FORMAT} == dict(
@@ -2041,3 +2042,7 @@ def test_the_format_of_the_last_release_is_written_unchanged(tmp_path):
         np.savez(tmp_path / "short.npz", **{**arrays, "generic": np.array(json.dumps(short))})
         with pytest.raises(ValueError, match="invalid saved recall ports"):
             cd.Brain.load(tmp_path / "short.npz")
+    without = {k: v for k, v in arrays.items() if k != "recall/history"}
+    np.savez(tmp_path / "without.npz", **without)
+    with pytest.raises(ValueError, match="recall"):
+        cd.Brain.load(tmp_path / "without.npz")

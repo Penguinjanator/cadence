@@ -307,17 +307,15 @@ class Recall:
 
     Each moment the brain accepts (an act, a moment ``wait`` senses) is written after its
     settle as one slot per stream (``witness``). The slot's key is ``heard * x``: ``x`` is
-    the observation as given (a brain gives its observation code), and with ``context`` the
-    fading history of the events before it is added. The slot's value is the event ``x``,
-    and the slot before it learns its next: the value of the moment that followed it, zero
-    until that moment comes. Before each settle the present moment's
+    the observation as given (a brain gives its observation code). The slot's value is the
+    event ``x``, and the slot before it learns its next: the value of the moment that
+    followed it, zero until that moment comes. Before each settle the present moment's
     address
 
-        q = heard * x + context * h + x W_x + c W_c + b
+        q = heard * x + x W_x + c W_c + b
 
-    (``h`` the fading history of the events before, ``c`` the settled association activity
-    of the moment before) weighs the stream's slots once,
-    ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``;
+    (``c`` the settled association activity of the moment before) weighs the stream's slots
+    once, ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``;
     with a ``null`` slot of logit ``null / temperature`` in the softmax, which reads nothing, the
     slots' shares sum to one less the null slot's), and
     ``stimulate`` sets the drive of the ``target`` region to ``amplitude * sum_i p_i V_i``
@@ -355,9 +353,8 @@ class Recall:
     fixed part is an ordered window of the stream's last k events, ``[heard * x_t, d * heard
     * x_{t-1}, ..., d^(k-1) * heard * x_{t-k+1}]``, each position on coordinates of its own:
     ``x_{t-j}`` the events of the stream's previous moments, acts and moments ``wait`` senses,
-    written or not, zeros before its first moment and after an episode ends. ``context`` adds
-    its fading history on the ``x_t`` block as before. The address takes the key's width,
-    ``k * inputs``; the map reads ``[x_t, c, 1]`` as before.
+    written or not, zeros before its first moment and after an episode ends. The address
+    takes the key's width, ``k * inputs``; the map reads ``[x_t, c, 1]`` as before.
 
     With ``address_reward`` above zero reward trains the map as well: at each sampled act
     the step the address lesson would take at each row, were the act's action the lesson's
@@ -383,8 +380,6 @@ class Recall:
     next: bool = True
     address: float = 0.01
     address_temperature: float = 0.1
-    context: float = 0.0
-    context_decay: float = 0.5
     # the options beside the founder memory (``OPTIONS``)
     address_step: str = "lms"
     null: float | None = None
@@ -402,17 +397,13 @@ class Recall:
     nexts: np.ndarray = field(init=False, repr=False)
     held: np.ndarray = field(init=False, repr=False)
     previous: np.ndarray = field(init=False, repr=False)
-    history: np.ndarray = field(init=False, repr=False)
     w_x: np.ndarray = field(init=False, repr=False)
     w_c: np.ndarray = field(init=False, repr=False)
     b: np.ndarray = field(init=False, repr=False)
 
     STEPS = ("lms", "toward")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
-    RUNTIME = (
-        "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
-        "context", "context_decay",
-    )
+    RUNTIME = ("amplitude", "temperature", "heard", "recency", "address", "address_temperature")
     CONSTRUCTION = ("capacity", "next")
     # options beside the founder memory: a memory describes and saves an option only where it
     # differs from its founder, and a saved memory without one takes its founder; each is
@@ -420,11 +411,11 @@ class Recall:
     OPTIONS = ("address_step", "null", "address_reward", "window", "window_decay")
     CONSTRUCTION_OPTIONS = ("window", "window_decay")
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
-    RETIRED = ("write", "key", "episodes", "value")
+    RETIRED = ("write", "key", "episodes", "value", "context", "context_decay")
     # the keys the checkpoint format of 0.84.3 (``cadence-generic/8`` and ``/9``) always wrote
     # for removed settings, described and saved at their one value: every founder file is
     # unchanged, and a file written here reads in 0.84.3
-    FORMAT = MappingProxyType({"value": "event"})
+    FORMAT = MappingProxyType({"value": "event", "context": 0.0, "context_decay": 0.5})
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -458,7 +449,7 @@ class Recall:
         setting this version removed is refused by name."""
         if name in Recall.RETIRED or (name == "recency" and value is None):
             raise ValueError(Recall.removed(name))
-        if name in ("amplitude", "recency", "address", "context"):
+        if name in ("amplitude", "recency", "address"):
             return real(name, value, low=0)
         if name in ("temperature", "address_temperature"):
             number = real(name, value, low=0)
@@ -467,11 +458,6 @@ class Recall:
             return number
         if name == "heard":
             return real(name, value)
-        if name == "context_decay":
-            number = real(name, value, low=0)
-            if number >= 1:
-                raise ValueError("context_decay must lie in [0, 1)")
-            return number
         if name == "capacity":
             if (
                 isinstance(value, (bool, np.bool_))
@@ -597,7 +583,6 @@ class Recall:
         self.nexts = np.zeros((batch, 0, self.value_width))
         self.held = np.zeros((batch, 0), dtype=bool)
         self.previous = np.zeros((batch, len(self.association)))
-        self.history = np.zeros((0, self.key_width))
         # per stream: its latest slot closed an episode (``end``) and learns no successor
         self.ended = np.zeros(batch, dtype=bool)
         # the window's previous events per stream, the latest first; none: zeros
@@ -607,8 +592,8 @@ class Recall:
 
     def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
         """Empty every stream, or the streams of ``rows`` only (streams that begin again): their
-        slots, the cortex of the moment before and the history. The address map is learned
-        and stays."""
+        slots, the cortex of the moment before and the window's events. The address map is
+        learned and stays."""
         if rows is None or self.streams != batch:
             self._empty(batch)
             return
@@ -638,19 +623,17 @@ class Recall:
 
     def _fresh(self, keep: np.ndarray) -> None:
         """The moment before begins afresh for the streams ``keep`` does not mark: the cortex
-        of the moment before, the history and the window's events."""
+        of the moment before and the window's events."""
         batch = len(keep)
         self.previous = np.where(keep[:, None], self.previous, 0.0)
-        if len(self.history) == batch:
-            self.history = np.where(keep[:, None], self.history, 0.0)
         if len(self.past) == batch:
             self.past = np.where(keep[:, None, None], self.past, 0.0)
 
     def end(self, batch: int, rows: np.ndarray | None = None) -> None:
         """The streams of ``rows`` (every stream without) end an episode and keep their
         slots: the latest slot of each learns no successor from the stream's next written
-        moment, and the moment before (the cortex of the moment before, the history and the
-        window's events) begins afresh. The
+        moment, and the moment before (the cortex of the moment before and the window's
+        events) begins afresh. The
         address map is learned and stays. Another batch size empties the streams, as
         ``reset`` does."""
         if self.streams != batch:
@@ -672,9 +655,8 @@ class Recall:
             a[rows] for a in (self.keys, self.values, self.nexts, self.held)
         )
         self.previous = self.previous[rows]
-        for name in ("history", "past"):
-            if len(getattr(self, name)):
-                setattr(self, name, getattr(self, name)[rows])
+        if len(self.past):
+            self.past = self.past[rows]
         self.ended = self.ended[rows]
         self.last = None
         self._attended = None
@@ -684,9 +666,7 @@ class Recall:
         these arrays rather than changing them."""
         return {
             name: getattr(self, name)
-            for name in (
-                "keys", "values", "nexts", "held", "previous", "history", "ended", "past",
-            )
+            for name in ("keys", "values", "nexts", "held", "previous", "ended", "past")
         }
 
     def restore(self, snapshot: dict[str, Any]) -> None:
@@ -712,10 +692,9 @@ class Recall:
 
     def imagined(self) -> Recall:
         """A private copy for an imagined branch: it reads the live slots and writes none; the
-        cortex of the moment before and the history follow the branch."""
+        cortex of the moment before and the window's events follow the branch."""
         branch = copy(self)
         branch.previous = self.previous.copy()
-        branch.history = self.history.copy()
         branch.past = self.past.copy()
         branch.last = None
         branch._attended = None
@@ -734,7 +713,7 @@ class Recall:
 
     def _moment(self, event: np.ndarray) -> _Moment:
         """The address of the present moment of each stream, from the cortex of the moment
-        before and, with ``context``, the history of the events before it."""
+        before."""
         x = np.asarray(event, dtype=float)
         n = len(x)
         c = (
@@ -743,9 +722,6 @@ class Recall:
             else np.zeros((n, len(self.association)))
         )
         key = self.heard * x
-        if self.context:
-            h = self.history if len(self.history) == n else np.zeros_like(x)
-            key = key + self.context * h
         if self.window > 1:
             # the stream's previous events in order, each on coordinates of its own
             past = (
@@ -838,9 +814,9 @@ class Recall:
     def witness(self, observations: np.ndarray, state: BrainState) -> None:
         """After the settle: the ``(batch, inputs)`` observations the streams acted on join
         their slots under the moment's key, the slot before learns them as its next, and the
-        settled cortex of ``state`` and the history move on to this moment. Another batch
+        settled cortex of ``state`` and the window move on to this moment. Another batch
         size begins the streams with empty memories first. An imagined branch moves the
-        cortex and the history only."""
+        cortex and the window only."""
         x = self._port(observations)
         moment = self.last
         if moment is None or moment.event.shape != x.shape or not np.array_equal(moment.event, x):
@@ -852,9 +828,6 @@ class Recall:
             self._observe(moment.key, moment.event)
             self.writes += len(x)
         self.previous = cortex
-        if self.context:
-            h = self.history if len(self.history) == len(x) else np.zeros_like(moment.event)
-            self.history = self.context_decay * h + moment.event
         if self.window > 1:  # this moment enters the window, the oldest leaves it
             past = (
                 self.past

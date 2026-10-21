@@ -150,7 +150,9 @@ marked construction above), for a missing component (arousal included), and for 
 change of `learning_beta` while a sampled action awaits feedback, whose contrast
 belongs to the old scale; learn that outcome first. With `recall_address_reward`
 above zero the same holds for `recall_address`, `recall_address_step` and
-`recall_address_reward` ([recall memory](recall.md)).
+`recall_address_reward` ([recall memory](recall.md)). The recall settings of 0.84.3 that
+left in this version are refused by name, at `compose` and `retune` alike
+([removed in this version](recall.md#removed-in-this-version)).
 
 `reset_arousal=True` resets the arousal level and reward references and keeps its age
 and work counters. An adult brain at the founder `need=0` is then roused only by

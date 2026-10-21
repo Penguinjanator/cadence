@@ -15,7 +15,7 @@ import pytest
 import cadence as cd
 
 EYE = np.eye(3)
-ARRAYS = ("keys", "values", "nexts", "held", "previous", "history", "ended", "w_x", "w_c", "b")
+ARRAYS = ("keys", "values", "nexts", "held", "previous", "ended", "w_x", "w_c", "b")
 
 
 def composed(seed=1, **options):
