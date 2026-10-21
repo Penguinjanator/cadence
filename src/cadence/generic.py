@@ -36,6 +36,7 @@ designed region can replace any of them.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
@@ -619,13 +620,17 @@ def _validate_learned_code(meta: dict[str, Any], data: Mapping[str, Any], learne
             raise ValueError("saved learned code tables require learned_code metadata")
         return 0
     populations = learner.brain.connectome.populations
-    fields = {"inputs", "units", "context", "seed", "work", *LearnedCode.GENES}
+    fields = {"inputs", "units", "context", "seed", "stepping", "work", *LearnedCode.GENES}
     if not isinstance(spec, dict) or set(spec) != fields:
         raise ValueError("invalid saved learned code metadata")
-    for name in ("inputs", "units", "context", "seed"):
+    for name in ("inputs", "units", "context", "seed", "stepping"):
         value = spec[name]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError(f"saved learned code {name} must be a nonnegative integer")
+    # the step the brain integrates at: the model's halved ``stepping`` times, saved with it
+    dt = learner.brain.neuron_model.dt
+    if dt != float(np.ldexp(1.0, -int(spec["stepping"]))):
+        raise ValueError("the saved learned code's stepping disagrees with the saved step")
     work = spec["work"]
     if not isinstance(work, dict) or any(
         isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in work.values()
@@ -1364,6 +1369,13 @@ class Brain:
         self.basal_ganglia = ActorCritic(
             self.learner, list(self.association_index), reward, seed=seed
         )
+        # With a learned code the brain integrates every phase at the step the code's
+        # competition is stable under (``LearnedCode.stability``), the model's step halved
+        # ``_stepping`` times, with the step budgets scaled to keep each phase's time; the
+        # configurations as given are kept as the base the scaling reads.
+        self._stepping = 0
+        self._learning_base = learning
+        self._reward_base = reward
         self.working_memory: Trace | None = None
         if "prefrontal" in populations:
             self.working_memory = Trace(
@@ -1661,6 +1673,48 @@ class Brain:
             s[:, self.sensory_index], s[:, self.code_index], s[:, self.prefrontal_index]
         ):
             self.learner.brain = self._installed(self.brain)
+
+    @staticmethod
+    def _scaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
+        """The learner's budgets for the model's step halved ``halvings`` times: the same time
+        in every phase."""
+        if not halvings:
+            return config
+        return replace(
+            config, free_steps=config.free_steps << halvings,
+            nudged_steps=config.nudged_steps << halvings,
+        )
+
+    @staticmethod
+    def _scaled_reward(config: ActorCriticConfig, halvings: int) -> ActorCriticConfig:
+        if not halvings or config.eligibility_steps is None:
+            return config
+        return replace(config, eligibility_steps=config.eligibility_steps << halvings)
+
+    def _restep(self, halvings: int) -> None:
+        """The brain at the model's step halved ``halvings`` times: the graph rebuilt at that
+        step with its parameters as they are, the learner's and the actor's budgets scaled,
+        and the code's sub-network stepped alike. Nothing changes at the current level."""
+        if halvings == self._stepping:
+            return
+        code = self.learned_code
+        assert code is not None
+        graph = self.brain
+        self.learner.brain = NeuralGraph(
+            graph.connectome,
+            graph.neuron_model.replace(dt=float(np.ldexp(code.model.dt, -halvings))),
+            backend=graph.backend,
+            efficacy=graph.efficacy,
+            log_gain=graph.log_gain,
+            bias=graph.bias,
+            dense_limit=graph.dense_limit,
+            layout=graph.layout,
+            precision=graph.precision,
+        )
+        self.learner.config = self._scaled_learning(self._learning_base, halvings)
+        self.basal_ganglia.config = self._scaled_reward(self._reward_base, halvings)
+        code.restep(halvings)
+        self._stepping = halvings
 
     # -- construction
 
@@ -2171,8 +2225,8 @@ class Brain:
         for name in options:
             if name in construction:
                 raise ValueError(f"{name} is a construction setting; retune preserves the brain")
-        learning = options.pop("learning", self.learner.config)
-        reward = options.pop("reward", self.basal_ganglia.config)
+        learning = options.pop("learning", self._learning_base)
+        reward = options.pop("reward", self._reward_base)
         current_arousal = None if self.arousal is None else self.arousal.config
         arousal = options.pop("arousal", current_arousal)
         if "arousal" in genes and (self.arousal is None or arousal is None):
@@ -2270,9 +2324,10 @@ class Brain:
 
         # Publication begins only after all validation. Never reconstruct a live
         # memory or optimizer to change its scalar settings.
-        self.learner.config = learning
+        self._learning_base, self._reward_base = learning, reward
+        self.learner.config = self._scaled_learning(learning, self._stepping)
         agent = self.basal_ganglia
-        agent.config = reward
+        agent.config = reward = self._scaled_reward(reward, self._stepping)
         if agent._valence is not None:
             agent._valence.level = reward.dopamine_center
             agent._valence.floor = reward.dopamine_floor
@@ -2307,8 +2362,10 @@ class Brain:
         returned mapping is detached and JSON serializable. No lazy state is
         initialized, no random values are drawn and no settlement is performed.
         """
-        learning = self.learner.config.to_dict()
-        actor = self.basal_ganglia.config.to_dict()
+        # the configurations as given: with a learned code the learner and the actor run
+        # them with their budgets scaled to the brain's step
+        learning = self._learning_base.to_dict()
+        actor = self._reward_base.to_dict()
         arousal = None if self.arousal is None else self.arousal.config.to_dict()
         genes = {f"learning_{name}": value for name, value in learning.items()}
         genes.update({f"actor_{name}": value for name, value in actor.items()})
@@ -2484,17 +2541,25 @@ class Brain:
         phase = code.settle(
             code.stimulus(sensory, z), warm, budget=cfg.free_steps, tolerance=cfg.tolerance
         )
-        self._code_settlement = {
-            "code_steps": int(phase.steps),
-            "code_residual": float(np.max(phase.residual)),
-            "code_damping_halvings": int(phase.damping_halvings),
-        }
         if not np.all(phase.qualified):
+            self._code_settlement = {
+                "code_steps": int(phase.steps),
+                "code_residual": float(np.max(phase.residual)),
+                "code_halvings": int(self._stepping),
+            }
             raise RuntimeError(
                 f"the code region did not settle within {cfg.free_steps} steps: "
                 f"residual={float(np.max(phase.residual)):.6g}, tolerance={cfg.tolerance:g}; "
                 "no action issued"
             )
+        # the step every phase of this moment integrates at: the one the settled code's
+        # competition is stable under
+        self._restep(code.stability(phase.state.v))
+        self._code_settlement = {
+            "code_steps": int(phase.steps),
+            "code_residual": float(np.max(phase.residual)),
+            "code_halvings": int(self._stepping),
+        }
         code.last = {
             "sensory": sensory, "context": z, "activation": np.asarray(phase.state.activation),
             "prediction": None if z is None else code.prediction(z),
@@ -3361,7 +3426,9 @@ class Brain:
                     if not self._coded_keys
                     else self.hippocampus.stimulate(drive, key=code)
                 )
-            phase = self._equilibrate(drive, current, budget=budget, tolerance=tolerance)
+            phase = self._equilibrate(
+                drive, current, budget=budget << self._stepping, tolerance=tolerance
+            )
             phases.append(phase)
             if not np.all(phase.qualified):
                 break
@@ -4369,6 +4436,20 @@ class Brain:
                         "the saved learned code tables disagree with the saved synapses and "
                         "biases of the code region"
                     )
+                # the saved step and budgets are the base's, scaled: the base is read back
+                stepping = int(meta["learned_code"]["stepping"])
+                region.restep(stepping)
+                result._stepping = stepping
+                result._learning_base = replace(
+                    learner.config, free_steps=learner.config.free_steps >> stepping,
+                    nudged_steps=learner.config.nudged_steps >> stepping,
+                )
+                saved_reward = result.basal_ganglia.config
+                result._reward_base = (
+                    saved_reward if saved_reward.eligibility_steps is None else replace(
+                        saved_reward, eligibility_steps=saved_reward.eligibility_steps >> stepping
+                    )
+                )
             if heard is not None:
                 assert result.history is not None  # validated above: the population is there
                 result.history.trace = data["history/trace"].astype(float)

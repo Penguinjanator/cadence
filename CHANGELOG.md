@@ -11,7 +11,11 @@
   region's phase first, by the brain's solver policy to the learner's tolerance, addresses
   the memories on the rectified settled code at unit length, and settles the whole graph
   warm from it; `last_settlement` reports `code_steps`, `code_residual` and
-  `code_damping_halvings`. The region learns at every accepted moment by local rules
+  `code_halvings`. The brain integrates every phase at the step the settled code's
+  competition is stable under (the model's step halved as `LearnedCode.stability` reports,
+  with the step budgets scaled to keep each phase's time), so a dictionary whose columns
+  come to overlap strongly settles instead of oscillating under the synchronous sweep. The
+  region learns at every accepted moment by local rules
   (Hebbian on the reconstruction residual, the delta rule on the prediction's residual,
   homeostatic thresholds), its genes `learned_code_top_down` (4.0), `learned_code_rate`
   (0.125), `learned_code_predictor` (0.03), `learned_code_threshold` (0.1),

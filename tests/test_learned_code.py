@@ -623,6 +623,74 @@ def test_independent_samples_settle_the_context_free_code():
     np.testing.assert_array_equal(brain.observation_code(x), brain.observation_code(x))
 
 
+def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(tmp_path):
+    """A dictionary whose columns overlap strongly makes the synchronous sweep oscillate
+    around the code's fixed point at the model's step; the region reports the halvings the
+    settled code needs, the brain re-steps its graph and scales the step budgets, the
+    description keeps the configurations as given, and a checkpoint carries the level."""
+    brain = composed(seed=8, units=24, recall=True)
+    code = brain.learned_code
+    assert code.stability(np.zeros((1, 24))) == 0 and brain._stepping == 0
+    # columns made alike by hand: the units that fire together inhibit each other at full strength
+    alike = code.dictionary.copy()
+    alike[:, 1:8] = alike[:, [0]] + 0.05 * np.random.default_rng(1).standard_normal((INPUTS, 7))
+    alike /= np.linalg.norm(alike, axis=0, keepdims=True)
+    code.take(alike, code.weights, np.zeros(24))
+    brain.learner.brain = brain._installed(brain.brain)
+    x = tokens(0, 0)
+    x[:, :] = alike[:, 0][None, :].clip(0)  # an observation the alike columns all explain
+    brain.act(x, greedy=True)
+    report = brain.last_settlement
+    assert report["qualified"] and report["code_halvings"] >= 1
+    level = brain._stepping
+    assert level == report["code_halvings"] == code.halvings
+    assert brain.brain.neuron_model.dt == 1.0 / 2**level == code.graph.neuron_model.dt
+    base = brain._learning_base
+    assert brain.learner.config.free_steps == base.free_steps << level
+    assert brain.learner.config.nudged_steps == base.nudged_steps << level
+    assert brain.basal_ganglia.config.eligibility_steps == 12 << level
+    described = brain.describe()
+    assert described["learning"]["free_steps"] == base.free_steps == 1024
+    assert described["actor"]["eligibility_steps"] == 12
+    assert described["learned_code"]["stepping"] == level
+    # a lesson and an outcome run at the stepped budgets and leave the level's bookkeeping
+    brain.lesson(x, [1, 2])
+    brain.step(x)
+    brain.step(x, reward=[1.0, 0.0])
+    brain.retune(learning_eta=0.4, actor_eta=0.5)
+    assert brain._learning_base.eta == 0.4 and brain.learner.config.eta == 0.4
+    assert brain.learner.config.free_steps == 1024 << brain._stepping
+    assert brain.basal_ganglia.config.eta == 0.5
+    assert brain.basal_ganglia.config.eligibility_steps == 12 << brain._stepping
+    path = brain.save(tmp_path / "stepped.npz")
+    with np.load(path, allow_pickle=False) as data:
+        meta = json.loads(str(data["generic"]))
+        saved_dt = json.loads(str(data["meta"]))["neuron_model"]["dt"]
+    assert meta["learned_code"]["stepping"] == brain._stepping
+    assert saved_dt == brain.brain.neuron_model.dt
+    twin = cd.Brain.load(path)
+    assert twin._stepping == brain._stepping and twin.describe() == brain.describe()
+    assert twin.learner.config == brain.learner.config
+    assert twin.basal_ganglia.config == brain.basal_ganglia.config
+    np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
+    # a code that is stable again steps the brain back up
+    code.take(np.linalg.qr(np.random.default_rng(2).standard_normal((INPUTS, 24)))[0],
+              code.weights, np.full(24, 0.1))
+    brain.learner.brain = brain._installed(brain.brain)
+    brain.act(tokens(3, 4), greedy=True)
+    assert brain._stepping == 0 and brain.brain.neuron_model.dt == 1.0
+    assert brain.learner.config.free_steps == 1024
+    # a saved stepping that disagrees with the saved step is refused
+    with np.load(path, allow_pickle=False) as data:
+        arrays = {name: data[name].copy() for name in data.files}
+    meta = json.loads(str(arrays["generic"]))
+    meta["learned_code"]["stepping"] = 0
+    arrays["generic"] = np.array(json.dumps(meta))
+    np.savez(tmp_path / "wrong.npz", **arrays)
+    with pytest.raises(ValueError, match="stepping disagrees with the saved step"):
+        cd.Brain.load(tmp_path / "wrong.npz")
+
+
 def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():
     brain = composed(seed=7)
     brain.act(tokens(3), greedy=True)

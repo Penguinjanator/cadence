@@ -58,8 +58,22 @@ settles warm from the stream's state with the sensory, prefrontal and code poten
 fixed points, qualified by the one residual over every neuron. The code units receive in the
 whole settle the input they settled under in the phase, so they stay where the phase left
 them. `last_settlement` reports the phase as `code_steps`, `code_residual` and
-`code_damping_halvings` beside the whole graph's `steps`. A code phase that does not qualify
+`code_halvings` beside the whole graph's `steps`. A code phase that does not qualify
 refuses the moment with `RuntimeError` before anything changes, as a refused free solve does.
+
+The code's fixed points are stable equilibria of the neuron equations, but the brain's
+synchronous sweep at the model's step can oscillate around one when several units with
+overlapping columns are active together (the sweep contracts only while `dt * (1 - mu_min)`
+stays below 2, `mu_min` the smallest eigenvalue of the slope-weighted lateral coupling).
+After each phase the region reports the halvings of the step its settled code needs
+(`LearnedCode.stability`, keeping `dt * (1 - mu_min)` at or below 1.5), and the brain
+integrates every phase of the moment at that step, the lessons' and the actor's phases
+included, with the step budgets (`learning_free_steps`, `learning_nudged_steps`,
+`actor_eligibility_steps`, an imagined branch's budget) scaled by the same power of two so
+that every phase covers the same time; `describe()` reports the configurations as given, and
+`learned_code["stepping"]` the level in effect. At the chamber of 53 tokens the level stays
+at 0; a dictionary whose columns come to overlap strongly, as in a world of a few frames,
+raises it to 1 or 2 and the settles cost that many times the sweeps.
 
 The top-down boundary reads the working trace, the settled association activity of the moment
 before, and never the association region of the moment: the recall memory addresses the moment

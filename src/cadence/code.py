@@ -39,6 +39,15 @@ batch one event, from the settled state alone (``a = max(s, 0)``, the rectified 
 While the code fits, the residuals are small and nothing moves. The rates are genes
 (``learned_code_<name>``); zero freezes a part. The memories key on the rectified settled
 code at unit length (``Brain.observation_code``).
+
+The code's fixed points are stable equilibria of the neuron equations (the lateral weights
+are minus a Gram matrix, so the coupling's eigenvalues stay below the unit's slope), but the
+brain's synchronous sweep at the model's step can oscillate around one when several units
+with overlapping columns are active together: the sweep contracts only while ``dt * (1 -
+mu_min)`` stays below 2, ``mu_min`` the smallest eigenvalue of the slope-weighted lateral
+coupling. ``stability`` reports the halvings of the step the settled code needs, and the
+brain integrates every phase at that step with its step budgets scaled to keep the same
+time (``Brain`` re-steps its graph when the level changes).
 """
 
 from __future__ import annotations
@@ -104,6 +113,9 @@ class LearnedCode:
     GENES = ("top_down", "rate", "predictor", "threshold", "threshold_rate", "target")
     RUNTIME = ("top_down", "rate", "predictor", "threshold_rate", "target")
     CONSTRUCTION = ("threshold",)
+    # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
+    # worst mode of the synchronous sweep contracts by at least a half per sweep
+    STEP_MARGIN = 1.5
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -154,6 +166,7 @@ class LearnedCode:
         )
         # the connectome sorts its synapses by (post, pre); the lateral weights are read in it
         self._pre, self._post = self.connectome.pre, self.connectome.post
+        self.halvings = 0  # the step's halvings the settled code needs (``stability``)
         self.graph = NeuralGraph(
             self.connectome, self.model, efficacy=self.lateral_efficacy(), bias=-self.thresholds
         )
@@ -162,6 +175,33 @@ class LearnedCode:
             "updates": 0, "update_rows": 0,
         }
         self.last: dict[str, Any] | None = None
+
+    # -- the step
+
+    def stability(self, v: np.ndarray) -> int:
+        """The halvings of the model's step under which the synchronous sweep contracts
+        around the fixed points at potentials ``v`` (``(batch, units)``): the least ``h``
+        with ``dt / 2^h * (1 - mu_min) <= STEP_MARGIN``, ``mu_min`` the smallest eigenvalue
+        over the rows of ``D^1/2 L D^1/2`` (``D`` the activation's slopes at ``v``, ``L``
+        the lateral weights); 0 when the sweep contracts at the model's own step."""
+        v = np.atleast_2d(np.asarray(v, dtype=float))
+        root = np.sqrt(np.maximum(self.model.slope_at(v), 0.0))
+        lateral = self.lateral()
+        coupling = root[:, :, None] * lateral[None, :, :] * root[:, None, :]
+        mu = float(np.linalg.eigvalsh(coupling)[:, 0].min())
+        need = self.model.dt * (1.0 - mu) / self.STEP_MARGIN
+        return 0 if need <= 1.0 else int(np.ceil(np.log2(need)))
+
+    def restep(self, halvings: int) -> None:
+        """The sub-network at the model's step halved ``halvings`` times."""
+        if halvings == self.halvings:
+            return
+        self.halvings = int(halvings)
+        self.graph = NeuralGraph(
+            self.connectome,
+            self.model.replace(dt=float(np.ldexp(self.model.dt, -self.halvings))),
+            efficacy=self.lateral_efficacy(), bias=-self.thresholds,
+        )
 
     # -- the tables as synapses
 
@@ -332,5 +372,6 @@ class LearnedCode:
     def to_dict(self) -> dict[str, Any]:
         return {
             "inputs": self.inputs, "units": self.units, "context": self.context,
-            "seed": self.seed, **self.genes(), "work": dict(self.work),
+            "seed": self.seed, **self.genes(), "stepping": int(self.halvings),
+            "work": dict(self.work),
         }

@@ -151,7 +151,7 @@ their shape. Keep row identities fixed until `reset()`.
 | `pending_feedback` | read-only: the issued action awaits its outcome (`wait` keeps it) |
 | `decision_id` | read-only: the `arousal.age` at which `live` issued the awaited action, or `None`; saved and restored ([feedback ownership in the population solver](equilibrium/LIVE.md#preserve-execution-and-feedback-ownership) is the stricter contract) |
 | `last_arousal` | immutable snapshot of the latest `live` moment; `None` after construction, reset or load ([fields](continuous.md#routine-and-repair-live)) |
-| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks`, and with a learned code `code_steps`, `code_residual`, `code_damping_halvings` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
+| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks`, and with a learned code `code_steps`, `code_residual`, `code_halvings` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
 | `last_learning` | the latest transition's learning report, teaching under `demonstration_*` keys |
 | `rng` | the brain's `numpy.random.Generator` |
 
@@ -310,8 +310,10 @@ and `graph` of the units (the sub-network a moment's code phase settles). `later
 `lateral_efficacy()`, `gram()`; `stimulus(sensory, context)`, `prediction(context)`,
 `settle(stimulus, warm, *, budget, tolerance, damping=3) -> Equilibrium`,
 `code_of(activation)` (the rectified code at unit length), `residuals(sensory, activation,
-context)`; `learn(sensory, activation, context) -> bool` (one step of every table from a
-settled moment, each row an event), `install()`, `take(dictionary, weights, thresholds)`;
+context)`; `stability(v) -> int` (the halvings of the step the settled code's competition
+is stable under) and `restep(halvings)`, `halvings`; `learn(sensory, activation, context)
+-> bool` (one step of every table from a settled moment, each row an event), `install()`,
+`take(dictionary, weights, thresholds)`;
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
 capped settles, updates), `last` (the latest phase's sensory activation, context, activation
 and prediction). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
