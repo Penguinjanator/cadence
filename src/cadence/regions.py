@@ -165,7 +165,7 @@ def motor_cortex(
     """One neuron per action, with optional lateral inhibition; population ``actions``.
 
     A body or an environment reads the choice from the most active neuron or from a softmax
-    over them. Continuous control with opposing muscles uses ``cadence.circuits.reflex_arc``.
+    over them.
     With several ``slots`` (see ``slot_sizes``) the lateral inhibition stays within each slot:
     the slots are separate competitions that settle together.
     """

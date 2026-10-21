@@ -362,5 +362,4 @@ assert control.predict(cues).shape == (4,) and 0 <= control.accuracy(cues, [0, 1
 
 No hidden thread drives the brain; the application owns scheduling. A `step` consumes
 a real transition, so never call it per UI frame; frames before a `live` outcome go to
-`wait`. [Memory](memory.md) describes each store, and the bounded `Deliberator` search
-in [the API](api.md) runs on a fixed model across `tick` calls.
+`wait`. [Memory](memory.md) describes each store.

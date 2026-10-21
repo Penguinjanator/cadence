@@ -272,48 +272,6 @@ def test_equilibrate_checks_the_same_nudge_and_ablation():
     )
 
 
-def test_pruned_imagination_keeps_all_root_scores_and_live_state():
-    from cadence.circuits import imagine
-
-    live = []
-
-    def move(s, a):
-        s.append(int(a))
-        return s
-
-    def value(s):
-        return sum((1 if k % 2 == 0 else -1) * a for k, a in enumerate(s))
-
-    options = dict(
-        actions=lambda s: np.arange(3),
-        transition=move,
-        evaluate=value,
-        terminal=lambda s: len(s) == 5,
-        depth=5,
-        adversarial=True,
-    )
-    exhaustive = imagine(live, **options)
-    pruned = imagine(live, **options, prune=True, clone=list)
-    assert live == [] and pruned.nodes < exhaustive.nodes
-    assert [(f.action, f.score, f.sequence) for f in pruned.futures] == [
-        (f.action, f.score, f.sequence) for f in exhaustive.futures
-    ]
-
-
-def test_imagination_budget_bounds_transition_calls():
-    from cadence.circuits import imagine
-
-    called = []
-
-    def transition(s, a):
-        called.append(a)
-        return s + 1
-
-    with pytest.raises(ValueError, match="budget"):
-        imagine(0, lambda s: (0, 1), transition, float, lambda s: False, max_nodes=1)
-    assert len(called) == 1
-
-
 def test_genome_rejects_colliding_region_names_and_changed_ports():
     from cadence.regions import Region
 

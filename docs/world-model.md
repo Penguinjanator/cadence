@@ -91,7 +91,7 @@ A missing feature differs from an observed zero: give the reading a missing flag
 for it, in witnessed and imagined readings alike. A UI tick or other host event is
 no action outcome; report each issued action's outcome once, success included.
 
-`cadence.circuits.assemble` or `Genome`/`develop` connect regions by declared
+`Genome`/`develop` connect regions by declared
 synapses. Put regions that should settle jointly into one `NeuralGraph`;
 independent solves shown side by side are uncoupled dynamics. Wire an auxiliary
 memory's recall into declared drive ports and count its store in the cost. A
@@ -126,7 +126,7 @@ Components for compositions beyond the default brain:
 | Perception and grounding | Input regions, associations and local updates (`Brain.compose`, `Genome`) | Features, entities, word/referent bindings |
 | Episodes and consolidation | `FastSynapses`, `SynapticMemory` | Addressing, relevant writes, retention, correction |
 | Workspace and goals | Recurrent state, `Trace`, goal and readback ports | Persistent context, goals and subgoals |
-| Action and value | `ActorCritic`, eligibility, `Valence`, optional `cadence.circuits.Deliberator` | Exploration, delayed credit, useful planning |
+| Action and value | `ActorCritic`, eligibility, `Valence` | Exploration, delayed credit |
 
 ## Coherent behavior over time
 

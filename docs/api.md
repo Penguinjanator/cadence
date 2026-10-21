@@ -12,7 +12,7 @@ keyword.
 | [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence`, `Bins` |
 | [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
 | [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Receipt` |
-| [Compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step) | `cadence.circuits`, `record_settlements` |
+| [Recording](#record-every-settling-step) | `record_settlements` |
 
 `cadence.__version__` is the installed release string.
 
@@ -550,27 +550,6 @@ cadence.receipts.source_manifest(files) -> dict
 
 `Receipt(kind, body, source, digest)` with `write(path)` and `to_dict()`. Guide:
 [receipts](receipts.md).
-
-## Optional task compositions (`cadence.circuits`)
-
-```text
-from cadence.circuits import (assemble, imagine, Deliberator, Deliberation, Future,
-                              ActivityMonitor, Readback, reflex_arc)
-```
-
-Small compositions of ordinary neuron dynamics with host-side orchestration; budgets and
-scheduling are in [defaults and the thinking clock](continuous.md#defaults-and-the-thinking-clock).
-
-| Name | Behaviour |
-| --- | --- |
-| `assemble(regions, synapses=()) -> Connectome` | Merges an ordered `{name: Connectome}` mapping; each synapse is `(source_region, neuron, target_region, neuron, weight)`. Regions and their populations stay addressable. Unknown regions, out-of-range neurons, autapses and nonfinite weights are refused. |
-| `imagine(live, actions, transition, evaluate, terminal, *, depth=2, max_nodes=10000, adversarial=False, prune=False, clone=deepcopy) -> Deliberation` | Compares copied futures from the root actor's view; `adversarial` alternates min and max, `prune` uses alpha-beta. Exhaustion raises `ValueError` before the next transition and returns no partial ranking; invalid budgets and nonfinite scores raise. |
-| `Deliberator(actions, transition, evaluate, terminal, *, depth=6, max_nodes=10000, adversarial=False, prune=False, clone=deepcopy)` | Resumable iterative deepening: `start(live)`, `tick(nodes=128)` (the last completed `Deliberation` or `None`), `pending`, `pause()`, `resume()`, `cancel()`. `nodes` counts the positions visited since `start`; `budget_exhausted` is true once `max_nodes` stopped the search; `result` holds the last completed `Deliberation`, which an incomplete depth never replaces. A callback error cancels the search and re-raises. Stores no weights and writes no feedback. |
-| `Deliberation(futures, nodes, depth)`, `Future(action, score, sequence, state)` | Futures sorted by score. |
-| `ActivityMonitor().read(activity, scores, *, pressure=0) -> Readback`, `reset()` | A heuristic reading of finite 1D vectors: `Readback(activity_change, ambiguity, pressure, uncertainty, request_more, state)`. |
-| `reflex_arc(axes=2) -> Connectome` | Sensory error ports and opposing motor pairs; the application supplies the body. |
-
-`clone` must isolate all mutable branch state, the other callbacks must not mutate outside objects, and the callbacks stay fixed for one search. Node limits do not interrupt a running callback.
 
 ## Record every settling step
 
