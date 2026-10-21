@@ -22,9 +22,14 @@
   every memory keys on (`context_free_steps`). The first module reads the rectified code at
   unit length. The key joins the code to the observation's own identity at weight .9,
   `unit([sqrt(1 - w) code, sqrt(w) unit(x)])` at the norm the observation itself has as a
-  key, so a binding stays readable while the code moves; with `memory_choice=True` the
-  episodic stores separate these keys as an observation's (1,024 cells, 24 winners). The
-  region learns at every accepted moment by local rules (Hebbian on the reconstruction
+  key, so a binding stays readable while the code moves. An observation wider than the code
+  (more inputs than units, a camera's frame) is keyed on the code alone, so that the key
+  keeps the code's width (`LearnedCode.joins`, `code_width` then `units`): in the camera
+  chamber, its frames at unit length, a code of 128 units answers the held-out pairs at .970
+  against .927 for the fixed random code of 1,024 units on the development founders, with a
+  recall address map of 0.198 MB against 9.331 MB. With `memory_choice=True` the episodic
+  stores separate the keys as an observation's (1,024 cells, 24 winners). The region learns
+  at every accepted moment by local rules (Hebbian on the reconstruction
   residual, the delta rule on the prediction's residual, homeostatic thresholds whose share
   reads the context-free code and holds each row's strongest unit above an active floor,
   and a repair that lowers the thresholds of a silent row's units); the lesson's contrast

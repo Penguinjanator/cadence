@@ -70,7 +70,8 @@ False holds every table still, for a reading on a copy. The memories key on the 
 settled code at unit length joined to the observation's own identity, ``unit([sqrt(1 - w)
 code, sqrt(w) unit(x)])`` with ``w`` the identity weight 0.9 (``LearnedCode.IDENTITY``;
 ``Brain.observation_code``): the identity part keeps a binding readable while the code part
-moves as the region learns.
+moves as the region learns. An observation wider than the code is keyed on the code
+alone (``LearnedCode.joins``), so that the key keeps the code's width.
 
 The code's fixed points are stable equilibria of the neuron equations (the lateral weights
 are minus a Gram matrix, so the coupling's eigenvalues stay below the unit's slope), but the
@@ -212,6 +213,13 @@ class LearnedCode:
         "active": "the thresholds' active floor is a constant of the region (0.05)",
     }
 
+    @staticmethod
+    def joins(inputs: int, units: int) -> bool:
+        """Whether the memories' key joins the observation's own identity to the code: for an
+        observation no wider than the code. A wider one (a camera's frame) is keyed on the
+        code alone, so that the key keeps the code's width."""
+        return int(inputs) <= int(units)
+
     @classmethod
     def founders(cls) -> dict[str, Any]:
         """The founder value of every setting."""
@@ -258,7 +266,8 @@ class LearnedCode:
         self.rate, self.predictor = self.RATE, self.PREDICTOR
         self.threshold, self.threshold_rate = self.THRESHOLD, self.THRESHOLD_RATE
         self.target, self.repair, self.silence = self.TARGET, self.REPAIR, self.SILENCE
-        self.active, self.identity = self.ACTIVE, self.IDENTITY
+        self.active = self.ACTIVE
+        self.identity = self.IDENTITY if self.joins(self.inputs, self.units) else 0.0
         # the fields: each unit reads one field of the observation's coordinates
         self.mask: np.ndarray | None = None
         self.field_units: tuple[int, ...] = (self.units,)

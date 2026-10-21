@@ -98,7 +98,8 @@ class Genome:
         ``Brain.compose`` takes them), before the brain is built: with ``recall=True`` a
         custom anatomy's ``recall`` and ``next`` regions hold that many neurons. A learned
         code's key is its units and the inputs, the code joined to the observation's
-        identity."""
+        identity, for an observation no wider than the code; a wider one is keyed on the
+        code alone, its units."""
         from .generic import _observation_width
 
         return _observation_width(inputs, code, learned_code)

@@ -99,9 +99,15 @@ The region has costs. A life computes the code's own phase at every moment, twic
 moment the region learns from (about 33 sweeps of the region's units per phase in the
 embedding chamber, 34 to 120 per moment in the small worlds of continuous interaction), and
 the code is dense, about 28 of 64 units active per observation in context. A cue held across
-a delay through the episodic memory takes about twice the experience to master. At camera
-width the code alone does not yet bind what a camera observes: there the key's identity
-part, the frame itself, carries the binding.
+a delay through the episodic memory takes about twice the experience to master.
+
+Present wide images at unit length: the region reads a lit pixel as one full input, so a
+frame at pixel scale overwhelms its units. An observation wider than the code keys the
+memories on the code alone ([what the memories key on](#what-the-memories-key-on)). In the
+camera chamber (`benchmarks/learned_code/camera.py`), its frames at unit length, a code of
+128 units answers the held-out pairs at .970 against .927 for the fixed random code of 1,024
+units on the development founders, with a recall address map of 0.198 MB against 9.331 MB;
+the region's stored dictionary takes 13.1 MB.
 
 ### What the region is
 
@@ -247,8 +253,11 @@ returns, joined to the observation's own identity, `unit([sqrt(1 - w) code, sqrt
 unit(x)])` with `w` the constant `IDENTITY` (0.9), and taken at the norm the observation
 itself would have as a key. `brain.code_width` is `units + inputs`. The identity part keeps a
 binding readable while the code part moves as the region learns, and a known situation is
-found again along a new path. With `memory_choice=True` the episodic stores separate these
-keys as an observation's (`memory_expansion` 1,024 cells, `memory_winners` 24). A decision
+found again along a new path. An observation wider than the code (more inputs than units, a
+camera's frame) is keyed on the code alone, at the observation's norm, so that the key keeps
+the code's width (`LearnedCode.joins`), and `brain.code_width` is then `units`. With
+`memory_choice=True` the episodic stores separate these keys as an observation's
+(`memory_expansion` 1,024 cells, `memory_winners` 24). A decision
 keeps the key it was taken under until its outcome is recorded. `stimulus(..., memory=False)`,
 `fit`, `predict` and `accuracy` settle the context-free code alone. The heard history holds
 the code, in blocks of `units` per decay.

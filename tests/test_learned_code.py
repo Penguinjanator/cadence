@@ -297,7 +297,8 @@ def test_the_settings_the_readings_retired_are_refused_by_name():
 
 def test_learned_code_none_is_the_founder_and_the_width_is_as_before():
     assert cd.Genome.observation_width(53) == 53 and cd.Genome.observation_width(53, 24) == 24
-    assert cd.Genome.observation_width(53, None, 16) == 16 + 53  # the key joins the identity
+    assert cd.Genome.observation_width(53, None, 64) == 64 + 53  # the key joins the identity
+    assert cd.Genome.observation_width(53, None, 16) == 16  # a wider observation: the code
     for value in (None, 0):
         brain = cd.Brain.compose(53, 4, modules=(8,), seed=2, learned_code=value)
         assert brain.learned_code is None and brain.code_width == 53
@@ -434,7 +435,8 @@ def test_the_constants_and_the_one_setting_and_bad_settings_are_refused():
     complete = develop(Genome(tuple(regions), (*projections, Projection(
         "prefrontal", "code", scale=0.0, reciprocal=False))), seed=1)
     custom = cd.Brain(complete, learned_code=6)
-    assert custom.learned_code is not None and custom.code_width == 6 + 8
+    # 8 inputs, wider than the code's 6 units: the memories key on the code alone
+    assert custom.learned_code is not None and custom.code_width == 6
     beside = develop(Genome(tuple(regions), (*projections, Projection(
         "prefrontal", "code", scale=0.0, reciprocal=False), Projection(
         "sensory", "association", reciprocal=False))), seed=1)
@@ -1080,6 +1082,32 @@ def test_the_cortex_and_the_memories_read_the_context_free_code():
     step = expected[:, fired] + code.rate * (residual.T @ a[:, fired])
     expected[:, fired] = step / np.linalg.norm(step, axis=0, keepdims=True)
     np.testing.assert_allclose(code.dictionary, expected, atol=1e-9)
+
+
+def test_an_observation_wider_than_the_code_is_keyed_on_the_code_alone(tmp_path):
+    """The key joins the observation's identity to the code for an observation no wider than
+    the code; a wider one is keyed on the code alone, at the observation's norm, and a
+    checkpoint keeps that width."""
+    assert cd.LearnedCode.joins(53, 64) and cd.LearnedCode.joins(64, 64)
+    assert not cd.LearnedCode.joins(65, 64)
+    assert composed(seed=2).code_width == UNITS + INPUTS
+    wide = composed(seed=2, units=32, recall=True, memory_choice=True, arousal=True)
+    assert wide.code_width == 32 and wide.learned_code.identity == 0.0
+    assert cd.Genome.observation_width(INPUTS, None, 32) == 32  # the width before building
+    x = tokens(3, 8)
+    wide.act(x, greedy=True)
+    code = wide.learned_code
+    key = code.code_of(code.last["free"]) * np.linalg.norm(x, axis=1)[:, None]
+    assert wide.recall.keys.shape[-1] == 32
+    np.testing.assert_allclose(wide.recall.keys[:, -1, :], key, atol=1e-12)
+    # the episodic stores take the same width, and a checkpoint keeps it
+    wide.reset()
+    for t, k in enumerate((4, 5, 9, 4)):
+        wide.live(tokens(k), reward=None if t == 0 else [float(t % 2)])
+    assert wide.hippocampus.writes >= 1
+    twin = cd.Brain.load(wide.save(tmp_path / "wide.npz"))
+    assert twin.code_width == 32 and twin.learned_code.identity == 0.0
+    np.testing.assert_array_equal(twin.live(tokens(6), reward=[0.0]), wide.live(tokens(6), reward=[0.0]))
 
 
 def test_fields_give_each_unit_one_field_of_the_observation(tmp_path):

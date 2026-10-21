@@ -705,8 +705,8 @@ def _validate_life_state(
     sensory = len(populations.get("sensory", populations.get("visual/input", ())))
     observed = sensory if code is None else code[0]
     code_width = sensory if code is None else code[1].expansion
-    if learned:  # the memories' key: the code, joined to the observation's identity
-        code_width = learned + sensory
+    if learned:  # the memories' key: the code, joined to an observation no wider than it
+        code_width = learned + (sensory if LearnedCode.joins(sensory, learned) else 0)
 
     def array(name: str, shape: tuple[int, ...] | None = None) -> np.ndarray:
         if name not in data:
@@ -1244,8 +1244,8 @@ def _observation_width(
     image = _image_shape(inputs)
     width = int(np.prod(image)) if image is not None else _count("inputs", inputs, low=1)
     units = _learned_code_units(learned_code)
-    if units:
-        return units + width
+    if units:  # the key: the code, joined to an observation no wider than it
+        return units + (width if LearnedCode.joins(width, units) else 0)
     return _code_units(code) or width
 
 
@@ -1296,7 +1296,10 @@ def _layout(
     # the sensory region is the code when a vector brain asks for one
     coded_cortex = bool(units) and image is None
     sensory_width = units if coded_cortex else inputs
-    code_width = (learned + inputs) if learned else (units or inputs)
+    if learned:  # the key: the code, joined to an observation no wider than it
+        code_width = learned + (inputs if LearnedCode.joins(inputs, learned) else 0)
+    else:
+        code_width = units or inputs
     heard_width = learned or sensory_width  # what the history hears: the code it reads
     scale = scales_of(scales)
     sensory_scale, working_memory_scale = scale["sensory"], scale["trace"]
@@ -1562,8 +1565,9 @@ class Brain:
             if "prefrontal" in populations
             else np.zeros(0, np.int64)
         )
-        if learned:  # the key: the code, joined to the observation's identity
-            self.code_width = learned["units"] + self.inputs
+        if learned:  # the key: the code, joined to an observation no wider than it
+            joined = LearnedCode.joins(self.inputs, learned["units"])
+            self.code_width = learned["units"] + (self.inputs if joined else 0)
         # whether the memories key on a code of the observation (fixed or learned) rather
         # than on the observation itself
         self._coded_keys = bool(units) or bool(learned)
@@ -2668,7 +2672,8 @@ class Brain:
         (the rectified settled code at unit length): the code joined to the observation's
         own identity, ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])`` with ``w`` the
         identity weight 0.9 (``LearnedCode.IDENTITY``), so that a binding stays readable by
-        the identity part while the code part moves as the region learns. The key takes the
+        the identity part while the code part moves as the region learns; the code alone
+        for an observation wider than the code (``LearnedCode.joins``). The key takes the
         norm the observation itself would have as a key: the recall's temperature reads the
         keys' dot products at that scale."""
         region = self.learned_code
