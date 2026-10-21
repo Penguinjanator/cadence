@@ -561,7 +561,7 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
     sampled.step(tokens(2, 3))
     kept = sampled.save(tmp_path / "pending.npz")
     with np.load(kept, allow_pickle=False) as data:
-        assert data["moment/code"].shape == (2, UNITS)
+        assert data["moment/code"].shape == (2, UNITS + INPUTS)
     loaded = cd.Brain.load(kept)
     np.testing.assert_array_equal(loaded._moment_code, sampled._moment_code)
     np.testing.assert_array_equal(
