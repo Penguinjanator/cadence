@@ -134,9 +134,9 @@
   moment, the sixth, earning .15 per moment, for .06, and the founder's 6 lives, all
   collapsed, for .02. Through `step` the gene is inert.
 - The learning guide's section "Many lessons: the normalized point for imitation" recommends
-  `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003` and
-  `learning_eta_bias=0.0003` with lessons of about 32 rows for a brain that learns a
-  demonstrator's policy from many lessons
+  the teaching learner's steps 0.003 and 0.0003 under a running RMS of forgetting 0.99 and
+  floor 1e-4 (`teaching="normalized"`, below) with lessons of about 32 rows for a brain that
+  learns a demonstrator's policy from many lessons
   ([issue 215](https://github.com/muellerberndt/cadence/issues/215)). In a copy task of 260
   inputs and three actions it agreed with the demonstrator on 0.868 / 0.866 of held-out moves
   after 240,000 samples (two seeds), against 0.874 / 0.888 for a backpropagation network trained
@@ -252,7 +252,7 @@
   resolution of `"auto"`; the night replay chamber keeps the readings of its centred arm.
   The actor's momentum and RMS normalization (`actor_momentum`, `actor_normalize`, declined
   as a founder in 0.73.1) leave with the actor's moment arrays; the settling learner keeps
-  its own (`learning_momentum`, `learning_normalize`). The teaching law's one-sided contrast
+  its own (`LearnerConfig.momentum` and `.normalize`). The teaching law's one-sided contrast
   and its leak (`LearnerConfig.centered` and `.decay`, `learning_centered` and
   `learning_decay`) leave: every lesson contrasts the `+beta` and `-beta` phases.
   `learning_nudge` leaves `compose` and `retune`: a composed brain learns with the
@@ -309,6 +309,22 @@
   `Brain(connectome, ...)` wraps any anatomy as before. Every composed brain is unchanged
   on the 12-brain digest ledger, and the benchmark chambers give the same outputs. The
   single-region layout lives on in release 0.84.3.
+- One teaching knob and one map of projection scales. `teaching` at `compose` and `retune`
+  sets the teaching learner's steps and their normalization: `"founder"` (steps 0.5 and 0.05
+  on the raw contrast, momentum 0.9, the founder) or `"normalized"` (steps 0.003 and 0.0003
+  under a running RMS of forgetting 0.99 and floor 1e-4, momentum 0.9: the point for many
+  lessons, as in imitation). `learning_eta`, `learning_eta_bias`, `learning_normalize` and
+  `learning_normalize_floor` leave the setting names, each refused with a message naming
+  `teaching`, and `learning=LearnerConfig(...)` keeps an expert's access to any steps.
+  `scales={"sensory": 1.0, "trace": 1.2, "history": 1.2, "recall": 1.2}` at `compose` names
+  the initial magnitudes of the projections from the sensory region, the working trace, the
+  heard history and the recall memory, a name left out at its founder; `sensory_scale`,
+  `working_memory_scale`, `history_scale` and `recall_scale` are refused with a message
+  naming their key, and a checkpoint's composition record keeps the scales under their
+  earlier names. The founder point and the founder scales are the founders of 0.84.3: every
+  composed brain is unchanged on the 12-brain digest ledger, descriptions and checkpoints
+  included. The chambers that set a scale or a teaching step pass the same values the new
+  way.
 
 ## 0.84.3 — 2026-10-19
 
