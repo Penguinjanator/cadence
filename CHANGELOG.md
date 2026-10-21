@@ -279,6 +279,23 @@
   12-brain ledger and on every pinned founder, whose checkpoint and name digests are
   re-recorded); a file of 0.84.3 loads to the same brain. Chambers and verifiers that read
   saved brains read either layout.
+- One memory contract, `cadence.memories`: `brain.memories` holds the present memories by
+  name, in the order the brain reads them before a settle and writes them after it
+  (`working_memory`, `efference`, `history`, `recall`, `hippocampus` and, with
+  `memory_choice=True`, `episodic`), and every member keeps one contract (`Memory`):
+  `stimulus(drive, moment)` before the settle, `branch()` for an imagined branch,
+  `begin(keep=False)` at a reset, `reset(batch, rows=None)` and `keep(rows)` on streams, and
+  `to_dict()` and `arrays()` for its checkpoint group `memories/<name>/`. The brain reads its
+  memories into the drive, branches them for `imagine`, begins them at `reset` and saves them
+  through the list; how each is written after the settle stays its own. The episodic
+  memory's vote, temporal context, replay paths, outcome writes and reverse replay leave the
+  brain for `EpisodicRecords`, the member `episodic`. `brain.working_memory`,
+  `brain.efference`, `brain.history`, `brain.recall`, `brain.hippocampus` and
+  `brain.context_memory` name the members, and `memory_choice`, `memory_context`,
+  `memory_replay` and `memory_demonstrations` read the episodic member's settings. Every
+  array, action, description and checkpoint on the 12-brain digest ledger is unchanged, and
+  the benchmark chambers give the same outputs.
+
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
