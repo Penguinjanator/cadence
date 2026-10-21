@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The episodic memory guide states a limit of `memory_choice=True` in a continuing life: a
+  record that paid is not extinguished by failures that pay nothing, since a zero outcome in
+  the middle of an attempt writes nothing and replay only adds credit, so after a reversal
+  whose failures pay 0 the new action is often not learned. It names what today's rules
+  offer: failures that cost a little (12 of 12 lives learned the new arm in the guide's
+  reading), failures marked with `salience=`, which the records write, or the memory left off
+  ([#210](https://github.com/muellerberndt/cadence/issues/210)).
 - `ArousalConfig` gains `need_scale` (`arousal_need_scale` at `compose` and `retune`; opt-in,
   founder 0): a need in units of the reward scale the brain has learned. At every outcome the
   want is at least the unmet share of `need_scale * scale`, the scale as it stood before the
