@@ -86,7 +86,7 @@ issued action owns the next outcome).
 | Setting | Composed founder | Changed at | Home |
 | --- | --- | --- | --- |
 | `modules`, `observers` | `(64,)`, `()` | construction | [map](#brain) |
-| `lateral`, `slots` | -0.5 up to 8 actions and 0.0 above, `1` | construction | [motor competition](#operating-point-and-motor-competition) |
+| `lateral`, `slots` | `0.0`, `1` | construction | [motor competition](#operating-point-and-motor-competition) |
 | `scales`: `"sensory"`, `"trace"`, `"history"`, `"recall"` | `1.0`, `1.2`, `1.2`, `1.2` | construction | [image inputs](senses.md#image-inputs), [memory](memory.md#working-trace) |
 | `features`, `field`, `seed` | `8`, `3`, `0` | construction | [image inputs](senses.md#image-inputs) |
 | `teaching` | `"founder"`: steps 0.5 and 0.05 on the raw contrast; `"normalized"`: 0.003 and 0.0003 under a running RMS (0.99, floor 1e-4) | retune | [learning](teach.md#many-lessons-the-normalized-point-for-imitation) |
@@ -176,15 +176,19 @@ inputs and compare against the founders on your own task ([evaluation](evaluate.
 
 `lateral` is the signed weight between each pair of motor neurons in a slot; `0.0`
 removes those synapses and keeps the association and motor feedback. Left unset it is
--0.5 up to 8 actions and 0.0 above, because from about 12 actions the undamped free
-solve stops settling under -0.5. The `cortex`, `motor_cortex` and `layered` factories
-default to `0.0`.
+`0.0` at every menu size, as in the `cortex`, `motor_cortex` and `layered` factories. A
+negative weight makes the actions of a slot compete, and at -0.5 the undamped free solve
+oscillates from 4 actions on: on 8-action composed brains a fifth of one-row greedy acts and
+every act of 16 rows settled only under the damping fallback (544 sweeps against 32 at
+`0.0`), and a lesson of 16 rows, whose free phase has no fallback, ran out its 1,024-sweep
+budget on 28 of 30 lessons at 8 actions and 7 of 30 at 4. Choose a competing readout
+against `0.0` on development tasks.
 
 `slots` groups the motor neurons into readouts that settle together, one softmax each:
 a count of equal groups or one size per group. An action with parts (kind, pitch,
-octave) is one slot per part. `act` and `step` return one index per slot, the unset
-`lateral` follows the largest slot, and `act(temperature=...)` takes one value or one
-per slot. `save` and `load` carry the grouping.
+octave) is one slot per part. `act` and `step` return one index per slot, a nonzero
+`lateral` is wired within a slot, and `act(temperature=...)` takes one value or one per
+slot. `save` and `load` carry the grouping.
 
 ```python
 chord = Brain.compose(inputs=4, actions=5, slots=(3, 2), seed=3)

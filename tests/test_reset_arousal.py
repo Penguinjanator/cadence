@@ -331,16 +331,16 @@ def test_the_documented_bandit_counts(bandit: dict[tuple[str, str, int], list[Mo
     assert counts("moved", "keep", 0, last=40) == [40] * 5
     # the same arm pays as before: kept at every moment, calm at every moment
     assert all(m[:2] == (0, False) for seed in range(5) for m in bandit[("same", "keep", seed)])
-    # after either reset the first 6 to 14 moments settle from rest at 32 sweeps each; the
+    # after either reset the first 5 to 12 moments settle from rest at 32 sweeps each; the
     # brain living on needs no sweep
     for arm in ("reset", "keep"):
-        for seed, lead in enumerate((6, 6, 14, 8, 6)):
+        for seed, lead in enumerate((5, 5, 12, 10, 5)):
             sweeps = [m[3] for m in bandit[("same", arm, seed)]]
             assert sweeps[:lead] == [32] * lead and not any(sweeps[lead:])
     assert not any(m[3] for seed in range(5) for m in bandit[("same", "none", seed)])
     # the arm pays 2.0: aroused at 9 of 600 decisions after a kept reset and at 6 of 600
     # without a reset, at none of the last 40 of any seed
-    assert counts("more", "keep", 1) == [7, 2, 0, 0, 0]
+    assert counts("more", "keep", 1) == [7, 0, 2, 0, 0]
     assert counts("more", "none", 1) == [6, 0, 0, 0, 0]
     assert counts("more", "keep", 1, last=40) == [0] * 5
 
@@ -461,60 +461,61 @@ def _compact(state: dict[str, Any]) -> list[float]:
 # (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
 # Where the library later removed a setting that was inert at its founder, the names and
 # checkpoint digests were re-recorded after every other value matched the recording.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220), which every founder here meets.
 FOUNDERS: dict[str, dict[str, Any]] = {
     "adult": {
         "build": (1, 2, {"modules": (16,), "seed": 0, "arousal": True}),
         "life": _adult,
-        "digest": "fcc22dba7289f686fead06ebd6dca9d5b67d4b3550377f20821edf51f3ac1857",
+        "digest": "32f58e96ba5ed96a5b25207c07f1c01618c02af6b80c7cbf915f8c9b16e35a9f",
         "acts": (
             "10000000000000000000000000110000000000000000000000000000000000000000000000000100"
             "00000000000100110100000000000000000000000000000000000000000000000000000000000000"
             "0000000000000000000000"
         ),
         "left": [
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3328, 547],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3296, 544],
         ],
         "format": "cadence-brain/1",
         "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
-        "checkpoint": "3433a8d344f60a36246e7b872177f8d9f16b74d06c8220f407d4b4c97e52d85c",
+        "checkpoint": "44d2b029b60e9929f02c65bc3af482776915c64440c285a2e691314c560a5df2",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
                          "recall": True, "history_decays": (0.2, 0.9),
                          "efference_amplitude": 1.0}),
         "life": _streams,
-        "digest": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
-        "acts": "111101100100011000000000000000000",
+        "digest": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
+        "acts": "111101100100011000000000000000010",
         "left": [
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 288, 151],
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 288, 151],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 256, 140],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 256, 140],
         ],
         "format": "cadence-brain/1",
         "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
-        "checkpoint": "b9a2eb0d754762d1f72c700696c79e1187666f2b05fa87e9fcd947c477249465",
+        "checkpoint": "532550e68c85b7438c3b5ed0f2c79d4df35f8c6d70a3c18950e85e628fea8467",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
         "life": _streams,
-        "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
+        "digest": "dcbc0983cda21c93c39ec2e5f75b9deebe3af815e53bdd9e9af7befbc7afac53",
         "acts": "111111011111111111111111111111111",
         "left": [
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 320, 203],
-            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 544, 301],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 256, 196],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 480, 295],
         ],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "d55cd4e74288887f5e41caf9899ecf4e6ceddedb3aacc31d194e0d60d3dc9b95",
+        "checkpoint": "91ae848b01aa1a8aece885e8eb8eff57242415399937eab8de1da2af7be68c34",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
         "life": _stepped,
-        "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
+        "digest": "8d42b245bdc9b36499675f913258d4ca9e532a91ad39a0bda82b666e4a441837",
         "acts": "0011010000000111111101000",
         "left": [],
         "format": "cadence-brain/1",
         "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
-        "checkpoint": "d8ceb9f406b33812b03a675f240a1f798b11ca03ab0f5805eabff5ba18530e74",
+        "checkpoint": "9c82f870c93d816e173d4ab03e59005439d347068f2f0337b273f3a9049f9f4a",
     },
 }
 

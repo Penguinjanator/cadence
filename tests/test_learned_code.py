@@ -136,38 +136,40 @@ def taught(brain: cd.Brain) -> list[int]:
 # whose description carries the arousal gene need_scale.
 # Where the library later removed a setting that was inert at its founder, the description
 # and checkpoint digests were re-recorded after every other value matched the recording.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
+# 8 motor neurons in a slot.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
         "life": stepped,
-        "parameters": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
+        "parameters": "8d42b245bdc9b36499675f913258d4ca9e532a91ad39a0bda82b666e4a441837",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
-        "checkpoint": "06fbd6687d87a6fd4fd821dc7decaf7fac71295bb1c076c6b73f0d6763b9bf11",
-        "describe": "c2d9ac325779947f7d47dce0368ec883e24fbe4f3d69fd54ec099ece68e035a0",
+        "checkpoint": "995ca55ca539707fc98e5d17c3132b091dcbdc070adeb5dbff229981072998fc",
+        "describe": "627782aa3674fd3feeca3751f78859d446362594cdf48574e158c95b903723b8",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True}),
         "life": lived,
-        "parameters": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
+        "parameters": "dcbc0983cda21c93c39ec2e5f75b9deebe3af815e53bdd9e9af7befbc7afac53",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "e76edb77fd4f5563d4263044651f3b40ae0310856a9e3921b999f501847c8a2a",
-        "describe": "4d2c1dc3e67a67c110696972927f22ac87f1bf37b0700dcabc9214b68d63c32e",
+        "checkpoint": "5d5caca11ff294796c8a8734058d4036c7463d7f4e46a08d90cd5fed5f708b30",
+        "describe": "df1a567b2d2ee37c57a2b6843d3b1dbf009e536783c257242a76c5e8607e0107",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
                          "history_decays": (0.2, 0.9), "efference_amplitude": 1.0,
                          "memory_choice": True}),
         "life": lived,
-        "parameters": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
+        "parameters": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
-        "checkpoint": "2ebe2c6747753e8d43bcc3de872204882532103b497cda757a7db2654084c783",
-        "describe": "cbca7ef58ecf8211c3837c68e5f05e9992e0fe09225a2d19e528843635295347",
+        "checkpoint": "d56839b39776dd3ce618009eb32ec5dcef08d51357b5ae1a2a33fe09397f278e",
+        "describe": "3a1969abe39e171d31fc1a87417a32e24e6b753b32a6060319c7427374b8d8bd",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -184,12 +186,12 @@ FOUNDERS: dict[str, dict] = {
         "build": (2_000, 3, {"modules": (8,), "seed": 13, "memory_choice": True,
                              "arousal": True}),
         "life": lived,
-        "parameters": "63de06ff41d1403e4e706fbf3095c48d555682191afc24b659c5e7e90d28acf3",
+        "parameters": "1eac71c04400948031c90dc1b00bd09f3cc5068037a88e69e6d3af225e0b89ae",
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "0277fcdf466243c9f0e805bd7c8d0c648d8cb8f3380972882f4ddac3b99cb154",
-        "describe": "23476fccc4a08d78891a9814d8ba3548ebf6533320edba0c4b980ea47d75fafa",
+        "checkpoint": "f89e12760a500968f79c2cd7d018fb99d94e59d12d3cd89194745555de3d892b",
+        "describe": "7cdc3504b3ee2fe50d70cbeb7f2a8016faa18878b410cafc6f47b05f961ac058",
     },
 }
 

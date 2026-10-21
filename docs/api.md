@@ -31,8 +31,7 @@ The composed System 1 brain, with optional System 2 `observers` in the same grap
 `field` size the visual cortex of an image. `modules` are the widths of the reciprocal
 processing chain, the last the association region; each `observers` width adds a region
 connected both ways to every module, the motor region and earlier observers. `lateral` is
-the weight between motor neurons of one slot (unset: -0.5 up to 8 actions in the largest
-slot, else 0.0); `slots` is a count of equal motor groups or one size per group, each read
+the weight between motor neurons of one slot (unset: 0.0); `slots` is a count of equal motor groups or one size per group, each read
 as its own softmax. `code=units` keys the memories on a fixed sparse
 code of that many units and, for a vector brain, makes the sensory region that code
 ([the observation code](senses.md#the-observation-code)). `learned_code=units` (a vector

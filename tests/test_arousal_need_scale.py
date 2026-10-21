@@ -536,6 +536,8 @@ LIVES: dict[str, tuple[tuple[int, int, dict[str, Any]], Life]] = {
 # checkpoint it saves. Where the library later removed a setting that was inert at its
 # founder, the state, names and checkpoint digests were re-recorded after every other value
 # matched the recording.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
+# 8 motor neurons in a slot.
 PINS: dict[str, dict[str, str]] = {
     "adult": {
         "acts": (
@@ -545,9 +547,9 @@ PINS: dict[str, dict[str, str]] = {
         ),
         "format": "cadence-brain/1",
         "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
-        "checkpoint": "f4d169bc69ad32a51ea0f0dc53fc134b2d44e628bff40859ea71261651908605",
-        "left": "9369e9b9ef6ea69c41ca7c9df69a3ccd1a65a94c677ea7a38287a8302da1ce9e",
-        "arousal": "82930a7673513d9ce243d643a81e968e5e9d6bc52e526b78abe7356c5b31fb60",
+        "checkpoint": "92934ef9e6e25131e5f79fa7452306f483f1e1a8c648241929eef722a2c66654",
+        "left": "f3e00b2ee149e3bceb81cdbe802bdd898ec7ceb3709331fa5b655a6b4a3b07fb",
+        "arousal": "81c8b36c180f88706717118915216bb1eac1f33be599c991a80ab314943c08e9",
     },
     "needy": {
         "acts": (
@@ -557,25 +559,25 @@ PINS: dict[str, dict[str, str]] = {
         ),
         "format": "cadence-brain/1",
         "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
-        "checkpoint": "21fc8b6a8dd784e2b4cc5f609fd1d88ddc1b24f6cc172b9315247300c9f588d5",
-        "left": "5fe084619d8817251b331ed1f4a4ed9f13423af747216eff94e132d108af1ae6",
-        "arousal": "609c15d6720de27c34cea0e220c670f9a949f5e8a3caef1fa5704501952d0ec0",
+        "checkpoint": "6ff1c5ddd55c8f3c6349403464f8a81fea06f440c1f17e38cea9c82c3c56b883",
+        "left": "b1b1e8d7aeb4ce6103952463dcec4a4d63a70fa450e739354a42058bbc853bc0",
+        "arousal": "7a77f09747321501d67c45eab0ca89932d553aa13d8c92291adfe3e9eabeb8bd",
     },
     "composed": {
-        "acts": "11110110010001100100010001000000000000",
+        "acts": "11110110010001100110010001000100010001",
         "format": "cadence-brain/1",
         "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
-        "checkpoint": "c5e81f4acc727a4a45ae2879329599a48610fc359368b72d9cc4cd5b3c710c88",
-        "left": "8330ed860dd21843e2e489451ab3781b77bf825f67c413f1fe58b977e4cc38b5",
-        "arousal": "d61a624596feedda53e9a3aee2ebde66dc0f820eb4d42431759425e3fbcb9fcc",
+        "checkpoint": "57d1ce3cd648e24736c4c1ce27736ff34497d888dafadbad00cebd9cd6cb793d",
+        "left": "bbb97ab1658f4574e15ba87d1ea1b4aa16794bcc4ab56a74385da29c2c6a67ac",
+        "arousal": "cb028cf7ca2e973e981b53923a4f856096b492232d0133bcc3e71db1172babda",
     },
     "episodic": {
         "acts": "11111101111111111111111111111111111110",
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "532bfa7319fd222d59cf98bdf8b00c9af1dd2836e20490088c92b7e0aba2ab5e",
-        "left": "75aef03fedbfcc5455e1febf4dcb7db64373faedc62d1288b23d73eca88a3ba0",
-        "arousal": "cb50b5df1de334b9b8f16a0644bfd9a380fb5b620db0e54ed70523d1fa627d93",
+        "checkpoint": "402ec610b77b7e3e7ae8b2e6a6e7584011fe76704aa02ff2cffed74d93291655",
+        "left": "c8fbc5cbc608d0a1d751d27f75e4e24e3627c186365c80b09849e2637e84e7d7",
+        "arousal": "eb1509e16f2500a38793f555993db8e4062393f60e3f5cdf1d96e2c743edc060",
     },
 }
 

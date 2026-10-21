@@ -1,4 +1,4 @@
-"""Operating defaults chosen by the readout they serve: issues 124, 125, 126, 127.
+"""Operating defaults chosen by the readout they serve: issues 124, 125, 126, 127, 220.
 
 The hand-set defaults remain the controls. These tests pin what each default
 resolves to, that composed brains settle at those defaults, and that the
@@ -6,7 +6,9 @@ diagnostics name the cause when a budget or rate is the problem.
 """
 
 import warnings
+from collections.abc import Mapping
 from dataclasses import replace
+from typing import Any
 
 import numpy as np
 import pytest
@@ -23,24 +25,21 @@ def motor_synapses(brain):
     return w.sign[edges]
 
 
-# -- issue 124: motor lateral inhibition follows the readout width
+# -- issues 124 and 220: an unset motor lateral is 0.0 at every menu size
 
 
-def test_small_action_menu_keeps_lateral_inhibition():
-    brain = cd.Brain.compose(inputs=8, actions=4, modules=(8,), seed=0)
-    signs = motor_synapses(brain)
-    assert len(signs) == 4 * 3 and np.all(signs == -0.5)
-
-
-def test_wide_readout_drops_lateral_inhibition_by_default():
-    brain = cd.Brain.compose(inputs=8, actions=36, modules=(8,), seed=0)
+@pytest.mark.parametrize("actions", [2, 4, 8, 9, 36])
+def test_an_unset_lateral_wires_no_motor_competition(actions: int) -> None:
+    brain = cd.Brain.compose(inputs=8, actions=actions, modules=(8,), seed=0)
     assert len(motor_synapses(brain)) == 0
 
 
-def test_explicit_lateral_overrides_the_width_rule():
+def test_an_explicit_lateral_is_used_as_given():
     brain = cd.Brain.compose(inputs=8, actions=36, modules=(8,), seed=0, lateral=-0.5)
     signs = motor_synapses(brain)
     assert len(signs) == 36 * 35 and np.all(signs == -0.5)
+    signs = motor_synapses(cd.Brain.compose(inputs=8, actions=4, modules=(8,), seed=0, lateral=-0.5))
+    assert len(signs) == 4 * 3 and np.all(signs == -0.5)
     assert (
         len(
             motor_synapses(cd.Brain.compose(inputs=8, actions=4, modules=(8,), seed=0, lateral=0.0))
@@ -49,9 +48,12 @@ def test_explicit_lateral_overrides_the_width_rule():
     )
 
 
-def test_build_and_genome_follow_the_same_lateral_rule():
-    assert len(motor_synapses(cd.Brain.compose(8, 36, modules=(8,), seed=0))) == 0
-    signs = motor_synapses(cd.Brain.compose(8, 4, modules=(8,), seed=0))
+def test_the_composed_layout_resolves_the_unset_lateral_as_compose_does():
+    for actions in (4, 36):
+        layout = cd.Genome.composed(8, actions, modules=(8,))
+        brain = cd.Brain(cd.develop(layout, seed=0))
+        assert len(motor_synapses(brain)) == 0
+    signs = motor_synapses(cd.Brain(cd.develop(cd.Genome.composed(8, 4, modules=(8,), lateral=-0.5), seed=0)))
     assert len(signs) == 12 and np.all(signs == -0.5)
 
 
@@ -64,6 +66,43 @@ def test_wide_composed_brain_settles_undamped_at_the_default():
     drive = brain.stimulus(rng.uniform(0, 1, (8, 64)), memory=False)
     phase = brain.brain.equilibrate(drive, budget=256, tolerance=3e-3)
     assert bool(np.all(phase.qualified)) and phase.steps <= 64
+
+
+def test_eight_action_composed_brain_settles_undamped_at_the_default():
+    # The issue-220 defect: at lateral -0.5 an 8-action composed brain settling 16 rows
+    # together oscillates in its undamped free solve, so greedy acts fall to the damping
+    # fallback and a lesson's free phase runs out its budget. At the resolved default the
+    # undamped solve, the acts and the lesson all settle in the ordinary few dozen sweeps.
+    def life(brain: cd.Brain) -> tuple[list[Mapping[str, Any]], dict[str, float]]:
+        rng = np.random.default_rng(3)
+        settles = []
+        for _ in range(4):
+            brain.act(rng.uniform(0, 1, (16, 64)), greedy=True)
+            settled = brain.last_settlement
+            assert settled is not None
+            settles.append(settled)
+        brain.lesson(rng.uniform(0, 1, (16, 64)), rng.integers(0, 8, 16))
+        return settles, brain.last_learning
+
+    competing = cd.Brain.compose(inputs=64, actions=8, modules=(64, 32), seed=1, lateral=-0.5)
+    with pytest.warns(RuntimeWarning, match="entire free_steps budget"):
+        settles, lesson = life(competing)
+    assert any(settled["damping_halvings"] > 0 for settled in settles)
+    assert lesson["demonstration_free_budget_exhausted"] == 1.0
+
+    brain = cd.Brain.compose(inputs=64, actions=8, modules=(64, 32), seed=1)
+    drive = brain.stimulus(np.random.default_rng(3).uniform(0, 1, (16, 64)), memory=False)
+    phase = brain.brain.equilibrate(drive, budget=256, tolerance=3e-3)
+    assert bool(np.all(phase.qualified)) and phase.steps <= 64
+    budget = brain.learner.config.free_steps
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        settles, lesson = life(brain)
+    for settled in settles:
+        assert settled["qualified"] and settled["damping_halvings"] == 0
+        assert settled["steps"] <= 64 < budget == settled["budget"]
+    assert lesson["demonstration_free_budget_exhausted"] == 0.0
+    assert lesson["demonstration_free_steps"] <= 64 < budget
 
 
 def test_invalid_lateral_is_still_rejected():

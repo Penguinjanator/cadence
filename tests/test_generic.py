@@ -157,8 +157,24 @@ def test_slotted_brain_predict_accuracy_and_fit_match_the_slot_contract(
 
     predicted = brain.predict(x[10:20])
     assert predicted.shape == (10, brain.learner.slot_count)
-    per_slot = brain.learner.predict(brain.stimulus(x[10:20], memory=False))
-    np.testing.assert_array_equal(predicted, per_slot)
+    drive = brain.stimulus(x[10:20], memory=False)
+    per_slot = brain.learner.predict(drive)
+    # predict settles under the brain's admission, the learner under its own free phase;
+    # both qualify at the tolerance, so their choices agree wherever a slot's two most
+    # active motor neurons lie further apart than the two residuals together (without
+    # motor competition two of them can tie within it); a slot of one neuron has one choice
+    out = np.asarray(brain.learner.free(drive).activation)[:, brain.motor_index]
+    tolerance = brain.learner.config.tolerance
+    assert tolerance is not None
+    for slot, (offset, size) in enumerate(
+        zip(brain.learner.slot_offsets, brain.learner.slot_sizes, strict=True)
+    ):
+        top = np.sort(out[:, offset : offset + size], axis=1)
+        clear = np.ones(len(top), dtype=bool)
+        if size > 1:
+            clear = top[:, -1] - top[:, -2] > 2 * tolerance
+        assert clear.any()
+        np.testing.assert_array_equal(predicted[clear, slot], per_slot[clear, slot])
     # act reads memory, so its choices may differ; its shape and slot bounds may not
     actions = brain.act(x[10:20], greedy=True)
     assert actions.shape == (10, brain.learner.slot_count)
@@ -166,9 +182,8 @@ def test_slotted_brain_predict_accuracy_and_fit_match_the_slot_contract(
         actions < np.asarray(brain.learner.slot_sizes)[None, :]
     ).all() and (actions >= 0).all()
 
-    assert brain.accuracy(x[10:20], y[10:20]) == brain.learner.accuracy(
-        brain.stimulus(x[10:20], memory=False), y[10:20]
-    )
+    # accuracy counts the choices of predict, one per slot
+    assert brain.accuracy(x[10:20], y[10:20]) == float(np.mean(predicted == y[10:20]))
 
     history = brain.fit(x[20:], y[20:], epochs=1, batch=5)
     assert len(history) == 1 and 0.0 <= history[0] <= 1.0

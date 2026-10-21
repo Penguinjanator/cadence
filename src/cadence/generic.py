@@ -64,7 +64,7 @@ from .learning import Learner, LearnerConfig, learning_neuron_model
 from .memories import EpisodicRecords, Memories, Moment, command, record_action
 from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
-from .regions import Region, cortex, motor_cortex, prefrontal_cortex, slot_sizes, visual_cortex
+from .regions import Region, cortex, motor_cortex, prefrontal_cortex, visual_cortex
 from .stream import Efference, FastSynapses, History, PatternSeparator, Recall, Trace
 
 __all__ = ["Brain"]
@@ -92,11 +92,12 @@ _REWARD_ARRAYS = (
 )
 
 
-# The default motor lateral inhibition, and the widest readout that keeps it. Up to 8
-# actions, -0.5 settles in as many sweeps as 0.0; on wider readouts the free solve needs
-# damping and many more sweeps, and the undamped teaching free phase does not settle.
-_LATERAL_DEFAULT = -0.5
-_LATERAL_ACTION_LIMIT = 8
+# The motor lateral weight an unset ``lateral`` resolves to: no motor-to-motor synapses, at
+# every menu size. At -0.5 the undamped free solve oscillates from 4 actions on (at 8 actions
+# a fifth of one-row acts and every act of 16 rows settle only under the damping fallback, at
+# 544 sweeps against 32, and a teaching free phase of 16 rows runs out its budget on most
+# lessons), so a competing readout is a choice made against 0.0 on development tasks.
+_LATERAL_UNSET = 0.0
 
 # The brain's sparse code, opt-in (``code=units``): each input is read through two rectified
 # channels, ON max(x, 0) and OFF max(-x, 0), every channel by _CODE_COVER units at least, with
@@ -113,10 +114,6 @@ _CODE_WINNERS_FLOOR = 24
 # separators from its seed and the next one, so a code drawn from an offset of the seed would
 # share its stream with a brain of a nearby seed.
 _CODE_STREAM = 7103
-
-
-def _default_lateral(actions: int) -> float:
-    return _LATERAL_DEFAULT if actions <= _LATERAL_ACTION_LIMIT else 0.0
 
 
 def _learning() -> LearnerConfig:
@@ -1310,7 +1307,7 @@ def _layout(
         {name: value for name, value in options.items() if name.startswith("recall_")},
     )
     if lateral is None:
-        lateral = _default_lateral(max(slot_sizes(actions, slots)))
+        lateral = _LATERAL_UNSET
     if (
         isinstance(lateral, (bool, np.bool_))
         or not isinstance(lateral, (int, float, np.integer, np.floating))
@@ -2120,18 +2117,19 @@ class Brain:
         in the same neural settlement; observer regions never run as a separate
         critic or override an already completed answer.
 
-        ``lateral`` is the signed weight between each pair of motor neurons.
-        Zero removes those lateral synapses, preserving motor/association feedback.
-        Left unset, it is -0.5 up to 8 actions and 0.0 above: lateral inhibition
-        sharpens a small competing action menu, while on a wider readout it stops
-        the undamped free solve from settling and slows damped answers several
-        times over. Select alternatives against the default on development tasks.
+        ``lateral`` is the signed weight between each pair of motor neurons in a
+        slot. Left unset it is 0.0 at every menu size: no synapses between the
+        motor neurons, the motor and association feedback kept. A negative weight
+        makes the actions compete; at -0.5 the undamped free solve oscillates from
+        4 actions on, so an act may settle only under the damping fallback and a
+        teaching free phase may run out its budget. Select a nonzero weight against
+        0.0 on development tasks.
 
         ``slots`` groups the motor neurons into several readouts that settle
         together, one softmax each: a count of equal groups, or one size per group
         covering ``actions``. ``act`` and ``step`` then return one index per slot,
-        lateral inhibition stays within a slot, and the unset ``lateral`` follows
-        the largest slot. One slot is one choice over every action.
+        and a nonzero ``lateral`` is wired within a slot. One slot is one choice
+        over every action.
 
         Observer wiring is experimental.
         Inputs are fixed external drives; their neural representations can vary.

@@ -119,32 +119,34 @@ def lived(brain: cd.Brain) -> list[int]:
 # checkpoint contents compared with those of the same life lived again instead.
 # Where the library later removed a setting that was inert at its founder, the description
 # and checkpoint digests were re-recorded after every other value matched the recording.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
+# 8 motor neurons in a slot.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
         "life": stepped,
-        "parameters": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
+        "parameters": "8d42b245bdc9b36499675f913258d4ca9e532a91ad39a0bda82b666e4a441837",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
-        "checkpoint": "06fbd6687d87a6fd4fd821dc7decaf7fac71295bb1c076c6b73f0d6763b9bf11",
+        "checkpoint": "995ca55ca539707fc98e5d17c3132b091dcbdc070adeb5dbff229981072998fc",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
                          "recall": False}),
         "life": lived,
-        "parameters": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
+        "parameters": "dcbc0983cda21c93c39ec2e5f75b9deebe3af815e53bdd9e9af7befbc7afac53",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "e76edb77fd4f5563d4263044651f3b40ae0310856a9e3921b999f501847c8a2a",
+        "checkpoint": "5d5caca11ff294796c8a8734058d4036c7463d7f4e46a08d90cd5fed5f708b30",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
                          "history_decays": (0.2, 0.9), "efference_amplitude": 1.0,
                          "memory_choice": True}),
         "life": lived,
-        "parameters": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
+        "parameters": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
@@ -156,7 +158,7 @@ FOUNDERS: dict[str, dict] = {
         "build": (256, 3, {"modules": (16,), "seed": 9, "memory_choice": True, "recall": True,
                            "arousal": True}),
         "life": lived,
-        "parameters": "938905bbc2dc39c354f2f53443948e0bc4b5f06dfe132306fa4d31062ada966a",
+        "parameters": "2682044117eb96655f6d3e084c547a516c88d0987409bde96cf07d7074f5c49f",
         "acts": [2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-brain/1",
         "names": "8fc6ffe8ac86a1d325e454c2f5b06d31316374fd1b83a5c3ee68e0cbefd5c1c2",
@@ -168,11 +170,11 @@ FOUNDERS: dict[str, dict] = {
         "build": (2_000, 3, {"modules": (8,), "seed": 13, "memory_choice": True,
                              "arousal": True, "recall": False}),
         "life": lived,
-        "parameters": "63de06ff41d1403e4e706fbf3095c48d555682191afc24b659c5e7e90d28acf3",
+        "parameters": "1eac71c04400948031c90dc1b00bd09f3cc5068037a88e69e6d3af225e0b89ae",
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "0277fcdf466243c9f0e805bd7c8d0c648d8cb8f3380972882f4ddac3b99cb154",
+        "checkpoint": "f89e12760a500968f79c2cd7d018fb99d94e59d12d3cd89194745555de3d892b",
     },
     "image": {
         # the single-region image brain of earlier releases, wired by hand: the hippocampus

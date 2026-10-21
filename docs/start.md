@@ -546,8 +546,8 @@ arm at each of the last 40; uniform random chooses it at half the moments. Reset
 stream that paid as before, they kept their arm, calm, at all 120 moments; into one
 whose arm paid 2.0 in place of 1.0, they were aroused at 9 of 600 moments and at none of
 the last 40 of any seed, and the adults living on without the reset at 6 of 600. Either
-reset starts the neural state afresh: in the stream that paid as before, the first 6 to
-14 moments after a reset settled from rest at 32 sweeps each, and the continuing stream
+reset starts the neural state afresh: in the stream that paid as before, the first 5 to
+12 moments after a reset settled from rest at 32 sweeps each, and the continuing stream
 needed no sweep.
 
 ```python

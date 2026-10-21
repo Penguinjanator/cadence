@@ -191,36 +191,38 @@ def _taught(brain):
 # the contents of every array (``checkpoint``) of the checkpoint it saves.
 # Where the library later removed a setting that was inert at its founder, the description
 # and checkpoint digests were re-recorded after every other value matched the recording.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
+# 8 motor neurons in a slot.
 FOUNDERS = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
         "life": _stepped,
-        "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
+        "digest": "8d42b245bdc9b36499675f913258d4ca9e532a91ad39a0bda82b666e4a441837",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
-        "checkpoint": "721c1063d17d8aa883110ca39f1c528d763f6d453f467e77495ef9d5cb7b5bfb",
+        "checkpoint": "67c4444f374b86a738469f0fa63fde0173456ed4c3a8f82f1dba51773c6fab00",
     },
     "lived": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True,
                          "history_decays": (0.2, 0.9), "efference_amplitude": 1.0,
                          "recall": False}),
         "life": _lived,
-        "digest": "b66e821b4d3c975000dc59663c7ce2babaf0473d232af438a689f12b9fbbee67",
-        "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1],
+        "digest": "30f4eae2e5b61512953080495ae1fef24fd5555d837fb4570d46e43af38d4582",
+        "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "73388bfd03b1d7badf6c3be759e8376562d96c9f4052822b96f76e880a7dafef",
-        "checkpoint": "793646f2d9238efe1b76b9fa8ac264911ecc3614d3b6add6203aa0d4bb207c65",
+        "checkpoint": "0d9ddf25a42bb5b2541d8dec7371552d3d2b9152893d16017f5ad943a7f481a7",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
                          "recall": False}),
         "life": _lived,
-        "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
+        "digest": "dcbc0983cda21c93c39ec2e5f75b9deebe3af815e53bdd9e9af7befbc7afac53",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "f7140a59b90edac254f9a1356aa1110168a176cb7589146418d0be58e8c37e9b",
+        "checkpoint": "e0637e9206f2e376b01d1697c4a04256e255f5d003e7f1e45aacac270dada196",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,

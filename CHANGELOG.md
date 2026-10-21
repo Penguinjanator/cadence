@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+- `Brain.compose` resolves an unset `lateral` to 0.0 at every menu size; an explicit
+  `lateral`, -0.5 included, is used as given
+  ([#220](https://github.com/muellerberndt/cadence/issues/220)). 0.73.0 had resolved it to
+  -0.5 for a largest motor slot of up to 8 neurons, on the measurement that the undamped free
+  solve stops settling under -0.5 from 12 actions. Measured again, the oscillation is there
+  from 4 actions on: 8-action composed brains at 8, 64 and 128 inputs, seeds 0 to 2, with 50
+  greedy acts each on uniform random observations ran the undamped half of the free budget
+  out on 94 of 450 acts, which settled only under the half-step damping fallback, at 544
+  sweeps against 32 at 0.0; with 16 rows per act every act did; and `Brain.lesson` with 16
+  rows per lesson, whose free phase has no damping fallback, exhausted its whole 1,024-sweep
+  budget on 28 of 30 lessons at 8 actions and 7 of 30 at 4, learning from an unsettled
+  state, where at 0.0 every lesson settled in about 6 sweeps. Founders change: every brain
+  `compose` or `Genome.composed` makes with `lateral` unset and a largest motor slot of at
+  most 8 neurons loses its motor-to-motor synapses, the benchmark chambers that leave
+  `lateral` unset among them (chain, competing, replay, key-door, reversal, selective recall,
+  bindings, acquisition controls, steady rhythm, reward rhythm and the CUDA chamber). Brains
+  whose largest slot exceeds 8 neurons are byte-identical.
 - `copy.deepcopy(brain)` works: a brain copies every array, store, state and random
   generator and shares its immutable connectomes (`Connectome` copies as itself), with the
   learned code region or without it; instruments that forked brains by hand no longer need
