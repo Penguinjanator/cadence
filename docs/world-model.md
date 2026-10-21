@@ -114,7 +114,6 @@ integrates no learned model of environmental transitions
 | Dreaming and sleep | `RecordPatchNet.dream` completes cues from the model and records; `sleep` teaches those completions to slow weights and rewrites residual records. Separate from `Brain.imagine` and from `Brain.compose`. [Sleep cycle](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night). |
 | Learned consequences | `TemporalPatchNet` is a separate learned temporal model with planning; `Records` give explicit predictions. Neither is wired into `Brain.compose`. [Planning](planning.md#learn-consequences-then-act). |
 | Selective activity elsewhere | [Centered dopamine](reward.md#centered-dopamine-and-selective-activity) suppresses familiar actor modulation; [`Life`](steering.md) selects habit, imagination and learning for a belief/steering composition. Neither gates `Brain.step`. |
-| State-and-error population | `cadence.experimental.equilibrium` qualifies a joint stationary state under its own energy, with explicit `History` in place of the trace and associative memory. [Population solver](equilibrium/index.md). |
 
 `step` learns from every outcome it is given. `live` gates learning by arousal;
 its evidence is the [odour nursery](../benchmarks/reversal/README.md), where the

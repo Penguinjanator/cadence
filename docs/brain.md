@@ -51,8 +51,7 @@ assert recursive.live(observation).shape == (1,)
 ```
 
 Observers settle with the base and never override a finished answer. The wiring
-permits recursive correction without teaching it; exact state-and-error readback
-belongs to the [population solver](equilibrium/index.md).
+permits recursive correction without teaching it.
 
 ## Image inputs
 

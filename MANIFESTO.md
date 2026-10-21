@@ -21,9 +21,7 @@ answers with a settled state of that one rule. There is no separate answer head.
 Here agreement means satisfying the declared coupled relations, not identical
 neural states or guaranteed correctness about the world. A fixed-input settle
 holds its parameters and memory readback fixed; the continuing brain encounters
-new observations, carries context and learns across such solves. Neural equation
-residuals and the experimental population model's stationarity residual have
-different contracts; stationarity can retain nonzero prediction error.
+new observations, carries context and learns across such solves.
 
 **Simple first; evolved brains are the reference.** Start from the simplest existing
 System 1 and check state, memory, experience and available information before adding a

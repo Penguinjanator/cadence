@@ -121,4 +121,3 @@ and measured. [Recursive observers](recursive-settlement.md) covers depth and wi
   [reciprocal patches](patchnet.md).
 - Evaluate: [evaluate a brain](evaluation.md).
 - Reference: [API reference](api.md).
-- Population solver: [exact state-and-error readback](equilibrium/index.md).

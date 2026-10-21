@@ -18,7 +18,6 @@ guides. Read the owning guide, [numerical contracts](docs/contracts.md) and
 | Use retained-record dreaming and sleep | [Record patches](docs/record-patch.md): `RecordPatchNet.dream` and `sleep`; this is a separate model from `Brain.compose` |
 | Learn transitions, plan or protect responses | [Temporal patches](docs/temporal.md), [planning](docs/planning.md), [temporal memory](docs/temporal-memory.md), [runnable example](examples/memory_imagination.py) |
 | Add optional recursive observation | [Cortical regions](docs/cortex.md), [recursive settlement](docs/recursive-settlement.md), [PatchNet training](docs/patchnet.md#train-on-observed-targets) |
-| Work on the population equilibrium solver | [Its entry guide](docs/equilibrium/README.md), [agent instructions](docs/equilibrium/AGENTS.md) and [reference](docs/equilibrium/REFERENCE.md) |
 | Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [protocols](docs/protocols.md), [receipts](docs/receipts.md) |
 
 ## What Cadence is, and is not
@@ -96,10 +95,10 @@ The intended observer-like structure has bounded local state, sensory/action
 boundaries, inspection, retained evidence and returning constraints. Name the
 actual implementation: composed brains expose sensory/motor indices, neural
 state, a working trace and associative memory. These are not the typed `Ports`
-or record readback of the record/temporal APIs, nor the population solver's exact
-state-and-error readback. A retained trace may be a held boundary during a present
-solve; a live coordinate must still qualify. Do not freeze unresolved live state
-or weaken qualification to manufacture a whole-brain answer.
+or record readback of the record/temporal APIs. A retained trace may be a held
+boundary during a present solve; a live coordinate must still qualify. Do not
+freeze unresolved live state or weaken qualification to manufacture a
+whole-brain answer.
 
 ## Build and demonstrate the lifecycle
 
@@ -168,10 +167,9 @@ behavioral contracts need their own capability issues and tests.
 
 Advanced APIs have explicit contracts: `TemporalPatchNet.plan` uses a learned
 world model; `TemporalMemory` protects selected responses at finite capacity;
-record patches combine context, learned relations and writable records. The
-population solver under `cadence.experimental.equilibrium` provides exact
-state-and-error readback. Do not transfer its mathematical guarantees to a
-neural-graph or record operation without an actual correspondence.
+record patches combine context, learned relations and writable records. Do not
+transfer one family's mathematical guarantees to another family's operation
+without an actual correspondence.
 
 Preserve `RecordPatchNet.dream(inputs)` and `sleep(cues)`: dreams complete cues
 from retained records without learning; sleep fixes those targets, teaches slow
@@ -253,9 +251,8 @@ salience do not establish general lifelong retention.
   or improved performance need before/after behavior and cost comparisons with
   matched tasks, inputs, seeds, information and resource accounting. Keep working
   baselines and acquisition/retention thresholds when refactoring.
-- Changes to the population solver need `tests/equilibrium`; default neural
-  changes need their own tests. Optional backends must preserve the applicable
-  qualification and continuation rules.
+- Default neural changes need their own tests. Optional backends must preserve
+  the applicable qualification and continuation rules.
 
 Cadence is experimental: backward compatibility is not a design requirement.
 Save/load must still preserve the current supported model's complete continuation.
@@ -274,9 +271,7 @@ completed general cognition is not a release gate.
 ports provide a useful analogy to overlapping descriptions, but a mathematical
 correspondence must identify the variables, equations and assumptions of each
 model. In the default neural brain, qualification checks the declared state
-equations. The experimental population model qualifies stationarity of its
-energy and can retain nonzero prediction errors; neither forces all patches to
-the same value ([prediction and disagreement](docs/equilibrium/SPECIFICATION.md#prediction-and-disagreement)).
+equations; it does not force all patches to the same value.
 Keep the two projects' claims separate. OPH results do not establish a Cadence
 capability, Cadence measurements do not test OPH physics, and Cadence code and
 documentation do not depend on OPH.

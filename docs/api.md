@@ -139,7 +139,7 @@ their shape. Keep row identities fixed until `reset()`.
 | `memory_choice`, `memory_context`, `memory_replay`, `memory_demonstrations`, `resting_bias` | the resolved construction settings |
 | `arousal` | the stream's `Arousal`, or `None` |
 | `pending_feedback` | read-only: the issued action awaits its outcome (`wait` keeps it) |
-| `decision_id` | read-only: the `arousal.age` at which `live` issued the awaited action, or `None`; saved and restored ([feedback ownership in the population solver](equilibrium/LIVE.md#preserve-execution-and-feedback-ownership) is the stricter contract) |
+| `decision_id` | read-only: the `arousal.age` at which `live` issued the awaited action, or `None`; saved and restored |
 | `last_arousal` | immutable snapshot of the latest `live` moment; `None` after construction, reset or load ([fields](continuous.md#routine-and-repair-live)) |
 | `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
 | `last_learning` | the latest transition's learning report, teaching under `demonstration_*` keys |
@@ -677,8 +677,7 @@ cadence.experimental.two_group_masks(context_hidden, motor_hidden, inputs, outpu
 The temporal model with boolean `A`/`B`/`C` masks (omitted masks allow every entry);
 `masks` returns copies and `trainable_parameter_count` counts permitted entries. Restore
 through the subclass. `TemporalMemory.observe` refuses it before any change. Guide:
-[experimental fixed connectivity](partitioned.md). The population solver,
-`cadence.experimental.equilibrium`, has its own [reference](equilibrium/REFERENCE.md).
+[experimental fixed connectivity](partitioned.md).
 
 ## RecordPatchNet (`cadence.record_patch`)
 

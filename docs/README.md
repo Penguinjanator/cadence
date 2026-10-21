@@ -43,7 +43,6 @@ is pinned to the release tag.
 | Connectome import | `NeuralGraph` from a measured wiring diagram | [Connectomes](connectomes.md) |
 | Selection across lives | `genes`, `evolve`, `cadence.genome.mutate` | [Evolution](evolution.md) |
 | Many brains on a GPU | `cadence.population.PopulationPatch` (torch) | [Population](population.md) |
-| The population solver | `cadence.experimental.equilibrium` | [Population solver](equilibrium/index.md) |
 
 Each model family carries its own guarantee, and one family's guarantee does not certify a
 composition of families ([contracts](contracts.md)).
@@ -87,14 +86,6 @@ composition of families ([contracts](contracts.md)).
 | | [Certificate](certificate.md) | the settling contraction certificate |
 | | [Backends](backends.md) | devices, precision, extras |
 | | [API reference](api.md) | every public name and signature |
-| Population solver | [Population solver](equilibrium/index.md) | `cadence.experimental.equilibrium` |
-| | [Quickstart](equilibrium/QUICKSTART.md) | build, teach, test, save and resume |
-| | [Brain design](equilibrium/BRAIN_DESIGN.md) | wiring, teaching rows, capacity, diagnosis |
-| | [Live operation](equilibrium/LIVE.md) | bodies, reward learning, retention |
-| | [Execution and cost](equilibrium/ACCELERATION.md) | devices, batching, parallel lives |
-| | [Specification](equilibrium/SPECIFICATION.md) | equations, qualification, continuation |
-| | [Solver API reference](equilibrium/REFERENCE.md) | classes, parameters, diagnostics |
-| | [Agent guide](equilibrium/AGENTS.md) | application workflow for coding agents |
 
 ## Evaluate and contribute
 
