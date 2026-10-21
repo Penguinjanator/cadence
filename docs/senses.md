@@ -36,8 +36,8 @@ saved with the brain as `brain.sparse_code`. In `compose` a vector brain's senso
 reads the code too; on an image brain and in `Brain(connectome, code=units)` only the
 memories use it. Set it when wide observations make the episodic separators and the recall
 address map too large: at 12,824 inputs they take 1,532 MB uncoded with `memory_choice` and
-`recall`, and 9.8 MB with `code=1024`. A coded brain refuses `memory_expansion` and
-`memory_fan_in`, and keys stored under one code do not match another.
+`recall`, and 9.8 MB with `code=1024`. A brain with this code refuses `memory_expansion`
+and `memory_fan_in`, and keys stored under one code do not match another.
 `Genome.observation_width(inputs, code)` gives the key width before building, the size of a
 custom anatomy's `recall` and `next` regions. The code is fixed and learns nothing.
 `learned_code=units` (opt-in, without `code`) adds a code region of the brain's own neurons

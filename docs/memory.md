@@ -210,7 +210,7 @@ at `q` by `q . k` times the correction, so overlapping situations interfere. Und
 
 `memory_choice=True` makes the hippocampus an episodic memory. Each record is kept twice,
 keyed by the observation code (place) and by the code with a fading trace of what the stream
-saw and did (`brain.context_memory`), each behind a fixed separator (none on a coded brain),
+saw and did (`brain.context_memory`), each behind a fixed separator (none with a fixed code),
 and the mean of the two reads joins the motor readout in every choice. It records known
 outcomes and demonstrations and replays a reward back along the recent path. Its settings,
 evidence and limits are in [episodic memory](#episodic-memory-what-happened-in-this-situation-before),
@@ -335,7 +335,8 @@ observation now ─► settle ─► motor readout ─────────�
   The place records keep a situation together when a new path reaches it.
 - **Records** hold one value per action in reward units. An uncoded key passes a fixed random
   separation first (`memory_expansion` cells, the `memory_winners` most active kept), so
-  different situations write different synapses. A coded brain keys on its code as it is.
+  different situations write different synapses. A brain with a fixed code keys on its code
+  as it is; a learned code's keys pass the separation as an observation's do.
 - **What is written.** The outcome of the chosen action, once it is known: a reward or a
   punishment, the end of an attempt (`done`), a surprise that woke a calm `live` brain, or an
   outcome marked with a positive `salience=`. A zero outcome in the middle of an attempt
@@ -412,7 +413,7 @@ All of these are construction settings: pass them at construction; `retune` refu
 | `memory_context` | `0.5` | Raise toward 1 (exclusive) when the answer depends on what came long before; lower when history does not matter; 0 keeps the place records alone and builds no `context_memory` |
 | `memory_replay` | `8` | Raise when rewards come at the end of long chains; 0 replays nothing |
 | `memory_demonstrations` | `1.0` | Raise when shown actions should outweigh the brain's own trials; lower for an unreliable teacher; 0 records none |
-| `memory_expansion` | `1024` (0 on a coded brain) | Raise when many situations must be told apart; 0 uses the key unseparated. With `code=units` it is set to 0 and a nonzero value is refused |
+| `memory_expansion` | `1024` (0 with a fixed code) | Raise when many situations must be told apart; 0 uses the key unseparated. With `code=units` it is set to 0 and a nonzero value is refused |
 | `memory_winners` | `24` | How many separation cells stay active per key; at most `memory_expansion` |
 | `memory_fan_in` | `0` (dense) | Above 0 each separation cell reads that many random key values; use 32 for keys wider than 256 values. Needs `memory_expansion` and at most the key width; refused with `code=units` |
 
