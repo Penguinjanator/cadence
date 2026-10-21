@@ -27,6 +27,11 @@ env OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
     --prepare --out /tmp/cadence-retention-prepared
 ```
 
+The preparation copies the continuing-interaction and memory guides and the
+actual-outcome, feedback, continuation and memory-checkpoint tests into the capsule as
+bridges. The response-protection guide and its two tests, which preparations up to
+release 0.84.3 also copied, left the library with the temporal patch.
+
 No sibling project or private evidence directory is required. Default receipts
 record formal evidence as `omitted_not_checked`. An explicit
 `--formal-source /path/to/CadenceMission` copies all five declared Lean files,

@@ -2830,8 +2830,7 @@ class Brain:
         copy reads the complete act on a supplied observation.
 
         This imagines the brain's responses, not an unobserved environment's
-        dynamics. ``TemporalPatchNet.plan`` supplies the separate learned
-        consequence-model interface for continuous action planning.
+        dynamics.
         """
         from copy import copy
 

@@ -2,9 +2,8 @@
 
 Use ``Brain.compose`` for the default System 1 brain, adding ``observers`` for
 optional System 2 feedback in the same neural graph. ``NeuralGraph`` exposes
-lower-level neuronal dynamics. Temporal models provide planning and response
-protection with their own contracts. See ``docs/contracts.md`` for their numerical
-and learning boundaries.
+lower-level neuronal dynamics. See ``docs/contracts.md`` for the numerical and
+learning boundaries.
 """
 
 from __future__ import annotations
@@ -41,7 +40,6 @@ from .learning import (
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
 from .patch import PatchNet, PatchObservation
-from .planning import TemporalPlan
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
@@ -64,19 +62,10 @@ from .stream import (
     Trace,
     stateful,
 )
-from .temporal import TemporalObservation, TemporalPatchNet, TemporalPhase, TemporalReadback
-from .temporal_memory import ConstraintReport, TemporalMemory
 
 __all__ = [
     "Arousal",
     "ArousalConfig",
-    "ConstraintReport",
-    "TemporalMemory",
-    "TemporalPlan",
-    "TemporalPatchNet",
-    "TemporalPhase",
-    "TemporalObservation",
-    "TemporalReadback",
     "PatchNet",
     "PatchObservation",
     "Certificate",

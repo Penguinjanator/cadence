@@ -17,42 +17,6 @@ def _frozen(result: object, name: str) -> None:
         setattr(result, name, None)
 
 
-# ---------------------------------------------------------------------------- temporal patch
-def test_temporal_phase_observation_and_readback() -> None:
-    rng = np.random.default_rng(4)
-    net = cd.TemporalPatchNet(3, 6, 2, seed=5)
-    inputs, target = rng.normal(size=(2, 4, 3)) * 0.2, rng.normal(size=(2, 4, 2)) * 0.2
-    phase = net.imagine(inputs)
-    assert isinstance(phase, cd.TemporalPhase)
-    _frozen(phase, "hidden")
-    assert phase.hidden.shape == (2, 4, 6) and phase.output.shape == (2, 4, 2)
-    assert phase.converged and phase.reason
-
-    result = net.observe(inputs, target, beta=0.01, rate=0.1)
-    assert isinstance(result, cd.TemporalObservation)
-    assert isinstance(result.free, cd.TemporalPhase)
-    _frozen(result, "updated")
-    assert result.updated == (result.reason == "updated")
-    assert result.free.output.shape == target.shape
-
-    readback = net.readback()
-    assert isinstance(readback, cd.TemporalReadback)
-    _frozen(readback, "state")
-    assert readback.state is not None and readback.state.shape == (2, 6)
-    assert readback.updates == int(result.updated)
-
-
-def test_constraint_report() -> None:
-    rng = np.random.default_rng(6)
-    net = cd.TemporalPatchNet(4, 12, 3, seed=127)
-    inputs = rng.normal(size=(1, 5, 4)) * 0.2
-    report = cd.TemporalMemory().protect(net, inputs, state=np.zeros((1, 12)))
-    assert isinstance(report, cd.ConstraintReport)
-    _frozen(report, "bytes")
-    assert set(report.ranks) == {"A", "B", "C"} and report.ranks["B"] <= 4
-    assert report.bytes > 0 and report.maximum_residual < 1e-12
-
-
 # ---------------------------------------------------------------------------- continuous brains
 def test_patch_observation_equilibrium_and_ep_structure() -> None:
     p = cd.PatchNet.create(2, 5, 1, seed=3, density=1, tolerance=1e-7)
