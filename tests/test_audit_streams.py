@@ -55,10 +55,8 @@ def test_trace_reads_only_its_source_slice_and_resets_rows(backend: str) -> None
     assert len(trace.trace) == 2 and trace.cold.tolist() == [False, False]
     stimulated = trace.stimulate(np.zeros((7, c.n)))  # a query cannot erase live streams
     assert len(trace.trace) == 2 and trace.trace.any() and not stimulated.any()
-    focused = Trace(c, decay=0.5, focus=1.0, source="hidden", target="context")
-    focused.update(state)
-    focused.update(state)
-    assert np.isfinite(focused.trace).all()
+    with pytest.raises(TypeError):
+        Trace(c, decay=0.5, focus=1.0, source="hidden", target="context")
 
 
 def test_synaptic_memory_salience_value_mask_and_batch_changes() -> None:

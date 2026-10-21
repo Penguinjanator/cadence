@@ -125,7 +125,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
         "format": "cadence-generic/2",
         "names": "4d36d84e68feb73b1b2eedc4de6c9e70769defa7231704e42b9531303f837703",
-        "checkpoint": "b68e0b45ff6121e4aaf95a2a838f43885c64dc0619ea66ddfde032c9f39dff1f",
+        "checkpoint": "e7c63a42cf7392c7e7ebeb91fd63813e5bc1cdaa3581966fee033f332a500ffc",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -135,7 +135,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
         "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "46ba532d6b3ae90be4e04f1fd7a7e0d845c5cc125702f9e78220d66c40bb29c1",
+        "checkpoint": "7d00502e0f88db3c766de2640fd65680dc74cfe8ac9e287df0ccd5bf8e456648",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -170,7 +170,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-generic/6",
         "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
-        "checkpoint": "2c7d257c0795d48b28ea0a4742962a4b57c0c7e6b5d8f74da6a6d2ec76859794",
+        "checkpoint": "5ec3ae0c7e5690a03894902ace185ec2d248c7d59802a5e859e2a57c50365ef9",
     },
     "image": {
         # an image shape through Brain.build: the hippocampus of earlier releases keyed on

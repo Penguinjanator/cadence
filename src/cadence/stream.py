@@ -51,18 +51,14 @@ class Trace:
     """A quantity decaying across moments, kept per stream, entering the next settling run
     as a stimulus: the memory of the moment before.
 
-    Over a range's activation it is the trace of that range (the echo of the interpretation
-    at ``focus`` 0); weighted by how much each neuron moved since the last moment (its share
-    of the row's mean movement, to the power ``focus``) it is brightest where the moment
-    changed, and of the input neurons it is an afterimage of the picture itself, the memory
-    that reads a cue against a static background (``tests/test_child.py``). What had
-    to change while settling stays lit; what stood still fades.
+    Over a range's activation it is the trace of that range, the echo of the interpretation;
+    of the input neurons it is an afterimage of the picture itself. ``last`` holds the
+    source read of the latest moment and ``cold`` the streams that have not been read yet.
     """
 
     connectome: Connectome
     decay: float = 0.5
     amplitude: float = 1.0  # the stimulus amplitude of the neuron model
-    focus: float = 0.0
     source: str = "hidden"  # the range traced
     # the range the trace enters as a stimulus, one neuron per source neuron
     target: str = "context"
@@ -73,8 +69,8 @@ class Trace:
     def __post_init__(self) -> None:
         if not 0 <= self.decay < 1:
             raise ValueError("decay lies in [0, 1)")
-        if not np.isfinite([self.amplitude, self.focus]).all() or self.focus < 0:
-            raise ValueError("amplitude and focus must be finite; focus must be nonnegative")
+        if not np.isfinite(self.amplitude):
+            raise ValueError("amplitude must be finite")
         self.glow = np.asarray(self.connectome.populations[self.target], dtype=np.int64)
         self.hidden = np.asarray(self.connectome.populations[self.source], dtype=np.int64)
         if len(self.glow) != len(self.hidden):
@@ -107,19 +103,11 @@ class Trace:
         return out
 
     def update(self, state: BrainState) -> None:
-        """After the free phase: the trace decays toward the source neurons' activation, each
-        weighted by its movement since the last moment when ``focus`` is above zero; a cold
-        stream's first moment weighs one."""
+        """After the free phase: the trace decays toward the source neurons' activation."""
         h = self._source_activation(state)
         if len(self.trace) != len(h):
             self.reset(len(h))
-        if self.focus:
-            moved = np.abs(h - self.last)
-            weight = (moved / (moved.mean(axis=1, keepdims=True) + 1e-9)) ** self.focus
-            weight[self.cold] = 1.0
-            self.trace = self.decay * self.trace + (1.0 - self.decay) * weight * h
-        else:
-            self.trace = self.decay * self.trace + (1.0 - self.decay) * h
+        self.trace = self.decay * self.trace + (1.0 - self.decay) * h
         self.last = h.copy()  # own the previous moment even if the caller reuses state storage
         self.cold[:] = False
 
@@ -157,7 +145,6 @@ class Trace:
         return {
             "decay": self.decay,
             "amplitude": self.amplitude,
-            "focus": self.focus,
             "source": self.source,
             "target": self.target,
             "neurons": int(len(self.glow)),
@@ -185,8 +172,7 @@ class Efference(Trace):
 
     def issue(self, command: np.ndarray) -> None:
         """After the decision: the trace decays toward the ``(batch, motor)`` command, one
-        row per stream with ones at the motor neurons of the executed action. ``focus``
-        does not apply: a command is not a settled activation with a movement to weigh."""
+        row per stream with ones at the motor neurons of the executed action."""
         command = np.asarray(command, dtype=float)
         if command.ndim != 2 or command.shape[1] != len(self.hidden):
             raise ValueError("a command is one row of motor values per stream")

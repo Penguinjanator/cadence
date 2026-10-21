@@ -211,7 +211,6 @@ def test_memory_and_trace_tuning_keeps_learned_contents(tmp_path):
         consolidation=0.2,
         working_memory_decay=0.4,
         working_memory_amplitude=0.2,
-        working_memory_focus=0.5,
         efference_decay=0.4,
         efference_amplitude=0.1,
     )
@@ -277,3 +276,28 @@ def test_pending_feedback_covers_sampled_routine_and_consumed_outcomes():
     assert not brain.pending_feedback
     brain.reset()
     assert not brain.pending_feedback
+
+
+def test_the_trace_focus_of_0843_is_refused_by_name_and_read_at_zero(tmp_path):
+    """The working trace's focus, a weighting of each neuron by its movement, is removed: the
+    name is refused at compose and retune, and a checkpoint of 0.84.3 loads at the founder
+    focus of zero and is refused above it, each refusal naming 0.84.3."""
+    with pytest.raises(ValueError, match="working_memory_focus was removed.*0.84.3"):
+        small(working_memory_focus=0.5)
+    brain = small()
+    with pytest.raises(ValueError, match="working_memory_focus was removed.*0.84.3"):
+        brain.retune(working_memory_focus=0.0)
+    assert "working_memory_focus" not in brain.describe()["genes"]
+    path = brain.save(tmp_path / "trace.npz")
+    with np.load(path, allow_pickle=False) as saved:
+        arrays = {name: saved[name].copy() for name in saved.files}
+    meta = json.loads(str(arrays["generic"]))
+    for focus, loads in ((0.0, True), (0.5, False)):
+        meta["working_memory"]["focus"] = focus
+        arrays["generic"] = np.array(json.dumps(meta))
+        np.savez(path, **arrays)
+        if loads:
+            assert cd.Brain.load(path).working_memory.to_dict() == brain.working_memory.to_dict()
+        else:
+            with pytest.raises(ValueError, match="working_memory_focus=0.5.*0.84.3"):
+                cd.Brain.load(path)

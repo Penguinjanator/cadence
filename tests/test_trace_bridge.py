@@ -1,6 +1,6 @@
 """Check the working trace against its independently written recurrence.
 
-For ``focus = 0``, one update is ``trace' = decay * trace + (1 - decay) * h``,
+One update is ``trace' = decay * trace + (1 - decay) * h``,
 ``last' = h`` and ``cold' = false``, with ``h`` read before any write. Iterating
 with a zero source gives ``decay ** k * trace``; with a constant source it gives
 ``h + decay ** k * (trace - h)``. Induction gives these identities and the
@@ -9,13 +9,10 @@ combination, so its magnitude is at most ``max(abs(trace), abs(h))``; bounded
 sources therefore preserve that bound. Rows evolve independently.
 
 These checks compare NumPy execution of ``Trace.update``, ``reset``, ``keep``
-and ``stimulate`` with the reference below at ``focus = 0`` and ``focus = 1``,
-for several batch sizes, decays and random inputs. They check reset, row and
-checkpoint boundaries, plus stimulation of the selected columns only. Focused
-updates weight source motion before writing ``last``: reversing that order
-incorrectly makes a warm row pure decay. A mutation harness checks that wrong
-source rows, decay, update order, aliasing and reset/keep/stimulation semantics
-are rejected.
+and ``stimulate`` with the reference below, for several batch sizes, decays and
+random inputs. They check reset, row and checkpoint boundaries, plus stimulation
+of the selected columns only. A mutation harness checks that wrong source rows,
+decay, aliasing and reset/keep/stimulation semantics are rejected.
 
 The checks concern the trace, not settlement, learning, recall or behavior of
 the brain reading it, and not the torch device path. They trust NumPy float64
@@ -35,7 +32,6 @@ import pytest
 
 import cadence as cd
 
-EPS = 1e-9  # the additive guard of the movement weight in ``Trace.update``
 DECAYS = (0.0, 0.3, 0.5, 0.9, 0.999)
 BATCHES = (1, 2, 5)
 CLOSED_FORM = dict(rtol=1e-12, atol=1e-14)
@@ -50,29 +46,16 @@ def reference_step(decay: float, trace: np.ndarray, h: np.ndarray) -> np.ndarray
     return decay * trace + (1.0 - decay) * h
 
 
-def movement_weight(focus: float, h: np.ndarray, last: np.ndarray) -> np.ndarray:
-    """movement since ``last`` over the row mean."""
-    moved = np.abs(h - last)
-    return (moved / (moved.mean(axis=1, keepdims=True) + EPS)) ** focus
-
-
 def reference_update(
     decay: float,
-    focus: float,
     trace: np.ndarray,
     last: np.ndarray,
     cold: np.ndarray,
     h: np.ndarray,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """``update`` at ``focus = 0`` and ``focusedUpdate`` at ``focus > 0``; the inputs are not written."""
+    """``update``; the inputs are not written."""
     hypotheses(decay, trace, last, h)
-    if focus:
-        weight = movement_weight(focus, h, last)
-        weight[cold] = 1.0
-        new_trace = decay * trace + (1.0 - decay) * weight * h
-    else:
-        new_trace = reference_step(decay, trace, h)
-    return new_trace, h.copy(), np.zeros(len(h), dtype=bool)
+    return reference_step(decay, trace, h), h.copy(), np.zeros(len(h), dtype=bool)
 
 
 def hypotheses(decay: float, *arrays: np.ndarray) -> None:
@@ -138,7 +121,7 @@ def same(trace: cd.Trace, expected: tuple[np.ndarray, np.ndarray, np.ndarray]) -
 # The bridge checks; each raises AssertionError on a mismatch
 
 
-def check_one_step_focus_zero() -> None:
+def check_one_step() -> None:
     """``update_trace``, ``update_last``, ``update_cold`` on settled states, two moments each."""
     w = connectome()
     for batch in BATCHES:
@@ -150,22 +133,7 @@ def check_one_step_focus_zero() -> None:
                 h = source_of(trace, state)
                 if len(held[0]) != batch:
                     held = (np.zeros((batch, 3)), np.zeros((batch, 3)), np.ones(batch, dtype=bool))
-                held = reference_update(decay, 0.0, *held, h)
-                trace.update(state)
-                same(trace, held)
-
-
-def check_one_step_focus_one() -> None:
-    """``focusedUpdate``: a cold first moment weighs one, a warm second moment reads ``last``."""
-    w = connectome()
-    for batch in BATCHES:
-        for decay in DECAYS:
-            trace = cd.Trace(w, decay=decay, focus=1.0)
-            held = (np.zeros((batch, 3)), np.zeros((batch, 3)), np.ones(batch, dtype=bool))
-            for seed in (3, 4, 5):
-                state = settled(w, batch, seed)
-                h = source_of(trace, state)
-                held = reference_update(decay, 1.0, *held, h)
+                held = reference_update(decay, *held, h)
                 trace.update(state)
                 same(trace, held)
 
@@ -321,7 +289,6 @@ def check_checkpoint_round_trip() -> None:
         assert saved.dtype == loaded.dtype and saved.shape == loaded.shape
         assert saved.tobytes() == loaded.tobytes()
     assert h.working_memory.decay == g.working_memory.decay
-    assert h.working_memory.focus == g.working_memory.focus
     activation = rng.normal(size=(4, g.connectome.n))
     g.working_memory.update(synthetic(activation))
     h.working_memory.update(synthetic(activation.copy()))
@@ -347,27 +314,25 @@ def check_stimulate() -> None:
 
 
 def check_last_is_the_source_read_before_the_write() -> None:
-    """``update_last`` and ``focusedUpdate_twice``: ``last`` owns the source read at the call,
-    whatever the caller writes into its state storage afterwards."""
+    """``update_last``: ``last`` owns the source read at the call, whatever the caller writes
+    into its state storage afterwards."""
     w = connectome()
     for batch in (1, 3):
-        for focus in (0.0, 1.0):
-            trace = cd.Trace(w, decay=0.5, focus=focus)
-            activation = np.random.default_rng(23).normal(size=(batch, w.n))
-            state = synthetic(activation)
-            read = activation[:, trace.hidden].copy()
-            trace.update(state)
-            activation[:, trace.hidden] += 1.0  # the caller reuses its state storage
-            assert np.array_equal(trace.last, read)
-            held = (trace.trace.copy(), read, np.zeros(batch, dtype=bool))
-            expected = reference_update(0.5, focus, *held, activation[:, trace.hidden].copy())
-            trace.update(state)
-            same(trace, expected)
+        trace = cd.Trace(w, decay=0.5)
+        activation = np.random.default_rng(23).normal(size=(batch, w.n))
+        state = synthetic(activation)
+        read = activation[:, trace.hidden].copy()
+        trace.update(state)
+        activation[:, trace.hidden] += 1.0  # the caller reuses its state storage
+        assert np.array_equal(trace.last, read)
+        held = (trace.trace.copy(), read, np.zeros(batch, dtype=bool))
+        expected = reference_update(0.5, *held, activation[:, trace.hidden].copy())
+        trace.update(state)
+        same(trace, expected)
 
 
 CHECKS: dict[str, Callable[[], None]] = {
-    "one_step_focus_zero": check_one_step_focus_zero,
-    "one_step_focus_one": check_one_step_focus_one,
+    "one_step": check_one_step,
     "k_step_zero_source": check_k_step_zero_source,
     "k_step_constant_source": check_k_step_constant_source,
     "k_step_closed_form": check_k_step_closed_form,
@@ -401,33 +366,17 @@ def _mutant_update(variant: str) -> Callable[[cd.Trace, cd.BrainState], None]:
             h = np.roll(h, 1, axis=0)
         if len(self.trace) != len(h):
             self.reset(len(h))
-        if variant == "order_last_before_weight":
-            self.last = h.copy()
-        if self.focus:
-            moved = np.abs(h - self.last)
-            weight = (moved / (moved.mean(axis=1, keepdims=True) + 1e-9)) ** self.focus
-            if variant != "cold_rows_not_weighted_one":
-                weight[self.cold] = 1.0
-            if variant == "decay_without_complement":
-                self.trace = self.decay * self.trace + weight * h
-            elif variant == "decay_swapped":
-                self.trace = (1.0 - self.decay) * self.trace + self.decay * weight * h
-            elif variant == "decay_after_blend":
-                self.trace = self.decay * (self.trace + (1.0 - self.decay) * weight * h)
-            else:
-                self.trace = self.decay * self.trace + (1.0 - self.decay) * weight * h
+        if variant == "decay_without_complement":
+            self.trace = self.decay * self.trace + h
+        elif variant == "decay_swapped":
+            self.trace = (1.0 - self.decay) * self.trace + self.decay * h
+        elif variant == "decay_after_blend":
+            self.trace = self.decay * (self.trace + (1.0 - self.decay) * h)
         else:
-            if variant == "decay_without_complement":
-                self.trace = self.decay * self.trace + h
-            elif variant == "decay_swapped":
-                self.trace = (1.0 - self.decay) * self.trace + self.decay * h
-            elif variant == "decay_after_blend":
-                self.trace = self.decay * (self.trace + (1.0 - self.decay) * h)
-            else:
-                self.trace = self.decay * self.trace + (1.0 - self.decay) * h
+            self.trace = self.decay * self.trace + (1.0 - self.decay) * h
         if variant == "last_aliased":
             self.last = h
-        elif variant != "order_last_before_weight":
+        else:
             self.last = h.copy()
         if variant != "cold_not_cleared":
             self.cold[:] = False
@@ -478,8 +427,6 @@ MUTANTS: dict[str, tuple[str, Callable[..., object]]] = {
     "decay_after_blend": ("update", _mutant_update("decay_after_blend")),
     "source_target_columns": ("update", _mutant_update("source_target_columns")),
     "source_shifted_row": ("update", _mutant_update("source_shifted_row")),
-    "order_last_before_weight": ("update", _mutant_update("order_last_before_weight")),
-    "cold_rows_not_weighted_one": ("update", _mutant_update("cold_rows_not_weighted_one")),
     "cold_not_cleared": ("update", _mutant_update("cold_not_cleared")),
     "last_aliased": ("update", _mutant_update("last_aliased")),
     "reset_keeps_last": ("reset", _mutant_reset("reset_keeps_last")),

@@ -841,6 +841,13 @@ def _validate_life_state(
         source, target = working["source"], working["target"]
         if source not in populations or target not in populations:
             raise ValueError("invalid saved working-memory ports")
+        # the trace's focus of 0.84.3, a weighting of each neuron by its movement, is read
+        # at its founder zero
+        if working.get("focus", 0.0) != 0.0:
+            raise ValueError(
+                f"this checkpoint was saved with working_memory_focus={working['focus']!r}, "
+                "which this version removed; load it with cadence-net 0.84.3"
+            )
         width = len(populations[source])
         array("working/trace", (batch, width))
         array("working/last", (batch, width))
@@ -1235,7 +1242,6 @@ class Brain:
         memory_fan_in: int | None = None,
         working_memory_decay: float = 0.0,
         working_memory_amplitude: float = 3.0,
-        working_memory_focus: float = 0.0,
         efference_decay: float = 0.2,
         efference_amplitude: float = 0.0,
         history_decays: Sequence[float] = (),
@@ -1360,7 +1366,6 @@ class Brain:
         if working_memory_decay >= 1 or efference_decay >= 1:
             raise ValueError("working_memory_decay and efference_decay must lie in [0, 1)")
         working_memory_amplitude = real("working_memory_amplitude", working_memory_amplitude)
-        working_memory_focus = real("working_memory_focus", working_memory_focus, low=0)
         resting_bias = _validate_resting_bias(resting_bias)
         efference_amplitude = _validate_efference_amplitude(efference_amplitude)
         history_decays = _history_decays(history_decays)
@@ -1430,7 +1435,6 @@ class Brain:
                 connectome,
                 decay=working_memory_decay,
                 amplitude=working_memory_amplitude,
-                focus=working_memory_focus,
                 source="association",
                 target="prefrontal",
             )
@@ -2373,7 +2377,6 @@ class Brain:
         memory_fields = {
             "working_memory_decay": (self.working_memory, "decay"),
             "working_memory_amplitude": (self.working_memory, "amplitude"),
-            "working_memory_focus": (self.working_memory, "focus"),
             "efference_decay": (self.efference, "decay"),
             "efference_amplitude": (self.efference, "amplitude"),
             "history_amplitude": (self.history, "amplitude"),
@@ -2400,7 +2403,7 @@ class Brain:
                 value = real(name, value, low=0, high=1 if component.rule == "delta" else np.inf)
             elif field == "consolidation":
                 value = real(name, value, low=0, high=1)
-            elif field == "focus" or name in ("efference_amplitude", "history_amplitude"):
+            elif name in ("efference_amplitude", "history_amplitude"):
                 value = real(name, value, low=0)
             else:
                 value = real(name, value)
@@ -2507,7 +2510,7 @@ class Brain:
         if arousal is not None:
             genes.update({f"arousal_{name}": value for name, value in arousal.items()})
         for prefix, component, fields in (
-            ("working_memory", self.working_memory, ("decay", "amplitude", "focus")),
+            ("working_memory", self.working_memory, ("decay", "amplitude")),
             ("efference", self.efference, ("decay", "amplitude")),
             ("history", self.history, ("decays", "amplitude")),
             ("memory", self.hippocampus, ("decay", "rate", "amplitude")),
@@ -4696,7 +4699,7 @@ class Brain:
                     result.connectome,
                     **{
                         name: working[name]
-                        for name in ("decay", "amplitude", "focus", "source", "target")
+                        for name in ("decay", "amplitude", "source", "target")
                     },
                 )
                 for name in ("trace", "last", "cold"):

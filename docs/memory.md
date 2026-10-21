@@ -90,7 +90,6 @@ assert not brain.working_memory.trace.any()
 | --- | --- | --- | --- | --- |
 | `working_memory_amplitude` | 3.0 | `retune` | the copy should weigh more in the settle and in learning | the carried context should fade (0 silences it) |
 | `working_memory_decay` | 0.0, in [0, 1) | `retune` | the context changes slowly and should be averaged over moments | 0 carries the last interpretation only |
-| `working_memory_focus` | 0.0 | `retune` | only the neurons that just changed should be carried | 0 carries every neuron |
 | `working_memory_scale` | 1.2 | construction (`compose` argument) | the past must matter from the first moment, before learning | the brain repeats itself and ignores what it sees |
 | `modules` | `(64,)` | construction | more items or distractors: `modules=(128,)` | a narrow last module such as `(48, 24)` carries little |
 

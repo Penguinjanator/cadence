@@ -30,7 +30,7 @@ def test_trace_remembers_previous_activation_when_state_storage_is_reused() -> N
     connectome = cd.Connectome.from_synapses(
         4, pre=[], post=[], populations={"hidden": [0, 1], "context": [2, 3]}
     )
-    trace = cd.Trace(connectome, decay=0.0, focus=1.0)
+    trace = cd.Trace(connectome, decay=0.5)
     activation = np.array([[0.1, 0.7, 0.0, 0.0]])
     state = cd.BrainState(
         v=activation.copy(), activation=activation, adaptation=np.zeros_like(activation), steps=1
@@ -39,8 +39,7 @@ def test_trace_remembers_previous_activation_when_state_storage_is_reused() -> N
     activation[0, 0] = 0.5
     np.testing.assert_array_equal(trace.last, [[0.1, 0.7]])
     trace.update(state)
-    moved = np.array([[0.4, 0.0]])
-    expected = moved / (moved.mean(axis=1, keepdims=True) + 1e-9) * [[0.5, 0.7]]
+    expected = 0.25 * np.array([[0.1, 0.7]]) + 0.5 * np.array([[0.5, 0.7]])
     np.testing.assert_allclose(trace.trace, expected)
 
 
@@ -125,8 +124,8 @@ def test_the_trace_reads_a_state_on_the_device_the_same_as_on_the_host() -> None
     dev = cd.NeuralGraph(w, cd.learning_neuron_model(dt=1.0), backend="torch", device="cpu").settle_batch(
         drive, steps=30
     )
-    a = cd.Trace(w, decay=0.5, focus=1.0, source="input", target="afterglow")
-    b = cd.Trace(w, decay=0.5, focus=1.0, source="input", target="afterglow")
+    a = cd.Trace(w, decay=0.5, source="input", target="afterglow")
+    b = cd.Trace(w, decay=0.5, source="input", target="afterglow")
     a.update(host)
     b.update(dev)
     assert np.allclose(a.trace, b.trace)

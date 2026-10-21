@@ -76,7 +76,7 @@ Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9,
       memory_context=0.0, memory_replay=0, memory_demonstrations=0.0,
       memory_expansion=0, memory_winners=32, memory_fan_in=None,
       working_memory_decay=0.0, working_memory_amplitude=3.0,
-      working_memory_focus=0.0, efference_decay=0.2, efference_amplitude=0.0,
+      efference_decay=0.2, efference_amplitude=0.0,
       history_decays=(), history_amplitude=3.0, recall=False, learning=None,
       reward=None, resting_bias=0.0, slots=1, arousal=None, seed=0,
       backend="cpu", device=None, inputs=None, code=None, learned_code=None, **genes)
@@ -219,8 +219,8 @@ brain's memories are explained in [memory](memory.md); the standalone stores in
 [standalone memory stores](records.md).
 
 ```text
-Trace(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="hidden", target="context")
-Efference(connectome, decay=0.5, amplitude=1.0, focus=0.0, source="motor", target="efference")
+Trace(connectome, decay=0.5, amplitude=1.0, source="hidden", target="context")
+Efference(connectome, decay=0.5, amplitude=1.0, source="motor", target="efference")
 ```
 
 Methods: `reset(batch, rows=None)`, `keep(rows)`, `stimulate(drive)`, `update(state)`,

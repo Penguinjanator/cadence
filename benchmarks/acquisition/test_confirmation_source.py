@@ -72,7 +72,7 @@ def assert_same_initial_graph(actual, expected):
 
 
 def assert_same_memory(actual, expected):
-    for name in ("amplitude", "decay", "focus", "source", "target"):
+    for name in ("amplitude", "decay", "source", "target"):
         assert getattr(actual.working_memory, name) == getattr(expected.working_memory, name)
     for name in ("cold", "glow", "hidden", "last", "trace"):
         np.testing.assert_array_equal(

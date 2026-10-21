@@ -143,7 +143,7 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
             ),
             seed=0,
         )
-        glow = cd.Trace(connectome, decay=0.7, focus=1.0, source="input", target="afterglow")
+        glow = cd.Trace(connectome, decay=0.7, source="input", target="afterglow")
         glow.reset(batch)
 
         def raw(context: np.ndarray | None) -> np.ndarray:
