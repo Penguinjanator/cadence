@@ -18,8 +18,8 @@ brain under the brain's neuron model:
   scaled by ``top_down``: the context's prediction of the code, ``p = W s_prefrontal``;
 * each unit's threshold is its bias, ``-t_j``;
 * a standing boundary on the code units, the solver's quadratic anchor at gain ``top_down``
-  toward zero, ``-top_down * s_j``, held through every phase: with the predictor's drive it
-  is the pull ``top_down * (p_j - s_j)`` toward the prediction, the gradient of
+  toward zero, ``-top_down * s_j``, held through the code's own phase: with the predictor's
+  drive it is the pull ``top_down * (p_j - s_j)`` toward the prediction, the gradient of
   ``top_down / 2 * |s - p|^2``.
 
 A code unit therefore settles to ``v_j = Phi_j . (x' - Phi s) + s_j + top_down (p_j -
@@ -47,28 +47,30 @@ no table, as the contrast and the dopamine enter no synapse of the region
   magnitude of its context (the prefrontal activation is small in the brain's units), a
   context fainter than ``|z| = predictor`` counted at that energy, so that no row commands a
   synaptic step above its gap;
-* the thresholds, homeostatic, ``t += threshold_rate * sum_rows ((a_free > 0) - target)``
-  with ``a_free`` the moment's context-free code (the region settled on the observation
-  alone, the code ``Brain.observation_code`` gives): a unit's share is the share of the
-  observations that drive it on their own, so what the context predicts may recruit a unit
-  without raising its threshold, and the context-free code keeps the target share by
-  construction; floored at zero, with a repair tied to the region's own disagreement: a
-  row whose code leaves at least the share ``repair`` of its input's energy unexplained
-  (``|x' - Phi a|^2
-  >= repair * |x'|^2``; at the founder ``repair`` 1, a row whose code is silent or worse
-  than nothing), in context or context-free (the place key), lowers the threshold of every
-  unit silent in that row by ``threshold_rate * silence``, a silent unit in such a row
-  counting as that many under-active rows, so no observation is left without a unit; a
-  unit that fires, and a row the code reconstructs, are left to the share rule alone.
-  There is no ceiling: a unit the world drives often has its threshold raised until its
-  share is the target, and the rows it then leaves unexplained lower it again.
+* the thresholds, homeostatic, ``t += threshold_rate * sum_rows ((a_free > active) -
+  target)`` with ``a_free`` the moment's context-free code (the region settled on the
+  observation alone, the code ``Brain.observation_code`` gives) and ``active`` the active
+  floor 0.05 (``LearnedCode.ACTIVE``): a unit's share is the share of the observations that
+  drive it on their own above the floor, so what the context predicts may recruit a unit
+  without raising its threshold, a unit that fires below the floor counts as under-active,
+  and the context-free code keeps the target share by construction; floored at zero, with a
+  repair tied to the region's own disagreement: a row whose code leaves at least the share
+  ``repair`` of its input's energy unexplained (``|x' - Phi a|^2 >= repair * |x'|^2``; at
+  ``repair`` 1, ``LearnedCode.REPAIR``, a row whose code is silent or worse than nothing),
+  in context or context-free (the memories' key), lowers the threshold of every unit silent
+  in that row by ``threshold_rate * silence``, a silent unit in such a row counting as that
+  many under-active rows, so no observation is left without a unit; a unit that fires, and
+  a row the code reconstructs, are left to the share rule alone. There is no ceiling: a
+  unit the world drives often has its threshold raised until its share is the target, and
+  the rows it then leaves unexplained lower it again.
 
-While the code fits, the residuals are small and nothing moves. The rates are genes
-(``learned_code_<name>``); zero freezes a part. The memories key on the rectified settled
-code at unit length joined to the observation's own identity, ``unit([sqrt(1 - w) code,
-sqrt(w) unit(x)])`` with ``w`` the gene ``identity`` (``Brain.observation_code``): the
-identity part keeps a binding readable while the code part moves as the region learns;
-at ``identity`` 0 the key is the code alone.
+While the code fits, the residuals are small and nothing moves. The rates are constants
+of the region (``LearnedCode.RATE``, ``PREDICTOR`` and ``THRESHOLD_RATE``); ``learning``
+False holds every table still, for a reading on a copy. The memories key on the rectified
+settled code at unit length joined to the observation's own identity, ``unit([sqrt(1 - w)
+code, sqrt(w) unit(x)])`` with ``w`` the identity weight 0.9 (``LearnedCode.IDENTITY``;
+``Brain.observation_code``): the identity part keeps a binding readable while the code part
+moves as the region learns.
 
 The code's fixed points are stable equilibria of the neuron equations (the lateral weights
 are minus a Gram matrix, so the coupling's eigenvalues stay below the unit's slope), but the
@@ -76,13 +78,14 @@ brain's synchronous sweep at the model's step can oscillate around one when seve
 with overlapping columns are active together: the sweep contracts only while ``dt * (1 -
 mu_min)`` stays below 2, ``mu_min`` the smallest eigenvalue of the slope-weighted lateral
 coupling. ``stability`` reports the halvings of the step the settled code needs, and the
-brain integrates every phase at that step with its step budgets scaled to keep the same
-time (``Brain`` re-steps its graph when the level changes); the restoring term adds
-``top_down`` times the slope to the coupling's diagonal. ``rest_stability`` bounds the same
-over every state the region can reach (the slopes at their largest, every unit active), from
-the dictionary alone: a phase that does not settle at the brain's step is settled once more
-at that step before the moment is refused, so a dictionary whose columns all overlap (one
-input: every column is plus or minus the same vector) settles from its first moment.
+code's phase integrates at that step with its budget scaled to keep the same time
+(``restep``); the code is held as a source through the whole settle, so the rest of the
+brain keeps the model's step. The restoring term adds ``top_down`` times the slope to the
+coupling's diagonal. ``rest_stability`` bounds the same over every state the region can
+reach (the slopes at their largest, every unit active), from the dictionary alone: a code
+phase that does not settle at its step is settled once more at that bound before the moment
+is refused, so a dictionary whose columns all overlap (one input: every column is plus or
+minus the same vector) settles from its first moment.
 """
 
 from __future__ import annotations

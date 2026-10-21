@@ -217,7 +217,7 @@ def _learned_code_genes(learned_code: Any, genes: dict[str, Any]) -> dict[str, A
 
 _LEARNED_CODE_TOGETHER = (
     "code and learned_code together are not built: the learned code's key joins the "
-    "observation itself as its identity (learned_code_identity); name one of them"
+    "observation itself as its identity, at the identity weight 0.9; name one of them"
 )
 
 
@@ -2663,11 +2663,11 @@ class Brain:
     def _moment_key(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
         """The key the memories use for observations ``x`` whose learned code is ``code``
         (the rectified settled code at unit length): the code joined to the observation's
-        own identity, ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])`` with ``w`` the gene
-        ``learned_code_identity``, so that a binding stays readable by the identity part
-        while the code part moves as the region learns; the code alone at ``w`` 0. The key
-        takes the norm the observation itself would have as a key: the recall's
-        temperature reads the keys' dot products at that scale."""
+        own identity, ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])`` with ``w`` the
+        identity weight 0.9 (``LearnedCode.IDENTITY``), so that a binding stays readable by
+        the identity part while the code part moves as the region learns. The key takes the
+        norm the observation itself would have as a key: the recall's temperature reads the
+        keys' dot products at that scale."""
         region = self.learned_code
         if region is None:
             return code
@@ -2749,7 +2749,7 @@ class Brain:
         if not report:
             return phase
         # the step the code's phase integrates at: the one the settled code's competition is
-        # stable under (the whole brain's too when the code is not held)
+        # stable under (the code is held as a source, so the rest of the brain keeps its step)
         self._step_region(code.stability(phase.state.v))
         self._code_settlement = {
             "code_steps": int(phase.steps),

@@ -1067,9 +1067,9 @@ def test_fields_give_each_unit_one_field_of_the_observation(tmp_path):
 
 
 def test_a_unit_below_the_active_floor_counts_as_under_active():
-    """With ``learned_code_active`` a unit that fires below that activation counts as
+    """A unit that fires below the active floor 0.05 (``LearnedCode.ACTIVE``) counts as
     under-active in the thresholds' share, so a frequent observation's units are not faded
-    toward zero; at the founder 0 any firing counts."""
+    toward zero; with the floor at 0 any firing counts."""
     code = composed(seed=5).learned_code
     x = np.zeros((2, INPUTS))
     a = np.zeros((2, UNITS))
