@@ -3,7 +3,8 @@
 ## Unreleased
 
 - The composed teaching learner steps under per-synapse normalization
-  ([issue 215](https://github.com/muellerberndt/cadence/issues/215)). The new composed teaching
+  ([issue 215](https://github.com/muellerberndt/cadence/issues/215)), in `Brain.compose`,
+  `Brain.build` and `Brain(connectome)`, which share the teaching founder. The new composed teaching
   defaults are `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003`
   and the derived `learning_eta_bias=0.0003`, with `learning_momentum=0.9` as before; they
   replace `learning_eta=0.5`, `learning_eta_bias=0.05` without normalization. The earlier

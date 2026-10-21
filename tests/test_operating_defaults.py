@@ -308,3 +308,15 @@ def test_composed_actor_keeps_its_measured_bias_rate():
     assert config.eta == 1.0 and config.eta_bias == 0.05
     saved = config.to_dict()
     assert saved["eta_bias"] == 0.05 and cd.ActorCriticConfig(**saved) == config
+
+
+def test_the_composed_teaching_founder_constructs_without_a_rate_warning():
+    """The normalized teaching founder (issue 215) sits below the rate warning's edge."""
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for brain in (
+            cd.Brain.compose(4, 2, seed=0),
+            cd.Brain.compose(4, 2, modules=(8, 4), observers=(4,), seed=0, arousal=True),
+        ):
+            config = brain.learner.config
+            assert (config.normalize, config.eta) == (0.99, 0.003)

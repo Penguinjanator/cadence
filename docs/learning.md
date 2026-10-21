@@ -360,10 +360,10 @@ Adam-style update.
 
 `Brain.compose` teaches under normalization: its teaching founder is `normalize=0.99`,
 `normalize_floor=1e-4`, `eta=0.003`, `eta_bias=0.0003` (`eta / 10`) and `momentum=0.9`. The
-composed actor keeps unnormalized rates (`eta=1.0`, `eta_bias=0.05`). Normalized at rates of that
-size, steps can dwarf the raw signals and saturate the outputs. Retune `eta` and `eta_bias`
-together; a development sweep might start at `eta` 0.001 to 0.003, checked against acquisition,
-retention and actual step sizes. `LearnerConfig` warns when `normalize > 0` and `eta` or
+composed actor keeps unnormalized rates (`eta=1.0`, `eta_bias=0.05`). Under normalization,
+rates of that size give steps that dwarf the raw signals and saturate the outputs. Retune `eta`
+and `eta_bias` together; a development sweep might start at `eta` 0.001 to 0.003, checked
+against acquisition, retention and actual step sizes. `LearnerConfig` warns when `normalize > 0` and `eta` or
 `eta_bias` exceeds 0.05; smaller rates can also fail. A named `learning_eta` keeps the current bias
 rate, and `learning_normalize=0` with `learning_eta` and `learning_eta_bias` returns a composed
 brain to raw steps. `learning=LearnerConfig(...)` replaces the whole teaching configuration.
@@ -398,7 +398,7 @@ at each moment, the working trace on), the same teaching founder agreed with the
 the composed amplitude of 3.0. Applications that bootstrap by imitation may lower
 `working_memory_amplitude`.
 
-A normalized founder for both composed learners was measured and declined in 0.73.0
+A normalized founder for both composed learners was measured and declined in 0.73.1
 ([issue 131](https://github.com/muellerberndt/cadence/issues/131)). At `eta=0.003`,
 `normalize=0.99` and `momentum=0.9` for teaching and the actor together, supervised acquisition
 contracts passed and the reward stream's re-adaptation after a contingency change reached 0.486
@@ -428,20 +428,27 @@ def move(position, action):
     return np.clip(position + np.where(action == 1, 1, -1), 0, 4)
 
 pupil = cd.Brain.compose(inputs=5, actions=2, seed=0)
-position = np.random.default_rng(0).integers(0, 5, 32)  # 32 streams, one per batch row
-for moment in range(8):  # bootstrap by watching: the demonstrator's moves are executed
+position = np.full(32, 2)  # 32 streams, one per batch row, starting in the middle
+for moment in range(32):  # bootstrap by watching: the demonstrator's moves are executed
     label = demonstrator(position)
     pupil.lesson(observe(position), label)
     position = move(position, label)
-for moment in range(8):  # then the brain's own path
+cells = np.arange(5)
+assert (pupil.predict(observe(cells)) != demonstrator(cells)).any()  # cells it never saw
+
+pupil.reset()  # new streams, starting anywhere
+position = np.random.default_rng(0).integers(0, 5, 32)
+for moment in range(32):  # then the brain's own path
     shown = observe(position)
     action = pupil.act(shown, greedy=True)  # its own move is executed; nothing awaits reward
     pupil.lesson(shown, demonstrator(position))  # the demonstrator labels the state reached
     position = move(position, action)
+assert (pupil.predict(observe(cells)) == demonstrator(cells)).all()
 ```
 
-The labels must come from the demonstrator the brain watched: corrections from a different
-policy pull the brain away from what it copied. Teach many rows at once with the normalized
-teaching founder [above](#rates-under-normalization); the measurements are in
-[issue 215](https://github.com/muellerberndt/cadence/issues/215). A caregiver's corrected
-stretches in a nursery follow this protocol.
+Watching alone, the pupil copies the two cells the demonstrator visits and answers the others
+wrongly; on its own path it reaches those cells and learns them. The labels must come from the
+demonstrator the brain watched: in the measurement of
+[issue 215](https://github.com/muellerberndt/cadence/issues/215), corrections from a different
+policy after a bootstrap by watching lowered the agreement with the watched demonstrator. Teach
+many rows at once with the normalized teaching founder [above](#rates-under-normalization).
