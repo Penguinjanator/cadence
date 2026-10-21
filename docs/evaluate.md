@@ -2,7 +2,7 @@
 
 This method applies to any task, demo or capability claim. Test one acquired
 brain through bootstrap, routine use, disturbance, repair and saved
-continuation ([the continuing life](world-model.md#bootstrap-use-repair-continue));
+continuation ([the continuing life](start.md#bootstrap-use-repair-continue));
 isolated classification is a mechanism control. A uniform-random policy with
 the same observations and actions is the baseline for every claim: a brain that
 does not beat it has learned nothing worth reporting. Declare a change's scope
@@ -84,7 +84,7 @@ Separate equation residual from meaningful surprise and from task success.
 `Brain.act` qualifies the present state with trace and memory as held input and
 settles no joint future trajectory. Supplied clocks, phase or goals belong in
 the declared information budget. The [world-model
-guide](world-model.md#coherent-behavior-over-time) gives the brain's side.
+guide](start.md#coherent-behavior-over-time) gives the brain's side.
 
 ## Close the action and consequence loop
 
@@ -117,7 +117,7 @@ Future observations are unavailable in a rollout unless an evaluation condition
 grants them: predict every later state the transition consumes, or declare an
 internal body model. Changing a key encoder or the model can make stored
 records inconsistent, so freeze, version or rebuild keys with it. The [three
-clocks](concepts.md#three-clocks) assign each update to its operation.
+clocks](settling.md#three-clocks) assign each update to its operation.
 
 ## Count the full work
 
@@ -135,7 +135,7 @@ keep outcome quality on held-out situations at lower work and respond to
 changed conditions. Keep every scheduled seed, including unattempted and
 time-capped cells, compare equal checkpoints only and add operation counts to
 wall-clock time. A residual and the model energy measure the equations, never
-joules. [Receipts](receipts.md#the-cost-fields) hold the cost
+joules. [Receipts](#the-cost-fields) hold the cost
 fields.
 
 ## Separate the causes of improvement
@@ -199,7 +199,7 @@ result together points to goal selection.
 
 | Misstep | Why it fails | Check |
 | --- | --- | --- |
-| Independent classification presented as a continuing world model | Fresh state omits the context being claimed | Test [one acquired brain](world-model.md) across bootstrap, use, disruption and repair |
+| Independent classification presented as a continuing world model | Fresh state omits the context being claimed | Test [one acquired brain](start.md#one-continuing-equilibrium-brain) across bootstrap, use, disruption and repair |
 | A small residual taken for a useful model | The equations can hold for a wrong interpretation | Measure task quality, retention, routine work and repair cost |
 | The answer produced by a trained external readout | The extra model carries the capability | Read the brain's declared output; report the readout as a baseline |
 | Free-state energy read as surprise | The causal recurrence has zero defect for a wrong prediction too | Compare the prediction with the actual reading |
@@ -213,3 +213,124 @@ result together points to goal selection.
 | Supplied routing called learned specialization | Assigned coordinate groups impose roles | Compare fixed connectivity against dense and disconnected controls |
 | Content sampled from scores where the model predicts at chance | The scores carry no information there: one draw is noise and consecutive draws are chaos | Measure held-out accuracy at those positions separately; let the model decide when something happens and declare what may happen |
 | A measurement's prior tuned until the data show the expected structure | The score rises because the prior wrote the labels, and the labelled events lose their relation to the source | Audit the fixture before training: faithfulness to the source against plain labelling, and the events of interest above chance where they should be |
+
+## Independent-sample controls
+
+`predict(observations)`, `accuracy(observations, labels)` and `fit(observations,
+labels, *, epochs=30, batch=32)` treat rows as independent samples: qualified cold
+solves that read no trace or associative memory. `fit` resets stream state and keeps
+the arousal state as it is (`reset(keep=("arousal",))`): a control on independent samples
+does not change a life. `fit` returns training accuracy per epoch; a refused score keeps
+accepted lessons.
+Use them as controls on a separate instance; greedy `act` on a loaded copy measures the
+memory-aware response.
+
+```python
+import numpy as np
+from cadence import Brain
+
+cues = np.eye(4)  # four one-hot observations
+
+control = Brain.compose(4, 2, modules=(16,), seed=1)
+control.fit(cues, np.array([0, 1, 0, 1]), epochs=2)
+assert control.predict(cues).shape == (4,) and 0 <= control.accuracy(cues, [0, 1, 0, 1]) <= 1
+```
+
+## Receipts
+
+A receipt stores outcomes, an embedded digest and a manifest of selected source files.
+The caller decides which outcomes to record and what the verifier checks.
+
+### Write and verify a small receipt
+
+Save this as `receipt_demo.py` and run `python receipt_demo.py`. It binds a small
+arithmetic result to its own script and to the installed receipt implementation:
+
+```python
+from pathlib import Path
+import cadence as cd
+
+sources = [
+    ("receipt_demo.py", Path(__file__)),
+    ("cadence/receipts.py", Path(cd.__file__).with_name("receipts.py")),
+]
+values = [1, 2, 3]
+receipt = cd.Receipt.build(
+    "sum-demo/v1", {"values": values, "total": sum(values)}, sources=sources,
+)
+path = receipt.write(Path("sum_receipt.json"))
+
+def check(body):
+    if body["values"] != [1, 2, 3] or body["total"] != sum(body["values"]):
+        return "stored sum differs from the declared inputs"
+    return None
+
+ok, message = cd.Receipt.verify(path, sources=sources, check=check)
+assert ok, message
+assert cd.Receipt.read(path).digest == receipt.digest
+print(message)
+```
+
+Expected output: `canonical form, digest, sources, arithmetic agree`. For an experiment,
+bind every consumed source and dataset, and supply checks for its schedule, outcomes
+and metrics.
+
+### Shape
+
+```json
+{
+  "kind": "experiment/v1",
+  "body": { "...": "recorded readings, rows, gain tables, custody" },
+  "source": { "files": [{"path": "experiment.py", "sha256": "..."}], "manifest_sha256": "..." },
+  "digest": "sha256 of the canonical JSON of kind, body and source"
+}
+```
+
+`Receipt.build(kind, body, sources=())` hashes each `(relative, path)` pair in `sources`
+(an empty tuple gives an empty manifest) and the canonical JSON of the payload
+(`cd.canonical_json`: sorted keys, no whitespace). Mapping keys become strings, tuples become
+lists, NumPy arrays and scalars and `Path` values become plain JSON, and NaN or infinity
+raises `ValueError`. `write(path)` creates parent directories, writes the newline-terminated
+canonical form and returns the path; `Receipt.read(path)` loads a file without checking it;
+`to_dict()` returns the four fields. `cadence.receipts.canonical_sha256(value)` and
+`cadence.receipts.source_manifest(pairs)` (not exported at top level) build the digest and the
+`source` block.
+
+### Verification
+
+`Receipt.verify(path, *, sources=None, check=None)` returns `(ok, message)` and stops at the
+first disagreement: (1) the file is byte for byte the canonical form of its content;
+(2) the embedded digest matches; (3) when `sources` is supplied, the complete source
+manifest matches; (4) when `check` is supplied, `check(body)` returns no problem text (for a
+protocol receipt: every pass flag follows from the stored readings and every tally from the
+rows). The message lists what was checked, or names the disagreement or the check's text.
+
+### What belongs in the body
+
+The connectome summary and digest (`Connectome.summary()`, `Connectome.digest()`) with the
+custody block for measured data; the graph description (`NeuralGraph.to_dict()`: connectome
+summary, neuron model, backend, transport, layout); the gain selection table with every gain
+tried and its admissibility; the protocol as data, with the reference for every row; the
+score with readings and reference readings on every row, and the control's score; the
+backend's conformance report (`cd.conformance(graph, stimulus)` on a `NeuralGraph`); and a
+boundary block saying what the experiment supplies rather than derives and what it does not
+claim.
+
+### The cost fields
+
+Every arm of a comparison carries the same accounting over the life: for a composed brain
+the free-answer sweeps of `last_settlement`, `learner.updates` and, under `live`, the
+per-mode totals `arousal.moments` and `arousal.sweeps`
+([count the full work](#count-the-full-work)). An efficiency comparison also
+reports elapsed time, peak memory, learning and search work and every failed attempt. Test
+targets never choose a baseline; record the disjoint calibration and validation split and
+its seeds.
+
+### Editing invalidates, on purpose
+
+A source check fails once any file in the manifest changes. Record source hashes beside the
+library version, because one version string can cover several source revisions. A receipt
+is evidence for its own source snapshot: keep its bytes and verify against that snapshot
+instead of re-signing an old result against later code. A run records data generation,
+seeds, every scheduled condition, predictions and targets, and its verifier rejects missing
+outcomes instead of averaging whichever rows remain.

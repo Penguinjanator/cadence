@@ -9,14 +9,14 @@ learning rule.
 
 | API | Equations | Stopping rule | Update contract |
 | --- | --- | --- | --- |
-| `NeuralGraph`, `Learner` | Rate neurons exchange activity over a directed graph ([concepts](concepts.md#settling-and-equilibrium)). | `equilibrate` checks the full fixed-point equations; `settle` alone may run a fixed budget or stop on activity movement. | Free/nudged local contrast, finite phases by default; optional reward traces. The gradient reading needs symmetric effective weights, a smooth stable branch and a small nudge ([certificate](certificate.md#equilibrium-propagation-scope)). |
+| `NeuralGraph`, `Learner` | Rate neurons exchange activity over a directed graph ([concepts](settling.md#settling-and-equilibrium)). | `equilibrate` checks the full fixed-point equations; `settle` alone may run a fixed budget or stop on activity movement. | Free/nudged local contrast, finite phases by default; optional reward traces. The gradient reading needs symmetric effective weights, a smooth stable branch and a small nudge ([certificate](settling.md#equilibrium-propagation-scope)). |
 | `Brain` (composed) | One recurrent graph, with System 2 observers in the same equations and held trace, record and recall input. | `act`, `predict`, `accuracy` and `wait` need the full potential/adaptation residual below `learning.tolerance` within `learning.free_steps`; exhaustion refuses the answer. | The learner's contrast and the actor-critic's reward eligibility (always finite phases, `reward.eligibility_steps`), plus explicit trace and synaptic-memory writes. |
 
 ### Component limits
 
 | Component | Implemented operation | Limit |
 | --- | --- | --- |
-| `Brain` (composed) | Qualified settles for every answer, local contrast and reward learning, working trace, synaptic and opt-in episodic and recall memory | A qualified answer covers the present settle. Memory enters as held input and is written after the settle, outside the equations; behaviour across ticks needs [persistence tests](evaluation.md#test-coherent-behavior-over-time). |
+| `Brain` (composed) | Qualified settles for every answer, local contrast and reward learning, working trace, synaptic and opt-in episodic and recall memory | A qualified answer covers the present settle. Memory enters as held input and is written after the settle, outside the equations; behaviour across ticks needs [persistence tests](evaluate.md#test-coherent-behavior-over-time). |
 
 A private `imagine` call is a component operation. The application defines what its inputs
 and outputs mean and which future variables it generates or supplies; a learned simulator
@@ -31,17 +31,17 @@ stability and useful behaviour need their own tests.
 
 Numerical qualification, parameter commitment and measured learning improvement are three
 separate facts. A qualified update establishes neither retention on earlier tasks nor
-generalization; [evaluation](evaluation.md) covers those measurements. Eligibility, reward
+generalization; [evaluation](evaluate.md) covers those measurements. Eligibility, reward
 and source identity stay attached to the action that was actually executed.
 
 ## Brain and Learner
 
 - A composed `Brain` answers only from a qualified settle (1024 sweeps, residual `3e-3`, with
-  a half-step fallback, or `damping` halvings under `qualified=True`); a refused `act` issues no action and changes no state ([qualification and refusal](continuous.md#qualification-and-refusal)).
+  a half-step fallback, or `damping` halvings under `qualified=True`); a refused `act` issues no action and changes no state ([qualification and refusal](start.md#qualification-and-refusal)).
 - `LearnerConfig` teaches with finite phases by default. `qualified=True` is the opt-in that
   gates each phase on the full equations, with at most `damping=3` dt halvings by default. Give it a
-  `nudged_steps` budget comparable to `free_steps` ([qualified teaching budgets](learning.md#qualified-teaching-budgets)).
-- RMS-normalized rates are covered in [rates under normalization](learning.md#rates-under-normalization).
+  `nudged_steps` budget comparable to `free_steps` ([qualified teaching budgets](settling.md#qualified-teaching-budgets)).
+- RMS-normalized rates are covered in [rates under normalization](teach.md#rates-under-normalization).
 
 ## State and production integration
 
@@ -73,10 +73,10 @@ an older `NeuralGraph` object can share the updated device kernel while holding 
 copies. Other model families change parameters through their own `set_parameters` or update
 interface. Pin the library revision and backend for reproducible results and run a parity
 check when changing device or precision ([backends](backends.md), [API](api.md),
-[receipts](receipts.md)).
+[receipts](evaluate.md#receipts)).
 
 ## Recursive observation
 
 An observer belongs to the same equilibrium as the system it observes only when its state
 and feedback enter the same coupled equations and stopping check;
-`Brain.compose(observers=...)` builds one ([compose a brain](brain.md#brain)).
+`Brain.compose(observers=...)` builds one ([compose a brain](tune.md#brain)).

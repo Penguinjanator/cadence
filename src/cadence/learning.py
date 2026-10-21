@@ -28,7 +28,7 @@ The rule is exact in a limit. With symmetric effective recurrent weights and a
 smooth stable equilibrium branch, converged phases give a gradient in the
 small-nudge limit. The raw contrast concerns effective weights; efficacy
 derivatives also need the contact/gain factor. The cross-entropy nudge uses T
-times that loss. See docs/learning.md for the parameter convention and
+times that loss. See docs/settling.md#learning-the-freenudged-rule for the parameter convention and
 finite-step limits. Two things break that in practice, and
 ``learning_neuron_model`` is chosen to avoid them: a neuron below rest with a
 hard rectifier publishes nothing and cannot be moved (hence a small ``leak``),
@@ -156,7 +156,7 @@ class LearnerConfig:
                 "LearnerConfig with normalize > 0 and eta or eta_bias above 0.05: "
                 "RMS normalization can make parameter steps much larger than raw contrasts "
                 "suggest and may saturate the readout. Consider smaller rates; "
-                "see docs/learning.md#rates-under-normalization.",
+                "see docs/teach.md#rates-under-normalization.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -166,7 +166,7 @@ class LearnerConfig:
                 "the bias step dominates the synapse step. The default couples "
                 "eta_bias to eta / 10; when lowering eta through dataclasses.replace, "
                 "set eta_bias too, or pass eta_bias=None to re-derive it. "
-                "See docs/learning.md#7-every-knob.",
+                "See docs/settling.md#7-every-knob.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -177,7 +177,7 @@ class LearnerConfig:
                 "phase against the full equations within its budget, and a nudged budget "
                 "sized for finite teaching refuses lessons the free budget would settle. "
                 "Set nudged_steps comparable to free_steps; "
-                "see docs/learning.md#qualified-teaching-budgets.",
+                "see docs/settling.md#qualified-teaching-budgets.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -551,7 +551,7 @@ class Learner:
         return (
             f"the nudged budget ({cfg.nudged_steps}) is below the free budget "
             f"({cfg.free_steps}); qualified nudged phases settle to the same tolerance, "
-            "see docs/learning.md#qualified-teaching-budgets"
+            "see docs/settling.md#qualified-teaching-budgets"
         )
 
     def _qualified_phase(
@@ -1124,7 +1124,7 @@ class Learner:
                 "(free_residual in the report holds the equation residual). Raise "
                 "free_steps, lower the gain, or opt into qualified=True to refuse "
                 "such lessons; "
-                "see docs/learning.md#finite-free-phases-that-run-out-of-budget.",
+                "see docs/settling.md#finite-free-phases-that-run-out-of-budget.",
                 RuntimeWarning,
                 stacklevel=3,
             )

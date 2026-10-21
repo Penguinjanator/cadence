@@ -9,7 +9,7 @@ equal-experience comparison of awake use against replay that
 one composed brain on one synthetic world; it does not choose defaults, establish a
 consolidation mechanism or complete either contract. Read the
 [reward guide](../../docs/reward.md#replaying-a-life-through-step) and the
-[world-model guide](../../docs/world-model.md) before interpreting results.
+[world-model guide](../../docs/start.md#one-continuing-equilibrium-brain) before interpreting results.
 
 ## What runs
 

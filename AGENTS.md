@@ -5,18 +5,18 @@ Every change must meet [the manifesto](MANIFESTO.md) and its
 requirement changes, and distinguish design goals from implemented capabilities.
 
 Start with [the guided documentation README](docs/README.md), then read the
-[continuing-world-model guide](docs/world-model.md) before designing an application,
-tutorial or experiment. Use [the catalogue](docs/README.md#all-guides) to find individual
+[continuing-world-model guide](docs/start.md#one-continuing-equilibrium-brain) before designing an application,
+tutorial or experiment. Use [the catalogue](docs/README.md#by-situation) to find individual
 guides. Read the owning guide, [numerical contracts](docs/contracts.md) and
 [API reference](docs/api.md) before changing semantics.
 
 | Task | Read and use |
 | --- | --- |
-| Build a continuing brain | [Quickstart](docs/quickstart.md), [composition](docs/brain.md), [runnable lifecycle](examples/continuing_brain.py) |
-| Manage streams, outcomes and memory | [Continuous interaction](docs/continuous.md), [memory](docs/memory.md), [episodic memory](docs/episodic.md), [recall memory](docs/recall.md), [reward](docs/reward.md), [world model](docs/world-model.md) |
-| Diagnose learning or settling work | [Learning](docs/learning.md), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
-| Add optional recursive observation | [Composition](docs/brain.md#brain) (`observers=`), [cortical regions](docs/cortex.md) |
-| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [instruments](benchmarks/instruments/README.md), [receipts](docs/receipts.md) |
+| Build a continuing brain | [Quickstart](docs/start.md), [composition](docs/tune.md), [runnable lifecycle](examples/continuing_brain.py) |
+| Manage streams, outcomes and memory | [Continuous interaction](docs/start.md#continuous-interaction), [memory](docs/memory.md), [episodic memory](docs/memory.md#episodic-memory-what-happened-in-this-situation-before), [recall memory](docs/memory.md#the-recall-memory-in-full), [reward](docs/reward.md), [world model](docs/start.md#one-continuing-equilibrium-brain) |
+| Diagnose learning or settling work | [Learning](docs/settling.md#learning-the-freenudged-rule), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
+| Add optional recursive observation | [Composition](docs/tune.md#brain) (`observers=`), [cortical regions](docs/anatomy.md#write-a-cortex) |
+| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluate.md), [instruments](benchmarks/instruments/README.md), [receipts](docs/evaluate.md#receipts) |
 
 ## What Cadence is, and is not
 
@@ -134,7 +134,7 @@ in the same acquired life. `brain.describe()` reports the effective settings.
 Keep rate ownership explicit: actor rates govern reward learning, learner rates
 govern teaching, and temperature is shared. A fresh configuration dataclass is
 still a complete replacement, while named overrides preserve unspecified values.
-Consult the [defaults and tuning guide](docs/brain.md#defaults-and-expert-overrides).
+Consult the [defaults and tuning guide](docs/tune.md#defaults-and-expert-overrides).
 Application recipes are measured choices, not generally optimal defaults.
 
 `resting_bias` is an optional initialization setting, not evidence of improved
@@ -154,7 +154,7 @@ world's transitions or turn predictions into witnessed experience.
 Distinguish implemented contracts from the desired world-model lifecycle.
 `Brain.compose` does not yet integrate learned environmental transition prediction.
 `step` does not gate learning on witnessed failure; `live` gates it by arousal
-for one stream through its [arousal law](docs/continuous.md#routine-and-repair-live).
+for one stream through its [arousal law](docs/start.md#routine-and-repair-live).
 Youth and sustained arousal also allow learning from successful outcomes. Its
 routine moment still pays one full settle. Stable inputs do not guarantee cheap
 operation. Do not invent thresholds, success policies or runtime

@@ -8,8 +8,8 @@ paying. It is a table-world reproduction attempt of the failure that
 on the arena's own founder brain, with the controls the issue names (smaller actor steps, a
 raised arousal threshold, the arena's ring stage, a frozen copy, uniform random). It
 establishes no default and closes no gate. Read the
-[world-model guide](../../docs/world-model.md) and
-[routine and repair](../../docs/continuous.md#routine-and-repair-live) before interpreting it.
+[world-model guide](../../docs/start.md#one-continuing-equilibrium-brain) and
+[routine and repair](../../docs/start.md#routine-and-repair-live) before interpreting it.
 
 **Development readings, 2026-10-10, Cadence 0.80.0 source.** When the ring pays the old
 skill with certainty or weakly, the acquired skill is **not lost**: at the gene step, learning

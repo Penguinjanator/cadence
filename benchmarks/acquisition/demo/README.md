@@ -113,4 +113,4 @@ An uploaded campaign is also displayed without a new scientific verification.
 Frozen experiment references stay distinct from current publication snapshots.
 Current roadmap or manifesto edits never substitute for source archived before
 a run. See the [owning acquisition guide](../README.md) and the
-[receipt contract](../../../docs/receipts.md).
+[receipt contract](../../../docs/evaluate.md#receipts).

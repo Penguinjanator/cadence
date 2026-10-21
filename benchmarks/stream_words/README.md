@@ -8,8 +8,8 @@ carried history that playing music needs
 ([issue 200](https://github.com/muellerberndt/cadence/issues/200), part of
 [issue 121](https://github.com/muellerberndt/cadence/issues/121)). The synthetic world comes
 first; real audio is a later step, planned below and declared separately before it runs.
-Read [continuous interaction](../../docs/continuous.md) and
-[lessons only where the answer differs](../../docs/learning.md#lessons-only-where-the-answer-differs)
+Read [continuous interaction](../../docs/start.md#continuous-interaction) and
+[lessons only where the answer differs](../../docs/teach.md#lessons-only-where-the-answer-differs)
 before interpreting results.
 
 ## The world

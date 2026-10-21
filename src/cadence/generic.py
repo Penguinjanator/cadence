@@ -4052,7 +4052,7 @@ class Brain:
         may leave it calm on a lapsed habit. Where its world may stop paying, keep
         ``"arousal"`` (the scale and the scaled need carry over), give it a positive
         ``need``, or let it keep living without the reset
-        (``docs/continuous.md#reset-and-save``)."""
+        (``docs/start.md#reset-and-save``)."""
         for name in renamed:
             if name in ("keep_memory", "keep_arousal"):
                 what = "slots" if name == "keep_memory" else "arousal"

@@ -81,7 +81,7 @@ one cannot pass `released`. A `specific` row names its second stimulus,
 `Row("F1", "fruit", "kc", "specific", "fruit and yeast are told apart", versus="yeast")`, and a
 training fact does the same with a fourth element, `("fruit", "kc", "specific", "yeast")`.
 Select a population's gain on this fact before learning there
-([brains from a connectome](../../docs/connectomes.md)): a code that is the same for every stimulus gives a
+([brains from a connectome](../../docs/anatomy.md#brains-from-a-connectome)): a code that is the same for every stimulus gives a
 lesson nothing to attach to.
 
 `evaluate_predicate(predicate, value, reference, levels=None)` is the pure test on two
@@ -119,7 +119,7 @@ entry has `gain`, `facts_passed`, `fraction_active`, `admissible` and `readings`
 `cd.NeuralGraph(connectome, model, log_gain=...)`. An empty grid or no admissible candidate raises
 `ValueError`; declare a wider grid or another cap before evaluation. `sparsity_cap=None` admits
 toy brains allowed to become fully active. Keep the whole table with the result, for example in
-a [receipt](../../docs/receipts.md).
+a [receipt](../../docs/evaluate.md#receipts).
 
 ### For learned brains
 
@@ -127,7 +127,7 @@ a [receipt](../../docs/receipts.md).
 evaluated with the same habits: select on a validation split of the training data only, read
 the test set once after selection, and include a control that should fail, such as a brain
 trained on shuffled labels scoring at chance
-([baselines and controls](../../docs/evaluation.md#baselines-and-controls)).
+([baselines and controls](../../docs/evaluate.md#baselines-and-controls)).
 
 ## Timing a decision
 

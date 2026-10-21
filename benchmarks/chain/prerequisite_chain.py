@@ -17,7 +17,7 @@ per moment, probed from cleared copies. Readings come from saved copies every
 policy from stage zero, the greedy action and the right action's probability at every
 stage, the share of the life's own moments spent on its most chosen action, the aroused
 share, the learned moments and the sign of their dopamine. A development instrument of
-issues 111, 113 and 84 (``docs/sequential-tasks.md``); it establishes no default and
+issues 111, 113 and 84 (``docs/reward.md#sequential-tasks-and-prerequisite-chains``); it establishes no default and
 declares no gate.
 """
 

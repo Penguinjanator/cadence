@@ -4,7 +4,7 @@ This bounded instrument asks whether a continuing `Brain.compose` can answer fro
 an earlier cue when all current probe inputs are identical. It tests one declared
 neural-graph/trace recipe; it does not establish general recall, choose defaults,
 or complete [the recall contract](https://github.com/muellerberndt/cadence/issues/84).
-Read the [world-model guide](../../docs/world-model.md) and
+Read the [world-model guide](../../docs/start.md#one-continuing-equilibrium-brain) and
 [numerical contracts](../../docs/contracts.md) before interpreting results.
 
 ## What runs

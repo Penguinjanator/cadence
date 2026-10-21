@@ -40,7 +40,7 @@ THREADS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 PRODUCERS = ("actual_outcome_chamber.py", "chamber_inputs.py", "FIXED_CAPACITY_PROTOCOL.md")
 FORMAL = ("MemoryBoundary.lean", "ProtectedTemporalPath.lean", "ReadableTrace.lean",
           "TemporalOverlap.lean", "StructuralMemory.lean")
-BRIDGES = ("docs/continuous.md", "docs/memory.md",
+BRIDGES = ("docs/start.md", "docs/memory.md",
            "tests/test_continuous.py", "tests/test_actual_outcome_association.py",
            "tests/test_feedback_transaction.py", "tests/test_generic_memory_checkpoint.py")
 GATES = {"variants_correct": 9, "variants_planned": 10, "prototype_correct": 1,

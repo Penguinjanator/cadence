@@ -18,65 +18,33 @@ at the repository root. The extras `[fast]` (Numba and SciPy), `[accel]` (PyTorc
 [v0.84.3 documentation](https://github.com/muellerberndt/cadence/blob/v0.84.3/docs/README.md)
 is pinned to the release tag.
 
-## Start here
+## By situation
 
-1. [Quickstart](quickstart.md): compose a brain, run it live, imagine, save and resume; then
-   run [examples/continuing_brain.py](../examples/continuing_brain.py).
-2. [World model](world-model.md): the lifecycle of one continuing brain and the order of one moment.
-3. [Continuous interaction](continuous.md): connect a body through `live` and `step`.
-4. [Memory](memory.md): what the brain keeps between moments and which memory to switch on.
-5. [Compose a brain](brain.md): regions, observers and the founder values of every setting.
-
-## Choose the interface for the task
-
-| Goal | Start with | Read next |
+| You want | Use | Page |
 | --- | --- | --- |
-| One continuing stream of observations and actions | `Brain.compose(..., arousal=True)`, `brain.live(...)` | [Continuous interaction](continuous.md) |
-| Explicit teaching, batched streams, learning from every outcome | `brain.step(...)` | [Continuous interaction](continuous.md), [learning](learning.md) |
-| Memory across moments | `Brain.compose` memory settings | [Memory](memory.md) |
-| Change settings of a living brain | `brain.retune(...)`, `brain.describe()` | [Retune the same life](brain.md#retune-the-same-life) |
-| Custom anatomy | `Genome`, `develop`, `NeuralGraph` | [Write a cortex](cortex.md) |
-| Connectome import | `NeuralGraph` from a measured wiring diagram | [Connectomes](connectomes.md) |
-| Selection across lives | `genes`, `evolve`, `cadence.genome.mutate` | [Evolution](evolution.md) |
+| A creature in a body that lives, acts and learns | `Brain.compose(inputs, actions, arousal=True)`, `live`, `wait`, `reset`, `save`, `Brain.load` | [Start a continuing brain](start.md) |
+| To teach by demonstration | `lesson`, `step(teacher=)`, `teaching=` | [Teach by demonstration](teach.md) |
+| The world to pay for good acts | `step`, `act` and `learn`, delayed pay, chains | [Learning from reward](reward.md) |
+| The brain to remember | `brain.memories`, the episodic and recall memories | [Memory](memory.md) |
+| Wide inputs: images, codes | image `inputs`, `code=units`, `learned_code=units` | [Wide inputs](senses.md) |
+| To read or change a living brain | `describe`, `retune`, `last_settlement`, the founders | [Tune and read](tune.md) |
+| To show a result | baselines, controls, `fit` as a control, receipts | [Evaluate a brain](evaluate.md) |
+| Your own regions, a connectome, evolution | `Genome`, `develop`, `compose(connectome=)`, `evolve` | [Your own anatomy](anatomy.md) |
+| To know how the graph settles and learns | the neuron, the free/nudged rule, the certificate | [How the brain settles](settling.md) |
+| Another device or precision | backends, devices, extras | [Backends](backends.md) |
+| A symptom remedied | symptom to remedy | [Troubleshooting](troubleshooting.md) |
+| The guarantee of each model family | the numerical and learning contracts | [Contracts](contracts.md) |
+| Every public name | signatures and refusals | [API reference](api.md) |
 
 Each model family carries its own guarantee, and one family's guarantee does not certify a
-composition of families ([contracts](contracts.md)).
-
-## All guides
-
-| Group | Page | Covers |
-| --- | --- | --- |
-| Start | [Quickstart](quickstart.md) | first continuing brain, imagination, save and resume |
-| | [World model](world-model.md) | lifecycle and causal order of one moment |
-| | [Orientation](orientation.md) | Cadence for machine-learning readers |
-| | [Concepts](concepts.md) | neuron equations, settling, state lifetimes |
-| Run the brain | [Compose a brain](brain.md) | composition settings and founder values |
-| | [Continuous interaction](continuous.md) | `live`, `step`, arousal, refusal, saving |
-| | [Sequential tasks](sequential-tasks.md) | multi-step prerequisite chains |
-| Memory | [Memory](memory.md) | every memory type and when to use it |
-| | [Episodic memory](episodic.md) | `memory_choice=True` records that vote in the choice |
-| | [Recall memory](recall.md) | `recall=True` slots and the learned address |
-| | [The learned code](code.md) | `learned_code=units`: a code region settled with the brain, the memories keyed on it |
-| | [Standalone stores](records.md) | `FastSynapses`, `SynapticMemory`, `PatternSeparator` and the traces used directly |
-| Learning and reward | [Learning](learning.md) | the free/nudged rule and teaching budgets |
-| | [Reward](reward.md) | three-factor rule, critic, dopamine, `ActorCritic` |
-| Build and wire | [Build your own brain](build.md) | tutorials on your own data |
-| | [Write a cortex](cortex.md) | regions, projections, ports |
-| | [Connectomes](connectomes.md) | a measured wiring diagram as one `NeuralGraph` |
-| | [Evolution](evolution.md) | genomes, mutation and selection |
-| Evaluate | [Evaluate a brain](evaluation.md) | task design, baselines, controls |
-| | [Instruments](../benchmarks/instruments/README.md) | held-out predicate tests and decision timing, in a source checkout |
-| | [Receipts](receipts.md) | outcomes bound to source hashes |
-| | [Troubleshooting](troubleshooting.md) | symptom to remedy |
-| Reference | [Contracts](contracts.md) | numerical and learning guarantee per family |
-| | [Certificate](certificate.md) | the settling contraction certificate |
-| | [Backends](backends.md) | devices, precision, extras |
-| | [API reference](api.md) | every public name and signature |
+composition of families ([contracts](contracts.md)). Readers who know machine learning find
+the comparison in the [README](../README.md#for-machine-learning-readers).
 
 ## Evaluate and contribute
 
-Design a claim with [evaluation](evaluation.md), test it with [the protocol instrument](../benchmarks/instruments/README.md) and
-report it with [receipts](receipts.md). [CONTRIBUTING.md](../CONTRIBUTING.md) lists the checks,
+Design a claim with [evaluation](evaluate.md), test it with
+[the protocol instrument](../benchmarks/instruments/README.md) and report it with
+[receipts](evaluate.md#receipts). [CONTRIBUTING.md](../CONTRIBUTING.md) lists the checks,
 [CHANGELOG.md](../CHANGELOG.md) the releases, the [paper](https://philpapers.org/rec/MUECAP-2)
 the hypothesis and [cadence-demos](https://github.com/muellerberndt/cadence-demos) the
 application demos.

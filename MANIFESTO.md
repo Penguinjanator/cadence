@@ -5,7 +5,7 @@ These are the design points every change to this library answers to.
 Every change must meet these bars. [Contributing](CONTRIBUTING.md) gives the
 required review and evidence checks; keep these two documents in sync whenever
 a requirement changes. The goals below do not imply that every capability is
-already implemented; the [world-model guide](docs/world-model.md) names current limits.
+already implemented; the [world-model guide](docs/start.md#one-continuing-equilibrium-brain) names current limits.
 
 **The goal.** One continuing brain with the functional capabilities of an animal and a
 human-like learner, built as a patch-net equilibrium that is more scalable, more capable
@@ -99,4 +99,4 @@ coupled equilibrium, preserves demonstrated recall, associations, context, actio
 ownership, private imagination and saved continuation, and passes the
 [preservation review](CONTRIBUTING.md#preserve-the-capable-foundation). Every constant
 that would be a designed number of the brain is a gene with the composed default as the
-founder and the control. Read [the world-model guide](docs/world-model.md) before building.
+founder and the control. Read [the world-model guide](docs/start.md#one-continuing-equilibrium-brain) before building.

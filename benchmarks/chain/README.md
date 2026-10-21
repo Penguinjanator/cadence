@@ -2,14 +2,14 @@
 
 This bounded instrument asks whether one continuing `Brain.compose` life learns a chain of
 actions whose pay comes at the end, and what makes it collapse onto one action. It is the
-development instrument of [sequential tasks and prerequisite chains](../../docs/sequential-tasks.md),
+development instrument of [sequential tasks and prerequisite chains](../../docs/reward.md#sequential-tasks-and-prerequisite-chains),
 built for the failure users report (a brain that learns to eat in one move and cannot
 learn to gather wood, gather stone, make fire and warm up), on the contracts of
 [issue 111](https://github.com/muellerberndt/cadence/issues/111) (credit across delays),
 [issue 113](https://github.com/muellerberndt/cadence/issues/113) (drives) and
 [issue 84](https://github.com/muellerberndt/cadence/issues/84) (the hidden chain state as a
 memory task). It establishes no default and declares no gate before its first readings.
-Read [routine and repair](../../docs/continuous.md#routine-and-repair-live) and the
+Read [routine and repair](../../docs/start.md#routine-and-repair-live) and the
 [competing-skill ring](../competing/README.md), whose brain and receipts it shares, before
 interpreting results.
 

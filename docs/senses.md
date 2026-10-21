@@ -1,11 +1,70 @@
-# The learned code
+# Wide inputs: images and codes
+
+You have wide inputs: an image, a long sensor vector, thousands of features. Pass an image
+shape as `inputs` and the sensory region is a visual cortex ([image inputs](#image-inputs)).
+Pass `code=units` and a fixed sparse code of the observation is what the cortex and the
+memories read ([the observation code](#the-observation-code)). Pass `learned_code=units`
+(opt-in) and a code region of the brain's own neurons learns that code while the brain lives
+([the learned code](#the-learned-code)).
+
+```python
+import numpy as np
+from cadence import Brain
+```
+
+## Image inputs
+
+`inputs=(height, width)` or `(height, width, channels)` makes the sensory region a
+`visual_cortex`: `features` maps (8) of `field` by `field` receptive fields (3) feed
+the first module. Observations may be flat `(1, height * width * channels)` or keep
+the image shape.
+
+```python
+eyes = Brain.compose(inputs=(8, 8), actions=3, features=4, seed=1)
+assert eyes.act(np.random.default_rng(0).random((1, 8, 8))).shape == (1,)
+```
+
+The memories key on the pixels. With `code=units` they key on a fixed sparse code
+and the cortex reads the pixels ([the observation code](#the-observation-code)).
+
+## The observation code
+
+`brain.observation_code(x)` returns the key every memory reads and writes: by default the
+observation itself. `code=units` (construction; at least 32 inputs and 24 units) replaces it
+with a fixed random sparse code of `units` width and unit length, one unit in ten active,
+saved with the brain as `brain.sparse_code`. In `compose` a vector brain's sensory region
+reads the code too; on an image brain and in `Brain(connectome, code=units)` only the
+memories use it. Set it when wide observations make the episodic separators and the recall
+address map too large: at 12,824 inputs they take 1,532 MB uncoded with `memory_choice` and
+`recall`, and 9.8 MB with `code=1024`. A coded brain refuses `memory_expansion` and
+`memory_fan_in`, and keys stored under one code do not match another.
+`Genome.observation_width(inputs, code)` gives the key width before building, the size of a
+custom anatomy's `recall` and `next` regions. The code is fixed and learns nothing.
+`learned_code=units` (opt-in, without `code`) adds a code region of the brain's own neurons
+that settles to a learned sparse code of the observation and learns every moment; the cortex
+reads it and the memories key on it ([the learned code](#the-learned-code)).
+
+```python
+from cadence import Genome
+
+plain = Brain.compose(inputs=2048, actions=3, seed=0)
+coded = Brain.compose(inputs=2048, actions=3, seed=0, code=1024)
+x = np.random.default_rng(0).random((1, 2048))
+assert plain.observation_code(x).shape == (1, 2048)     # the observation itself
+key = coded.observation_code(x)                         # what every memory keys on
+assert key.shape == (1, 1024) and (key > 0).sum() == 102 and np.isclose(np.linalg.norm(key), 1.0)
+assert Genome.observation_width(2048, 1024) == 1024     # the key width before building
+assert len(coded.connectome.populations["sensory"]) == 1024  # the cortex reads the code
+```
+
+## The learned code
 
 `Brain.compose(..., learned_code=units)` adds a `code` region of that many neurons between the
 sensory region and the first module. The region settles with the rest of the brain to a sparse
 code of the observation, the cortex reads the code in place of the observation, the memories
 key on it, and the region learns at every accepted moment by local rules. The founder
 `learned_code=None` builds the brain without it and keys the memories on
-[the observation code](memory.md#the-observation-code) as before; `code=units`, the fixed
+[the observation code](#the-observation-code) as before; `code=units`, the fixed
 random code, is the control at matched width.
 
 ```python
@@ -24,7 +83,7 @@ code = brain.learned_code                            # the tables the region lea
 assert code.dictionary.shape == (53, 64) and code.work["updates"] == 1
 ```
 
-## What the region is
+### What the region is
 
 The region's tables are the brain's own synapses and biases, read in every sweep as every
 other synapse is:
@@ -50,7 +109,7 @@ observation and the working trace alone. The boundary is held fixed through ever
 is part of the residual that qualifies a state (it is a `Nudge` anchor); at
 `learned_code_top_down=0` there is none.
 
-## How a moment settles
+### How a moment settles
 
 A moment's settle has a code phase first: the region's sub-network (its units, its lateral
 synapses, its biases, the same neuron model) settles under the dictionary's read of the
@@ -100,7 +159,7 @@ before its settle on the code, and a code that read the association region would
 what the moment recalls; a prediction read from the moment's own association activity would
 copy the code it reads.
 
-## How it learns
+### How it learns
 
 At every accepted moment (each `act`, `step` and `live` answer, and each moment `wait` senses)
 the region takes one step from the moment's free settle, each row of the batch one event;
@@ -137,7 +196,7 @@ assert teacher.learned_code.work["updates"] == 3
 teacher.retune(learned_code_rate=0.0)                # the dictionary stays from here on
 ```
 
-## Settings
+### Settings
 
 | Setting | Founder | When | What it sets |
 | --- | --- | --- | --- |
@@ -166,7 +225,7 @@ is not built in this version), an image brain, `memory_expansion` or `memory_fan
 memories key on the code as it is), a backend other than `cpu`, and a custom connectome
 without a `code` population and the complete dictionary, lateral and predictor synapses.
 
-## What the memories key on
+### What the memories key on
 
 With the region, every memory keys on the rectified settled code at unit length joined to
 the observation's own identity, `unit([sqrt(1 - w) code, sqrt(w) unit(x)])` with `w` the
@@ -186,7 +245,7 @@ until its outcome is recorded. `stimulus(..., memory=False)`, `fit`, `predict` a
 `accuracy` settle the context-free code alone. The heard history holds the moment's code, in
 blocks of `units` per decay.
 
-## Save, load, describe, cost
+### Save, load, describe, cost
 
 A brain with the region saves, in checkpoint format `cadence-brain/1`, the `learned_code`
 metadata (units, widths, seed, genes, work counts) and the tables `learned_code/dictionary`,

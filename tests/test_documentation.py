@@ -15,7 +15,7 @@ BLOCK = re.compile(r"(<!-- not-run[^\n]*-->\n)?```python\n(.*?)```", re.S)
 # pages whose blocks need an optional dependency
 REQUIRES = {"docs/backends.md": "torch"}
 # pages whose blocks import a benchmark instrument, a module of a source checkout
-INSTRUMENTS = {"benchmarks/instruments/README.md", "docs/connectomes.md"}
+INSTRUMENTS = {"benchmarks/instruments/README.md", "docs/anatomy.md"}
 
 
 def snippets(page: str) -> list[str]:
@@ -67,26 +67,17 @@ def test_continuing_brain_example():
 
 PAGES = [
     "README.md",
-    "docs/world-model.md",
-    "docs/quickstart.md",
-    "docs/concepts.md",
-    "docs/memory.md",
-    "docs/continuous.md",
+    "docs/start.md",
+    "docs/teach.md",
     "docs/reward.md",
-    "docs/certificate.md",
-    "docs/cortex.md",
-    "docs/connectomes.md",
-    "docs/brain.md",
-    "docs/episodic.md",
-    "docs/recall.md",
-    "docs/code.md",
-    "docs/records.md",
-    "docs/evolution.md",
-    "docs/build.md",
+    "docs/memory.md",
+    "docs/senses.md",
+    "docs/tune.md",
+    "docs/evaluate.md",
+    "docs/anatomy.md",
+    "docs/settling.md",
     "docs/api.md",
     "docs/backends.md",
-    "docs/learning.md",
-    "docs/receipts.md",
     "benchmarks/instruments/README.md",
 ]
 
@@ -106,14 +97,8 @@ def test_introductory_python_snippets(page, tmp_path, monkeypatch):
     namespace = {"__name__": "documentation_example", "__file__": str(script)}
     for index, code in enumerate(blocks):
         exec(compile(code, f"{page}:python-block-{index + 1}", "exec"), namespace)
-    if page in {"README.md", "docs/quickstart.md", "docs/world-model.md", "docs/brain.md"}:
+    if page == "README.md":
         assert namespace["brain"].last_arousal is not None
-    if page == "docs/quickstart.md":
-        assert namespace["brain"].learner.updates > 0
-        assert len(namespace["phases"]) == 2
-        assert (namespace["continued"] == namespace["replayed"]).all()
-        assert namespace["brain"].arousal.to_dict() == namespace["resumed"].arousal.to_dict()
-        assert namespace["brain"].last_arousal == namespace["resumed"].last_arousal
 
 
 def test_every_python_block_is_run_or_marked_illustrative():

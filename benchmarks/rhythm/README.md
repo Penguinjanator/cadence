@@ -8,7 +8,7 @@ It is the continuing-action chamber of
 declared System 1 recipe and its compose-default control against lesioned forks of
 the same checkpoint, a matched flip-flop control and a uniform-random baseline. It
 establishes no default, no mechanism and no general timing capability. Read
-[the protocol](RHYTHM_PROTOCOL.md), the [world-model guide](../../docs/world-model.md)
+[the protocol](RHYTHM_PROTOCOL.md), the [world-model guide](../../docs/start.md#one-continuing-equilibrium-brain)
 and [numerical contracts](../../docs/contracts.md) before interpreting results.
 
 ## What runs

@@ -45,7 +45,7 @@ capability-preservation test. State the actual learning rule and the scope of
 its equilibrium guarantee; one model's settlement must not inherit another's
 claims.
 
-Use [one continuing equilibrium brain](docs/world-model.md) as the application
+Use [one continuing equilibrium brain](docs/start.md#one-continuing-equilibrium-brain) as the application
 and tutorial frame: bootstrap useful relations and memory, operate with them,
 repair witnessed failures, then resume the same acquired brain. Parameters and
 memory support a family of equilibria under changing evidence. Deep reciprocal
@@ -155,7 +155,7 @@ changes to these guides or examples, run `python -m pytest -q tests/test_documen
 and `ruff check examples/continuing_brain.py tests/test_documentation.py`.
 
 Mathematical claims must state their assumptions and connect them to the
-executed numerical model. The [settling certificates](docs/certificate.md) explain
+executed numerical model. The [settling certificates](docs/settling.md#the-settling-certificate) explain
 the supported contraction checks and their limits; the
 [trace recurrence checks](tests/test_trace_bridge.py) state their reference
 equations inline. These numerical checks are not formal verification of Python.

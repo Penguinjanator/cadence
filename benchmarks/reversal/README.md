@@ -11,8 +11,8 @@ behavioural evidence for the routine-and-repair loop of
 System 1 operating point with arousal against the same brain without it, the released
 defaults, two ablations of the brain, frozen, replay and reset controls, a tabular
 learner with the same information and uniform-random actions. It establishes no default.
-Read [routine and repair](../../docs/continuous.md#routine-and-repair-live), the
-[world-model guide](../../docs/world-model.md) and
+Read [routine and repair](../../docs/start.md#routine-and-repair-live), the
+[world-model guide](../../docs/start.md#one-continuing-equilibrium-brain) and
 [numerical contracts](../../docs/contracts.md) before interpreting results.
 
 ## What runs

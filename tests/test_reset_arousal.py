@@ -316,7 +316,7 @@ def test_a_reset_adult_learns_the_moved_arm_when_it_keeps_what_it_was_used_to(
 
 @pytest.mark.skipif(not NUMPY_SOLVER, reason=BYTES_REASON)
 def test_the_documented_bandit_counts(bandit: dict[tuple[str, str, int], list[Moment]]) -> None:
-    """The counts ``docs/continuous.md#reset-and-save`` gives for seeds 0 to 4."""
+    """The counts ``docs/start.md#reset-and-save`` gives for seeds 0 to 4."""
 
     def counts(stream: str, arm: str, field: int, last: int = 120) -> list[int]:
         return [sum(m[field] for m in bandit[(stream, arm, seed)][-last:]) for seed in range(5)]

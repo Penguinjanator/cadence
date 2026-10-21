@@ -6,7 +6,7 @@ gates: **4/4 retained specimens, 360/360 reserved variants**, compared with
 reused-founder result, with no fresh confirmation or claim that #85 is complete.
 The [live roadmap](https://github.com/muellerberndt/cadence/issues/109) owns the
 remaining work. Start with the simpler existing brain and ordinary experience;
-the [world-model guide](../../docs/world-model.md) explains that continuing life.
+the [world-model guide](../../docs/start.md#one-continuing-equilibrium-brain) explains that continuing life.
 Animal and human brains guide functional hypotheses; these finite tests do not
 promise perfect learning or literal biological implementation.
 
