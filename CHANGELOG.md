@@ -222,6 +222,52 @@
   per dimension), with their tests and API rows. The categorical motor slots keep their
   per-slot softmax, sampling and temperatures; every composed brain, checkpoint and composed
   life is byte-identical. The population code lives on in release 0.84.3.
+- Remove the genes that no composed brain read away from their founders. Each name is
+  refused at `compose` and `retune` with a message naming 0.84.3 as the release that takes
+  it, a checkpoint of 0.84.3 that set one away from its founder is refused on load with the
+  same message, and one at the founders loads. At the founders every composed brain's
+  parameters and every composed life are unchanged: on the 12-brain digest ledger the
+  arrays and the actions are identical, and the descriptions and checkpoints lose the
+  removed keys. The record channel of the arousal (`arousal_record_surprise`, a second
+  surprise at the error of the outcome the action's record forecast, with
+  `Arousal.usual_record`, `Arousal.records` and `last_arousal["record_error"]`) never entered
+  the level at its founder weight of zero; on the odour nursery a positive weight woke lives
+  sooner and left more of them searching too briefly. `Arousal.to_dict()` writes
+  `cadence-arousal/4` with every gene, and `ArousalConfig.space()` names ten genes. The
+  centred dopamine (`actor_dopamine_center`, `actor_dopamine_floor`, `actor_center_scale`)
+  and the `Valence` class leave with the critic's signal options (`actor_critic_signal`,
+  `actor_critic_normalize`): the critic learns from the actor's dopamine, the prediction
+  error capped at `actor_dopamine_cap`, its step divided by its trace's energy, the founder
+  resolution of `"auto"`; the night replay chamber keeps the readings of its centred arm.
+  The actor's momentum and RMS normalization (`actor_momentum`, `actor_normalize`, declined
+  as a founder in 0.73.1) leave with the actor's moment arrays; the settling learner keeps
+  its own (`learning_momentum`, `learning_normalize`). The teaching law's one-sided contrast
+  and its leak (`LearnerConfig.centered` and `.decay`, `learning_centered` and
+  `learning_decay`) leave: every lesson contrasts the `+beta` and `-beta` phases.
+  `learning_nudge` leaves `compose` and `retune`: a composed brain learns with the
+  cross-entropy nudge, and the quadratic nudge stays on a standalone `Learner` for pattern
+  targets. The working trace's focus (`working_memory_focus`, `Trace.focus`), a weighting of
+  each neuron by its movement, leaves: every trace decays toward its source. The resting
+  bias (`resting_bias`), an initial bias of the processing regions, leaves: every bias starts
+  at zero, and the acquisition and rhythm chambers whose frozen recipes name it set the same
+  arrays themselves, act for act. The removed genes live on in release 0.84.3.
+- One checkpoint format, `cadence-brain/1`: `Brain.save` writes the learner's checkpoint, the
+  brain's metadata in the `brain` member (the actor's config under `actor`, the random
+  states, the free phase and a pending action, the arousal and the action `live` issued, the
+  state a waiting stream sensed, the code, and under `memories` each present memory's
+  settings), and one group of arrays per memory: `memories/working_memory/`,
+  `memories/efference/`, `memories/history/`, `memories/recall/`, `memories/hippocampus/`
+  and `memories/episodic/` (the context store, the stream's context and decision, the replay
+  paths); the learned code region is the `learned_code` group. The formats
+  `cadence-generic/2` to `/10`, one number per component a brain held, are no longer
+  written; `Brain.load` reads them through 0.85.x, and the next minor release refuses them
+  with a message naming 0.84.3. The recall memory's settings that 0.84.3 always wrote
+  (`value`, `context`, `context_decay` at their one value) and its empty context history
+  leave the description and the checkpoint. Every array and every metadata value of a
+  checkpoint is the one the earlier format held, under its new name (checked on the
+  12-brain ledger and on every pinned founder, whose checkpoint and name digests are
+  re-recorded); a file of 0.84.3 loads to the same brain. Chambers and verifiers that read
+  saved brains read either layout.
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
