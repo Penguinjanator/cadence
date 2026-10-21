@@ -94,13 +94,9 @@ for _ in range(3):
 assert {"td_error", "delta", "dopamine", "capped", "saturation", "trace"} <= set(report)
 ```
 
-For a continuous action pass `population=Bins(dims, size=9)`: each dimension owns `size`
-output neurons standing for levels in `[-1, 1]` (the output set holds `dims * size`), `act`
-returns one sampled level per dimension, and a population code takes no choice `bias`.
-
 ## Settings
 
-`ActorCritic(learner, critic, config=None, seed=0, population=None)`. In a composed brain
+`ActorCritic(learner, critic, config=None, seed=0)`. In a composed brain
 each field is the named setting `actor_<field>`, set in `Brain.compose` or `brain.retune`;
 the composed founders are `gamma=0.9, lam=0.8, eta=1.0, eta_bias=0.05, eta_critic=0.3,
 eligibility_steps=12` ([defaults table](brain.md#defaults-and-expert-overrides)).

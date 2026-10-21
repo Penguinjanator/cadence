@@ -365,16 +365,6 @@ def test_zero_density_builds_a_disconnected_sensory_projection():
     assert graph.synapses > 0
 
 
-def test_bins_probabilities_normalize_each_action_dimension():
-    graph = cd.layered(2, 3, 6, density=1)
-    learner = cd.Learner(cd.NeuralGraph(graph, cd.learning_neuron_model()), graph.populations["output"])
-    agent = cd.ActorCritic(learner, graph.populations["hidden"], population=cd.Bins(2, 3))
-    state = agent.settle(np.ones((4, graph.n)))
-    probabilities = agent.probabilities(state)
-    assert probabilities.shape == (4, 2, 3)
-    np.testing.assert_allclose(probabilities.sum(axis=-1), 1)
-
-
 def test_corrupt_optimizer_state_is_rejected_on_load(tmp_path):
     learner = controller().learner
     path = learner.save(tmp_path / "invalid.npz")

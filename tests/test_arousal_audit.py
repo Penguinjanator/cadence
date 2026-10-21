@@ -74,22 +74,3 @@ def test_subnormal_temperature_keeps_categorical_slots_normalized(slots, dtype):
     current = agent.probabilities(agent.state, np.nextafter(0.0, 1.0))
     np.testing.assert_array_equal(action, current.argmax(axis=-1))
     assert agent._pending is not None
-
-
-@pytest.mark.parametrize("dtype", [np.float32, np.float64])
-def test_subnormal_temperature_keeps_bins_normalized_and_samples_the_best_levels(dtype):
-    bins = cd.Bins(dims=2, size=3)
-    connectome = cd.layered(2, 4, 6, density=1.0, seed=0)
-    graph = cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0))
-    learner = cd.Learner(graph, connectome.populations["output"])
-    agent = cd.ActorCritic(learner, connectome.populations["hidden"], population=bins)
-    drive = graph.stimulus_levels(np.full((1, connectome.n), 0.25))
-    expected = agent.act(drive, greedy=True)
-    state = agent.state
-    reading = cd.BrainState(state.v, state.activation.astype(dtype), state.adaptation, state.steps)
-    p = agent.probabilities(reading, float(np.nextafter(0.0, 1.0)))
-    assert p.shape == (1, 2, 3) and np.isfinite(p).all()
-    np.testing.assert_array_equal(p.sum(axis=-1), 1.0)
-    np.testing.assert_array_equal(bins.centres[p.argmax(axis=-1)], expected)
-    np.testing.assert_array_equal(agent.act(drive, temperature=np.nextafter(0.0, 1.0)), expected)
-    assert agent._pending is not None

@@ -22,8 +22,7 @@ def test_invalid_eligibility_budget_is_rejected(steps):
 
 
 @pytest.mark.parametrize("steps", [None, 0, 3, np.int64(5)])
-@pytest.mark.parametrize("bins", [False, True])
-def test_standalone_reward_eligibility_has_a_finite_independent_budget(steps, bins, monkeypatch):
+def test_standalone_reward_eligibility_has_a_finite_independent_budget(steps, monkeypatch):
     graph = cd.layered(2, 4, 2, density=1, seed=3)
     learner = cd.Learner(
         cd.NeuralGraph(graph, cd.learning_neuron_model(dt=1)),
@@ -31,10 +30,7 @@ def test_standalone_reward_eligibility_has_a_finite_independent_budget(steps, bi
         cd.LearnerConfig(free_steps=64, nudged_steps=7, tolerance=None),
     )
     config = cd.ActorCriticConfig(eligibility_steps=steps)
-    agent = cd.ActorCritic(
-        learner, graph.populations["hidden"], config,
-        population=cd.Bins(1, 2) if bins else None,
-    )
+    agent = cd.ActorCritic(learner, graph.populations["hidden"], config)
     requested = []
     original = cd.NeuralGraph.settle_batch
 

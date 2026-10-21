@@ -42,7 +42,6 @@ from .neuron import Adaptation, NeuronModel
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
-    Bins,
     Valence,
 )
 from .receipts import Receipt, canonical_json
@@ -71,7 +70,6 @@ __all__ = [
     "ActorCritic",
     "ActorCriticConfig",
     "Valence",
-    "Bins",
     "Adaptation",
     "Region",
     "Brain",

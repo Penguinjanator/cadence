@@ -101,12 +101,12 @@ def test_traces_reset_on_done_and_updates_are_local() -> None:
     assert np.allclose(got[~clipped], expected[~clipped])
 
 
-def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuous_bandit() -> None:
+def test_grouped_softmax_nudge_agrees_between_kernels() -> None:
 
     from cadence import brain as S
 
-    bins = cd.Bins(dims=2, size=5)
-    connectome = cd.layered(4, 8, bins.dims * bins.size, density=1.0, seed=3)
+    dims, size = 2, 5
+    connectome = cd.layered(4, 8, dims * size, density=1.0, seed=3)
     brain = cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0))
     rng = np.random.default_rng(3)
     drive = brain.stimulus_levels(np.pad(rng.random((6, 4)), ((0, 0), (0, connectome.n - 4))))
@@ -115,9 +115,9 @@ def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuou
     target[:, out[[0, 7]]] = 1.0
     mask = np.zeros(connectome.n)
     mask[out] = 1.0
-    nudge = cd.Nudge(
-        target, mask, 0.1, softmax_temperature=0.2, groups=bins.groups(out, connectome.n)
-    )
+    groups = np.full(connectome.n, -1, dtype=np.int64)
+    groups[out] = np.repeat(np.arange(dims), size)  # one softmax group per output dimension
+    nudge = cd.Nudge(target, mask, 0.1, softmax_temperature=0.2, groups=groups)
     free = brain.settle_batch(drive, steps=60, tolerance=3e-3)
     fused = brain.settle_batch(drive, steps=12, state=free, nudge=nudge, tolerance=3e-3)
     was = S._FUSED
@@ -127,43 +127,6 @@ def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuou
     finally:
         S._FUSED = was
     assert np.abs(fused.activation - plain.activation).max() < 1e-12
-
-    learner = cd.Learner(
-        brain,
-        connectome.populations["output"],
-        cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
-    )
-    ac = cd.ActorCritic(
-        learner,
-        connectome.populations["hidden"],
-        cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0, eta_critic=0.3),
-        seed=3,
-        population=bins,
-    )
-    wanted = np.array([[0.5, -1.0], [-0.5, 1.0]])
-
-    def batch(k: int) -> tuple[np.ndarray, np.ndarray]:
-        c = rng.integers(0, 2, k)
-        x = np.zeros((k, 4))
-        x[np.arange(k), 2 * c] = 1.0
-        x[np.arange(k), 2 * c + 1] = 1.0
-        return brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 4)))), c
-
-    def error() -> float:
-        d, c = batch(200)
-        ac.reset()
-        return float(np.abs(ac.act(d, greedy=True) - wanted[c]).mean())
-
-    before = error()
-    ac.reset()
-    d, c = batch(32)
-    for _ in range(200):
-        a = ac.act(d)
-        reward = -((a - wanted[c]) ** 2).sum(axis=1)
-        d, c = batch(32)
-        ac.learn(reward, np.ones(32, dtype=bool), d)
-    after = error()
-    assert after < 0.2 and after < before
 
 
 def test_one_stream_learns_the_same_on_the_device_as_on_the_host() -> None:
@@ -193,13 +156,7 @@ def test_one_stream_learns_the_same_on_the_device_as_on_the_host() -> None:
             precision="float64" if backend == "torch" else None,
         )  # type: ignore[arg-type]
         learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
-        ac = cd.ActorCritic(
-            learner,
-            connectome.populations["hidden"],
-            ac_config,
-            seed=0,
-            population=cd.Bins(dims=2, size=2),
-        )
+        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0)
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())
@@ -249,13 +206,7 @@ def test_a_batch_of_streams_learns_the_same_on_the_device_as_on_the_host() -> No
             precision="float64" if backend == "torch" else None,
         )  # type: ignore[arg-type]
         learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
-        ac = cd.ActorCritic(
-            learner,
-            connectome.populations["hidden"],
-            ac_config,
-            seed=0,
-            population=cd.Bins(dims=2, size=2),
-        )
+        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0)
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())

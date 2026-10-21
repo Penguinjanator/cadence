@@ -43,7 +43,6 @@ from .learning import Learner
 __all__ = [
     "ActorCritic",
     "ActorCriticConfig",
-    "Bins",
 ]
 
 
@@ -53,46 +52,6 @@ def _batch_of(state: BrainState) -> int:
     if handle is not None and "s" in handle and state.__dict__.get("v") is None:
         return int(handle["s"].shape[0])
     return int(np.atleast_2d(state.v).shape[0])
-
-
-@dataclass(frozen=True)
-class Bins:
-    """A continuous action as one softmax choice per dimension over ``size`` levels.
-
-    Each dimension owns ``size`` output neurons standing for levels in ``[-1, 1]``; an
-    action is a draw from the softmax over each dimension's neurons (a discrete choice
-    per dimension), and learning is the cross-entropy nudge of that group toward the
-    level taken, the same rule that learns a discrete action. Discretised actions match
-    Gaussian ones on continuous control (Tang and Agrawal 2020); here they let one rule
-    serve every kind of action.
-    """
-
-    dims: int
-    size: int = 9
-
-    def __post_init__(self) -> None:
-        for name, minimum in (("dims", 1), ("size", 2)):
-            value = getattr(self, name)
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, np.integer))
-                or value < minimum
-            ):
-                raise ValueError(f"{name} must be an integer >= {minimum}")
-
-    @property
-    def centres(self) -> np.ndarray:
-        return np.linspace(-1.0, 1.0, self.size)
-
-    def groups(self, output_index: np.ndarray, n: int) -> np.ndarray:
-        gid = np.full(n, -1, dtype=np.int64)
-        gid[output_index] = np.repeat(np.arange(self.dims), self.size)
-        return gid
-
-    def read(self, activation: np.ndarray, temperature: float) -> np.ndarray:
-        """The most likely level per dimension: ``(batch, dims)`` values in ``[-1, 1]``."""
-        s = activation.reshape(len(activation), self.dims, self.size)
-        return np.asarray(self.centres[np.argmax(s, axis=2)])
 
 
 @dataclass
@@ -283,22 +242,10 @@ class ActorCritic:
         critic: Sequence[int],
         config: ActorCriticConfig | None = None,
         seed: int = 0,
-        population: Bins | None = None,
     ) -> None:
         self.learner = learner
         self.config = config or ActorCriticConfig()
-        if (
-            population is not None
-            and len(learner.output_index) != population.dims * population.size
-        ):
-            raise ValueError("the output set must hold dims * size neurons for a population code")
-        self.bins = population
-        if self.bins is not None:
-            self.group_id: np.ndarray | None = self.bins.groups(
-                learner.output_index, learner.brain.connectome.n
-            )
-        else:
-            self.group_id = learner.output_groups
+        self.group_id: np.ndarray | None = learner.output_groups
         index = np.asarray(list(critic))
         if (
             index.ndim != 1
@@ -363,27 +310,21 @@ class ActorCritic:
         """Action probabilities, normalized separately for each motor slot.
 
         Multiple categorical slots return ``(batch, slots, max_size)`` with
-        zero padding for shorter slots. Bins keeps its uniform population shape.
+        zero padding for shorter slots.
         ``temperature`` reads the same settled outputs at another softmax
         temperature, or one temperature per motor slot; left unset it is the learner's.
         ``bias`` adds a ``(batch, motor)`` value per motor neuron to the settled outputs
         before each slot's softmax: a vote from outside the readout, such as the records
-        of an episodic memory. Bins take none.
+        of an episodic memory.
         """
         temperature = self._temperature(temperature)
         s = state.activation[:, self.learner.output_index]
         if bias is not None:
             bias = np.asarray(bias, dtype=float)
-            if self.bins is not None:
-                raise ValueError("a population code takes no choice bias")
             if bias.shape != s.shape or not np.isfinite(bias).all():
                 raise ValueError("bias must be a finite (batch, motor) array")
             s = s + bias
-        if self.bins is not None:
-            s = s.reshape(len(s), self.bins.dims, self.bins.size)
-            if isinstance(temperature, np.ndarray):
-                temperature = temperature[None, :, None]
-        elif self.learner.slot_count > 1:
+        if self.learner.slot_count > 1:
             p = np.zeros((len(s), self.learner.slot_count, int(self.learner.slot_sizes.max())))
             for j, (start, size) in enumerate(
                 zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
@@ -420,7 +361,7 @@ class ActorCritic:
             return float(self.learner.config.temperature)
         if isinstance(temperature, (Sequence, np.ndarray)) and not isinstance(temperature, str):
             values = np.asarray(temperature)
-            slots = self.bins.dims if self.bins is not None else self.learner.slot_count
+            slots = self.learner.slot_count
             if values.shape != (slots,) or values.dtype.kind not in "iuf":
                 raise ValueError("temperature must be finite and positive, one per motor slot")
             with np.errstate(over="ignore", under="ignore"):
@@ -476,7 +417,6 @@ class ActorCritic:
         """Settle (or reuse the cached free phase), sample an action per row, keep its eligibility.
 
         Discrete: an action index per row, or one index per categorical motor slot.
-        With ``Bins``: one softmax draw per dimension of a population code.
         ``temperature`` samples the same settled outputs at another softmax
         temperature, or one per motor slot. Eligibility uses those same temperatures
         for the sampled action's policy score. A greedy read ignores them.
@@ -491,8 +431,6 @@ class ActorCritic:
             temperature = self._temperature(temperature)  # before any state changes
         if bias is not None:
             bias = np.asarray(bias, dtype=float)
-            if self.bins is not None:
-                raise ValueError("a population code takes no choice bias")
             if bias.shape != (len(drive), len(self.learner.output_index)) or not np.isfinite(
                 bias
             ).all():
@@ -507,8 +445,6 @@ class ActorCritic:
         )
         self._pending = None  # eligibility always belongs to this decision, including greedy reads
         self._pending_memory = None
-        if self.bins is not None:
-            return self._act_bins(drive, free, greedy, temperature)
         p = self.probabilities(free, None if greedy else temperature, bias=bias)
         if greedy:
             action = np.argmax(p, axis=-1)
@@ -528,38 +464,6 @@ class ActorCritic:
             self._pending = ("states", plus, minus, self.value(free))
             self._pending_memory = self._memory_contrast(plus, minus)
         return np.asarray(action, dtype=np.int64)
-
-    def _act_bins(
-        self,
-        drive: np.ndarray,
-        free: BrainState,
-        greedy: bool,
-        temperature: float | Sequence[float] | np.ndarray | None = None,
-    ) -> np.ndarray:
-        """One softmax draw per dimension; the taken levels' one-hots are the nudge's target,
-        per group."""
-        bins = self.bins
-        assert bins is not None
-        cfg = self.learner.config
-        batch = len(drive)
-        p = self.probabilities(free, None if greedy else temperature)
-        if greedy:
-            choice = np.argmax(p, axis=2)
-        else:
-            u = self.rng.random((batch, bins.dims))
-            choice = np.minimum((p.cumsum(axis=2) < u[:, :, None]).sum(axis=2), bins.size - 1)
-        action = bins.centres[choice]
-        if not greedy:
-            onehot = np.zeros((batch, bins.dims, bins.size))
-            np.put_along_axis(onehot, choice[:, :, None], 1.0, axis=2)
-            target = np.zeros((batch, self.n))
-            target[:, self.learner.output_index] = onehot.reshape(batch, -1)
-            plus = self._nudged_groups(drive, free, target, cfg.beta, temperature)
-            minus = self._nudged_groups(drive, free, target, -cfg.beta, temperature)
-            self._pending = ("states", plus, minus, self.value(free))
-            self._pending_memory = self._memory_contrast(plus, minus)
-        out: np.ndarray = np.asarray(action, dtype=float)
-        return out
 
     def _memory_contrast(self, plus: BrainState, minus: BrainState) -> np.ndarray | None:
         """The per-row contrast of the memory's learned parameters between a sampled act's
@@ -610,11 +514,7 @@ class ActorCritic:
         # policy retains its existing unit mask and learning rate.
         scale = min(float(cfg.temperature), float(np.min(actual)))
         if isinstance(actual, np.ndarray):
-            sizes = (
-                self.learner.slot_sizes
-                if self.bins is None
-                else np.full(self.bins.dims, self.bins.size)
-            )
+            sizes = self.learner.slot_sizes
             expanded = np.full(self.n, cfg.temperature)
             expanded[self.learner.output_index] = np.repeat(actual, sizes)
             actual = expanded

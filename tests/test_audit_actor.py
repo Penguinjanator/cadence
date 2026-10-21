@@ -96,20 +96,3 @@ def test_act_refreshes_after_learning_and_a_new_batch_size_drops_the_traces() ->
     assert agent.state is refreshed  # the drive and parameters have not changed
     agent.act(_drive(c, rng, 2))
     assert agent.trace is None and agent.state is not None and agent.state.v.shape[0] == 2
-
-
-def test_bins_population_code_acts_and_learns_per_dimension() -> None:
-    c, model, learning = _setup()
-    rng = np.random.default_rng(4)
-    learner = cd.Learner(cd.NeuralGraph(c, model), c.populations["output"], learning)
-    bins = cd.Bins(dims=2, size=2)
-    agent = cd.ActorCritic(learner, c.populations["hidden"], population=bins)
-    d = _drive(c, rng, 3)
-    action = agent.act(d)
-    assert action.shape == (3, 2) and set(np.unique(action)) <= {-1.0, 1.0}
-    assert agent.group_id is not None
-    assert agent.group_id[learner.output_index].tolist() == [0, 0, 1, 1]
-    report = agent.learn(np.ones(3), np.zeros(3, dtype=bool), d)
-    assert report["delta"] > 0
-    assert agent.state is not None
-    assert bins.read(agent.state.activation[:, learner.output_index], 0.2).shape == (3, 2)
