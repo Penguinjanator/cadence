@@ -208,7 +208,7 @@
   files; no composed brain, benchmark or example used it, and it lives on in release 0.84.3.
   Every composed brain, checkpoint and composed life is byte-identical.
 - Remove the leftovers of the stream and the actor that no composed brain used: `Echo` and
-  `Afterglow` (a `Trace` with other defaults; `Trace(focus=..., source=..., target=...)` is
+  `Afterglow` (a `Trace` with other defaults; `Trace(decay=..., source=..., target=...)` is
   what they were), `stateful` (an embedded network plus a context range for a trace), and
   `Bins` with the `population` argument of `ActorCritic` (a continuous action as one softmax
   per dimension), with their tests and API rows. The categorical motor slots keep their

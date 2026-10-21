@@ -96,7 +96,7 @@ above, so pass these here or use `compose` ([episodic settings](memory.md#episod
 | `memory_choice` needs `episodic=True` | `ValueError` |
 | `memory_context`, `memory_replay`, `memory_demonstrations`, `memory_expansion` need `memory_choice` | `ValueError` |
 | `memory_fan_in` needs `memory_expansion` (so `memory_choice` too) and at most the key width; a brain with a fixed `code` refuses both | `ValueError` |
-| `learned_code` at least 2; a `learned_code_*` gene without it, `code` beside it, an image brain, a backend other than `cpu`, or a connectome without the region's populations and complete synapses | `ValueError` |
+| `learned_code` at least 2; `learned_code_fields` without it, a removed `learned_code_*` name (`LearnedCode.REMOVED`), `code` beside it, an image brain, a backend other than `cpu`, or a connectome without the region's populations and complete synapses | `ValueError` |
 | `memory_context` in `[0, 1)`; `working_memory_decay`, `efference_decay` in `[0, 1)` | `ValueError` |
 | a missing population that a switched-on component needs | `ValueError` |
 

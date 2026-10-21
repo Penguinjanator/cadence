@@ -698,8 +698,10 @@ confirmation seeds were first run on the frozen protocol.
   reversal pair after one or two punishments: 89 of 96 lives passed every reading with the
   record channel alone and 90 of 96 with both channels, against 94 of 96 with the value
   forecast alone. The founders weigh the record channel at zero, so the law of the second
-  freeze is unchanged; the channel is a gene (`record_surprise`) left to selection. On the
-  confirmation seeds the same comparison is a declared variant below.
+  freeze is unchanged; the channel was a gene (`record_surprise`) left to selection, until
+  the library removed the record channel after release 0.84.3 (the chamber refuses a recipe
+  that weighs it). On the confirmation seeds the same comparison is a declared variant
+  below.
 - **The lag gate.** The gate on the reversal lag was first a ratio between the longest and
   the shortest exposure. A ratio of two medians of about 20 trials moves with single
   lives, and before the first confirmation it was replaced by the bound of 150 trials at

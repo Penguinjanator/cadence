@@ -137,13 +137,14 @@ still a complete replacement, while named overrides preserve unspecified values.
 Consult the [defaults and tuning guide](docs/tune.md#defaults-and-expert-overrides).
 Application recipes are measured choices, not generally optimal defaults.
 
-`resting_bias` is an optional initialization setting, not evidence of improved
-acquisition or retention. Keep its default and the working-trace defaults as
-controls. Select alternatives with matched tasks and continuation tests;
-responsiveness under random drives or one tiny teaching assay cannot establish
-generally better defaults. The [recall instrument](benchmarks/recall/README.md)
-and [acquisition microscope](benchmarks/acquisition/README.md) have distinct
-protocols. Preserve their measured settings, failed attempts and source identity.
+The resting bias that the acquisition and rhythm chambers apply from their frozen
+recipes (the `resting_bias` setting of release 0.84.3) is not evidence of improved
+acquisition or retention. Keep the working-trace defaults as controls. Select
+alternatives with matched tasks and continuation tests; responsiveness under random
+drives or one tiny teaching assay cannot establish generally better defaults. The
+[recall instrument](benchmarks/recall/README.md) and
+[acquisition microscope](benchmarks/acquisition/README.md) have distinct protocols.
+Preserve their measured settings, failed attempts and source identity.
 
 `step` receives a current observation and the preceding executed action's actual
 outcome. `teacher` labels the current observation. Preserve stream identity,
