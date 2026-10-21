@@ -522,7 +522,7 @@ integrates no learned model of the world's consequences.
 ### Reset and save
 
 `reset(*, keep=())` starts every stream afresh. It clears activity, eligibility, any
-pending action, reward centering, the working trace, the efference copy, the heard history
+pending action, the working trace, the efference copy, the heard history
 and the episodic context, plus `last_learning`, `last_settlement` and `last_arousal`. It
 keeps parameters and associative records; recall slots survive only with
 `keep=("slots",)` ([recall](memory.md#the-recall-memory-in-full)). Arousal starts calm with its references cleared
@@ -558,8 +558,8 @@ brain.save("continuing-brain.npz")
 resumed = Brain.load("continuing-brain.npz")
 ```
 
-A save carries parameters, critic, optimizers, random state, every trace and memory,
-arousal, an action awaiting feedback and what a waiting stream has sensed; load
+A save carries parameters, critic, the learner's optimizer, random state, every trace and
+memory, arousal, an action awaiting feedback and what a waiting stream has sensed; load
 validates them ([formats](api.md#brain-cadence)). Resume the same rows, supply the
 pending outcome once and save the environment separately.
 

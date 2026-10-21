@@ -53,8 +53,8 @@ On a device backend `settle_batch` returns a state that stays resident (`BrainSt
 Blocked graphs compute the learning contrast there too (`NeuralGraph.contrast_on_device`,
 `None` unless both states are resident). Blocked torch `Learner` updates, momentum and RMS
 normalization stay on the device; MLX hands the contrast to a host optimizer, and sparse
-contrasts use bounded host chunks. `ActorCritic` updates on the device only with its own
-`momentum` and `normalize` both zero; its critic and dopamine use host arrays. Reading
+contrasts use bounded host chunks. `ActorCritic` updates on the device when both of its
+phases settled there; its critic and dopamine use host arrays. Reading
 parameters or saving a checkpoint copies arrays back. Parameter edits and the `learner.brain`
 rule are in [contracts](contracts.md).
 

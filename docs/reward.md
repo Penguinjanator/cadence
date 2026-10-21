@@ -121,7 +121,7 @@ of lessons alone.
 
 Drives are nonempty finite `(batch, neurons)` arrays, rewards and bootstrap values
 `(batch,)`, `done` boolean; validation precedes every update. Each row keeps its own
-potential, adaptation, eligibility and centering. `done` rows restart from rest and
+potential, adaptation and eligibility. `done` rows restart from rest and
 bootstrap from `bootstrap`, or zero without it. A time limit is not terminal: mark the
 truncated row `done` and pass its value, `value_of(next_drive)`, as `bootstrap`. `learn`
 settles the next state before the update, and the next `act` settles again from it under
@@ -131,7 +131,7 @@ parameters): two free and two nudged phases per decision.
 `act(..., greedy=True)` is an evaluation read: it keeps no eligibility for its action and
 cannot be followed by `learn`. Another `act` replaces the pending action. Finish a reward
 transition before changing learner parameters elsewhere, or call `reset`, which clears
-stream state, traces and centering and keeps the critic, actor and optimizer history.
+stream state and traces and keeps the critic, the actor and the learner's optimizer history.
 `Brain.save/load` carries the full state; `Learner.save` does not save a separately built
 `ActorCritic`. A shaped reward keeps the task's optimum only in the discounted form
 `gamma * Phi(next) - Phi(now)` with terminal handling.
