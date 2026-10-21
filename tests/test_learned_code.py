@@ -250,18 +250,21 @@ def region_digest(brain: cd.Brain, acts: list[int], path: Path) -> str:
 # recording; since an imagined branch leaves the region's work counts as they were, the
 # second founder's digest was re-recorded after its acts and every array matched, its work
 # short of the six settles of the three imagined moments that ends its life.
+# Both were re-recorded once more under the 0.85 defaults (an unset lateral at 0.0, the
+# scaled need at 0.1), after the two lives with those settings given at their earlier values
+# reproduced the earlier digests exactly.
 REGION_FOUNDERS: dict[str, dict] = {
     "region": {
         "build": (16, 8, {"modules": (24,), "seed": 5, "learned_code": 16, "recall": True}),
         "life": taught,
-        "digest": "16b54a0206813a385519c5237aec7242544dfcb869947aa5c17628e4ea6b6d0e",
+        "digest": "8ef21e03bb9d987b50ee7ada774f3b391a75ea47e7c8b76599b3b48504b8fbae",
     },
     "region_fields": {
         "build": (16, 4, {"modules": (24,), "seed": 6, "learned_code": 16,
                           "learned_code_fields": (8, 8), "memory_choice": True,
                           "arousal": True}),
         "life": lived,
-        "digest": "c77cd58b26f0f5474a5bc00df3cb87a72500e49b575e99137dde136275a86359",
+        "digest": "5c531c395ecaaec07f69c853d13a7c6477fe2a53a65bf80ca20bb84f5d97481c",
     },
 }
 
