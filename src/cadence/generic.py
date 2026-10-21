@@ -822,6 +822,8 @@ def _validate_recall_state(
     for name in Recall.RETIRED:
         if name in recalled:
             raise ValueError(_removed_recall(name, recalled[name]))
+    if recalled["recency"] is None:
+        raise ValueError(_removed_recall("recency", None))
     settings = {name: Recall.setting(name, recalled[name]) for name in names}
     # an option is saved where it differs from its founder, and takes its founder where absent
     settings.update({name: Recall.setting(name, recalled[name]) for name in Recall.OPTIONS
@@ -901,9 +903,10 @@ def _validate_recall_state(
 
 def _removed_recall(name: str, value: Any) -> str:
     """The refusal of a checkpoint saved under a recall setting this version removed."""
+    setting = "recency=None" if name == "recency" else f"{name}={value!r}"
     return (
-        f"this checkpoint was saved with the recall memory's {name}={value!r}, which this "
-        "version removed; load it with cadence-net 0.84.3"
+        f"this checkpoint was saved with the recall memory's {setting}, which this version "
+        "removed; load it with cadence-net 0.84.3"
     )
 
 
@@ -1611,10 +1614,7 @@ class Brain:
         memory, each a gene described and saved only where it differs from its founder and a
         runtime one but the key and the window: ``recall_address_step="toward"`` steps the
         address by the named keys less the mixture it attended to, in place of the founder's
-        ``"lms"`` step toward the named keys; ``recall_recency=None`` charges a slot's age
-        ``r * log(1 + age)``, ``r = recall_heard^2 / recall_temperature / log(1 +
-        recall_capacity)``, so an unmatched old slot's weight falls as a power of its age;
-        a number ``recall_null`` adds a null slot of logit
+        ``"lms"`` step toward the named keys; a number ``recall_null`` adds a null slot of logit
         ``recall_null / recall_temperature`` that reads nothing; and
         ``recall_address_reward`` above zero lets reward train the address map, each sampled
         act keeping the step its lesson would take as the map's eligibility and each outcome
@@ -1634,8 +1634,8 @@ class Brain:
         ``recall_window`` and ``recall_window_decay`` are construction
         settings; the keys, the event values and the address map follow the observation code's
         width, a brain's ``code`` among the ways to bound it. The settings of 0.84.3 that this
-        version removed (``recall_write``, ``recall_key``, ``recall_episodes``) are refused by
-        name; the CHANGELOG gives each one's reading.
+        version removed (``recall_write``, ``recall_key``, ``recall_episodes`` and
+        ``recall_recency=None``) are refused by name; the CHANGELOG gives each one's reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the

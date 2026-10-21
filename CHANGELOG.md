@@ -16,8 +16,10 @@
   carry the same information. `recall_episodes="keep"`, a stream's slots kept across an ended
   episode, lowered success by .108 on a crafting chain whose observation names the stage: an
   ended episode empties the slots, as the founder did, and `Brain.reset(keep_memory=True)`
-  keeps them across a reset as before (`Recall.end` stays for it). The binding instrument
-  keeps its arms (`benchmarks/binding/index_read.py`) with their protocol.
+  keeps them across a reset as before (`Recall.end` stays for it). `recall_recency=None`,
+  the power-law age charge `r * log(1 + age)` (`Recall.charges`), failed its confirmation on
+  the camera task's founders; a number keeps the linear charge `recency * age`. The binding
+  instrument keeps its arms (`benchmarks/binding/index_read.py`) with their protocol.
 - `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
   its settlement and repair-network version in Cadence (the embedding as a learned code of
   meaning, the residual stream as the settling cortex, attention as a recall memory over the

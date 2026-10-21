@@ -1373,80 +1373,6 @@ def test_the_address_step_is_described_saved_retuned_and_refused_when_unknown(tm
         cd.Brain.load(tmp_path / "bad.npz")
 
 
-# -- the recency default: a power-law charge
-
-
-def test_the_recency_default_charges_a_power_of_each_slots_age():
-    """With ``recency=None`` a slot's logit is lowered by ``r log(1 + age)``, ``r = heard^2 /
-    temperature / log(1 + capacity)``. With unit keys a fully matched target of age
-    ``capacity - 1`` keeps a larger weight than a fresh unrelated slot, and of two equal
-    matches at ages 1 and 3 the younger holds the larger weight by the factor ``2^r``."""
-    capacity, heard, temperature = 8, 1.5, 0.5
-    recall = bare(width=capacity, recency=None, capacity=capacity, heard=heard,
-                  temperature=temperature)
-    exponent = heard**2 / temperature / np.log(1 + capacity)
-    events = np.eye(capacity)
-    for event in events:  # the target first, then unrelated moments: the capacity's slots
-        recall._observe(heard * event[None], event[None])
-    np.testing.assert_array_equal(recall.ages(), np.arange(capacity - 1, -1, -1))
-    np.testing.assert_allclose(recall.charges(), exponent * np.log1p(recall.ages()), rtol=1e-15)
-    target = recall._moment(events[[0]])  # the target's own event, a full match
-    p = recall.weights(target.address)[0]
-    logits = heard**2 * events[0] / temperature - exponent * np.log1p(recall.ages())
-    np.testing.assert_allclose(p, softmax(logits), rtol=1e-12)
-    assert p[0] > p[-1]  # the oldest slot, matched, over the fresh unrelated one
-    # two equal matches at ages 1 and 3
-    recall = bare(width=4, recency=None, capacity=capacity, heard=heard, temperature=temperature)
-    for event in np.eye(4)[[0, 1, 0, 2]]:
-        recall._observe(heard * event[None], event[None])
-    p = recall.weights(recall._moment(np.eye(4)[[0]]).address)[0]
-    np.testing.assert_allclose(p[2] / p[0], 2.0**exponent, rtol=1e-12)
-    # a numeric recency keeps the linear charge
-    linear = bare(width=4, recency=0.25, capacity=capacity)
-    for event in np.eye(4):
-        linear._observe(event[None], event[None])
-    np.testing.assert_array_equal(linear.charges(), 0.25 * linear.ages())
-
-
-def test_the_recency_default_lives_in_a_brain_and_survives_retune_and_checkpoints(tmp_path):
-    brain = composed(seed=5, arousal=True, recall_recency=None)
-    assert brain.recall.recency is None
-    assert brain.describe()["genes"]["recall_recency"] is None
-    for x in (FACT, GO, CUE):
-        brain.act(x, greedy=True)
-    brain.stimulus(NAME)
-    recall = brain.recall
-    exponent = 1.0 / 0.25 / np.log(65)
-    logits = np.einsum("bk,bmk->bm", NAME, recall.keys) / 0.25 - exponent * np.log1p(
-        recall.ages()
-    )
-    np.testing.assert_allclose(recall.attended, softmax(logits), rtol=1e-12)
-    for t in range(3):
-        brain.step(STREAM[t % 4], teacher=[t % 2])
-    brain.live(GO)
-    twin = cd.Brain.load(brain.save(tmp_path / "power"))
-    assert twin.recall.recency is None and twin.describe() == brain.describe()
-    for t in range(3):
-        x = STREAM[(t + 1) % 4]
-        np.testing.assert_array_equal(brain.live(x, reward=[1.0]), twin.live(x, reward=[1.0]))
-    assert_same_memory(brain.recall, twin.recall)
-    brain.retune(recall_recency=0.5)
-    assert brain.recall.recency == 0.5
-    brain.retune(recall_recency=None)
-    assert brain.recall.recency is None
-    with pytest.raises(ValueError):
-        brain.retune(recall_recency=-1.0)
-
-
-@pytest.mark.parametrize(
-    "extra",
-    [{"recency": None}, {"recency": None, "address_step": "toward"}],
-    ids=["power", "power_toward"],
-)
-def test_the_recency_default_is_the_instruments_moment_for_moment(extra):
-    assert _option_lives(extra) > 0
-
-
 # -- a null slot
 
 
@@ -1507,8 +1433,8 @@ def test_the_address_lesson_reads_the_slots_alone_beside_a_null_slot(form):
 
 @pytest.mark.parametrize(
     "extra",
-    [{"null": 0.5}, {"null": -1.0, "address_step": "toward", "recency": None}],
-    ids=["null", "null_toward_power"],
+    [{"null": 0.5}, {"null": -1.0, "address_step": "toward"}],
+    ids=["null", "null_toward"],
 )
 def test_the_null_slot_is_the_instruments_moment_for_moment(extra):
     assert _option_lives(extra) > 0
@@ -1517,8 +1443,7 @@ def test_the_null_slot_is_the_instruments_moment_for_moment(extra):
 def test_the_options_survive_a_checkpoint_and_a_saved_memory_without_one_takes_its_founder(
     tmp_path,
 ):
-    options = {"recall_address_step": "toward", "recall_null": 0.5, "recall_recency": None,
-               "recall_address": 0.2}
+    options = {"recall_address_step": "toward", "recall_null": 0.5, "recall_address": 0.2}
     brain = composed(seed=5, arousal=cd.ArousalConfig(youth=7, threshold=10.0),
                      learning_surprise=True, **options)
     for t in range(6):
@@ -1532,7 +1457,7 @@ def test_the_options_survive_a_checkpoint_and_a_saved_memory_without_one_takes_i
         meta = json.loads(str(data["generic"]))
     assert meta["format"] == "cadence-generic/8" and meta["recall"] == brain.recall.to_dict()
     assert {k: meta["recall"][k] for k in ("address_step", "null", "recency")} == {
-        "address_step": "toward", "null": 0.5, "recency": None,
+        "address_step": "toward", "null": 0.5, "recency": 0.25,
     }
     twin = cd.Brain.load(path)
     assert twin.describe() == brain.describe()
@@ -2042,24 +1967,36 @@ REMOVED = {
     "recall_write": ("aroused", "always"),
     "recall_key": ("predecessor", "event"),
     "recall_episodes": ("keep", "forget"),
+    "recall_recency": (None, 0.25),
 }
 
 
 @pytest.mark.parametrize("name", sorted(REMOVED))
 def test_a_removed_setting_is_refused_at_compose_and_retune_naming_the_release(name):
-    """Each setting 0.84.3 took and this version removed is refused by name, at any value,
-    with a message that names it as removed and names the release that takes it; the
-    description carries none of the removed names."""
+    """Each setting 0.84.3 took and this version removed is refused with a message that names
+    it as removed and names the release that takes it: a removed name at any value, and
+    ``recall_recency=None``, the power-law charge, at that value alone (a number stays the
+    linear charge). The description carries none of the removed names."""
     value, founder = REMOVED[name]
     message = rf"{name}.*removed in this version.*cadence-net 0\.84\.3"
     brain = composed()
-    for given in (value, founder):
+    with pytest.raises(ValueError, match=message):
+        composed(**{name: value})
+    with pytest.raises(ValueError, match=message):
+        brain.retune(**{name: value})
+    if name == "recall_recency":
+        assert composed(recall_recency=founder).recall.recency == founder
+        brain.retune(recall_recency=0.5)
+        assert brain.recall.recency == 0.5 and brain.describe()["genes"]["recall_recency"] == 0.5
+        with pytest.raises(ValueError, match="power-law"):
+            bare(width=4, recency=None)
+    else:
         with pytest.raises(ValueError, match=message):
-            composed(**{name: given})
+            composed(**{name: founder})
         with pytest.raises(ValueError, match=message):
-            brain.retune(**{name: given})
-    assert name not in brain.describe()["genes"]
-    assert name[len("recall_"):] in cd.Recall.RETIRED
+            brain.retune(**{name: founder})
+        assert name not in brain.describe()["genes"]
+        assert name[len("recall_"):] in cd.Recall.RETIRED
 
 
 @pytest.mark.parametrize("name", sorted(REMOVED))

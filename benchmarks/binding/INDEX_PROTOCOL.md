@@ -335,3 +335,5 @@ arm and probe above, with their receipts, as the record of those readings:
 
 - `write="aroused"` (the `repeat` probe's arm; the library's `recall_write="aroused"`):
   neutral on every binding chamber.
+- `recency=None` (the `horizon` and `improved` arms; the library's `recall_recency=None`):
+  the power-law charge failed its confirmation on the camera task's founders.

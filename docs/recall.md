@@ -39,18 +39,14 @@ p = softmax(q . K / temperature - recency * age)
 `x` is the observation as the memory hears it, `h` the fading history of earlier events,
 `c` the settled association activity of the moment before, `K` the stored keys, and `W_x`,
 `W_c`, `b` a learned map that starts at zero, so before any lesson the address is the key
-and a name finds the moment it was stated in. `p` is kept in `brain.recall.attended`;
-`brain.recall.charges()` gives each slot's age charge. The `recall` region is driven at
+and a name finds the moment it was stated in. `p` is kept in `brain.recall.attended`. The
+`recall` region is driven at
 `amplitude * sum p V` and the `next` region at `amplitude * sum p N`, held through the settle as a sensory drive is: the settle answers
 on the mixture the address chose and cannot revise the choice. Both regions reach the
 association region through one-way plastic synapses of initial magnitude `recall_scale`.
 
-`recall_recency=None` charges age as `r * log(1 + age)`, `r = heard^2 / temperature /
-log(1 + capacity)`, so an unmatched old slot's weight falls as `(1 + age)^-r` and a full
-match of a unit-length key outweighs every age the capacity holds. The linear charge suits
-codes whose queries match in part; the power law suits keys that match fully over long
-spans. A number `recall_null` adds a slot of logit `null / temperature` that reads nothing,
-so a moment that matches no slot recalls little.
+A number `recall_null` adds a slot of logit `null / temperature` that reads nothing, so a
+moment that matches no slot recalls little.
 
 ## How it writes and how the address learns
 
@@ -113,7 +109,7 @@ map.
 | `recall_amplitude` | `3.0` | retune | Drive of a slot that holds the whole weight |
 | `recall_temperature` | `0.25` | retune | Softmax temperature over the slots |
 | `recall_heard` | `1.0` | retune | Weight of the present event in its key and address |
-| `recall_recency` | `0.25` | retune | Logit cost per moment of age; `None` gives the power-law charge |
+| `recall_recency` | `0.25` | retune | Logit cost per moment of age |
 | `recall_address` | `0.01` | retune | Address lesson rate, bounded per row by `1 / \|z\|^2`; `0.0` freezes the map |
 | `recall_address_temperature` | `0.1` | retune | Temperature of the slots' scores in the address lesson |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` | retune | Fading history of earlier events in a key, and its retention per moment in [0, 1) |
@@ -133,8 +129,7 @@ The [API reference](api.md#recall-memory-genes) gives the `Recall` class signatu
 ```python
 optioned = Brain.compose(
     inputs=4, actions=2, modules=(16,), seed=1, recall=True,
-    recall_address_step="toward", recall_recency=None, recall_null=0.0,
-    recall_address_reward=0.1,
+    recall_address_step="toward", recall_null=0.0, recall_address_reward=0.1,
 )
 other = np.array([[0.0, 1.0, 0.0, 0.0]])
 optioned.act(fact)                               # every act writes a slot, sampled or greedy
@@ -162,6 +157,9 @@ Settings of 0.84.3 that left in this version, each refused by name with a messag
 - `recall_episodes="keep"`, slots kept across an ended episode: it lowered success by .108 on
   a crafting chain whose observation names the stage; an ended episode empties the slots, and
   `reset(keep_memory=True)` keeps them across a reset as before.
+- `recall_recency=None`, the power-law age charge `r * log(1 + age)`: it failed its
+  confirmation on the camera task's founders; a number keeps the linear charge
+  `recency * age`.
 
 ## Cost
 
