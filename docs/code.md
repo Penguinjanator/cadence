@@ -30,7 +30,7 @@ other synapse is:
 
 | Table | Synapses | Role |
 | --- | --- | --- |
-| dictionary `Phi`, `inputs` by `units`, unit-length columns | one way from the sensory neurons to the code units | the bottom-up boundary: code unit `j` is driven by `Phi_j . s_sensory` |
+| dictionary `Phi`, `inputs` by `units`, unit-length columns | one way from the sensory neurons to the code units, at the read gain `1 / f(A)` (`f` the neuron's activation, `A` the model's stimulus amplitude): the region reads the sensory activation in units of one full input, `x' = s_sensory / f(A)` | the bottom-up boundary: code unit `j` is driven by `Phi_j . x'`; one input at amplitude 1 drives the unit whose column matches it by one |
 | the Gram matrix of the dictionary | every ordered pair of code units, `-(Phi_j . Phi_k)` | lateral competition: units whose columns overlap inhibit each other |
 | predictor `W`, `units` by the association width | one way from the prefrontal region, scaled by `learned_code_top_down` | the top-down boundary: the working trace's prediction of the code, `p = W s_prefrontal` |
 | thresholds `t`, one per unit | the units' biases, `-t_j` | how much drive a unit needs before it publishes |
@@ -39,11 +39,11 @@ other synapse is:
 A code unit settles under the brain's neuron model to
 
 ```text
-v_j = Phi_j . (s_sensory - Phi s) + s_j + top_down * (p_j - s_j) - t_j,    s_j = f(v_j),    p = W s_prefrontal
+v_j = Phi_j . (x' - Phi s) + s_j + top_down * (p_j - s_j) - t_j,    s_j = f(v_j),    x' = s_sensory / f(A),    p = W s_prefrontal
 ```
 
-the sparse state that reconstructs the sensory activation through the dictionary as far as
-the thresholds allow, drawn toward what the context predicts. The sensory neurons project to
+the sparse state that reconstructs the sensory activation, as read, through the dictionary
+as far as the thresholds allow, drawn toward what the context predicts. The sensory neurons project to
 the code region alone, and nothing leads back into it, so its fixed point depends on the
 observation and the working trace alone. The boundary is held fixed through every solve and
 is part of the residual that qualifies a state, as the temporal boundary of `PatchNet` is;
@@ -91,13 +91,14 @@ copy the code it reads.
 
 At every accepted moment (each `act`, `step` and `live` answer, and each moment `wait` senses)
 the region takes one step from the settled state, each row of the batch one event, with `a`
-the rectified code, `x'` the sensory activation, `z` the prefrontal activation and `p = W z`:
+the rectified code, `x'` the sensory activation as read (at the gain above), `z` the
+prefrontal activation and `p = W z`:
 
 | Table | Rule | Gene (founder) |
 | --- | --- | --- |
 | dictionary | `Phi += rate * sum_rows (x' - Phi a) a^T`, each column scaled back to unit length | `learned_code_rate` (0.125) |
 | lateral weights | recomputed from the dictionary | with the dictionary |
-| predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = min(predictor, 1 / \|z\|^2)` | `learned_code_predictor` (0.03) |
+| predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = predictor / max(\|z\|^2, predictor^2)`: a row closes the share `predictor` of its own gap whatever its context's energy (the prefrontal activation is small in the brain's units); a context fainter than `\|z\| = predictor` is counted at that energy, so no row commands a synaptic step above its gap | `learned_code_predictor` (0.03) |
 | thresholds | `t += threshold_rate * sum_rows ((a > 0) - target)`, less `threshold_rate * silence` per row whose code is silent (in context, or context-free where the place key is settled), floored at 0 and capped at the ceiling | `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1), `learned_code_threshold_max` (0.2), `learned_code_silence` (10) |
 
 The brain's graph takes the new tables at once. While the code fits, the residuals are small
@@ -127,11 +128,11 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code` | `None` | construction | the region, of that many units (at least 2); `None` builds nothing |
 | `learned_code_top_down` | 4.0 | retune | weight of the prediction's drive on the code units |
 | `learned_code_rate` | 0.125 | retune | the dictionary's Hebbian rate per row and moment |
-| `learned_code_predictor` | 0.03 | retune | the predictor's delta rate per row, bounded by `1 / \|z\|^2` |
+| `learned_code_predictor` | 0.03 | retune | the share of a row's prediction gap the predictor closes per event, in [0, 1], normalized by the context's energy |
 | `learned_code_threshold` | 0.1 | construction | every unit's initial threshold |
 | `learned_code_threshold_rate` | 0.001 | retune | the homeostatic rate per row |
 | `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
-| `learned_code_threshold_max` | 0.2 | retune | the ceiling of every threshold, at least the initial threshold, in the brain's drive units (one input at amplitude 1 drives a unit by at most .46); a unit the world drives more often than the target is made harder to drive only up to it, so the observation alone can still fire it; a lower ceiling clips the thresholds at once |
+| `learned_code_threshold_max` | 0.2 | retune | the ceiling of every threshold, at least the initial threshold, in the units the region reads (one input at amplitude 1 drives the unit whose column matches it by one, a column shared by five inputs by .45); a unit the world drives more often than the target is made harder to drive only up to it, so the observation alone can still fire it; a lower ceiling clips the thresholds at once |
 | `learned_code_silence` | 10 | retune | how many under-active rows a silent row counts as: a row whose code is silent lowers every threshold by `threshold_rate * silence`, so no observation is left without a unit; 0 leaves silence to the target alone |
 | `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
 

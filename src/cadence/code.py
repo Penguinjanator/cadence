@@ -6,7 +6,11 @@ read in every sweep as every other synapse is, and the region settles with the r
 brain under the brain's neuron model:
 
 * the dictionary ``Phi`` (``inputs`` by ``units``, unit-length columns) is the one-way
-  synapses from the sensory neurons: a code unit ``j`` is driven by ``Phi_j . s_sensory``;
+  synapses from the sensory neurons at the gain ``read = 1 / f(A)`` (``f`` the neuron's
+  activation, ``A`` the model's stimulus amplitude): the region reads the sensory
+  activation in units of one full input, ``x' = read * s_sensory``, so that one input at
+  amplitude 1 drives the unit whose column matches it by one, and a code unit ``j`` is
+  driven by ``Phi_j . x'``;
 * the dictionary's Gram matrix is the lateral inhibition among the code units: every ordered
   pair ``j != k`` carries ``-(Phi_j . Phi_k)``, so units whose columns overlap compete;
 * the predictor ``W`` (``units`` by the prefrontal width) is the one-way synapses from the
@@ -18,9 +22,10 @@ brain under the brain's neuron model:
   is the pull ``top_down * (p_j - s_j)`` toward the prediction, the gradient of
   ``top_down / 2 * |s - p|^2``.
 
-A code unit therefore settles to ``v_j = Phi_j . (s_sensory - Phi s) + s_j + top_down (p_j
-- s_j) - t_j`` with ``s_j = f(v_j)`` the neuron's rectified sigmoid: the sparse state that
-reconstructs the sensory activation through the dictionary as far as the thresholds allow,
+A code unit therefore settles to ``v_j = Phi_j . (x' - Phi s) + s_j + top_down (p_j -
+s_j) - t_j`` with ``s_j = f(v_j)`` the neuron's rectified sigmoid: the sparse state that
+reconstructs the sensory activation, as read, through the dictionary as far as the
+thresholds allow,
 drawn toward what the context predicts. No synapse leads back into the region, so its
 fixed point depends on the observation and the trace alone; the brain settles it first,
 with the same solver and tolerance, addresses its memories on it, and settles the whole
@@ -28,14 +33,17 @@ graph warm from it.
 
 Learning is local to each boundary and happens at every accepted moment, each row of the
 batch one event, from the settled state alone (``a = max(s, 0)``, the rectified code;
-``x'`` the sensory activation; ``z`` the prefrontal activation; ``p = W z``):
+``x'`` the sensory activation as read; ``z`` the prefrontal activation; ``p = W z``):
 
 * the dictionary, Hebbian on the bottom-up residual, ``Phi += rate * sum_rows (x' - Phi a)
   a^T``, each column then scaled back to unit length (a unit's own synaptic scaling);
 * the lateral weights, recomputed from the dictionary;
-* the predictor, the delta rule on the top-down residual, ``W += sum_rows r_row (a - p)
-  z^T`` with ``r_row = min(predictor, 1 / |z|^2)``, the row's rate bounded by its own
-  input energy;
+* the predictor, the delta rule on the top-down residual normalized by the context's
+  energy, ``W += sum_rows r_row (a - p) z^T`` with ``r_row = predictor / max(|z|^2,
+  predictor^2)``: a row closes the share ``predictor`` of its own gap whatever the
+  magnitude of its context (the prefrontal activation is small in the brain's units), a
+  context fainter than ``|z| = predictor`` counted at that energy, so that no row commands a
+  synaptic step above its gap;
 * the thresholds, homeostatic, ``t += threshold_rate * sum_rows ((a > 0) - target)``,
   floored at zero and capped at ``threshold_max``: a unit the world drives more often than
   the target share is made harder to drive only up to the ceiling, so the observation alone
@@ -96,7 +104,9 @@ class LearnedCode:
     """The learned code region's tables, genes, sub-network and rules; see the module note.
 
     ``inputs`` is the sensory width, ``units`` the region's, ``context`` the prefrontal
-    width; ``model`` the brain's neuron model, under which the region settles. The genes are
+    width; ``model`` the brain's neuron model, under which the region settles, and from
+    which the read gain follows (``read``, one over the activation one input at amplitude
+    1 gives a sensory neuron at rest). The genes are
     ``top_down`` (the prediction's weight on the units), ``rate`` (the dictionary's Hebbian
     rate per row), ``predictor`` (the delta rate per row), ``threshold`` (the initial
     threshold of every unit, a construction setting), ``threshold_rate`` and ``target`` (the
@@ -121,6 +131,7 @@ class LearnedCode:
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
+    read: float = field(init=False)
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target",
@@ -151,8 +162,10 @@ class LearnedCode:
     @staticmethod
     def setting(name: str, value: Any) -> Any:
         """One gene, validated and converted."""
-        if name in ("top_down", "rate", "predictor", "threshold", "threshold_rate", "silence"):
+        if name in ("top_down", "rate", "threshold", "threshold_rate", "silence"):
             return real(name, value, low=0)
+        if name == "predictor":
+            return real(name, value, low=0, high=1)
         if name == "threshold_max":
             number = real(name, value, low=0)
             if number <= 0:
@@ -186,6 +199,13 @@ class LearnedCode:
             setattr(self, name, self.setting(name, getattr(self, name)))
         if self.threshold > self.threshold_max:
             raise ValueError("threshold_max must be at least the initial threshold")
+        amplitude = np.array([self.model.stimulus_amplitude])
+        full = float(np.asarray(self.model.activation(amplitude)).item())
+        if not full > 0.0:
+            raise ValueError(
+                "a learned code needs a stimulus amplitude that drives a sensory neuron"
+            )
+        self.read = 1.0 / full
         rng = np.random.default_rng(np.random.SeedSequence([self.seed, _CODE_STREAM]))
         self.dictionary = _unit_columns(rng.standard_normal((self.inputs, self.units)))
         self.weights = np.zeros((self.units, self.context))
@@ -308,9 +328,9 @@ class LearnedCode:
 
     def stimulus(self, sensory: np.ndarray, context: np.ndarray | None) -> np.ndarray:
         """The drive of the code units, ``(batch, units)``: the dictionary's read of the
-        sensory activation plus ``top_down`` times the predictor's read of the prefrontal
-        activation; without a context the prediction is zero."""
-        drive = np.asarray(sensory, dtype=float) @ self.dictionary
+        sensory activation at the region's gain plus ``top_down`` times the predictor's read
+        of the prefrontal activation; without a context the prediction is zero."""
+        drive = (self.read * np.asarray(sensory, dtype=float)) @ self.dictionary
         if context is not None and self.top_down:
             drive = drive + self.top_down * self.prediction(context)
         return np.asarray(drive)
@@ -349,9 +369,10 @@ class LearnedCode:
     def residuals(
         self, sensory: np.ndarray, activation: np.ndarray, context: np.ndarray | None
     ) -> dict[str, np.ndarray]:
-        """Per row: the bottom-up residual's squared norm over the sensory activation's,
-        and the top-down residual's squared norm (zero without a context)."""
-        x = np.atleast_2d(np.asarray(sensory, dtype=float))
+        """Per row: the bottom-up residual's squared norm over the sensory activation's
+        (both as read), and the top-down residual's squared norm (zero without a
+        context)."""
+        x = self.read * np.atleast_2d(np.asarray(sensory, dtype=float))
         a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
         rx = x - a @ self.dictionary.T
         energy = np.maximum(np.sum(x * x, axis=1), 1e-12)
@@ -369,7 +390,7 @@ class LearnedCode:
         moment, each row an event; returns whether any table moved (every rate zero, or an
         empty batch, moves nothing). ``place`` is the moment's context-free code where one
         was settled, read for its silence alone. The sub-network takes the new tables."""
-        x = np.atleast_2d(np.asarray(sensory, dtype=float))
+        x = self.read * np.atleast_2d(np.asarray(sensory, dtype=float))
         a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
         n = len(x)
         if not n or not (self.rate or self.predictor or self.threshold_rate):
@@ -391,10 +412,11 @@ class LearnedCode:
                 moved = True
         if self.predictor and context is not None:
             z = np.atleast_2d(np.asarray(context, dtype=float))
-            with np.errstate(divide="ignore"):
-                bound = np.minimum(self.predictor, 1.0 / np.sum(z * z, axis=1))
+            # the share of the row's gap, normalized by its context's energy, floored at
+            # predictor^2; a silent context (z = 0) moves nothing
+            rate = self.predictor / np.maximum(np.sum(z * z, axis=1), self.predictor**2)
             error = a - self.prediction(z)
-            weights = self.weights + (error * bound[:, None]).T @ z
+            weights = self.weights + (error * rate[:, None]).T @ z
             if not np.isfinite(weights).all():
                 raise ValueError("the learned code's predictor must remain finite")
             self.weights = weights

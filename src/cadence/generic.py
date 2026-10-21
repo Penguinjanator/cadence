@@ -1654,13 +1654,14 @@ class Brain:
         return out
 
     def _installed(self, graph: NeuralGraph) -> NeuralGraph:
-        """``graph`` with the learned code's tables as its synapses and biases: the dictionary,
-        the lateral weights, the predictor at ``top_down`` and the thresholds."""
+        """``graph`` with the learned code's tables as its synapses and biases: the dictionary
+        at the region's read gain, the lateral weights, the predictor at ``top_down`` and the
+        thresholds."""
         code = self.learned_code
         assert code is not None
         efficacy, bias = graph.efficacy.copy(), graph.bias.copy()
         synapses, i, j = self._code_synapses["dictionary"]
-        efficacy[synapses] = code.dictionary[i, j]
+        efficacy[synapses] = code.read * code.dictionary[i, j]
         synapses, j, k = self._code_synapses["lateral"]
         efficacy[synapses] = code.lateral()[j, k]
         synapses, i, j = self._code_synapses["predictor"]

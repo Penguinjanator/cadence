@@ -307,7 +307,9 @@ LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, pre
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
 and held as `brain.learned_code`: `dictionary` `(inputs, units)` with unit-length columns,
-`weights` `(units, context)` the predictor, `thresholds` `(units,)`, the lateral `connectome`
+`weights` `(units, context)` the predictor, `thresholds` `(units,)`, `read` (the gain the
+sensory activation is read at, one over the activation one input at amplitude 1 gives, from
+the model), the lateral `connectome`
 and `graph` of the units (the sub-network a moment's code phase settles). `lateral()`,
 `lateral_efficacy()`, `gram()`; `stimulus(sensory, context)`, `prediction(context)`,
 `settle(stimulus, warm, *, budget, tolerance, damping=3) -> Equilibrium`,
@@ -315,8 +317,8 @@ and `graph` of the units (the sub-network a moment's code phase settles). `later
 context)`; `standing() -> Nudge | None` (the region's quadratic boundary toward zero at gain
 `top_down` over its units); `stability(v) -> int` (the halvings of the step the settled
 code's competition is stable under) and `restep(halvings)`, `halvings`; `learn(sensory,
-activation, context)
--> bool` (one step of every table from a settled moment, each row an event), `install()`,
+activation, context, place=None) -> bool` (one step of every table from a settled moment,
+each row an event; `place` the context-free code, read for its silence), `install()`,
 `take(dictionary, weights, thresholds)`;
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
 capped settles, updates), `last` (the latest phase's sensory activation, context, activation

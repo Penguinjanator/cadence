@@ -117,8 +117,10 @@ TOP_DOWN = {"learned": 4.0, "learned_g2": 2.0, "bottom_up": 0.0, "shuffled": 4.0
 CODE_ARMS = tuple(TOP_DOWN)
 LIBRARY_ARMS = ("library", "library_bottom_up")  # the library's region, inside the brain's settle
 # the library region's genes: the prototype's rates per moment are means over the BATCH
-# streams, so the per-row rates of the library give the same effective step
-LIBRARY = {"rate": 2.0 / BATCH, "predictor": 0.5 / BATCH, "threshold": 0.1,
+# streams, so the per-row rates of the library give the same effective step; the
+# prototype's predictor closed its whole gap per update on a unit-length context with a
+# bias input (rate 0.5 at energy 2), so the library's share per row is 1 / BATCH
+LIBRARY = {"rate": 2.0 / BATCH, "predictor": 1.0 / BATCH, "threshold": 0.1,
            "threshold_rate": 0.01 / BATCH, "target": 0.1}
 SCHEDULE_SEED, HOLDOUT_SEED, PANEL_SEED, GRU_SEED, UNIFORM_SEED, CHANGE_SEED, SHUFFLE_SEED = (
     51101, 51102, 51103, 51104, 51105, 51106, 51107,

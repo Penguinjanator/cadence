@@ -5,8 +5,9 @@
 - `Brain.compose(..., learned_code=units)` (opt-in) adds a `code` region of the brain's own
   neurons between the sensory region and the first module: a learned sparse code of the
   observation, settled with the rest of the brain under the brain's neuron model, with the
-  dictionary as its synapses from the sensory neurons, the dictionary's Gram matrix as its
-  lateral inhibition, a predictor from the prefrontal region (the working trace) as its
+  dictionary as its synapses from the sensory neurons (at the gain that reads the sensory
+  activation in units of one full input), the dictionary's Gram matrix as its lateral
+  inhibition, a predictor from the prefrontal region (the working trace) as its
   top-down boundary, each unit's threshold as its bias, and a standing quadratic boundary
   (`Learner.standing`, the solver's anchor toward zero at gain `learned_code_top_down` on
   the code units, carried by every phase) that with the predictor's drive is the pull
@@ -19,9 +20,10 @@
   with the step budgets scaled to keep each phase's time), so a dictionary whose columns
   come to overlap strongly settles instead of oscillating under the synchronous sweep. The
   region learns at every accepted moment by local rules
-  (Hebbian on the reconstruction residual, the delta rule on the prediction's residual,
-  homeostatic thresholds), its genes `learned_code_top_down` (4.0), `learned_code_rate`
-  (0.125), `learned_code_predictor` (0.03), `learned_code_threshold` (0.1),
+  (Hebbian on the reconstruction residual, the delta rule on the prediction's residual
+  normalized by the context's energy, homeostatic thresholds), its genes
+  `learned_code_top_down` (4.0), `learned_code_rate` (0.125), `learned_code_predictor`
+  (0.03, the share of a row's gap per event), `learned_code_threshold` (0.1),
   `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1),
   `learned_code_threshold_max` (0.2, the ceiling that keeps a unit the world drives often
   within reach of the observation alone), `learned_code_silence` (10, a silent row lowers

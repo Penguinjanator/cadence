@@ -267,7 +267,10 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
     # the tables are the synapses: the dictionary, the Gram as inhibition, the predictor
     efficacy = brain.brain.efficacy
     synapses, i, j = groups["dictionary"]
-    np.testing.assert_array_equal(efficacy[synapses], code.dictionary[i, j])
+    np.testing.assert_array_equal(efficacy[synapses], code.read * code.dictionary[i, j])
+    # the read gain: one input at amplitude 1 drives the unit whose column matches it by one
+    model = brain.brain.neuron_model
+    assert np.isclose(code.read * model.activation(np.array([model.stimulus_amplitude])), 1.0)
     synapses, j, k = groups["lateral"]
     np.testing.assert_allclose(efficacy[synapses], -(code.dictionary[:, j] * code.dictionary[:, k]).sum(0))
     synapses, i, j = groups["predictor"]
@@ -410,17 +413,19 @@ def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_t
     a = np.maximum(last["activation"], 0.0)
     active = (a > 0).any(axis=0)
     # the dictionary moved on the residual, in the columns of active units alone
-    residual = last["sensory"] - a @ before["dictionary"].T
+    residual = code.read * last["sensory"] - a @ before["dictionary"].T
     expected = before["dictionary"] + code.rate * (residual.T @ a)
     expected /= np.linalg.norm(expected, axis=0, keepdims=True)
-    np.testing.assert_allclose(code.dictionary, expected, atol=1e-12)
+    # the step reads the sensory activation the settle holds, within the solver's tolerance
+    # of its fixed point under a halved step
+    np.testing.assert_allclose(code.dictionary, expected, atol=1e-6)
     np.testing.assert_array_equal(code.dictionary[:, ~active], before["dictionary"][:, ~active])
     assert not np.array_equal(code.dictionary[:, active], before["dictionary"][:, active])
     # the predictor moved by the delta rule on the top-down residual, bounded per row
     z = last["context"]
-    bound = np.minimum(code.predictor, 1.0 / np.maximum(np.sum(z * z, axis=1), 1e-300))
+    rate = code.predictor / np.maximum(np.sum(z * z, axis=1), code.predictor**2)
     np.testing.assert_allclose(
-        code.weights, before["weights"] + ((a - z @ before["weights"].T) * bound[:, None]).T @ z,
+        code.weights, before["weights"] + ((a - z @ before["weights"].T) * rate[:, None]).T @ z,
         atol=1e-12,
     )
     # the thresholds: a unit active in more rows than the target rises, a silent one falls
@@ -432,7 +437,7 @@ def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_t
     # the graph took the tables
     efficacy = brain.brain.efficacy
     synapses, i, j = brain._code_synapses["dictionary"]
-    np.testing.assert_array_equal(efficacy[synapses], code.dictionary[i, j])
+    np.testing.assert_array_equal(efficacy[synapses], code.read * code.dictionary[i, j])
     synapses, j, k = brain._code_synapses["lateral"]
     np.testing.assert_allclose(efficacy[synapses], code.lateral()[j, k])
     synapses, i, j = brain._code_synapses["predictor"]
@@ -487,11 +492,12 @@ def test_the_key_of_a_decision_is_its_moments_code_and_the_history_hears_the_cod
     x = tokens(5)
     brain.live(x)
     first = brain.learned_code.code_of(settled_code(brain))  # (1, units)
-    np.testing.assert_allclose(brain.history.trace, 0.5 * first, atol=1e-12)
+    key = brain.recall.keys[0, 0]  # the moment's key: the phase's code in the stream's context
+    np.testing.assert_allclose(brain.history.trace, 0.5 * key[None, :], atol=1e-9)
     assert brain._lived[7] is not None
     # the keys are the phase's code; the whole settle moves the code units within tolerance
     np.testing.assert_allclose(brain._lived[7], first, atol=1e-3)
-    np.testing.assert_allclose(brain.recall.keys[0, 0], first[0], atol=1e-3)
+    np.testing.assert_allclose(key, first[0], atol=1e-3)
     brain.live(tokens(9), reward=[1.0])  # the outcome wakes the brain: recorded under the code
     assert brain.hippocampus.writes >= 1
     keyed = brain.hippocampus.recall(first)
