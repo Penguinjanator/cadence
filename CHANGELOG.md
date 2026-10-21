@@ -124,6 +124,16 @@
   composed brain, checkpoint and composed life is byte-identical. Observer populations on
   `Brain.compose(observers=...)` remain the System 2 path; `PatchNet.recursive` and the hybrid
   solver live on in release 0.84.3.
+- Move the protocol and timing instruments out of the installed package into
+  `benchmarks/instruments`: `protocol.py` (held-out facts with preconditions, the shuffled
+  control, gain selection under a sparsity cap) and `timing.py` (the latency of a decision and
+  the machine it ran on), with their tests and their guide, which keeps running in the
+  documentation test. `Protocol`, `Row`, `evaluate_predicate`, `select_gain` and `shuffled`
+  leave the top-level exports; a source checkout imports them with `benchmarks/instruments` on
+  `sys.path`. Remove `cadence.circuits` (437 lines: the region assembler, the bounded
+  `Deliberator` search with `imagine`, `ActivityMonitor` and `reflex_arc`) with its 5 test
+  files; no composed brain, benchmark or example used it, and it lives on in release 0.84.3.
+  Every composed brain, checkpoint and composed life is byte-identical.
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
