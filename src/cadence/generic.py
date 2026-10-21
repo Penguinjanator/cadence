@@ -70,7 +70,8 @@ from .stream import Efference, FastSynapses, History, PatternSeparator, Recall, 
 __all__ = ["Brain"]
 
 # The checkpoint format of a brain: one group per memory (``Brain.save``). ``Brain.load`` reads
-# it and, through 0.85.x, the formats of 0.84.3 (``cadence-generic/2`` to ``/9``).
+# it and, through 0.85.x, the earlier formats: ``cadence-generic/1`` to ``/9``, which 0.84.3
+# reads, and ``/10``, which development builds of the learned code wrote.
 BRAIN_FORMAT = "cadence-brain/1"
 # A memory's group in BRAIN_FORMAT and the prefix its arrays had in the formats of 0.84.3; the
 # episodic memory's arrays are the context store's and the stream's (``_earlier_layout``).
@@ -4089,8 +4090,9 @@ class Brain:
     ) -> Brain:
         """Resume a complete saved brain, defaulting to portable CPU inference and learning.
 
-        Reads ``cadence-brain/1`` and, through 0.85.x, the formats of 0.84.3
-        (``cadence-generic/2`` to ``/9``); a setting of 0.84.3 that this version removed loads
+        Reads ``cadence-brain/1`` and, through 0.85.x, the earlier formats:
+        ``cadence-generic/1`` to ``/9``, which 0.84.3 reads, and ``/10``, which development
+        builds of the learned code wrote. A setting of 0.84.3 that this version removed loads
         at the value whose law this version keeps and is refused otherwise, with a message
         naming 0.84.3. Keep the saved batch row identities, or call ``reset`` for new
         episodes. Cross-backend results are subject to floating-point differences.

@@ -167,8 +167,9 @@ their shape. Keep row identities fixed until `reset()`.
 | `memories/hippocampus/` | the associative store's ports, strengths, masses, consolidated records and separator |
 | `memories/episodic/` | the episodic choice (`memory_choice`): the context store (`context_memory/`), the stream's `context` and `decision`, and the replay `path/` |
 
-`Brain.load` reads it and, through 0.85.x, the formats of 0.84.3 (`cadence-generic/1` to `/9`);
-a setting of 0.84.3 that this version removed loads at the value whose law this version keeps
+`Brain.load` reads it and, through 0.85.x, the earlier formats: `cadence-generic/1` to `/9`,
+which 0.84.3 reads, and `/10`, which development builds of the learned code wrote. A setting of
+0.84.3 that this version removed loads at the value whose law this version keeps
 and is refused otherwise with a message naming 0.84.3; a file saved with a resting bias loads as
 it is, the biases it set being in the saved arrays. Record and recall key widths are checked
 against the code; code tables that do not read every ON and OFF channel twice with positive

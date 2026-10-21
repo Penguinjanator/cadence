@@ -268,10 +268,11 @@
   settings), and one group of arrays per memory: `memories/working_memory/`,
   `memories/efference/`, `memories/history/`, `memories/recall/`, `memories/hippocampus/`
   and `memories/episodic/` (the context store, the stream's context and decision, the replay
-  paths); the learned code region is the `learned_code` group. The formats
-  `cadence-generic/2` to `/10`, one number per component a brain held, are no longer
-  written; `Brain.load` reads them through 0.85.x, and the next minor release refuses them
-  with a message naming 0.84.3. The recall memory's settings that 0.84.3 always wrote
+  paths); the learned code region is the `learned_code` group. The earlier formats, one
+  number per component a brain held, are no longer written; `Brain.load` reads them through
+  0.85.x (`cadence-generic/1` to `/9`, which 0.84.3 reads, and `/10`, which development
+  builds of the learned code wrote), and the next minor release refuses them with a message
+  naming 0.84.3. The recall memory's settings that 0.84.3 always wrote
   (`value`, `context`, `context_decay` at their one value) and its empty context history
   leave the description and the checkpoint. Every array and every metadata value of a
   checkpoint is the one the earlier format held, under its new name (checked on the
