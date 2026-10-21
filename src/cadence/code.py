@@ -147,8 +147,9 @@ class LearnedCode:
     ``repair`` (the share of a row's input energy its code may leave unexplained before the
     row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
     silent unit in such a row counts as), ``place`` (what the place stores key on) and
-    ``output`` (what the module reads of the code: the activations, or the rectified code
-    at unit length as the memories key on it), ``floor`` (the norm, in units of the
+    ``output`` (what the module reads of the code: the activations, the rectified code
+    at unit length as the memories key on it, or that code at the norm of the sensory
+    activation the observation gives), ``floor`` (the norm, in units of the
     activation one full input gives its unit, below which the unit read does not raise a
     code), ``cortex`` (whether the first module reads the observation beside the code, a
     construction setting), ``scale`` (the memories' key at unit length or at the norm of the
@@ -207,10 +208,12 @@ class LearnedCode:
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
     PLACES = ("free", "context")
-    # what the module reads of the code: the units' activations as they are (``"raw"``) or
+    # what the module reads of the code: the units' activations as they are (``"raw"``),
     # the rectified code at unit length, the key the memories use (``"unit"``), the region's
-    # output gain ``1 / |a|`` per stream entered as a drive on the module from the phase
-    OUTPUTS = ("raw", "unit", "capped")
+    # output gain ``1 / |a|`` per stream entered as a drive on the module from the phase,
+    # or that code at the norm of the moment's sensory activation (``"observation"``), the
+    # loudness the observation itself drives the module with in a brain without the region
+    OUTPUTS = ("raw", "unit", "capped", "observation")
     # what the first module reads: the code in place of the observation (``"code"``), or
     # the observation as a brain without the region reads it and the code beside it
     # (``"both"``)
@@ -506,14 +509,20 @@ class LearnedCode:
             self.work["capped"] += 1
         return phase
 
-    def output_of(self, activation: np.ndarray) -> np.ndarray:
+    def output_of(
+        self, activation: np.ndarray, sensory: np.ndarray | None = None
+    ) -> np.ndarray:
         """What the first module reads of the code, ``a`` the rectified activation and
         ``n = floor * f(1)`` (``f(1)`` the activation one full input gives the unit whose
         column matches it, before its threshold): with ``output`` ``"unit"`` ``a / max(|a|,
         n)``, a code at least that strong read at unit length and a weaker one (a blank
         moment's, held up only by the prediction) as it is over ``n``; with ``"capped"`` ``a *
         min(1, n / |a|)``, the code as it is with its norm capped at one full input's, so that
-        it drives the module at most as a one-hot observation does; with ``"raw"`` ``a``."""
+        it drives the module at most as a one-hot observation does; with ``"observation"``
+        the unit read times ``|f|``, the norm of the moment's sensory activation
+        ``sensory`` per row: the code's synapses into the module are drawn at the sensory
+        projection's scale, so the module's input is as loud as the observation makes it in a
+        brain without the region, and a blank moment reads nothing; with ``"raw"`` ``a``."""
         a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
         if self.output == "raw":
             return a
@@ -522,6 +531,13 @@ class LearnedCode:
         if self.output == "capped":
             return np.asarray(a * np.minimum(1.0, least / np.where(norm > 0.0, norm, 1.0)))
         scale = np.maximum(norm, least)
+        if self.output == "observation":
+            if sensory is None:
+                raise ValueError("the observation read needs the moment's sensory activation")
+            loudness = np.linalg.norm(
+                np.atleast_2d(np.asarray(sensory, dtype=float)), axis=1, keepdims=True
+            )
+            return np.asarray(a / np.where(scale > 0.0, scale, 1.0) * loudness)
         return np.asarray(a / np.where(scale > 0.0, scale, 1.0))
 
     def code_of(self, activation: np.ndarray) -> np.ndarray:

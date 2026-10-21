@@ -1030,9 +1030,10 @@ def test_the_key_joins_the_code_to_the_observations_identity():
 
 def test_the_module_reads_the_code_at_unit_length_when_set():
     """With ``learned_code_output="unit"`` the association neurons' input from the code
-    units is the code at unit length through the forward synapses; with the founder
-    ``"raw"`` it is the activations as they are and the drive carries no such term."""
-    for output in ("unit", "raw"):
+    units is the code at unit length through the forward synapses; with ``"observation"``
+    that code at the norm of the moment's sensory activation; with ``"raw"`` it is the
+    activations as they are and the drive carries no such term."""
+    for output in ("unit", "observation", "raw"):
         brain = composed(seed=6, learned_code_output=output)
         x = tokens(3, 8)
         terms = []  # the term the moment's settle carries on the association neurons
@@ -1054,10 +1055,14 @@ def test_the_module_reads_the_code_at_unit_length_when_set():
         s = np.atleast_2d(state.activation)[:, brain.code_index]
         phase = brain.learned_code.last["activation"]  # the moment's code phase
         np.testing.assert_allclose(s, phase, atol=1e-3)  # the code units hold its fixed point
-        if output == "unit":
+        if output != "raw":
             assert terms and brain.last_settlement["qualified"]
             read = s @ weights.T + terms[0]  # the code's synaptic input plus the term
-            expected = brain.learned_code.output_of(phase) @ weights.T
+            model = brain.brain.neuron_model
+            sensory = model.activation(
+                x * model.stimulus_amplitude + brain.brain.bias[brain.sensory_index]
+            )
+            expected = brain.learned_code.output_of(phase, sensory) @ weights.T
             np.testing.assert_allclose(read, expected, atol=1e-3)
         else:  # the held code's drive alone, nothing on the association neurons
             assert all(not term.any() for term in terms)
@@ -1240,6 +1245,31 @@ def test_a_unit_below_the_active_floor_counts_as_under_active():
     plain = composed(seed=5, learned_code_active=0.0).learned_code
     plain.learn(x, a, None, free=a)
     assert np.isclose(plain.thresholds[0], before[0] + step * 2 * (1 - plain.target))
+
+
+def test_the_observation_read_takes_the_observations_loudness():
+    """With ``learned_code_output="observation"`` a code is read in its direction at the
+    norm of the moment's sensory activation: one input's activation for a token, more for
+    an observation of several inputs, nothing for a blank moment or a silent code; the
+    read needs the sensory activation."""
+    code = composed(seed=2, learned_code_output="observation").learned_code
+    one = float(code.model.activation(np.array([1.0]))[0])
+    a = np.zeros((4, UNITS))
+    a[:, :3] = [0.4, 0.3, 0.2]
+    a[1] *= 0.05  # a weak code is read at the observation's norm as well
+    a[3] = 0.0
+    sensory = np.zeros((4, INPUTS))
+    sensory[0, 0] = one
+    sensory[1, :2] = one
+    sensory[3, 0] = one
+    read = code.output_of(a, sensory)
+    np.testing.assert_allclose(
+        np.linalg.norm(read, axis=1), [one, one * np.sqrt(2.0), 0.0, 0.0]
+    )
+    np.testing.assert_allclose(read[0], a[0] / np.linalg.norm(a[0]) * one)
+    np.testing.assert_allclose(read[1] / np.linalg.norm(read[1]), a[0] / np.linalg.norm(a[0]))
+    with pytest.raises(ValueError, match="sensory activation"):
+        code.output_of(a)
 
 
 def test_the_capped_read_holds_a_code_to_one_full_inputs_norm():

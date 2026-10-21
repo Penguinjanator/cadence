@@ -1698,9 +1698,11 @@ class Brain:
         (``learned_code_held``), the code units' drive is the phase's potential less their
         bias: nothing leads into them in the whole graph, so they sit at the phase's fixed
         point through the settle, a source to the cortex as the sensory neurons are. With
-        ``learned_code_output`` ``"unit"`` or ``"capped"``, the association neurons' term
-        that makes them read the code as ``LearnedCode.output_of`` gives it in place of the
-        code units' activations: the region's output gain per stream."""
+        ``learned_code_output`` ``"unit"``, ``"capped"`` or ``"observation"``, the
+        association neurons' term that makes them read the code as
+        ``LearnedCode.output_of`` gives it in place of the code units' activations: the
+        region's output gain per stream, at ``"observation"`` from the sensory activation
+        the observations give."""
         code = self.learned_code
         assert code is not None
         coded = self._coded_moment
@@ -1718,7 +1720,13 @@ class Brain:
             out[:, self.code_index] = v - self.brain.bias[self.code_index]
         if code.output == "raw":
             return out
-        unit = code.output_of(s)
+        sensory = None
+        if code.output == "observation":
+            model = self.brain.neuron_model
+            sensory = model.activation(
+                x * model.stimulus_amplitude + self.brain.bias[self.sensory_index]
+            )
+        unit = code.output_of(s, sensory)
         synapses, j, m = self._code_forward
         weights = np.zeros((len(self.association_index), code.units))
         weights[m, j] = self.brain.efficacy[synapses]
