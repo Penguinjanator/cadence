@@ -224,7 +224,7 @@ environments. Run one substantial local QA process at a time on a busy machine.
 
 | Path | What lives there |
 | --- | --- |
-| `src/cadence/` | the numerical library: `brain.py`, `learning.py`, `genome.py`, `regions.py` (the settling brain); `temporal.py`, `planning.py`, `temporal_memory.py`; `record_patch.py`, `records.py`, `record_stack.py`, `record_ports.py`, `ports.py`; `belief.py`, `belief_torch.py`; `steering.py`, `life.py`, `instruments.py` (composition) |
+| `src/cadence/` | the numerical library: `brain.py`, `learning.py`, `genome.py`, `regions.py` (the settling brain); `temporal.py`, `planning.py`, `temporal_memory.py` |
 | `tests/` | unit, numerical, integration and documentation contract tests |
 | `docs/` | the guides; `docs/README.md` is the map |
 

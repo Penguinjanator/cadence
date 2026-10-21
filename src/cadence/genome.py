@@ -258,7 +258,7 @@ def genes(
     ``("linear", step, low, high)`` adds ``normal(0, step)`` and clips; ``("int", low, high)``
     moves by one, up or down, within the bounds; ``("choice", option, ...)`` redraws among the
     options. Each gene mutates independently with probability ``rate``; genes of the genome that
-    ``space`` does not name are copied. A governor's threshold, an imagination budget, a port's
+    ``space`` does not name are copied. An arousal threshold, an imagination budget, a port's
     width or a cortex size can all be genes this way, with the hand-set value as the control.
     """
     kinds = {}
@@ -329,7 +329,7 @@ def evolve(
     compute.
 
     A ``Genome`` grows into a connectome by ``develop`` and mutates by ``mutate`` of this module,
-    whose keyword arguments arrive through ``mutation``. Any other genome, a dict of a governor's
+    whose keyword arguments arrive through ``mutation``. Any other genome, a dict of
     thresholds, a port topology, a patch's sizes, needs its own ``mutate(genome, rng)`` (``genes``
     supplies one over a declared space) and is passed to the fitness as it is unless ``grow``
     says how to build from it. ``mapper`` runs a generation's lives: ``map`` one after another, a

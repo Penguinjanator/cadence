@@ -17,30 +17,6 @@ def make_learner(backend="cpu", *, rate=1.0, eta=.1):
     )
 
 
-def test_single_record_write_failure_preserves_existing_context_and_witnesses():
-    net = cd.RecordPatchNet(1, 1, 1, seed=0, cells=2, active=1,
-                            record_rate=2, habituation=1)
-    params = net.parameters()
-    for value in params.values():
-        value.fill(0)
-    params["b"].fill(.5)
-    net.set_parameters(params)
-    net.records.projection.fill(0)
-    net.records.projection[0] = [1, -1]
-    net.records.offset.fill(1)
-    net.advance(np.zeros((1, 1, 1)))
-    # The finite prediction uses cell 0. Witnessing shifts the winning cell to
-    # cell 1, whose finite old value overflows the rate-two record update.
-    net.records.tables["y"][:, 0] = [0, 1e308]
-    before = net.snapshot()
-    with np.errstate(over="ignore", invalid="ignore"):
-        with pytest.raises(ValueError, match="record write would produce nonfinite state"):
-            net.observe(np.ones((1, 1, 1)), np.zeros((1, 1, 1)))
-    after = net.snapshot()
-    for key, value in before.items():
-        np.testing.assert_array_equal(after[key], value, err_msg=key)
-
-
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
 def test_scaled_overflow_cannot_be_hidden_by_parameter_clipping(backend):
     learner = make_learner(backend, rate=1e200)
