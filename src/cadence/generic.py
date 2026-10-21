@@ -1621,10 +1621,8 @@ class Brain:
         stepping the map by that rate times the dopamine times the trace: the eligibility
         carries the lesson's rate, so at 1.0 a unit of dopamine moves the map by one lesson's
         step, and ``recall_address=0`` leaves the map as it is under reward too.
-        ``recall_episodes="keep"`` keeps a stream's slots when its episode ends, where the
-        founder ``"forget"`` empties them: the latest slot of the ended episode learns no
-        successor from the next episode's first moment, and the moment before begins afresh
-        as the working trace does. ``Brain.reset(keep_memory=True)`` keeps the slots too.
+        When an episode ends the stream's slots are emptied with its working trace;
+        ``Brain.reset(keep_memory=True)`` keeps the slots across a reset.
         ``recall_window`` k above 1 (construction, with ``recall_window_decay`` d in (0, 1])
         makes every key an ordered window of the stream's last k events, ``[heard * x_t, d *
         heard * x_(t-1), ..., d^(k-1) * heard * x_(t-k+1)]``, each position on coordinates of
@@ -1636,8 +1634,8 @@ class Brain:
         ``recall_window`` and ``recall_window_decay`` are construction
         settings; the keys, the event values and the address map follow the observation code's
         width, a brain's ``code`` among the ways to bound it. The settings of 0.84.3 that this
-        version removed (``recall_write``, ``recall_key``) are refused by name; the CHANGELOG
-        gives each one's reading.
+        version removed (``recall_write``, ``recall_key``, ``recall_episodes``) are refused by
+        name; the CHANGELOG gives each one's reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -2560,7 +2558,7 @@ class Brain:
                 if ended[0] and self.recall is not None:
                     # the forecast read the stream as this end leaves it; once the end is
                     # committed that read is the moment's, for the act's eligibility and write
-                    self._end_recall(1, np.array([0]))
+                    self.recall.reset(1, rows=np.array([0]))
                     if self._forecast_read is not None:
                         self.recall.hold(self._forecast_read)
                 self._forecast_read = None
@@ -2785,7 +2783,7 @@ class Brain:
             for trace, _ in traces:
                 trace.reset(1, rows=np.array([0]))
             if self.recall is not None:
-                self._end_recall(1, np.array([0]))
+                self.recall.reset(1, rows=np.array([0]))
             agent._free = None
             answer = self._settled(x)
             if self.recall is not None:
@@ -3288,7 +3286,7 @@ class Brain:
         """Dopamine from the reward of the last action; ``done`` rows start a new episode.
 
         A ``done`` row's working trace, efference copy and heard history begin afresh, and its
-        recall memory's slots are emptied, or kept with ``recall_episodes="keep"``.
+        recall memory's slots are emptied.
         The hippocampus records the reward of the chosen action for the situation it was
         chosen in, and the next choice in that situation reads the record. A refused
         feedback update preserves that pending action and both memories; retry this
@@ -3373,7 +3371,7 @@ class Brain:
             if heard is not None and done.any():
                 heard.reset(len(done), rows=np.flatnonzero(done))
             if recalled is not None and done.any():
-                self._end_recall(len(done), np.flatnonzero(done))
+                recalled.reset(len(done), rows=np.flatnonzero(done))
             report = self.basal_ganglia.learn(
                 reward, done, self.stimulus(following), bootstrap, warm=self._awaited()
             )
@@ -3457,16 +3455,6 @@ class Brain:
             target = memory.recall(keys)
             target[rows, chosen] = value
             memory.observe(keys, target, write)
-
-    def _end_recall(self, batch: int, rows: np.ndarray) -> None:
-        """The recall memory's streams of ``rows`` end an episode: emptied with the founder
-        ``recall_episodes="forget"``, their slots kept with ``"keep"`` (``Recall.end``)."""
-        recall = self.recall
-        assert recall is not None
-        if recall.episodes == "keep":
-            recall.end(batch, rows)
-        else:
-            recall.reset(batch, rows=rows)
 
     def reset(self, *, keep_memory: bool = False, keep_arousal: bool = False) -> None:
         """Start every stream afresh; hippocampal records are kept. By default a brain with

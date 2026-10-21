@@ -13,8 +13,11 @@
   previous event and the one-hot of the last command in every key (`Recall.before`,
   `Recall.command`, the `recall/before` and `recall/command` checkpoint arrays, `witness`
   loses `command`), was neutral where it was read, and the window key and the efference copy
-  carry the same information. The binding instrument keeps its arms
-  (`benchmarks/binding/index_read.py`) with their protocol.
+  carry the same information. `recall_episodes="keep"`, a stream's slots kept across an ended
+  episode, lowered success by .108 on a crafting chain whose observation names the stage: an
+  ended episode empties the slots, as the founder did, and `Brain.reset(keep_memory=True)`
+  keeps them across a reset as before (`Recall.end` stays for it). The binding instrument
+  keeps its arms (`benchmarks/binding/index_read.py`) with their protocol.
 - `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
   its settlement and repair-network version in Cadence (the embedding as a learned code of
   meaning, the residual stream as the settling cortex, attention as a recall memory over the

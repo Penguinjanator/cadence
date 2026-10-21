@@ -80,11 +80,11 @@ as the map's eligibility. The actor holds it in a trace of its own (decaying by
 ## Episodes, keys and windows
 
 Each stream has its own slots. A plain `reset()` empties them and keeps the address map. When
-an episode ends, the founder `recall_episodes="forget"` empties that stream's slots with its
-working trace and heard history; `"keep"` keeps the slots, and the ended episode's last slot
-learns no successor from the next episode's first moment. The cortex of the moment before,
-the history and the window begin afresh under either setting.
-`brain.reset(keep_memory=True)` keeps the slots across a reset in the same way.
+an episode ends, that stream's slots are emptied with its working trace and heard history,
+and the cortex of the moment before, the history and the window begin afresh.
+`brain.reset(keep_memory=True)` keeps the slots across a reset: each stream ends an episode
+there (`Recall.end`), and the ended episode's last slot learns no successor from the next
+stream's first moment.
 
 The founder key is the present event alone, so where an event recurs with different
 continuations the read returns a mixture of every occurrence's successor. One construction
@@ -124,7 +124,6 @@ map.
 | `recall_address_step` | `"lms"` | retune | `"toward"`: the named keys less the attended mixture |
 | `recall_null` | `None` | retune | A number adds a null slot; a non-finite logit is refused |
 | `recall_address_reward` | `0.0` | retune | Rate at which reward trains the address map |
-| `recall_episodes` | `"forget"` | retune | `"keep"`: slots survive an ended episode |
 | `recall_window`, `recall_window_decay` | `1`, `1.0` | construction | Window of the last k events, decay in (0, 1] |
 
 The [API reference](api.md#recall-memory-genes) gives the `Recall` class signature.
@@ -135,7 +134,7 @@ The [API reference](api.md#recall-memory-genes) gives the `Recall` class signatu
 optioned = Brain.compose(
     inputs=4, actions=2, modules=(16,), seed=1, recall=True,
     recall_address_step="toward", recall_recency=None, recall_null=0.0,
-    recall_address_reward=0.1, recall_episodes="keep",
+    recall_address_reward=0.1,
 )
 other = np.array([[0.0, 1.0, 0.0, 0.0]])
 optioned.act(fact)                               # every act writes a slot, sampled or greedy
@@ -146,7 +145,7 @@ assert optioned.recall.attended.sum() < 1.0      # the null slot takes the rest
 optioned.act(name)                               # sampled: the map's eligibility is kept
 report = optioned.learn(np.array([1.0]), np.array([True]), fact)  # the outcome ends the episode
 assert report["address_reward_step"] > 0.0
-assert optioned.recall.slots == 3                # recall_episodes="keep": the slots stay
+assert optioned.recall.slots == 0                # an ended episode empties the slots
 windowed = Brain.compose(inputs=4, actions=2, modules=(16,), seed=1, recall=True, recall_window=2)
 assert windowed.recall.address_width == 2 * 4
 ```
@@ -160,6 +159,9 @@ Settings of 0.84.3 that left in this version, each refused by name with a messag
   chamber it was read on; every accepted moment is written.
 - `recall_key="predecessor"`, the previous event and the last command in every key: neutral
   where it was read, and the window key and the efference copy carry the same information.
+- `recall_episodes="keep"`, slots kept across an ended episode: it lowered success by .108 on
+  a crafting chain whose observation names the stage; an ended episode empties the slots, and
+  `reset(keep_memory=True)` keeps them across a reset as before.
 
 ## Cost
 

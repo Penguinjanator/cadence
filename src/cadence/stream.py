@@ -349,8 +349,8 @@ class Recall:
     ``capacity`` bounds the slots per stream, the oldest dropped first. ``reset`` empties
     streams, and an empty stream reads silence. ``end`` ends their episodes and keeps their
     slots: the latest slot of each learns no successor from the next episode's first moment,
-    and the moment before begins afresh; the brain ends an episode so with
-    ``episodes="keep"`` and empties the stream with the founder ``"forget"``.
+    and the moment before begins afresh; the brain ends an episode so under
+    ``Brain.reset(keep_memory=True)`` and empties the stream when an episode ends in a life.
 
     With ``window`` k above 1 (a construction setting, with ``window_decay`` d) the key's
     fixed part is an ordered window of the stream's last k events, ``[heard * x_t, d * heard
@@ -385,7 +385,6 @@ class Recall:
     address_step: str = "lms"
     null: float | None = None
     address_reward: float = 0.0
-    episodes: str = "forget"
     window: int = 1
     window_decay: float = 1.0
     source: str = "sensory"  # the observations' range
@@ -406,7 +405,6 @@ class Recall:
 
     VALUES = ("event", "cortex")
     STEPS = ("lms", "toward")
-    EPISODES = ("forget", "keep")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
     RUNTIME = (
         "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
@@ -416,10 +414,10 @@ class Recall:
     # options beside the founder memory: a memory describes and saves an option only where it
     # differs from its founder, and a saved memory without one takes its founder; each is
     # runtime except the window, which shapes the memory
-    OPTIONS = ("address_step", "null", "address_reward", "episodes", "window", "window_decay")
+    OPTIONS = ("address_step", "null", "address_reward", "window", "window_decay")
     CONSTRUCTION_OPTIONS = ("window", "window_decay")
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
-    RETIRED = ("write", "key")
+    RETIRED = ("write", "key", "episodes")
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -487,10 +485,6 @@ class Recall:
             return None if value is None else real(name, value)
         if name == "address_reward":
             return real(name, value, low=0)
-        if name == "episodes":
-            if not isinstance(value, str) or value not in Recall.EPISODES:
-                raise ValueError(f"episodes is one of {Recall.EPISODES}")
-            return value
         if name == "window":
             if (
                 isinstance(value, (bool, np.bool_))
