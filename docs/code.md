@@ -168,6 +168,33 @@ is not built in this version), an image brain, `memory_expansion` or `memory_fan
 memories key on the code as it is), a backend other than `cpu`, and a custom connectome
 without a `code` population and the complete dictionary, lateral and predictor synapses.
 
+## When to declare fields
+
+With one field (the founder, `learned_code_fields=None`) every unit reads the whole
+observation, and the region learns codes of whole moments: observations that look alike
+as a whole share units, so a member of a group is read as its group's members are, and a
+lesson on some members reaches the rest. That is what a world of single tokens or of
+whole scenes wants.
+
+When the observation is a combination of independent channels, declare one field per
+channel: the coordinates of a sentence's word slots, of who acts, what is held and where,
+of a pouch beside the cell a creature stands in, of the patches of an image. Give
+`learned_code_fields` the channels' widths in the order of the observation's coordinates
+(they sum to `inputs`). Each unit then reads one channel, the units of a channel compete
+among themselves alone, and a moment's code is the union of its channels' codes. A
+combination never seen before is then read as channels already known, and a second input
+in another channel keeps its own code. With one field the same combination arrives as an
+unfamiliar whole, and a second input is merged into the code of the first, distinguished
+only by the code's strength.
+
+```python
+from cadence import Brain
+
+# 8 coordinates of where, 4 of what is held: a held key keeps its own units
+brain = Brain.compose(inputs=12, actions=4, seed=0, learned_code=32, learned_code_fields=(8, 4))
+assert brain.learned_code.field_units == (21, 11)  # the units shared by the channels' widths
+```
+
 ## What the memories key on
 
 With the region, every memory keys on the rectified settled code at unit length joined to
