@@ -308,7 +308,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9, "cortex": "code",
-        "scale": "unit", "held": True, "reads": "context",
+        "scale": "observation", "held": True, "reads": "context",
     }
     with pytest.raises(ValueError, match="reads is one of"):
         composed(learned_code_reads="both")
@@ -1107,7 +1107,7 @@ def test_the_key_takes_the_observations_norm_when_set():
     code at unit length."""
     x = tokens(3, 9)
     x[1, 20] = 1.0  # the second stream: two inputs at once
-    unit = composed(seed=6, recall=True, history_decays=(0.5,))
+    unit = composed(seed=6, recall=True, history_decays=(0.5,), learned_code_scale="unit")
     scaled = composed(seed=6, recall=True, history_decays=(0.5,), learned_code_scale="observation")
     unit.act(x, greedy=True)
     scaled.act(x, greedy=True)
