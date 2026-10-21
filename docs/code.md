@@ -153,7 +153,6 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_held` | `True` | construction | the code units held at the code phase's fixed point through the whole settle, a source to the cortex as the sensory neurons are (nothing leads into them in the whole graph; the moment's drive holds them), so the rest of the brain integrates at the model's step with its learning phases as configured and the region's phase steps alone; `False` settles the code units with the whole graph and integrates the whole brain at the step the code's competition needs |
 | `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit's dictionary column reads its field alone through every learning step, and the competition among the units (the Gram) is block-diagonal, so a recombination of fields is a recombination of their codes and a second input in another field keeps its own code |
 | `learned_code_active` | 0.05 | retune | the activation a unit must reach to count as active in the thresholds' share: a unit firing below it counts as under-active, so the homeostasis does not fade every unit of a frequent observation toward zero; 0 counts any firing |
-| `learned_code_reads` | `"free"` | construction | what the cortex and the memories read of a held code: the context-free code (the founder; the embedding chamber reads held-out members at .97 and 5 of 6 development founders with it, .92 and 4 of 6 with the code in context), or with `"context"` the moment's code in its context, or with `"free"` the context-free code (the observation's code settled alone, the region's second phase), while the code in context, with the prediction's pull, is what the dictionary and the predictor learn from; `"free"` needs `learned_code_held` |
 | `learned_code_identity` | 0.9 | construction | the weight of the observation's own identity in the memories' key, in [0, 1); the key width is `units + inputs`, or `units` at 0 |
 
 Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], an
@@ -173,7 +172,9 @@ one full input's activation lost the embedding chamber's held-out members) and
 `learned_code_scale` (the memories' key takes the norm the observation itself has as a
 key; a key at unit length lost the binding family's continuing task) and
 `learned_code_place` (the associative store and the episodic place records key on the
-context-free code).
+context-free code) and `learned_code_reads` (the cortex and the memories read the
+context-free code; the code in context lost the embedding chamber's fresh founders, 7 of 12
+at .90 against 11 of 12).
 
 ## When to declare fields
 
@@ -210,23 +211,19 @@ world never fires belong in the field of a channel it fires.
 
 ## What the memories key on
 
-With the region, every memory keys on the rectified settled code at unit length joined to
-the observation's own identity, `unit([sqrt(1 - w) code, sqrt(w) unit(x)])` with `w` the
-gene `learned_code_identity` (0.5; at 0 the code alone), so `brain.code_width` is
-`units + inputs` (`units` at 0): the identity part keeps a binding readable while the code
-part moves as the region learns. Two codes of a moment stand apart. The moment's key is its code in the
-stream's context, the one the cortex reads: the recall slots (keys and event values) and the
-episodic context records key on it, since their job is to tell apart what looks the same by
-its history. The place key is the context-free code, the observation settled alone with a
-zero prediction, what `brain.observation_code(x)` returns: the associative store and the
-episodic place records key on it, since their job is to answer a known situation reached
-along a new path, and a code in context would split one situation across the histories it
-was reached by. The place key is a second code phase of the moment, taken only for brains
-with a place store and reported as `context_free_steps`. A decision keeps the place key it
-was taken under
-until its outcome is recorded. `stimulus(..., memory=False)`, `fit`, `predict` and
-`accuracy` settle the context-free code alone. The heard history holds the moment's code, in
-blocks of `units` per decay.
+With the region, every memory keys on the context-free code: the observation settled alone
+with a zero prediction, the rectified code at unit length that `brain.observation_code(x)`
+returns, joined to the observation's own identity, `unit([sqrt(1 - w) code, sqrt(w)
+unit(x)])` with `w` the gene `learned_code_identity` (0.9; at 0 the code alone), and taken
+at the norm the observation itself would have as a key. `brain.code_width` is `units +
+inputs` (`units` at 0). The identity part keeps a binding readable while the code part moves
+as the region learns, and a known situation is found again along a new path. The cortex
+reads the same context-free code. A moment the region learns from settles twice: in the
+stream's context, the code the dictionary and the predictor learn from, and on the
+observation alone, reported as `context_free_steps`. A decision keeps the key it was taken
+under until its outcome is recorded. `stimulus(..., memory=False)`, `fit`, `predict` and
+`accuracy` settle the context-free code alone. The heard history holds the code, in blocks
+of `units` per decay.
 
 ## Save, load, describe, cost
 

@@ -45,9 +45,7 @@
   held at the code phase's fixed point through the whole settle, a source to the cortex, so
   the rest of the brain keeps the model's step and its learning phases as without the
   region, and the region's phase steps alone; `False` settles them with the whole graph at
-  the code's step; it needs `learned_code_reads="context"`), `learned_code_reads` (`"free"`: the cortex and the
-  memories read the context-free code while the code in context, with the prediction's
-  pull, is what the region learns from), `learned_code_fields` (`None`: one field; a
+  the code's step), `learned_code_fields` (`None`: one field; a
   sequence of field widths shares the units among the observation's fields, each unit
   reading its field alone, the competition block-diagonal), `learned_code_active` (0.05: a unit
   firing below this activation counts as under-active in the thresholds' share) and
@@ -55,10 +53,10 @@
   at unit length joined to the observation's own identity, `unit([sqrt(1 - w) code,
   sqrt(w) unit(x)])`, of width `units + inputs`, so a binding stays readable by the
   identity part while the code part moves; at 0 the code alone); the lesson's contrast and the dopamine leave
-  its synapses alone. The recall slots and the episodic context records key on the moment's code in its
-  context; the associative store and the episodic place records key on the context-free
-  code (a second code phase, `context_free_steps`), so a known situation is found again along a
-  new path. With `memory_choice=True` the episodic stores separate the learned code's keys
+  its synapses alone. The cortex and every memory read the context-free code (a second
+  code phase, `context_free_steps`), so a known situation is found again along a new
+  path, while the code in context, with the prediction's pull, is what the region learns
+  from. With `memory_choice=True` the episodic stores separate the learned code's keys
   as an observation's (`memory_expansion` 1,024 cells, `memory_winners` 24): a linear store
   fits opposite outcomes under nearly equal keys on their identity part, and its records
   then rise above the rewards. The heard history holds the code and the recall memory's

@@ -1704,8 +1704,7 @@ class Brain:
         if coded is not None and coded[0] is x and coded[2] is not None:
             phase = coded[2]
         else:
-            in_context = memory and code.reads != "free"
-            phase = self._settle_code(x, context=in_context, report=False).state
+            phase = self._settle_code(x, context=False, report=False).state
         s = np.atleast_2d(np.asarray(phase.activation, dtype=float))
         if len(s) != len(drive):
             return drive
@@ -2627,20 +2626,19 @@ class Brain:
         for a brain without a code, else their sparse code, the largest positive sums of one
         unit in ten kept and the row scaled to unit length; with a learned code the
         rectified code the region settles to on the observations alone, without a context,
-        at unit length (the key of a moment is its code in the stream's context)."""
+        at unit length, the key of every memory."""
         return self._code(self._observations(observations), context=False)
 
     def _code(
         self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None
     ) -> np.ndarray:
         """The observation code of validated observations; the observations themselves,
-        the same array, without a code. A learned code settles here, in the stream's
-        context (the working trace, or ``trace``) unless ``context`` is off."""
+        the same array, without a code. A learned code settles here on the observations
+        alone, whatever ``context`` and ``trace`` say: the cortex and the memories read the
+        context-free code."""
         if self.learned_code is None:
             return x if self.sparse_code is None else _unit_rows(self.sparse_code.code(x))
-        if self.learned_code.reads == "free":
-            context = False  # the cortex and the memories read the context-free code
-        phase = self._settle_code(x, context=context, trace=trace)
+        phase = self._settle_code(x, context=False, trace=trace)
         return self._moment_key(x, self.learned_code.code_of(phase.state.activation))
 
     def _prepare(
@@ -2648,12 +2646,11 @@ class Brain:
     ) -> np.ndarray:
         """The code of the moment being settled, computed once and kept with the
         observations (``_coded_moment``): ``stimulus`` given that same array reads it, and
-        with a learned code the region's settled state is the whole graph's warm start. The
-        record holds the moment's key (its code in the stream's context, what the context
-        records and the recall slots key on) and its place key (the context-free code, what
-        the associative store and the place records key on; a second code phase, reported
-        as ``context_free_steps``), the same array without a learned code or without a place
-        store."""
+        with a learned code the region's settled state is the whole graph's warm start. A
+        moment the region learns from settles twice: in the stream's context (the working
+        trace, or ``trace``), the code the region learns from, and on the observations alone
+        (reported as ``context_free_steps``), the code the cortex reads and every memory keys
+        on; the record holds that key twice, as the moment's key and as its place key."""
         if self.learned_code is None:
             key = self._code(x)
             self._coded_moment = (x, key, None, key, None)
@@ -2662,20 +2659,15 @@ class Brain:
         phase = self._settle_code(x, context=context, trace=trace)
         key = self._moment_key(x, code.code_of(phase.state.activation))
         place, free_code, held = key, None, phase.state
-        # the context-free code: the place key, what the thresholds' share and the repair
-        # read at a moment the region learns from (an imagined branch learns nothing), and
-        # with ``learned_code_reads="free"`` what the cortex and the memories read
-        placed = self.hippocampus is not None
-        reads_free = code.reads == "free"
-        if context and (placed or reads_free or (trace is None and code.threshold_rate > 0)):
+        # the context-free code: what the cortex reads and every memory keys on, and what the
+        # thresholds' share and the repair read at a moment the region learns from
+        if context:
             free = self._settle_code(x, context=False, report=False)
             free_code = np.maximum(np.asarray(free.state.activation, dtype=float), 0.0)
             assert code.last is not None
             code.last["free"] = free_code
-            if placed or reads_free:
-                place = self._moment_key(x, code.code_of(free_code))
-            if reads_free:
-                key, held = place, free.state
+            place = self._moment_key(x, code.code_of(free_code))
+            key, held = place, free.state
             assert self._code_settlement is not None
             self._code_settlement["context_free_steps"] = int(free.steps)
         self._coded_moment = (x, key, held, place, free_code)

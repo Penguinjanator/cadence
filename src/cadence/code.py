@@ -150,9 +150,7 @@ class LearnedCode:
     phase's fixed point through the whole settle, a construction setting), ``fields`` (the
     widths of the observation's fields, each unit reading one, a construction setting),
     ``active`` (the activation a unit must reach to count as active in the thresholds'
-    share), ``reads`` (what
-    the cortex and the memories read of a held code: the code in context or the context-free
-    code, a construction setting) and ``identity``
+    share) and ``identity``
     (the weight of the
     observation's own identity in the memories' key, a construction setting: the key width
     follows it).
@@ -174,7 +172,6 @@ class LearnedCode:
     silence: float = 10.0
     identity: float = 0.9
     held: bool = True
-    reads: str = "free"
     fields: tuple[int, ...] | None = None
     active: float = 0.05
     dictionary: np.ndarray = field(init=False, repr=False)
@@ -184,18 +181,13 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "identity", "held", "reads",
+        "silence", "identity", "held",
         "fields", "active",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
     )
-    CONSTRUCTION = ("threshold", "identity", "held", "reads", "fields")
-    # what the cortex and the memories read of a held code: the moment's code in its
-    # context (``"context"``), or the context-free code (``"free"``), the observation's code
-    # settled alone, while the code in context, with the prediction's pull, is what the
-    # dictionary and the predictor learn from
-    READS = ("context", "free")
+    CONSTRUCTION = ("threshold", "identity", "held", "fields")
     # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
     # worst mode of the synchronous sweep contracts by at least a half per sweep
     STEP_MARGIN = 1.5
@@ -207,6 +199,8 @@ class LearnedCode:
         "scale": "the memories' key takes the norm the observation itself has as a key",
         "place": "the associative store and the episodic place records key on the "
         "context-free code",
+        "reads": "the cortex and the memories read the context-free code; the region learns "
+        "from the code in context",
     }
 
     @classmethod
@@ -216,7 +210,7 @@ class LearnedCode:
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "identity": 0.9,
-            "held": True, "reads": "free",
+            "held": True,
             "fields": None, "active": 0.05,
         }
 
@@ -243,10 +237,6 @@ class LearnedCode:
             if not isinstance(value, (bool, np.bool_)):
                 raise ValueError("held is True or False")
             return bool(value)
-        if name == "reads":
-            if not isinstance(value, str) or value not in LearnedCode.READS:
-                raise ValueError(f"reads is one of {LearnedCode.READS}")
-            return value
         if name == "fields":
             if value is None:
                 return None
@@ -283,8 +273,11 @@ class LearnedCode:
         self.seed = int(self.seed)
         for name in self.GENES:
             setattr(self, name, self.setting(name, getattr(self, name)))
-        if self.reads == "free" and not self.held:
-            raise ValueError("reads \"free\" needs the held code (held=True)")
+        if not self.held:
+            raise ValueError(
+                "held=False settled the code with the whole graph and needed the code in "
+                "context; the cortex and the memories read the context-free code"
+            )
         # the fields: each unit reads one field of the observation's coordinates
         self.mask: np.ndarray | None = None
         self.field_units: tuple[int, ...] = (self.units,)
