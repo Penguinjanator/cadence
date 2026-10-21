@@ -198,7 +198,7 @@ def _learned_code_genes(learned_code: Any, genes: dict[str, Any]) -> dict[str, A
     settings: dict[str, Any] = {}
     for name in [name for name in genes if name.startswith("learned_code_")]:
         setting = name[len("learned_code_"):]
-        if setting not in LearnedCode.GENES:
+        if setting not in LearnedCode.GENES and setting not in LearnedCode.REMOVED:
             raise TypeError(f"unknown brain setting: {name!r}")
         settings[setting] = LearnedCode.setting(setting, genes.pop(name))
     if not units:
@@ -1376,16 +1376,12 @@ class Brain:
             )
             self._code_synapses = self._learned_code_synapses()
             self._code_forward = self._learned_code_forward()
-            # the first module reads the observation beside the code only with cortex "both"
+            # the first module reads the code alone: the sensory neurons project to the code
+            # region and nowhere else
             pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
-            beside = bool(
-                (np.isin(pre, self.sensory_index) & ~np.isin(post, self.code_index)).any()
-            )
-            if beside != (self.learned_code.cortex == "both"):
+            if (np.isin(pre, self.sensory_index) & ~np.isin(post, self.code_index)).any():
                 raise ValueError(
-                    f"learned_code_cortex {self.learned_code.cortex!r} disagrees with the "
-                    "connectome: with \"both\" the sensory neurons project to the first module "
-                    "beside the code, with \"code\" to the code region alone"
+                    "a learned code's sensory neurons project to the code region alone"
                 )
             brain = self._installed(brain)
             plastic_synapses = np.ones(connectome.synapses, dtype=bool)
@@ -2274,13 +2270,6 @@ class Brain:
                 Projection("sensory", "code", scale=1.0, reciprocal=False),
                 Projection("code", names[0], scale=sensory_scale, reciprocal=False),
             ]
-            reads = LearnedCode.setting(
-                "cortex", options.get("learned_code_cortex", LearnedCode.founders()["cortex"])
-            )
-            if reads == "both":  # the observation as a brain without the region reads it
-                projections.append(
-                    Projection("sensory", names[0], scale=sensory_scale, reciprocal=False)
-                )
         else:
             projections = [
                 Projection(regions[0].name, names[0], scale=sensory_scale, reciprocal=False)
@@ -2457,6 +2446,8 @@ class Brain:
             )
         for name in [name for name in options if name.startswith("learned_code_")]:
             setting = name[len("learned_code_"):]
+            if setting in LearnedCode.REMOVED:
+                LearnedCode.setting(setting, options[name])  # refused by name
             if setting not in LearnedCode.RUNTIME:
                 raise TypeError(f"unknown brain setting: {name!r}")
             if self.learned_code is None:
@@ -2604,10 +2595,7 @@ class Brain:
                 else (0 if self.sparse_code is None else int(self.sparse_code.expansion)),
                 "fan_in": 0 if self.sparse_code is None else int(self.sparse_code.fan_in),
                 "winners": 0 if self.sparse_code is None else int(self.sparse_code.winners),
-                "cortex": (
-                    "observation and code" if learned is not None and learned.cortex == "both"
-                    else "code" if self.coded_cortex or learned is not None else "observation"
-                ),
+                "cortex": "code" if self.coded_cortex or learned is not None else "observation",
                 "separator": None
                 if self.hippocampus is None or self.hippocampus.separator is None
                 else ("sparse" if self.hippocampus.separator.fan_in else "dense"),

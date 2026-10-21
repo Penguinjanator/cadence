@@ -152,7 +152,6 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone; `brain.learned_code.work["repairs"]` counts the unit-rows it lowered |
 | `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
 | `learned_code_floor` | 0.0 | retune | with the unit read, the norm below which a code is not raised to unit length (at 0, the founder, every code that is not silent is read at unit length; the embedding chamber reads held-out members at .92 at 0 against .61 at 1), in units of the activation one full input gives the unit whose column matches it: a code at least that strong is read at unit length, a weaker one (a blank moment's, held up by the prediction alone) is read as it is over that norm; 0 reads every code that is not silent at unit length |
-| `learned_code_cortex` | `"code"` | construction | what the first module reads: the code in place of the observation, or with `"both"` the observation as a brain without the region reads it (plastic synapses from every sensory neuron) and the code beside it, so the code adds meaning and never removes the input |
 | `learned_code_held` | `True` | construction | the code units held at the code phase's fixed point through the whole settle, a source to the cortex as the sensory neurons are (nothing leads into them in the whole graph; the moment's drive holds them), so the rest of the brain integrates at the model's step with its learning phases as configured and the region's phase steps alone; `False` settles the code units with the whole graph and integrates the whole brain at the step the code's competition needs |
 | `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit's dictionary column reads its field alone through every learning step, and the competition among the units (the Gram) is block-diagonal, so a recombination of fields is a recombination of their codes and a second input in another field keeps its own code |
 | `learned_code_active` | 0.05 | retune | the activation a unit must reach to count as active in the thresholds' share: a unit firing below it counts as under-active, so the homeostasis does not fade every unit of a frequent observation toward zero; 0 counts any firing |
@@ -166,7 +165,11 @@ identity weight outside [0, 1), a `learned_code_*` gene without the region,
 `code` beside `learned_code` (a key that joins the observation's own identity to its meaning
 is not built in this version), an image brain, `memory_expansion` or `memory_fan_in` (the
 memories key on the code as it is), a backend other than `cpu`, and a custom connectome
-without a `code` population and the complete dictionary, lateral and predictor synapses.
+without a `code` population and the complete dictionary, lateral and predictor synapses,
+or whose sensory neurons project anywhere but to the code region. A setting the readings
+retired is refused by name with what the region does instead: `learned_code_cortex` (the
+first module reads the code alone; the observation read beside the code lost the
+embedding chamber's held-out members).
 
 ## When to declare fields
 

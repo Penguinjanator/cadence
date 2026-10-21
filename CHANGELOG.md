@@ -48,9 +48,8 @@
   that is not silent is read at unit length; above 0 a code weaker than that many full
   inputs' activation is read as it is over that norm, so a blank moment held up by the
   prediction alone is not raised to full length; `"capped"` reads
-  the code as it is with its norm capped at one full input's), `learned_code_cortex`
-  (`"code"`; with `"both"` the first module reads the observation as a brain without the
-  region does and the code beside it), `learned_code_scale` (`"observation"`:
+  the code as it is with its norm capped at one full input's), `learned_code_scale`
+  (`"observation"`:
   the memories' key takes the norm the observation itself would have as a key, the scale
   the recall's temperature was set for; `"unit"` keeps it at unit length), `learned_code_held` (`True`: the code units are
   held at the code phase's fixed point through the whole settle, a source to the cortex, so

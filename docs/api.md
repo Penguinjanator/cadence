@@ -304,8 +304,8 @@ contiguous index.
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=2.0, rate=0.125, predictor=0.0625,
             threshold=0.1, threshold_rate=0.000625, target=0.1, repair=1.0, silence=10.0,
-            place="free", output="unit", floor=0.0, identity=0.95, cortex="code",
-            scale="observation", held=True, reads="free", fields=None, active=0.05)
+            place="free", output="unit", floor=0.0, identity=0.95, scale="observation",
+            held=True, reads="free", fields=None, active=0.05)
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
@@ -329,7 +329,8 @@ and whose residual the repair reads), `install()`,
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
 capped settles, updates, and `repairs`, the unit-rows the repair lowered), `last` (the latest phase's sensory activation, context, activation,
 prediction and, at a learned moment, the context-free code `free`). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
-validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them. Guide:
+validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them, and `REMOVED` the
+settings the readings retired with what the region does instead. Guide:
 [the learned code](code.md).
 
 ## Records (`cadence.records`)

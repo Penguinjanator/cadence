@@ -7,7 +7,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -265,6 +264,23 @@ def test_a_founder_with_the_region_lives_its_recorded_life(tmp_path, name):
     assert region_digest(brain, acts, path) == spec["digest"]
 
 
+# the settings the readings retired, each with a value it once took
+REMOVED = {"cortex": "code"}
+
+
+def test_the_settings_the_readings_retired_are_refused_by_name():
+    """A removed setting is refused at construction and in a retune with what the region
+    does instead, whatever value it is given."""
+    assert set(REMOVED) == set(cd.LearnedCode.REMOVED)
+    brain = cd.Brain.compose(16, 4, modules=(8,), seed=1, learned_code=8)
+    for name, value in REMOVED.items():
+        with pytest.raises(ValueError, match=f"learned_code_{name} was removed"):
+            cd.Brain.compose(16, 4, modules=(8,), seed=1, learned_code=8,
+                             **{f"learned_code_{name}": value})
+        with pytest.raises(ValueError, match=f"learned_code_{name} was removed"):
+            brain.retune(**{f"learned_code_{name}": value})
+
+
 def test_learned_code_none_is_the_founder_and_the_width_is_as_before():
     assert cd.Brain.observation_width(53) == 53 and cd.Brain.observation_width(53, 24) == 24
     assert cd.Brain.observation_width(53, None, 16) == 16 + 53  # the key joins the identity
@@ -351,7 +367,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.95, "cortex": "code",
+        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.95,
         "scale": "observation", "held": True, "reads": "free", "fields": None, "active": 0.05,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
@@ -368,8 +384,6 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         composed(learned_code_scale="raw")
     with pytest.raises(ValueError, match="held is True or False"):
         composed(learned_code_held="yes")
-    with pytest.raises(ValueError, match="cortex is one of"):
-        composed(learned_code_cortex="sensory")
     with pytest.raises(ValueError, match="output is one of"):
         composed(learned_code_output="norm")
     with pytest.raises(ValueError, match="identity must lie in"):
@@ -419,6 +433,11 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "prefrontal", "code", scale=0.0, reciprocal=False))), seed=1)
     custom = cd.Brain(complete, learned_code=6)
     assert custom.learned_code is not None and custom.code_width == 6 + 8
+    beside = develop(Genome(tuple(regions), (*projections, Projection(
+        "prefrontal", "code", scale=0.0, reciprocal=False), Projection(
+        "sensory", "association", reciprocal=False))), seed=1)
+    with pytest.raises(ValueError, match="project to the code region alone"):
+        cd.Brain(beside, learned_code=6)
     with pytest.raises(ValueError, match="is not the learned code of 5 units"):
         cd.Brain(complete, learned_code=5)
 
@@ -1128,34 +1147,6 @@ def test_the_unit_read_does_not_raise_a_weak_code():
     assert not code.output_of(np.zeros((1, UNITS))).any()
     code.floor = 0.0
     np.testing.assert_allclose(np.linalg.norm(code.output_of(weak)), 1.0)
-
-
-def test_the_cortex_reads_the_observation_beside_the_code():
-    """With ``learned_code_cortex="both"`` the first module reads the observation as a
-    brain without the region reads it, through plastic synapses from every sensory neuron,
-    and the code beside it; the region's own synapses are those of the founder layout, a
-    lesson moves the observation's synapses, a checkpoint continues the life, and a
-    connectome that disagrees with the setting is refused."""
-    brain = composed(seed=4, recall=True, learned_code_cortex="both", learned_code_output="capped")
-    pre, post = np.asarray(brain.connectome.pre), np.asarray(brain.connectome.post)
-    beside = np.isin(pre, brain.sensory_index) & np.isin(post, brain.association_index)
-    assert beside.sum() == INPUTS * 64
-    assert brain.learner.plastic_synapses[beside].all()
-    assert len(brain._code_synapses["dictionary"][0]) == INPUTS * UNITS
-    assert brain.describe()["observation_code"]["cortex"] == "observation and code"
-    x = tokens(2, 6)
-    brain.act(x, greedy=True)
-    efficacy = brain.brain.efficacy[beside].copy()
-    brain.lesson(x, [1, 3])
-    assert not np.array_equal(brain.brain.efficacy[beside], efficacy)
-    twin = cd.Brain.load(brain.save(Path(tempfile.mkdtemp()) / "both.npz"))
-    assert twin.learned_code.cortex == "both" and twin.describe() == brain.describe()
-    np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
-    with pytest.raises(ValueError, match="disagrees with the connectome"):
-        cd.Brain(brain.connectome, learned_code=UNITS)  # the founder "code" on this layout
-    founder = composed(seed=4)
-    with pytest.raises(ValueError, match="disagrees with the connectome"):
-        cd.Brain(founder.connectome, learned_code=UNITS, learned_code_cortex="both")
 
 
 def test_the_key_takes_the_observations_norm_when_set():

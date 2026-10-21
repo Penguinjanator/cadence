@@ -151,8 +151,7 @@ class LearnedCode:
     at unit length as the memories key on it, or that code at the norm of the sensory
     activation the observation gives), ``floor`` (the norm, in units of the
     activation one full input gives its unit, below which the unit read does not raise a
-    code), ``cortex`` (whether the first module reads the observation beside the code, a
-    construction setting), ``scale`` (the memories' key at unit length or at the norm of the
+    code), ``scale`` (the memories' key at unit length or at the norm of the
     observation itself, a construction setting), ``held`` (the code units held at the code
     phase's fixed point through the whole settle, a construction setting), ``fields`` (the
     widths of the observation's fields, each unit reading one, a construction setting),
@@ -183,7 +182,6 @@ class LearnedCode:
     output: str = "unit"
     floor: float = 0.0
     identity: float = 0.95
-    cortex: str = "code"
     scale: str = "observation"
     held: bool = True
     reads: str = "free"
@@ -196,14 +194,14 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place", "output", "floor", "identity", "cortex", "scale", "held", "reads",
+        "silence", "place", "output", "floor", "identity", "scale", "held", "reads",
         "fields", "active",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
         "place", "output", "floor",
     )
-    CONSTRUCTION = ("threshold", "identity", "cortex", "scale", "held", "reads", "fields")
+    CONSTRUCTION = ("threshold", "identity", "scale", "held", "reads", "fields")
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
@@ -214,10 +212,6 @@ class LearnedCode:
     # or that code at the norm of the moment's sensory activation (``"observation"``), the
     # loudness the observation itself drives the module with in a brain without the region
     OUTPUTS = ("raw", "unit", "capped", "observation")
-    # what the first module reads: the code in place of the observation (``"code"``), or
-    # the observation as a brain without the region reads it and the code beside it
-    # (``"both"``)
-    CORTICES = ("code", "both")
     # the memories' key at unit length (``"unit"``), or at the norm the observation itself
     # would have as a key (``"observation"``), the scale the recall's temperature reads
     SCALES = ("unit", "observation")
@@ -229,6 +223,10 @@ class LearnedCode:
     # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
     # worst mode of the synchronous sweep contracts by at least a half per sweep
     STEP_MARGIN = 1.5
+    # settings the readings retired, refused by name with what the region does instead
+    REMOVED = {
+        "cortex": "the first module reads the code alone",
+    }
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -237,13 +235,15 @@ class LearnedCode:
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 0.0, "identity": 0.95,
-            "cortex": "code", "scale": "observation", "held": True, "reads": "free",
+            "scale": "observation", "held": True, "reads": "free",
             "fields": None, "active": 0.05,
         }
 
     @staticmethod
     def setting(name: str, value: Any) -> Any:
-        """One gene, validated and converted."""
+        """One gene, validated and converted; a removed setting is refused."""
+        if name in LearnedCode.REMOVED:
+            raise ValueError(f"learned_code_{name} was removed: {LearnedCode.REMOVED[name]}")
         if name in ("top_down", "rate", "threshold", "threshold_rate", "silence", "floor"):
             return real(name, value, low=0)
         if name == "predictor":
@@ -265,10 +265,6 @@ class LearnedCode:
         if name == "output":
             if not isinstance(value, str) or value not in LearnedCode.OUTPUTS:
                 raise ValueError(f"output is one of {LearnedCode.OUTPUTS}")
-            return value
-        if name == "cortex":
-            if not isinstance(value, str) or value not in LearnedCode.CORTICES:
-                raise ValueError(f"cortex is one of {LearnedCode.CORTICES}")
             return value
         if name == "scale":
             if not isinstance(value, str) or value not in LearnedCode.SCALES:
