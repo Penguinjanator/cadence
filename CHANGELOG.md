@@ -2,37 +2,22 @@
 
 ## Unreleased
 
-- The composed teaching learner steps under per-synapse normalization
-  ([issue 215](https://github.com/muellerberndt/cadence/issues/215)), in `Brain.compose`,
-  `Brain.build` and `Brain(connectome)`, which share the teaching founder. The new composed teaching
-  defaults are `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003`
-  and the derived `learning_eta_bias=0.0003`, with `learning_momentum=0.9` as before; they
-  replace `learning_eta=0.5`, `learning_eta_bias=0.05` without normalization. The earlier
-  teaching law is reachable with `learning_eta=0.5`, `learning_eta_bias=0.05`,
-  `learning_normalize=0.0` and `learning_normalize_floor=1e-3`, or with a full
-  `learning=LearnerConfig(...)`, which still replaces the whole teaching configuration; brains
-  built with an explicit configuration act and save as before. The actor's reward optimizer
-  keeps its rates and stays unnormalized, the case measured and declined for both learners in
-  issue 131. In a copy task of 260 inputs and three actions, the composed brain with one region
-  of 256 neurons agreed with a demonstrator on 0.868 / 0.866 of held-out moves after 240,000
-  samples in lessons of 32 rows (two seeds), against 0.874 / 0.888 for a backpropagation network
-  with one hidden layer of 256 trained with Adam on the same samples, and 0.81 at 80,000 samples
-  for the previous defaults. A composed brain that is taught now learns, acts and saves
-  differently from the same brain in 0.84.3, so comparisons that assume identical defaults across
-  releases read differently by design. The teaching instruments in `benchmarks/` that use the
-  composed defaults move in both directions: acquisition controls and the successor read gain,
-  and the token-binding content arms lose held-out accuracy and gate passes at the new defaults
-  (the pull request gives the readings; issue 218 follows it). The binding family
-  (`benchmarks/binding`) builds every brain with the earlier teaching law
-  (`token_binding.RELEASED_TEACHING`, a caller's genes take precedence), so its protocols, the
-  recall report's levels and the library's moment-for-moment comparisons with its instruments
-  keep their recorded meaning. The tests that pin recorded bytes of composed lives pass the earlier
-  teaching law explicitly; the tests that pin the defaults read the new values. The learning
-  guide gives the measurement, the lesson size of about 32 rows and the working-trace
-  amplitude's effect on teaching.
+- The learning guide's section "Many lessons: the normalized point for imitation" recommends
+  `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003` and
+  `learning_eta_bias=0.0003` with lessons of about 32 rows for a brain that learns a
+  demonstrator's policy from many lessons
+  ([issue 215](https://github.com/muellerberndt/cadence/issues/215)). In a copy task of 260
+  inputs and three actions it agreed with the demonstrator on 0.868 / 0.866 of held-out moves
+  after 240,000 samples (two seeds), against 0.874 / 0.888 for a backpropagation network trained
+  with Adam on the same samples, where the composed founder reached 0.81 at 80,000 samples. The
+  composed founder keeps its teaching rates: with few lessons its larger steps acquire faster
+  (a taught chain from a few hundred corrections, and the token-binding content arms at long
+  budgets, [issue 218](https://github.com/muellerberndt/cadence/issues/218)). The guide also gives
+  the working-trace amplitude's effect on teaching fidelity.
 - The learning guide's new section "Teach on the brain's own path" gives the DAgger recipe for a
   brain that bootstraps by watching: its own greedy move is executed, the same demonstrator
   labels the observation it reached, and `lesson` teaches it, with a runnable snippet.
+- The composition guide lists `normalize=0` among a fresh `LearnerConfig()`'s values.
 
 - `Brain.reset(keep_arousal=True)` (opt-in) keeps the arousal state as it is: its level, the
   counts, the recent and long-run reward, the usual errors, the reward scale, the age and

@@ -207,9 +207,7 @@ def test_dominating_bias_rate_warns_and_zero_eta_stays_silent():
 
 def test_composed_default_bias_rate_follows_the_composed_eta():
     config = cd.Brain.compose(inputs=4, actions=2, modules=(4,), seed=0).learner.config
-    # issue 215: the composed teaching founder steps under normalization at eta 0.003
-    assert config.eta == 0.003 and config.eta_bias == pytest.approx(0.0003)
-    assert config.normalize == 0.99 and config.normalize_floor == 1e-4
+    assert config.eta == 0.5 and config.eta_bias == pytest.approx(0.05)
 
 
 # -- issue 127: a finite free phase that uses its whole budget says so
@@ -308,15 +306,3 @@ def test_composed_actor_keeps_its_measured_bias_rate():
     assert config.eta == 1.0 and config.eta_bias == 0.05
     saved = config.to_dict()
     assert saved["eta_bias"] == 0.05 and cd.ActorCriticConfig(**saved) == config
-
-
-def test_the_composed_teaching_founder_constructs_without_a_rate_warning():
-    """The normalized teaching founder (issue 215) sits below the rate warning's edge."""
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        for brain in (
-            cd.Brain.compose(4, 2, seed=0),
-            cd.Brain.compose(4, 2, modules=(8, 4), observers=(4,), seed=0, arousal=True),
-        ):
-            config = brain.learner.config
-            assert (config.normalize, config.eta) == (0.99, 0.003)

@@ -46,14 +46,8 @@ def acquire(brain):
 def test_plain_compose_keeps_the_released_founders():
     brain = cd.Brain.compose(3, 2, modules=(8,))
     assert brain.arousal is None and brain.efference is None
-    # issue 215: the teaching founder steps under normalization (eta 0.5 and no
-    # normalization before); the actor keeps its unnormalized rates
-    assert brain.learner.config.eta == 0.003
-    assert brain.learner.config.eta_bias == pytest.approx(0.0003)
-    assert brain.learner.config.normalize == 0.99
-    assert brain.learner.config.normalize_floor == 1e-4
-    assert brain.learner.config.momentum == 0.9
-    assert brain.basal_ganglia.config.normalize == 0.0
+    assert brain.learner.config.eta == 0.5
+    assert brain.learner.config.eta_bias == 0.05
     assert brain.basal_ganglia.config.eta == 1.0
     assert brain.basal_ganglia.config.eta_bias == 0.05
     assert brain.working_memory.amplitude == 3.0
@@ -268,7 +262,7 @@ def test_description_is_detached_observational_and_survives_checkpoints(tmp_path
     assert brain.basal_ganglia._valence is None
     json.dumps(description, allow_nan=False)
     assert description["genes"]["actor_eta"] == 0.03
-    assert description["genes"]["learning_eta"] == 0.003
+    assert description["genes"]["learning_eta"] == 0.5
     description["genes"]["actor_eta"] = 999
     assert brain.basal_ganglia.config.eta == 0.03
     acquire(brain)

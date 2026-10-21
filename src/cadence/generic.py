@@ -100,19 +100,14 @@ def _default_lateral(actions: int) -> float:
 def _learning() -> LearnerConfig:
     # Retain the recovered finite teaching law; numerical damping belongs to
     # qualified free settlement, where it does not change these learning phases.
-    # Each synapse steps on its own normalized contrast (issue 215): a consistent contrast
-    # moves an efficacy by about eta whatever its size, and the bias rate is eta / 10. The
-    # actor's reward optimizer keeps its unnormalized rates (issue 131).
     return LearnerConfig(
         beta=0.1,
-        eta=0.003,
+        eta=0.5,
         temperature=0.2,
         tolerance=3e-3,
         free_steps=1024,
         nudged_steps=12,
         momentum=0.9,
-        normalize=0.99,
-        normalize_floor=1e-4,
     )
 
 

@@ -35,13 +35,8 @@ no held-out name-value pair does. The fifth name token never occurs in training.
 | `gru` | a supervised online GRU, 64 hidden units, a softmax over the values, cross-entropy through the trial, rate 1.0, gradient norm bounded at 5 | one step per round |
 
 The composition is `Brain.compose(16, 8, modules=(64,), lateral=0.0, seed=founder)` at its
-founder genes with the teaching law the protocol was declared under
-(`token_binding.RELEASED_TEACHING`: `learning_eta=0.5`, `learning_eta_bias=0.05`, no
-normalization; the composed teaching founder normalizes since issue 215, and every binding
-instrument keeps the declared law unless a run sets these genes itself; set all four together,
-or pass a whole `learning=LearnerConfig(...)`, which replaces the law), built region by region
-so that the recall region is appended last (a contract test checks that without it the
-connectome equals `Brain.compose`). Nothing changes the
+founder genes, built region by region so that the recall region is appended last (a contract
+test checks that without it the connectome equals `Brain.compose`). Nothing changes the
 library.
 
 ## Readings

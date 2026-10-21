@@ -28,13 +28,6 @@ BYTES_REASON = (
     "acts and array contents were recorded on the NumPy solver; this run uses the compiled "
     "dense kernel (CADENCE_FUSED=0 selects the NumPy loop)"
 )
-# The teaching law of the releases that recorded these bytes: issue 215 normalized the composed
-# teaching founder, and the recorded lives keep the earlier law as an explicit recipe.
-RELEASED_TEACHING = {
-    "learning_eta": 0.5, "learning_eta_bias": 0.05,
-    "learning_normalize": 0.0, "learning_normalize_floor": 1e-3,
-}
-
 CUE = np.array([[1.0, 0.0, 0.5, 0.0]])
 GO = np.array([[0.0, 0.0, 0.0, 1.0]])
 FACT = np.array([[1.0, 0.0, 0.0, 1.0]])  # a name (coordinate 0) stated with a value (3)
@@ -266,7 +259,7 @@ def test_the_founder_lives_as_the_composition_before_the_option(tmp_path, name):
 def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, name):
     spec = FOUNDERS[name]
     inputs, actions, options = spec["build"]
-    brain = cd.Brain.compose(inputs, actions, **options, **RELEASED_TEACHING)
+    brain = cd.Brain.compose(inputs, actions, **options)
     assert spec["life"](brain) == spec["acts"]
     assert _checkpoint_digest(brain.save(tmp_path / "founder")) == spec["checkpoint"]
 
@@ -414,7 +407,6 @@ def test_the_memory_is_the_instrument_index_memory_moment_for_moment(
     lib = cd.Brain.compose(
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
         learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
-        **RELEASED_TEACHING,
     )
     for name in ("pre", "post", "count", "sign"):
         np.testing.assert_array_equal(
@@ -843,7 +835,7 @@ def test_the_bound_leaves_the_token_task_as_it_was(monkeypatch):
     ir = instrument("index_read")
     tb = ir.tb
     brain = cd.Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL,
-                             seed=0, learning_surprise=True, recall=True, **RELEASED_TEACHING)
+                             seed=0, learning_surprise=True, recall=True)
     model = brain.brain.neuron_model
     reach = np.abs(model.activation(np.array([-50.0, 50.0]))).max()
     assert reach <= 1.0
@@ -1213,7 +1205,6 @@ def _option_lives(extra, seed=2, rounds=8):
     lib = cd.Brain.compose(
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
         learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
-        **RELEASED_TEACHING,
     )
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
@@ -1582,8 +1573,7 @@ def test_aroused_writes_are_the_instruments_moment_for_moment():
     inst = ir.IndexBrain.build(seed, read=dict(_declared(ir), write="aroused"),
                                learning_surprise=True)
     lib = cd.Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL,
-                           seed=seed, learning_surprise=True, recall=True, recall_write="aroused",
-                           **RELEASED_TEACHING)
+                           seed=seed, learning_surprise=True, recall=True, recall_write="aroused")
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))
     for _ in range(3):

@@ -25,13 +25,6 @@ BYTES_REASON = (
     "acts and array contents were recorded on the NumPy solver; this run uses the compiled "
     "dense kernel (CADENCE_FUSED=0 selects the NumPy loop)"
 )
-# The teaching law of the releases that recorded these bytes: issue 215 normalized the composed
-# teaching founder, and the recorded lives keep the earlier law as an explicit recipe.
-RELEASED_TEACHING = {
-    "learning_eta": 0.5, "learning_eta_bias": 0.05,
-    "learning_normalize": 0.0, "learning_normalize_floor": 1e-3,
-}
-
 CUE = np.array([[1.0, 0.0, 0.5, 0.0]])
 GO = np.array([[0.0, 0.0, 0.0, 1.0]])
 FACT = np.array([[1.0, 0.0, 0.0, 1.0]])
@@ -198,7 +191,7 @@ def founder_record(tmp_path: Path) -> dict[str, dict]:
     for name, spec in FOUNDERS.items():
         inputs, actions, options = spec["build"]
         builder = cd.Brain.build if spec.get("builder") == "build" else cd.Brain.compose
-        brain = builder(inputs, actions, **options, **RELEASED_TEACHING)
+        brain = builder(inputs, actions, **options)
         parameters = parameter_digest(brain)
         acts = spec["life"](brain)
         path = brain.save(tmp_path / f"{name}.npz")
@@ -211,7 +204,7 @@ def founder_record(tmp_path: Path) -> dict[str, dict]:
 def founder(spec: dict) -> tuple[cd.Brain, int]:
     inputs, actions, options = spec["build"]
     builder = cd.Brain.build if spec.get("builder") == "build" else cd.Brain.compose
-    return builder(inputs, actions, **options, **RELEASED_TEACHING), int(np.prod(inputs))
+    return builder(inputs, actions, **options), int(np.prod(inputs))
 
 
 @pytest.mark.parametrize("name", sorted(FOUNDERS))
@@ -272,7 +265,7 @@ def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
     if NUMPY_SOLVER:
         assert acts == provenance["continuation"]["recalled"]["acts"]
         inputs, actions, options = FOUNDERS["recalled"]["build"]
-        relived = cd.Brain.compose(inputs, actions, **options, **RELEASED_TEACHING)
+        relived = cd.Brain.compose(inputs, actions, **options)
         FOUNDERS["recalled"]["life"](relived)
         assert checkpoint_digest(relived.save(tmp_path / "relived.npz")) == (
             checkpoint_digest(fixture)
