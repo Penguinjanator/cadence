@@ -40,8 +40,8 @@
   unexplained before the row repairs: it lowers the thresholds of its silent units, at the
   founder level a row whose code is silent) and `learned_code_silence` (10, how many
   under-active rows a silent unit counts as in such a row, so no observation is left
-  without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`),
-  `learned_code_held` (`True`: the code units are
+  without a unit; the thresholds have no ceiling), `learned_code_held` (`True`: the code
+  units are
   held at the code phase's fixed point through the whole settle, a source to the cortex, so
   the rest of the brain keeps the model's step and its learning phases as without the
   region, and the region's phase steps alone; `False` settles them with the whole graph at

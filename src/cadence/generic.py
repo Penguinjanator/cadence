@@ -2649,10 +2649,10 @@ class Brain:
         observations (``_coded_moment``): ``stimulus`` given that same array reads it, and
         with a learned code the region's settled state is the whole graph's warm start. The
         record holds the moment's key (its code in the stream's context, what the context
-        records and the recall slots key on) and its place key (the context-free code with
-        ``learned_code_place="free"``, what the associative store and the place records key
-        on; a second code phase, reported as ``context_free_steps``), the same array without a
-        learned code or without a place store."""
+        records and the recall slots key on) and its place key (the context-free code, what
+        the associative store and the place records key on; a second code phase, reported
+        as ``context_free_steps``), the same array without a learned code or without a place
+        store."""
         if self.learned_code is None:
             key = self._code(x)
             self._coded_moment = (x, key, None, key, None)
@@ -2664,7 +2664,7 @@ class Brain:
         # the context-free code: the place key, what the thresholds' share and the repair
         # read at a moment the region learns from (an imagined branch learns nothing), and
         # with ``learned_code_reads="free"`` what the cortex and the memories read
-        placed = self.hippocampus is not None and code.place == "free"
+        placed = self.hippocampus is not None
         reads_free = code.reads == "free"
         if context and (placed or reads_free or (trace is None and code.threshold_rate > 0)):
             free = self._settle_code(x, context=False, report=False)
@@ -3743,12 +3743,12 @@ class Brain:
     def _placed(self, x: np.ndarray) -> np.ndarray:
         """The code the place stores key on (the associative store, the episodic place
         records): the moment's, kept by ``_prepare``; of any other observations, the
-        context-free code with ``learned_code_place="free"``, else their observation code."""
+        context-free code with a learned code, else their observation code."""
         coded = self._coded_moment
         if coded is not None and coded[0] is x:
             return coded[3]
         code = self.learned_code
-        if code is not None and code.place == "free":
+        if code is not None:
             return self._code(x, context=False)
         return self._code(x)
 

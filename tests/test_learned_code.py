@@ -265,7 +265,8 @@ def test_a_founder_with_the_region_lives_its_recorded_life(tmp_path, name):
 
 
 # the settings the readings retired, each with a value it once took
-REMOVED = {"cortex": "code", "output": "unit", "floor": 0.0, "scale": "observation"}
+REMOVED = {"cortex": "code", "output": "unit", "floor": 0.0, "scale": "observation",
+           "place": "free"}
 
 
 def test_the_settings_the_readings_retired_are_refused_by_name():
@@ -367,7 +368,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "identity": 0.95,
+        "identity": 0.95,
         "held": True, "reads": "free", "fields": None, "active": 0.05,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
@@ -924,12 +925,11 @@ def test_a_brain_with_the_region_deep_copies_and_imagines():
 def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_moments():
     """The associative store and the episodic place records key on the context-free code,
     the observation settled alone; the recall slots and the context records on the moment's
-    code in its context; ``learned_code_place="context"`` keys the place stores on the
-    moment's code; the place phase is reported and costs nothing without a place store."""
+    code in its context; the place phase is reported and costs nothing without a place
+    store."""
     brain = composed(seed=9, recall=True, memory_choice=True, arousal=True,
                      learned_code_reads="context")  # the keying split under the context read
     code = brain.learned_code
-    assert code.place == "free"
     # a predictor with weight: at birth it is zero and the two keys coincide
     code.weights[:] = 0.2 * np.random.default_rng(3).random(code.weights.shape)
     code.install()
@@ -976,17 +976,6 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
                       learned_code_reads="context")
     frozen.act(token, greedy=True)  # thresholds frozen, no place store: no second phase
     assert "context_free_steps" not in frozen.last_settlement
-    in_context = composed(seed=9, learned_code_place="context", arousal=True,
-                          learned_code_reads="context")
-    in_context.live(context)
-    in_context.live(token, reward=[0.0])
-    assert in_context._coded_moment[3] is in_context._coded_moment[1]
-    assert "context_free_steps" in in_context.last_settlement  # the thresholds' share reads it
-    in_context.retune(learned_code_place="free")
-    in_context.live(tokens(44), reward=[0.0])
-    assert "context_free_steps" in in_context.last_settlement
-    with pytest.raises(ValueError, match="place is one of"):
-        composed(learned_code_place="route")
     # a step, its outcome and a lesson under the split keys
     taught = composed(seed=10, memory_choice=True)
     taught.step(tokens(1, 2))

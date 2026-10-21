@@ -150,7 +150,6 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
 | `learned_code_repair` | 1.0 | retune | the share of a row's input energy its code may leave unexplained, in (0, 1], before the row lowers the thresholds of its silent units: at 1 a row whose code is silent (or worse than nothing); lower, a row the code reconstructs poorly |
 | `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone; `brain.learned_code.work["repairs"]` counts the unit-rows it lowered |
-| `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
 | `learned_code_held` | `True` | construction | the code units held at the code phase's fixed point through the whole settle, a source to the cortex as the sensory neurons are (nothing leads into them in the whole graph; the moment's drive holds them), so the rest of the brain integrates at the model's step with its learning phases as configured and the region's phase steps alone; `False` settles the code units with the whole graph and integrates the whole brain at the step the code's competition needs |
 | `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit's dictionary column reads its field alone through every learning step, and the competition among the units (the Gram) is block-diagonal, so a recombination of fields is a recombination of their codes and a second input in another field keeps its own code |
 | `learned_code_active` | 0.05 | retune | the activation a unit must reach to count as active in the thresholds' share: a unit firing below it counts as under-active, so the homeostasis does not fade every unit of a frequent observation toward zero; 0 counts any firing |
@@ -172,7 +171,9 @@ chamber, and a read at the observation's own loudness lost delayed cues) and
 `learned_code_floor` (every code that is not silent is read at unit length; a floor of
 one full input's activation lost the embedding chamber's held-out members) and
 `learned_code_scale` (the memories' key takes the norm the observation itself has as a
-key; a key at unit length lost the binding family's continuing task).
+key; a key at unit length lost the binding family's continuing task) and
+`learned_code_place` (the associative store and the episodic place records key on the
+context-free code).
 
 ## When to declare fields
 
@@ -221,8 +222,8 @@ zero prediction, what `brain.observation_code(x)` returns: the associative store
 episodic place records key on it, since their job is to answer a known situation reached
 along a new path, and a code in context would split one situation across the histories it
 was reached by. The place key is a second code phase of the moment, taken only for brains
-with a place store and reported as `context_free_steps`; `learned_code_place="context"` keys the
-place stores on the moment's key instead. A decision keeps the place key it was taken under
+with a place store and reported as `context_free_steps`. A decision keeps the place key it
+was taken under
 until its outcome is recorded. `stimulus(..., memory=False)`, `fit`, `predict` and
 `accuracy` settle the context-free code alone. The heard history holds the moment's code, in
 blocks of `units` per decay.
