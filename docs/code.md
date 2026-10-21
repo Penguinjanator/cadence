@@ -195,6 +195,12 @@ brain = Brain.compose(inputs=12, actions=4, seed=0, learned_code=32, learned_cod
 assert brain.learned_code.field_units == (21, 11)  # the units shared by the channels' widths
 ```
 
+Declare fields for the channels the world fires. A field keeps its share of the units (by
+width, at least two) for the whole life, and its units read its coordinates alone, so a
+field whose coordinates never fire leaves its units silent: the repair lowers a silent
+unit's threshold, which recruits nothing in a unit that receives no input. Coordinates the
+world never fires belong in the field of a channel it fires.
+
 ## What the memories key on
 
 With the region, every memory keys on the rectified settled code at unit length joined to
