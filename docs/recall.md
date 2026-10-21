@@ -114,7 +114,6 @@ map.
 | `recall_address_temperature` | `0.1` | retune | Temperature of the slots' scores in the address lesson |
 | `recall_context`, `recall_context_decay` | `0.0`, `0.5` | retune | Fading history of earlier events in a key, and its retention per moment in [0, 1) |
 | `recall_capacity` | `64` | construction | Slots per stream, oldest dropped first |
-| `recall_value` | `"event"` | construction | `"cortex"` stores the settled association activity and sizes the regions by the association width |
 | `recall_next` | `True` | construction | The `next` region and each slot's next |
 | `recall_scale` | `1.2` | construction | Initial magnitude of the two projections (a `compose` argument) |
 | `recall_address_step` | `"lms"` | retune | `"toward"`: the named keys less the attended mixture |
@@ -160,6 +159,13 @@ Settings of 0.84.3 that left in this version, each refused by name with a messag
 - `recall_recency=None`, the power-law age charge `r * log(1 + age)`: it failed its
   confirmation on the camera task's founders; a number keeps the linear charge
   `recency * age`.
+- `recall_value="cortex"`, the settled association activity as a slot's value: it failed all
+  four binding tasks (token .06, succession .07, fresh bindings .55, camera .00); the values
+  are the events.
+
+`describe()` and a checkpoint still carry `recall_value="event"`, the one value it has, under
+`genes` and `recall`, so a description and a founder file of 0.84.3 are unchanged and a file
+written here reads there; the next checkpoint format drops it.
 
 ## Cost
 
@@ -174,9 +180,9 @@ changing the code makes the stored keys inconsistent with new addresses.
 ## In a custom anatomy
 
 `Brain(connectome, recall=True, ...)` needs a `recall` and a `next` region (or `recall` alone
-with `recall_next=False`), each with one neuron per value coordinate:
-`Brain.observation_width(inputs, code)` with event values, the association width with
-`recall_value="cortex"`. Without `recall=True` populations of those names are ordinary ones.
+with `recall_next=False`), each with one neuron per value coordinate,
+`Brain.observation_width(inputs, code)`. Without `recall=True` populations of those names
+are ordinary ones.
 `tests/test_recall_memory.py` checks that the library reproduces the reference memory
 `benchmarks/binding/index_read.py` moment for moment. To check that the memory does the work,
 erase a copy's slots with `brain.recall.reset(batch)` before the query
@@ -187,7 +193,5 @@ erase a copy's slots with `brain.recall.reset(batch)` before the query
 - The address is fixed before the settle, so a second recall takes a second moment.
 - Chained recall, where the address depends on a recalled token and the question together,
   reaches the linear map only through conjunctions held in the cortex of the moment before.
-- `recall_value="cortex"` carries no content the next settle can read back; the founder
-  stores events.
 - The slots are a record within one stream. Nothing consolidates across streams except
   through the plastic synapses that read them.

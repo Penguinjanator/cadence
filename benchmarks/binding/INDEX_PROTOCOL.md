@@ -337,3 +337,5 @@ arm and probe above, with their receipts, as the record of those readings:
   neutral on every binding chamber.
 - `recency=None` (the `horizon` and `improved` arms; the library's `recall_recency=None`):
   the power-law charge failed its confirmation on the camera task's founders.
+- `value="cortex"` (the library's `recall_value="cortex"`): cortex values failed all four
+  binding tasks (token .06, succession .07, fresh bindings .55, camera .00).

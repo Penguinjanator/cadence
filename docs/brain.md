@@ -33,7 +33,7 @@ The composed graph, in the order its regions are developed:
 | `observer_0` ... | `observers` | Reciprocal with every module, `motor` and earlier observers | below |
 | `efference` | `actions` | With `efference_amplitude` above 0 | [memory](memory.md#efference-copy) |
 | `history` | sensory width per decay | With a nonempty `history_decays` | [memory](memory.md#heard-history) |
-| `recall`, `next` | observation-code width, or `modules[-1]` with `recall_value="cortex"` | With `recall=True`; `next` unless `recall_next=False` | [recall memory](recall.md) |
+| `recall`, `next` | observation-code width | With `recall=True`; `next` unless `recall_next=False` | [recall memory](recall.md) |
 
 The hippocampus is a `SynapticMemory` from the observation code to the motor drive,
 with `memory_choice=True` the [episodic memory](episodic.md), and with

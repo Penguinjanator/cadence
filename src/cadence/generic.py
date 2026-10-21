@@ -807,12 +807,14 @@ def _validate_recall_state(
             raise ValueError("saved recall state requires recall metadata")
         return
     names = {*Recall.RUNTIME, *Recall.CONSTRUCTION}
-    # a setting this version removed was saved only where it differed from its founder
+    # the format always wrote the keys of ``FORMAT``; the other removed settings, like the
+    # options, were saved only where they differed from their founders
     optional = {"inputs", *Recall.OPTIONS, *Recall.RETIRED}
     if (
         not isinstance(recalled, dict)
         or set(recalled) - optional
         != names | {"source", "target", "neurons", "writes"}
+        or set(Recall.FORMAT) - set(recalled)
         or recalled["source"] not in ("sensory", "visual/input")
         or recalled["source"] not in populations
         or recalled["target"] != "recall"
@@ -820,7 +822,7 @@ def _validate_recall_state(
     ):
         raise ValueError("invalid saved recall ports")
     for name in Recall.RETIRED:
-        if name in recalled:
+        if name in recalled and recalled[name] != Recall.FORMAT.get(name):
             raise ValueError(_removed_recall(name, recalled[name]))
     if recalled["recency"] is None:
         raise ValueError(_removed_recall("recency", None))
@@ -839,7 +841,7 @@ def _validate_recall_state(
         )
     association = len(populations["association"])
     key = width
-    value = key if settings["value"] == "event" else association
+    value = key  # the values are the events
     # the window's k events in order
     window = settings.get("window", 1)
     address = window * key
@@ -1402,9 +1404,8 @@ class Brain:
     def observation_width(inputs: int | Sequence[int], code: int | None = None) -> int:
         """The width of the observation code of a brain with these ``inputs`` (a vector
         length or an image shape) and this ``code`` (as the constructor takes it), before
-        the brain is built: with ``recall=True`` and event values a custom anatomy's
-        ``recall`` and ``next`` regions hold that many neurons (the association width with
-        ``recall_value="cortex"``)."""
+        the brain is built: with ``recall=True`` a custom anatomy's ``recall`` and ``next``
+        regions hold that many neurons."""
         image = _image_shape(inputs)
         width = int(np.prod(image)) if image is not None else _count("inputs", inputs, low=1)
         return _code_units(code) or width
@@ -1598,8 +1599,7 @@ class Brain:
         its key the event heard (``recall_heard`` 1.0 times the observation code, the
         observation itself or the brain's sparse code of it, plus ``recall_context`` (0.0)
         times a fading history of the earlier events, kept at ``recall_context_decay``
-        (0.5) per moment), its value the event (``recall_value="event"``) or the settled
-        association activity (``"cortex"``), and the slot before learns it as its next.
+        (0.5) per moment), its value the event, and the slot before learns it as its next.
         Before each settle the moment's address, the key plus a learned map of the event and
         of the association activity of the moment before, weighs the slots by a softmax
         (``recall_temperature`` 0.25, ``recall_recency`` 0.25 per moment of age), and the
@@ -1630,12 +1630,13 @@ class Brain:
         ``k * code`` values, the address and the map's outputs as wide; ``recall_context`` adds
         its fading sum on the present event's block.
         The founder ``recall=False`` builds the brain without it.
-        ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next``,
-        ``recall_window`` and ``recall_window_decay`` are construction
-        settings; the keys, the event values and the address map follow the observation code's
-        width, a brain's ``code`` among the ways to bound it. The settings of 0.84.3 that this
-        version removed (``recall_write``, ``recall_key``, ``recall_episodes`` and
-        ``recall_recency=None``) are refused by name; the CHANGELOG gives each one's reading.
+        ``recall_scale``, ``recall_capacity``, ``recall_next``, ``recall_window`` and
+        ``recall_window_decay`` are construction settings; the keys, the values and the
+        address map follow the observation code's width, a brain's ``code`` among the ways
+        to bound it. The settings of 0.84.3 that this version removed (``recall_write``,
+        ``recall_key``, ``recall_episodes``, ``recall_value`` and ``recall_recency=None``) are
+        refused by name, and ``describe()`` reports ``recall_value="event"``, the one value,
+        as before; the CHANGELOG gives each one's reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -1777,11 +1778,10 @@ class Brain:
             )
         if recalled:
             # Appended last, after any history: the brain with the recall memory is the brain
-            # without it plus the recall and next regions and one projection from each.
-            event = recalled["value"] == "event"
-            width = code_width if event else widths[-1]
+            # without it plus the recall and next regions, one neuron per value coordinate
+            # (the values are the events, of the code's width), and one projection from each.
             for name in ("recall", "next") if recalled["next"] else ("recall",):
-                regions.append(Region(name, width))
+                regions.append(Region(name, code_width))
                 projections.append(
                     Projection(name, "association", scale=recall_scale, reciprocal=False)
                 )
@@ -2004,6 +2004,9 @@ class Brain:
                     for name in (*Recall.RUNTIME, *Recall.CONSTRUCTION)
                 }
             )
+            # the genes of 0.84.3 this version fixed at their one value are described as
+            # before, so a description is unchanged; compose refuses their names
+            genes.update({f"recall_{name}": value for name, value in Recall.FORMAT.items()})
             # an option is described where it differs from its founder
             recalled = self.recall.to_dict()
             genes.update(

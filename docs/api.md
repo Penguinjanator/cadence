@@ -223,7 +223,7 @@ columns of a copy (another batch size reads silence). `reset(batch, rows=None)`,
 
 ```text
 Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25,
-       capacity=64, value="event", next=True, address=0.01,
+       capacity=64, next=True, address=0.01,
        address_temperature=0.1, context=0.0, context_decay=0.5,
        address_step="lms", null=None, address_reward=0.0,
        window=1, window_decay=1.0,
@@ -246,7 +246,7 @@ when it differs from the `source` population (a coded brain passes the code widt
 | `weights(address)`, `ages()`, `readback(graph, region, movement)`, `activity(state)` | The read's slot shares, slot ages, and the association movement read back through the recall synapses. |
 | `reset(batch, rows=None)`, `keep(rows)`, `snapshot()`, `restore(snapshot)`, `reading()`, `hold(reading)`, `imagined()` | Stream bookkeeping; `imagined()` is a copy that reads the live slots and writes none. |
 | `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)`, `Recall.removed(name)` | The always-described genes, the five options saved only where they differ, validation of one gene, the null slot's logit, the refusal of a removed setting. |
-| `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `RETIRED`, `VALUES`, `STEPS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, the settings this version removed, and the allowed values of `value` and `address_step`. |
+| `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `RETIRED`, `FORMAT`, `STEPS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, the settings this version removed, the keys of the 0.84.3 format kept at their one value, and the allowed values of `address_step`. |
 | `keys`, `values`, `nexts`, `held`, `previous`, `history`, `ended`, `past`, `w_x`, `w_c`, `b`, `address_width`, `neurons`, `streams`, `slots`, `attended`, `to_dict()` | State arrays and sizes. |
 
 Construction and `Brain.retune` refuse a `null` whose logit is not finite.

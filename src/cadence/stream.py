@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from copy import copy
 from dataclasses import dataclass, field, fields
+from types import MappingProxyType
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -307,10 +308,9 @@ class Recall:
     Each moment the brain accepts (an act, a moment ``wait`` senses) is written after its
     settle as one slot per stream (``witness``). The slot's key is ``heard * x``: ``x`` is
     the observation as given (a brain gives its observation code), and with ``context`` the
-    fading history of the events before it is added. The slot's value is
-    the event ``x`` (``value="event"``) or the settled activity of the association region
-    (``value="cortex"``), and the slot before it learns its next: the value of the moment
-    that followed it, zero until that moment comes. Before each settle the present moment's
+    fading history of the events before it is added. The slot's value is the event ``x``,
+    and the slot before it learns its next: the value of the moment that followed it, zero
+    until that moment comes. Before each settle the present moment's
     address
 
         q = heard * x + context * h + x W_x + c W_c + b
@@ -366,6 +366,12 @@ class Recall:
     (``propose`` and ``accept``). The eligibility is a lesson's step at the lesson's bounded
     rate ``min(address, 1 / |z|^2)``: at ``address_reward=1`` a unit of dopamine moves the
     map by one lesson's step, and ``address=0`` leaves the map as it is under reward too.
+
+    The settings of 0.84.3 that this version removed (``RETIRED``, and ``recency=None``) are
+    refused with a message naming that release. A memory still describes and saves the keys
+    its checkpoint format always wrote for them, at their one value (``FORMAT``), and the
+    brain describes the genes so, so that every description and founder file of 0.84.3 is
+    unchanged and a file written here reads there; the next checkpoint format drops them.
     """
 
     connectome: Connectome
@@ -374,7 +380,6 @@ class Recall:
     heard: float = 1.0
     recency: float = 0.25
     capacity: int = 64
-    value: str = "event"
     next: bool = True
     address: float = 0.01
     address_temperature: float = 0.1
@@ -402,21 +407,24 @@ class Recall:
     w_c: np.ndarray = field(init=False, repr=False)
     b: np.ndarray = field(init=False, repr=False)
 
-    VALUES = ("event", "cortex")
     STEPS = ("lms", "toward")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
     RUNTIME = (
         "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
         "context", "context_decay",
     )
-    CONSTRUCTION = ("capacity", "value", "next")
+    CONSTRUCTION = ("capacity", "next")
     # options beside the founder memory: a memory describes and saves an option only where it
     # differs from its founder, and a saved memory without one takes its founder; each is
     # runtime except the window, which shapes the memory
     OPTIONS = ("address_step", "null", "address_reward", "window", "window_decay")
     CONSTRUCTION_OPTIONS = ("window", "window_decay")
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
-    RETIRED = ("write", "key", "episodes")
+    RETIRED = ("write", "key", "episodes", "value")
+    # the keys the checkpoint format of 0.84.3 (``cadence-generic/8`` and ``/9``) always wrote
+    # for removed settings, described and saved at their one value: every founder file is
+    # unchanged, and a file written here reads in 0.84.3
+    FORMAT = MappingProxyType({"value": "event"})
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -472,10 +480,6 @@ class Recall:
             ):
                 raise ValueError("capacity must be an integer of at least 1")
             return int(value)
-        if name == "value":
-            if not isinstance(value, str) or value not in Recall.VALUES:
-                raise ValueError(f"value is one of {Recall.VALUES}")
-            return value
         if name == "next":
             if not isinstance(value, bool):
                 raise ValueError("next must be boolean")
@@ -537,7 +541,7 @@ class Recall:
             raise ValueError("inputs must be a nonnegative integer; 0 reads the source range")
         self.inputs = int(self.inputs)
         self.key_width = self.inputs or len(self.observed)
-        self.value_width = self.key_width if self.value == "event" else len(self.association)
+        self.value_width = self.key_width  # the values are the events
         if len(self.recall_neurons) != self.value_width or (
             self.next and len(self.next_neurons) != self.value_width
         ):
@@ -845,8 +849,7 @@ class Recall:
         if len(cortex) != len(x):
             raise ValueError("the settled state needs one row per stream")
         if not self._private:
-            value = moment.event if self.value == "event" else cortex
-            self._observe(moment.key, value)
+            self._observe(moment.key, moment.event)
             self.writes += len(x)
         self.previous = cortex
         if self.context:
@@ -1113,8 +1116,12 @@ class Recall:
         self.w_x, self.w_c, self.b = proposal[0], proposal[1], proposal[2]
 
     def to_dict(self) -> dict[str, Any]:
+        """The memory's settings and counts: the founders, the keys of the 0.84.3 format at
+        their one value (``FORMAT``), the ports, and each option where it differs from its
+        founder."""
         out = {
             **{name: getattr(self, name) for name in (*self.RUNTIME, *self.CONSTRUCTION)},
+            **self.FORMAT,
             "source": self.source,
             "target": self.target,
             "neurons": self.neurons,

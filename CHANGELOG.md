@@ -18,8 +18,14 @@
   ended episode empties the slots, as the founder did, and `Brain.reset(keep_memory=True)`
   keeps them across a reset as before (`Recall.end` stays for it). `recall_recency=None`,
   the power-law age charge `r * log(1 + age)` (`Recall.charges`), failed its confirmation on
-  the camera task's founders; a number keeps the linear charge `recency * age`. The binding
-  instrument keeps its arms (`benchmarks/binding/index_read.py`) with their protocol.
+  the camera task's founders; a number keeps the linear charge `recency * age`.
+  `recall_value="cortex"`, the settled association activity as a slot's value, failed all
+  four binding tasks (token .06, succession .07, fresh bindings .55, camera .00): the values
+  are the events, and the `recall` and `next` regions hold one neuron per code unit. The
+  0.84.3 format always wrote `value`, so `describe()` and a checkpoint still carry
+  `recall_value="event"`, the one value, under `genes` and `recall`, and a file written here
+  reads in 0.84.3; the next checkpoint format drops it. The binding instrument keeps its arms
+  (`benchmarks/binding/index_read.py`) with their protocol.
 - `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
   its settlement and repair-network version in Cadence (the embedding as a learned code of
   meaning, the residual stream as the settling cortex, attention as a recall memory over the

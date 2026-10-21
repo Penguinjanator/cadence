@@ -587,9 +587,8 @@ def test_a_custom_anatomy_takes_the_code_and_keeps_recall_off_unless_asked(tmp_p
     assert twin.describe() == brain.describe()
     np.testing.assert_array_equal(twin.live(x, reward=[0.0]), brain.live(x, reward=[0.0]))
     # the sensory region as the code: the observation width named beside it
-    coded = cd.Brain(anatomy(256, 16, 16), inputs=3_230, code=256, recall=True,
-                     recall_value="cortex")
-    assert coded.coded_cortex and coded.inputs == 3_230 and coded.recall.value_width == 16
+    coded = cd.Brain(anatomy(256, 16, 256), inputs=3_230, code=256, recall=True)
+    assert coded.coded_cortex and coded.inputs == 3_230 and coded.recall.value_width == 256
     assert coded.act(x, greedy=True).shape == (1,)
     assert coded.recall.inputs == 0  # the sensory range is the code
     with pytest.raises(ValueError, match="with inputs the sensory region is the code"):
@@ -598,8 +597,6 @@ def test_a_custom_anatomy_takes_the_code_and_keeps_recall_off_unless_asked(tmp_p
         cd.Brain(anatomy(256, 16, None), inputs=3_230)  # no code: the region is not one
     with pytest.raises(ValueError, match=r"one neuron per value coordinate \(1024\)"):
         cd.Brain(anatomy(3_230, 16, 512), code=1024, recall=True)
-    cortex = cd.Brain(anatomy(3_230, 16, 16), recall=True, recall_value="cortex")
-    assert cortex.recall is not None
     with pytest.raises(ValueError, match="inputs must be an integer of at least 1"):
         cd.Brain(anatomy(256, 16, None), inputs=0, code=256)
 
@@ -764,26 +761,22 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
             cd.Brain.load(tampered(name, mutate))
 
 
-def wider_than_the_graph(recall: bool = False, **options) -> cd.Brain:
+def wider_than_the_graph(**options) -> cd.Brain:
     """A custom anatomy whose code is wider than its whole graph: 32 sensory, 8 association
-    and 2 motor neurons and a code of 128 units, with the default episodic memory; with
-    ``recall`` 8 recall and 8 next neurons for a memory of cortex values."""
+    and 2 motor neurons and a code of 128 units, with the default episodic memory. (A recall
+    memory's regions hold one neuron per code unit, so a graph with one is never narrower
+    than its code.)"""
     regions = [Region("sensory", 32), Region("association", 8), Region("motor", 2)]
     projections = [Projection("sensory", "association", reciprocal=False),
                    Projection("association", "motor")]
-    if recall:
-        regions += [Region("recall", 8), Region("next", 8)]
-        projections += [Projection(name, "association", reciprocal=False)
-                        for name in ("recall", "next")]
-        options = {"recall": True, "recall_value": "cortex", **options}
     connectome = develop(Genome(tuple(regions), tuple(projections)), seed=3)
     return cd.Brain(connectome, code=128, seed=3, **options)
 
 
 @pytest.mark.parametrize(
     "variant",
-    [{}, {"recall": True}, {"memory_choice": True, "memory_context": 0.5, "arousal": True}],
-    ids=["episodic", "recall", "context"],
+    [{}, {"memory_choice": True, "memory_context": 0.5, "arousal": True}],
+    ids=["episodic", "context"],
 )
 def test_a_code_wider_than_the_graph_saves_and_continues_from_a_pending_action(
     tmp_path, variant
@@ -807,9 +800,6 @@ def test_a_code_wider_than_the_graph_saves_and_continues_from_a_pending_action(
     np.testing.assert_array_equal(twin.hippocampus.strength, brain.hippocampus.strength)
     if brain.context_memory is not None:
         np.testing.assert_array_equal(twin.context_memory.pre, np.arange(128 + 2))
-    if brain.recall is not None:
-        assert brain.recall.key_width == 128 and brain.recall.value_width == 8
-        np.testing.assert_array_equal(twin.recall.keys, brain.recall.keys)
     for t in (4, 5):
         np.testing.assert_array_equal(
             brain.step(x[t:t + 1], reward=[float(t % 2)]),

@@ -289,13 +289,14 @@ def test_the_founders_are_the_declared_genes():
     assert cd.Recall.founders() == {
         "amplitude": 3.0, "temperature": 0.25, "heard": 1.0, "recency": 0.25,
         "address": 0.01, "address_temperature": 0.1, "context": 0.0, "context_decay": 0.5,
-        "capacity": 64, "value": "event", "next": True,
+        "capacity": 64, "next": True,
     }
     assert inspect.signature(cd.Brain.compose).parameters["recall_scale"].default == 1.2
     assert inspect.signature(cd.Brain).parameters["recall"].default is False
     described = composed().describe()["genes"]
     assert {k: v for k, v in described.items() if k.startswith("recall_")} == {
-        f"recall_{name}": value for name, value in cd.Recall.founders().items()
+        **{f"recall_{name}": value for name, value in cd.Recall.founders().items()},
+        **{f"recall_{name}": value for name, value in cd.Recall.FORMAT.items()},
     }
 
 
@@ -325,7 +326,6 @@ def test_the_memory_adds_its_two_regions_and_their_projections_last():
     heard = composed(history_decays=(0.5,))
     assert list(heard.connectome.populations)[-3:] == ["history", "recall", "next"]
     assert "next" not in composed(recall_next=False).connectome.populations
-    assert len(composed(recall_value="cortex").connectome.populations["recall"]) == 8
 
 
 def test_the_projections_start_at_their_scale_like_the_working_trace():
@@ -357,7 +357,6 @@ def test_a_custom_connectome_needs_regions_of_the_value_width():
         cd.Brain(graph(2, following=False), episodic=False, recall=True)
     assert cd.Brain(graph(2, following=False), episodic=False, recall=True,
                     recall_next=False).recall is not None
-    assert cd.Brain(graph(4), episodic=False, recall=True, recall_value="cortex").recall
     # without the option, populations of those names are ordinary ones
     assert cd.Brain(graph(3), episodic=False).recall is None
 
@@ -389,7 +388,7 @@ def _declared(ir):
     [
         (0, 12, {}, False),
         (1, 12, {}, False),
-        (3, 6, {"value": "cortex", "context": 0.5, "next": False}, False),
+        (3, 6, {"context": 0.5, "next": False}, False),
         (4, 16, {"capacity": 12}, True),
     ],
 )
@@ -610,18 +609,18 @@ def test_the_answers_address_is_named_among_the_moments_attended_to():
     """A moment whose own value is the answer does not displace the moment the address found:
     the attention is the prior, so the step toward the answer's slot is a fraction of the
     step a lesson at rate 1 could take."""
-    layout = (Region("sensory", 3), Region("association", 2), motor_cortex(2),
+    layout = (Region("sensory", 2), Region("association", 2), motor_cortex(2),
               Region("recall", 2), Region("next", 2))
     projections = (Projection("sensory", "association", reciprocal=False),
                    Projection("association", "motor"))
     connectome = develop(Genome(layout, projections))
-    recall = cd.Recall(connectome, value="cortex", temperature=0.25, recency=0.0,
-                       address=1.0, address_temperature=0.5)
-    recall._observe(np.array([[1.0, 0, 0]]), np.array([[1.0, 0]]))  # the moment found
-    recall._observe(np.array([[0, 1.0, 0]]), np.array([[0, 1.0]]))  # its value: the answer
-    before = recall._moment(np.array([[1.0, 0, 0]]))
+    recall = cd.Recall(connectome, temperature=0.25, recency=0.0, address=1.0,
+                       address_temperature=0.5)
+    recall._observe(np.array([[1.0, 0]]), np.array([[1.0, 0]]))  # the moment found
+    recall._observe(np.array([[0, 1.0]]), np.array([[0, 1.0]]))  # its value: the answer
+    before = recall._moment(np.array([[1.0, 0]]))
     recall._step(before, np.array([0]), np.array([[0.0, 1.0]]), None)
-    after = recall._moment(np.array([[1.0, 0, 0]]))
+    after = recall._moment(np.array([[1.0, 0]]))
     toward_second = float((after.address - before.address)[0] @ recall.keys[0, 1])
     # rate 1 on |z|^2 = 2 is bounded to a gain of one: the address lands on the named moments'
     # key, the second slot's weight among them, 0.12 under the prior where the answer's score
@@ -1017,7 +1016,7 @@ def test_a_fork_carries_its_own_memory():
     "options",
     [
         {},
-        {"recall_value": "cortex", "recall_context": 0.5, "recall_capacity": 3},
+        {"recall_context": 0.5, "recall_capacity": 3},
         {"memory_choice": True},
     ],
 )
@@ -1107,8 +1106,8 @@ def test_the_read_and_lesson_genes_retune_and_the_layout_is_a_construction_setti
     brain.retune(recall_amplitude=1.5, recall_temperature=0.5, recall_address=0.0)
     assert brain.recall.amplitude == 1.5 and brain.recall.address == 0.0
     assert brain.describe()["genes"]["recall_temperature"] == 0.5
-    for name, value in (("recall", False), ("recall_capacity", 8), ("recall_value", "cortex"),
-                        ("recall_next", False), ("recall_scale", 2.0)):
+    for name, value in (("recall", False), ("recall_capacity", 8), ("recall_next", False),
+                        ("recall_scale", 2.0)):
         with pytest.raises(ValueError, match="construction setting"):
             brain.retune(**{name: value})
     with pytest.raises(ValueError):
@@ -1126,7 +1125,6 @@ def test_the_read_and_lesson_genes_retune_and_the_layout_is_a_construction_setti
         {"recall": False, "recall_amplitude": 1.0},
         {"recall": True, "recall_temperature": 0.0},
         {"recall": True, "recall_capacity": 0},
-        {"recall": True, "recall_value": "events"},
         {"recall": True, "recall_next": 1},
         {"recall": True, "recall_context_decay": 1.0},
         {"recall": True, "recall_recency": -0.1},
@@ -1968,6 +1966,7 @@ REMOVED = {
     "recall_key": ("predecessor", "event"),
     "recall_episodes": ("keep", "forget"),
     "recall_recency": (None, 0.25),
+    "recall_value": ("cortex", "event"),
 }
 
 
@@ -1976,7 +1975,8 @@ def test_a_removed_setting_is_refused_at_compose_and_retune_naming_the_release(n
     """Each setting 0.84.3 took and this version removed is refused with a message that names
     it as removed and names the release that takes it: a removed name at any value, and
     ``recall_recency=None``, the power-law charge, at that value alone (a number stays the
-    linear charge). The description carries none of the removed names."""
+    linear charge). The description carries a removed name only where the 0.84.3 format
+    always wrote it, at its one value."""
     value, founder = REMOVED[name]
     message = rf"{name}.*removed in this version.*cadence-net 0\.84\.3"
     brain = composed()
@@ -1995,8 +1995,12 @@ def test_a_removed_setting_is_refused_at_compose_and_retune_naming_the_release(n
             composed(**{name: founder})
         with pytest.raises(ValueError, match=message):
             brain.retune(**{name: founder})
-        assert name not in brain.describe()["genes"]
-        assert name[len("recall_"):] in cd.Recall.RETIRED
+        setting = name[len("recall_"):]
+        assert setting in cd.Recall.RETIRED
+        if setting in cd.Recall.FORMAT:  # described at its one value, as 0.84.3 described it
+            assert brain.describe()["genes"][name] == cd.Recall.FORMAT[setting] == founder
+        else:
+            assert name not in brain.describe()["genes"]
 
 
 @pytest.mark.parametrize("name", sorted(REMOVED))
@@ -2013,3 +2017,27 @@ def test_a_saved_brain_under_a_removed_setting_is_refused_naming_the_release(tmp
     np.savez(tmp_path / "removed.npz", **arrays)
     with pytest.raises(ValueError, match=r"removed; load it with cadence-net 0\.84\.3"):
         cd.Brain.load(tmp_path / "removed.npz")
+
+
+def test_the_format_of_the_last_release_is_written_unchanged(tmp_path):
+    """The keys the 0.84.3 format always wrote for the removed settings (``Recall.FORMAT``)
+    are still written, at their one value, in the checkpoint and under ``describe()``'s
+    ``recall`` and ``genes``, so a description and a founder file are unchanged and a file
+    written here reads in 0.84.3; a file without them is refused as a format error."""
+    brain = composed()
+    for x in (CUE, GO):
+        brain.act(x, greedy=True)
+    arrays = saved_arrays(brain.save(tmp_path / "founder"))
+    meta = json.loads(str(arrays["generic"]))
+    assert {k: meta["recall"][k] for k in cd.Recall.FORMAT} == dict(cd.Recall.FORMAT)
+    described = brain.describe()
+    assert {k: described["recall"][k] for k in cd.Recall.FORMAT} == dict(cd.Recall.FORMAT)
+    assert {k: described["genes"][f"recall_{k}"] for k in cd.Recall.FORMAT} == dict(
+        cd.Recall.FORMAT
+    )
+    for key in cd.Recall.FORMAT:
+        short = json.loads(str(arrays["generic"]))
+        del short["recall"][key]
+        np.savez(tmp_path / "short.npz", **{**arrays, "generic": np.array(json.dumps(short))})
+        with pytest.raises(ValueError, match="invalid saved recall ports"):
+            cd.Brain.load(tmp_path / "short.npz")
