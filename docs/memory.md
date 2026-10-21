@@ -329,4 +329,3 @@ assert forgetting.act(place, greedy=True)[0] == 0   # without them the newborn a
 <a id="reading-and-writing-directly"></a>
 
 - [Standalone memory stores](records.md): `FastSynapses`, `PatternSeparator`, `SynapticMemory` and the `Trace` family used directly.
-- [Protect a temporal response](temporal-memory.md): a `TemporalPatchNet` tool that protects chosen responses during later updates; not a brain memory.

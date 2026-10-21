@@ -1,7 +1,6 @@
 # Build your own brain
 
-Two component recipes on your own data: a supervised neural graph and a temporal patch.
-For a continuing brain, start with the [world-model lifecycle](world-model.md) and the
+A component recipe on your own data: a supervised neural graph. For a continuing brain, start with the [world-model lifecycle](world-model.md) and the
 [Brain quickstart](quickstart.md). The blocks of one section run together, in order, on
 NumPy after you [install](README.md#install) the package; [orientation](orientation.md)
 explains the terms.
@@ -119,28 +118,6 @@ To draw it, record the settlings of a solve and hand them to a page of your own
   control ([protocols](protocols.md)).
 - Speed: `NeuralGraph(..., backend="torch")` for a large blocked connectome
   ([backends](backends.md)).
-
-## A temporal patch on continuous observations and actions
-
-The temporal patch models a body: continuous observations and actions on paths of
-shape `(batch, time, ports)`, a learned dynamics model, and planning that repairs the
-action ports under it. [The temporal patch](temporal.md) owns the model;
-[learn consequences, then act](planning.md#learn-consequences-then-act) is the runnable
-walkthrough. The call order is the recipe for any body:
-
-1. Declare observation and action ports, with a presence flag where an observed zero
-   must differ from no observation.
-2. `net.reset()` between independent episodes; `observe(inputs, measured, beta=0.01, rate=...)`
-   on executed inputs and measured outcomes only.
-3. `imagine(inputs, state=...)` on held-out paths; report the forecast error beside persistence.
-4. `plan(inputs, goal=..., controls=..., bounds=..., state=...)`; execute the first
-   action through the real body, admit what was measured and plan again.
-5. Protect a response with `memory = TemporalMemory()` and `memory.protect(net, inputs)`,
-   then learn through `memory.observe(net, inputs, measured)`
-   ([response protection](temporal-memory.md)).
-
-Keep the hidden width and path length modest and read
-[cost and memory](temporal.md#cost-and-memory) before a long run.
 
 ## Before you trust a number
 

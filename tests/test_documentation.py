@@ -67,8 +67,6 @@ PAGES = [
     "README.md",
     "docs/world-model.md",
     "docs/patchnet.md",
-    "docs/temporal.md",
-    "docs/temporal-memory.md",
     "docs/quickstart.md",
     "docs/concepts.md",
     "docs/memory.md",
@@ -87,8 +85,6 @@ PAGES = [
     "docs/api.md",
     "docs/backends.md",
     "docs/learning.md",
-    "docs/partitioned.md",
-    "docs/planning.md",
     "docs/protocols.md",
     "docs/receipts.md",
 ]

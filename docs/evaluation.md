@@ -60,24 +60,14 @@ Common easy outputs hide errors on rare decisive ones, so report the error per
 behaviour (timing, intention, the rare event) beside the aggregate. Test
 perception, memory, transitions and decisions separately: novel combinations,
 delayed cues, effects of alternative actions and rollout error by horizon.
-`TemporalPatchNet(..., output_precision=...)` (default all ones) weights each
-output's squared error ([output teaching precision](temporal.md#explicit-output-teaching-precision)).
-Fit such weights on declared training data and freeze them for evaluation; they
-are supplied unit conversions, never learned importance.
 
 Where probabilities are claimed, report log loss and calibration of a valid
 normalized distribution beside accuracy.
 
-Check representability before training. `TemporalPatchNet` has no bias term:
-from a zero state, negating every input negates every hidden state and output,
-so opposite-sign cues alone cannot teach two behaviours that share positive
-components. A declared shared context input breaks the symmetry. Never alter a
-frozen task to repair it.
-
 Test ambiguity before adding capacity: swapped intention, cue removal, context
 removal and activity reset. When tasks learn alone but average under joint
 training, inspect cue activity, output sensitivity, competing gradients,
-horizon and capacity. Changing what one temporal patch stands for (event,
+horizon and capacity. Changing what one moment stands for (event,
 frame, bar) changes the task; count path length, ports, state and compute.
 
 ## Test coherent behavior over time
@@ -107,15 +97,11 @@ For an acting system, test the whole sequence:
 4. Execute the selected action and measure the consequence.
 5. Repair the discrepancy, then retest earlier skills.
 
-`Brain.imagine` and `TemporalPatchNet.imagine` settle private branches and
-change no live state. `TemporalPatchNet.plan` repairs the input ports selected
-by `controls`, within optional `bounds`, toward a supplied goal output path; it
-neither executes the action nor trains on the goal ([learn consequences, then
-act](planning.md#learn-consequences-then-act)). A goal-detuned prediction can
-approach a goal no action can cause: replay the chosen action with the goal
-removed, execute it and measure the outcome. Demonstrations omit most
-mistakes: add the learner's own interactions and test transfer on whole
-held-out tasks.
+`Brain.imagine` settles private branches and changes no live state. A planner
+that detunes a prediction toward a goal can approach a goal no action can cause:
+replay the chosen action with the goal removed, execute it and measure the
+outcome. Demonstrations omit most mistakes: add the learner's own interactions
+and test transfer on whole held-out tasks.
 
 ## Keep branches isolated and provenance explicit
 
@@ -150,7 +136,7 @@ changed conditions. Keep every scheduled seed, including unattempted and
 time-capped cells, compare equal checkpoints only and add operation counts to
 wall-clock time. A residual and the model energy measure the equations, never
 joules. [Receipts](receipts.md#the-cost-fields) hold the cost
-fields; the temporal solver's cost is in [cost and memory](temporal.md#cost-and-memory).
+fields.
 
 ## Separate the causes of improvement
 
@@ -224,6 +210,6 @@ result together points to goal selection.
 | Imagined outcomes fed back as observations | Predictions reinforce their own mistakes | Keep readings, proposals, teaching and imagination distinct |
 | Scale expected to restore discarded information | Many sequences share one summary | [Test encoding collisions](#check-which-differences-survive-encoding) |
 | A named module added before locating a failure | It hides an encoding, objective or optimization problem | Compare correct supplied actions, each task alone, joint learning and controls |
-| Supplied routing called learned specialization | Assigned coordinate groups impose roles | Use [fixed connectivity](partitioned.md) against dense and disconnected controls |
+| Supplied routing called learned specialization | Assigned coordinate groups impose roles | Compare fixed connectivity against dense and disconnected controls |
 | Content sampled from scores where the model predicts at chance | The scores carry no information there: one draw is noise and consecutive draws are chaos | Measure held-out accuracy at those positions separately; let the model decide when something happens and declare what may happen |
 | A measurement's prior tuned until the data show the expected structure | The score rises because the prior wrote the labels, and the labelled events lose their relation to the source | Audit the fixture before training: faithfulness to the source against plain labelling, and the events of interest above chance where they should be |

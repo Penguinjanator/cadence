@@ -12,7 +12,6 @@ keyword.
 | [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence`, `Bins` |
 | [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `RefinementReport`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
 | [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Protocol`, `Row`, `Receipt`, timing |
-| [Temporal patch](#temporalpatchnet-cadencetemporal) | `TemporalPatchNet`, `TemporalPlan`, `TemporalMemory`, `PartitionedTemporalPatchNet` |
 | [PatchNet](#patchnet-cadencepatch), [compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step) | `PatchNet`, `cadence.circuits`, `record_settlements` |
 
 `cadence.__version__` is the installed release string.
@@ -584,70 +583,6 @@ cadence.timing.environment() -> dict
 microseconds, the mean, `jitter` (p99 over p50 minus one) and context switches.
 `environment` reports machine, cores, Python, thread limits, pinned cores, load and library
 versions ([timing a decision](backends.md#timing-a-decision)).
-
-## TemporalPatchNet (`cadence.temporal`)
-
-```text
-TemporalPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None,
-                 initial_radius=0.95, tolerance=1e-9, max_iterations=80,
-                 max_backtracks=24, max_damping_trials=16)
-```
-
-A residual temporal model with shared `A`, `B`, `C` maps over paths `(batch, time, ports)`;
-the constructor options are tabled in [TemporalPatchNet](temporal.md).
-
-| Member | Behaviour |
-| --- | --- |
-| `observe(inputs, target, *, beta=0.01, rate=0.1, backtrack=False, symmetry_tolerance=0.15, max_halvings=8) -> TemporalObservation` | Repairs the free and detuned paths and carries only the free state. `beta` halves until the detuned pair is centred; an uncentred pair is refused as `contrast_asymmetric` ([centering](temporal.md#checking-that-the-contrast-is-centered)). `backtrack` admits parameters only after a decreasing causal replay. |
-| `advance(inputs)`, `imagine(inputs, *, state=None)`, `settle(inputs, *, target=None, beta=0.0, state=None)` | Free inference carried into context; a private path; a diagnostic phase. |
-| `plan(inputs, *, goal, controls, bounds=None, state=None, beta=0.01, rate=1.0, max_steps=32, max_backtracks=16, tolerance=1e-6, goal_tolerance=1e-6, symmetry_tolerance=0.15, max_halvings=8, method="steepest") -> TemporalPlan` | Repairs the selected input ports toward `goal`; executes nothing and changes no live state. `method="bfgs"` uses a quasi-Newton direction ([planning](planning.md)). |
-| `readback()`, `state`, `parameters()`, `set_parameters(mapping)`, `output_precision`, `set_output_precision(precision)` | Detached values; atomic, validated replacements. |
-| `reset()`, `snapshot()`, `TemporalPatchNet.restore(snapshot)`, `save(path, *, compressed=True)`, `TemporalPatchNet.load(path)` | `reset` keeps parameters; saves are `cadence-temporal/1`. |
-
-`TemporalPhase` holds `hidden`, `output`, `residual`, `converged`, `reason`, `iterations`,
-`minimum_pivot_eigenvalue`, `message_bytes`, `energy_history`, `accepted_step_sizes`,
-`accepted_damping`, `block_chain_attempts` and `energy_evaluations`, with `activity`,
-`energy` and `final_state`. `TemporalObservation` holds `updated`, `reason`, the `free`,
-`plus` and `minus` phases, `delta`, losses, `accepted_rate`, replays, `beta` and
-`contrast_halvings` ([reasons](temporal.md#reasons)). `TemporalReadback` binds the activity to
-its parameter revision. `cadence.temporal.contrast_asymmetry(free, plus, minus)` is
-`||plus + minus - 2 free|| / ||plus - minus||` over the hidden paths.
-
-## TemporalPlan (`cadence.planning`)
-
-The detached result of `plan`: `inputs`, `prediction`, `initial_prediction`, `boundary`,
-`losses`, `step_sizes`, `projected_residual`, `converged`, `predicted_goal_met`, `reason`,
-`phase_calls`, `block_chain_attempts`, `energy_evaluations`, `peak_message_bytes`,
-`parameter_revision`, `beta`, `contrast_halvings`, `method`, and the properties `cost`,
-`initial_cost`, `improved`, `iterations`. `predicted_goal_met` checks modelled cost only
-([reading the result](planning.md#reading-the-result)).
-
-## TemporalMemory (`cadence.temporal_memory`)
-
-```text
-TemporalMemory(*, relative_tolerance=1e-12)
-```
-
-`protect(net, inputs, *, state=None) -> ConstraintReport` admits the current free response
-of a query as a local constraint. `observe(net, inputs, target, *, beta=0.01, rate=0.1,
-readout_damping=None, symmetry_tolerance=0.15, max_halvings=8)` stages protected learning
-atomically. `report(maximum_residual=0.0)`, `snapshot()`, `TemporalMemory.restore(snapshot)`, and the low-level
-`project(before, proposed)`. `ConstraintReport(ranks, bytes, maximum_residual)`. Save the net
-and its memory together. Guide: [protect a temporal response](temporal-memory.md).
-
-## PartitionedTemporalPatchNet (`cadence.experimental`)
-
-```text
-cadence.experimental.PartitionedTemporalPatchNet(inputs, hidden, outputs, *,
-    masks=None, **options)
-cadence.experimental.two_group_masks(context_hidden, motor_hidden, inputs, outputs, *,
-    context_inputs, motor_inputs, cross_coupling=True) -> dict
-```
-
-The temporal model with boolean `A`/`B`/`C` masks (omitted masks allow every entry);
-`masks` returns copies and `trainable_parameter_count` counts permitted entries. Restore
-through the subclass. `TemporalMemory.observe` refuses it before any change. Guide:
-[experimental fixed connectivity](partitioned.md).
 
 ## PatchNet (`cadence.patch`)
 

@@ -9,8 +9,7 @@ Short answers to the problems builders meet first, each linking the page that ow
 the only requirements.
 
 **Do I need a GPU?** No; everything runs on NumPy float64. `[fast]` adds Numba and SciPy,
-`[accel]` torch and `[apple]` MLX for the settling brain ([backends](backends.md)). The
-temporal patch has no GPU path.
+`[accel]` torch and `[apple]` MLX for the settling brain ([backends](backends.md)).
 
 **Which interface do I want?** `Brain.compose(..., arousal=True)` and `brain.live(...)` for one
 continuing stream; `step` for explicit teaching, batches or learning from every outcome. Other
@@ -19,15 +18,14 @@ contracts are in the [specialist guides](quickstart.md#specialist-guides).
 ## Shapes and encodings
 
 **`ValueError` on shapes.** A settling brain takes a drive `(batch, n)`, one column per neuron,
-and `Learner.step` integer labels `(batch,)`. A temporal patch takes paths `(batch, time,
-ports)` and targets `(batch, time, outputs)`; one moment is `(batch, 1, ports)`
-([shapes](orientation.md#shapes)).
+and `Learner.step` integer labels `(batch,)`; a composed `Brain` takes observations
+`(batch, inputs)` ([shapes](orientation.md#shapes)).
 
 **Categorical outputs.** A settling brain's `step` takes the index of the wanted output
-neuron. A temporal patch's outputs are continuous levels ([build from your data](build.md)).
+neuron ([build from your data](build.md)).
 
-**An absent observation reads as zero drive.** Add a presence port when an observed zero must
-differ from no observation ([temporal](temporal.md#context-private-continuation-and-readback)).
+**An absent observation reads as zero drive.** Add a presence input when an observed zero must
+differ from no observation.
 
 ## The settling brain
 
@@ -76,22 +74,6 @@ and a positive `need_scale` wants nothing until outcomes enter the new scale;
 
 **Stored keys do not match a brain built with another `code`.** Keys are valid only under the
 code they were stored with; `retune` refuses `code` ([the observation code](memory.md#the-observation-code)).
-
-## The temporal patch
-
-**`observe` returns `updated=False`.** Read `result.reason`. `contrast_asymmetric`: lower `beta`,
-or shorten the path or hidden width. `no_decreasing_parameter_step`: with `backtrack=True`, no
-rate lowered the loss in replay ([checking a learning step](temporal.md#checking-a-learning-step)).
-
-**The plan reports `step_cap`.** The search stopped at its cap short of convergence; execute the
-first action, measure and replan. `method="bfgs"` suits a badly conditioned action path
-([planning](planning.md)).
-
-**Zero free energy, wrong predictions.** The causal recurrence has zero defect by construction;
-surprise is the observation minus the prediction ([temporal](temporal.md)).
-
-**Learning is slow.** One detuned chain costs about `N * T * H^3`; keep hidden width and path
-length modest ([cost and memory](temporal.md#cost-and-memory), [evaluation](evaluation.md)).
 
 ## Evaluation
 

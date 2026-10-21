@@ -83,7 +83,7 @@ assert brain.arousal.to_dict() == resumed.arousal.to_dict()
 along a private trace. Live memory, parameters, random state and pending feedback
 are unchanged. A refused phase ends the branch and stays in the result, so check
 each phase's `qualified` flags before using a response. `Brain.compose` builds no
-transition model; learned consequences and planning are in [planning.md](planning.md).
+transition model.
 
 `save` and `load` keep the brain's full continuation, pending feedback included.
 Save the environment separately and resume its stream as well. If `live` refuses
@@ -116,7 +116,6 @@ and measured. [Recursive observers](recursive-settlement.md) covers depth and wi
 - Learning and reward: [the free/nudged rule](learning.md) and
   [learning from reward](reward.md).
 - Build and wire: [write a cortex](cortex.md) and [evolve a brain](evolution.md).
-- Other model families: [temporal models](temporal.md), [planning](planning.md),
-  [response protection](temporal-memory.md) and [reciprocal patches](patchnet.md).
+- Other model families: [reciprocal patches](patchnet.md).
 - Evaluate: [evaluate a brain](evaluation.md).
 - Reference: [API reference](api.md).

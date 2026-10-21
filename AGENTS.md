@@ -15,7 +15,6 @@ guides. Read the owning guide, [numerical contracts](docs/contracts.md) and
 | Build a continuing brain | [Quickstart](docs/quickstart.md), [composition](docs/brain.md), [runnable lifecycle](examples/continuing_brain.py) |
 | Manage streams, outcomes and memory | [Continuous interaction](docs/continuous.md), [memory](docs/memory.md), [episodic memory](docs/episodic.md), [recall memory](docs/recall.md), [reward](docs/reward.md), [world model](docs/world-model.md) |
 | Diagnose learning or settling work | [Learning](docs/learning.md), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
-| Learn transitions, plan or protect responses | [Temporal patches](docs/temporal.md), [planning](docs/planning.md), [temporal memory](docs/temporal-memory.md), [runnable example](examples/memory_imagination.py) |
 | Add optional recursive observation | [Cortical regions](docs/cortex.md), [recursive settlement](docs/recursive-settlement.md), [PatchNet training](docs/patchnet.md#train-on-observed-targets) |
 | Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [protocols](docs/protocols.md), [receipts](docs/receipts.md) |
 
@@ -93,9 +92,8 @@ or blur model identities to make the design story simpler.
 The intended observer-like structure has bounded local state, sensory/action
 boundaries, inspection, retained evidence and returning constraints. Name the
 actual implementation: composed brains expose sensory/motor indices, neural
-state, a working trace and associative memory. These are not the readback of the
-temporal API. A retained trace may be a held boundary during a present solve; a
-live coordinate must still qualify. Do not freeze unresolved live state or weaken
+state, a working trace and associative memory. A retained trace may be a held
+boundary during a present solve; a live coordinate must still qualify. Do not freeze unresolved live state or weaken
 qualification to manufacture a whole-brain answer.
 
 ## Build and demonstrate the lifecycle
@@ -163,13 +161,9 @@ operation. Do not invent thresholds, success policies or runtime
 changes to make documentation imply those capabilities. Missing integration and
 behavioral contracts need their own capability issues and tests.
 
-Advanced APIs have explicit contracts: `TemporalPatchNet.plan` uses a learned
-world model; `TemporalMemory` protects selected responses at finite capacity. Do
-not transfer one family's mathematical guarantees to another family's operation
-without an actual correspondence.
-
-Graph and temporal learners use free/nudged equilibrium contrasts. State those
-mathematics accurately.
+Graph learners use free/nudged equilibrium contrasts. State those mathematics
+accurately, and do not transfer one model's mathematical guarantees to another's
+operation without an actual correspondence.
 
 ## Numerical and behavioral contracts
 

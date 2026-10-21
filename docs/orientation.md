@@ -11,18 +11,17 @@ families below are the numerical mechanisms underneath and beside it.
 
 A Cadence brain is a set of patches joined by ports. A patch holds a bounded local
 state (the potentials of a group of neurons, or one context vector), reads its
-inputs through ports and updates by its declared equations. Graph and temporal
-models qualify a settled state and learn from detuned phases. The
-[contract guide](contracts.md) separates these cases.
+inputs through ports and updates by its declared equations. Graph models qualify a
+settled state and learn from detuned phases. The [contract guide](contracts.md)
+separates these cases.
 
 ![Idealized equilibrium contrast under a symmetric energy model](assets/learning-cycle.svg)
 
-## The brains against models you know
+## Against models you know
 
 | Cadence | Nearest familiar model | What is different |
 | --- | --- | --- |
 | Settling brain (`Genome`, `develop`, `NeuralGraph`, `Learner`) | A continuous Hopfield or energy-based recurrent network trained by [equilibrium propagation](https://arxiv.org/abs/1602.05179): rate neurons relax to a fixed point, and the gradient is the contrast of a free and a nudged fixed point. | Any wiring, including a measured connectome. Reciprocal learning ties paired weights; an arbitrary directed import need not satisfy the gradient contract. A [certificate](certificate.md) says when settling is a contraction and how far the answer is from the equilibrium. Reward learns through eligibility traces and one broadcast prediction error. |
-| Temporal patch (`TemporalPatchNet`) | A tanh RNN, `h[t] = A tanh(h[t-1]) + B u[t]`, `y[t] = C tanh(h[t])`. | Trained by two detuned solves of the whole path's energy and their contrast, with the solves checked for symmetry, in place of backpropagation through time. The same contrast on the input ports with weights frozen plans through the learned model. Chosen responses can be protected by projecting later updates ([orthogonal weight modification](https://www.nature.com/articles/s42256-019-0080-x)). |
 
 The composed brain's memories key on the observation or on the fixed sparse code
 `code=units` ([the observation code](memory.md#the-observation-code)), described under
@@ -31,7 +30,7 @@ The composed brain's memories key on the observation or on the fixed sparse code
 
 ## Where the learning signal comes from
 
-- **The settling brain and the temporal patch use no backward pass through time.**
+- **The settling brain uses no backward pass through time.**
   The free settle is the answer. A second settle with the outputs nudged by `beta`
   toward the target (and, centered, a third nudged away) gives every synapse the
   product of its two neurons in each phase; the difference over `2 beta` is the
@@ -42,30 +41,22 @@ The composed brain's memories key on the observation or on the fixed sparse code
   `1/beta`; the default activation's kink at zero lies outside the smooth-branch
   argument. [benchmarks/local_equilibrium](../benchmarks/local_equilibrium/README.md)
   compares the contrast learner with an implicit-gradient learner on the same network.
-  The temporal patch does the same on a whole path: it solves the path's energy plus
-  and minus `beta` times the loss by damped Newton steps and contrasts the parameter
-  derivatives ([temporal learning](temporal.md#energy-and-update)).
 - **Memory stores learn by one write** of the error into the rows of the key, so two
   keys share records exactly as far as they overlap
   ([one correction](records.md#one-correction)).
 - **Reward** enters the settling brain as a broadcast prediction error gating every
   synapse's eligibility trace, a three-factor rule ([reward](reward.md)).
-- **Backtracking** (`observe(..., backtrack=True)`) accepts a parameter step only
-  after a target-free replay from the original boundary lowers the loss, halving the
-  rate up to sixteen times. It replaces a learning-rate schedule. The temporal patch
-  takes it as an opt-in flag.
 
 ## Compared with a backprop network
 
 | | A network trained by backprop | A Cadence brain |
 | --- | --- | --- |
-| Reading an answer | Evaluate the layers | Settle to a fixed point, or run the temporal patch's causal path, with a residual check |
+| Reading an answer | Evaluate the layers | Settle to a fixed point with a residual check |
 | State between inputs | A cache or a separate memory | A settled state, a carried context, a trace or a memory store, each explicit |
-| Credit | Reverse-mode differentiation | Free and nudged contrasts for the settling brain and the temporal patch; delta-rule writes for the memory stores |
+| Credit | Reverse-mode differentiation | Free and nudged contrasts for the settling brain; delta-rule writes for the memory stores |
 | Exact-gradient conditions | A differentiable computation | For the contrast: a stable smooth equilibrium, symmetric effective weights, converged phases and a vanishing nudge |
 | Work | A forward and a backward pass | Every step of the free and nudged phases plus the update |
 | Memory of one event | A replay buffer or fine-tuning | One write into the store, read back at the same reading |
-| Planning | A separate policy or a search | The same contrast on the action ports with the weights frozen; imagination under declared actions |
 | Hardware | GPU tensors | NumPy float64 on the CPU; optional torch, MLX or Numba for the settling brain's graph transport ([backends](backends.md)) |
 
 The table compares update mechanisms. Networks trained by backprop can also be
@@ -78,28 +69,25 @@ acquired behaviour and total work on the same task and information.
 | --- | --- | --- | --- | --- |
 | Composed `Brain` | `(batch, inputs)` observations; one row for `live` | `step(teacher=...)` labels the current observation; reward labels the preceding executed action | Neural activity, working trace, optional efference copy, heard history, recall slots and their address map, the associative and episodic stores with the episodic temporal context, pending outcomes | `Brain.save` / `Brain.load` keep the complete continuation |
 | Neural graph / `Learner` | a drive `(batch, n)`, one column per neuron; features go on the input neurons | integer labels `(batch,)` or `(batch, slots)` for `Learner.step`, or a target pattern `(batch, n)` for the phase calls | `BrainState` per row; pass `warm=` to continue | `Learner.save` / `Learner.load`, one `.npz` |
-| Temporal patch | `(batch, time, inputs)` | `(batch, time, outputs)` | the hidden boundary `(batch, hidden)`; `reset()` clears it | `save` / `load`, `snapshot` / `restore` |
 
 Batch rows are independent streams sharing parameters. `imagine` is private: it
 changes no learned parameter, record or live activity, though cost counters may count
-its work. `advance` carries context without learning. `observe` learns.
+its work.
 
 ## Glossary
 
 - **Patch.** A bounded unit with local state, ports, readback and a repair rule: a
-  group of neurons with their synapses, or one temporal patch.
+  group of neurons with their synapses.
 - **Port.** A declared band of a patch's state that another patch, or the world,
-  reads or drives: a population of a connectome, or the input and output ports of a
-  path.
+  reads or drives: a population of a connectome.
 - **Settle, settling.** Repeating local updates under fixed evidence. A settle
   qualifies when the component's declared equation or stationarity check passes; small
   movement or an exhausted iteration budget is insufficient.
 - **Equilibrium.** A state satisfying the component's settlement contract under fixed
   boundary conditions. For the neural graph these include drive, parameters and held
-  memory readback. For a free path, the causal recurrence satisfies its temporal
-  equations with zero defect.
-- **Residual.** A model-specific number: neural equation error or temporal seam
-  defect ([contracts](contracts.md)). A residual says nothing about task success.
+  memory readback.
+- **Residual.** A model-specific number, for the neural graph the equation error
+  ([contracts](contracts.md)). A residual says nothing about task success.
 - **Certificate.** The contraction bound that says settling has a unique equilibrium
   and how far the last step's movement leaves the state from it.
 - **Free phase, nudged phase, beta, centered.** The settle under the inputs alone; the
@@ -107,12 +95,10 @@ its work. `advance` carries context without learning. `observe` learns.
   (default 0.1), where smaller is closer to the gradient and weaker; `centered` (default
   on) contrasts the plus and minus `beta` phases over `2 beta`.
 - **Detuning, contrast.** Perturbing an equilibrium and reading the difference between
-  the perturbed and the free state; the learning signal of the settling brain and the
-  temporal patch, and the planning signal on input ports.
+  the perturbed and the free state; the learning signal of the settling brain.
 - **Code.** The fixed random expansion of an observation onto `expansion` units, of which
   the `winners` strongest positive entries stay (`code=units`, `PatternSeparator`); the
   sparse key of a store.
-- **Context.** The carried state of a temporal patch between moments.
 - **Readback.** The detached state, residuals, counters and revision of a patch, as
   observations an application or another patch's port can read.
 - **Genome, develop, region, cortex, projection.** The declaration of a settling
@@ -138,9 +124,8 @@ algorithmic solver. [Evaluate a brain](evaluation.md) lists the checks and
 
 ## Further reading
 
-- Learning rule: [equilibrium propagation](https://arxiv.org/abs/1602.05179), its
-  [centered estimator](https://arxiv.org/abs/2006.03824) and
-  [orthogonal weight modification](https://www.nature.com/articles/s42256-019-0080-x).
+- Learning rule: [equilibrium propagation](https://arxiv.org/abs/1602.05179) and its
+  [centered estimator](https://arxiv.org/abs/2006.03824).
 - Memory stores: the cerebellar sparse expansion with a linear readout of
   [Marr (1969)](https://doi.org/10.1113/jphysiol.1969.sp008820) and
   [Albus (1971)](https://doi.org/10.1016/0025-5564%2871%2990051-4); the

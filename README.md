@@ -114,8 +114,8 @@ assert phases  # Inspect phase.qualified before using an imagined response.
 ```
 
 Imagination carries a private trace without changing live memory, random state
-or pending feedback. Learned consequences and action planning belong to the
-[temporal model](https://github.com/muellerberndt/cadence/blob/main/docs/planning.md#learn-consequences-then-act).
+or pending feedback; the composed brain builds no model of the world's
+consequences.
 
 Each action solve reports its residual, qualification, sweeps and check counts
 in read-only `brain.last_settlement`, as the
@@ -152,8 +152,7 @@ evaluation.
 states the design points, including the language goal of whole consistent
 sentences from the settled state.
 [Build a brain](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md)
-for custom wiring, and [the memory/planning example](https://github.com/muellerberndt/cadence/blob/main/examples/memory_imagination.py)
-for a bounded demonstration with actual toy-body outcomes.
+for custom wiring.
 [cadence-demos](https://github.com/muellerberndt/cadence-demos) contains the
 application demos.
 

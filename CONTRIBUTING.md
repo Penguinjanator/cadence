@@ -42,8 +42,8 @@ A replacement must preserve demonstrated behavior and saved continuation before
 removing its predecessor. Keep source-bound evidence, original application
 checkpoints and failed comparisons. Smaller code or a newer solver is not a
 capability-preservation test. State the actual learning rule and the scope of
-its equilibrium guarantee; temporal repair and graph settlement must not inherit
-one another's claims.
+its equilibrium guarantee; one model's settlement must not inherit another's
+claims.
 
 Use [one continuing equilibrium brain](docs/world-model.md) as the application
 and tutorial frame: bootstrap useful relations and memory, operate with them,
@@ -147,12 +147,10 @@ archive and confirmation-audit tests.
 A change to a guide's code is a change to a test. The
 [minimal-install job](https://github.com/muellerberndt/cadence/blob/main/.github/workflows/ci.yml)
 builds the wheel with NumPy alone
-and runs 16 pages without optional backends: `README.md` and, under `docs/`,
-`world-model.md`, `patchnet.md`, `quickstart.md`, `temporal.md`,
-`temporal-memory.md`, `memory.md`, `recall.md`, `planning.md`,
-`partitioned.md`, `build.md`, `recursive-settlement.md`, `api.md`,
-`learning.md`, `protocols.md` and `receipts.md`. It also executes
-`examples/continuing_brain.py` and `examples/memory_imagination.py`. For changes
+and runs 12 pages without optional backends: `README.md` and, under `docs/`,
+`world-model.md`, `patchnet.md`, `quickstart.md`, `memory.md`, `recall.md`,
+`build.md`, `recursive-settlement.md`, `api.md`, `learning.md`, `protocols.md`
+and `receipts.md`. It also executes `examples/continuing_brain.py`. For changes
 to these guides or examples, run `python -m pytest -q tests/test_documentation.py`
 and `ruff check examples/continuing_brain.py tests/test_documentation.py`.
 
@@ -214,8 +212,8 @@ environments. Run one substantial local QA process at a time on a busy machine.
   cost counters may count attempted computation. Invalid calls and failed
   transactions cannot partially install parameters or records. Qualification,
   continuation and device portability follow the owning API's
-  [contract](docs/contracts.md); do not transfer a graph guarantee to a finite
-  repair or temporal model. The audit tests (`tests/test_audit_*.py`) check
+  [contract](docs/contracts.md); do not transfer a graph guarantee to the memory
+  stores, which are read and written outside the equations. The audit tests (`tests/test_audit_*.py`) check
   specific cases and backends.
 - **Plain prose.** State what an operation does and what it does not establish, in the
   register of the existing guides.
@@ -224,7 +222,7 @@ environments. Run one substantial local QA process at a time on a busy machine.
 
 | Path | What lives there |
 | --- | --- |
-| `src/cadence/` | the numerical library: `brain.py`, `learning.py`, `genome.py`, `regions.py` (the settling brain); `temporal.py`, `planning.py`, `temporal_memory.py` |
+| `src/cadence/` | the numerical library: `brain.py`, `learning.py`, `genome.py`, `regions.py` (the settling brain) |
 | `tests/` | unit, numerical, integration and documentation contract tests |
 | `docs/` | the guides; `docs/README.md` is the map |
 
@@ -245,10 +243,6 @@ library pins; use those when reproducing archived results.
 
 The primary local entry is [the continuing brain](examples/continuing_brain.py):
 one brain, actual feedback through changed conditions, and saved continuation.
-The [memory/planning example](examples/memory_imagination.py) separately exercises
-`TemporalPatchNet` and finite response protection. Do not present those distinct
-model equations as an already integrated `Brain.compose` world model.
-
 The default runtime requires NumPy; optional backends do not make it
 dependency-free.
 

@@ -248,8 +248,7 @@ observations (each a batch of the live streams) on a private trace and reads dur
 memory without writing it. The branch's efference copy and recall predecessor key
 take in the act the brain would issue at each phase. A refused phase ends the branch
 and is returned. Live state, parameters, records, random state and pending outcomes are
-untouched. A learned model of the world's consequences is
-[planning](planning.md#learn-consequences-then-act).
+untouched. The composed brain integrates no learned model of the world's consequences.
 
 ## Outcomes that arrive later: `wait`
 

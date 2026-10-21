@@ -46,8 +46,7 @@ with another. Loads default to the saved precision; `Brain.load` and `PatchNet.l
 `backend="cpu"`, `Learner.load` to the saved backend. `Learner.load(path, backend="cpu")`
 brings a checkpoint learned on any device back to the float64 receipt backend.
 
-`TemporalPatchNet`, `TemporalPlan` and `TemporalMemory` run in NumPy on every install, and the
-composed brain's memory stores are read on the host inside a device brain too.
+The composed brain's memory stores are read on the host inside a device brain too.
 
 On a device backend `settle_batch` returns a state that stays resident (`BrainState.device`;
 `None` on the CPU and from the one-stimulus `settle`), so a continuing phase starts there.

@@ -31,9 +31,8 @@ jobs:
           import tempfile
           from pathlib import Path
 
-          for name in ("README.md", "docs/world-model.md", "docs/patchnet.md", "docs/quickstart.md", "docs/temporal.md",
-                       "docs/temporal-memory.md", "docs/memory.md", "docs/recall.md",
-                       "docs/planning.md", "docs/partitioned.md",
+          for name in ("README.md", "docs/world-model.md", "docs/patchnet.md", "docs/quickstart.md",
+                       "docs/memory.md", "docs/recall.md",
                        "docs/build.md", "docs/recursive-settlement.md",
                        "docs/api.md", "docs/learning.md",
                        "docs/protocols.md", "docs/receipts.md"):
@@ -48,10 +47,9 @@ jobs:
                   script.write_text(code, encoding="utf-8")
                   subprocess.run([sys.executable, str(script)], cwd=directory, check=True)
           PY
-      - name: Exercise the continuing brain, memory and planning
+      - name: Exercise the continuing brain
         run: |
           python examples/continuing_brain.py
-          python examples/memory_imagination.py
   test:
     runs-on: ${{ matrix.os }}
     strategy:

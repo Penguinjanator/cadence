@@ -35,7 +35,6 @@ is pinned to the release tag.
 | Explicit teaching, batched streams, learning from every outcome | `brain.step(...)` | [Continuous interaction](continuous.md), [learning](learning.md) |
 | Memory across moments | `Brain.compose` memory settings | [Memory](memory.md) |
 | Change settings of a living brain | `brain.retune(...)`, `brain.describe()` | [Retune the same life](brain.md#retune-the-same-life) |
-| Learned consequences and planning | `TemporalPatchNet`, `TemporalPatchNet.plan` | [Temporal](temporal.md), [planning](planning.md) |
 | Custom anatomy | `Genome`, `develop`, `NeuralGraph` | [Write a cortex](cortex.md) |
 | Connectome import | `NeuralGraph` from a measured wiring diagram | [Connectomes](connectomes.md) |
 | Selection across lives | `genes`, `evolve`, `cadence.genome.mutate` | [Evolution](evolution.md) |
@@ -66,10 +65,6 @@ composition of families ([contracts](contracts.md)).
 | | [Evolution](evolution.md) | genomes, mutation and selection |
 | Other model families | [PatchNet](patchnet.md) | reciprocal patches on continuous observations |
 | | [Recursive settlement](recursive-settlement.md) | observer populations in one graph |
-| | [Temporal](temporal.md) | `TemporalPatchNet` transitions |
-| | [Planning](planning.md) | private repair of input ports toward a goal |
-| | [Protect temporal responses](temporal-memory.md) | `TemporalPatchNet` tool that protects chosen responses; not a brain memory |
-| | [Partitioned](partitioned.md) | fixed connectivity masks, experimental |
 | Evaluate | [Evaluate a brain](evaluation.md) | task design, baselines, controls |
 | | [Protocols](protocols.md) | held-out predicate tests |
 | | [Receipts](receipts.md) | outcomes bound to source hashes |

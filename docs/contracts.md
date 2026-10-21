@@ -12,17 +12,12 @@ learning rule.
 | `NeuralGraph`, `Learner` | Rate neurons exchange activity over a directed graph ([concepts](concepts.md#settling-and-equilibrium)). | `equilibrate` checks the full fixed-point equations; `settle` alone may run a fixed budget or stop on activity movement. | Free/nudged local contrast, finite phases by default; optional reward traces. The gradient reading needs symmetric effective weights, a smooth stable branch and a small nudge ([certificate](certificate.md#equilibrium-propagation-scope)). |
 | `Brain` (composed) | One recurrent graph, with System 2 observers in the same equations and held trace, record and recall input. | `act`, `predict`, `accuracy` and `wait` need the full potential/adaptation residual below `learning.tolerance` within `learning.free_steps`; exhaustion refuses the answer. | The learner's contrast and the actor-critic's reward eligibility (always finite phases, `reward.eligibility_steps`), plus explicit trace and synaptic-memory writes. |
 | `PatchNet` | The reciprocal graph core with persistent free activity and explicit evidence ports. | Free and nudged phases (two when `centered`, the default) must pass the equation residual. | Commits only when every phase qualifies; no replay-loss check ([PatchNet](patchnet.md#observed-ports-and-local-detuning)). |
-| `TemporalPatchNet` | A causal free path and jointly repaired teaching paths over a finite window. | Whole-path residual and branch checks. | Centered contrast of parameter derivatives. The two teaching paths must sit centered on the free path (`symmetry_tolerance=0.15`), else beta halves up to `max_halvings=8` times and the step is refused; `backtrack=True` also requires a loss decrease on the observation ([temporal](temporal.md#checking-that-the-contrast-is-centered)). |
-
-The experimental [partitioned temporal model](partitioned.md) adds fixed masks to
-`TemporalPatchNet` and keeps its contract; `TemporalMemory.observe` refuses it.
 
 ### Component limits
 
 | Component | Implemented operation | Limit |
 | --- | --- | --- |
 | `Brain` (composed) | Qualified settles for every answer, local contrast and reward learning, working trace, synaptic and opt-in episodic and recall memory | A qualified answer covers the present settle. Memory enters as held input and is written after the settle, outside the equations; behaviour across ticks needs [persistence tests](evaluation.md#test-coherent-behavior-over-time). |
-| `TemporalPatchNet` | Learned temporal relationships, private imagination and bounded continuous-port planning | Model accuracy and executed outcomes need separate validation |
 
 A private `imagine` call is a component operation. The application defines what its inputs
 and outputs mean and which future variables it generates or supplies; a learned simulator
@@ -37,8 +32,7 @@ stability and useful behaviour need their own tests.
 
 Numerical qualification, parameter commitment and measured learning improvement are three
 separate facts. `PatchNet.observe` qualifies its phases before it updates and does not
-replay the update. APIs with replay admission accept only steps that lower the replayed loss
-on the declared observation or window. Neither establishes retention on earlier tasks or
+replay the update; a qualified update establishes neither retention on earlier tasks nor
 generalization; [evaluation](evaluation.md) covers those measurements. Eligibility, reward
 and source identity stay attached to the action that was actually executed.
 

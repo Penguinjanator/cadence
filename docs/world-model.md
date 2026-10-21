@@ -111,7 +111,6 @@ integrates no learned model of environmental transitions
 | Local correction | Teacher labels change graph parameters, the address map of a recall memory and, with `memory_choice=True`, the episodic records. Chosen-action outcomes drive reward plasticity and associative writes. A label credits no earlier action. |
 | Routine and repair | `Brain.live`, for a brain built with `arousal`, answers greedily from one qualified settle while calm and changes no parameter or associative record; the trace, heard history and recall slots advance. Surprise, a reward shortfall or an unmet `need` or `need_scale` (founders 0) raises arousal, and the outcome that wakes the brain is written to its associative store. The first `youth` moments (100) and aroused moments sample, keep eligibility and learn, from success too. One stream; the law's constants are genes. [Routine and repair](continuous.md#routine-and-repair-live). |
 | Private imagination | `Brain.imagine` settles **supplied** observation sequences with a private trace and read-only durable memory. It learns nothing and generates no environmental transition. [Private imagination](continuous.md#private-imagination). |
-| Learned consequences | `TemporalPatchNet` is a separate learned temporal model with planning, not wired into `Brain.compose`. [Planning](planning.md#learn-consequences-then-act). |
 | Selective activity elsewhere | [Centered dopamine](reward.md#centered-dopamine-and-selective-activity) suppresses familiar actor modulation; it does not gate `Brain.step`. |
 
 `step` learns from every outcome it is given. `live` gates learning by arousal;
@@ -125,7 +124,6 @@ Components for compositions beyond the default brain:
 | Function | Build with | Learned or supplied explicitly |
 | --- | --- | --- |
 | Perception and grounding | Input regions, associations and local updates (`Brain.compose`, `Genome`) | Features, entities, word/referent bindings |
-| Consequence prediction | `TemporalPatchNet` | Action-conditioned consequences, missing flags, rates |
 | Episodes and consolidation | `FastSynapses`, `SynapticMemory` | Addressing, relevant writes, retention, correction |
 | Workspace and goals | Recurrent state, `Trace`, goal and readback ports | Persistent context, goals and subgoals |
 | Action and value | `ActorCritic`, eligibility, `Valence`, optional `cadence.circuits.Deliberator` | Exploration, delayed credit, useful planning |
