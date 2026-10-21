@@ -29,10 +29,10 @@ arousal's income and error references, which decide when a `live` brain wakes, a
 | Efference copy | no | `efference_amplitude=1.0` | a fading one-hot of the commands issued | none | after each issued act | no | [below](#efference-copy) |
 | Heard history | no | `history_decays=(0.2, 0.8)` | the observations as heard, one fading block per decay | none | after each act and each moment `wait` senses | no | [below](#heard-history) |
 | Associative store | yes | `episodic=False` removes it | one value per action per situation, in reward units | observation code | each outcome of the chosen action | yes | [below](#associative-store-the-hippocampus) |
-| Episodic memory | no | `memory_choice=True` | place and context records that vote in the choice | observation code, and code with the temporal context | known outcomes, demonstrations, replay of the path to a reward | records yes, context no | [episodic.md](#episodic-memory-what-happened-in-this-situation-before) |
-| Recall memory | no | `recall=True` | the stream's recent moments as slots, and a learned address map | observation code | a slot per moment; the map at lessons | map yes, slots no | [recall.md](#the-recall-memory-in-full) |
-| Learned code | no | `learned_code=units` | a dictionary, a predictor and thresholds: the code region's synapses and biases | none | every accepted moment, by local rules | yes | [code.md](senses.md#the-learned-code) |
-| Learned weights | yes | learning rates of zero freeze them | synapse scales and biases, actor and critic | none | lessons, and outcomes (aroused ones under `live`) | yes | [learning.md](settling.md#learning-the-freenudged-rule) |
+| Episodic memory | no | `memory_choice=True` | place and context records that vote in the choice | observation code, and code with the temporal context | known outcomes, demonstrations, replay of the path to a reward | records yes, context no | [below](#episodic-memory-what-happened-in-this-situation-before) |
+| Recall memory | no | `recall=True` | the stream's recent moments as slots, and a learned address map | observation code | a slot per moment; the map at lessons | map yes, slots no | [below](#the-recall-memory-in-full) |
+| Learned code | no | `learned_code=units` | a dictionary, a predictor and thresholds: the code region's synapses and biases | none | every accepted moment, by local rules | yes | [the learned code](senses.md#the-learned-code) |
+| Learned weights | yes | learning rates of zero freeze them | synapse scales and biases, actor and critic | none | lessons, and outcomes (aroused ones under `live`) | yes | [the free/nudged rule](settling.md#learning-the-freenudged-rule) |
 | Actor eligibility | yes | `actor_lam=0.0` credits the last action only | each synapse's credit for recent sampled acts | none | each sampled act | no | [reward.md](reward.md#eligibility-traces-and-dopamine) |
 
 `predict`, `accuracy` and `fit` answer independent samples and read none of these except the
@@ -213,7 +213,8 @@ keyed by the observation code (place) and by the code with a fading trace of wha
 saw and did (`brain.context_memory`), each behind a fixed separator (none on a coded brain),
 and the mean of the two reads joins the motor readout in every choice. It records known
 outcomes and demonstrations and replays a reward back along the recent path. Its settings,
-evidence and limits are on [episodic.md](#episodic-memory-what-happened-in-this-situation-before).
+evidence and limits are in [episodic memory](#episodic-memory-what-happened-in-this-situation-before),
+below.
 
 ```python
 frozen = {"actor_eta": 0.0, "actor_eta_bias": 0.0, "actor_eta_critic": 0.0}  # records alone
@@ -234,8 +235,8 @@ assert chooser.act(place, greedy=True)[0] == 1    # the records vote for the act
 event) and next (the moment that followed). Before each settle an address, the key plus a
 learned map that teacher lessons move, weighs the slots by a softmax, and the recalled value
 and next drive a `recall` and a `next` region through the settle. `reset(keep=("slots",))`
-keeps the slots. Every `recall_*` setting, the cost and the limits are on
-[recall.md](#the-recall-memory-in-full), with the settings of 0.84.3 that left in this version and their
+keeps the slots. Every `recall_*` setting, the cost and the limits are in
+[the recall memory in full](#the-recall-memory-in-full), with the settings of 0.84.3 that left in this version and their
 readings ([removed in this version](#removed-in-this-version)).
 
 ```python
