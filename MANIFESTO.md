@@ -49,7 +49,7 @@ random code of it; the learned code is work in progress in
 [#211](https://github.com/muellerberndt/cadence/issues/211).
 
 **The transformer's parts, settled.** Everything that makes a transformer effective has its
-settlement and repair-network version here: the embedding is a learned code of meaning, the
+version here as settling and local repair: the embedding is a learned code of meaning, the
 residual stream is the settling cortex, attention is a recall memory over the brain's own
 moments with a learned address and keys that stay current, and the logits are the motor
 population inside the settle. What was tested and did not work is removed or folded into what
