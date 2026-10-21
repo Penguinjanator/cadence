@@ -148,9 +148,9 @@ class LearnedCode:
     seed: int = 0
     top_down: float = 2.0
     rate: float = 0.125
-    predictor: float = 0.03
+    predictor: float = 0.0625
     threshold: float = 0.1
-    threshold_rate: float = 0.001
+    threshold_rate: float = 0.000625
     target: float = 0.1
     repair: float = 1.0
     silence: float = 10.0
@@ -188,8 +188,8 @@ class LearnedCode:
     def founders(cls) -> dict[str, Any]:
         """The founder value of every gene."""
         return {
-            "top_down": 2.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
-            "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
+            "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
+            "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
         }
 
