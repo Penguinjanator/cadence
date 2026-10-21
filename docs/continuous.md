@@ -245,10 +245,10 @@ assert all(phase.qualified for phase in phases)
 
 `imagine(observations, *, budget=1024, tolerance=1e-6)` settles supplied
 observations (each a batch of the live streams) on a private trace and reads durable
-memory without writing it. The branch's efference copy and recall predecessor key
-take in the act the brain would issue at each phase. A refused phase ends the branch
-and is returned. Live state, parameters, records, random state and pending outcomes are
-untouched. The composed brain integrates no learned model of the world's consequences.
+memory without writing it. The branch's efference copy takes in the act the brain
+would issue at each phase. A refused phase ends the branch and is returned. Live state,
+parameters, records, random state and pending outcomes are untouched. The composed brain
+integrates no learned model of the world's consequences.
 
 ## Outcomes that arrive later: `wait`
 

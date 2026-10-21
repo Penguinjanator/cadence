@@ -68,8 +68,8 @@ the context records read under that decision's own temporal context.
 - **Surprise in `live`** counts only the outcome of the brain's own best guess, the act it
   would issue greedily. A greedy act the vote decided is its own, and its outcome counts.
 - **Imagination** (`imagine`) issues privately the act the brain would issue, to its efference
-  copy and the recall memory's predecessor key, with the vote read under the branch's own
-  temporal context. A returned state holds the cortex's response before the vote; act greedily
+  copy, with the vote read under the branch's own temporal context. A returned state holds
+  the cortex's response before the vote; act greedily
   on a [loaded copy](#check-that-the-memory-does-the-work) to read the complete act.
 
 ## Turning it on

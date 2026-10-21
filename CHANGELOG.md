@@ -9,7 +9,11 @@
   library before the removal (pinned), the options having been saved only where they
   differed from their founders. `recall_write="aroused"`, a moment written only when its act
   was sampled (`Recall.witness` loses `aroused`, and every write is a slot each stream
-  holds), was neutral on every chamber it was read on. The binding instrument keeps its arms
+  holds), was neutral on every chamber it was read on. `recall_key="predecessor"`, the
+  previous event and the one-hot of the last command in every key (`Recall.before`,
+  `Recall.command`, the `recall/before` and `recall/command` checkpoint arrays, `witness`
+  loses `command`), was neutral where it was read, and the window key and the efference copy
+  carry the same information. The binding instrument keeps its arms
   (`benchmarks/binding/index_read.py`) with their protocol.
 - `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
   its settlement and repair-network version in Cadence (the embedding as a learned code of

@@ -83,18 +83,17 @@ Each stream has its own slots. A plain `reset()` empties them and keeps the addr
 an episode ends, the founder `recall_episodes="forget"` empties that stream's slots with its
 working trace and heard history; `"keep"` keeps the slots, and the ended episode's last slot
 learns no successor from the next episode's first moment. The cortex of the moment before,
-the history and the window and predecessor blocks begin afresh under either setting.
+the history and the window begin afresh under either setting.
 `brain.reset(keep_memory=True)` keeps the slots across a reset in the same way.
 
 The founder key is the present event alone, so where an event recurs with different
-continuations the read returns a mixture of every occurrence's successor. Two construction
-settings widen the key:
+continuations the read returns a mixture of every occurrence's successor. One construction
+setting widens the key:
 
 | Key | Holds | Address width |
 | --- | --- | --- |
-| `recall_key="event"` | `heard * x_t`, plus `context * h` | `code` |
-| `recall_key="predecessor"` | adds the previous event and the one-hot of the last command | `2 * code + actions` |
-| `recall_window=k` | the ordered last k events, the event j moments back weighted `recall_window_decay^j` | `k * code`, plus `code + actions` with the predecessor key |
+| the founder key | `heard * x_t`, plus `context * h` | `code` |
+| `recall_window=k` | the ordered last k events, the event j moments back weighted `recall_window_decay^j` | `k * code` |
 
 `code` is the width of the [observation code](memory.md#the-observation-code), and
 `brain.recall.address_width` reports the result. Keys, address, map outputs and a reward
@@ -126,7 +125,6 @@ map.
 | `recall_null` | `None` | retune | A number adds a null slot; a non-finite logit is refused |
 | `recall_address_reward` | `0.0` | retune | Rate at which reward trains the address map |
 | `recall_episodes` | `"forget"` | retune | `"keep"`: slots survive an ended episode |
-| `recall_key` | `"event"` | construction | `"predecessor"` adds the previous event and command |
 | `recall_window`, `recall_window_decay` | `1`, `1.0` | construction | Window of the last k events, decay in (0, 1] |
 
 The [API reference](api.md#recall-memory-genes) gives the `Recall` class signature.
@@ -149,9 +147,8 @@ optioned.act(name)                               # sampled: the map's eligibilit
 report = optioned.learn(np.array([1.0]), np.array([True]), fact)  # the outcome ends the episode
 assert report["address_reward_step"] > 0.0
 assert optioned.recall.slots == 3                # recall_episodes="keep": the slots stay
-windowed = Brain.compose(inputs=4, actions=2, modules=(16,), seed=1, recall=True,
-                         recall_window=2, recall_key="predecessor")
-assert windowed.recall.address_width == 2 * 4 + 4 + 2
+windowed = Brain.compose(inputs=4, actions=2, modules=(16,), seed=1, recall=True, recall_window=2)
+assert windowed.recall.address_width == 2 * 4
 ```
 
 ## Removed in this version
@@ -161,6 +158,8 @@ Settings of 0.84.3 that left in this version, each refused by name with a messag
 
 - `recall_write="aroused"`, a moment written only when its act was sampled: neutral on every
   chamber it was read on; every accepted moment is written.
+- `recall_key="predecessor"`, the previous event and the last command in every key: neutral
+  where it was read, and the window key and the efference copy carry the same information.
 
 ## Cost
 

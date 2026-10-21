@@ -244,32 +244,6 @@ def test_an_imagined_branch_issues_the_act_the_brain_would_issue(tmp_path, monke
     assert_same_checkpoint(before, brain.save(tmp_path / "after.npz"))  # nothing real changed
 
 
-def test_an_imagined_branch_gives_the_predecessor_key_the_act_the_brain_would_issue(
-    tmp_path, monkeypatch
-):
-    brain, cues, _ = cued(0, recall=True, recall_key="predecessor")
-    commands = []
-    release = cd.Recall.witness
-
-    def witness(self, observations, state, *, command=None):
-        if self._private:
-            commands.append(int(np.argmax(command[0])))
-        release(self, observations, state, command=command)
-
-    monkeypatch.setattr(cd.Recall, "witness", witness)
-    before = brain.save(tmp_path / "before.npz")
-    decided = 0
-    for shown in cues.values():
-        commands.clear()
-        phase = brain.imagine([shown])[0]
-        live = cd.Brain.load(before)
-        act = int(live.act(shown, greedy=True)[0])
-        assert commands == [act]
-        decided += act != int(np.argmax(phase.state.activation[0, brain.motor_index]))
-    assert decided
-    assert_same_checkpoint(before, brain.save(tmp_path / "after.npz"))
-
-
 # -- a known outcome bounds the replay, whatever follows it in the same situation
 
 

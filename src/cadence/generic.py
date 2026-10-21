@@ -838,12 +838,9 @@ def _validate_recall_state(
     association = len(populations["association"])
     key = width
     value = key if settings["value"] == "event" else association
-    # the predecessor key adds the previous event and the last command to every key
-    predecessor = settings.get("key", "event") == "predecessor"
-    commands = len(populations.get("motor", ())) if predecessor else 0
-    # and the window, its k events in order, comes first
+    # the window's k events in order
     window = settings.get("window", 1)
-    address = window * key + (key + commands if predecessor else 0)
+    address = window * key
     regions = ("recall", "next") if settings["next"] else ("recall",)
     if (
         any(len(populations.get(name, ())) != value for name in regions)
@@ -882,11 +879,6 @@ def _validate_recall_state(
     if window > 1:  # the window's previous events per stream: a window of another length
         past = data.get("recall/past")  # is refused by the shape
         array("past", (0 if past is None or not len(past) else batch, window - 1, key))
-    if predecessor:  # the previous moment's event and the last command, per stream
-        before = data.get("recall/before")
-        array("before", (0 if before is None or not len(before) else batch, key))
-        command = data.get("recall/command")
-        array("command", (0 if command is None or not len(command) else batch, commands))
     # the actor's eligibility of the address map, and the contrast of a pending action
     eligibility = (batch, key + association + 1, address)
     if "recall/trace" in data:
@@ -899,8 +891,6 @@ def _validate_recall_state(
     if "recall/ended" in data and array("ended", (batch,)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: ended")
     expected = {"keys", "values", "nexts", "held", "previous", "history", "w_x", "w_c", "b"}
-    if predecessor:
-        expected |= {"before", "command"}
     if window > 1:
         expected |= {"past"}
     if {name[len("recall/"):] for name in data if name.startswith("recall/")} - {
@@ -1635,24 +1625,19 @@ class Brain:
         founder ``"forget"`` empties them: the latest slot of the ended episode learns no
         successor from the next episode's first moment, and the moment before begins afresh
         as the working trace does. ``Brain.reset(keep_memory=True)`` keeps the slots too.
-        ``recall_key="predecessor"`` (construction) adds the stream's previous moment to every
-        key, ``recall_heard`` times the event of the previous moment and the one-hot of the
-        command the stream issued last, zeros at a stream's first moment and after an
-        episode ends: a key of ``2 * code + actions`` values in place of ``code``, the address
-        and the map's outputs as wide, the values and nexts the events.
         ``recall_window`` k above 1 (construction, with ``recall_window_decay`` d in (0, 1])
         makes every key an ordered window of the stream's last k events, ``[heard * x_t, d *
         heard * x_(t-1), ..., d^(k-1) * heard * x_(t-k+1)]``, each position on coordinates of
         its own, zeros before a stream's first moment and after an episode ends: a key of
-        ``k * code`` values (the predecessor key's blocks follow it), the address and the map's
-        outputs as wide; ``recall_context`` adds its fading sum on the present event's block.
+        ``k * code`` values, the address and the map's outputs as wide; ``recall_context`` adds
+        its fading sum on the present event's block.
         The founder ``recall=False`` builds the brain without it.
         ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next``,
-        ``recall_key``, ``recall_window`` and ``recall_window_decay`` are construction
+        ``recall_window`` and ``recall_window_decay`` are construction
         settings; the keys, the event values and the address map follow the observation code's
         width, a brain's ``code`` among the ways to bound it. The settings of 0.84.3 that this
-        version removed (``recall_write``) are refused by name; the CHANGELOG gives each one's
-        reading.
+        version removed (``recall_write``, ``recall_key``) are refused by name; the CHANGELOG
+        gives each one's reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -2837,8 +2822,8 @@ class Brain:
         remains in the result; inspect ``qualified`` before using a response.
 
         After each imagined moment the branch issues, privately, the act the brain would
-        issue on it, its complete greedy choice; the branch's efference copy and the recall
-        memory's predecessor key take it in. With ``memory_choice`` that act includes the
+        issue on it, its complete greedy choice; the branch's efference copy takes it in.
+        With ``memory_choice`` that act includes the
         episodic vote, read under the branch's own temporal context, which the branch's acts
         move on as the stream's acts move the stream's. The vote joins the readout after the
         settle, so a returned state holds the cortex's response; a greedy ``act`` on a loaded
@@ -2886,9 +2871,9 @@ class Brain:
             heard.trace = heard.trace.copy()
         recalled = None if self.recall is None else self.recall.imagined()
         # the branch issues the act the brain would issue where the act is heard, by the copy
-        # of the command or the predecessor key; the episodic vote is read under the branch's
-        # own temporal context, the stream's moved on privately by the branch's acts
-        issues = echo is not None or (recalled is not None and recalled.key == "predecessor")
+        # of the command; the episodic vote is read under the branch's own temporal context,
+        # the stream's moved on privately by the branch's acts
+        issues = echo is not None
         context = None if self._context is None else self._context.copy()
         phases = []
         for value in sequence:
@@ -2935,12 +2920,7 @@ class Brain:
                 # private history
                 heard.hear(self._sensed(value, code))
             if recalled is not None:
-                # the branch's cortex moves on, and with the predecessor key the branch's own
-                # act is the command the next imagined moment follows
-                recalled.witness(
-                    code, phase.state,
-                    command=command if recalled.key == "predecessor" else None,
-                )
+                recalled.witness(code, phase.state)  # the branch's cortex moves on
         return tuple(phases)
 
     def act(
@@ -3019,11 +2999,9 @@ class Brain:
             # past; the next drive holds the present
             self.history.hear(self._sensed(x, code))
         if self.recall is not None:
-            # the moment acted on joins the stream's slots; its settled cortex enters the next
-            # moment's address, and with the predecessor key the moment and its command the
-            # next moment's key
-            command = self._command(action) if self.recall.key == "predecessor" else None
-            self.recall.witness(code, free, command=command)
+            # the moment acted on joins the stream's slots; its settled cortex enters the
+            # next moment's address
+            self.recall.witness(code, free)
         if bias is not None:
             if key is not None:
                 # what the stream did joins its temporal context after what it saw
@@ -3664,8 +3642,6 @@ class Brain:
                 data["recall/ended"] = recall.ended
             if recall.window > 1:  # the window's previous events
                 data["recall/past"] = recall.past
-            if recall.key == "predecessor":  # the previous moment's event and last command
-                data["recall/before"], data["recall/command"] = recall.before, recall.command
             # the actor's eligibility of the address map, and the pending action's contrast
             if agent.trace_memory is not None:
                 data["recall/trace"] = agent.trace_memory
@@ -3872,9 +3848,6 @@ class Brain:
                 )
                 if recall.window > 1:  # validated above: saved with the window
                     recall.past = data["recall/past"].astype(float)
-                if recall.key == "predecessor":  # validated above: both are saved
-                    recall.before = data["recall/before"].astype(float)
-                    recall.command = data["recall/command"].astype(float)
                 recall.writes = int(recalled["writes"])
             result.learner = learner
             # Initialization provenance is separate from the saved, possibly learned bias.

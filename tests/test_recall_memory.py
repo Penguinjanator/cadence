@@ -1180,7 +1180,7 @@ def test_the_options_at_their_founders_build_the_founder_memory(tmp_path):
     checkpoint bytes and the same description, which leaves the options out."""
     assert cd.Recall.options() == {
         "address_step": "lms", "null": None, "address_reward": 0.0, "episodes": "forget",
-        "key": "event", "window": 1, "window_decay": 1.0,
+        "window": 1, "window_decay": 1.0,
     }
     founder = composed(seed=5, arousal=True, learning_surprise=True)
     explicit = composed(
@@ -1954,131 +1954,6 @@ def test_kept_episodes_survive_a_checkpoint_between_an_ending_and_the_next_momen
         cd.Brain.load(tmp_path / "bad.npz")
 
 
-# -- the predecessor key
-
-
-def _predecessor(present, previous, command, heard=1.0):
-    """A predecessor key: ``heard`` times the present event, the previous one (zeros for
-    none) and the one-hot of the last command (``None``: zeros) of two actions."""
-    issued = np.zeros(2)
-    if command is not None:
-        issued[int(command)] = 1.0
-    before = np.zeros_like(present) if previous is None else previous
-    return heard * np.r_[present, before, issued]
-
-
-@pytest.mark.parametrize("episodes", ["forget", "keep"])
-def test_the_predecessor_key_joins_the_previous_moment_and_command_with_the_present(episodes):
-    """With ``recall_key="predecessor"`` a slot's key is ``heard`` times the moment's event,
-    the event of the stream's previous moment and the one-hot of the command the stream
-    issued last: zeros at a stream's first moment and after an episode ends, either way the
-    episode's slots go. The address is the key while the map is zero, the map reads the
-    event alone and writes the wider key, and values and nexts stay the events."""
-    brain = composed(seed=5, recall_heard=1.5, recall_key="predecessor", recall_episodes=episodes)
-    recall = brain.recall
-    assert recall.address_width == 2 * 4 + 2 and recall.commands == 2
-    assert (recall.w_x.shape, recall.w_c.shape, recall.b.shape) == ((4, 10), (8, 10), (10,))
-    first = int(brain.act(FACT)[0])  # the stream's first moment
-    np.testing.assert_array_equal(recall.keys[0, 0], _predecessor(FACT[0], None, None, 1.5))
-    second = int(brain.act(GO)[0])  # steady state
-    np.testing.assert_array_equal(recall.keys[0, 1], _predecessor(GO[0], FACT[0], first, 1.5))
-    brain.stimulus(CUE)
-    np.testing.assert_array_equal(recall.last.address[0], _predecessor(CUE[0], GO[0], second, 1.5))
-    np.testing.assert_array_equal(recall.values[0], np.r_[FACT, GO])
-    np.testing.assert_array_equal(recall.nexts[0, 0], GO[0])
-    brain.learn(np.zeros(1), np.ones(1, bool), CUE)  # the episode ends
-    brain.act(CUE, greedy=True)
-    np.testing.assert_array_equal(recall.keys[0, -1], _predecessor(CUE[0], None, None, 1.5))
-    assert recall.slots == (3 if episodes == "keep" else 1)
-    report = brain.lesson(NAME, [1])  # the address lesson steps the wider map
-    assert report["address_rows"] == 1.0 and recall.w_x.shape == (4, 10)
-    assert np.abs(recall.w_x).sum() > 0
-
-
-def test_the_predecessor_keys_of_a_batch_are_each_streams_own():
-    brain = composed(seed=6, recall_key="predecessor")
-    recall = brain.recall
-    first = brain.act(np.eye(4)[:2])
-    second = brain.act(np.eye(4)[[2, 3]])
-    for row in range(2):
-        np.testing.assert_array_equal(
-            recall.keys[row, 1], _predecessor(np.eye(4)[2 + row], np.eye(4)[row], first[row])
-        )
-    brain.learn(np.zeros(2), np.array([False, True]), np.eye(4)[[1, 0]])  # stream 1 ends
-    brain.act(np.eye(4)[[1, 0]])
-    np.testing.assert_array_equal(
-        recall.keys[0, -1], _predecessor(np.eye(4)[1], np.eye(4)[2], second[0])
-    )
-    np.testing.assert_array_equal(recall.keys[1, -1], _predecessor(np.eye(4)[0], None, None))
-
-
-def test_a_waited_moment_becomes_the_predecessor_and_keeps_the_last_command():
-    """``wait`` writes the sensed moment under the predecessor key and makes it the next
-    moment's predecessor; no command is issued, so the last one stays. An imagined branch
-    moves its own predecessor and leaves the live memory as it was."""
-    brain = composed(seed=7, arousal=True, recall_key="predecessor")
-    recall = brain.recall
-    action = int(brain.live(CUE)[0])
-    brain.wait(GO)
-    np.testing.assert_array_equal(recall.keys[0, 1], _predecessor(GO[0], CUE[0], action))
-    np.testing.assert_array_equal(recall.before[0], GO[0])
-    before = recall.snapshot()
-    branch = brain.imagine([NAME, FACT])
-    assert all(np.all(phase.qualified) for phase in branch)
-    for name, value in before.items():
-        assert getattr(recall, name) is value
-    brain.live(FACT, reward=[1.0])
-    np.testing.assert_array_equal(recall.keys[0, 2], _predecessor(FACT[0], GO[0], action))
-
-
-def test_the_predecessor_key_survives_a_checkpoint_and_shapes_the_memory(tmp_path):
-    brain = composed(seed=5, arousal=True, recall_key="predecessor", recall_address=0.2,
-                     recall_address_reward=0.5, learning_surprise=True)
-    for t in range(4):
-        brain.step(STREAM[t % 4], teacher=[t % 2])
-    for t in range(3):
-        brain.live(STREAM[t % 4], reward=[float(t % 2)])
-    assert brain.basal_ganglia._pending_memory.shape == (1, 4 + 8 + 1, 10)
-    path = brain.save(tmp_path / "predecessor")
-    with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
-        assert data["recall/keys"].shape[2] == 10 and data["recall/before"].shape == (1, 4)
-        assert data["recall/command"].shape == (1, 2)
-    assert meta["recall"]["key"] == "predecessor"
-    twin = cd.Brain.load(path)
-    assert twin.recall.key == "predecessor" and twin.describe() == brain.describe()
-    for name in ("before", "command"):
-        np.testing.assert_array_equal(getattr(twin.recall, name), getattr(brain.recall, name))
-    for t in range(4):
-        x, reward = STREAM[(t + 1) % 4], [float(t % 2)]
-        np.testing.assert_array_equal(brain.live(x, reward=reward), twin.live(x, reward=reward))
-        assert_same_memory(brain.recall, twin.recall)
-    assert_same_checkpoint(brain.save(tmp_path / "later"), twin.save(tmp_path / "twin"))
-    with pytest.raises(ValueError, match="construction setting"):
-        brain.retune(recall_key="event")
-    with pytest.raises(ValueError, match="key"):
-        composed(recall_key="pair")
-    for tamper in ("without_before", "wide_command", "founder_key"):
-        arrays = saved_arrays(path)
-        meta = json.loads(str(arrays["generic"]))
-        if tamper == "without_before":
-            del arrays["recall/before"]
-        elif tamper == "wide_command":
-            arrays["recall/command"] = np.zeros((1, 3))
-        else:
-            del meta["recall"]["key"]  # the founder key cannot read keys of the wider width
-        arrays["generic"] = np.array(json.dumps(meta))
-        np.savez(tmp_path / "bad.npz", **arrays)
-        with pytest.raises(ValueError):
-            cd.Brain.load(tmp_path / "bad.npz")
-    layout = (Region("sensory", 2), Region("association", 2), Region("recall", 2),
-              Region("next", 2))
-    with pytest.raises(ValueError, match="motor"):
-        cd.Recall(develop(Genome(layout, (Projection("sensory", "association",
-                                                     reciprocal=False),))),
-                  key="predecessor")
-
-
 # -- the window key
 
 
@@ -2136,21 +2011,6 @@ def test_waited_moments_enter_the_window_and_imagination_keeps_its_own_copy():
         assert getattr(recall, name) is value
     brain.live(FACT, reward=[0.0])
     np.testing.assert_array_equal(recall.keys[0, 2], _window(FACT[0], [GO[0]]))
-
-
-def test_the_window_composes_with_the_context_sum_and_the_predecessor_key():
-    """The context sum is added on the present event's block as without a window, and the
-    predecessor key's blocks, the previous event and the last command, follow the window's."""
-    brain = composed(seed=8, recall_window=2, recall_context=0.5, recall_key="predecessor")
-    recall = brain.recall
-    assert recall.address_width == 2 * 4 + 4 + 2
-    first = int(brain.act(FACT)[0])
-    brain.act(GO, greedy=True)
-    issued = np.zeros(2)
-    issued[first] = 1.0
-    np.testing.assert_array_equal(
-        recall.keys[0, 1], np.r_[GO[0] + 0.5 * FACT[0], FACT[0], FACT[0], issued]
-    )
 
 
 @pytest.mark.parametrize(
@@ -2242,6 +2102,7 @@ def test_the_window_survives_a_checkpoint_and_a_window_of_another_length_is_refu
 # each at a value 0.84.3 took, and its founder there
 REMOVED = {
     "recall_write": ("aroused", "always"),
+    "recall_key": ("predecessor", "event"),
 }
 
 
