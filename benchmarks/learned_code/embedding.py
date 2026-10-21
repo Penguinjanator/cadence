@@ -212,9 +212,10 @@ class Life:
         self.library = arm in LIBRARY_ARMS
         if self.library:
             genes = dict(LIBRARY, **(library or {}))
+            top_down = genes.pop("top_down", TOP_DOWN[arm])  # a pilot's weight over the arm's
             self.brain = Brain.compose(
                 INPUTS, ACTIONS, modules=(WIDTH,), seed=seed, learning_surprise=True,
-                learned_code=UNITS, learned_code_top_down=TOP_DOWN[arm],
+                learned_code=UNITS, learned_code_top_down=top_down,
                 **{f"learned_code_{name}": value for name, value in genes.items()},
             )
         elif arm in CODE_ARMS:
