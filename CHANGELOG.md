@@ -2,6 +2,59 @@
 
 ## Unreleased
 
+- `copy.deepcopy(brain)` works: a brain copies every array, store, state and random
+  generator and shares its immutable connectomes (`Connectome` copies as itself), with the
+  learned code region or without it; instruments that forked brains by hand no longer need
+  to.
+- `Brain.compose(..., learned_code=units)` (opt-in) adds a `code` region of the brain's own
+  neurons between the sensory region and the first module: a learned sparse code of the
+  observation, settled with the rest of the brain under the brain's neuron model, with the
+  dictionary as its synapses from the sensory neurons (at the gain that reads the sensory
+  activation in units of one full input), the dictionary's Gram matrix as its lateral
+  inhibition, a predictor from the prefrontal region (the working trace) as its
+  top-down boundary, each unit's threshold as its bias, and a standing quadratic boundary
+  (`Learner.standing`, the solver's anchor toward zero at gain `learned_code_top_down` on
+  the code units, carried by every phase) that with the predictor's drive is the pull
+  toward the prediction. A moment's settle runs the
+  region's phase first, by the brain's solver policy to the learner's tolerance, addresses
+  the memories on the rectified settled code at unit length, and settles the whole graph
+  warm from it; `last_settlement` reports `code_steps`, `code_residual` and
+  `code_halvings`. The brain integrates every phase at the step the settled code's
+  competition is stable under (the model's step halved as `LearnedCode.stability` reports,
+  with the step budgets scaled to keep each phase's time), so a dictionary whose columns
+  come to overlap strongly settles instead of oscillating under the synchronous sweep; a
+  phase that does not settle at the brain's step is settled once more at the step the
+  dictionary's coupling allows over every state (`LearnedCode.rest_stability`) before the
+  moment is refused, so a world of one input settles from its first moment. The
+  region learns at every accepted moment, from the moment's free settle alone, by local
+  rules (Hebbian on the reconstruction residual, the delta rule on the prediction's
+  residual normalized by the context's energy, homeostatic thresholds whose share reads
+  the context-free code, so that what the context predicts may recruit a unit without
+  raising its threshold), its genes
+  `learned_code_top_down` (2.0), `learned_code_rate` (0.125), `learned_code_predictor`
+  (0.0625, the share of a row's gap per event), `learned_code_threshold` (0.1),
+  `learned_code_threshold_rate` (0.000625), `learned_code_target` (0.1),
+  `learned_code_repair` (1.0, the share of a row's input energy its code may leave
+  unexplained before the row repairs: it lowers the thresholds of its silent units, at the
+  founder level a row whose code is silent) and `learned_code_silence` (10, how many
+  under-active rows a silent unit counts as in such a row, so no observation is left
+  without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`) and
+  `learned_code_output` (`"unit"`: the first module reads the rectified code at unit
+  length; `"raw"` reads the activations as they are), `learned_code_floor` (1.0: a code
+  weaker than one full input's activation is read as it is over that norm, so a blank
+  moment held up by the prediction alone is not raised to full length) and `learned_code_identity` (0.5: the memories' key is the rectified code
+  at unit length joined to the observation's own identity, `unit([sqrt(1 - w) code,
+  sqrt(w) unit(x)])`, of width `units + inputs`, so a binding stays readable by the
+  identity part while the code part moves; at 0 the code alone); the lesson's contrast and the dopamine leave
+  its synapses alone. The recall slots and the episodic context records key on the moment's code in its
+  context; the associative store and the episodic place records key on the context-free
+  code (a second code phase, `context_free_steps`), so a known situation is found again along a
+  new path. The heard history holds the code and the recall memory's event values are
+  codes; a decision keeps the key it was taken under until its outcome. Checkpoint format
+  `cadence-generic/10` carries the tables; `describe`,
+  `parameters` and `retune` cover the region; `LearnedCode` is exported. With the founder
+  `learned_code=None` every brain, checkpoint and life is the one of 0.84.3 byte for byte
+  (`tests/test_learned_code.py`).
 - Settings of the recall memory that 0.84.3 took are removed, each refused by name at
   `compose` and `retune` with a message naming 0.84.3 as the release that takes it, and a
   checkpoint saved under one is refused on load with a message naming 0.84.3; each was read before

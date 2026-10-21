@@ -31,6 +31,7 @@ arousal's income and error references, which decide when a `live` brain wakes, a
 | Associative store | yes | `episodic=False` removes it | one value per action per situation, in reward units | observation code | each outcome of the chosen action | yes | [below](#associative-store-the-hippocampus) |
 | Episodic memory | no | `memory_choice=True` | place and context records that vote in the choice | observation code, and code with the temporal context | known outcomes, demonstrations, replay of the path to a reward | records yes, context no | [episodic.md](episodic.md) |
 | Recall memory | no | `recall=True` | the stream's recent moments as slots, and a learned address map | observation code | a slot per moment; the map at lessons | map yes, slots no | [recall.md](recall.md) |
+| Learned code | no | `learned_code=units` | a dictionary, a predictor and thresholds: the code region's synapses and biases | none | every accepted moment, by local rules | yes | [code.md](code.md) |
 | Learned weights | yes | learning rates of zero freeze them | synapse scales and biases, actor and critic | none | lessons, and outcomes (aroused ones under `live`) | yes | [learning.md](learning.md) |
 | Actor eligibility | yes | `actor_lam=0.0` credits the last action only | each synapse's credit for recent sampled acts | none | each sampled act | no | [reward.md](reward.md#eligibility-traces-and-dopamine) |
 
@@ -281,8 +282,10 @@ address map too large: at 12,824 inputs they take 1,532 MB uncoded with `memory_
 `recall`, and 9.8 MB with `code=1024`. A coded brain refuses `memory_expansion` and
 `memory_fan_in`, and keys stored under one code do not match another.
 `Brain.observation_width(inputs, code)` gives the key width before building, the size of a
-custom anatomy's `recall` and `next` regions. The code is fixed and learns nothing; a learned
-code is work in progress in [#211](https://github.com/muellerberndt/cadence/issues/211).
+custom anatomy's `recall` and `next` regions. The code is fixed and learns nothing.
+`learned_code=units` (opt-in, without `code`) adds a code region of the brain's own neurons
+that settles to a learned sparse code of the observation and learns every moment; the cortex
+reads it and the memories key on it ([the learned code](code.md)).
 
 ```python
 plain = Brain.compose(inputs=2048, actions=3, seed=0)

@@ -79,6 +79,7 @@ PAGES = [
     "docs/brain.md",
     "docs/episodic.md",
     "docs/recall.md",
+    "docs/code.md",
     "docs/records.md",
     "docs/evolution.md",
     "docs/build.md",

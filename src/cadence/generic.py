@@ -36,6 +36,8 @@ designed region can replace any of them.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType
 from typing import Any, cast
@@ -44,14 +46,15 @@ import numpy as np
 
 from ._configuration import arousal_config, configured, plain, real, split_genes
 from .arousal import Arousal, ArousalConfig
-from .brain import Backend, BrainState, Equilibrium
+from .brain import Backend, BrainState, Equilibrium, Nudge
 from .brain import Brain as NeuralGraph
+from .code import LearnedCode
 from .connectome import Connectome
 from .genome import Genome, Projection, develop
 from .learning import Learner, LearnerConfig, learning_neuron_model
 from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
-from .regions import Region, motor_cortex, prefrontal_cortex, slot_sizes, visual_cortex
+from .regions import Region, cortex, motor_cortex, prefrontal_cortex, slot_sizes, visual_cortex
 from .stream import Efference, FastSynapses, History, PatternSeparator, Recall, Trace
 
 __all__ = ["Brain"]
@@ -178,6 +181,40 @@ def _recall_genes(recall: Any, genes: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("recall settings need recall=True")
         return {}
     return {**founders, **settings}
+
+
+def _learned_code_units(value: Any) -> int:
+    """The units of the brain's learned code: ``learned_code`` as given, 0 or None for none."""
+    if value is None:
+        return 0
+    units = _count("learned_code", value)
+    if units == 1:
+        raise ValueError("a learned code holds at least 2 units")
+    return units
+
+
+def _learned_code_genes(learned_code: Any, genes: dict[str, Any]) -> dict[str, Any]:
+    """The learned code's settings, validated: its units and founders with every
+    ``learned_code_<setting>`` of ``genes`` over them (those names are removed from
+    ``genes``), or an empty mapping for a brain without it."""
+    units = _learned_code_units(learned_code)
+    settings: dict[str, Any] = {}
+    for name in [name for name in genes if name.startswith("learned_code_")]:
+        setting = name[len("learned_code_"):]
+        if setting not in LearnedCode.GENES:
+            raise TypeError(f"unknown brain setting: {name!r}")
+        settings[setting] = LearnedCode.setting(setting, genes.pop(name))
+    if not units:
+        if settings:
+            raise ValueError("learned_code settings need learned_code=units")
+        return {}
+    return {"units": units, **LearnedCode.founders(), **settings}
+
+
+_LEARNED_CODE_TOGETHER = (
+    "code and learned_code together are not built: the learned code's key joins the "
+    "observation itself as its identity (learned_code_identity); name one of them"
+)
 
 
 def _image_shape(inputs: Any) -> tuple[int, int, int] | None:
@@ -379,7 +416,7 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
         # provenance without a working_memory_scale was composed at the fixed scale 12
         value = {**value, "working_memory_scale": 12.0}
     if not isinstance(value, dict) or set(value) - {
-        "history_scale", "recall_scale", "image", "code"
+        "history_scale", "recall_scale", "image", "code", "learned_code"
     } != (expected | {"working_memory_scale"}):
         raise ValueError("invalid saved composition provenance")
     for name in ("inputs", "actions", "seed"):
@@ -430,6 +467,18 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
             or "image" in value
         ):
             raise ValueError("invalid saved composition code")
+    if "learned_code" in value:
+        # the code region of that many units, between the sensory region and the first module
+        units = value["learned_code"]
+        if (
+            isinstance(units, bool)
+            or not isinstance(units, int)
+            or units != len(populations.get("code", ()))
+            or sensory != "sensory"
+            or "image" in value
+            or "code" in value
+        ):
+            raise ValueError("invalid saved composition learned_code")
     modules = _region_widths(populations, "module_") + [len(populations.get("association", ()))]
     observers = _region_widths(populations, "observer_")
     if (
@@ -564,21 +613,91 @@ def _load_memory(
         raise ValueError("invalid or incomplete saved memory metadata") from exc
 
 
+def _validate_learned_code(meta: dict[str, Any], data: Mapping[str, Any], learner: Learner) -> int:
+    """The learned code a checkpoint names, validated against the connectome and its saved
+    tables: its units, or 0 for a brain without one."""
+    spec = meta.get("learned_code")
+    if spec is None:
+        if any(name.startswith("learned_code/") for name in data) or any(
+            name in data for name in ("moment/code", "lived/code")
+        ):
+            raise ValueError("saved learned code tables require learned_code metadata")
+        return 0
+    populations = learner.brain.connectome.populations
+    fields = {"inputs", "units", "context", "seed", "stepping", "work", *LearnedCode.GENES}
+    if not isinstance(spec, dict) or set(spec) != fields:
+        raise ValueError("invalid saved learned code metadata")
+    for name in ("inputs", "units", "context", "seed", "stepping"):
+        value = spec[name]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise ValueError(f"saved learned code {name} must be a nonnegative integer")
+    # the step the brain integrates at: the model's halved ``stepping`` times, saved with it
+    dt = learner.brain.neuron_model.dt
+    if dt != float(np.ldexp(1.0, -int(spec["stepping"]))):
+        raise ValueError("the saved learned code's stepping disagrees with the saved step")
+    work = spec["work"]
+    if not isinstance(work, dict) or any(
+        isinstance(v, bool) or not isinstance(v, int) or v < 0 for v in work.values()
+    ):
+        raise ValueError("saved learned code work must count nonnegative integers")
+    for name in LearnedCode.GENES:
+        try:
+            LearnedCode.setting(name, spec[name])
+        except ValueError as exc:
+            raise ValueError(f"invalid saved learned code {name}") from exc
+    if "code" not in populations or "prefrontal" not in populations or "sensory" not in populations:
+        raise ValueError("a learned code needs sensory, code and prefrontal populations")
+    units = int(spec["units"])
+    if units != len(populations["code"]):
+        raise ValueError(
+            f"the code population of {len(populations['code'])} neurons is not the saved "
+            f"learned code of {units} units"
+        )
+    if spec["inputs"] != len(populations["sensory"]) or spec["context"] != len(
+        populations["prefrontal"]
+    ):
+        raise ValueError("the saved learned code reads other widths than the connectome has")
+    shapes = {
+        "dictionary": (spec["inputs"], units),
+        "weights": (units, spec["context"]),
+        "thresholds": (units,),
+    }
+    for name, shape in shapes.items():
+        key = "learned_code/" + name
+        if key not in data:
+            raise ValueError(f"missing saved learned code table: {name}")
+        table: np.ndarray = data[key]
+        if table.shape != shape or table.dtype.kind not in "iuf" or not np.isfinite(table).all():
+            raise ValueError(f"invalid saved learned code table: {name}")
+    if (data["learned_code/thresholds"] < 0).any():
+        raise ValueError("a learned code's thresholds are nonnegative")
+    if not np.allclose(
+        np.linalg.norm(data["learned_code/dictionary"], axis=0), 1.0, rtol=0, atol=1e-9
+    ):
+        raise ValueError("a learned code's dictionary has unit-length columns")
+    return units
+
+
 def _validate_life_state(
     meta: dict[str, Any],
     data: Mapping[str, Any],
     learner: Learner,
     code: tuple[int, PatternSeparator, bool] | None,
+    learned: int = 0,
 ) -> None:
     """Reject corrupt continuation state before exposing a resumed agent. ``code`` is the
     brain's sparse code the checkpoint names, validated: the observations are saved at their
-    width, and the memories' keys have the code's."""
+    width, and the memories' keys have the code's. ``learned`` is the units of the learned
+    code the checkpoint names, the memories' key width then."""
     n = learner.brain.connectome.n
     populations = learner.brain.connectome.populations
     association = len(populations["association"])
     sensory = len(populations.get("sensory", populations.get("visual/input", ())))
     observed = sensory if code is None else code[0]
     code_width = sensory if code is None else code[1].expansion
+    if learned:  # the memories' key: the code, joined to the observation's identity when weighted
+        joined = float(meta["learned_code"]["identity"]) > 0
+        code_width = learned + (sensory if joined else 0)
 
     def array(name: str, shape: tuple[int, ...] | None = None) -> np.ndarray:
         if name not in data:
@@ -660,6 +779,10 @@ def _validate_life_state(
         limit = learner.slot_sizes[None, :] if slotted else len(learner.output_index)
         if action.dtype.kind not in "iu" or (action < 0).any() or (action >= limit).any():
             raise ValueError("invalid saved action indices")
+        if learned:  # the code the decision was keyed on, settled at its moment
+            array("moment/code", (batch, code_width))
+    if "moment/code" in data and (not learned or "moment/observations" not in data):
+        raise ValueError("a saved moment's code belongs to a pending action of a learned code")
     lived = meta.get("lived")
     if "lived" not in meta:
         if "lived/observations" in data or "lived/action" in data:
@@ -692,6 +815,10 @@ def _validate_life_state(
         limit = learner.slot_sizes[None, :] if slotted else len(learner.output_index)
         if action.dtype.kind not in "iu" or (action < 0).any() or (action >= limit).any():
             raise ValueError("invalid saved lived action indices")
+        if learned:
+            array("lived/code", (1, code_width))
+    if "lived/code" in data and (not learned or "lived" not in meta):
+        raise ValueError("a saved lived code belongs to a lived action of a learned code")
         if was_sampled:
             if (
                 not np.array_equal(observations, array("moment/observations", (1, observed)))
@@ -704,10 +831,10 @@ def _validate_life_state(
         raise ValueError("format cadence-generic/5 carries a sensed state awaiting an outcome")
     if "awaiting" in meta and meta.get("format") not in (
         "cadence-generic/5", "cadence-generic/6", "cadence-generic/7", "cadence-generic/8",
-        "cadence-generic/9",
+        "cadence-generic/9", "cadence-generic/10",
     ):
         raise ValueError(
-            "a sensed state awaiting an outcome belongs to formats cadence-generic/5 to /9"
+            "a sensed state awaiting an outcome belongs to formats cadence-generic/5 to /10"
         )
     if "awaiting" not in meta:
         if any(name.startswith("awaiting/") for name in data):
@@ -745,9 +872,10 @@ def _validate_life_state(
             "cadence-generic/7",
             "cadence-generic/8",
             "cadence-generic/9",
+            "cadence-generic/10",
         ):
             raise ValueError(
-                "an efference copy belongs to checkpoint formats cadence-generic/4 to /9"
+                "an efference copy belongs to checkpoint formats cadence-generic/4 to /10"
             )
         source, target = efference["source"], efference["target"]
         if (
@@ -769,11 +897,13 @@ def _validate_life_state(
     ):
         raise ValueError("saved history neurons and state require history metadata")
     if heard is not None:
+        # with a learned code the history hears the code region, what the cortex reads
+        sources = ("code",) if learned else ("sensory", "visual/input")
         if (
             not isinstance(heard, dict)
             or set(heard) != {"decays", "amplitude", "source", "target", "neurons"}
             or not isinstance(heard["decays"], list)
-            or heard["source"] not in ("sensory", "visual/input")
+            or heard["source"] not in sources
             or heard["source"] not in populations
             or heard["target"] != "history"
             or "history" not in populations
@@ -782,7 +912,8 @@ def _validate_life_state(
         decays = _history_decays(heard["decays"])
         real("saved history_amplitude", heard["amplitude"], low=0)
         width = len(populations["history"])
-        if not decays or width != len(decays) * sensory or heard["neurons"] != width:
+        heard_width = learned or sensory
+        if not decays or width != len(decays) * heard_width or heard["neurons"] != width:
             raise ValueError("a saved history needs one block of sensory width per decay")
         array("history/trace", (batch, width))
     _validate_recall_state(meta, data, learner, batch, sensory, code_width)
@@ -797,7 +928,7 @@ def _validate_recall_state(
     sensory: int,
     width: int,
 ) -> None:
-    """The settings, slots and address map of a recall memory (formats /8 and /9); ``width``
+    """The settings, slots and address map of a recall memory (formats /8 to /10); ``width``
     is the observation code's, the observations the memory is given. A file saved under a
     setting this version removed is refused with a message naming 0.84.3."""
     populations = learner.brain.connectome.populations
@@ -916,7 +1047,7 @@ def _removed_recall(name: str, value: Any) -> str:
 def _validate_episodic_state(
     meta: dict[str, Any], data: Mapping[str, Any], learner: Learner, sensory: int
 ) -> None:
-    """The settings and stream state of an episodic memory's choice (formats /6 to /9);
+    """The settings and stream state of an episodic memory's choice (formats /6 to /10);
     ``sensory`` is the width of the observation code the records are keyed on."""
     names = ("episode/context", "episode/decision") + tuple(
         "episode/path/" + name
@@ -1056,6 +1187,19 @@ class Brain:
     separation, so the episodic stores take no separator of their own.
     """
 
+    def __deepcopy__(self, memo: dict[int, Any]) -> Brain:
+        """An independent copy: every array, store, state and random generator copied, the
+        immutable connectomes shared, the read-only reports copied as read-only reports."""
+        twin = type(self).__new__(type(self))
+        memo[id(self)] = twin
+        for name, value in vars(self).items():
+            if isinstance(value, MappingProxyType):
+                value = MappingProxyType(deepcopy(dict(value), memo))
+            else:
+                value = deepcopy(value, memo)
+            setattr(twin, name, value)
+        return twin
+
     def __init__(
         self,
         connectome: Connectome,
@@ -1090,6 +1234,7 @@ class Brain:
         device: str | None = None,
         inputs: int | None = None,
         code: int | None = None,
+        learned_code: int | None = None,
         **genes: Any,
     ) -> None:
         populations = connectome.populations
@@ -1119,6 +1264,40 @@ class Brain:
             _sparse_code(self.inputs, units, _code_seed(seed)) if units else None
         )
         self.code_width = units or self.inputs
+        # the learned code: a region of the brain's own neurons that settles to a sparse
+        # code of the observation and learns every moment; the memories key on it
+        learned = _learned_code_genes(learned_code, genes)  # its genes leave ``genes`` here
+        if learned and self.sparse_code is not None:
+            raise ValueError(_LEARNED_CODE_TOGETHER)
+        if learned and sensory != "sensory":
+            raise ValueError("a learned code needs a vector brain with a 'sensory' population")
+        if learned and backend != "cpu":
+            raise ValueError("a learned code settles on the cpu backend in this version")
+        for name in ("code", "prefrontal") if learned else ():
+            if name not in populations:
+                raise ValueError(
+                    f"learned_code needs a population named {name!r}; Brain.compose adds it"
+                )
+        if learned and len(populations["code"]) != learned["units"]:
+            raise ValueError(
+                f"the code population of {len(populations['code'])} neurons is not the "
+                f"learned code of {learned['units']} units"
+            )
+        self.code_index = (
+            np.asarray(populations["code"], dtype=np.int64) if learned else np.zeros(0, np.int64)
+        )
+        self.prefrontal_index = (
+            np.asarray(populations["prefrontal"], dtype=np.int64)
+            if "prefrontal" in populations
+            else np.zeros(0, np.int64)
+        )
+        if learned:  # the key: the code, joined to the observation's identity when weighted
+            self.code_width = learned["units"] + (
+                self.inputs if float(learned["identity"]) > 0 else 0
+            )
+        # whether the memories key on a code of the observation (fixed or learned) rather
+        # than on the observation itself
+        self._coded_keys = bool(units) or bool(learned)
         recalled = _recall_genes(recall, genes)  # the recall_* genes leave ``genes`` here
         learning_genes, actor_genes, arousal_genes = split_genes(genes)
         learning = configured(_learning() if learning is None else learning, learning_genes,
@@ -1141,7 +1320,7 @@ class Brain:
         memory_expansion = _count("memory_expansion", memory_expansion)
         memory_winners = _count("memory_winners", memory_winners, low=1)
         memory_fan_in = _count("memory_fan_in", 0 if memory_fan_in is None else memory_fan_in)
-        if self.sparse_code is not None and (memory_expansion or memory_fan_in):
+        if self._coded_keys and (memory_expansion or memory_fan_in):
             # a coded brain's memories key on the code as it is: the code is their separation
             raise ValueError(
                 "a coded brain's memories key on its code as it is; memory_expansion and "
@@ -1181,7 +1360,9 @@ class Brain:
                 head = name.split("/", 1)[0]
                 boundary = head in (
                     "sensory", "visual", "prefrontal", "motor", "efference", "history"
-                ) or (bool(recalled) and head in ("recall", "next"))
+                ) or (bool(recalled) and head in ("recall", "next")) or (
+                    bool(learned) and head == "code"
+                )
                 target = excluded if boundary else selected
                 target[np.asarray(members, dtype=np.int64)] = True
             bias[selected & ~excluded] = resting_bias
@@ -1190,10 +1371,42 @@ class Brain:
         )
         self.resting_bias = resting_bias
         self._composition: dict[str, Any] | None = None  # construction provenance, not parameters
-        self.learner = Learner(brain, list(self.motor_index), learning, slots=slots)
+        # The learned code's tables are the brain's synapses and biases: the dictionary from
+        # the sensory neurons, the lateral weights among the code units and the predictor
+        # from the prefrontal region, with the thresholds as the units' biases. The region
+        # installs them itself at every accepted moment, so the lesson's contrast and the
+        # dopamine leave them alone.
+        self.learned_code: LearnedCode | None = None
+        self._code_synapses: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
+        plastic_synapses = plastic_neurons = None
+        if learned:
+            self.learned_code = LearnedCode(
+                len(self.sensory_index), learned["units"], len(self.prefrontal_index),
+                brain.neuron_model, seed=seed,
+                **{name: learned[name] for name in LearnedCode.GENES},
+            )
+            self._code_synapses = self._learned_code_synapses()
+            self._code_forward = self._learned_code_forward()
+            brain = self._installed(brain)
+            plastic_synapses = np.ones(connectome.synapses, dtype=bool)
+            for synapses, _, _ in self._code_synapses.values():
+                plastic_synapses[synapses] = False
+            plastic_neurons = np.ones(connectome.n, dtype=bool)
+            plastic_neurons[self.code_index] = False
+        self.learner = Learner(
+            brain, list(self.motor_index), learning, slots=slots,
+            plastic_synapses=plastic_synapses, plastic_neurons=plastic_neurons,
+        )
         self.basal_ganglia = ActorCritic(
             self.learner, list(self.association_index), reward, seed=seed
         )
+        # With a learned code the brain integrates every phase at the step the code's
+        # competition is stable under (``LearnedCode.stability``), the model's step halved
+        # ``_stepping`` times, with the step budgets scaled to keep each phase's time; the
+        # configurations in the model's step are the ones in use unscaled by the level.
+        self._stepping = 0
+        if learned:
+            self.learner.standing = self._standing()
         self.working_memory: Trace | None = None
         if "prefrontal" in populations:
             self.working_memory = Trace(
@@ -1216,9 +1429,11 @@ class Brain:
                 target="efference",
             )
         self.history: History | None = None
+        # the history hears what the cortex reads: the code region's code with a learned code
+        heard_width = len(self.code_index) if learned else len(self.sensory_index)
         if "history" in populations:
-            if not history_decays or len(populations["history"]) != len(history_decays) * len(
-                self.sensory_index
+            if not history_decays or len(populations["history"]) != len(history_decays) * (
+                heard_width
             ):
                 raise ValueError(
                     "a history population needs one block of sensory width per history decay"
@@ -1227,7 +1442,7 @@ class Brain:
                 connectome,
                 decays=history_decays,
                 amplitude=history_amplitude,
-                source=sensory,
+                source="code" if learned else sensory,
                 target="history",
             )
         elif history_decays:
@@ -1243,7 +1458,9 @@ class Brain:
                     )
             # a memory on a code of the observation is given the code, not the observation;
             # with a coded cortex the sensory range is the code
-            coded_memory = self.sparse_code is not None and not self.coded_cortex
+            coded_memory = (self.sparse_code is not None and not self.coded_cortex) or bool(
+                learned
+            )
             self.recall = Recall(
                 connectome, **recalled, source=sensory,
                 inputs=self.code_width if coded_memory else 0,
@@ -1274,7 +1491,7 @@ class Brain:
                 )
 
             # keyed on the sensory neurons, or on the coordinates of the observation code
-            coded = self.sparse_code is not None
+            coded = self._coded_keys
             self.hippocampus = store(np.arange(self.code_width) if coded else self.sensory_index, 0)
             if memory_choice and memory_context:
                 self.context_memory = store(
@@ -1297,18 +1514,30 @@ class Brain:
         ] = []
         self.rng = np.random.default_rng(seed)
         # the validated observations a settle is being prepared for and their code, computed
-        # once per moment: ``stimulus`` given that same array reads it, ``_choose`` takes it
-        self._coded_moment: tuple[np.ndarray, np.ndarray] | None = None
+        # once per moment: ``stimulus`` given that same array reads it, ``_choose`` takes it;
+        # with a learned code also the code region's settled state, the whole graph's warm start
+        self._coded_moment: (
+            tuple[np.ndarray, np.ndarray, BrainState | None, np.ndarray, np.ndarray | None]
+            | None
+        ) = None
         self._moment: tuple[np.ndarray, np.ndarray] | None = None
+        # with a learned code, the code the pending action was keyed on, settled at its moment
+        self._moment_code: np.ndarray | None = None
+        self._code_settlement: dict[str, Any] | None = None  # the latest code phase's report
         self._prepared: np.ndarray | None = None  # the observations ``learn`` settled
         self.last_learning: dict[str, float] = {}
         self._last_settlement: Mapping[str, Any] | None = None
         # ``live``: the arousal of the stream, and the action it issued that awaits an outcome
         # (observations, action, the value forecast made before the outcome, sampled?, its
-        # free state, the brain's own best guess?, the record's forecast of the outcome)
+        # free state, the brain's own best guess?, the record's forecast of the outcome, the
+        # code it was keyed on with a learned code)
         self.arousal: Arousal | None = None if arousal is None else Arousal(arousal)
         self._lived: (
-            tuple[np.ndarray, np.ndarray, float, bool, BrainState, bool, float | None] | None
+            tuple[
+                np.ndarray, np.ndarray, float, bool, BrainState, bool, float | None,
+                np.ndarray | None,
+            ]
+            | None
         ) = None
         self._last_arousal: Mapping[str, Any] | None = None
         # ``wait``: the free state of the action whose outcome is awaited, and the state the
@@ -1399,16 +1628,235 @@ class Brain:
         """
         return self._last_arousal
 
+    # -- the learned code's synapses
+
+    def _learned_code_synapses(self) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+        """The three synapse groups of the learned code in the connectome, each as the
+        synapse indices and the local coordinates of their ends: ``dictionary`` (sensory
+        ``i`` to code ``j``), ``lateral`` (code ``j`` to code ``k``) and ``predictor``
+        (prefrontal ``i`` to code ``j``). Every group must be complete, nothing else may
+        lead into the code region, and the sensory and prefrontal neurons must receive no
+        synapses, so that the region's fixed point is its own."""
+        code = self.learned_code
+        assert code is not None
+        connectome = self.connectome
+        pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+
+        def local(index: np.ndarray) -> np.ndarray:
+            out = -np.ones(connectome.n, dtype=np.int64)
+            out[index] = np.arange(len(index))
+            return out
+
+        sensory, codes, prefrontal = (
+            local(self.sensory_index), local(self.code_index), local(self.prefrontal_index)
+        )
+        into = codes[post] >= 0
+        groups = {
+            "dictionary": (sensory[pre] >= 0) & into,
+            "lateral": (codes[pre] >= 0) & into,
+            "predictor": (prefrontal[pre] >= 0) & into,
+        }
+        expected = {
+            "dictionary": code.inputs * code.units,
+            "lateral": code.units * (code.units - 1),
+            "predictor": code.context * code.units,
+        }
+        for name, mask in groups.items():
+            if int(mask.sum()) != expected[name]:
+                raise ValueError(
+                    f"a learned code needs its complete {name} synapses: {expected[name]} "
+                    f"where the connectome has {int(mask.sum())}; Brain.compose builds them"
+                )
+        if int(into.sum()) != sum(expected.values()):
+            raise ValueError("only the sensory, code and prefrontal neurons may lead into the code")
+        boundary = (sensory[post] >= 0) | (prefrontal[post] >= 0)
+        if boundary.any():
+            raise ValueError(
+                "a learned code needs sensory and prefrontal neurons that receive no synapses"
+            )
+        out = {}
+        for name, mask in groups.items():
+            synapses = np.flatnonzero(mask)
+            source = {"dictionary": sensory, "lateral": codes, "predictor": prefrontal}[name]
+            out[name] = (synapses, source[pre[synapses]], codes[post[synapses]])
+        return out
+
+    def _learned_code_forward(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The synapses from the code units to the association neurons: the synapse
+        indices and the local coordinates of their ends (code ``j``, association ``m``)."""
+        connectome = self.connectome
+        pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+        codes = -np.ones(connectome.n, dtype=np.int64)
+        codes[self.code_index] = np.arange(len(self.code_index))
+        targets = -np.ones(connectome.n, dtype=np.int64)
+        targets[self.association_index] = np.arange(len(self.association_index))
+        synapses = np.flatnonzero((codes[pre] >= 0) & (targets[post] >= 0))
+        return synapses, codes[pre[synapses]], targets[post[synapses]]
+
+    def _unit_read(self, x: np.ndarray, drive: np.ndarray, *, memory: bool) -> np.ndarray:
+        """With ``learned_code_output="unit"``: the drive with the term that makes the
+        association neurons read the rectified code at unit length (``LearnedCode.output_of``:
+        a code weaker than the floor is read as it is, scaled by one over the floor), in
+        place of the code units' activations: the region's output gain per stream, entered as
+        a drive from the moment's phase (the code units hold their fixed point through the
+        settle, as nothing in the graph leads back into them)."""
+        code = self.learned_code
+        assert code is not None
+        coded = self._coded_moment
+        if coded is not None and coded[0] is x and coded[2] is not None:
+            s = np.atleast_2d(np.asarray(coded[2].activation, dtype=float))
+        else:
+            s = np.atleast_2d(
+                np.asarray(self._settle_code(x, context=memory, report=False).state.activation,
+                           dtype=float)
+            )
+        if len(s) != len(drive):
+            return drive
+        unit = code.output_of(s)
+        synapses, j, m = self._code_forward
+        weights = np.zeros((len(self.association_index), code.units))
+        weights[m, j] = self.brain.efficacy[synapses]
+        out = drive.copy()
+        out[:, self.association_index] += (unit - s) @ weights.T
+        return out
+
+    def _installed(self, graph: NeuralGraph) -> NeuralGraph:
+        """``graph`` with the learned code's tables as its synapses and biases: the dictionary
+        at the region's read gain, the lateral weights, the predictor at ``top_down`` and the
+        thresholds."""
+        code = self.learned_code
+        assert code is not None
+        efficacy, bias = graph.efficacy.copy(), graph.bias.copy()
+        synapses, i, j = self._code_synapses["dictionary"]
+        efficacy[synapses] = code.read * code.dictionary[i, j]
+        synapses, j, k = self._code_synapses["lateral"]
+        efficacy[synapses] = code.lateral()[j, k]
+        synapses, i, j = self._code_synapses["predictor"]
+        efficacy[synapses] = code.top_down * code.weights[j, i]
+        bias[self.code_index] = -code.thresholds
+        return graph.with_parameters(efficacy=efficacy, bias=bias)
+
+    def _standing(self) -> Nudge | None:
+        """The brain's standing boundary: the learned code's quadratic anchor toward zero at
+        gain ``learned_code_top_down`` on the code units, nothing elsewhere; None at gain 0
+        or without the region."""
+        code = self.learned_code
+        if code is None or not code.top_down:
+            return None
+        n = self.connectome.n
+        gain = np.zeros(n)
+        gain[self.code_index] = code.top_down
+        return Nudge(np.zeros(n), np.zeros(n), 0.0, anchor=np.zeros(n), anchor_gain=gain)
+
+    def _learn_code(self, state: BrainState) -> None:
+        """The learned code's step from an accepted moment's settled ``state``: the sensory,
+        code and prefrontal activations the settle holds, then the brain's graph takes the
+        new tables."""
+        code = self.learned_code
+        assert code is not None
+        s = np.atleast_2d(np.asarray(state.activation, dtype=float))
+        coded = self._coded_moment  # the moment's context-free code: the share and the repair
+        free = None if coded is None else coded[4]
+        if code.learn(
+            s[:, self.sensory_index], s[:, self.code_index], s[:, self.prefrontal_index],
+            free=free,
+        ):
+            self.learner.brain = self._installed(self.brain)
+
+    @staticmethod
+    def _scaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
+        """The learner's budgets for the model's step halved ``halvings`` times: the same time
+        in every phase."""
+        if not halvings:
+            return config
+        return replace(
+            config, free_steps=config.free_steps << halvings,
+            nudged_steps=config.nudged_steps << halvings,
+        )
+
+    @staticmethod
+    def _scaled_reward(config: ActorCriticConfig, halvings: int) -> ActorCriticConfig:
+        if not halvings or config.eligibility_steps is None:
+            return config
+        return replace(config, eligibility_steps=config.eligibility_steps << halvings)
+
+    @staticmethod
+    def _unscaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
+        """The learner's budgets in the model's step from the ones at ``halvings``."""
+        if not halvings:
+            return config
+        return replace(
+            config, free_steps=config.free_steps >> halvings,
+            nudged_steps=config.nudged_steps >> halvings,
+        )
+
+    @staticmethod
+    def _unscaled_reward(config: ActorCriticConfig, halvings: int) -> ActorCriticConfig:
+        if not halvings or config.eligibility_steps is None:
+            return config
+        return replace(config, eligibility_steps=config.eligibility_steps >> halvings)
+
+    @property
+    def _learning_base(self) -> LearnerConfig:
+        """The learner's configuration in the model's step: the one in use, its budgets
+        unscaled by the stepping level, so a configuration assigned to ``learner.config``
+        holds through a change of step, its budgets read at the level in effect."""
+        return self._unscaled_learning(self.learner.config, self._stepping)
+
+    @property
+    def _reward_base(self) -> ActorCriticConfig:
+        """The actor's configuration in the model's step, as ``_learning_base``."""
+        return self._unscaled_reward(self.basal_ganglia.config, self._stepping)
+
+    def _restep(self, halvings: int) -> None:
+        """The brain at the model's step halved ``halvings`` times: the graph rebuilt at that
+        step with its parameters as they are, the learner's and the actor's budgets scaled,
+        and the code's sub-network stepped alike. Nothing changes at the current level."""
+        if halvings == self._stepping:
+            return
+        code = self.learned_code
+        assert code is not None
+        # the configurations in use, in the model's step: assigned ones included
+        learning, reward = self._learning_base, self._reward_base
+        graph = self.brain
+        self.learner.brain = NeuralGraph(
+            graph.connectome,
+            graph.neuron_model.replace(dt=float(np.ldexp(code.model.dt, -halvings))),
+            backend=graph.backend,
+            efficacy=graph.efficacy,
+            log_gain=graph.log_gain,
+            bias=graph.bias,
+            dense_limit=graph.dense_limit,
+            layout=graph.layout,
+            precision=graph.precision,
+        )
+        self.learner.config = self._scaled_learning(learning, halvings)
+        self.basal_ganglia.config = self._scaled_reward(reward, halvings)
+        code.restep(halvings)
+        self._stepping = halvings
+
     # -- construction
 
     @staticmethod
-    def observation_width(inputs: int | Sequence[int], code: int | None = None) -> int:
+    def observation_width(
+        inputs: int | Sequence[int], code: int | None = None, learned_code: int | None = None,
+        learned_code_identity: float | None = None,
+    ) -> int:
         """The width of the observation code of a brain with these ``inputs`` (a vector
-        length or an image shape) and this ``code`` (as the constructor takes it), before
-        the brain is built: with ``recall=True`` a custom anatomy's ``recall`` and ``next``
-        regions hold that many neurons."""
+        length or an image shape), this ``code`` and this ``learned_code`` (as the
+        constructor takes them; ``learned_code_identity`` as given, the founder otherwise),
+        before the brain is built: with ``recall=True`` a custom anatomy's ``recall`` and
+        ``next`` regions hold that many neurons. A learned code's key is its units, plus the
+        inputs when the key joins the observation's identity."""
         image = _image_shape(inputs)
         width = int(np.prod(image)) if image is not None else _count("inputs", inputs, low=1)
+        units = _learned_code_units(learned_code)
+        if units:
+            founder = LearnedCode.founders()["identity"]
+            weight = LearnedCode.setting(
+                "identity", founder if learned_code_identity is None else learned_code_identity
+            )
+            return units + (width if weight > 0 else 0)
         return _code_units(code) or width
 
     @staticmethod
@@ -1517,6 +1965,7 @@ class Brain:
         features: int = 8,
         field: int = 3,
         code: int | None = None,
+        learned_code: int | None = None,
         seed: int = 0,
         slots: int | Sequence[int] = 1,
         **options: Any,
@@ -1536,10 +1985,20 @@ class Brain:
         coded before the drive, so 12,824 inputs reach the cortex as 1,024 units through
         1,024 x 64 sensory synapses in place of 12,824 x 64, and the memories key on the same
         code; the founder leaves the cortex and the memories on the observation. The code is
-        fixed and random and learns nothing; a learned code is work in progress in
-        https://github.com/muellerberndt/cadence/issues/211. For an image brain
+        fixed and random and learns nothing. For an image brain
         ``code`` names the memories' code alone, the cortex reading the pixels through the
         visual cortex.
+        ``learned_code=units`` (opt-in; a vector brain, without ``code``) places a ``code``
+        region of that many neurons between the sensory region and the first module: a
+        learned sparse code of the observation, settled with the rest of the brain under
+        lateral competition through its dictionary and drawn toward the prediction the
+        working trace makes of it, learning every accepted moment by local rules
+        (``LearnedCode``). The cortex reads the code, the heard history holds it, and the
+        memories key on the rectified settled code at unit length joined to the
+        observation's own identity. Its genes, ``learned_code_<name>`` for every name of
+        ``LearnedCode.GENES`` (``LearnedCode.founders()`` gives the founders; the guide's
+        table says what each sets), are passed beside it; the founder
+        ``learned_code=None`` builds the brain without the region.
 
         ``modules`` specifies a chain of reciprocally connected processing
         regions. The final region is the association cortex. ``observers``
@@ -1685,10 +2144,22 @@ class Brain:
         inputs = size(inputs) if image is None else int(np.prod(image))
         actions = size(actions)
         units = _code_units(code)
+        learned = _learned_code_units(learned_code)
+        if learned and units:
+            raise ValueError(_LEARNED_CODE_TOGETHER)
+        if learned and image is not None:
+            raise ValueError(
+                "a learned code needs a vector brain: an image brain's sensory region is its "
+                "visual cortex"
+            )
         # the sensory region is the code when a vector brain asks for one
         coded_cortex = bool(units) and image is None
         sensory_width = units if coded_cortex else inputs
-        code_width = units or inputs
+        joined = bool(learned) and LearnedCode.setting(
+            "identity", options.get("learned_code_identity", LearnedCode.founders()["identity"])
+        ) > 0
+        code_width = (learned + (inputs if joined else 0)) if learned else (units or inputs)
+        heard_width = learned or sensory_width  # what the history hears: the code it reads
         sensory_scale = real("sensory_scale", sensory_scale, low=0)
         working_memory_scale = real("working_memory_scale", working_memory_scale, low=0)
         history_scale = real("history_scale", history_scale, low=0)
@@ -1720,7 +2191,9 @@ class Brain:
         if options.get("episodic", True) and options.get("memory_choice") is True:
             for name, value in _EPISODIC_FOUNDERS.items():
                 # a coded brain's memories key on the code as it is: no separation of their own
-                options.setdefault(name, 0 if units and name == "memory_expansion" else value)
+                options.setdefault(
+                    name, 0 if (units or learned) and name == "memory_expansion" else value
+                )
         if isinstance(modules, (str, bytes)) or isinstance(observers, (str, bytes)):
             raise ValueError("modules and observers must be sequences of population sizes")
         try:
@@ -1740,13 +2213,24 @@ class Brain:
                     height, width, channels=channels, features=features, field=field, seed=seed
                 )
             ]
+        if learned:
+            # the code region, every ordered pair of its units a lateral synapse; the
+            # dictionary, the lateral weights and the predictor take the region's own tables
+            # once the brain is built, in place of the developed draw
+            regions.append(cortex(learned, lateral=-1.0, name="code"))
         regions.extend(Region(name, width) for name, width in zip(names, widths, strict=True))
         regions.extend(
             (prefrontal_cortex(widths[-1]), motor_cortex(actions, lateral=lateral, slots=slots))
         )
-        projections = [
-            Projection(regions[0].name, names[0], scale=sensory_scale, reciprocal=False)
-        ]
+        if learned:
+            projections = [
+                Projection("sensory", "code", scale=1.0, reciprocal=False),
+                Projection("code", names[0], scale=sensory_scale, reciprocal=False),
+            ]
+        else:
+            projections = [
+                Projection(regions[0].name, names[0], scale=sensory_scale, reciprocal=False)
+            ]
         projections.extend(
             Projection(left, right) for left, right in zip(names, names[1:], strict=False)
         )
@@ -1758,6 +2242,8 @@ class Brain:
                 ),
             )
         )
+        if learned:
+            projections.append(Projection("prefrontal", "code", scale=0.0, reciprocal=False))
         observed = [*names, "motor"]
         for index, width in enumerate(observer_widths):
             name = f"observer_{index}"
@@ -1773,7 +2259,7 @@ class Brain:
         if heard:
             # Appended last, after any efference copy: the brain with the history is the brain
             # without it plus one block of sensory width per decay and their one projection.
-            regions.append(Region("history", len(heard) * sensory_width))
+            regions.append(Region("history", len(heard) * heard_width))
             projections.append(
                 Projection("history", "association", scale=history_scale, reciprocal=False)
             )
@@ -1789,7 +2275,7 @@ class Brain:
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
         result = cls(
             develop(genome, seed=seed), seed=seed, slots=slots, code=units,
-            inputs=inputs if coded_cortex else None, **options,
+            inputs=inputs if coded_cortex else None, learned_code=learned or None, **options,
         )
         result._composition = {
             "inputs": inputs,
@@ -1810,6 +2296,8 @@ class Brain:
             result._composition["image"] = list(image)
         if coded_cortex:
             result._composition["code"] = units
+        if learned:
+            result._composition["learned_code"] = learned
         return result
 
     def retune(self, *, reset_arousal: bool = False, **genes: Any) -> Brain:
@@ -1854,12 +2342,13 @@ class Brain:
             "device", "connectome", "history_decays", "history_scale", *_EPISODIC_SETTINGS,
             "recall", "recall_scale", *(f"recall_{name}" for name in Recall.CONSTRUCTION),
             *(f"recall_{name}" for name in Recall.CONSTRUCTION_OPTIONS), "code",
+            "learned_code", *(f"learned_code_{name}" for name in LearnedCode.CONSTRUCTION),
         }
         for name in options:
             if name in construction:
                 raise ValueError(f"{name} is a construction setting; retune preserves the brain")
-        learning = options.pop("learning", self.learner.config)
-        reward = options.pop("reward", self.basal_ganglia.config)
+        learning = options.pop("learning", self._learning_base)
+        reward = options.pop("reward", self._reward_base)
         current_arousal = None if self.arousal is None else self.arousal.config
         arousal = options.pop("arousal", current_arousal)
         if "arousal" in genes and (self.arousal is None or arousal is None):
@@ -1915,6 +2404,14 @@ class Brain:
             memory_changes.append(
                 (self.recall, setting, Recall.setting(setting, options.pop(name)))
             )
+        for name in [name for name in options if name.startswith("learned_code_")]:
+            setting = name[len("learned_code_"):]
+            if setting not in LearnedCode.RUNTIME:
+                raise TypeError(f"unknown brain setting: {name!r}")
+            if self.learned_code is None:
+                raise ValueError(f"{name} requires its existing learned code")
+            value = LearnedCode.setting(setting, options.pop(name))
+            memory_changes.append((self.learned_code, setting, value))
         if self.recall is not None:
             # the null slot's logit, null / temperature, must stay finite under the change
             retuned = {
@@ -1950,9 +2447,9 @@ class Brain:
 
         # Publication begins only after all validation. Never reconstruct a live
         # memory or optimizer to change its scalar settings.
-        self.learner.config = learning
+        self.learner.config = self._scaled_learning(learning, self._stepping)
         agent = self.basal_ganglia
-        agent.config = reward
+        agent.config = reward = self._scaled_reward(reward, self._stepping)
         if agent._valence is not None:
             agent._valence.level = reward.dopamine_center
             agent._valence.floor = reward.dopamine_floor
@@ -1964,6 +2461,14 @@ class Brain:
                 self.arousal.reset()
         for component, field, value in memory_changes:
             setattr(component, field, value)
+        if self.learned_code is not None and any(
+            component is self.learned_code for component, _, _ in memory_changes
+        ):
+            # the prediction's weight is a synapse scale and the boundary's gain: the graph
+            # takes the tables again and the learner its boundary
+            self.learned_code.install()
+            self.learner.brain = self._installed(self.brain)
+            self.learner.standing = self._standing()
         if self.recall is not None and not self.recall.address_reward:
             # reward leaves the address map as it is: the actor keeps no eligibility of it, and
             # the brain reports and saves as one composed without it
@@ -1981,8 +2486,10 @@ class Brain:
         returned mapping is detached and JSON serializable. No lazy state is
         initialized, no random values are drawn and no settlement is performed.
         """
-        learning = self.learner.config.to_dict()
-        actor = self.basal_ganglia.config.to_dict()
+        # the configurations as given: with a learned code the learner and the actor run
+        # them with their budgets scaled to the brain's step
+        learning = self._learning_base.to_dict()
+        actor = self._reward_base.to_dict()
         arousal = None if self.arousal is None else self.arousal.config.to_dict()
         genes = {f"learning_{name}": value for name, value in learning.items()}
         genes.update({f"actor_{name}": value for name, value in actor.items()})
@@ -2013,6 +2520,9 @@ class Brain:
             genes.update(
                 {f"recall_{name}": recalled[name] for name in Recall.OPTIONS if name in recalled}
             )
+        learned = self.learned_code
+        if learned is not None:
+            genes.update({f"learned_code_{name}": value for name, value in learned.genes().items()})
         populations = self.connectome.populations
         result = {
             "layout": {
@@ -2035,20 +2545,23 @@ class Brain:
             "history": None if self.history is None else self.history.to_dict(),
             "recall": None if self.recall is None else self.recall.to_dict(),
             "memory": None if self.hippocampus is None else self.hippocampus.to_dict(),
-            # what the memories key on: the observation or the brain's sparse code of it, what
-            # the cortex reads, and the episodic separation of an uncoded key
+            # what the memories key on: the observation, the brain's sparse code of it or its
+            # learned code, what the cortex reads, and the episodic separation of an uncoded key
             "observation_code": {
-                "kind": "observation" if self.sparse_code is None else "code",
+                "kind": "learned" if learned is not None
+                else ("observation" if self.sparse_code is None else "code"),
                 "inputs": int(self.inputs),
                 "width": int(self.code_width),
-                "units": 0 if self.sparse_code is None else int(self.sparse_code.expansion),
+                "units": int(learned.units) if learned is not None
+                else (0 if self.sparse_code is None else int(self.sparse_code.expansion)),
                 "fan_in": 0 if self.sparse_code is None else int(self.sparse_code.fan_in),
                 "winners": 0 if self.sparse_code is None else int(self.sparse_code.winners),
-                "cortex": "code" if self.coded_cortex else "observation",
+                "cortex": "code" if self.coded_cortex or learned is not None else "observation",
                 "separator": None
                 if self.hippocampus is None or self.hippocampus.separator is None
                 else ("sparse" if self.hippocampus.separator.fan_in else "dense"),
             },
+            **({} if learned is None else {"learned_code": learned.to_dict()}),
             # construction settings of an episodic memory whose records vote in the choice
             "episodic": None
             if not self.memory_choice
@@ -2082,18 +2595,198 @@ class Brain:
     def observation_code(self, observations: Any) -> np.ndarray:
         """The code the memories key on, ``(batch, code_width)``: the observations themselves
         for a brain without a code, else their sparse code, the largest positive sums of one
-        unit in ten kept and the row scaled to unit length."""
-        return self._code(self._observations(observations))
+        unit in ten kept and the row scaled to unit length; with a learned code the
+        rectified code the region settles to on the observations alone, without a context,
+        at unit length (the key of a moment is its code in the stream's context)."""
+        return self._code(self._observations(observations), context=False)
 
-    def _code(self, x: np.ndarray) -> np.ndarray:
+    def _code(
+        self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None
+    ) -> np.ndarray:
         """The observation code of validated observations; the observations themselves,
-        the same array, without a code."""
-        return x if self.sparse_code is None else _unit_rows(self.sparse_code.code(x))
+        the same array, without a code. A learned code settles here, in the stream's
+        context (the working trace, or ``trace``) unless ``context`` is off."""
+        if self.learned_code is None:
+            return x if self.sparse_code is None else _unit_rows(self.sparse_code.code(x))
+        phase = self._settle_code(x, context=context, trace=trace)
+        return self._moment_key(x, self.learned_code.code_of(phase.state.activation))
+
+    def _prepare(
+        self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None
+    ) -> np.ndarray:
+        """The code of the moment being settled, computed once and kept with the
+        observations (``_coded_moment``): ``stimulus`` given that same array reads it, and
+        with a learned code the region's settled state is the whole graph's warm start. The
+        record holds the moment's key (its code in the stream's context, what the context
+        records and the recall slots key on) and its place key (the context-free code with
+        ``learned_code_place="free"``, what the associative store and the place records key
+        on; a second code phase, reported as ``context_free_steps``), the same array without a
+        learned code or without a place store."""
+        if self.learned_code is None:
+            key = self._code(x)
+            self._coded_moment = (x, key, None, key, None)
+            return key
+        code = self.learned_code
+        phase = self._settle_code(x, context=context, trace=trace)
+        key = self._moment_key(x, code.code_of(phase.state.activation))
+        place, free_code = key, None
+        # the context-free code: the place key, and what the thresholds' share and the
+        # repair read at a moment the region learns from (an imagined branch learns nothing)
+        placed = self.hippocampus is not None and code.place == "free"
+        if context and (placed or (trace is None and code.threshold_rate > 0)):
+            free = self._settle_code(x, context=False, report=False)
+            free_code = np.maximum(np.asarray(free.state.activation, dtype=float), 0.0)
+            assert code.last is not None
+            code.last["free"] = free_code
+            if placed:
+                place = self._moment_key(x, code.code_of(free_code))
+            assert self._code_settlement is not None
+            self._code_settlement["context_free_steps"] = int(free.steps)
+        self._coded_moment = (x, key, phase.state, place, free_code)
+        return key
+
+    def _moment_key(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
+        """The key the memories use for observations ``x`` whose learned code is ``code``
+        (the rectified settled code at unit length): the code joined to the observation's
+        own identity, ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])`` with ``w`` the gene
+        ``learned_code_identity``, so that a binding stays readable by the identity part
+        while the code part moves as the region learns; the code alone at ``w`` 0."""
+        region = self.learned_code
+        if region is None or not region.identity:
+            return code
+        weight = region.identity
+        identity = _unit_rows(np.atleast_2d(np.asarray(x, dtype=float)))
+        joined = np.concatenate(
+            [np.sqrt(1.0 - weight) * np.atleast_2d(code), np.sqrt(weight) * identity], axis=1
+        )
+        return _unit_rows(joined)
+
+    def _settle_code(
+        self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None,
+        report: bool = True,
+    ) -> Equilibrium:
+        """The code phase of a moment's settle: the learned code's region settled under the
+        dictionary's read of the sensory activation the observations give and, with
+        ``context``, the predictor's read of the prefrontal activation the working trace
+        (or ``trace``, an imagined branch's) gives, warm from the stream's code, by the
+        brain's solver policy to the learner's tolerance within its free budget. A phase
+        that does not qualify is settled once more at the step the dictionary's coupling
+        allows over every state (``LearnedCode.rest_stability``), and refuses the moment before
+        anything changes when it does not qualify there either. With ``report``
+        the phase is the moment's: it sets the brain's step and the settlement report."""
+        code = self.learned_code
+        assert code is not None
+        cfg = self.learner.config
+        if cfg.tolerance is None:
+            raise ValueError("Brain answers require a finite residual tolerance")
+        tolerance = float(cfg.tolerance)
+        graph = self.brain
+        model, bias = graph.neuron_model, graph.bias
+        sensory = model.activation(x * model.stimulus_amplitude + bias[self.sensory_index])
+        z = None
+        if context:
+            held = self.working_memory if trace is None else trace
+            drive = np.zeros((len(x), len(self.prefrontal_index)))
+            if held is not None and len(held.trace) == len(x):
+                drive = held.amplitude * held.trace
+            z = model.activation(drive + bias[self.prefrontal_index])
+        warm = None
+        current = self._activity()
+        if current is not None and len(np.atleast_2d(current.v)) == len(x):
+            warm = BrainState(
+                np.atleast_2d(current.v)[:, self.code_index].copy(),
+                np.atleast_2d(current.activation)[:, self.code_index].copy(),
+                np.atleast_2d(current.adaptation)[:, self.code_index].copy(),
+                current.steps,
+            )
+        stimulus = code.stimulus(sensory, z)
+        phase = code.settle(stimulus, warm, budget=cfg.free_steps, tolerance=tolerance)
+        if not np.all(phase.qualified):
+            # once more at the step the dictionary's coupling allows over every state the
+            # region can reach; the brain's step is left as it was when this fails too
+            previous, rest = self._stepping, code.rest_stability()
+            if rest > previous:
+                self._restep(rest)
+                cfg = self.learner.config
+                phase = code.settle(stimulus, warm, budget=cfg.free_steps, tolerance=tolerance)
+                if not np.all(phase.qualified):
+                    self._restep(previous)
+                    cfg = self.learner.config
+        if not np.all(phase.qualified):
+            self._code_settlement = {
+                "code_steps": int(phase.steps),
+                "code_residual": float(np.max(phase.residual)),
+                "code_halvings": int(self._stepping),
+            }
+            raise RuntimeError(
+                f"the code region did not settle within {cfg.free_steps} steps: "
+                f"residual={float(np.max(phase.residual)):.6g}, tolerance={cfg.tolerance:g}; "
+                "no action issued"
+            )
+        if not report:
+            return phase
+        # the step every phase of this moment integrates at: the one the settled code's
+        # competition is stable under
+        self._restep(code.stability(phase.state.v))
+        self._code_settlement = {
+            "code_steps": int(phase.steps),
+            "code_residual": float(np.max(phase.residual)),
+            "code_halvings": int(self._stepping),
+        }
+        code.last = {
+            "sensory": sensory, "context": z, "activation": np.asarray(phase.state.activation),
+            "prediction": None if z is None else code.prediction(z),
+        }
+        return phase
+
+    def _warm(self, drive: np.ndarray, state: BrainState | None) -> BrainState | None:
+        """The warm start of a settle under ``drive`` with the learned code's phase in it:
+        ``state`` (rest without one) with the sensory and prefrontal potentials at the fixed
+        points their drives give them and the code units at the phase's, so the code units
+        receive the input they settled under from the first sweep; ``state`` itself without
+        the region, or without a phase for this batch."""
+        coded = self._coded_moment
+        if (
+            self.learned_code is None
+            or coded is None
+            or coded[2] is None
+            or len(np.atleast_2d(coded[2].v)) != len(drive)
+        ):
+            return state
+        batch, n = len(drive), self.connectome.n
+        if state is None or len(np.atleast_2d(state.v)) != batch:
+            v, a, steps = np.zeros((batch, n)), np.zeros((batch, n)), 0
+        else:
+            v = np.array(np.atleast_2d(state.v), dtype=float, copy=True)
+            a = np.array(np.atleast_2d(state.adaptation), dtype=float, copy=True)
+            steps = state.steps
+        bias = self.brain.bias
+        for index in (self.sensory_index, self.prefrontal_index):
+            v[:, index] = drive[:, index] + bias[index]
+        v[:, self.code_index] = np.atleast_2d(coded[2].v)
+        a[:, self.code_index] = np.atleast_2d(coded[2].adaptation)
+        return BrainState(v, self.brain.neuron_model.activation(v), a, steps)
+
+    def _key_of(self, observations: np.ndarray, code: np.ndarray | None) -> np.ndarray:
+        """The key a decision was taken under: its code as settled at its moment, or the
+        observations' code where a fixed code gives the same at any moment."""
+        return self._code(observations) if code is None else code
 
     def _sensed(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
         """What the sensory neurons are given: the observations, or with a coded cortex their
         code."""
         return code if self.coded_cortex else x
+
+    def _heard(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
+        """What the heard history takes in: what the cortex reads, the observations or their
+        code; with a learned code whose key joins the observation's identity, the key's
+        code part at unit length (the identity part is the observation the history would
+        hear without a code)."""
+        region = self.learned_code
+        if region is not None and region.identity:
+            part = np.atleast_2d(code)[:, : region.units]
+            return np.asarray(part / np.sqrt(1.0 - region.identity))
+        return code if self.coded_cortex or region is not None else x
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
         """The drive of a batch of observations: the sensory neurons stimulated, plus the
@@ -2101,12 +2794,13 @@ class Brain:
         hippocampal recall when ``memory`` is set. An episodic memory that votes in the
         choice (``memory_choice``) is not read into the drive. The recall memory addresses
         the moment here and keeps the address for the moment's write and lesson. Both
-        memories read the observation code."""
+        memories read the observation code; a learned code settles in the stream's context
+        with ``memory``, and on the observations alone without it."""
         coded = self._coded_moment  # the moment's code, when this is its settle
         if coded is not None and coded[0] is observations:
             return self._stimulus(coded[0], coded[1], memory=memory)
         x = self._observations(observations)
-        return self._stimulus(x, self._code(x), memory=memory)
+        return self._stimulus(x, self._code(x, context=memory), memory=memory)
 
     def _stimulus(self, x: np.ndarray, code: np.ndarray, *, memory: bool = True) -> np.ndarray:
         """The drive of validated observations and their code."""
@@ -2114,6 +2808,8 @@ class Brain:
         drive[:, self.sensory_index] = (
             self._sensed(x, code) * self.brain.neuron_model.stimulus_amplitude
         )
+        if self.learned_code is not None and self.learned_code.output == "unit":
+            drive = self._unit_read(x, drive, memory=memory)
         if memory and self.working_memory is not None:
             drive = self.working_memory.stimulate(drive)
         if memory and self.efference is not None:
@@ -2127,8 +2823,8 @@ class Brain:
             # without a code the call reads the drive itself (an instrument may wrap it)
             drive = (
                 self.hippocampus.stimulate(drive)
-                if self.sparse_code is None
-                else self.hippocampus.stimulate(drive, key=code)
+                if not self._coded_keys
+                else self.hippocampus.stimulate(drive, key=self._placed(x))
             )
         return drive
 
@@ -2186,6 +2882,8 @@ class Brain:
 
         cfg = self.learner.config
         brain = self.brain
+        state = self._warm(drive, state)  # with a learned code: its phase in the warm start
+        standing = self.learner.standing  # a learned code's restoring term, every phase's
         if cfg.qualified:
             return brain.equilibrate(
                 drive,
@@ -2193,10 +2891,12 @@ class Brain:
                 budget=budget,
                 tolerance=tolerance,
                 damping=cfg.damping,
+                nudge=standing,
             )
         first_budget = budget if budget < 2 else (budget + 1) // 2
         phase = brain.equilibrate(
-            drive, state=_copy_state(state), budget=first_budget, tolerance=tolerance
+            drive, state=_copy_state(state), budget=first_budget, tolerance=tolerance,
+            nudge=standing,
         )
         if np.all(phase.qualified) or phase.steps >= budget:
             return phase
@@ -2218,9 +2918,10 @@ class Brain:
             precision=brain.precision,
         )
         following = damped.equilibrate(
-            drive, state=_copy_state(phase.state), budget=budget - phase.steps, tolerance=tolerance
+            drive, state=_copy_state(phase.state), budget=budget - phase.steps,
+            tolerance=tolerance, nudge=standing,
         )
-        residual = brain.residual(drive, following.state)
+        residual = brain.residual(drive, following.state, nudge=standing)
         return Equilibrium(
             following.state,
             residual,
@@ -2240,22 +2941,23 @@ class Brain:
         phase = self._equilibrate(drive, state, budget=cfg.free_steps, tolerance=cfg.tolerance)
         rows = tuple(bool(value) for value in phase.qualified)
         residual = tuple(float(value) for value in phase.residual)
-        self._last_settlement = MappingProxyType(
-            {
-                "operation": operation,
-                "scope": "free_answer",
-                "qualified": all(rows),
-                "row_qualified": rows,
-                "residual": residual,
-                "max_residual": max(residual),
-                "steps": int(phase.steps),
-                "budget": int(cfg.free_steps),
-                "tolerance": float(phase.tolerance),
-                "residual_checks": int(phase.residual_checks),
-                "damping_halvings": int(phase.damping_halvings),
-                "stagnation_checks": int(phase.stagnation_checks),
-            }
-        )
+        report: dict[str, Any] = {
+            "operation": operation,
+            "scope": "free_answer",
+            "qualified": all(rows),
+            "row_qualified": rows,
+            "residual": residual,
+            "max_residual": max(residual),
+            "steps": int(phase.steps),
+            "budget": int(cfg.free_steps),
+            "tolerance": float(phase.tolerance),
+            "residual_checks": int(phase.residual_checks),
+            "damping_halvings": int(phase.damping_halvings),
+            "stagnation_checks": int(phase.stagnation_checks),
+        }
+        if self.learned_code is not None and self._code_settlement is not None:
+            report.update(self._code_settlement)  # the code phase this settle started from
+        self._last_settlement = MappingProxyType(report)
         if not all(rows):
             raise RuntimeError(
                 f"brain did not settle within {cfg.free_steps} steps: "
@@ -2407,9 +3109,10 @@ class Brain:
         from .learning import LearningPhaseError
 
         batch = len(x)
-        self._coded_moment = (x, self._code(x))
+        self._prepare(x)
         drive = self.stimulus(x)
         code = self._coded(x)
+        place = self._placed(x)
         key = self._decision_key(code)  # of the decision the lesson is shown for
         answer = None
         if self.learner.config.surprise:
@@ -2417,10 +3120,13 @@ class Brain:
             # settle its act reads, warm from the stream, with the episodic vote under the
             # decision's own key; a row that answer already gives as shown is no surprise
             answer = self._greedy(
-                self._qualified(drive, self._activity(), operation="act"), code, key
+                self._qualified(drive, self._activity(), operation="act"), place, key
             )
         try:
-            lesson, teaching = self.learner.step(drive, labels, answer=answer)
+            # the lesson's free phase starts from rest, with a learned code's phase in it
+            lesson, teaching = self.learner.step(
+                drive, labels, warm=self._warm(drive, None), answer=answer
+            )
         except LearningPhaseError as error:
             self.last_learning.update(
                 {"demonstration_" + name: value for name, value in error.report.items()}
@@ -2441,7 +3147,7 @@ class Brain:
         if (self.memory_choice and self.memory_demonstrations
                 and self.hippocampus is not None and shown.any()):
             value = np.full(batch, self.memory_demonstrations)
-            self._remember(code, key, labels, value, shown)
+            self._remember(place, key, labels, value, shown)
         self._prepared = None
         self.basal_ganglia._drive = None
         self.last_learning["demonstrations"] = float(batch)
@@ -2573,14 +3279,15 @@ class Brain:
                 assert lived is not None
                 if not self.memory_choice:
                     self._record(
-                        self._code(lived[0]), lived[1], r,
+                        self._key_of(lived[0], lived[7]), lived[1], r,
                         SynapticMemory.salience_vector(np.abs(r), 1),
                     )
                     recorded = True
                 else:
                     # the outcome that woke the brain surprised it: known at any reward
                     self._record_outcome(
-                        lived[0], lived[1], r, ended, np.ones(1, bool), woken=True
+                        lived[0], lived[1], r, ended, np.ones(1, bool), woken=True,
+                        code=lived[7],
                     )
                     recorded = True
                 if recorded and not self.memory_choice:
@@ -2614,10 +3321,11 @@ class Brain:
                 temperatures = np.full(slot_count, self.learner.config.temperature)
                 temperatures[heated_slot] = temperature
         code = self._coded(x)  # computed by the settle of this moment
+        place = self._placed(x)
         # the brain's own best guess, read at issue time before the decision moves the
         # temporal context on: the act it would issue greedily, the readout with the episodic
         # vote under the decision's own key, one choice per slot
-        guessed = self._greedy(answer[1], code, self._decision_key(code))
+        guessed = self._greedy(answer[1], place, self._decision_key(code))
         best = [int(choice) for choice in np.atleast_1d(guessed[0])]
         action = self._choose(x, *answer, greedy=not aroused, temperature=temperatures)
         state = agent.state
@@ -2632,7 +3340,8 @@ class Brain:
             aroused,
             state,
             best == chosen,
-            self._recorded(code, chosen),
+            self._recorded(place, chosen),
+            place.copy() if self.learned_code is not None else None,
         )
         self._last_arousal = MappingProxyType(
             {
@@ -2697,14 +3406,16 @@ class Brain:
             raise RuntimeError(
                 "wait needs an issued action awaiting its outcome; start with live(observations)"
             )
-        self._coded_moment = (x, self._code(x))
+        self._prepare(x)
         drive = self.stimulus(x)
         state = self._qualified(drive, self._activity(), operation="wait")
         code = self._coded(x)
+        if self.learned_code is not None:
+            self._learn_code(state)  # the region's step at every accepted moment
         if self.working_memory is not None:
             self.working_memory.update(state)
         if self.history is not None:
-            self.history.hear(self._sensed(x, code))  # what was sensed joins the heard past
+            self.history.hear(self._heard(x, code))  # what was sensed joins the heard past
         if self.recall is not None:
             self.recall.witness(code, state)  # the sensed moment joins the stream's slots
         if self.context_memory is not None:
@@ -2879,9 +3590,10 @@ class Brain:
         context = None if self._context is None else self._context.copy()
         phases = []
         for value in sequence:
-            self._coded_moment = (value, self._code(value))
+            self._prepare(value, trace=trace)  # a learned code in the branch's own context
             drive = self.stimulus(value, memory=False)
             code = self._coded(value)
+            place = self._placed(value)
             if trace is not None:
                 drive = trace.stimulate(drive)
             if echo is not None:
@@ -2894,10 +3606,12 @@ class Brain:
             if self.hippocampus is not None and not self.memory_choice:
                 drive = (
                     self.hippocampus.stimulate(drive)
-                    if self.sparse_code is None
-                    else self.hippocampus.stimulate(drive, key=code)
+                    if not self._coded_keys
+                    else self.hippocampus.stimulate(drive, key=place)
                 )
-            phase = self._equilibrate(drive, current, budget=budget, tolerance=tolerance)
+            phase = self._equilibrate(
+                drive, current, budget=budget << self._stepping, tolerance=tolerance
+            )
             phases.append(phase)
             if not np.all(phase.qualified):
                 break
@@ -2910,7 +3624,7 @@ class Brain:
                 # complete greedy choice, the readout with the episodic vote under the branch's
                 # own key, after which the branch's context moves on
                 key = None if self.context_memory is None else self._keyed(code, context)
-                choice = self._greedy(phase.state, code, key)
+                choice = self._greedy(phase.state, place, key)
                 if key is not None:
                     context = self._following(key, choice)
                 command = self._command(choice)
@@ -2918,9 +3632,8 @@ class Brain:
                 assert command is not None
                 echo.issue(command)
             if heard is not None:
-                # the imagined observation, as the sensory neurons were given it, joins the
-                # private history
-                heard.hear(self._sensed(value, code))
+                # the imagined observation, as the cortex read it, joins the private history
+                heard.hear(self._heard(value, code))
             if recalled is not None:
                 recalled.witness(code, phase.state)  # the branch's cortex moves on
         return tuple(phases)
@@ -2956,8 +3669,8 @@ class Brain:
         """The drive of validated observations and its qualified free state, warm from the
         stream's last state; the observations' code is computed here once for the moment.
         Refusal raises before anything changes."""
-        self._coded_moment = (x, self._code(x))
         try:
+            self._prepare(x)
             drive = self.stimulus(x)
             return drive, self._qualified(drive, self._activity(), operation="act")
         except BaseException:
@@ -2969,6 +3682,18 @@ class Brain:
         other observations, computed here."""
         coded = self._coded_moment
         return coded[1] if coded is not None and coded[0] is x else self._code(x)
+
+    def _placed(self, x: np.ndarray) -> np.ndarray:
+        """The code the place stores key on (the associative store, the episodic place
+        records): the moment's, kept by ``_prepare``; of any other observations, the
+        context-free code with ``learned_code_place="free"``, else their observation code."""
+        coded = self._coded_moment
+        if coded is not None and coded[0] is x:
+            return coded[3]
+        code = self.learned_code
+        if code is not None and code.place == "free":
+            return self._code(x, context=False)
+        return self._code(x)
 
     def _choose(
         self,
@@ -2986,20 +3711,23 @@ class Brain:
         self._prepared = None
         self._awaiting = None
         code = self._coded(x)  # the memories key on the observation code
+        place = self._placed(x)  # the place stores on the place key
         key = bias = None
         if self.memory_choice and self.hippocampus is not None:
             key = self._decision_key(code)
-            bias = self._vote(code, key)
+            bias = self._vote(place, key)
         action = self.basal_ganglia.act(drive, greedy=greedy, temperature=temperature, bias=bias)
         state = self.basal_ganglia.state
+        if self.learned_code is not None and state is not None:
+            self._learn_code(state)  # the region's step at every accepted moment
         if self.working_memory is not None and state is not None:
             self.working_memory.update(state)
         if self.efference is not None:
             self.efference.issue(self._command(action))
         if self.history is not None:
-            # the observation acted on, as the sensory neurons were given it, joins the heard
-            # past; the next drive holds the present
-            self.history.hear(self._sensed(x, code))
+            # the observation acted on, as the cortex read it, joins the heard past; the next
+            # drive holds the present
+            self.history.hear(self._heard(x, code))
         if self.recall is not None:
             # the moment acted on joins the stream's slots; its settled cortex enters the
             # next moment's address
@@ -3022,13 +3750,18 @@ class Brain:
                     guess = (picked / np.maximum(p.max(axis=-1), 1e-12)).mean(axis=1)
                 else:
                     guess = p[rows, action] / np.maximum(p.max(axis=-1), 1e-12)
-                self._extend_paths(code, key, action, np.minimum(guess, 1.0))
+                self._extend_paths(place, key, action, np.minimum(guess, 1.0))
         self._moment = None if greedy else (x.copy(), action.copy())
+        # with a learned code the place key the decision was taken under, settled at this moment
+        self._moment_code = (
+            None if greedy or self.learned_code is None else np.array(place, copy=True)
+        )
         return action
 
     def _vote(self, code: np.ndarray, key: np.ndarray | None) -> np.ndarray:
-        """The records' vote for every motor neuron: the mean of the place read of the
-        observation code and the context read of the decision's key."""
+        """The records' vote for every motor neuron: the mean of the place read of the place
+        key (the observation code, or a learned code's context-free code) and the context
+        read of the decision's key."""
         memory = self.hippocampus
         assert memory is not None
         place = np.asarray(memory.recall(np.asarray(code, dtype=float)), dtype=float)
@@ -3135,6 +3868,7 @@ class Brain:
         learned: np.ndarray,
         woken: bool = False,
         salience: np.ndarray | None = None,
+        code: np.ndarray | None = None,
     ) -> None:
         """Record the outcome of the last decision for the streams in ``learned``, where it is
         known: a reward or a punishment, the end of an attempt, a surprise that woke a calm
@@ -3142,8 +3876,9 @@ class Brain:
         in the middle of an attempt is not yet one. A supplied salience also sets how fast
         the outcome consolidates; without one every write moves a record equally. A reward
         replays the decisions that led to it. The records key on the code of the
-        ``observations`` the decision was taken on."""
-        observations = self._code(observations)
+        ``observations`` the decision was taken on: ``code`` where it was kept (a learned
+        code, settled at the decision's moment), else the observations' code."""
+        observations = self._key_of(observations, code)
         marked = np.zeros(len(reward), bool) if salience is None else salience > 0
         known = learned & ((reward != 0) | done | woken | marked)
         keys = self._decided(len(action))
@@ -3301,7 +4036,7 @@ class Brain:
         the same dopamine, and the report names the step (``address_reward_step``).
         """
         following = self._observations(next_observations)
-        self._coded_moment = (following, self._code(following))
+        self._prepare(following)
         # Preflight without reading or resetting memories: invalid input must not write an episode.
         reward, done, _, bootstrap = self.basal_ganglia._validated_transition(
             reward, done, self.stimulus(following, memory=False), bootstrap
@@ -3359,12 +4094,13 @@ class Brain:
             if memory is not None and self._moment is not None:
                 keys, action = self._moment
                 if not self.memory_choice:
-                    self._record(self._code(keys), action, reward, importance)
+                    self._record(self._key_of(keys, self._moment_code), action, reward, importance)
                 else:
                     self._received(reward)
                     self._record_outcome(
                         keys, action, reward, done, np.ones(len(action), bool),
                         salience=None if salience is None else importance,
+                        code=self._moment_code,
                     )
             if self.memory_choice and done.any():
                 self._end_attempt(done)
@@ -3376,9 +4112,12 @@ class Brain:
                 heard.reset(len(done), rows=np.flatnonzero(done))
             if recalled is not None and done.any():
                 recalled.reset(len(done), rows=np.flatnonzero(done))
-            report = self.basal_ganglia.learn(
-                reward, done, self.stimulus(following), bootstrap, warm=self._awaited()
-            )
+            next_drive = self.stimulus(following)
+            warm = self._awaited()
+            if self.learned_code is not None:
+                # the next state settles warm from the stream's state with the code's phase
+                warm = self._warm(next_drive, self.basal_ganglia.state if warm is None else warm)
+            report = self.basal_ganglia.learn(reward, done, next_drive, bootstrap, warm=warm)
         except Exception:
             if memory is not None:
                 for name, value in memory_values.items():
@@ -3402,6 +4141,7 @@ class Brain:
                 self._context, self._paths = episode_values
             raise
         self._moment = None
+        self._moment_code = None
         self._prepared = following.copy()
         self._awaiting = None
         return report
@@ -3501,7 +4241,11 @@ class Brain:
         elif self.recall is not None:
             self.recall.reset(0)  # the slots are emptied; the address map is learned and stays
         self._moment = None
+        self._moment_code = None
         self._coded_moment = None
+        self._code_settlement = None
+        if self.learned_code is not None:
+            self.learned_code.last = None  # the tables stay, as the weights do
         self._prepared = None
         self.last_learning = {}
         self._last_settlement = None
@@ -3515,8 +4259,8 @@ class Brain:
             self.arousal.reset()
 
     def parameters(self) -> int:
-        """Actor/critic and consolidated weights and the recall memory's address map; per-stream
-        transient storage is additional."""
+        """Actor/critic and consolidated weights, the recall memory's address map and a learned
+        code's tables; per-stream transient storage is additional."""
         recall = self.recall
         return (
             self.basal_ganglia.parameters()
@@ -3527,6 +4271,7 @@ class Brain:
             )
             + (0 if self.context_memory is None else self.context_memory.consolidated.size)
             + (0 if recall is None else recall.w_x.size + recall.w_c.size + recall.b.size)
+            + (0 if self.learned_code is None else self.learned_code.parameters())
         )
 
     def save(self, path: str | Path) -> Path:
@@ -3577,6 +4322,8 @@ class Brain:
                     "own": bool(lived[5]),
                     "recorded": None if lived[6] is None else float(lived[6]),
                 }
+                if lived[7] is not None:  # the code the lived action was keyed on
+                    data["lived/code"] = lived[7]
         if self.efference is not None:
             # The copy is part of the continuation; earlier formats cannot carry it. A brain
             # without one writes the metadata of the earlier formats unchanged.
@@ -3649,6 +4396,14 @@ class Brain:
             metadata["code"] = {**self.sparse_code.to_dict(), "cortex": self.coded_cortex}
             tables = self.sparse_code.arrays()
             data["code/index"], data["code/weight"] = tables["index"], tables["weight"]
+        if self.learned_code is not None:
+            # The learned code is part of the continuation: its tables are the brain's
+            # synapses and the memories' keys. A brain without one writes the earlier formats
+            # unchanged.
+            metadata["format"] = "cadence-generic/10"
+            metadata["learned_code"] = self.learned_code.to_dict()
+            for name, value in self.learned_code.arrays().items():
+                data["learned_code/" + name] = value
         if agent._pending is not None:
             kind, plus, minus, value = agent._pending
             if kind != "states":
@@ -3660,6 +4415,8 @@ class Brain:
                     data[f"pending/{name}/{field}"] = np.asarray(getattr(phase, field))
             if self._moment is not None:
                 data["moment/observations"], data["moment/action"] = self._moment
+                if self._moment_code is not None:  # the code the decision was keyed on
+                    data["moment/code"] = self._moment_code
         for name in _REWARD_ARRAYS:
             value = getattr(agent, name)
             if value is not None:
@@ -3741,32 +4498,36 @@ class Brain:
             if "generic" not in data:
                 raise ValueError("not a Brain checkpoint; use Learner.load for a learner")
             meta = json.loads(str(data["generic"]))
-            formats = tuple(f"cadence-generic/{level}" for level in range(1, 10))
+            formats = tuple(f"cadence-generic/{level}" for level in range(1, 11))
             if not isinstance(meta, dict) or meta.get("format") not in formats:
                 raise ValueError("unsupported Brain checkpoint format")
             # each format carries the component it was introduced for, and may carry those
             # of the earlier formats; a component under an earlier format name is refused
             level = formats.index(meta["format"]) + 1
+            if (level == 10) != ("learned_code" in meta):
+                raise ValueError(
+                    "a brain's learned code belongs to checkpoint format cadence-generic/10"
+                )
             if (level == 9) != ("code" in meta):
                 raise ValueError("a brain's code belongs to checkpoint format cadence-generic/9")
             if level == 8 and meta.get("recall") is None:
                 raise ValueError("format cadence-generic/8 carries a recall memory")
             if meta.get("recall") is not None and level < 8:
                 raise ValueError(
-                    "a recall memory belongs to checkpoint formats cadence-generic/8 and /9"
+                    "a recall memory belongs to checkpoint formats cadence-generic/8 to /10"
                 )
             if level == 7 and meta.get("history") is None:
                 raise ValueError("format cadence-generic/7 carries a heard history")
             if meta.get("history") is not None and level < 7:
                 raise ValueError(
-                    "a heard history belongs to checkpoint formats cadence-generic/7 to /9"
+                    "a heard history belongs to checkpoint formats cadence-generic/7 to /10"
                 )
             if level == 6 and "episodic" not in meta:
                 raise ValueError("format cadence-generic/6 carries an episodic memory's choice")
             if "episodic" in meta and level < 6:
                 raise ValueError(
                     "an episodic memory's choice belongs to checkpoint formats cadence-generic/6 "
-                    "to /9"
+                    "to /10"
                 )
             if level == 5 and "arousal" not in meta:
                 raise ValueError("format cadence-generic/5 carries a live stream's arousal")
@@ -3784,14 +4545,20 @@ class Brain:
             code = _load_code(
                 meta, data, len(populations.get("sensory", populations.get("visual/input", ())))
             )
+            learned = _validate_learned_code(meta, data, learner)
             try:
-                _validate_life_state(meta, data, learner, code)
+                _validate_life_state(meta, data, learner, code, learned)
             except (KeyError, TypeError, OverflowError) as exc:
                 raise ValueError("invalid or incomplete saved continuation state") from exc
             # a memory keyed on the code numbers its key coordinates from zero: the code's
             # width bounds them, with the motor neurons after it for the context records
             neurons = learner.brain.connectome.n
-            coded = None if code is None else code[1].expansion
+            coded: int | None
+            if learned:  # the key width: the units, joined to the observation's identity
+                joined = float(meta["learned_code"]["identity"]) > 0
+                coded = learned + (len(populations["sensory"]) if joined else 0)
+            else:
+                coded = None if code is None else code[1].expansion
             memory = _load_memory(meta["hippocampus"], data, neurons, keys=coded)
             heard = meta.get("history")
             recalled = meta.get("recall")
@@ -3802,6 +4569,15 @@ class Brain:
                 slots=[int(k) for k in learner.slot_sizes],
                 code=0 if code is None else code[1].expansion,
                 inputs=code[0] if code is not None and code[2] else None,
+                learned_code=learned or None,
+                **(
+                    {}
+                    if not learned
+                    else {
+                        f"learned_code_{name}": meta["learned_code"][name]
+                        for name in LearnedCode.GENES
+                    }
+                ),
                 **(
                     {}
                     if heard is None
@@ -3827,6 +4603,33 @@ class Brain:
                 # the saved code as validated, its settings, seed and tables: the construction
                 # above drew a code from the default seed
                 result.sparse_code = code[1]
+            if learned:
+                # the saved tables, never ones drawn anew, and the saved synapses must be the
+                # ones the tables give (the learner below carries them)
+                region = result.learned_code
+                assert region is not None
+                region.seed = int(meta["learned_code"]["seed"])
+                region.take(
+                    data["learned_code/dictionary"], data["learned_code/weights"],
+                    data["learned_code/thresholds"],
+                )
+                region.work.update(
+                    {k: int(v) for k, v in meta["learned_code"]["work"].items() if k in region.work}
+                )
+                installed = result._installed(learner.brain)
+                if not np.array_equal(installed.efficacy, learner.brain.efficacy) or not (
+                    np.array_equal(installed.bias, learner.brain.bias)
+                ):
+                    raise ValueError(
+                        "the saved learned code tables disagree with the saved synapses and "
+                        "biases of the code region"
+                    )
+                # the saved budgets are scaled to the saved step: the configurations in the
+                # model's step are read back from them at that level
+                stepping = int(meta["learned_code"]["stepping"])
+                region.restep(stepping)
+                result._stepping = stepping
+                learner.standing = result._standing()  # the loaded learner's boundary
             if heard is not None:
                 assert result.history is not None  # validated above: the population is there
                 result.history.trace = data["history/trace"].astype(float)
@@ -3890,6 +4693,8 @@ class Brain:
                         data["moment/observations"].copy(),
                         data["moment/action"].copy(),
                     )
+                    if "moment/code" in data:
+                        result._moment_code = data["moment/code"].astype(float)
             if "recall/trace" in data:
                 agent.trace_memory = data["recall/trace"].astype(float)
             working = meta["working_memory"]
@@ -3917,9 +4722,7 @@ class Brain:
                 # the place records are keyed on the brain's observation code: its coordinates
                 # from zero with a code, the sensory neurons without
                 expected = (
-                    np.arange(result.code_width)
-                    if result.sparse_code is not None
-                    else result.sensory_index
+                    np.arange(result.code_width) if result._coded_keys else result.sensory_index
                 )
                 if len(memory.pre) != result.code_width:
                     raise ValueError(
@@ -3948,7 +4751,7 @@ class Brain:
                 if temporal is not None and not np.array_equal(
                     temporal.pre,
                     np.arange(result.code_width + len(result.motor_index))
-                    if result.sparse_code is not None
+                    if result._coded_keys
                     else np.concatenate([result.sensory_index, result.motor_index]),
                 ):
                     raise ValueError(
@@ -3993,6 +4796,7 @@ class Brain:
                     state,
                     bool(meta["lived"]["own"]),
                     None if recorded is None else float(recorded),
+                    data["lived/code"].astype(float) if "lived/code" in data else None,
                 )
             if "awaiting" in meta:
                 acted = agent._free  # validated above: the awaited action has its free state

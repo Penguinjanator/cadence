@@ -21,6 +21,7 @@ from .certificate import (
     row_mass,
 )
 from .checkpoint import load, save
+from .code import LearnedCode
 from .connectome import Connectome
 from .generic import Brain
 from .genome import Genome, Projection, develop, evolve, genes
@@ -80,6 +81,7 @@ __all__ = [
     "Efference",
     "History",
     "Recall",
+    "LearnedCode",
     "FastSynapses",
     "SynapticMemory",
     "NeuronModel",
