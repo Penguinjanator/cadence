@@ -36,9 +36,10 @@ arousal's income and error references, which decide when a `live` brain wakes, a
 | Actor eligibility | yes | `actor_lam=0.0` credits the last action only | each synapse's credit for recent sampled acts | none | each sampled act | no | [reward.md](reward.md#eligibility-traces-and-dopamine) |
 
 `predict`, `accuracy` and `fit` answer independent samples and read none of these except the
-learned weights, and `fit` starts with a `reset()`. Test a memory through `act`, `step` or
-`live` on a continuing stream. `save` keeps every memory in the table, per-stream traces
-included, and `Brain.load` continues the stream where it stopped.
+learned weights; `fit` starts by resetting the streams and keeps the arousal state. Test a
+memory through `act`, `step` or `live` on a continuing stream. `save` keeps every memory in
+the table, per-stream traces included, and `Brain.load` continues the stream where it
+stopped.
 
 `brain.memories` holds the present memories by name, in the order the brain reads them before
 a settle and writes them after it: `working_memory`, `efference`, `history`, `recall`,
