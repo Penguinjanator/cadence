@@ -111,7 +111,9 @@ ARMS = ("raw", "random", "learned", "learned_g2", "bottom_up", "shuffled", "unif
 ORDER = ("library", "library_bottom_up", "learned", "bottom_up", "raw", "random", "gru",
          "uniform", "shuffled", "gru_lm", "learned_g2")
 # the code arms and their top-down weight; ``shuffled`` also draws its contexts apart
-LIBRARY_TOP_DOWN = 4.0  # the library region's top-down weight, selected on pilot founders
+LIBRARY_TOP_DOWN = 2.0  # the library region's top-down weight: the smallest at which the
+# taught members' context-free codes reach a within-group cosine of .5 with between-group
+# at most .1 on both pilot founders (900, 901) at the nursery's end; 4 passes as well
 TOP_DOWN = {"learned": 4.0, "learned_g2": 2.0, "bottom_up": 0.0, "shuffled": 4.0,
             "library": LIBRARY_TOP_DOWN, "library_bottom_up": 0.0}
 CODE_ARMS = tuple(TOP_DOWN)
