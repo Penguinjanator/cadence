@@ -38,8 +38,10 @@ The composition is `Brain.compose(16, 8, modules=(64,), lateral=0.0, seed=founde
 founder genes with the teaching law the protocol was declared under
 (`token_binding.RELEASED_TEACHING`: `learning_eta=0.5`, `learning_eta_bias=0.05`, no
 normalization; the composed teaching founder normalizes since issue 215, and every binding
-instrument keeps the declared law unless a run sets these genes itself), built region by region so that the recall region is appended last (a contract
-test checks that without it the connectome equals `Brain.compose`). Nothing changes the
+instrument keeps the declared law unless a run sets these genes itself; set all four together,
+or pass a whole `learning=LearnerConfig(...)`, which replaces the law), built region by region
+so that the recall region is appended last (a contract test checks that without it the
+connectome equals `Brain.compose`). Nothing changes the
 library.
 
 ## Readings

@@ -253,7 +253,8 @@ class ContentBrain(Brain):
                 Projection("recall", "association", scale=content["scale"], reciprocal=False)
             )
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
-        options = {**RELEASED_TEACHING, **options}
+        if "learning" not in options:  # a whole LearnerConfig replaces the teaching law
+            options = {**RELEASED_TEACHING, **options}
         brain = cls(develop(genome, seed=seed), seed=seed, slots=1, **options)
         if content is not None:
             brain.recall_index = np.asarray(

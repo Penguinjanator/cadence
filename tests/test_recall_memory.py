@@ -843,7 +843,7 @@ def test_the_bound_leaves_the_token_task_as_it_was(monkeypatch):
     ir = instrument("index_read")
     tb = ir.tb
     brain = cd.Brain.compose(tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL,
-                             seed=0, learning_surprise=True, recall=True)
+                             seed=0, learning_surprise=True, recall=True, **RELEASED_TEACHING)
     model = brain.brain.neuron_model
     reach = np.abs(model.activation(np.array([-50.0, 50.0]))).max()
     assert reach <= 1.0

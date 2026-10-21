@@ -194,7 +194,8 @@ class MemoryBrain(Brain):
                 Projection("recall", "association", scale=memory["scale"], reciprocal=False)
             )
         genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
-        options = {**tb.RELEASED_TEACHING, **options}  # the family's teaching law (issue 215)
+        if "learning" not in options:  # the family's teaching law (issue 215); a whole
+            options = {**tb.RELEASED_TEACHING, **options}  # LearnerConfig replaces it
         brain = cls(develop(genome, seed=seed), seed=seed, slots=1, **options)
         if mode is not None:
             if mode not in ("event", "successor"):

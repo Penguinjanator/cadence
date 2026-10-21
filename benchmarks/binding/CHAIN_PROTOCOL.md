@@ -35,7 +35,8 @@ per round, one lesson per round at the last event.
 | `gru` | supervised online GRU, 64 hidden units, cross-entropy through the trial | one step per round |
 
 The composition is the one of the token-binding protocol on this task's ports
-(`modules=(64,)`, `lateral=0.0`, founder genes).
+(`modules=(64,)`, `lateral=0.0`, founder genes, and the teaching law of that protocol,
+`token_binding.RELEASED_TEACHING`).
 
 ## Readings and gates
 

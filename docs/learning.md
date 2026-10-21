@@ -363,10 +363,10 @@ Adam-style update.
 composed actor keeps unnormalized rates (`eta=1.0`, `eta_bias=0.05`). Under normalization,
 rates of that size give steps that dwarf the raw signals and saturate the outputs. Retune `eta`
 and `eta_bias` together; a development sweep might start at `eta` 0.001 to 0.003, checked
-against acquisition, retention and actual step sizes. `LearnerConfig` warns when `normalize > 0` and `eta` or
-`eta_bias` exceeds 0.05; smaller rates can also fail. A named `learning_eta` keeps the current bias
-rate, and `learning_normalize=0` with `learning_eta` and `learning_eta_bias` returns a composed
-brain to raw steps. `learning=LearnerConfig(...)` replaces the whole teaching configuration.
+against acquisition, retention and actual step sizes. `LearnerConfig` warns when
+`normalize > 0` and `eta` or `eta_bias` exceeds 0.05; smaller rates can also fail. A named
+`learning_eta` keeps the current bias rate, and `learning_normalize=0` with `learning_eta` and
+`learning_eta_bias` returns a composed brain to raw steps. `learning=LearnerConfig(...)` replaces the whole teaching configuration.
 
 The teaching founder comes from a copy measurement. A composed brain with one region of 256
 neurons (`Brain.compose(260, 3, modules=(256,))`) learned the moves of a three-move look-ahead
