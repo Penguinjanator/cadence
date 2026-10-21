@@ -97,6 +97,16 @@
   composed life is byte-identical. Its projected-gradient state-and-error readback lives on in
   release 0.84.3, which also loads its checkpoints, and in the application demos that pin
   `cadence-net==0.70.0`.
+- Remove the record era: `RecordPatchNet` with `RecordPatchStack`, `JointRecordPatches` and the
+  structured ports, the `Records` store, `BeliefPatch`, `Steered`, `Life` with its governors,
+  the orienting instruments and `cadence.population.PopulationPatch` (11 modules, 6,898 lines,
+  36 top-level exports), with 15 test files, the record and belief cases of 4 more, and the
+  record patch, belief, steering and population guides. The composed brain never imported
+  them; every composed brain, checkpoint and composed life is byte-identical. The standalone
+  stores guide keeps `FastSynapses`, `SynapticMemory`, `PatternSeparator` and the traces.
+  `RecordPatchNet.dream` and `sleep`, the belief patch, the steered cortex and the governed
+  life live on in release 0.84.3 and in the application demos that pin earlier releases; the
+  population throughput receipt stays in `benchmarks/population` as a frozen reading.
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
