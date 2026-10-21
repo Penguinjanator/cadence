@@ -3,7 +3,7 @@
 ## Unreleased
 
 - `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
-  its settlement and repair-network version in Cadence (the embedding as a learned code of
+  its version in Cadence as settling and local repair (the embedding as a learned code of
   meaning, the residual stream as the settling cortex, attention as a recall memory over the
   brain's own moments, the logits as the motor population inside the settle), that what was
   tested and did not work is removed or folded into what did, and that the documentation is
