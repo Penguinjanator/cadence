@@ -2620,13 +2620,16 @@ class Brain:
         ``context``, the predictor's read of the prefrontal activation the working trace
         (or ``trace``, an imagined branch's) gives, warm from the stream's code, by the
         brain's solver policy to the learner's tolerance within its free budget. A phase
-        that does not qualify refuses the moment before anything changes. With ``report``
+        that does not qualify is settled once more at the step the dictionary's coupling
+        allows over every state (``LearnedCode.rest_stability``), and refuses the moment before
+        anything changes when it does not qualify there either. With ``report``
         the phase is the moment's: it sets the brain's step and the settlement report."""
         code = self.learned_code
         assert code is not None
         cfg = self.learner.config
         if cfg.tolerance is None:
             raise ValueError("Brain answers require a finite residual tolerance")
+        tolerance = float(cfg.tolerance)
         graph = self.brain
         model, bias = graph.neuron_model, graph.bias
         sensory = model.activation(x * model.stimulus_amplitude + bias[self.sensory_index])
@@ -2646,9 +2649,19 @@ class Brain:
                 np.atleast_2d(current.adaptation)[:, self.code_index].copy(),
                 current.steps,
             )
-        phase = code.settle(
-            code.stimulus(sensory, z), warm, budget=cfg.free_steps, tolerance=cfg.tolerance
-        )
+        stimulus = code.stimulus(sensory, z)
+        phase = code.settle(stimulus, warm, budget=cfg.free_steps, tolerance=tolerance)
+        if not np.all(phase.qualified):
+            # once more at the step the dictionary's coupling allows over every state the
+            # region can reach; the brain's step is left as it was when this fails too
+            previous, rest = self._stepping, code.rest_stability()
+            if rest > previous:
+                self._restep(rest)
+                cfg = self.learner.config
+                phase = code.settle(stimulus, warm, budget=cfg.free_steps, tolerance=tolerance)
+                if not np.all(phase.qualified):
+                    self._restep(previous)
+                    cfg = self.learner.config
         if not np.all(phase.qualified):
             self._code_settlement = {
                 "code_steps": int(phase.steps),

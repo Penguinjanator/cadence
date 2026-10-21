@@ -637,7 +637,10 @@ def test_a_code_phase_that_cannot_settle_refuses_the_moment_before_anything_chan
     with pytest.raises(RuntimeError, match="code region did not settle"):
         brain.act(x, greedy=True)
     assert brain.basal_ganglia.state is before and brain._coded_moment is None
-    assert brain.learned_code.work["capped"] == 1 and brain.learned_code.work["updates"] == 0
+    # the phase at the brain's step and once more at the step the dictionary allows, both
+    # capped; the brain's step is left as it was
+    assert brain.learned_code.work["capped"] == 2 and brain.learned_code.work["updates"] == 0
+    assert brain._stepping == 0 and brain.brain.neuron_model.dt == 1.0
     assert brain.last_settlement is None
 
 
@@ -730,6 +733,28 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     np.savez(tmp_path / "wrong.npz", **arrays)
     with pytest.raises(ValueError, match="stepping disagrees with the saved step"):
         cd.Brain.load(tmp_path / "wrong.npz")
+
+
+def test_a_one_input_world_settles_at_the_step_its_dictionary_allows():
+    """With one input every column of the dictionary is plus or minus the same vector, so
+    every pair of units competes at full strength and the sweep at the model's step cannot
+    settle the code. The first phase is settled once more at the step the dictionary's
+    coupling allows over every state, and the bandit lives on without a refusal; the bound
+    over every state is at least the bound at any settled state."""
+    for seed in range(6):
+        brain = cd.Brain.compose(1, 2, arousal=True, learned_code=64, seed=seed)
+        code = brain.learned_code
+        assert code.rest_stability() >= 4
+        rng = np.random.default_rng(seed)
+        for moment in range(100):
+            reward = None if moment == 0 else [float(rng.random() < 0.7)]
+            brain.live(np.ones((1, 1)), reward=reward)  # never refused
+        assert code.work["capped"] >= 1  # the first phase at the model's step
+        assert brain._stepping >= 3
+    # the bound over every state holds at states the region reaches and at random ones
+    code = composed(seed=3).learned_code
+    for v in np.random.default_rng(4).normal(0.0, 0.5, (20, 1, UNITS)):
+        assert code.stability(v) <= code.rest_stability()
 
 
 def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_moments():

@@ -18,7 +18,10 @@
   `code_halvings`. The brain integrates every phase at the step the settled code's
   competition is stable under (the model's step halved as `LearnedCode.stability` reports,
   with the step budgets scaled to keep each phase's time), so a dictionary whose columns
-  come to overlap strongly settles instead of oscillating under the synchronous sweep. The
+  come to overlap strongly settles instead of oscillating under the synchronous sweep; a
+  phase that does not settle at the brain's step is settled once more at the step the
+  dictionary's coupling allows over every state (`LearnedCode.rest_stability`) before the
+  moment is refused, so a world of one input settles from its first moment. The
   region learns at every accepted moment, from the moment's free settle alone, by local
   rules (Hebbian on the reconstruction residual, the delta rule on the prediction's
   residual normalized by the context's energy, homeostatic thresholds whose share reads

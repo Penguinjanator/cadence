@@ -62,8 +62,14 @@ settles warm from the stream's state with the sensory, prefrontal and code poten
 fixed points, qualified by the one residual over every neuron. The code units receive in the
 whole settle the input they settled under in the phase, so they stay where the phase left
 them. `last_settlement` reports the phase as `code_steps`, `code_residual` and
-`code_halvings` beside the whole graph's `steps`. A code phase that does not qualify
-refuses the moment with `RuntimeError` before anything changes, as a refused free solve does.
+`code_halvings` beside the whole graph's `steps`. A code phase that does not qualify at the
+brain's step is settled once more at the step the dictionary's coupling allows over every
+state the region can reach (`LearnedCode.rest_stability`: every unit active, every slope at
+its largest), and refuses the moment with `RuntimeError` before anything changes when it
+does not qualify there either, as a refused free solve does. A world of one input needs
+this from its first moment: every column of the dictionary is then plus or minus the same
+vector, every pair of units competes at full strength, and the code settles at a sixteenth
+of the model's step.
 
 The code's fixed points are stable equilibria of the neuron equations, but the brain's
 synchronous sweep at the model's step can oscillate around one when several units with

@@ -78,7 +78,11 @@ mu_min)`` stays below 2, ``mu_min`` the smallest eigenvalue of the slope-weighte
 coupling. ``stability`` reports the halvings of the step the settled code needs, and the
 brain integrates every phase at that step with its step budgets scaled to keep the same
 time (``Brain`` re-steps its graph when the level changes); the restoring term adds
-``top_down`` times the slope to the coupling's diagonal.
+``top_down`` times the slope to the coupling's diagonal. ``rest_stability`` bounds the same
+over every state the region can reach (the slopes at their largest, every unit active), from
+the dictionary alone: a phase that does not settle at the brain's step is settled once more
+at that step before the moment is refused, so a dictionary whose columns all overlap (one
+input: every column is plus or minus the same vector) settles from its first moment.
 """
 
 from __future__ import annotations
@@ -282,6 +286,20 @@ class LearnedCode:
         index = np.arange(self.units)
         coupling[:, index, index] -= self.top_down * slopes
         mu = float(np.linalg.eigvalsh(coupling)[:, 0].min())
+        need = self.model.dt * (1.0 - mu) / self.STEP_MARGIN
+        return 0 if need <= 1.0 else int(np.ceil(np.log2(need)))
+
+    def rest_stability(self) -> int:
+        """The halvings of the model's step under which the synchronous sweep contracts
+        around any fixed point the region can reach: the bound of ``stability`` over every
+        state, from the dictionary alone. With every slope at most the activation's largest,
+        ``s_max``, the coupling's smallest eigenvalue is at least ``s_max (1 - lambda_max(G)
+        - top_down)``, ``G`` the dictionary's Gram matrix."""
+        rest = float(self.model.rest_emission)
+        steepest = max(rest, 0.5)  # the active branch's steepest point of the sigmoid
+        s_max = self.model.slope * steepest * (1.0 - steepest) / (1.0 - rest)
+        largest = float(np.linalg.eigvalsh(self.gram())[-1])
+        mu = s_max * (1.0 - largest - self.top_down)
         need = self.model.dt * (1.0 - mu) / self.STEP_MARGIN
         return 0 if need <= 1.0 else int(np.ceil(np.log2(need)))
 

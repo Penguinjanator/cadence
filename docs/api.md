@@ -317,7 +317,8 @@ and `graph` of the units (the sub-network a moment's code phase settles). `later
 `code_of(activation)` (the rectified code at unit length), `residuals(sensory, activation,
 context)`; `standing() -> Nudge | None` (the region's quadratic boundary toward zero at gain
 `top_down` over its units); `stability(v) -> int` (the halvings of the step the settled
-code's competition is stable under) and `restep(halvings)`, `halvings`; `learn(sensory,
+code's competition is stable under), `rest_stability() -> int` (the same over every state
+the region can reach, from the dictionary alone) and `restep(halvings)`, `halvings`; `learn(sensory,
 activation, context, free=None) -> bool` (one step of every table from a settled moment,
 each row an event; `free` the context-free code, whose activity the thresholds' share reads
 and whose residual the repair reads), `install()`,
