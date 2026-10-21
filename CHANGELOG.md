@@ -107,6 +107,14 @@
   `RecordPatchNet.dream` and `sleep`, the belief patch, the steered cortex and the governed
   life live on in release 0.84.3 and in the application demos that pin earlier releases; the
   population throughput receipt stays in `benchmarks/population` as a frozen reading.
+- Remove the temporal family: `TemporalPatchNet` with `TemporalPlan` (planning by repairing
+  input ports toward a goal), `TemporalMemory` (response protection) and the experimental
+  `PartitionedTemporalPatchNet` (5 modules, 1,834 lines, the `cadence.experimental` package
+  and 7 top-level exports), with 7 test files and their fixtures, the temporal cases of 2
+  more, the memory/planning example and the temporal, planning, response-protection and
+  partitioned guides. `Brain.compose` never had a transition model and used none of them;
+  every composed brain, checkpoint and composed life is byte-identical. Learned transitions,
+  bounded planning and response protection live on in release 0.84.3.
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
