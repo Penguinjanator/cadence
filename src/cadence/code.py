@@ -238,7 +238,7 @@ class LearnedCode:
         )
         self.work = {
             "settles": 0, "settle_rows": 0, "sweeps": 0, "capped": 0,
-            "updates": 0, "update_rows": 0,
+            "updates": 0, "update_rows": 0, "repairs": 0,
         }
         self.last: dict[str, Any] | None = None
 
@@ -439,10 +439,12 @@ class LearnedCode:
             if self.silence:
                 # the repair: a row whose code leaves at least the share ``repair`` of its
                 # input's energy unexplained, in context or context-free, lowers the
-                # thresholds of the units silent in it
-                step = step - self.threshold_rate * self.silence * self.unexplained(x, a)
+                # thresholds of the units silent in it; counted per unit and row
+                repairs = self.unexplained(x, a)
                 if free is not None:
-                    step = step - self.threshold_rate * self.silence * self.unexplained(x, own)
+                    repairs = repairs + self.unexplained(x, own)
+                step = step - self.threshold_rate * self.silence * repairs
+                self.work["repairs"] += int(repairs.sum())
             self.thresholds = np.maximum(self.thresholds + step, 0.0)
             moved = True
         self.work["updates"] += 1

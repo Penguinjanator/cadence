@@ -136,7 +136,7 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_threshold_rate` | 0.001 | retune | the homeostatic rate per row |
 | `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
 | `learned_code_repair` | 1.0 | retune | the share of a row's input energy its code may leave unexplained, in (0, 1], before the row lowers the thresholds of its silent units: at 1 a row whose code is silent (or worse than nothing); lower, a row the code reconstructs poorly |
-| `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone |
+| `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone; `brain.learned_code.work["repairs"]` counts the unit-rows it lowered |
 | `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
 
 Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], a

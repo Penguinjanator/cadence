@@ -322,7 +322,7 @@ each row an event; `free` the context-free code, whose activity the thresholds' 
 and whose residual the repair reads), `install()`,
 `take(dictionary, weights, thresholds)`;
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
-capped settles, updates), `last` (the latest phase's sensory activation, context, activation,
+capped settles, updates, and `repairs`, the unit-rows the repair lowered), `last` (the latest phase's sensory activation, context, activation,
 prediction and, at a learned moment, the context-free code `free`). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
 validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them. Guide:
 [the learned code](code.md).

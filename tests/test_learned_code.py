@@ -860,6 +860,8 @@ def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained(
     np.testing.assert_allclose(code.thresholds, np.maximum(expected, 0.0))
     fired = (a > 0).any(axis=0)
     assert (code.thresholds[~fired] < code.threshold).all()
+    assert code.work["repairs"] == int(repair.sum()) > 0
+    assert strict.learned_code.work["repairs"] == 0  # no row was silent at the strict level
 
 
 def test_the_region_learns_from_the_moments_free_settle_alone():
@@ -910,6 +912,7 @@ def test_the_thresholds_share_reads_the_context_free_code():
     np.testing.assert_allclose(code.thresholds, np.maximum(expected, 0.0))
     recruited = (a > 0).any(axis=0) & ~(free > 0).any(axis=0)
     assert recruited.any() and (code.thresholds[recruited] <= before[recruited]).all()
+    assert code.work["repairs"] == int(repair.sum())
 
 
 def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():
