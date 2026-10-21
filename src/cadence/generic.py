@@ -1374,6 +1374,17 @@ class Brain:
             )
             self._code_synapses = self._learned_code_synapses()
             self._code_forward = self._learned_code_forward()
+            # the first module reads the observation beside the code only with cortex "both"
+            pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+            beside = bool(
+                (np.isin(pre, self.sensory_index) & ~np.isin(post, self.code_index)).any()
+            )
+            if beside != (self.learned_code.cortex == "both"):
+                raise ValueError(
+                    f"learned_code_cortex {self.learned_code.cortex!r} disagrees with the "
+                    "connectome: with \"both\" the sensory neurons project to the first module "
+                    "beside the code, with \"code\" to the code region alone"
+                )
             brain = self._installed(brain)
             plastic_synapses = np.ones(connectome.synapses, dtype=bool)
             for synapses, _, _ in self._code_synapses.values():
@@ -1681,12 +1692,11 @@ class Brain:
         return synapses, codes[pre[synapses]], targets[post[synapses]]
 
     def _unit_read(self, x: np.ndarray, drive: np.ndarray, *, memory: bool) -> np.ndarray:
-        """With ``learned_code_output="unit"``: the drive with the term that makes the
-        association neurons read the rectified code at unit length (``LearnedCode.output_of``:
-        a code weaker than the floor is read as it is, scaled by one over the floor), in
-        place of the code units' activations: the region's output gain per stream, entered as
-        a drive from the moment's phase (the code units hold their fixed point through the
-        settle, as nothing in the graph leads back into them)."""
+        """With ``learned_code_output`` ``"unit"`` or ``"capped"``: the drive with the term
+        that makes the association neurons read the code as ``LearnedCode.output_of`` gives
+        it, in place of the code units' activations: the region's output gain per stream,
+        entered as a drive from the moment's phase (the code units hold their fixed point
+        through the settle, as nothing in the graph leads back into them)."""
         code = self.learned_code
         assert code is not None
         coded = self._coded_moment
@@ -2225,6 +2235,13 @@ class Brain:
                 Projection("sensory", "code", scale=1.0, reciprocal=False),
                 Projection("code", names[0], scale=sensory_scale, reciprocal=False),
             ]
+            reads = LearnedCode.setting(
+                "cortex", options.get("learned_code_cortex", LearnedCode.founders()["cortex"])
+            )
+            if reads == "both":  # the observation as a brain without the region reads it
+                projections.append(
+                    Projection("sensory", names[0], scale=sensory_scale, reciprocal=False)
+                )
         else:
             projections = [
                 Projection(regions[0].name, names[0], scale=sensory_scale, reciprocal=False)
@@ -2548,7 +2565,10 @@ class Brain:
                 else (0 if self.sparse_code is None else int(self.sparse_code.expansion)),
                 "fan_in": 0 if self.sparse_code is None else int(self.sparse_code.fan_in),
                 "winners": 0 if self.sparse_code is None else int(self.sparse_code.winners),
-                "cortex": "code" if self.coded_cortex or learned is not None else "observation",
+                "cortex": (
+                    "observation and code" if learned is not None and learned.cortex == "both"
+                    else "code" if self.coded_cortex or learned is not None else "observation"
+                ),
                 "separator": None
                 if self.hippocampus is None or self.hippocampus.separator is None
                 else ("sparse" if self.hippocampus.separator.fan_in else "dense"),
@@ -2800,7 +2820,7 @@ class Brain:
         drive[:, self.sensory_index] = (
             self._sensed(x, code) * self.brain.neuron_model.stimulus_amplitude
         )
-        if self.learned_code is not None and self.learned_code.output == "unit":
+        if self.learned_code is not None and self.learned_code.output != "raw":
             drive = self._unit_read(x, drive, memory=memory)
         if memory and self.working_memory is not None:
             drive = self.working_memory.stimulate(drive)

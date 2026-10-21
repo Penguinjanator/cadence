@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -305,8 +306,10 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
+        "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5, "cortex": "code",
     }
+    with pytest.raises(ValueError, match="cortex is one of"):
+        composed(learned_code_cortex="sensory")
     with pytest.raises(ValueError, match="output is one of"):
         composed(learned_code_output="norm")
     with pytest.raises(ValueError, match="identity must lie in"):
@@ -1024,6 +1027,47 @@ def test_the_unit_read_does_not_raise_a_weak_code():
     assert not code.output_of(np.zeros((1, UNITS))).any()
     code.floor = 0.0
     np.testing.assert_allclose(np.linalg.norm(code.output_of(weak)), 1.0)
+
+
+def test_the_cortex_reads_the_observation_beside_the_code():
+    """With ``learned_code_cortex="both"`` the first module reads the observation as a
+    brain without the region reads it, through plastic synapses from every sensory neuron,
+    and the code beside it; the region's own synapses are those of the founder layout, a
+    lesson moves the observation's synapses, a checkpoint continues the life, and a
+    connectome that disagrees with the setting is refused."""
+    brain = composed(seed=4, recall=True, learned_code_cortex="both", learned_code_output="capped")
+    pre, post = np.asarray(brain.connectome.pre), np.asarray(brain.connectome.post)
+    beside = np.isin(pre, brain.sensory_index) & np.isin(post, brain.association_index)
+    assert beside.sum() == INPUTS * 64
+    assert brain.learner.plastic_synapses[beside].all()
+    assert len(brain._code_synapses["dictionary"][0]) == INPUTS * UNITS
+    assert brain.describe()["observation_code"]["cortex"] == "observation and code"
+    x = tokens(2, 6)
+    brain.act(x, greedy=True)
+    efficacy = brain.brain.efficacy[beside].copy()
+    brain.lesson(x, [1, 3])
+    assert not np.array_equal(brain.brain.efficacy[beside], efficacy)
+    twin = cd.Brain.load(brain.save(Path(tempfile.mkdtemp()) / "both.npz"))
+    assert twin.learned_code.cortex == "both" and twin.describe() == brain.describe()
+    np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
+    with pytest.raises(ValueError, match="disagrees with the connectome"):
+        cd.Brain(brain.connectome, learned_code=UNITS)  # the founder "code" on this layout
+    founder = composed(seed=4)
+    with pytest.raises(ValueError, match="disagrees with the connectome"):
+        cd.Brain(founder.connectome, learned_code=UNITS, learned_code_cortex="both")
+
+
+def test_the_capped_read_holds_a_code_to_one_full_inputs_norm():
+    """With ``learned_code_output="capped"`` a code stronger than one full input is read
+    at that input's norm and a weaker one as it is."""
+    code = composed(seed=2, learned_code_output="capped").learned_code
+    least = float(code.model.activation(np.array([1.0]))[0])
+    strong = np.zeros((1, UNITS))
+    strong[0, :3] = [0.6, 0.5, 0.4]
+    weak = 0.2 * strong
+    np.testing.assert_allclose(np.linalg.norm(code.output_of(strong)), least)
+    np.testing.assert_allclose(code.output_of(weak), weak)
+    assert not code.output_of(np.zeros((1, UNITS))).any()
 
 
 def test_the_region_learns_from_the_moments_free_settle_alone():
