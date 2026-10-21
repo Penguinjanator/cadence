@@ -126,6 +126,52 @@ def test_readings_change_nothing(tmp_path):
         assert np.array_equal(before[name], after[name]), name
 
 
+def test_the_library_arm_holds_the_region_inside_the_brain_at_the_prototypes_effective_rates():
+    """The library arms compose the brain with ``learned_code=UNITS``: the per-row rates give
+    the prototype's effective step at this chamber's batch, the bottom-up arm has no top-down
+    weight, and a life's moments settle the region with the brain."""
+    life = em.Life("library", 3)
+    brain = life.brain
+    assert life.code is None and life.library and life.coded
+    assert brain.learned_code is not None and brain.code_width == em.UNITS
+    genes = brain.describe()["genes"]
+    assert genes["learned_code_top_down"] == em.TOP_DOWN["library"]
+    assert genes["learned_code_rate"] == em.CODE.dictionary_rate / em.BATCH
+    assert genes["learned_code_predictor"] == em.CODE.predictor_rate / em.BATCH
+    assert genes["learned_code_threshold_rate"] == em.CODE.threshold_rate / em.BATCH
+    assert genes["learned_code_target"] == em.CODE.target
+    assert em.Life("library_bottom_up", 3).brain.describe()["genes"]["learned_code_top_down"] == 0.0
+    for seq, target in _rounds(3, 2):
+        assert em.live_round(life, seq, target)
+    assert life.work["acts"] == 2 * len(seq) and life.work["code_sweeps"] > 0
+    assert brain.learned_code.work["updates"] == life.work["acts"]
+    codes = life.code_of(np.arange(em.GROUPS * em.MEMBERS))
+    assert codes.shape == (em.GROUPS * em.MEMBERS, em.UNITS) and (codes >= 0).all()
+    assert life.residual_of(np.arange(4), codes[:4]).shape == (4,)
+    assert set(life.residuals()) == {"bottom_up", "top_down"}
+
+
+def test_readings_change_nothing_on_a_library_life(tmp_path):
+    seed = 6
+    life = em.Life("library", seed)
+    held, answers = em.holdout(seed), em.answers_of(seed)
+    for seq, target in _rounds(seed, 2):
+        em.live_round(life, seq, target)
+    code = life.brain.learned_code
+    tables = {name: value.copy() for name, value in code.arrays().items()}
+    genes = dict(life.brain.describe()["genes"])
+    before = _saved(life.brain, tmp_path / "a.npz")
+    em.read_life(life, "library", seed, held, answers)
+    em.code_report(life, held, seed)
+    em.change_report(life, held, seed)
+    for name, value in tables.items():
+        assert np.array_equal(getattr(code, name), value), name
+    assert life.brain.describe()["genes"] == genes  # a reading's freeze and override stay on copies
+    after = _saved(life.brain, tmp_path / "b.npz")
+    for name in before:
+        assert np.array_equal(before[name], after[name]), name
+
+
 def test_shuffled_contexts_keep_the_members_and_lose_the_groups():
     rng_a = np.random.default_rng(7)
     rng_b = np.random.default_rng(7)

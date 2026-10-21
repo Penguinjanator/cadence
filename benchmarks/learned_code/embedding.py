@@ -28,7 +28,14 @@ Arms, one life per founder and arm, on the same schedule of sentences and questi
   units, a softmax over the answers, cross-entropy at the question through the round's
   events, one step per round);
 * ``gru_lm``: the same GRU that also predicts every next token (a softmax over the tokens),
-  its embedding of the inputs learned by gradient from the sentences as well.
+  its embedding of the inputs learned by gradient from the sentences as well;
+* ``library``: the library's own code region, ``Brain.compose(INPUTS, GROUPS, modules=(64,),
+  learned_code=UNITS, learned_code_top_down=LIBRARY_TOP_DOWN, ...)``: the region settles
+  with the brain, its top-down boundary reads the working trace inside the settle, and it
+  learns at every accepted moment at the per-row rates that give the prototype's effective
+  step at this chamber's batch;
+* ``library_bottom_up``: the same region without its top-down boundary
+  (``learned_code_top_down=0``).
 
 Every brain arm teaches with ``learning_surprise`` (rows the brain already answers as shown
 are not taught); every other gene is the founder's. Readings run on copies of the life with
@@ -99,13 +106,20 @@ PANEL = 128  # trials per reading panel
 CHANGE_ROUNDS = (0, 16, 64, 256)  # rounds of the changed statistics, read at each
 FOUNDERS = tuple(range(6))
 ARMS = ("raw", "random", "learned", "learned_g2", "bottom_up", "shuffled", "uniform", "gru",
-        "gru_lm")
+        "gru_lm", "library", "library_bottom_up")
 # the order lives start in: the gated arm and the gates' controls first
-ORDER = ("learned", "bottom_up", "raw", "random", "gru", "uniform", "shuffled", "gru_lm",
-         "learned_g2")
+ORDER = ("library", "library_bottom_up", "learned", "bottom_up", "raw", "random", "gru",
+         "uniform", "shuffled", "gru_lm", "learned_g2")
 # the code arms and their top-down weight; ``shuffled`` also draws its contexts apart
-TOP_DOWN = {"learned": 4.0, "learned_g2": 2.0, "bottom_up": 0.0, "shuffled": 4.0}
+LIBRARY_TOP_DOWN = 4.0  # the library region's top-down weight, selected on pilot founders
+TOP_DOWN = {"learned": 4.0, "learned_g2": 2.0, "bottom_up": 0.0, "shuffled": 4.0,
+            "library": LIBRARY_TOP_DOWN, "library_bottom_up": 0.0}
 CODE_ARMS = tuple(TOP_DOWN)
+LIBRARY_ARMS = ("library", "library_bottom_up")  # the library's region, inside the brain's settle
+# the library region's genes: the prototype's rates per moment are means over the BATCH
+# streams, so the per-row rates of the library give the same effective step
+LIBRARY = {"rate": 2.0 / BATCH, "predictor": 0.5 / BATCH, "threshold": 0.1,
+           "threshold_rate": 0.01 / BATCH, "target": 0.1}
 SCHEDULE_SEED, HOLDOUT_SEED, PANEL_SEED, GRU_SEED, UNIFORM_SEED, CHANGE_SEED, SHUFFLE_SEED = (
     51101, 51102, 51103, 51104, 51105, 51106, 51107,
 )
@@ -185,14 +199,25 @@ class Life:
     """The brain of an arm and, for the code arms, its code region. ``hear`` lets a moment
     pass with a greedy act, ``teach`` gives the moment's lesson and then acts; the code
     settles once per moment and learns from it. Without a code region the brain receives
-    the observation as given: the released ``Brain.compose`` driven directly."""
+    the observation as given: the released ``Brain.compose`` driven directly. The library
+    arms hold the region inside the brain (``learned_code``): the brain receives the
+    observation, settles the region with itself and learns it at every accepted moment."""
 
-    def __init__(self, arm: str, seed: int, *, code: Any = CODE) -> None:
+    def __init__(self, arm: str, seed: int, *, code: Any = CODE,
+                 library: dict[str, Any] | None = None) -> None:
         from cadence import Brain
 
         self.arm, self.seed = arm, seed
         self.code = None
-        if arm in CODE_ARMS:
+        self.library = arm in LIBRARY_ARMS
+        if self.library:
+            genes = dict(LIBRARY, **(library or {}))
+            self.brain = Brain.compose(
+                INPUTS, ACTIONS, modules=(WIDTH,), seed=seed, learning_surprise=True,
+                learned_code=UNITS, learned_code_top_down=TOP_DOWN[arm],
+                **{f"learned_code_{name}": value for name, value in genes.items()},
+            )
+        elif arm in CODE_ARMS:
             settings = cr.CodeSettings(**{**code.to_dict(), "top_down": TOP_DOWN[arm]})
             self.brain = Brain.compose(settings.units, ACTIONS, modules=(WIDTH,), seed=seed,
                                        learning_surprise=True)
@@ -210,7 +235,20 @@ class Life:
         self.last: dict[str, np.ndarray] = {}
         self.work = {"acts": 0, "act_rows": 0, "act_sweeps": 0, "act_refusals": 0,
                      "lessons": 0, "lesson_rows": 0, "rows_taught": 0, "lesson_sweeps": 0,
-                     "lesson_refusals": 0}
+                     "lesson_refusals": 0, "code_sweeps": 0}
+
+    @property
+    def coded(self) -> bool:
+        """Whether a code stands between the observation and the cortex (either kind)."""
+        return self.code is not None or self.library
+
+    def freeze(self) -> None:
+        """The code's learning off: a reading's copy keeps the life's tables."""
+        if self.code is not None:
+            self.code.learning = False
+        elif self.library:
+            self.brain.retune(learned_code_rate=0.0, learned_code_predictor=0.0,
+                              learned_code_threshold_rate=0.0)
 
     def reset(self) -> None:
         self.brain.reset()
@@ -218,7 +256,8 @@ class Life:
 
     def _coded(self, x: np.ndarray) -> np.ndarray:
         """The moment's input to the brain: the observation, or its settled code at unit
-        length after the code region settled (and learned) on it."""
+        length after the code region settled (and learned) on it; a library brain takes the
+        observation and settles its own region."""
         if self.code is None:
             return x
         p = self.code.predict(self.context, len(x))
@@ -230,6 +269,9 @@ class Life:
     def _act(self, y: np.ndarray) -> np.ndarray | None:
         self.work["acts"] += 1
         self.work["act_rows"] += len(y)
+        if self.library and self.top_down is not None:
+            # a reading's override of the boundary at this moment alone, on a copy
+            self.brain.retune(learned_code_top_down=self.top_down)
         try:
             action = self.brain.act(y, greedy=True)
         except RuntimeError:
@@ -237,9 +279,44 @@ class Life:
             self.context = None
             return None
         self.work["act_sweeps"] += int(self.brain.last_settlement["steps"])
+        if self.library:
+            self.work["code_sweeps"] += int(self.brain.last_settlement["code_steps"])
+            last = self.brain.learned_code.last
+            self.last = {"x": last["sensory"], "a": np.maximum(last["activation"], 0.0),
+                         "p": np.zeros_like(last["activation"]) if last["prediction"] is None
+                         else last["prediction"], "context": last["context"]}
         state = self.brain.basal_ganglia.state
         self.context = np.asarray(state.activation[:, self.brain.association_index]).copy()
         return np.asarray(action)
+
+    def residuals(self) -> dict[str, np.ndarray]:
+        """The last moment's residuals on both boundaries, per row, for either kind."""
+        if self.library:
+            return self.brain.learned_code.residuals(
+                self.last["x"], self.last["a"], self.last["context"]
+            )
+        assert self.code is not None
+        return self.code.residuals(self.last["x"], self.last["a"], self.last["p"])
+
+    @property
+    def region_work(self) -> dict[str, int]:
+        if self.library:
+            return dict(self.brain.learned_code.work)
+        assert self.code is not None
+        return dict(self.code.work)
+
+    @property
+    def thresholds(self) -> np.ndarray:
+        if self.library:
+            return np.asarray(self.brain.learned_code.thresholds)
+        assert self.code is not None
+        return np.asarray(self.code.thresholds)
+
+    def region_bytes(self) -> int:
+        if self.library:
+            return int(self.brain.learned_code.nbytes())
+        assert self.code is not None
+        return int(self.code.nbytes())
 
     def hear(self, x: np.ndarray) -> np.ndarray | None:
         return self._act(self._coded(x))
@@ -261,12 +338,28 @@ class Life:
 
     def code_of(self, tokens: np.ndarray) -> np.ndarray:
         """The context-free code of tokens as the brain would receive it: the observation, the
-        random code, or the region's settle on the observation alone (no prediction)."""
+        random code, or the region's settle on the observation alone (no prediction); for a
+        library brain the region's rectified activation settled without a context."""
         x = onehot(tokens)
+        if self.library:
+            phase = self.brain._settle_code(x, context=False)
+            return np.maximum(np.asarray(phase.state.activation), 0.0)
         if self.code is None:
             return self.brain.observation_code(x)
         a, _ = self.code.settle(x, np.zeros((len(x), self.code.settings.units)), top_down=0.0)
         return a
+
+    def residual_of(self, tokens: np.ndarray, codes: np.ndarray) -> np.ndarray:
+        """The bottom-up residual of context-free ``codes`` of ``tokens``, per row."""
+        x = onehot(tokens)
+        if self.library:
+            model = self.brain.brain.neuron_model
+            sensory = model.activation(
+                x * model.stimulus_amplitude + self.brain.brain.bias[self.brain.sensory_index]
+            )
+            return self.brain.learned_code.residuals(sensory, codes, None)["bottom_up"]
+        assert self.code is not None
+        return self.code.residuals(x, codes, np.zeros_like(codes))["bottom_up"]
 
 
 def fork(life: Any) -> Any:
@@ -274,6 +367,9 @@ def fork(life: Any) -> Any:
     immutable connectome shared; read-only mapping proxies restored as proxies."""
     brain = getattr(life, "brain", None)
     memo = {} if brain is None else {id(brain.connectome): brain.connectome}
+    region = None if brain is None else getattr(brain, "learned_code", None)
+    if region is not None:  # the region's own immutable connectome is shared as well
+        memo[id(region.connectome)] = region.connectome
     proxies = {} if brain is None else {
         k: v for k, v in vars(brain).items() if isinstance(v, MappingProxyType)}
     for key, value in proxies.items():
@@ -473,20 +569,18 @@ def read_brain(life: Life, seq: list[np.ndarray], *, top_down: float | None = No
     top-down boundary at the question alone. Returns the answers and, for a code arm, the
     question's codes and residuals."""
     copy_ = fork(life)
-    if copy_.code is not None:
-        copy_.code.learning = False
+    copy_.freeze()
     copy_.reset()
     for x in seq[:-1]:
         copy_.hear(x)
     copy_.top_down = top_down
     out = copy_.hear(seq[-1])
     extra: dict[str, Any] = {}
-    if copy_.code is not None and copy_.last:
-        a, p, x = copy_.last["a"], copy_.last["p"], copy_.last["x"]
-        extra = {"codes": a, "residual": copy_.code.residuals(x, a, p)}
+    if copy_.coded and copy_.last:
+        extra = {"codes": copy_.last["a"], "residual": copy_.residuals()}
     work = copy_.work
-    if copy_.code is not None:
-        work = {**work, "code": copy_.code.work}
+    if copy_.coded:
+        work = {**work, "code": copy_.region_work}
     extra["work"] = work
     return (np.full(len(seq[0]), -1) if out is None else out), extra
 
@@ -531,10 +625,10 @@ def code_report(life: Life, held: np.ndarray, seed: int, *,
     copy_ = fork(life)
     report: dict[str, Any] = {}
     members = np.arange(GROUPS * MEMBERS)
-    if copy_.code is None:
+    if not copy_.coded:
         report["structure"] = structure(copy_.code_of(members), held)
         return report
-    copy_.code.learning = False
+    copy_.freeze()
     rng = np.random.default_rng(np.random.SeedSequence([PANEL_SEED, seed, 2]))
     shuffle = (np.random.default_rng(np.random.SeedSequence([SHUFFLE_SEED, seed, 2]))
                if life.arm == "shuffled" else None)
@@ -544,10 +638,10 @@ def code_report(life: Life, held: np.ndarray, seed: int, *,
         seq += [onehot(t) for t in sentence(rng, PANEL, shuffle=shuffle)]
     bottom, top, codes, sweeps = [], [], [], []
     for x in seq:
-        start = copy_.code.work["sweeps"]
+        start = copy_.region_work["sweeps"]
         copy_.hear(x)
-        sweeps.append(copy_.code.work["sweeps"] - start)
-        r = copy_.code.residuals(copy_.last["x"], copy_.last["a"], copy_.last["p"])
+        sweeps.append(copy_.region_work["sweeps"] - start)
+        r = copy_.residuals()
         bottom.append(r["bottom_up"])
         top.append(r["top_down"])
         codes.append(copy_.last["a"])
@@ -562,8 +656,8 @@ def code_report(life: Life, held: np.ndarray, seed: int, *,
     report["units_over_one_percent"] = int(np.sum(active.mean(axis=0) >= 0.01))
     report["active_per_code"] = float(active.sum(axis=1).mean())
     report["silent_codes"] = int(np.sum(~active.any(axis=1)))
-    report["thresholds"] = {"mean": float(copy_.code.thresholds.mean()),
-                            "zero": int(np.sum(copy_.code.thresholds == 0.0))}
+    report["thresholds"] = {"mean": float(copy_.thresholds.mean()),
+                            "zero": int(np.sum(copy_.thresholds == 0.0))}
     free = copy_.code_of(members)
     report["structure"] = structure(free, held)
     report["free_active_per_code"] = float((free > 0).sum(axis=1).mean())
@@ -582,7 +676,7 @@ def change_report(life: Life, held: np.ndarray, seed: int) -> dict[str, Any]:
     members' and the old members' context-free codes, the drift of the old members' codes
     from before the change (mean cosine), and the late members' nearest taught group."""
     copy_ = fork(life)
-    assert copy_.code is not None
+    assert copy_.coded
     rng = np.random.default_rng(np.random.SeedSequence([CHANGE_SEED, seed]))
     shuffle = (np.random.default_rng(np.random.SeedSequence([SHUFFLE_SEED, seed, 3]))
                if life.arm == "shuffled" else None)
@@ -593,7 +687,6 @@ def change_report(life: Life, held: np.ndarray, seed: int) -> dict[str, Any]:
     taught = ~held.reshape(-1)
     centroids = cr.unit_rows(np.stack([unit[(members // MEMBERS == g) & taught].mean(axis=0)
                                        for g in range(GROUPS)]))
-    zeros = np.zeros((len(late), copy_.code.settings.units))
     readings, done = [], 0
     for target in CHANGE_ROUNDS:
         while done < target:
@@ -605,8 +698,8 @@ def change_report(life: Life, held: np.ndarray, seed: int) -> dict[str, Any]:
             done += 1
         old = copy_.code_of(members)
         new = copy_.code_of(late)
-        r_old = copy_.code.residuals(onehot(members), old, np.zeros_like(old))["bottom_up"]
-        r_new = copy_.code.residuals(onehot(late), new, zeros)["bottom_up"]
+        r_old = copy_.residual_of(members, old)
+        r_new = copy_.residual_of(late, new)
         drift = np.sum(cr.unit_rows(old) * unit, axis=1)
         nearest = np.argmax(cr.unit_rows(new) @ centroids.T, axis=1)
         readings.append({
@@ -617,7 +710,7 @@ def change_report(life: Life, held: np.ndarray, seed: int) -> dict[str, Any]:
             "late_nearest_group": float(np.mean(nearest == np.arange(GROUPS * LATE) // LATE)),
             "late_active_per_code": float((new > 0).sum(axis=1).mean()),
         })
-    return {"readings": readings, "code_work": dict(copy_.code.work)}
+    return {"readings": readings, "code_work": copy_.region_work}
 
 
 def accuracy(given: np.ndarray, truth: np.ndarray) -> float:
@@ -644,7 +737,7 @@ def read_life(life: Any, arm: str, seed: int, held: np.ndarray,
                 row["residual_bottom_up"] = float(extra["residual"]["bottom_up"].mean())
                 row["residual_top_down"] = float(extra["residual"]["top_down"].mean())
                 row["active_per_code"] = float((extra["codes"] > 0).sum(axis=1).mean())
-            if arm in ("learned", "learned_g2", "shuffled"):
+            if arm in ("learned", "learned_g2", "shuffled", "library"):
                 given, extra = read_brain(life, panel["events"], top_down=0.0)
                 row["top_down_off_at_question"] = accuracy(given, truth)
                 row["work_top_down_off"] = extra["work"]
@@ -669,7 +762,7 @@ def life_run(spec: dict[str, Any]) -> dict[str, Any]:
     elif arm == "uniform":
         life = None
     else:
-        life = Life(arm, seed, code=code)
+        life = Life(arm, seed, code=code, library=spec.get("library"))
     failed = 0
     nursery = int(spec.get("nursery", NURSERY))
     for _ in range(nursery):
@@ -680,7 +773,7 @@ def life_run(spec: dict[str, Any]) -> dict[str, Any]:
             failed += int(not live_round(life, seq, None))
     readings, done = [], 0
     before = None
-    if isinstance(life, Life) and life.code is not None:
+    if isinstance(life, Life) and life.coded:
         before = life.code_of(np.arange(GROUPS * MEMBERS))
         nursery_code = code_report(life, held, seed)
         nursery_code.pop("free_codes")
@@ -708,9 +801,9 @@ def life_run(spec: dict[str, Any]) -> dict[str, Any]:
                            "readings": readings, "failed_rounds": failed}
     if isinstance(life, Life):
         out["work"] = dict(life.work)
-        if life.code is not None:
-            out["code_work"] = dict(life.code.work)
-            out["code_bytes"] = life.code.nbytes()
+        if life.coded:
+            out["code_work"] = life.region_work
+            out["code_bytes"] = life.region_bytes()
             if spec.get("change", True):
                 out["change"] = change_report(life, held, seed)
     elif isinstance(life, Recurrent):
@@ -773,14 +866,15 @@ def receipt(out: Path, args: argparse.Namespace, elapsed: float) -> list[dict[st
             path = out / "lives" / life_name({"arm": arm, "seed": seed})
             if path.exists():
                 rows.append(json.loads(path.read_text()))
-    body = {"schema": "learned-code-embedding/2", "digests": digests(), "rows": rows,
+    body = {"schema": "learned-code-embedding/3", "digests": digests(), "rows": rows,
             "elapsed_seconds": elapsed,
             "constants": {"GROUPS": GROUPS, "MEMBERS": MEMBERS, "HELD": HELD, "PRE": PRE,
                           "POST": POST, "LATE": LATE, "INPUTS": INPUTS, "UNITS": UNITS,
                           "WIDTH": WIDTH, "SENTENCES": SENTENCES, "BATCH": BATCH,
                           "NURSERY": args.nursery, "PANEL": PANEL,
                           "CHANGE_ROUNDS": CHANGE_ROUNDS, "CODE": CODE.to_dict(), "GRU": GRU,
-                          "GATE": GATE}}
+                          "GATE": GATE, "LIBRARY": LIBRARY, "TOP_DOWN": TOP_DOWN,
+                          "library_over": args.library}}
     (out / "receipt.json").write_text(json.dumps(body, indent=1, default=float) + "\n")
     return rows
 
@@ -794,13 +888,16 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seeds", nargs="*", type=int, default=list(FOUNDERS))
     parser.add_argument("--budgets", nargs="*", type=int, default=list(BUDGETS))
     parser.add_argument("--nursery", type=int, default=NURSERY)
+    parser.add_argument("--library", type=json.loads, default={},
+                        help="genes over the library arms' (a pilot); declared runs leave it")
     args = parser.parse_args(argv)
     lives = args.out / "lives"
     began = time.monotonic()
     if args.command == "run":
         lives.mkdir(parents=True, exist_ok=True)
         specs = [{"arm": arm, "seed": seed, "budgets": sorted(args.budgets),
-                  "nursery": args.nursery, "lives": str(lives)}
+                  "nursery": args.nursery, "lives": str(lives),
+                  **({"library": args.library} if args.library else {})}
                  for arm in sorted(args.arms, key=ORDER.index) for seed in args.seeds]
         specs = [spec for spec in specs if not (lives / life_name(spec)).exists()]
         with get_context("spawn").Pool(max(1, min(args.workers, len(specs) or 1))) as pool:
