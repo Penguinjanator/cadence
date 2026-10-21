@@ -44,7 +44,7 @@ brain, without `code`) adds a `code` region of that many neurons that settles wi
 to a learned sparse code of the observation, read by the cortex and keyed on by the
 memories, with the genes `learned_code_top_down`, `learned_code_rate`,
 `learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate`,
-`learned_code_target`, `learned_code_threshold_max`, `learned_code_silence` and
+`learned_code_target`, `learned_code_repair`, `learned_code_silence` and
 `learned_code_place` ([the learned code](code.md)). The `*_scale` arguments are initial
 projection magnitudes, fixed at construction. `options` takes every constructor keyword below
 and every `learning_<field>`, `actor_<field>` and `arousal_<field>` name; with
@@ -152,7 +152,7 @@ their shape. Keep row identities fixed until `reset()`.
 | `pending_feedback` | read-only: the issued action awaits its outcome (`wait` keeps it) |
 | `decision_id` | read-only: the `arousal.age` at which `live` issued the awaited action, or `None`; saved and restored ([feedback ownership in the population solver](equilibrium/LIVE.md#preserve-execution-and-feedback-ownership) is the stricter contract) |
 | `last_arousal` | immutable snapshot of the latest `live` moment; `None` after construction, reset or load ([fields](continuous.md#routine-and-repair-live)) |
-| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks`, and with a learned code `code_steps`, `code_residual`, `code_halvings` and, for a brain with a place store, `place_steps` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
+| `last_settlement` | immutable report of the latest free-answer solve, refused ones included: `operation`, `scope`, `qualified`, `row_qualified`, `residual`, `max_residual`, `steps`, `budget`, `tolerance`, `residual_checks`, `damping_halvings`, `stagnation_checks`, and with a learned code `code_steps`, `code_residual`, `code_halvings` and, for a brain with a place store, `context_free_steps` ([inspect the work](quickstart.md#inspect-the-work-of-answering)) |
 | `last_learning` | the latest transition's learning report, teaching under `demonstration_*` keys |
 | `rng` | the brain's `numpy.random.Generator` |
 
@@ -301,7 +301,7 @@ contiguous index.
 
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, predictor=0.03,
-            threshold=0.1, threshold_rate=0.001, target=0.1, threshold_max=0.2, silence=10.0,
+            threshold=0.1, threshold_rate=0.001, target=0.1, repair=1.0, silence=10.0,
             place="free")
 ```
 
@@ -317,12 +317,13 @@ and `graph` of the units (the sub-network a moment's code phase settles). `later
 context)`; `standing() -> Nudge | None` (the region's quadratic boundary toward zero at gain
 `top_down` over its units); `stability(v) -> int` (the halvings of the step the settled
 code's competition is stable under) and `restep(halvings)`, `halvings`; `learn(sensory,
-activation, context, place=None) -> bool` (one step of every table from a settled moment,
-each row an event; `place` the context-free code, read for its silence), `install()`,
+activation, context, free=None) -> bool` (one step of every table from a settled moment,
+each row an event; `free` the context-free code, whose activity the thresholds' share reads
+and whose residual the repair reads), `install()`,
 `take(dictionary, weights, thresholds)`;
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
-capped settles, updates), `last` (the latest phase's sensory activation, context, activation
-and prediction). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
+capped settles, updates), `last` (the latest phase's sensory activation, context, activation,
+prediction and, at a learned moment, the context-free code `free`). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
 validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them. Guide:
 [the learned code](code.md).
 

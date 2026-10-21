@@ -302,13 +302,13 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
 def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
-        "threshold_rate": 0.001, "target": 0.1, "threshold_max": 0.2, "silence": 10.0,
+        "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free",
     }
-    with pytest.raises(ValueError, match="at least the initial threshold"):
-        composed(learned_code_threshold=0.3)
-    with pytest.raises(ValueError, match="threshold_max must be positive"):
-        composed(learned_code_threshold_max=0.0)
+    with pytest.raises(ValueError, match="repair must lie in"):
+        composed(learned_code_repair=0.0)
+    with pytest.raises(ValueError, match="repair"):
+        composed(learned_code_repair=1.5)
     with pytest.raises(ValueError, match="at least 2 units"):
         composed(units=1)
     with pytest.raises(ValueError, match="learned_code must be an integer"):
@@ -428,10 +428,18 @@ def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_t
         code.weights, before["weights"] + ((a - z @ before["weights"].T) * rate[:, None]).T @ z,
         atol=1e-12,
     )
-    # the thresholds: a unit active in more rows than the target rises, a silent one falls
-    share = (a > 0).sum(axis=0) - 4 * code.target
+    # the thresholds: a unit active in more rows than the target rises, a silent one falls;
+    # the share reads the context-free code (the code itself at a stream's first moment,
+    # within the solver's tolerance), and the repair what both codes leave unexplained
+    free = last["free"]
+    np.testing.assert_allclose(free, a, atol=1e-5)
+    share = (free > 0).sum(axis=0) - 4 * code.target
+    x_read = code.read * last["sensory"]
+    repair = code.unexplained(x_read, a) + code.unexplained(x_read, free)
     np.testing.assert_allclose(
-        code.thresholds, np.maximum(before["thresholds"] + code.threshold_rate * share, 0.0),
+        code.thresholds,
+        np.maximum(before["thresholds"] + code.threshold_rate * (share - code.silence * repair),
+                   0.0),
     )
     assert (code.thresholds[~active] < before["thresholds"][~active]).all()
     # the graph took the tables
@@ -605,7 +613,7 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
         ("bad_gene", bad_gene, "invalid saved learned code target"),
         ("no_table", no_table, "missing saved learned code table: weights"),
         ("wrong_shape", wrong_shape, "invalid saved learned code table: thresholds"),
-        ("negative_threshold", negative_threshold, "between zero and its ceiling"),
+        ("negative_threshold", negative_threshold, "thresholds are nonnegative"),
         ("long_column", long_column, "unit-length columns"),
         ("other_dictionary", other_dictionary, "disagree with the saved synapses"),
         ("lone_code", lone_code, "saved lived code belongs to a lived action"),
@@ -736,7 +744,7 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     before = brain._context.copy()
     brain.live(token, reward=[0.0])
     report = brain.last_settlement
-    assert report["place_steps"] >= 0 and "code_steps" in report
+    assert report["context_free_steps"] >= 0 and "code_steps" in report
     coded = brain._coded_moment
     assert coded is not None and coded[0] is not None
     key, place = coded[1], coded[3]
@@ -759,20 +767,23 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     np.testing.assert_allclose(again[3], brain.observation_code(token), atol=5e-3)
     np.testing.assert_allclose(again[3], place, atol=5e-3)
     assert not np.array_equal(again[1], key)
-    # without a place store no place phase runs; with the stores keyed in context the place
-    # key is the moment's key
+    # without a place store the context-free phase still runs for the thresholds' share,
+    # and the place key is the moment's key; with the stores keyed in context the same
     bare = composed(seed=9, episodic=False)
     bare.act(token, greedy=True)
-    assert "place_steps" not in bare.last_settlement
+    assert bare.last_settlement["context_free_steps"] > 0
     assert bare._coded_moment[3] is bare._coded_moment[1]
+    frozen = composed(seed=9, episodic=False, learned_code_threshold_rate=0.0)
+    frozen.act(token, greedy=True)  # thresholds frozen, no place store: no second phase
+    assert "context_free_steps" not in frozen.last_settlement
     in_context = composed(seed=9, learned_code_place="context", arousal=True)
     in_context.live(context)
     in_context.live(token, reward=[0.0])
     assert in_context._coded_moment[3] is in_context._coded_moment[1]
-    assert "place_steps" not in in_context.last_settlement
+    assert "context_free_steps" in in_context.last_settlement  # the thresholds' share reads it
     in_context.retune(learned_code_place="free")
     in_context.live(tokens(44), reward=[0.0])
-    assert "place_steps" in in_context.last_settlement
+    assert "context_free_steps" in in_context.last_settlement
     with pytest.raises(ValueError, match="place is one of"):
         composed(learned_code_place="route")
     # a step, its outcome and a lesson under the split keys
@@ -785,14 +796,12 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     assert taught.hippocampus.writes >= 2
 
 
-def test_a_long_stream_leaves_the_code_alive_within_the_ceiling(tmp_path):
+def test_a_long_stream_leaves_the_code_alive(tmp_path):
     """Six tokens heard for 2,000 moments by one stream, a lesson every tenth moment: the
-    thresholds stay at or below the ceiling, every token keeps at least one active unit in
-    context and context-free, at least one unit is in use per token, and a lower ceiling
-    retuned in the life clips the thresholds at once; a checkpoint above its ceiling is
-    refused."""
-    brain = composed(seed=11, units=32, recall=True, learned_code_threshold_rate=0.01,
-                     learned_code_threshold_max=0.12)
+    thresholds stay finite and nonnegative, every token keeps at least one active unit in
+    context and context-free, and at least one unit is in use per token; a checkpoint with
+    a negative threshold is refused."""
+    brain = composed(seed=11, units=32, recall=True, learned_code_threshold_rate=0.01)
     code = brain.learned_code
     rng = np.random.default_rng(5)
     for t in range(2000):
@@ -801,8 +810,7 @@ def test_a_long_stream_leaves_the_code_alive_within_the_ceiling(tmp_path):
         if t % 10 == 9:
             brain.lesson(x, [token % ACTIONS])
         brain.act(x, greedy=True)
-    assert (code.thresholds <= code.threshold_max + 1e-12).all()
-    assert (code.thresholds == code.threshold_max).any()  # the ceiling binds in a world of six
+    assert np.isfinite(code.thresholds).all() and (code.thresholds >= 0.0).all()
     used = np.zeros(32, bool)
     for token in range(6):
         x = tokens(token)
@@ -812,18 +820,96 @@ def test_a_long_stream_leaves_the_code_alive_within_the_ceiling(tmp_path):
         assert (in_context > 0).sum() >= 1 and (free > 0).sum() >= 1
         used |= (free > 0)[0]
     assert used.sum() >= 6
-    brain.retune(learned_code_threshold_max=0.1)  # a lower ceiling clips at once
-    assert (code.thresholds <= 0.1).all() and (code.thresholds == 0.1).any()
     np.testing.assert_array_equal(brain.brain.bias[brain.code_index], -code.thresholds)
-    with pytest.raises(ValueError, match="at least the initial threshold"):
-        brain.retune(learned_code_threshold_max=0.05)
-    path = brain.save(tmp_path / "ceiling.npz")
+    path = brain.save(tmp_path / "alive.npz")
     with np.load(path, allow_pickle=False) as data:
         arrays = {name: data[name].copy() for name in data.files}
-    arrays["learned_code/thresholds"][0] = 0.3
-    np.savez(tmp_path / "above.npz", **arrays)
-    with pytest.raises(ValueError, match="between zero and its ceiling"):
-        cd.Brain.load(tmp_path / "above.npz")
+    arrays["learned_code/thresholds"][0] = -0.1
+    np.savez(tmp_path / "below.npz", **arrays)
+    with pytest.raises(ValueError, match="thresholds are nonnegative"):
+        cd.Brain.load(tmp_path / "below.npz")
+
+
+def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained():
+    """At a repair level the newborn's rows exceed (its random dictionary explains little),
+    one moment lowers the thresholds of the units silent in those rows by the silence term
+    beyond the share rule, and leaves the units that fired to the share rule; at the
+    founder level 1 the same moment, whose rows are not silent, moves nothing beyond it."""
+    x = tokens(1, 2, 5, 9)
+    strict = composed(seed=4)
+    strict.act(x, greedy=True)
+    code = strict.learned_code
+    free = code.last["free"]
+    share = (free > 0).sum(axis=0) - len(x) * code.target
+    np.testing.assert_allclose(
+        code.thresholds, np.maximum(code.threshold + code.threshold_rate * share, 0.0)
+    )
+    repairing = composed(seed=4, learned_code_repair=0.5)
+    repairing.act(x, greedy=True)
+    code = repairing.learned_code
+    a = np.maximum(code.last["activation"], 0.0)
+    left = code.residuals(code.last["sensory"], a, None)["bottom_up"]
+    rows = left >= 0.5
+    assert rows.any()
+    free = code.last["free"]
+    x_read = code.read * code.last["sensory"]
+    repair = code.unexplained(x_read, a) + code.unexplained(x_read, free)
+    np.testing.assert_array_equal(code.unexplained(x_read, a), (rows[:, None] & ~(a > 0)).sum(0))
+    share = (free > 0).sum(axis=0) - len(x) * code.target
+    expected = code.threshold + code.threshold_rate * (share - code.silence * repair)
+    np.testing.assert_allclose(code.thresholds, np.maximum(expected, 0.0))
+    fired = (a > 0).any(axis=0)
+    assert (code.thresholds[~fired] < code.threshold).all()
+
+
+def test_the_region_learns_from_the_moments_free_settle_alone():
+    """With the working trace silenced (so that the lesson's synaptic changes reach no
+    code), a stream of lessons and outcomes leaves every table of the region bit for bit as
+    a stream of acts on the same observations leaves it: the nudged phases, the eligibility
+    phases and the lesson's settle enter no table."""
+    acting = composed(seed=3, recall=True, working_memory_amplitude=0.0)
+    taught = composed(seed=3, recall=True, working_memory_amplitude=0.0)
+    rng = np.random.default_rng(2)
+    for t in range(12):
+        x = tokens(*rng.integers(INPUTS, size=3))
+        acting.act(x, greedy=True)
+        taught.lesson(x, rng.integers(ACTIONS, size=3))
+        taught.act(x, greedy=True)
+        if t % 4 == 3:  # a sampled act and its outcome, the eligibility phases on taught
+            x, following = (tokens(*rng.integers(INPUTS, size=3)) for _ in range(2))
+            acting.step(x)
+            taught.step(x)
+            taught.learn(np.array([1.0, -1.0, 0.5]), np.array([False, False, True]), following)
+    # the tables agree to the solver's tolerance (each brain's phases start warm from its
+    # own stream's state and settle to the same fixed points within it); a step of any rule
+    # from a lesson's phase would be of the order of the rates, a thousand times larger
+    for name, value in acting.learned_code.arrays().items():
+        np.testing.assert_allclose(getattr(taught.learned_code, name), value, atol=1e-6)
+    assert taught.learned_code.work["updates"] == acting.learned_code.work["updates"] == 15
+
+
+def test_the_thresholds_share_reads_the_context_free_code():
+    """A prediction that recruits every unit in context raises no threshold: the share
+    counts the units the observation drives on its own."""
+    brain = composed(seed=5)
+    code = brain.learned_code
+    brain.act(tokens(2, 7), greedy=True)  # the trace now carries a moment
+    code.weights[:] = 1.0  # every unit predicted from any context
+    code.install()
+    brain.learner.brain = brain._installed(brain.brain)
+    before = code.thresholds.copy()
+    brain.act(tokens(4, 9), greedy=True)
+    a = np.maximum(code.last["activation"], 0.0)
+    free = code.last["free"]
+    assert (a > 0).sum() > (free > 0).sum()  # the context recruited units
+    share = (free > 0).sum(axis=0) - 2 * code.target
+    repair = code.unexplained(code.read * code.last["sensory"], a) + code.unexplained(
+        code.read * code.last["sensory"], free
+    )
+    expected = before + code.threshold_rate * (share - code.silence * repair)
+    np.testing.assert_allclose(code.thresholds, np.maximum(expected, 0.0))
+    recruited = (a > 0).any(axis=0) & ~(free > 0).any(axis=0)
+    assert recruited.any() and (code.thresholds[recruited] <= before[recruited]).all()
 
 
 def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():

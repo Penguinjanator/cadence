@@ -665,10 +665,8 @@ def _validate_learned_code(meta: dict[str, Any], data: Mapping[str, Any], learne
         table: np.ndarray = data[key]
         if table.shape != shape or table.dtype.kind not in "iuf" or not np.isfinite(table).all():
             raise ValueError(f"invalid saved learned code table: {name}")
-    if (data["learned_code/thresholds"] < 0).any() or (
-        data["learned_code/thresholds"] > spec["threshold_max"]
-    ).any():
-        raise ValueError("a learned code's thresholds lie between zero and its ceiling")
+    if (data["learned_code/thresholds"] < 0).any():
+        raise ValueError("a learned code's thresholds are nonnegative")
     if not np.allclose(
         np.linalg.norm(data["learned_code/dictionary"], axis=0), 1.0, rtol=0, atol=1e-9
     ):
@@ -1490,7 +1488,8 @@ class Brain:
         # once per moment: ``stimulus`` given that same array reads it, ``_choose`` takes it;
         # with a learned code also the code region's settled state, the whole graph's warm start
         self._coded_moment: (
-            tuple[np.ndarray, np.ndarray, BrainState | None, np.ndarray] | None
+            tuple[np.ndarray, np.ndarray, BrainState | None, np.ndarray, np.ndarray | None]
+            | None
         ) = None
         self._moment: tuple[np.ndarray, np.ndarray] | None = None
         # with a learned code, the code the pending action was keyed on, settled at its moment
@@ -1688,11 +1687,11 @@ class Brain:
         code = self.learned_code
         assert code is not None
         s = np.atleast_2d(np.asarray(state.activation, dtype=float))
-        coded = self._coded_moment  # the moment's context-free key, read for its silence
-        place = None if coded is None or coded[3] is coded[1] else coded[3]
+        coded = self._coded_moment  # the moment's context-free code: the share and the repair
+        free = None if coded is None else coded[4]
         if code.learn(
             s[:, self.sensory_index], s[:, self.code_index], s[:, self.prefrontal_index],
-            place=place,
+            free=free,
         ):
             self.learner.brain = self._installed(self.brain)
 
@@ -2311,8 +2310,6 @@ class Brain:
             if self.learned_code is None:
                 raise ValueError(f"{name} requires its existing learned code")
             value = LearnedCode.setting(setting, options.pop(name))
-            if setting == "threshold_max" and value < self.learned_code.threshold:
-                raise ValueError("threshold_max must be at least the initial threshold")
             memory_changes.append((self.learned_code, setting, value))
         if self.recall is not None:
             # the null slot's logit, null / temperature, must stay finite under the change
@@ -2367,10 +2364,8 @@ class Brain:
         if self.learned_code is not None and any(
             component is self.learned_code for component, _, _ in memory_changes
         ):
-            # the prediction's weight is a synapse scale and the boundary's gain, and a lower
-            # ceiling bounds the thresholds: the graph takes the tables again and the
-            # learner its boundary
-            self.learned_code.bound()
+            # the prediction's weight is a synapse scale and the boundary's gain: the graph
+            # takes the tables again and the learner its boundary
             self.learned_code.install()
             self.learner.brain = self._installed(self.brain)
             self.learner.standing = self._standing()
@@ -2522,22 +2517,29 @@ class Brain:
         record holds the moment's key (its code in the stream's context, what the context
         records and the recall slots key on) and its place key (the context-free code with
         ``learned_code_place="free"``, what the associative store and the place records key
-        on; a second code phase, reported as ``place_steps``), the same array without a
+        on; a second code phase, reported as ``context_free_steps``), the same array without a
         learned code or without a place store."""
         if self.learned_code is None:
             key = self._code(x)
-            self._coded_moment = (x, key, None, key)
+            self._coded_moment = (x, key, None, key, None)
             return key
         code = self.learned_code
         phase = self._settle_code(x, context=context, trace=trace)
         key = self._moment_key(x, code.code_of(phase.state.activation))
-        place = key
-        if context and self.hippocampus is not None and code.place == "free":
+        place, free_code = key, None
+        # the context-free code: the place key, and what the thresholds' share and the
+        # repair read at a moment the region learns from (an imagined branch learns nothing)
+        placed = self.hippocampus is not None and code.place == "free"
+        if context and (placed or (trace is None and code.threshold_rate > 0)):
             free = self._settle_code(x, context=False, report=False)
-            place = self._moment_key(x, code.code_of(free.state.activation))
+            free_code = np.maximum(np.asarray(free.state.activation, dtype=float), 0.0)
+            assert code.last is not None
+            code.last["free"] = free_code
+            if placed:
+                place = self._moment_key(x, code.code_of(free_code))
             assert self._code_settlement is not None
-            self._code_settlement["place_steps"] = int(free.steps)
-        self._coded_moment = (x, key, phase.state, place)
+            self._code_settlement["context_free_steps"] = int(free.steps)
+        self._coded_moment = (x, key, phase.state, place, free_code)
         return key
 
     def _moment_key(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:

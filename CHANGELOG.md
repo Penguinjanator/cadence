@@ -19,19 +19,22 @@
   competition is stable under (the model's step halved as `LearnedCode.stability` reports,
   with the step budgets scaled to keep each phase's time), so a dictionary whose columns
   come to overlap strongly settles instead of oscillating under the synchronous sweep. The
-  region learns at every accepted moment by local rules
-  (Hebbian on the reconstruction residual, the delta rule on the prediction's residual
-  normalized by the context's energy, homeostatic thresholds), its genes
+  region learns at every accepted moment, from the moment's free settle alone, by local
+  rules (Hebbian on the reconstruction residual, the delta rule on the prediction's
+  residual normalized by the context's energy, homeostatic thresholds whose share reads
+  the context-free code, so that what the context predicts may recruit a unit without
+  raising its threshold), its genes
   `learned_code_top_down` (4.0), `learned_code_rate` (0.125), `learned_code_predictor`
   (0.03, the share of a row's gap per event), `learned_code_threshold` (0.1),
   `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1),
-  `learned_code_threshold_max` (0.2, the ceiling that keeps a unit the world drives often
-  within reach of the observation alone), `learned_code_silence` (10, a silent row lowers
-  every threshold by that many under-active rows' steps, so no observation is left without
-  a unit) and `learned_code_place` (`"free"`); the lesson's contrast and the dopamine leave
+  `learned_code_repair` (1.0, the share of a row's input energy its code may leave
+  unexplained before the row repairs: it lowers the thresholds of its silent units, at the
+  founder level a row whose code is silent) and `learned_code_silence` (10, how many
+  under-active rows a silent unit counts as in such a row, so no observation is left
+  without a unit; the thresholds have no ceiling) and `learned_code_place` (`"free"`); the lesson's contrast and the dopamine leave
   its synapses alone. The recall slots and the episodic context records key on the moment's code in its
   context; the associative store and the episodic place records key on the context-free
-  code (a second code phase, `place_steps`), so a known situation is found again along a
+  code (a second code phase, `context_free_steps`), so a known situation is found again along a
   new path. The heard history holds the code and the recall memory's event values are
   codes; a decision keeps the key it was taken under until its outcome. Checkpoint format
   `cadence-generic/10` carries the tables; `describe`,

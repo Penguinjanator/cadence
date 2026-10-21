@@ -90,8 +90,11 @@ copy the code it reads.
 ## How it learns
 
 At every accepted moment (each `act`, `step` and `live` answer, and each moment `wait` senses)
-the region takes one step from the settled state, each row of the batch one event, with `a`
-the rectified code, `x'` the sensory activation as read (at the gain above), `z` the
+the region takes one step from the moment's free settle, each row of the batch one event;
+the lesson's nudged phases, the outcome's eligibility phases, the imagined branches and
+the readings taken on copies enter no table, as the contrast and the dopamine enter no
+synapse of the region. With `a` the rectified code, `a_free` the moment's context-free code
+(the region settled on the observation alone, a second code phase, `context_free_steps`), `x'` the sensory activation as read (at the gain above), `z` the
 prefrontal activation and `p = W z`:
 
 | Table | Rule | Gene (founder) |
@@ -99,7 +102,7 @@ prefrontal activation and `p = W z`:
 | dictionary | `Phi += rate * sum_rows (x' - Phi a) a^T`, each column scaled back to unit length | `learned_code_rate` (0.125) |
 | lateral weights | recomputed from the dictionary | with the dictionary |
 | predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = predictor / max(\|z\|^2, predictor^2)`: a row closes the share `predictor` of its own gap whatever its context's energy (the prefrontal activation is small in the brain's units); a context fainter than `\|z\| = predictor` is counted at that energy, so no row commands a synaptic step above its gap | `learned_code_predictor` (0.03) |
-| thresholds | `t += threshold_rate * sum_rows ((a > 0) - target)`, less `threshold_rate * silence` per row whose code is silent (in context, or context-free where the place key is settled), floored at 0 and capped at the ceiling | `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1), `learned_code_threshold_max` (0.2), `learned_code_silence` (10) |
+| thresholds | `t += threshold_rate * sum_rows ((a_free > 0) - target)`: a unit's share is the share of the observations that drive it on their own, so what the context predicts may recruit a unit without raising its threshold and the context-free code keeps the target share by construction; floored at 0; the repair: a row whose code leaves at least the share `repair` of its input's energy unexplained (`\|x' - Phi a\|^2 >= repair * \|x'\|^2`; at the founder level 1 a row whose code is silent or worse than nothing), in context or context-free where the place key is settled, lowers the threshold of every unit silent in it by `threshold_rate * silence`; a unit that fires, and a row the code reconstructs, are left to the share rule; there is no ceiling | `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1), `learned_code_repair` (1.0), `learned_code_silence` (10) |
 
 The brain's graph takes the new tables at once. While the code fits, the residuals are small
 and nothing moves. The lesson's contrast and the dopamine leave the region's synapses and
@@ -132,11 +135,11 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_threshold` | 0.1 | construction | every unit's initial threshold |
 | `learned_code_threshold_rate` | 0.001 | retune | the homeostatic rate per row |
 | `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
-| `learned_code_threshold_max` | 0.2 | retune | the ceiling of every threshold, at least the initial threshold, in the units the region reads (one input at amplitude 1 drives the unit whose column matches it by one, a column shared by five inputs by .45); a unit the world drives more often than the target is made harder to drive only up to it, so the observation alone can still fire it; a lower ceiling clips the thresholds at once |
-| `learned_code_silence` | 10 | retune | how many under-active rows a silent row counts as: a row whose code is silent lowers every threshold by `threshold_rate * silence`, so no observation is left without a unit; 0 leaves silence to the target alone |
+| `learned_code_repair` | 1.0 | retune | the share of a row's input energy its code may leave unexplained, in (0, 1], before the row lowers the thresholds of its silent units: at 1 a row whose code is silent (or worse than nothing); lower, a row the code reconstructs poorly |
+| `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone |
 | `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
 
-Refused with `ValueError`: `learned_code` below 2, a ceiling below the initial threshold, a
+Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], a
 `learned_code_*` gene without the region,
 `code` beside `learned_code` (a key that joins the observation's own identity to its meaning
 is not built in this version), an image brain, `memory_expansion` or `memory_fan_in` (the
@@ -154,7 +157,7 @@ zero prediction, what `brain.observation_code(x)` returns: the associative store
 episodic place records key on it, since their job is to answer a known situation reached
 along a new path, and a code in context would split one situation across the histories it
 was reached by. The place key is a second code phase of the moment, taken only for brains
-with a place store and reported as `place_steps`; `learned_code_place="context"` keys the
+with a place store and reported as `context_free_steps`; `learned_code_place="context"` keys the
 place stores on the moment's key instead. A decision keeps the place key it was taken under
 until its outcome is recorded. `stimulus(..., memory=False)`, `fit`, `predict` and
 `accuracy` settle the context-free code alone. The heard history holds the moment's code, in

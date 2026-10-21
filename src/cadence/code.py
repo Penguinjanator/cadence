@@ -32,7 +32,10 @@ with the same solver and tolerance, addresses its memories on it, and settles th
 graph warm from it.
 
 Learning is local to each boundary and happens at every accepted moment, each row of the
-batch one event, from the settled state alone (``a = max(s, 0)``, the rectified code;
+batch one event, from the moment's free settle alone: the lesson's nudged phases, the
+outcome's eligibility phases, the imagined branches and the readings taken on copies enter
+no table, as the contrast and the dopamine enter no synapse of the region
+(``a = max(s, 0)``, the rectified code;
 ``x'`` the sensory activation as read; ``z`` the prefrontal activation; ``p = W z``):
 
 * the dictionary, Hebbian on the bottom-up residual, ``Phi += rate * sum_rows (x' - Phi a)
@@ -44,13 +47,21 @@ batch one event, from the settled state alone (``a = max(s, 0)``, the rectified 
   magnitude of its context (the prefrontal activation is small in the brain's units), a
   context fainter than ``|z| = predictor`` counted at that energy, so that no row commands a
   synaptic step above its gap;
-* the thresholds, homeostatic, ``t += threshold_rate * sum_rows ((a > 0) - target)``,
-  floored at zero and capped at ``threshold_max``: a unit the world drives more often than
-  the target share is made harder to drive only up to the ceiling, so the observation alone
-  can still fire it (without the ceiling such thresholds run away under long training and
-  the code goes silent); and a row whose code is silent, in context or context-free (the
-  place key), lowers every threshold by ``threshold_rate * silence``, a silent row counting
-  as that many under-active rows, so no observation is left without a unit.
+* the thresholds, homeostatic, ``t += threshold_rate * sum_rows ((a_free > 0) - target)``
+  with ``a_free`` the moment's context-free code (the region settled on the observation
+  alone, the code ``Brain.observation_code`` gives): a unit's share is the share of the
+  observations that drive it on their own, so what the context predicts may recruit a unit
+  without raising its threshold, and the context-free code keeps the target share by
+  construction; floored at zero, with a repair tied to the region's own disagreement: a
+  row whose code leaves at least the share ``repair`` of its input's energy unexplained
+  (``|x' - Phi a|^2
+  >= repair * |x'|^2``; at the founder ``repair`` 1, a row whose code is silent or worse
+  than nothing), in context or context-free (the place key), lowers the threshold of every
+  unit silent in that row by ``threshold_rate * silence``, a silent unit in such a row
+  counting as that many under-active rows, so no observation is left without a unit; a
+  unit that fires, and a row the code reconstructs, are left to the share rule alone.
+  There is no ceiling: a unit the world drives often has its threshold raised until its
+  share is the target, and the rows it then leaves unexplained lower it again.
 
 While the code fits, the residuals are small and nothing moves. The rates are genes
 (``learned_code_<name>``); zero freezes a part. The memories key on the rectified settled
@@ -108,10 +119,13 @@ class LearnedCode:
     which the read gain follows (``read``, one over the activation one input at amplitude
     1 gives a sensory neuron at rest). The genes are
     ``top_down`` (the prediction's weight on the units), ``rate`` (the dictionary's Hebbian
-    rate per row), ``predictor`` (the delta rate per row), ``threshold`` (the initial
-    threshold of every unit, a construction setting), ``threshold_rate`` and ``target`` (the
-    share of rows a unit should be active in). Validation refuses a value outside its
-    domain before anything is built.
+    rate per row), ``predictor`` (the share of a row's prediction gap closed per event),
+    ``threshold`` (the initial threshold of every unit, a construction setting),
+    ``threshold_rate`` and ``target`` (the share of rows a unit should be active in),
+    ``repair`` (the share of a row's input energy its code may leave unexplained before the
+    row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
+    silent unit in such a row counts as), ``place`` (what the place stores key on).
+    Validation refuses a value outside its domain before anything is built.
     """
 
     inputs: int
@@ -125,7 +139,7 @@ class LearnedCode:
     threshold: float = 0.1
     threshold_rate: float = 0.001
     target: float = 0.1
-    threshold_max: float = 0.2
+    repair: float = 1.0
     silence: float = 10.0
     place: str = "free"
     dictionary: np.ndarray = field(init=False, repr=False)
@@ -134,12 +148,12 @@ class LearnedCode:
     read: float = field(init=False)
 
     GENES = (
-        "top_down", "rate", "predictor", "threshold", "threshold_rate", "target",
-        "threshold_max", "silence", "place",
+        "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
+        "silence", "place",
     )
     RUNTIME = (
-        "top_down", "rate", "predictor", "threshold_rate", "target", "threshold_max",
-        "silence", "place",
+        "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
+        "place",
     )
     CONSTRUCTION = ("threshold",)
     # what the place stores key on: the context-free code (``"free"``, the observation
@@ -155,7 +169,7 @@ class LearnedCode:
         """The founder value of every gene."""
         return {
             "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
-            "threshold_rate": 0.001, "target": 0.1, "threshold_max": 0.2, "silence": 10.0,
+            "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free",
         }
 
@@ -166,10 +180,10 @@ class LearnedCode:
             return real(name, value, low=0)
         if name == "predictor":
             return real(name, value, low=0, high=1)
-        if name == "threshold_max":
-            number = real(name, value, low=0)
+        if name == "repair":
+            number = real(name, value, low=0, high=1)
             if number <= 0:
-                raise ValueError("threshold_max must be positive")
+                raise ValueError("repair must lie in (0, 1]")
             return number
         if name == "target":
             number = real(name, value, low=0, high=1)
@@ -197,8 +211,6 @@ class LearnedCode:
         self.seed = int(self.seed)
         for name in self.GENES:
             setattr(self, name, self.setting(name, getattr(self, name)))
-        if self.threshold > self.threshold_max:
-            raise ValueError("threshold_max must be at least the initial threshold")
         amplitude = np.array([self.model.stimulus_amplitude])
         full = float(np.asarray(self.model.activation(amplitude)).item())
         if not full > 0.0:
@@ -261,12 +273,6 @@ class LearnedCode:
             zeros, zeros, 0.0, anchor=zeros, anchor_gain=np.full(self.units, self.top_down)
         )
 
-    def bound(self) -> None:
-        """The thresholds within the ceiling, after a change of ``threshold_max``."""
-        if (self.thresholds > self.threshold_max).any():
-            self.thresholds = np.minimum(self.thresholds, self.threshold_max)
-            self.install()
-
     def restep(self, halvings: int) -> None:
         """The sub-network at the model's step halved ``halvings`` times."""
         if halvings == self.halvings:
@@ -315,7 +321,6 @@ class LearnedCode:
             or not np.isfinite(weights).all()
             or not np.isfinite(thresholds).all()
             or (thresholds < 0).any()
-            or (thresholds > self.threshold_max).any()
         ):
             raise ValueError("invalid learned code tables")
         norms = np.linalg.norm(dictionary, axis=0)
@@ -384,12 +389,15 @@ class LearnedCode:
 
     def learn(
         self, sensory: np.ndarray, activation: np.ndarray, context: np.ndarray | None,
-        place: np.ndarray | None = None,
+        free: np.ndarray | None = None,
     ) -> bool:
         """One step of the dictionary, the predictor and the thresholds from a settled
         moment, each row an event; returns whether any table moved (every rate zero, or an
-        empty batch, moves nothing). ``place`` is the moment's context-free code where one
-        was settled, read for its silence alone. The sub-network takes the new tables."""
+        empty batch, moves nothing). ``free`` is the moment's context-free code (the
+        rectified activation of the region settled on the observation alone) where one was
+        settled: the thresholds' share reads it, and the repair reads what it leaves
+        unexplained beside the code in context; without it the code itself serves both.
+        The sub-network takes the new tables."""
         x = self.read * np.atleast_2d(np.asarray(sensory, dtype=float))
         a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
         n = len(x)
@@ -422,21 +430,38 @@ class LearnedCode:
             self.weights = weights
             moved = True
         if self.threshold_rate:
-            active = (a > 0.0).astype(float) - self.target
+            own = a
+            if free is not None:
+                own = np.maximum(np.atleast_2d(np.asarray(free, dtype=float)), 0.0)
+            # the share: the observations a unit fires for on their own, context-free
+            active = (own > 0.0).astype(float) - self.target
             step = self.threshold_rate * active.sum(axis=0)
-            # a silent row, in context or context-free, lowers every threshold
-            silent = int(np.sum(~(a > 0.0).any(axis=1)))
-            if place is not None:
-                silent += int(np.sum(~(np.atleast_2d(np.asarray(place)) > 0.0).any(axis=1)))
-            if silent and self.silence:
-                step = step - self.threshold_rate * self.silence * silent
-            self.thresholds = np.clip(self.thresholds + step, 0.0, self.threshold_max)
+            if self.silence:
+                # the repair: a row whose code leaves at least the share ``repair`` of its
+                # input's energy unexplained, in context or context-free, lowers the
+                # thresholds of the units silent in it
+                step = step - self.threshold_rate * self.silence * self.unexplained(x, a)
+                if free is not None:
+                    step = step - self.threshold_rate * self.silence * self.unexplained(x, own)
+            self.thresholds = np.maximum(self.thresholds + step, 0.0)
             moved = True
         self.work["updates"] += 1
         self.work["update_rows"] += n
         if moved:
             self.install()
         return moved
+
+    def unexplained(self, x: np.ndarray, a: np.ndarray) -> np.ndarray:
+        """Per unit, how many rows of ``a`` (rectified codes of the read inputs ``x``)
+        leave at least the share ``repair`` of their input's energy unexplained and have the
+        unit silent; a row without input energy counts for no unit."""
+        x = np.atleast_2d(np.asarray(x, dtype=float))
+        a = np.atleast_2d(np.asarray(a, dtype=float))
+        residual = x - a @ self.dictionary.T
+        energy = np.sum(x * x, axis=1)
+        left = np.sum(residual * residual, axis=1)
+        repairing = (energy > 0.0) & (left >= self.repair * energy)
+        return np.asarray((repairing[:, None] & ~(a > 0.0)).sum(axis=0), dtype=float)
 
     # -- reports
 
