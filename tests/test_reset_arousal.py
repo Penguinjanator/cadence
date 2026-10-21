@@ -461,7 +461,8 @@ def _compact(state: dict[str, Any]) -> list[float]:
 # (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
 # Where the library later removed a setting that was inert at its founder, the names and
 # checkpoint digests were re-recorded after every other value matched the recording.
-# Re-recorded with the unset motor lateral at 0.0 (issue 220), which every founder here meets.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220), which every founder here meets,
+# and at the founder need scale 0.1 (issue 198) where a founder has arousal.
 FOUNDERS: dict[str, dict[str, Any]] = {
     "adult": {
         "build": (1, 2, {"modules": (16,), "seed": 0, "arousal": True}),
@@ -477,7 +478,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         ],
         "format": "cadence-brain/1",
         "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
-        "checkpoint": "44d2b029b60e9929f02c65bc3af482776915c64440c285a2e691314c560a5df2",
+        "checkpoint": "69440d6135e4963598cfd415ab1a85d7ee5f226b7e48011f3e2a53bdfd276118",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
@@ -492,7 +493,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         ],
         "format": "cadence-brain/1",
         "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
-        "checkpoint": "532550e68c85b7438c3b5ed0f2c79d4df35f8c6d70a3c18950e85e628fea8467",
+        "checkpoint": "699531391bd37f105d2be6329dc2bb3a0e1b1cdbea14ce8b90c2ef83ae1d1f70",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
@@ -505,7 +506,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         ],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "91ae848b01aa1a8aece885e8eb8eff57242415399937eab8de1da2af7be68c34",
+        "checkpoint": "40ca5e982c17c9ad39b197edf1051a2bfc76b972909b364a674d6cf5d7968d5a",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),

@@ -109,7 +109,7 @@ class ArousalConfig:
     youth: int = 100  # the first moments of a life are aroused
     value_surprise: float = 1.0  # weight of the surprise at a contradicted value forecast
     need: float = 0.0  # the reward per moment the body requires; the unmet share is a want
-    need_scale: float = 0.0  # a need in reward scales, need_scale * scale, after youth
+    need_scale: float = 0.1  # a need in reward scales, need_scale * scale, after youth
 
     def __post_init__(self) -> None:
         # A scalar's Python/NumPy origin must not change continuation arithmetic.
@@ -153,7 +153,7 @@ class ArousalConfig:
         exploration and ``need`` at zero removes the need's want: the controls are inside the
         space. A mutation that leaves ``fast`` below ``slow`` is refused at
         construction. ``need_scale`` is left out, so a seeded mutation of the founder draws
-        as it did before the gene and copies the founder zero to the child; to select on it,
+        as it did before the gene and copies the founder 0.1 to the child; to select on it,
         add it to the space, as ``{**ArousalConfig.space(), "need_scale": ("linear", 0.02,
         0.0, 1.0)}``."""
         return {

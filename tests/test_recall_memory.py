@@ -192,7 +192,7 @@ def _taught(brain):
 # Where the library later removed a setting that was inert at its founder, the description
 # and checkpoint digests were re-recorded after every other value matched the recording.
 # Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
-# 8 motor neurons in a slot.
+# 8 motor neurons in a slot, and at the founder need scale 0.1 (issue 198) where it has arousal.
 FOUNDERS = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
@@ -212,7 +212,7 @@ FOUNDERS = {
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "73388bfd03b1d7badf6c3be759e8376562d96c9f4052822b96f76e880a7dafef",
-        "checkpoint": "0d9ddf25a42bb5b2541d8dec7371552d3d2b9152893d16017f5ad943a7f481a7",
+        "checkpoint": "89f70f27208981c2916dfaf1d8bb361e89da9990eb8c9c1c201e2d15017adbb9",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -222,7 +222,7 @@ FOUNDERS = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "e0637e9206f2e376b01d1697c4a04256e255f5d003e7f1e45aacac270dada196",
+        "checkpoint": "cbd324c7313fb5a6af6e2a8881feb3a4a44a495a245a5a4dbed68e673784d6e5",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,

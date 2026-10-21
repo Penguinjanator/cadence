@@ -390,7 +390,7 @@ outside their ranges, a negative `need` or `need_scale` and `fast < slow`.
 | `youth` | 100 | first moments of a life spent aroused |
 | `value_surprise` | 1.0 | weight of surprise at the critic's forecast |
 | `need` | 0.0 | reward per moment the body requires; 0 removes the need's want |
-| `need_scale` | 0.0 | the need as a share of the reward scale, `need_scale * scale`, after youth; 0 removes it |
+| `need_scale` | 0.1 | the need as a share of the reward scale, `need_scale * scale`, after youth; 0 removes it |
 
 `brain.last_arousal` snapshots the latest moment: `mode`, `level`, `error`,
 `surprise`, `want`, `temperature`, per-slot `temperatures`, `heated_slot`, `learned`,
@@ -407,9 +407,9 @@ adaptation, and a minority of lives never find the moved reward. In an unchangin
 world, reward noise rouses the founders for a small share of moments. A routine moment
 pays one full settle.
 
-`need_scale` is opt-in: at the founder 0 every brain and composed life is as without it. It
-is outside `ArousalConfig.space()`, so seeded mutations at the founder draw as before; add it to
-a space to select on it. A positive `need_scale` rouses an adult whose income falls below
+`need_scale` is 0.1 at the founder; `need_scale=0` is the brain without the scaled need, the
+law of 0.84.3. It is outside `ArousalConfig.space()`, so seeded mutations at the founder draw
+as before; add it to a space to select on it. A positive `need_scale` rouses an adult whose income falls below
 that share of its learned reward spread, whatever the unit of its rewards, and leaves a life
 that never paid at all calm (its scale is zero). At `need_scale=0.1`, with the actor step at
 the composed founder, against the founder on fresh seeds the composed brain kept every

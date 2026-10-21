@@ -70,7 +70,7 @@ def test_a_genuine_unmet_need_remains_aroused_while_sampling():
 
 
 def test_prior_saved_income_keeps_its_readings_and_then_accepts_sampled_rewards():
-    arousal = cd.Arousal(cd.ArousalConfig(youth=0))
+    arousal = cd.Arousal(cd.ArousalConfig(youth=0, need_scale=0.0))  # a state 0.84.3 could save
     for reward in (0.5, 1.0, -0.1):
         arousal.outcome(0.2, reward)
     prior = arousal.to_dict()  # as a cadence-arousal/1 save, with the record channel at zero

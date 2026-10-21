@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- The scaled need is a founder: `ArousalConfig.need_scale` (`arousal_need_scale`) is 0.1, so a
+  composed brain with arousal wants at least the unmet share of a tenth of its learned reward
+  spread once its youth is over and an outcome has entered the spread
+  ([#198](https://github.com/muellerberndt/cadence/issues/198)). `need_scale=0` is the law of
+  0.84.3 and stays an option. Founders change: every brain with arousal whose income falls
+  below a tenth of its reward spread after youth now wants, explores and learns where it
+  stayed calm. Saved arousal states of earlier formats load with `need_scale=0`, as written.
 - `Brain.compose` resolves an unset `lateral` to 0.0 at every menu size; an explicit
   `lateral`, -0.5 included, is used as given
   ([#220](https://github.com/muellerberndt/cadence/issues/220)). 0.73.0 had resolved it to

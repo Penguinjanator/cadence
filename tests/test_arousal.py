@@ -119,8 +119,9 @@ def test_a_need_is_a_want_of_its_own_that_a_sparse_reward_meets_and_that_never_h
     """Fed once in fourteen moments, a brain's income is 1/14 per moment while its reward
     spread is near 1/sqrt(14): losing the food leaves the long-run want below the
     threshold, and it habituates; the need's want is the unmet share of the need."""
-    content = cd.Arousal(cd.ArousalConfig(youth=0))
-    needy = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04))
+    # the law without the scaled need (need_scale 0, the law of 0.84.3): the need alone
+    content = cd.Arousal(cd.ArousalConfig(youth=0, need_scale=0.0))
+    needy = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04, need_scale=0.0))
     assert needy.want == 1.0 and needy.heat == 3.0  # never paid: the whole need is unmet
     assert content.want == 0.0
     peaks = {}
@@ -141,8 +142,8 @@ def test_a_need_is_a_want_of_its_own_that_a_sparse_reward_meets_and_that_never_h
         needy.outcome(0.0, 0.0, learned=False)
     assert content.want < 0.05 and not content.aroused  # the poorer life became usual
     assert needy.want == 1.0 and needy.aroused  # a need is a level: it stays unmet
-    scaled = cd.Arousal(cd.ArousalConfig(youth=0, need=40 * 0.04))
-    plain = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04))
+    scaled = cd.Arousal(cd.ArousalConfig(youth=0, need=40 * 0.04, need_scale=0.0))
+    plain = cd.Arousal(cd.ArousalConfig(youth=0, need=0.04, need_scale=0.0))
     for moment in range(300):
         a = plain.outcome(0.1, float(moment % 14 == 0), learned=moment < 200)
         b = scaled.outcome(4.0, 40.0 * float(moment % 14 == 0), learned=moment < 200)
@@ -183,9 +184,10 @@ def test_every_outcome_changes_whether_need_is_met_even_with_equal_rates():
 
 
 def test_the_law_is_unchanged_by_the_scale_and_the_zero_of_reward():
+    # a shift of the rewards preserves the law where the need and the need scale are zero
     rng = np.random.default_rng(3)
-    plain = cd.Arousal(cd.ArousalConfig(youth=0))
-    moved = cd.Arousal(cd.ArousalConfig(youth=0))
+    plain = cd.Arousal(cd.ArousalConfig(youth=0, need_scale=0.0))
+    moved = cd.Arousal(cd.ArousalConfig(youth=0, need_scale=0.0))
     for moment in range(600):
         reward = float(rng.random() < (0.7 if moment < 400 else 0.2))
         error = float(0.05 + 0.3 * rng.random() + (moment == 400))
@@ -253,7 +255,7 @@ def test_the_record_channel_of_0843_is_refused_by_name_and_its_founder_saves_loa
         brain.retune(arousal_record_surprise=1.0)
     assert "arousal_record_surprise" not in brain.describe()["genes"]
     assert "record_surprise" not in cd.ArousalConfig.space()
-    arousal = cd.Arousal(cd.ArousalConfig(youth=2))
+    arousal = cd.Arousal(cd.ArousalConfig(youth=2, need_scale=0.0))  # a state 0.84.3 could save
     for value in (0.5, 1.0, 0.2):
         arousal.outcome(value, value)
         arousal.lived(7, 3)
@@ -289,7 +291,7 @@ def test_arousal_state_round_trips_and_rejects_corruption():
 
 
 def test_legacy_arousal_without_need_migrates_without_changing_its_saved_state():
-    arousal = cd.Arousal(cd.ArousalConfig(youth=2))
+    arousal = cd.Arousal(cd.ArousalConfig(youth=2, need_scale=0.0))  # a state 0.84.3 could save
     for value in (0.5, 1.0, 0.2):
         arousal.outcome(value, value)
         arousal.lived(7, 3)
@@ -504,7 +506,7 @@ def test_a_saved_life_continues_identically(tmp_path, wake, need):
 
 
 def test_a_legacy_saved_brain_continues_with_zero_need(tmp_path):
-    brain = calm_brain(seed=5, youth=8)
+    brain = calm_brain(seed=5, youth=8, need_scale=0.0)  # a brain 0.84.3 could save
     eye = np.eye(4)
     brain.live(eye[[0]])
     for moment in range(5):

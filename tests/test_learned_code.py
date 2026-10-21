@@ -137,7 +137,7 @@ def taught(brain: cd.Brain) -> list[int]:
 # Where the library later removed a setting that was inert at its founder, the description
 # and checkpoint digests were re-recorded after every other value matched the recording.
 # Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
-# 8 motor neurons in a slot.
+# 8 motor neurons in a slot, and at the founder need scale 0.1 (issue 198) where it has arousal.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
@@ -156,8 +156,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "5d5caca11ff294796c8a8734058d4036c7463d7f4e46a08d90cd5fed5f708b30",
-        "describe": "df1a567b2d2ee37c57a2b6843d3b1dbf009e536783c257242a76c5e8607e0107",
+        "checkpoint": "819a806d35bf843679477ab0595e97fe8140ca880de3dc0791800e4c6befe72a",
+        "describe": "d7ea6c6f8e4d0e8373b0edc05145c309f019ada55fdae730e2f8657591a9424c",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -168,8 +168,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
-        "checkpoint": "d56839b39776dd3ce618009eb32ec5dcef08d51357b5ae1a2a33fe09397f278e",
-        "describe": "3a1969abe39e171d31fc1a87417a32e24e6b753b32a6060319c7427374b8d8bd",
+        "checkpoint": "9f62fbed4bf76c42ce80c77112ac988d1d50d356558262c3c1ca612bf05ed68d",
+        "describe": "9e323e24457ee1674d4252cc6b94f5f05d6a6de78a4dd2d6f8aad789b406207b",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -190,8 +190,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "f89e12760a500968f79c2cd7d018fb99d94e59d12d3cd89194745555de3d892b",
-        "describe": "7cdc3504b3ee2fe50d70cbeb7f2a8016faa18878b410cafc6f47b05f961ac058",
+        "checkpoint": "d26023c492f2b68d4117f558bb347716da946a4b3aaed192b56e865b2001fd29",
+        "describe": "5ea48210172da756f147ed3b356416f0bb1f0ea61dc471f460fc7d5776e13738",
     },
 }
 

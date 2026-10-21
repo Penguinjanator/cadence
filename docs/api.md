@@ -181,7 +181,7 @@ biases of the code region are refused.
 ```text
 ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05,
               slow=0.005, heat=2.0, youth=100, value_surprise=1.0, need=0.0,
-              need_scale=0.0)
+              need_scale=0.1)
 Arousal(config=None)
 ```
 

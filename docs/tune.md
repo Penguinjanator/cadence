@@ -98,7 +98,7 @@ issued action owns the next outcome).
 | `actor_dopamine_cap` | `1.0` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `arousal` | off; `True` is `ArousalConfig()` | construction (switch), retune (fields) | [continuous](start.md#routine-and-repair-live) |
 | `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor`, `arousal_fast`, `arousal_slow` | `0.2`, `0.9`, `2.0`, `0.1`, `0.05`, `0.005` | retune | [continuous](start.md#routine-and-repair-live) |
-| `arousal_heat`, `arousal_youth`, `arousal_value_surprise`, `arousal_need`, `arousal_need_scale` | `2.0`, `100`, `1.0`, `0.0`, `0.0` | retune | [continuous](start.md#routine-and-repair-live) |
+| `arousal_heat`, `arousal_youth`, `arousal_value_surprise`, `arousal_need`, `arousal_need_scale` | `2.0`, `100`, `1.0`, `0.0`, `0.1` | retune | [continuous](start.md#routine-and-repair-live) |
 | `working_memory_*` | amplitude `3.0`, decay `0.0` | retune | [memory](memory.md#working-trace) |
 | `efference_*` | amplitude `0.0` (absent), decay `0.2` | a positive amplitude at construction adds it | [memory](memory.md#efference-copy) |
 | `history_*` | decays `()` (absent), amplitude `3.0` | decays at construction | [memory](memory.md#heard-history) |

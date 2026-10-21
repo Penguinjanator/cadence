@@ -120,7 +120,7 @@ def lived(brain: cd.Brain) -> list[int]:
 # Where the library later removed a setting that was inert at its founder, the description
 # and checkpoint digests were re-recorded after every other value matched the recording.
 # Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
-# 8 motor neurons in a slot.
+# 8 motor neurons in a slot, and at the founder need scale 0.1 (issue 198) where it has arousal.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
@@ -139,7 +139,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "5d5caca11ff294796c8a8734058d4036c7463d7f4e46a08d90cd5fed5f708b30",
+        "checkpoint": "819a806d35bf843679477ab0595e97fe8140ca880de3dc0791800e4c6befe72a",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -174,7 +174,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "f89e12760a500968f79c2cd7d018fb99d94e59d12d3cd89194745555de3d892b",
+        "checkpoint": "d26023c492f2b68d4117f558bb347716da946a4b3aaed192b56e865b2001fd29",
     },
     "image": {
         # the single-region image brain of earlier releases, wired by hand: the hippocampus
@@ -278,7 +278,8 @@ def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
     if NUMPY_SOLVER:
         assert acts == provenance["continuation"]["recalled"]["acts"]
         inputs, actions, options = FOUNDERS["recalled"]["build"]
-        relived = cd.Brain.compose(inputs, actions, **options)
+        # the fixture's genes: a save of 0.84.3 carries the need scale of zero
+        relived = cd.Brain.compose(inputs, actions, **options, arousal_need_scale=0.0)
         FOUNDERS["recalled"]["life"](relived)
         assert checkpoint_digest(relived.save(tmp_path / "relived.npz")) == (
             checkpoint_digest(again)

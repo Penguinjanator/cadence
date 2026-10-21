@@ -146,12 +146,12 @@ def sparse_adult(scale: float, seed: int = 0, moments: int = 300, **options: Any
 # -- the gene
 
 
-def test_need_scale_is_a_gene_with_the_founder_zero_outside_the_declared_space() -> None:
+def test_need_scale_is_a_gene_with_the_founder_0_1_outside_the_declared_space() -> None:
     """The space names the ten genes of the law beside the need scale, so a seeded mutation of
     the founder draws as it does without the gene and copies the founder need scale to the
     child; a space that adds the gene can move it."""
     config = cd.ArousalConfig()
-    assert config.need_scale == 0.0 and config.to_dict()["need_scale"] == 0.0
+    assert config.need_scale == 0.1 and config.to_dict()["need_scale"] == 0.1
     assert cd.ArousalConfig(need_scale=0.1).to_dict()["need_scale"] == 0.1
     assert cd.ArousalConfig(**cd.ArousalConfig(need_scale=0.1).to_dict()).need_scale == 0.1
     space = cd.ArousalConfig.space()
@@ -162,11 +162,11 @@ def test_need_scale_is_a_gene_with_the_founder_zero_outside_the_declared_space()
     assert set(config.to_dict()) == set(space) | {"need_scale"}
     before = {k: v for k, v in config.to_dict().items() if k != "need_scale"}
     child = cd.genes(space)(config.to_dict(), np.random.default_rng(1))
-    assert child["need_scale"] == 0.0
+    assert child["need_scale"] == 0.1
     assert {k: v for k, v in child.items() if k != "need_scale"} == cd.genes(space)(
         before, np.random.default_rng(1)
     )
-    assert cd.ArousalConfig(**child).need_scale == 0.0
+    assert cd.ArousalConfig(**child).need_scale == 0.1
     extended = {**space, "need_scale": ("linear", 0.02, 0.0, 1.0)}
     moved = [cd.genes(extended)(config.to_dict(), np.random.default_rng(seed))["need_scale"]
              for seed in range(20)]
@@ -186,11 +186,12 @@ def test_need_scale_rejects_invalid_genes(value: Any) -> None:
 @pytest.mark.parametrize("scale", [0.1, 0.5])
 def test_the_gene_is_the_reference_subclass_outcome_for_outcome(scale: float) -> None:
     """The gene and the subclass give the same surprise and want at every outcome and the
-    same want, heat, mode and level after it, through a reset; the founder differs."""
+    same want, heat, mode and level after it, through a reset; the law without the scaled
+    need differs."""
     gene = cd.Arousal(cd.ArousalConfig(youth=20, need_scale=scale))
-    reference = ScaledNeedReference(cd.ArousalConfig(youth=20))
+    reference = ScaledNeedReference(cd.ArousalConfig(youth=20, need_scale=0.0))
     reference.need_scale = scale
-    founder = cd.Arousal(cd.ArousalConfig(youth=20))
+    founder = cd.Arousal(cd.ArousalConfig(youth=20, need_scale=0.0))
     differed = 0
     for t, (error, reward, own, learned, _) in enumerate(outcomes(600, seed=int(10 * scale))):
         taken = [a.outcome(error, reward, own=own, learned=learned)
@@ -285,11 +286,14 @@ def test_a_need_and_a_need_scale_together_want_the_larger() -> None:
 def test_a_composed_brain_with_the_gene_lives_as_the_reference_subclass(tmp_path: Path) -> None:
     """In a world that pays rarely, the brain with the gene at .5 acts and reads at every
     moment as the brain with the subclass installed, and saves the same checkpoint but for the
-    arousal's config; the founder calms and the gene keeps the brain wanting."""
+    arousal's config; the brain without the scaled need calms and the gene keeps the brain
+    wanting."""
     k = 0.5
     gene = cd.Brain.compose(1, 2, modules=(16,), seed=0, arousal=True, arousal_need_scale=k)
-    reference = with_reference(cd.Brain.compose(1, 2, modules=(16,), seed=0, arousal=True), k)
-    founder = cd.Brain.compose(1, 2, modules=(16,), seed=0, arousal=True)
+    reference = with_reference(
+        cd.Brain.compose(1, 2, modules=(16,), seed=0, arousal=True, arousal_need_scale=0.0), k
+    )
+    founder = cd.Brain.compose(1, 2, modules=(16,), seed=0, arousal=True, arousal_need_scale=0.0)
     lives = {name: sparse_life(brain, 260) for name, brain in
              (("gene", gene), ("reference", reference), ("founder", founder))}
     assert lives["gene"] == lives["reference"]
@@ -365,10 +369,10 @@ def test_a_saved_life_with_the_gene_continues_identically(tmp_path: Path) -> Non
 
 
 def test_saves_under_earlier_formats_load_at_the_founder_and_a_scaled_save_needs_its_gene() -> None:
-    """The saves of 0.84.3: ``cadence-arousal/2`` leaves out the founder need scale of zero,
-    ``/3`` carries a positive one, and every one carries the record channel, removed since,
-    at its founder weight of zero with its readings."""
-    arousal = cd.Arousal(cd.ArousalConfig(youth=2))
+    """The saves of 0.84.3: ``cadence-arousal/2`` leaves out the need scale of zero (0.84.3's
+    founder), ``/3`` carries a positive one, and every one carries the record channel, removed
+    since, at its founder weight of zero with its readings."""
+    arousal = cd.Arousal(cd.ArousalConfig(youth=2, need_scale=0.0))  # a state 0.84.3 could save
     for error, reward, own, learned, _ in outcomes(12, seed=9):
         arousal.outcome(error, reward, own=own, learned=learned)
         arousal.lived(5, 2)
@@ -537,7 +541,7 @@ LIVES: dict[str, tuple[tuple[int, int, dict[str, Any]], Life]] = {
 # founder, the state, names and checkpoint digests were re-recorded after every other value
 # matched the recording.
 # Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
-# 8 motor neurons in a slot.
+# 8 motor neurons in a slot, and at the founder need scale 0.1 (issue 198).
 PINS: dict[str, dict[str, str]] = {
     "adult": {
         "acts": (
@@ -547,9 +551,9 @@ PINS: dict[str, dict[str, str]] = {
         ),
         "format": "cadence-brain/1",
         "names": "5a43619d2f4c9195b155e3845148d5b71bb23b0ef9627662b977e7fc70720df7",
-        "checkpoint": "92934ef9e6e25131e5f79fa7452306f483f1e1a8c648241929eef722a2c66654",
-        "left": "f3e00b2ee149e3bceb81cdbe802bdd898ec7ceb3709331fa5b655a6b4a3b07fb",
-        "arousal": "81c8b36c180f88706717118915216bb1eac1f33be599c991a80ab314943c08e9",
+        "checkpoint": "4a318dac443b6800cd91743edf1a8ac581b0fde3c0a826f143686cccf9128120",
+        "left": "592745fbe88ba3f4b044f08ea408bb472e2555be71e911e09f6901418883939a",
+        "arousal": "e43016560008a6bd8c4a413122500c68b9569adadc934e2225f1488c841c7b9a",
     },
     "needy": {
         "acts": (
@@ -559,25 +563,25 @@ PINS: dict[str, dict[str, str]] = {
         ),
         "format": "cadence-brain/1",
         "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
-        "checkpoint": "6ff1c5ddd55c8f3c6349403464f8a81fea06f440c1f17e38cea9c82c3c56b883",
-        "left": "b1b1e8d7aeb4ce6103952463dcec4a4d63a70fa450e739354a42058bbc853bc0",
-        "arousal": "7a77f09747321501d67c45eab0ca89932d553aa13d8c92291adfe3e9eabeb8bd",
+        "checkpoint": "c3536b17c2fda043741695e5b50e72c1f8e85e1c3ecb70944442fdc61b18e7dc",
+        "left": "f6fc1d01755b4d1565adbee8d28abc2460005bc661aa13eb956d02ea52e1ac49",
+        "arousal": "c3074c80a0171b4f44b32b1e44bbeed77d090c7537831ebf2e97118f5346c18a",
     },
     "composed": {
         "acts": "11110110010001100110010001000100010001",
         "format": "cadence-brain/1",
         "names": "d6ae788f4a6129e676cbd305f208afb0d6b952cd54cf22119428d72e4273981b",
-        "checkpoint": "57d1ce3cd648e24736c4c1ce27736ff34497d888dafadbad00cebd9cd6cb793d",
-        "left": "bbb97ab1658f4574e15ba87d1ea1b4aa16794bcc4ab56a74385da29c2c6a67ac",
-        "arousal": "cb028cf7ca2e973e981b53923a4f856096b492232d0133bcc3e71db1172babda",
+        "checkpoint": "d3175fda262eb60b71bd91c6a2794dbd86c16db79275d8ae11b01b0949ba6d95",
+        "left": "a5816dace14c3fa3a92ecfd845392eb759268ad2a87f5e8eaa8f0d75e55e4b51",
+        "arousal": "99ca73ee34e4ec704e25feac903773cac366cdf698ae9eef11e92818931815fe",
     },
     "episodic": {
         "acts": "11111101111111111111111111111111111110",
         "format": "cadence-brain/1",
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
-        "checkpoint": "402ec610b77b7e3e7ae8b2e6a6e7584011fe76704aa02ff2cffed74d93291655",
-        "left": "c8fbc5cbc608d0a1d751d27f75e4e24e3627c186365c80b09849e2637e84e7d7",
-        "arousal": "eb1509e16f2500a38793f555993db8e4062393f60e3f5cdf1d96e2c743edc060",
+        "checkpoint": "6bf6fca1d1bfa15cd20603f3a6eba6153ba26e46da26a2b23e1b2f1a022afbe8",
+        "left": "91eb38d1ee3513c435225cf7cb0e5c3f7890dfe0db1850f8934231ebd93aaa90",
+        "arousal": "87cc1f9ebcd102a0a5dfa17801137d2f04072d8c5d7e7821ec489c20c3c79173",
     },
 }
 
@@ -590,15 +594,15 @@ def _build(name: str) -> tuple[cd.Brain, Life]:
 @pytest.mark.parametrize("name", sorted(PINS))
 def test_the_founder_saves_and_describes_as_on_main(tmp_path: Path, name: str) -> None:
     """On every backend: the checkpoint's format, members and metadata keys, and the saved
-    arousal states, which carry the need scale at its founder zero."""
+    arousal states, which carry the need scale at its founder 0.1."""
     brain, life = _build(name)
     _, left = life(brain)
     assert brain.arousal is not None
     path = brain.save(tmp_path / name)
     assert names(path) == (PINS[name]["format"], PINS[name]["names"])
     for state in (*left, brain.arousal.to_dict()):
-        assert state["format"] == "cadence-arousal/4" and state["config"]["need_scale"] == 0.0
-    assert brain.describe()["genes"]["arousal_need_scale"] == 0.0
+        assert state["format"] == "cadence-arousal/4" and state["config"]["need_scale"] == 0.1
+    assert brain.describe()["genes"]["arousal_need_scale"] == 0.1
     assert cd.Brain.load(path).describe() == brain.describe()
 
 
@@ -643,16 +647,17 @@ def law_readings() -> dict[str, tuple[list[list[Any]], dict[str, Any]]]:
 
 
 # Recorded on main at c7dc2f0: the law's readings on the stream above; its saved state is
-# the one of main in the layout of ``cadence-arousal/4``.
+# the one of main in the layout of ``cadence-arousal/4``. Re-recorded at the founder need
+# scale 0.1 (issue 198).
 LAW: dict[str, tuple[str, str]] = {
-    "founder": ("50a92666d40294ae132eeff72b6aa3c0e178c4eb981e6076ec324a5825b09c1b",
-                "52bdfb98e436c58f3c63b6493a4107cdba336e320c94253d31b1fd88c1915ca3"),
+    "founder": ("636f4e4c64d77ca7fca23131a128f277179c28f92d6a72f7d35b44a9b303a942",
+                "d5aedc61ceadc9800fe5f917c86b836c1998375c6921829475a970766de82d6b"),
     "needy": ("f41e6fd01cacac4128368ce8d3cbb6b0e5d785f15edd2ca501d023913ba82066",
-              "90dcf4c0a162dd31d9878a76a47dbbdf4f9e35be35e51e9155f4ad46201c7705"),
+              "c3406214ca4f0789c3d166533ef3d98b29517be874a0da55c2ad6868412fc5e4"),
 }
 
 
 def test_the_law_alone_reads_and_saves_as_on_main() -> None:
     for name, (readings, state) in law_readings().items():
-        assert state["format"] == "cadence-arousal/4" and state["config"]["need_scale"] == 0.0
+        assert state["format"] == "cadence-arousal/4" and state["config"]["need_scale"] == 0.1
         assert (digest(readings), digest(state)) == LAW[name]
