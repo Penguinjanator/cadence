@@ -45,7 +45,7 @@ import numpy as np
 
 from ._configuration import arousal_config, configured, plain, real, split_genes
 from .arousal import Arousal, ArousalConfig
-from .brain import Backend, BrainState, Equilibrium
+from .brain import Backend, BrainState, Equilibrium, Nudge
 from .brain import Brain as NeuralGraph
 from .code import LearnedCode
 from .connectome import Connectome
@@ -665,8 +665,10 @@ def _validate_learned_code(meta: dict[str, Any], data: Mapping[str, Any], learne
         table: np.ndarray = data[key]
         if table.shape != shape or table.dtype.kind not in "iuf" or not np.isfinite(table).all():
             raise ValueError(f"invalid saved learned code table: {name}")
-    if (data["learned_code/thresholds"] < 0).any():
-        raise ValueError("a learned code's thresholds are nonnegative")
+    if (data["learned_code/thresholds"] < 0).any() or (
+        data["learned_code/thresholds"] > spec["threshold_max"]
+    ).any():
+        raise ValueError("a learned code's thresholds lie between zero and its ceiling")
     if not np.allclose(
         np.linalg.norm(data["learned_code/dictionary"], axis=0), 1.0, rtol=0, atol=1e-9
     ):
@@ -1376,6 +1378,8 @@ class Brain:
         self._stepping = 0
         self._learning_base = learning
         self._reward_base = reward
+        if learned:
+            self.learner.standing = self._standing()
         self.working_memory: Trace | None = None
         if "prefrontal" in populations:
             self.working_memory = Trace(
@@ -1664,6 +1668,18 @@ class Brain:
         bias[self.code_index] = -code.thresholds
         return graph.with_parameters(efficacy=efficacy, bias=bias)
 
+    def _standing(self) -> Nudge | None:
+        """The brain's standing boundary: the learned code's quadratic anchor toward zero at
+        gain ``learned_code_top_down`` on the code units, nothing elsewhere; None at gain 0
+        or without the region."""
+        code = self.learned_code
+        if code is None or not code.top_down:
+            return None
+        n = self.connectome.n
+        gain = np.zeros(n)
+        gain[self.code_index] = code.top_down
+        return Nudge(np.zeros(n), np.zeros(n), 0.0, anchor=np.zeros(n), anchor_gain=gain)
+
     def _learn_code(self, state: BrainState) -> None:
         """The learned code's step from an accepted moment's settled ``state``: the sensory,
         code and prefrontal activations the settle holds, then the brain's graph takes the
@@ -1671,8 +1687,11 @@ class Brain:
         code = self.learned_code
         assert code is not None
         s = np.atleast_2d(np.asarray(state.activation, dtype=float))
+        coded = self._coded_moment  # the moment's context-free key, read for its silence
+        place = None if coded is None or coded[3] is coded[1] else coded[3]
         if code.learn(
-            s[:, self.sensory_index], s[:, self.code_index], s[:, self.prefrontal_index]
+            s[:, self.sensory_index], s[:, self.code_index], s[:, self.prefrontal_index],
+            place=place,
         ):
             self.learner.brain = self._installed(self.brain)
 
@@ -2290,9 +2309,10 @@ class Brain:
                 raise TypeError(f"unknown brain setting: {name!r}")
             if self.learned_code is None:
                 raise ValueError(f"{name} requires its existing learned code")
-            memory_changes.append(
-                (self.learned_code, setting, LearnedCode.setting(setting, options.pop(name)))
-            )
+            value = LearnedCode.setting(setting, options.pop(name))
+            if setting == "threshold_max" and value < self.learned_code.threshold:
+                raise ValueError("threshold_max must be at least the initial threshold")
+            memory_changes.append((self.learned_code, setting, value))
         if self.recall is not None:
             # the null slot's logit, null / temperature, must stay finite under the change
             retuned = {
@@ -2346,9 +2366,13 @@ class Brain:
         if self.learned_code is not None and any(
             component is self.learned_code for component, _, _ in memory_changes
         ):
-            # the prediction's weight is a synapse scale: the graph takes the tables again
+            # the prediction's weight is a synapse scale and the boundary's gain, and a lower
+            # ceiling bounds the thresholds: the graph takes the tables again and the
+            # learner its boundary
+            self.learned_code.bound()
             self.learned_code.install()
             self.learner.brain = self._installed(self.brain)
+            self.learner.standing = self._standing()
         if self.recall is not None and not self.recall.address_reward:
             # reward leaves the address map as it is: the actor keeps no eligibility of it, and
             # the brain reports and saves as one composed without it
@@ -2722,6 +2746,7 @@ class Brain:
         cfg = self.learner.config
         brain = self.brain
         state = self._warm(drive, state)  # with a learned code: its phase in the warm start
+        standing = self.learner.standing  # a learned code's restoring term, every phase's
         if cfg.qualified:
             return brain.equilibrate(
                 drive,
@@ -2729,10 +2754,12 @@ class Brain:
                 budget=budget,
                 tolerance=tolerance,
                 damping=cfg.damping,
+                nudge=standing,
             )
         first_budget = budget if budget < 2 else (budget + 1) // 2
         phase = brain.equilibrate(
-            drive, state=_copy_state(state), budget=first_budget, tolerance=tolerance
+            drive, state=_copy_state(state), budget=first_budget, tolerance=tolerance,
+            nudge=standing,
         )
         if np.all(phase.qualified) or phase.steps >= budget:
             return phase
@@ -2754,9 +2781,10 @@ class Brain:
             precision=brain.precision,
         )
         following = damped.equilibrate(
-            drive, state=_copy_state(phase.state), budget=budget - phase.steps, tolerance=tolerance
+            drive, state=_copy_state(phase.state), budget=budget - phase.steps,
+            tolerance=tolerance, nudge=standing,
         )
-        residual = brain.residual(drive, following.state)
+        residual = brain.residual(drive, following.state, nudge=standing)
         return Equilibrium(
             following.state,
             residual,
@@ -4487,6 +4515,7 @@ class Brain:
                         saved_reward, eligibility_steps=saved_reward.eligibility_steps >> stepping
                     )
                 )
+                learner.standing = result._standing()  # the loaded learner's boundary
             if heard is not None:
                 assert result.history is not None  # validated above: the population is there
                 result.history.trace = data["history/trace"].astype(float)

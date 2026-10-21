@@ -32,19 +32,22 @@ other synapse is:
 | --- | --- | --- |
 | dictionary `Phi`, `inputs` by `units`, unit-length columns | one way from the sensory neurons to the code units | the bottom-up boundary: code unit `j` is driven by `Phi_j . s_sensory` |
 | the Gram matrix of the dictionary | every ordered pair of code units, `-(Phi_j . Phi_k)` | lateral competition: units whose columns overlap inhibit each other |
-| predictor `W`, `units` by the association width | one way from the prefrontal region, scaled by `learned_code_top_down` | the top-down boundary: the working trace's prediction of the code lowers the thresholds of the units it predicts |
+| predictor `W`, `units` by the association width | one way from the prefrontal region, scaled by `learned_code_top_down` | the top-down boundary: the working trace's prediction of the code, `p = W s_prefrontal` |
 | thresholds `t`, one per unit | the units' biases, `-t_j` | how much drive a unit needs before it publishes |
+| the standing boundary | the solver's quadratic anchor toward zero at gain `learned_code_top_down` on the code units, carried by every phase (`brain.learner.standing`) | the restoring term `-top_down * s_j`; with the predictor's drive it is the pull `top_down * (p_j - s_j)` toward the prediction, the gradient of `top_down / 2 * |s - p|^2` |
 
 A code unit settles under the brain's neuron model to
 
 ```text
-v_j = Phi_j . (s_sensory - Phi s) + s_j + top_down * p_j - t_j,    s_j = f(v_j),    p = W s_prefrontal
+v_j = Phi_j . (s_sensory - Phi s) + s_j + top_down * (p_j - s_j) - t_j,    s_j = f(v_j),    p = W s_prefrontal
 ```
 
 the sparse state that reconstructs the sensory activation through the dictionary as far as
 the thresholds allow, drawn toward what the context predicts. The sensory neurons project to
 the code region alone, and nothing leads back into it, so its fixed point depends on the
-observation and the working trace alone.
+observation and the working trace alone. The boundary is held fixed through every solve and
+is part of the residual that qualifies a state, as the temporal boundary of `PatchNet` is;
+at `learned_code_top_down=0` there is none.
 
 ## How a moment settles
 
@@ -66,14 +69,17 @@ synchronous sweep at the model's step can oscillate around one when several unit
 overlapping columns are active together (the sweep contracts only while `dt * (1 - mu_min)`
 stays below 2, `mu_min` the smallest eigenvalue of the slope-weighted lateral coupling).
 After each phase the region reports the halvings of the step its settled code needs
-(`LearnedCode.stability`, keeping `dt * (1 - mu_min)` at or below 1.5), and the brain
+(`LearnedCode.stability`, keeping `dt * (1 - mu_min)` at or below 1.5, the restoring term
+on the coupling's diagonal), and the brain
 integrates every phase of the moment at that step, the lessons' and the actor's phases
 included, with the step budgets (`learning_free_steps`, `learning_nudged_steps`,
 `actor_eligibility_steps`, an imagined branch's budget) scaled by the same power of two so
 that every phase covers the same time; `describe()` reports the configurations as given, and
-`learned_code["stepping"]` the level in effect. At the chamber of 53 tokens the level stays
-at 0; a dictionary whose columns come to overlap strongly, as in a world of a few frames,
-raises it to 1 or 2 and the settles cost that many times the sweeps.
+`learned_code["stepping"]` the level in effect. At `learned_code_top_down` 4 the restoring
+term alone asks for the halved step wherever a unit sits near its threshold, so a life with
+the region runs at level 1 for the most part; a dictionary whose columns come to overlap
+strongly, as in a world of a few frames, raises it to 2 or 3, and the settles cost that
+many times the sweeps.
 
 The top-down boundary reads the working trace, the settled association activity of the moment
 before, and never the association region of the moment: the recall memory addresses the moment
@@ -92,7 +98,7 @@ the rectified code, `x'` the sensory activation, `z` the prefrontal activation a
 | dictionary | `Phi += rate * sum_rows (x' - Phi a) a^T`, each column scaled back to unit length | `learned_code_rate` (0.125) |
 | lateral weights | recomputed from the dictionary | with the dictionary |
 | predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = min(predictor, 1 / \|z\|^2)` | `learned_code_predictor` (0.03) |
-| thresholds | `t += threshold_rate * sum_rows ((a > 0) - target)`, floored at 0 | `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1) |
+| thresholds | `t += threshold_rate * sum_rows ((a > 0) - target)`, less `threshold_rate * silence` per row whose code is silent (in context, or context-free where the place key is settled), floored at 0 and capped at the ceiling | `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1), `learned_code_threshold_max` (0.2), `learned_code_silence` (10) |
 
 The brain's graph takes the new tables at once. While the code fits, the residuals are small
 and nothing moves. The lesson's contrast and the dopamine leave the region's synapses and
@@ -125,9 +131,12 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | `learned_code_threshold` | 0.1 | construction | every unit's initial threshold |
 | `learned_code_threshold_rate` | 0.001 | retune | the homeostatic rate per row |
 | `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
+| `learned_code_threshold_max` | 0.2 | retune | the ceiling of every threshold, at least the initial threshold, in the brain's drive units (one input at amplitude 1 drives a unit by at most .46); a unit the world drives more often than the target is made harder to drive only up to it, so the observation alone can still fire it; a lower ceiling clips the thresholds at once |
+| `learned_code_silence` | 10 | retune | how many under-active rows a silent row counts as: a row whose code is silent lowers every threshold by `threshold_rate * silence`, so no observation is left without a unit; 0 leaves silence to the target alone |
 | `learned_code_place` | `"free"` | retune | what the associative store and the place records key on: the context-free code, or with `"context"` the moment's code |
 
-Refused with `ValueError`: `learned_code` below 2, a `learned_code_*` gene without the region,
+Refused with `ValueError`: `learned_code` below 2, a ceiling below the initial threshold, a
+`learned_code_*` gene without the region,
 `code` beside `learned_code` (a key that joins the observation's own identity to its meaning
 is not built in this version), an image brain, `memory_expansion` or `memory_fan_in` (the
 memories key on the code as it is), a backend other than `cpu`, and a custom connectome

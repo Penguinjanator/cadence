@@ -44,8 +44,8 @@ brain, without `code`) adds a `code` region of that many neurons that settles wi
 to a learned sparse code of the observation, read by the cortex and keyed on by the
 memories, with the genes `learned_code_top_down`, `learned_code_rate`,
 `learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate`,
-`learned_code_target` and `learned_code_place` ([the learned code](code.md)). The `*_scale`
-arguments are initial
+`learned_code_target`, `learned_code_threshold_max`, `learned_code_silence` and
+`learned_code_place` ([the learned code](code.md)). The `*_scale` arguments are initial
 projection magnitudes, fixed at construction. `options` takes every constructor keyword below
 and every `learning_<field>`, `actor_<field>` and `arousal_<field>` name; with
 `memory_choice=True` it fills in the episodic founders. The region map and the founder table
@@ -301,7 +301,8 @@ contiguous index.
 
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, predictor=0.03,
-            threshold=0.1, threshold_rate=0.001, target=0.1, place="free")
+            threshold=0.1, threshold_rate=0.001, target=0.1, threshold_max=0.2, silence=10.0,
+            place="free")
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
@@ -311,8 +312,10 @@ and `graph` of the units (the sub-network a moment's code phase settles). `later
 `lateral_efficacy()`, `gram()`; `stimulus(sensory, context)`, `prediction(context)`,
 `settle(stimulus, warm, *, budget, tolerance, damping=3) -> Equilibrium`,
 `code_of(activation)` (the rectified code at unit length), `residuals(sensory, activation,
-context)`; `stability(v) -> int` (the halvings of the step the settled code's competition
-is stable under) and `restep(halvings)`, `halvings`; `learn(sensory, activation, context)
+context)`; `standing() -> Nudge | None` (the region's quadratic boundary toward zero at gain
+`top_down` over its units); `stability(v) -> int` (the halvings of the step the settled
+code's competition is stable under) and `restep(halvings)`, `halvings`; `learn(sensory,
+activation, context)
 -> bool` (one step of every table from a settled moment, each row an event), `install()`,
 `take(dictionary, weights, thresholds)`;
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
@@ -359,7 +362,7 @@ LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, centered=True, free_steps=100,
               damping=3, surprise=False)
 Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None,
         plastic_neurons=None, reciprocal=True, tie_groups=None,
-        synapse_rate=None, slots=1, updates=0, contrast_updates=0)
+        synapse_rate=None, slots=1, updates=0, contrast_updates=0, standing=None)
 ```
 
 Every field is explained in [every knob](learning.md#7-every-knob). `eta_bias=None` derives
@@ -373,6 +376,7 @@ when `normalize > 0` with a rate above 0.05
 | --- | --- |
 | `step(drive, labels, warm=None, weight=None, *, answer=None) -> (LearnedState, report)` | Free phase, nudged phase(s), one update. A refused qualified phase raises `LearningPhaseError` and changes nothing. |
 | `free(drive, warm=None)`, `nudged(drive, free, target, sign=1.0, weight=None)`, `targets(labels)`, `nudge_for(target, beta, weight=None)` | One phase; the per-neuron target; the `Nudge`. |
+| `standing`, `bounded(nudge)` | A standing boundary every phase carries (a `Nudge` whose anchor terms are held fixed through each solve; a composed brain's learned code sets it), and a phase's nudge with those terms joined; `None` without one. |
 | `contrast(free, nudged, opposite=None)`, `contrast_rows(...)`, `update(free, nudged, opposite=None)`, `apply(delta_scale, delta_bias)` | The contrast, per row, and an update through masks, rates, tying, decay and the cap. `update` does not check qualification. |
 | `calibrate(drive, *, level=None, grid=None) -> float` | Picks the global gain by the free output operating point; reports in `last_calibration`; raises `RuntimeError` without a usable candidate and changes nothing ([calibration](learning.md#calibrating-the-operating-point)). |
 | `predict(drive)`, `accuracy(drive, labels, batch=256)`, `parameters()`, `to_dict()` | Readout, score, plastic parameter count. |

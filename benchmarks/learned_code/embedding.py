@@ -658,6 +658,7 @@ def code_report(life: Life, held: np.ndarray, seed: int, *,
     report["active_per_code"] = float(active.sum(axis=1).mean())
     report["silent_codes"] = int(np.sum(~active.any(axis=1)))
     report["thresholds"] = {"mean": float(copy_.thresholds.mean()),
+                            "max": float(copy_.thresholds.max()),
                             "zero": int(np.sum(copy_.thresholds == 0.0))}
     free = copy_.code_of(members)
     report["structure"] = structure(free, held)

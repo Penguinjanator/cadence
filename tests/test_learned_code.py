@@ -299,8 +299,13 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
 def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
-        "threshold_rate": 0.001, "target": 0.1, "place": "free",
+        "threshold_rate": 0.001, "target": 0.1, "threshold_max": 0.2, "silence": 10.0,
+        "place": "free",
     }
+    with pytest.raises(ValueError, match="at least the initial threshold"):
+        composed(learned_code_threshold=0.3)
+    with pytest.raises(ValueError, match="threshold_max must be positive"):
+        composed(learned_code_threshold_max=0.0)
     with pytest.raises(ValueError, match="at least 2 units"):
         composed(units=1)
     with pytest.raises(ValueError, match="learned_code must be an integer"):
@@ -372,6 +377,8 @@ def test_the_code_is_a_fixed_point_of_the_whole_settle_and_the_memories_key():
     state = brain.basal_ganglia.state
     graph = brain.brain
     total = graph._synaptic_input(np.atleast_2d(state.activation)) + drive + graph.bias
+    if brain.learner.standing is not None:  # the code units' restoring term, every phase's
+        total = total + brain.learner.standing.drive(np.atleast_2d(state.activation))
     residual = np.abs(total - np.atleast_2d(state.v))[:, brain.code_index].max()
     assert residual <= brain.learner.config.tolerance
     # the code phase's own fixed point: settled again under the same stimulus it stays
@@ -482,8 +489,9 @@ def test_the_key_of_a_decision_is_its_moments_code_and_the_history_hears_the_cod
     first = brain.learned_code.code_of(settled_code(brain))  # (1, units)
     np.testing.assert_allclose(brain.history.trace, 0.5 * first, atol=1e-12)
     assert brain._lived[7] is not None
-    np.testing.assert_array_equal(brain._lived[7], first)
-    np.testing.assert_array_equal(brain.recall.keys[0, 0], first[0])
+    # the keys are the phase's code; the whole settle moves the code units within tolerance
+    np.testing.assert_allclose(brain._lived[7], first, atol=1e-3)
+    np.testing.assert_allclose(brain.recall.keys[0, 0], first[0], atol=1e-3)
     brain.live(tokens(9), reward=[1.0])  # the outcome wakes the brain: recorded under the code
     assert brain.hippocampus.writes >= 1
     keyed = brain.hippocampus.recall(first)
@@ -591,7 +599,7 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
         ("bad_gene", bad_gene, "invalid saved learned code target"),
         ("no_table", no_table, "missing saved learned code table: weights"),
         ("wrong_shape", wrong_shape, "invalid saved learned code table: thresholds"),
-        ("negative_threshold", negative_threshold, "thresholds are nonnegative"),
+        ("negative_threshold", negative_threshold, "between zero and its ceiling"),
         ("long_column", long_column, "unit-length columns"),
         ("other_dictionary", other_dictionary, "disagree with the saved synapses"),
         ("lone_code", lone_code, "saved lived code belongs to a lived action"),
@@ -630,7 +638,16 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     description keeps the configurations as given, and a checkpoint carries the level."""
     brain = composed(seed=8, units=24, recall=True)
     code = brain.learned_code
-    assert code.stability(np.zeros((1, 24))) == 0 and brain._stepping == 0
+    assert brain._stepping == 0 and brain.learner.standing is not None
+    # just above threshold (slope .5) the restoring term alone asks for the halved step at
+    # gain 4; without the boundary the bound reads the lateral coupling alone
+    near = np.full((1, 24), 0.01)
+    with_boundary = code.stability(near)
+    assert with_boundary >= 1
+    brain.retune(learned_code_top_down=0.0)
+    assert brain.learner.standing is None and code.stability(near) < with_boundary
+    brain.retune(learned_code_top_down=4.0)
+    assert brain.learner.standing is not None
     # columns made alike by hand: the units that fire together inhibit each other at full strength
     alike = code.dictionary.copy()
     alike[:, 1:8] = alike[:, [0]] + 0.05 * np.random.default_rng(1).standard_normal((INPUTS, 7))
@@ -673,7 +690,9 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     assert twin.learner.config == brain.learner.config
     assert twin.basal_ganglia.config == brain.basal_ganglia.config
     np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
-    # a code that is stable again steps the brain back up
+    # a code that is stable again steps the brain back up: orthogonal columns and no
+    # restoring term
+    brain.retune(learned_code_top_down=0.0)
     code.take(np.linalg.qr(np.random.default_rng(2).standard_normal((INPUTS, 24)))[0],
               code.weights, np.full(24, 0.1))
     brain.learner.brain = brain._installed(brain.brain)
@@ -758,6 +777,47 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     taught.act(tokens(5, 6), greedy=True)  # a greedy act replaces the pending one
     taught.lesson(tokens(5, 6), [1, 2])
     assert taught.hippocampus.writes >= 2
+
+
+def test_a_long_stream_leaves_the_code_alive_within_the_ceiling(tmp_path):
+    """Six tokens heard for 2,000 moments by one stream, a lesson every tenth moment: the
+    thresholds stay at or below the ceiling, every token keeps at least one active unit in
+    context and context-free, at least one unit is in use per token, and a lower ceiling
+    retuned in the life clips the thresholds at once; a checkpoint above its ceiling is
+    refused."""
+    brain = composed(seed=11, units=32, recall=True, learned_code_threshold_rate=0.01,
+                     learned_code_threshold_max=0.12)
+    code = brain.learned_code
+    rng = np.random.default_rng(5)
+    for t in range(2000):
+        token = int(rng.integers(6))
+        x = tokens(token)
+        if t % 10 == 9:
+            brain.lesson(x, [token % ACTIONS])
+        brain.act(x, greedy=True)
+    assert (code.thresholds <= code.threshold_max + 1e-12).all()
+    assert (code.thresholds == code.threshold_max).any()  # the ceiling binds in a world of six
+    used = np.zeros(32, bool)
+    for token in range(6):
+        x = tokens(token)
+        brain.act(x, greedy=True)
+        in_context = np.maximum(code.last["activation"], 0.0)
+        free = brain.observation_code(x)
+        assert (in_context > 0).sum() >= 1 and (free > 0).sum() >= 1
+        used |= (free > 0)[0]
+    assert used.sum() >= 6
+    brain.retune(learned_code_threshold_max=0.1)  # a lower ceiling clips at once
+    assert (code.thresholds <= 0.1).all() and (code.thresholds == 0.1).any()
+    np.testing.assert_array_equal(brain.brain.bias[brain.code_index], -code.thresholds)
+    with pytest.raises(ValueError, match="at least the initial threshold"):
+        brain.retune(learned_code_threshold_max=0.05)
+    path = brain.save(tmp_path / "ceiling.npz")
+    with np.load(path, allow_pickle=False) as data:
+        arrays = {name: data[name].copy() for name in data.files}
+    arrays["learned_code/thresholds"][0] = 0.3
+    np.savez(tmp_path / "above.npz", **arrays)
+    with pytest.raises(ValueError, match="between zero and its ceiling"):
+        cd.Brain.load(tmp_path / "above.npz")
 
 
 def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():

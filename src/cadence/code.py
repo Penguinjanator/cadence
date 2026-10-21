@@ -11,17 +11,20 @@ brain under the brain's neuron model:
   pair ``j != k`` carries ``-(Phi_j . Phi_k)``, so units whose columns overlap compete;
 * the predictor ``W`` (``units`` by the prefrontal width) is the one-way synapses from the
   prefrontal region, the working trace of the association activity of the moment before,
-  scaled by ``top_down``: the context's prediction of the code lowers the thresholds of the
-  units it predicts;
-* each unit's threshold is its bias, ``-t_j``.
+  scaled by ``top_down``: the context's prediction of the code, ``p = W s_prefrontal``;
+* each unit's threshold is its bias, ``-t_j``;
+* a standing boundary on the code units, the solver's quadratic anchor at gain ``top_down``
+  toward zero, ``-top_down * s_j``, held through every phase: with the predictor's drive it
+  is the pull ``top_down * (p_j - s_j)`` toward the prediction, the gradient of
+  ``top_down / 2 * |s - p|^2``.
 
-A code unit therefore settles to ``v_j = Phi_j . (s_sensory - Phi s) + s_j + top_down p_j
-- t_j`` with ``s_j = f(v_j)`` the neuron's rectified sigmoid and ``p = W s_prefrontal``: the
-sparse state that reconstructs the sensory activation through the dictionary as far as the
-thresholds allow, drawn toward what the context predicts. No synapse leads back into the
-region, so its fixed point depends on the observation and the trace alone; the brain settles
-it first, with the same solver and tolerance, addresses its memories on it, and settles the
-whole graph warm from it.
+A code unit therefore settles to ``v_j = Phi_j . (s_sensory - Phi s) + s_j + top_down (p_j
+- s_j) - t_j`` with ``s_j = f(v_j)`` the neuron's rectified sigmoid: the sparse state that
+reconstructs the sensory activation through the dictionary as far as the thresholds allow,
+drawn toward what the context predicts. No synapse leads back into the region, so its
+fixed point depends on the observation and the trace alone; the brain settles it first,
+with the same solver and tolerance, addresses its memories on it, and settles the whole
+graph warm from it.
 
 Learning is local to each boundary and happens at every accepted moment, each row of the
 batch one event, from the settled state alone (``a = max(s, 0)``, the rectified code;
@@ -34,7 +37,12 @@ batch one event, from the settled state alone (``a = max(s, 0)``, the rectified 
   z^T`` with ``r_row = min(predictor, 1 / |z|^2)``, the row's rate bounded by its own
   input energy;
 * the thresholds, homeostatic, ``t += threshold_rate * sum_rows ((a > 0) - target)``,
-  floored at zero.
+  floored at zero and capped at ``threshold_max``: a unit the world drives more often than
+  the target share is made harder to drive only up to the ceiling, so the observation alone
+  can still fire it (without the ceiling such thresholds run away under long training and
+  the code goes silent); and a row whose code is silent, in context or context-free (the
+  place key), lowers every threshold by ``threshold_rate * silence``, a silent row counting
+  as that many under-active rows, so no observation is left without a unit.
 
 While the code fits, the residuals are small and nothing moves. The rates are genes
 (``learned_code_<name>``); zero freezes a part. The memories key on the rectified settled
@@ -47,7 +55,8 @@ with overlapping columns are active together: the sweep contracts only while ``d
 mu_min)`` stays below 2, ``mu_min`` the smallest eigenvalue of the slope-weighted lateral
 coupling. ``stability`` reports the halvings of the step the settled code needs, and the
 brain integrates every phase at that step with its step budgets scaled to keep the same
-time (``Brain`` re-steps its graph when the level changes).
+time (``Brain`` re-steps its graph when the level changes); the restoring term adds
+``top_down`` times the slope to the coupling's diagonal.
 """
 
 from __future__ import annotations
@@ -59,7 +68,7 @@ import numpy as np
 
 from ._configuration import real
 from .brain import Brain as NeuralGraph
-from .brain import BrainState, Equilibrium
+from .brain import BrainState, Equilibrium, Nudge
 from .connectome import Connectome
 from .neuron import NeuronModel
 
@@ -106,13 +115,21 @@ class LearnedCode:
     threshold: float = 0.1
     threshold_rate: float = 0.001
     target: float = 0.1
+    threshold_max: float = 0.2
+    silence: float = 10.0
     place: str = "free"
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
 
-    GENES = ("top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "place")
-    RUNTIME = ("top_down", "rate", "predictor", "threshold_rate", "target", "place")
+    GENES = (
+        "top_down", "rate", "predictor", "threshold", "threshold_rate", "target",
+        "threshold_max", "silence", "place",
+    )
+    RUNTIME = (
+        "top_down", "rate", "predictor", "threshold_rate", "target", "threshold_max",
+        "silence", "place",
+    )
     CONSTRUCTION = ("threshold",)
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
@@ -127,14 +144,20 @@ class LearnedCode:
         """The founder value of every gene."""
         return {
             "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
-            "threshold_rate": 0.001, "target": 0.1, "place": "free",
+            "threshold_rate": 0.001, "target": 0.1, "threshold_max": 0.2, "silence": 10.0,
+            "place": "free",
         }
 
     @staticmethod
     def setting(name: str, value: Any) -> Any:
         """One gene, validated and converted."""
-        if name in ("top_down", "rate", "predictor", "threshold", "threshold_rate"):
+        if name in ("top_down", "rate", "predictor", "threshold", "threshold_rate", "silence"):
             return real(name, value, low=0)
+        if name == "threshold_max":
+            number = real(name, value, low=0)
+            if number <= 0:
+                raise ValueError("threshold_max must be positive")
+            return number
         if name == "target":
             number = real(name, value, low=0, high=1)
             if number <= 0 or number >= 1:
@@ -161,6 +184,8 @@ class LearnedCode:
         self.seed = int(self.seed)
         for name in self.GENES:
             setattr(self, name, self.setting(name, getattr(self, name)))
+        if self.threshold > self.threshold_max:
+            raise ValueError("threshold_max must be at least the initial threshold")
         rng = np.random.default_rng(np.random.SeedSequence([self.seed, _CODE_STREAM]))
         self.dictionary = _unit_columns(rng.standard_normal((self.inputs, self.units)))
         self.weights = np.zeros((self.units, self.context))
@@ -191,15 +216,36 @@ class LearnedCode:
         """The halvings of the model's step under which the synchronous sweep contracts
         around the fixed points at potentials ``v`` (``(batch, units)``): the least ``h``
         with ``dt / 2^h * (1 - mu_min) <= STEP_MARGIN``, ``mu_min`` the smallest eigenvalue
-        over the rows of ``D^1/2 L D^1/2`` (``D`` the activation's slopes at ``v``, ``L``
-        the lateral weights); 0 when the sweep contracts at the model's own step."""
+        over the rows of ``D^1/2 (L - top_down I) D^1/2`` (``D`` the activation's slopes at
+        ``v``, ``L`` the lateral weights, ``top_down`` the standing boundary's gain); 0 when
+        the sweep contracts at the model's own step."""
         v = np.atleast_2d(np.asarray(v, dtype=float))
-        root = np.sqrt(np.maximum(self.model.slope_at(v), 0.0))
+        slopes = np.maximum(self.model.slope_at(v), 0.0)
+        root = np.sqrt(slopes)
         lateral = self.lateral()
         coupling = root[:, :, None] * lateral[None, :, :] * root[:, None, :]
+        # the standing boundary's restoring term, -top_down on every unit's own diagonal
+        index = np.arange(self.units)
+        coupling[:, index, index] -= self.top_down * slopes
         mu = float(np.linalg.eigvalsh(coupling)[:, 0].min())
         need = self.model.dt * (1.0 - mu) / self.STEP_MARGIN
         return 0 if need <= 1.0 else int(np.ceil(np.log2(need)))
+
+    def standing(self) -> Nudge | None:
+        """The region's standing boundary over its own units: the quadratic anchor toward
+        zero at gain ``top_down`` on every unit, ``-top_down * s``; None at ``top_down`` 0."""
+        if not self.top_down:
+            return None
+        zeros = np.zeros(self.units)
+        return Nudge(
+            zeros, zeros, 0.0, anchor=zeros, anchor_gain=np.full(self.units, self.top_down)
+        )
+
+    def bound(self) -> None:
+        """The thresholds within the ceiling, after a change of ``threshold_max``."""
+        if (self.thresholds > self.threshold_max).any():
+            self.thresholds = np.minimum(self.thresholds, self.threshold_max)
+            self.install()
 
     def restep(self, halvings: int) -> None:
         """The sub-network at the model's step halved ``halvings`` times."""
@@ -249,6 +295,7 @@ class LearnedCode:
             or not np.isfinite(weights).all()
             or not np.isfinite(thresholds).all()
             or (thresholds < 0).any()
+            or (thresholds > self.threshold_max).any()
         ):
             raise ValueError("invalid learned code tables")
         norms = np.linalg.norm(dictionary, axis=0)
@@ -285,7 +332,8 @@ class LearnedCode:
         repair at the model's step, then halved steps within the same ``budget``, to the
         residual ``tolerance``; counted as work."""
         phase = self.graph.equilibrate(
-            stimulus, state=warm, budget=budget, tolerance=tolerance, damping=damping
+            stimulus, state=warm, budget=budget, tolerance=tolerance, damping=damping,
+            nudge=self.standing(),
         )
         self.work["settles"] += 1
         self.work["settle_rows"] += len(stimulus)
@@ -314,11 +362,13 @@ class LearnedCode:
     # -- learning
 
     def learn(
-        self, sensory: np.ndarray, activation: np.ndarray, context: np.ndarray | None
+        self, sensory: np.ndarray, activation: np.ndarray, context: np.ndarray | None,
+        place: np.ndarray | None = None,
     ) -> bool:
         """One step of the dictionary, the predictor and the thresholds from a settled
         moment, each row an event; returns whether any table moved (every rate zero, or an
-        empty batch, moves nothing). The sub-network takes the new tables."""
+        empty batch, moves nothing). ``place`` is the moment's context-free code where one
+        was settled, read for its silence alone. The sub-network takes the new tables."""
         x = np.atleast_2d(np.asarray(sensory, dtype=float))
         a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
         n = len(x)
@@ -351,9 +401,14 @@ class LearnedCode:
             moved = True
         if self.threshold_rate:
             active = (a > 0.0).astype(float) - self.target
-            self.thresholds = np.maximum(
-                self.thresholds + self.threshold_rate * active.sum(axis=0), 0.0
-            )
+            step = self.threshold_rate * active.sum(axis=0)
+            # a silent row, in context or context-free, lowers every threshold
+            silent = int(np.sum(~(a > 0.0).any(axis=1)))
+            if place is not None:
+                silent += int(np.sum(~(np.atleast_2d(np.asarray(place)) > 0.0).any(axis=1)))
+            if silent and self.silence:
+                step = step - self.threshold_rate * self.silence * silent
+            self.thresholds = np.clip(self.thresholds + step, 0.0, self.threshold_max)
             moved = True
         self.work["updates"] += 1
         self.work["update_rows"] += n

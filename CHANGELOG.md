@@ -7,7 +7,10 @@
   observation, settled with the rest of the brain under the brain's neuron model, with the
   dictionary as its synapses from the sensory neurons, the dictionary's Gram matrix as its
   lateral inhibition, a predictor from the prefrontal region (the working trace) as its
-  top-down boundary and each unit's threshold as its bias. A moment's settle runs the
+  top-down boundary, each unit's threshold as its bias, and a standing quadratic boundary
+  (`Learner.standing`, the solver's anchor toward zero at gain `learned_code_top_down` on
+  the code units, carried by every phase) that with the predictor's drive is the pull
+  toward the prediction. A moment's settle runs the
   region's phase first, by the brain's solver policy to the learner's tolerance, addresses
   the memories on the rectified settled code at unit length, and settles the whole graph
   warm from it; `last_settlement` reports `code_steps`, `code_residual` and
@@ -19,9 +22,12 @@
   (Hebbian on the reconstruction residual, the delta rule on the prediction's residual,
   homeostatic thresholds), its genes `learned_code_top_down` (4.0), `learned_code_rate`
   (0.125), `learned_code_predictor` (0.03), `learned_code_threshold` (0.1),
-  `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1) and
-  `learned_code_place` (`"free"`); the lesson's contrast and the dopamine leave its synapses
-  alone. The recall slots and the episodic context records key on the moment's code in its
+  `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1),
+  `learned_code_threshold_max` (0.2, the ceiling that keeps a unit the world drives often
+  within reach of the observation alone), `learned_code_silence` (10, a silent row lowers
+  every threshold by that many under-active rows' steps, so no observation is left without
+  a unit) and `learned_code_place` (`"free"`); the lesson's contrast and the dopamine leave
+  its synapses alone. The recall slots and the episodic context records key on the moment's code in its
   context; the associative store and the episodic place records key on the context-free
   code (a second code phase, `place_steps`), so a known situation is found again along a
   new path. The heard history holds the code and the recall memory's event values are
