@@ -1939,13 +1939,11 @@ class Brain:
         lateral competition through its dictionary and drawn toward the prediction the
         working trace makes of it, learning every accepted moment by local rules
         (``LearnedCode``). The cortex reads the code, the heard history holds it, and the
-        memories key on the rectified settled code at unit length. Its genes
-        ``learned_code_top_down`` (4.0), ``learned_code_rate`` (0.125),
-        ``learned_code_predictor`` (0.03), ``learned_code_threshold`` (0.1, construction),
-        ``learned_code_threshold_rate`` (0.001), ``learned_code_target`` (0.1) and
-        ``learned_code_place`` ("free": the associative store and the episodic place
-        records key on the context-free code; "context": on the moment's code) are passed
-        beside it; the founder ``learned_code=None`` builds the brain without the region.
+        memories key on the rectified settled code at unit length joined to the
+        observation's own identity. Its genes, ``learned_code_<name>`` for every name of
+        ``LearnedCode.GENES`` (``LearnedCode.founders()`` gives the founders; the guide's
+        table says what each sets), are passed beside it; the founder
+        ``learned_code=None`` builds the brain without the region.
 
         ``modules`` specifies a chain of reciprocally connected processing
         regions. The final region is the association cortex. ``observers``
