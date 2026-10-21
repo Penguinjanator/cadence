@@ -84,12 +84,13 @@
   brain's own moments, the logits as the motor population inside the settle), that what was
   tested and did not work is removed or folded into what did, and that the documentation is
   organized by situation with the interface kept as simple as possible for users.
-- The episodic memory guide states a limit of `memory_choice=True` in a continuing life: a
-  record that paid is not extinguished by failures that pay nothing, since a zero outcome in
-  the middle of an attempt writes nothing and replay only adds credit, so after a reversal
-  whose failures pay 0 the new action is often not learned. It names what today's rules
-  offer: failures that cost a little (12 of 12 lives learned the new arm in the guide's
-  reading), failures marked with `salience=`, which the records write, or the memory left off
+- The memory guide's episodic part (`docs/memory.md`) states a limit of `memory_choice=True`
+  in a continuing life: a record that paid is not extinguished by failures that pay nothing,
+  since a zero outcome in the middle of an attempt writes nothing and replay only adds
+  credit, so after a reversal whose failures pay 0 the new action is often not learned. It
+  names what today's rules offer: failures that cost a little (12 of 12 lives learned the
+  new arm in the guide's reading), failures marked with `salience=`, which the records
+  write, or the memory left off
   ([#210](https://github.com/muellerberndt/cadence/issues/210)).
 - `ArousalConfig` gains `need_scale` (`arousal_need_scale` at `compose` and `retune`; opt-in,
   founder 0): a need in units of the reward scale the brain has learned. At every outcome the
@@ -117,22 +118,25 @@
   5 of 6 lives stayed aroused for .60 to .67 of the life on an income of .017 to .022 per
   moment, the sixth, earning .15 per moment, for .06, and the founder's 6 lives, all
   collapsed, for .02. Through `step` the gene is inert.
-- The learning guide's section "Many lessons: the normalized point for imitation" recommends
-  the teaching learner's steps 0.003 and 0.0003 under a running RMS of forgetting 0.99 and
-  floor 1e-4 (`teaching="normalized"`, below) with lessons of about 32 rows for a brain that
-  learns a demonstrator's policy from many lessons
+- The teaching guide's section "Many lessons: the normalized point for imitation"
+  (`docs/teach.md`) recommends the teaching learner's steps 0.003 and 0.0003 under a running
+  RMS of forgetting 0.99 and floor 1e-4 (`teaching="normalized"`, below) with lessons of
+  about 32 rows for a brain that learns a demonstrator's policy from many lessons
   ([issue 215](https://github.com/muellerberndt/cadence/issues/215)). In a copy task of 260
-  inputs and three actions it agreed with the demonstrator on 0.868 / 0.866 of held-out moves
-  after 240,000 samples (two seeds), against 0.874 / 0.888 for a backpropagation network trained
-  with Adam on the same samples, where the composed founder reached 0.81 at 80,000 samples. The
-  composed founder keeps its teaching rates: with few lessons its larger steps acquire faster
-  (a taught chain from a few hundred corrections, and the token-binding content arms at long
-  budgets, [issue 218](https://github.com/muellerberndt/cadence/issues/218)). The guide also gives
+  inputs and three actions it agreed with the demonstrator on 0.868 / 0.866 of held-out
+  moves after 240,000 samples (two seeds), against 0.874 / 0.888 for a backpropagation
+  network trained with Adam on the same samples, where the composed founder reached 0.81 at
+  80,000 samples. The composed founder keeps its teaching rates: with few lessons its larger
+  steps acquire faster (a taught chain from a few hundred corrections, and the token-binding
+  content arms at long budgets,
+  [issue 218](https://github.com/muellerberndt/cadence/issues/218)). The guide also gives
   the working-trace amplitude's effect on teaching fidelity.
-- The learning guide's new section "Teach on the brain's own path" gives the DAgger recipe for a
-  brain that bootstraps by watching: its own greedy move is executed, the same demonstrator
-  labels the observation it reached, and `lesson` teaches it, with a runnable snippet.
-- The composition guide lists `normalize=0` among a fresh `LearnerConfig()`'s values.
+- The teaching guide's new section "Teach on the brain's own path" (`docs/teach.md`) gives
+  the DAgger recipe for a brain that bootstraps by watching: its own greedy move is
+  executed, the same demonstrator labels the observation it reached, and `lesson` teaches
+  it, with a runnable snippet.
+- The tuning guide (`docs/tune.md`) lists `normalize=0` among a fresh `LearnerConfig()`'s
+  values.
 
 - `Brain.reset(keep=("arousal",))` (opt-in) keeps the arousal state as it is: its level, the
   counts, the recent and long-run reward, the usual errors, the reward scale, the age and
@@ -145,18 +149,27 @@
   without arousal resets as it does without it. At the default, `keep=()`, every brain
   resets, acts and saves as in 0.84.3.
 
-- The documentation is reorganized: 63 pages and 16,193 lines become 45 pages and 10,463
-  lines, with `docs/README.md` as the single entry and catalogue, one owning guide per setting
-  and `docs/api.md` for signatures. `docs/memory.md` describes the eight memories of the
-  composed brain in one table, which memory serves which task from this repository's
-  benchmarks, one runnable example per memory and the observation code (`code=units`);
-  `docs/recall.md` (the recall memory and its options) and `docs/records.md` (standalone
-  delta-rule stores) are new; `docs/evaluation.md` replaces task-design, scaling, missteps and
-  creativity. The pages architecture, context, creativity, equilibrium-world-models,
+- The documentation is organized by situation: 63 pages and 16,193 lines become 14 pages and
+  about 5,400 lines, each page answering what you want and what to use. `docs/start.md` (a
+  creature in a body: `compose`, `live`, `wait`, `reset`, `save` and `Brain.load`),
+  `docs/teach.md` (lessons, `step` with a teacher, the teaching point, the brain's own
+  path), `docs/reward.md` (with the sequential tasks), `docs/memory.md` (the eight memories
+  of the composed brain in one table, which memory serves which task, a runnable example per
+  memory, the episodic and recall memories in full, the standalone stores), `docs/senses.md`
+  (images, the observation code, the learned code), `docs/tune.md` (the region map, the
+  founders, `retune`, the operating point), `docs/evaluate.md` (baselines,
+  independent-sample controls, receipts), `docs/anatomy.md` (genomes, cortices, connectomes,
+  evolution), `docs/settling.md` (the neuron, the free/nudged rule, the certificate), and
+  `docs/backends.md`, `docs/troubleshooting.md`, `docs/contracts.md` and `docs/api.md` (the
+  signatures); `docs/README.md` is the single entry and the catalogue by situation, one
+  guide owns each setting, and the README carries the comparison for machine-learning
+  readers. The pages architecture, context, creativity, equilibrium-world-models,
   experience, howto-demo, index, interaction, missteps, pages, recursive-training, scaling,
   settling-literature, task-design and tasks, and the equilibrium folder's BOOTSTRAP, DRSN,
-  ELEMENT, EXPERIMENTAL, PERFORMANCE and VARIANTS, are merged into the remaining guides or
-  removed.
+  ELEMENT, EXPERIMENTAL, PERFORMANCE and VARIANTS, are merged into these pages or removed.
+  Every section that stays keeps its heading and text, so its anchor holds on its new page,
+  and every link of the documentation, the README, the benchmark READMEs and the library's
+  docstrings and warnings points to the new place.
 - Docstrings and comments across `src/` describe current behaviour only, with no version
   narration, run records or issue history, and link to the new pages; docstrings that
   disagreed with the code beside them are corrected. Code and every message string are
@@ -323,21 +336,6 @@
   `pending`; the configuration and memory sections, `observation_code`, `initialization`
   and `pending_feedback` move into them. Arrays, actions and checkpoints are unchanged on
   the 12-brain digest ledger, and every description holds what it held, in the new layout.
-- The documentation is organized by situation: the 26 pages left by the reorganization above
-  and the removals of this release become 14, each answering what you want and what to use.
-  `docs/start.md` (a creature in a body: `compose`, `live`, `wait`, `reset`, `save` and
-  `Brain.load`), `docs/teach.md` (lessons, `step` with a teacher, the teaching point, the
-  brain's own path), `docs/reward.md` (with the sequential tasks), `docs/memory.md` (the
-  family, the episodic and recall memories in full, the standalone stores),
-  `docs/senses.md` (images, the observation code, the learned code), `docs/tune.md` (the
-  region map, the founders, `retune`, the operating point), `docs/evaluate.md` (baselines,
-  independent-sample controls, receipts), `docs/anatomy.md` (genomes, cortices,
-  connectomes, evolution), `docs/settling.md` (the neuron, the free/nudged rule, the
-  certificate), and `docs/backends.md`, `docs/troubleshooting.md`, `docs/contracts.md` and
-  `docs/api.md`; `docs/README.md` is the catalogue by situation, and the README carries the
-  comparison for machine-learning readers. Every section keeps its heading and text, so its
-  anchor holds on its new page, and every link of the documentation, the README, the
-  benchmark READMEs and the library's docstrings and warnings points to the new place.
 
 ## 0.84.3 — 2026-10-19
 
