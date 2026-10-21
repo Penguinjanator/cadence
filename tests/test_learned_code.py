@@ -307,7 +307,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9, "cortex": "code",
+        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.95, "cortex": "code",
         "scale": "observation", "held": True, "reads": "free", "fields": None, "active": 0.0,
     }
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
