@@ -82,7 +82,8 @@ For a custom world model, save the free prediction (`Learner.free`) under the ob
 proposed action. Once the action has run, its observed consequence is the target, and both
 nudged phases start from that saved state. The repair assigns no credit across delays; use
 [reward eligibility](reward.md) for that. Score an outcome before teaching it. Where an outcome
-follows its reading directly, [records](records.md) learn it without settling phases.
+follows its reading directly, a [delta-rule store](records.md) learns it without settling
+phases.
 
 ## 5. Why the contrast is a gradient
 

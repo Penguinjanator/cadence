@@ -154,8 +154,6 @@ sentences from the settled state.
 [Build a brain](https://github.com/muellerberndt/cadence/blob/main/docs/brain.md)
 for custom wiring, and [the memory/planning example](https://github.com/muellerberndt/cadence/blob/main/examples/memory_imagination.py)
 for a bounded demonstration with actual toy-body outcomes.
-[Record patches](https://github.com/muellerberndt/cadence/blob/main/docs/record-patch.md)
-provide event records and consolidation.
 [cadence-demos](https://github.com/muellerberndt/cadence-demos) contains the
 application demos.
 

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 NOT_RUN = "<!-- not-run"
 BLOCK = re.compile(r"(<!-- not-run[^\n]*-->\n)?```python\n(.*?)```", re.S)
 # pages whose blocks need an optional dependency
-REQUIRES = {"docs/backends.md": "torch", "docs/population.md": "torch"}
+REQUIRES = {"docs/backends.md": "torch"}
 
 
 def snippets(page: str) -> list[str]:
@@ -83,18 +83,14 @@ PAGES = [
     "docs/records.md",
     "docs/evolution.md",
     "docs/build.md",
-    "docs/belief.md",
-    "docs/steering.md",
     "docs/recursive-settlement.md",
     "docs/api.md",
     "docs/backends.md",
     "docs/learning.md",
     "docs/partitioned.md",
     "docs/planning.md",
-    "docs/population.md",
     "docs/protocols.md",
     "docs/receipts.md",
-    "docs/record-patch.md",
 ]
 
 

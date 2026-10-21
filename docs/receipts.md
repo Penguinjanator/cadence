@@ -78,24 +78,15 @@ backend's conformance report (`cd.conformance(graph, stimulus)` on a `NeuralGrap
 boundary block saying what the experiment supplies rather than derives and what it does not
 claim.
 
-## The cost and the orienting fields
+## The cost fields
 
-Every arm of a comparison carries the same accounting: `macs_per_moment`
-(`BeliefPatch.macs_per_moment()` or `Steered.macs_per_moment()`), `moments_per_decision`
-and the `cost` counters (`moments`, `macs`, `replays`) over the life. `Life.compute()`
-returns these with the governor's steps added as moments and the decisions by mode.
-
-A demo that reads a gain's response to events carries `cd.orienting` per kind (count,
-capture of the first and last `bins` events, curve, latency shares, mean return) and the
-`cd.dishabituation` pair, so that two demos' captures mean the same thing. An unobserved
-return is `null`, with `return_censored=true` after a positive capture, and is not
-counted as recovery. Partial final curve bins stay in the curve.
-
-MAC counts are dense forward-work estimates that exclude adjoints, writes, nonlinearities,
-callbacks and memory traffic; state these exclusions and any governor step-to-moment
-conversion. An efficiency comparison also reports elapsed time, peak memory, learning and
-search work and every failed attempt. Test targets never calibrate the governor or choose a
-baseline; record the disjoint calibration and validation split and its seeds.
+Every arm of a comparison carries the same accounting over the life: for a composed brain
+the free-answer sweeps of `last_settlement`, `learner.updates` and, under `live`, the
+per-mode totals `arousal.moments` and `arousal.sweeps`
+([count the full work](evaluation.md#count-the-full-work)). An efficiency comparison also
+reports elapsed time, peak memory, learning and search work and every failed attempt. Test
+targets never choose a baseline; record the disjoint calibration and validation split and
+its seeds.
 
 ## Editing invalidates, on purpose
 

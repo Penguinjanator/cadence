@@ -9,9 +9,8 @@ Short answers to the problems builders meet first, each linking the page that ow
 the only requirements.
 
 **Do I need a GPU?** No; everything runs on NumPy float64. `[fast]` adds Numba and SciPy,
-`[accel]` torch and `[apple]` MLX for the settling brain. `PopulationPatch` is the record patch's
-torch twin for one-moment paths ([population](population.md)), `TorchBelief` the belief patch's
-([backends](backends.md)). The temporal patch has no GPU path.
+`[accel]` torch and `[apple]` MLX for the settling brain ([backends](backends.md)). The
+temporal patch has no GPU path.
 
 **Which interface do I want?** `Brain.compose(..., arousal=True)` and `brain.live(...)` for one
 continuing stream; `step` for explicit teaching, batches or learning from every outcome. Other
@@ -20,13 +19,12 @@ contracts are in the [specialist guides](quickstart.md#specialist-guides).
 ## Shapes and encodings
 
 **`ValueError` on shapes.** A settling brain takes a drive `(batch, n)`, one column per neuron,
-and `Learner.step` integer labels `(batch,)`. Temporal, record and belief patches take paths
-`(batch, time, ports)` and targets `(batch, time, outputs)`; one moment is `(batch, 1, ports)`
+and `Learner.step` integer labels `(batch,)`. A temporal patch takes paths `(batch, time,
+ports)` and targets `(batch, time, outputs)`; one moment is `(batch, 1, ports)`
 ([shapes](orientation.md#shapes)).
 
-**Categorical outputs.** A record patch takes `groups=(k,)` and one-hot targets (a softmax per
-group). A settling brain's `step` takes the index of the wanted output neuron. A temporal patch's
-outputs are continuous levels ([build from your data](build.md)).
+**Categorical outputs.** A settling brain's `step` takes the index of the wanted output
+neuron. A temporal patch's outputs are continuous levels ([build from your data](build.md)).
 
 **An absent observation reads as zero drive.** Add a presence port when an observed zero must
 differ from no observation ([temporal](temporal.md#context-private-continuation-and-readback)).
@@ -95,44 +93,11 @@ surprise is the observation minus the prediction ([temporal](temporal.md)).
 **Learning is slow.** One detuned chain costs about `N * T * H^3`; keep hidden width and path
 length modest ([cost and memory](temporal.md#cost-and-memory), [evaluation](evaluation.md)).
 
-## The record patch
-
-**The slow weights learn nothing, the records recall everything.** The loss is a mean over time
-and outputs, so the useful `rate` grows with their product; try `rate=8` with `backtrack=True`.
-A conjunction of this input and the last takes far longer, or a second patch
-([two patches in depth](record-patch.md#two-patches-in-depth)).
-
-**The records recall nothing.** Give every reading unit unit variance and count the cells in use
-([diagnosing a record store](record-patch.md#diagnosing-a-record-store)). At `record_rate` near
-one a cell keeps only its last writers; set `record_averaging=True` to retain a corpus
-([records](records.md#records)).
-
-**Sleep changed nothing.** Sleep restructures the store and corrects nothing; dreams from cues the
-store never met teach its guesses as facts. Dream the cues of the day and score the slow weights
-alone before and after ([two phases](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night)).
-
-**Recall by position fails.** Records are keyed by content and context; give position its own
-ports ([recall is by content](record-patch.md#recall-is-by-content-not-by-position)).
-
-**`detune` refuses categorical ports.** Quadratic detuning covers the linear readout only;
-`observe` learns both ([detuning](record-patch.md#detuning-as-the-acceptance-check)).
-
-**Which checkpoint format?** Format 2, or format 3 when the patch has `groups`,
-`record_writes="batch"`, `record_width` or a structured `port`. `load` reads both.
-
-## The belief patch
-
-**Imagination decays while the one-step read improves.** Add the imagination loss, which
-penalises drift from random starting moments ([the imagination loss](belief.md#training-the-transition-the-imagination-loss)).
-
-**A wide picture port needs a huge rate.** Use a rate in the thousands, or the torch twin with
-an ordinary optimizer ([belief](belief.md#learning)).
-
 ## Evaluation
 
-**Which number do I report?** Held-out data split before tuning, slow weights and records
-separately, a control (majority outcome, persistence, a linear predictor), and log loss with
-calibration beside accuracy ([evaluation](evaluation.md)).
+**Which number do I report?** Held-out data split before tuning, a control (majority outcome,
+persistence, a linear predictor), and log loss with calibration beside accuracy
+([evaluation](evaluation.md)).
 
 **How do I make a result reproducible?** Pin the release, fix every seed and bind numbers to
 sources with a [receipt](receipts.md), as the `verify.py` scripts in [benchmarks](../benchmarks/) do.

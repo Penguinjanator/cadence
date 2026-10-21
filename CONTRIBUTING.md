@@ -42,8 +42,8 @@ A replacement must preserve demonstrated behavior and saved continuation before
 removing its predecessor. Keep source-bound evidence, original application
 checkpoints and failed comparisons. Smaller code or a newer solver is not a
 capability-preservation test. State the actual learning rule and the scope of
-its equilibrium guarantee; record scans, temporal repair and graph settlement
-must not inherit one another's claims.
+its equilibrium guarantee; temporal repair and graph settlement must not inherit
+one another's claims.
 
 Use [one continuing equilibrium brain](docs/world-model.md) as the application
 and tutorial frame: bootstrap useful relations and memory, operate with them,
@@ -147,15 +147,14 @@ archive and confirmation-audit tests.
 A change to a guide's code is a change to a test. The
 [minimal-install job](https://github.com/muellerberndt/cadence/blob/main/.github/workflows/ci.yml)
 builds the wheel with NumPy alone
-and runs 19 pages without optional backends: `README.md` and, under `docs/`,
+and runs 16 pages without optional backends: `README.md` and, under `docs/`,
 `world-model.md`, `patchnet.md`, `quickstart.md`, `temporal.md`,
 `temporal-memory.md`, `memory.md`, `recall.md`, `planning.md`,
-`partitioned.md`, `record-patch.md`, `build.md`, `belief.md`, `steering.md`,
-`recursive-settlement.md`, `api.md`, `learning.md`,
-`protocols.md` and `receipts.md`. It also executes
-`examples/continuing_brain.py` and `examples/memory_imagination.py`. For
-changes to these guides or examples, run `python -m pytest -q tests/test_documentation.py` and
-`ruff check examples/continuing_brain.py tests/test_documentation.py`.
+`partitioned.md`, `build.md`, `recursive-settlement.md`, `api.md`,
+`learning.md`, `protocols.md` and `receipts.md`. It also executes
+`examples/continuing_brain.py` and `examples/memory_imagination.py`. For changes
+to these guides or examples, run `python -m pytest -q tests/test_documentation.py`
+and `ruff check examples/continuing_brain.py tests/test_documentation.py`.
 
 Mathematical claims must state their assumptions and connect them to the
 executed numerical model. The [settling certificates](docs/certificate.md) explain
@@ -205,8 +204,8 @@ environments. Run one substantial local QA process at a time on a busy machine.
 ## What a change needs
 
 - **A test.** A new operation gets a test of its contract, and a numerical claim gets a
-  finite-difference or reference check where one exists (`tests/test_equilibrium.py`,
-  `tests/test_belief.py` are the pattern).
+  finite-difference or reference check where one exists (`tests/test_equilibrium.py` is
+  the pattern).
 - **A line in `CHANGELOG.md`** under `Unreleased`, saying what changed and why.
 - **A guide.** A public name is described in `docs/api.md`, and a new capability gets a
   section with a runnable snippet in the guide that owns it; add that guide to

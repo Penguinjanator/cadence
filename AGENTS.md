@@ -15,7 +15,6 @@ guides. Read the owning guide, [numerical contracts](docs/contracts.md) and
 | Build a continuing brain | [Quickstart](docs/quickstart.md), [composition](docs/brain.md), [runnable lifecycle](examples/continuing_brain.py) |
 | Manage streams, outcomes and memory | [Continuous interaction](docs/continuous.md), [memory](docs/memory.md), [episodic memory](docs/episodic.md), [recall memory](docs/recall.md), [reward](docs/reward.md), [world model](docs/world-model.md) |
 | Diagnose learning or settling work | [Learning](docs/learning.md), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
-| Use retained-record dreaming and sleep | [Record patches](docs/record-patch.md): `RecordPatchNet.dream` and `sleep`; this is a separate model from `Brain.compose` |
 | Learn transitions, plan or protect responses | [Temporal patches](docs/temporal.md), [planning](docs/planning.md), [temporal memory](docs/temporal-memory.md), [runnable example](examples/memory_imagination.py) |
 | Add optional recursive observation | [Cortical regions](docs/cortex.md), [recursive settlement](docs/recursive-settlement.md), [PatchNet training](docs/patchnet.md#train-on-observed-targets) |
 | Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [protocols](docs/protocols.md), [receipts](docs/receipts.md) |
@@ -94,11 +93,10 @@ or blur model identities to make the design story simpler.
 The intended observer-like structure has bounded local state, sensory/action
 boundaries, inspection, retained evidence and returning constraints. Name the
 actual implementation: composed brains expose sensory/motor indices, neural
-state, a working trace and associative memory. These are not the typed `Ports`
-or record readback of the record/temporal APIs. A retained trace may be a held
-boundary during a present solve; a live coordinate must still qualify. Do not
-freeze unresolved live state or weaken qualification to manufacture a
-whole-brain answer.
+state, a working trace and associative memory. These are not the readback of the
+temporal API. A retained trace may be a held boundary during a present solve; a
+live coordinate must still qualify. Do not freeze unresolved live state or weaken
+qualification to manufacture a whole-brain answer.
 
 ## Build and demonstrate the lifecycle
 
@@ -166,22 +164,12 @@ changes to make documentation imply those capabilities. Missing integration and
 behavioral contracts need their own capability issues and tests.
 
 Advanced APIs have explicit contracts: `TemporalPatchNet.plan` uses a learned
-world model; `TemporalMemory` protects selected responses at finite capacity;
-record patches combine context, learned relations and writable records. Do not
-transfer one family's mathematical guarantees to another family's operation
+world model; `TemporalMemory` protects selected responses at finite capacity. Do
+not transfer one family's mathematical guarantees to another family's operation
 without an actual correspondence.
 
-Preserve `RecordPatchNet.dream(inputs)` and `sleep(cues)`: dreams complete cues
-from retained records without learning; sleep fixes those targets, teaches slow
-weights and rewrites record residuals against the changed weights. This retained
-capability is separate from `Brain.imagine` and online `SynapticMemory`
-consolidation; `Brain.compose` does not expose the record-patch sleep cycle.
-Dreamed targets are not witnessed environmental outcomes. Use the owning guide's
-model and source-pinned evidence when reproducing sleep results.
-
-Graph and temporal learners use free/nudged equilibrium contrasts. Record and
-belief models also use explicit adjoints and record writes. State those
-mathematics accurately. A record scan is not a joint graph-equilibrium certificate.
+Graph and temporal learners use free/nudged equilibrium contrasts. State those
+mathematics accurately.
 
 ## Numerical and behavioral contracts
 
@@ -241,8 +229,7 @@ salience do not establish general lifelong retention.
   [acquisition](tests/test_composed_acquisition.py),
   [feedback transactions](tests/test_feedback_transaction.py),
   [memory and continuation](tests/test_generic_memory_checkpoint.py),
-  [private imagination](tests/test_composed_brain.py),
-  [record recall and sleep](tests/test_record_patch.py), and
+  [private imagination](tests/test_composed_brain.py), and
   [settlement diagnostics](tests/test_settlement_reports.py).
 - Numerical changes need independent reference, derivative or adversarial checks.
   Measure behavior after teaching with answers free, and count query, training,

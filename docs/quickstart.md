@@ -117,7 +117,6 @@ and measured. [Recursive observers](recursive-settlement.md) covers depth and wi
   [learning from reward](reward.md).
 - Build and wire: [write a cortex](cortex.md) and [evolve a brain](evolution.md).
 - Other model families: [temporal models](temporal.md), [planning](planning.md),
-  [response protection](temporal-memory.md), [record patches](record-patch.md) and
-  [reciprocal patches](patchnet.md).
+  [response protection](temporal-memory.md) and [reciprocal patches](patchnet.md).
 - Evaluate: [evaluate a brain](evaluation.md).
 - Reference: [API reference](api.md).

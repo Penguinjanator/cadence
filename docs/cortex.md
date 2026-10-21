@@ -210,8 +210,9 @@ A cortex needs settling when its answer depends on a joint state of many neurons
 a missing part of the reading, carrying context across a delay through a recurrent state or a
 `prefrontal_cortex`, or learning a policy under late reward through `ActorCritic`
 ([reward](reward.md)). When the outcome follows the reading it belongs to and the reading
-holds what decides it, a `Records` store outside the connectome is enough, read and written
-without a settling step and without touching any `NeuralGraph` parameter
-([records or a settling learner](records.md#records-or-a-settling-learner)). A records reading
-can include the activation of a port, so records and a settled policy combine in one brain;
+holds what decides it, a delta-rule store outside the connectome (`FastSynapses`,
+`SynapticMemory`) is enough, read and written without a settling step and without touching
+any `NeuralGraph` parameter
+([a store or a settling learner](records.md#a-store-or-a-settling-learner)). A store's key
+can include the activation of a port, so a store and a settled policy combine in one brain;
 [Compose a brain](brain.md) builds both.

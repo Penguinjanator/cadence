@@ -169,11 +169,7 @@ parameters, contacts, information, experience and total work, failed solves incl
 
 A one-way cut leaves contacts without a reciprocal partner; `PatchNet` refuses it.
 
-`BeliefPatch` (finite repair iterations), `Steered` (participants in sequence) and
-`JointRecordPatches` (finite port rounds) are comparison implementations under different
-contracts ([numerical contracts](contracts.md#choose-the-computation)). Raising their
-iteration budgets does not give them the checked shared-equilibrium contract of this
-factory. For comparisons with transformers or other families, follow the
+For comparisons with transformers or other families, follow the
 [checklist](evaluation.md#comparing-with-other-model-families). Deep equilibrium models
 apply fixed-point solves to attention architectures
 ([Bai, Kolter and Koltun, 2019](https://arxiv.org/abs/1909.01377)) and are a natural

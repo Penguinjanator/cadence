@@ -66,8 +66,7 @@ Fit such weights on declared training data and freeze them for evaluation; they
 are supplied unit conversions, never learned importance.
 
 Where probabilities are claimed, report log loss and calibration of a valid
-normalized distribution beside accuracy. For a model with records, score the
-record output and the slow-weight output separately.
+normalized distribution beside accuracy.
 
 Check representability before training. `TemporalPatchNet` has no bias term:
 from a zero state, negating every input negates every hidden state and output,
@@ -150,7 +149,7 @@ keep outcome quality on held-out situations at lower work and respond to
 changed conditions. Keep every scheduled seed, including unattempted and
 time-capped cells, compare equal checkpoints only and add operation counts to
 wall-clock time. A residual and the model energy measure the equations, never
-joules. [Receipts](receipts.md#the-cost-and-the-orienting-fields) hold the cost
+joules. [Receipts](receipts.md#the-cost-fields) hold the cost
 fields; the temporal solver's cost is in [cost and memory](temporal.md#cost-and-memory).
 
 ## Separate the causes of improvement
@@ -228,7 +227,3 @@ result together points to goal selection.
 | Supplied routing called learned specialization | Assigned coordinate groups impose roles | Use [fixed connectivity](partitioned.md) against dense and disconnected controls |
 | Content sampled from scores where the model predicts at chance | The scores carry no information there: one draw is noise and consecutive draws are chaos | Measure held-out accuracy at those positions separately; let the model decide when something happens and declare what may happen |
 | A measurement's prior tuned until the data show the expected structure | The score rises because the prior wrote the labels, and the labelled events lose their relation to the source | Audit the fixture before training: faithfulness to the source against plain labelling, and the events of interest above chance where they should be |
-
-Record-store failures (scale-mixed readings, high write rates, rare boundary
-readings, recall by position) are covered in [diagnosing a record
-store](record-patch.md#diagnosing-a-record-store).

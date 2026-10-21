@@ -116,11 +116,12 @@ leave it off for equilibrium learning, and note that the certificate excludes it
 |---|---|---|
 | Potential, activation, adaptation | Settling steps | Pass `state=` to continue; omit it to start from rest |
 | Trace or fast-memory matrix | Explicit activity or observation updates | Keep it through a continuing stream; reset only at a declared terminal |
-| Weights, biases, records, consolidated associations | Learner updates, reward, `Records.write`, `SynapticMemory.observe` | Save each owning component; evaluate on a separate snapshot |
+| Weights, biases, consolidated associations | Learner updates, reward, `SynapticMemory.observe` | Save each owning component; evaluate on a separate snapshot |
 
 A raw `NeuralGraph` changes no weights by settling. `Brain.step` schedules learning in a
 composed brain; a custom composition owns its update calls. See
-[traces](api.md#streams-cadencestream), [memory](memory.md) and [records](records.md).
+[traces](api.md#streams-cadencestream), [memory](memory.md) and
+[standalone stores](records.md).
 
 ## Three clocks
 
@@ -162,9 +163,10 @@ learning contrast, inference damping and the random drive below are separate qua
 A settled graph gives one answer under one drive. To sample alternatives inside one
 decision, repeat the drive in a batch, add a bounded random drive to the latent neurons of
 each row, settle with `equilibrate`, keep the converged rows and rank their actions by a
-validated read such as [records](records.md) or a critic. Parameters, memories and the
-genome stay as they are; only this decision's drive changes. Elsewhere in these docs
-"detuning" means the learning nudge (`beta`), which is a different operation.
+validated read such as a table of witnessed outcomes, a [delta-rule store](records.md) or a
+critic. Parameters, memories and the genome stay as they are; only this decision's drive
+changes. Elsewhere in these docs "detuning" means the learning nudge (`beta`), which is a
+different operation.
 
 ```python
 import numpy as np
@@ -174,11 +176,10 @@ connectome = cd.layered(2, 16, 2, density=1.0, seed=1)    # cue in, action out
 brain = cd.NeuralGraph(connectome, cd.learning_neuron_model())
 cue_units, latent, action_units = (list(connectome.populations[k]) for k in ("input", "hidden", "output"))
 
-records = cd.Records(2 + 2, {"reward": 1}, valued=["reward"], cells=1000, active=20, seed=0)
-for cue in range(2):                     # witnessed: the action equal to the cue pays
+witnessed = np.zeros((2, 2))             # witnessed: the action equal to the cue pays
+for cue in range(2):
     for action in range(2):
-        code = records.code(np.r_[np.eye(2)[cue], np.eye(2)[action]], adapt=True)[:, 0]
-        records.write(code, {"reward": np.array([float(action == cue)])})
+        witnessed[cue, action] = float(action == cue)
 
 cue = np.eye(2)[1]
 drive = np.zeros((8, connectome.n))      # eight candidate rows, the same cue in each
@@ -186,8 +187,7 @@ drive[:, cue_units] = cue
 drive[:, latent] += np.random.default_rng(0).uniform(-0.5, 0.5, (8, len(latent)))
 result = brain.equilibrate(drive, budget=512, chunk=32, tolerance=1e-6)
 candidates = result.state.activation[:, action_units].argmax(axis=1)
-imagined = np.stack([np.r_[cue, np.eye(2)[a]] for a in candidates])
-score = records.read(records.code(imagined))["reward"][:, 0]
+score = witnessed[1, candidates]         # the outcome each candidate was seen to bring
 score[~result.converged] = -np.inf       # a row without an equilibrium offers no candidate
 choice = int(candidates[np.argmax(score)])
 print(candidates, score.round(2), choice)
@@ -198,7 +198,7 @@ bound. In a composed brain build the repeated drive with `brain.stimulus([observ
 settle with `brain.brain.equilibrate`, perturb `brain.association_index` and read actions
 at `brain.motor_index`; `brain.basal_ganglia.value(result.state)` ranks the same rows by the
 critic. Perturbation proposes; the ranking only helps as far as
-the records or critic have learned consequences.
+the table, store or critic has learned consequences.
 
 ## Controls and when to add machinery
 

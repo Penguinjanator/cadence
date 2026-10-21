@@ -92,8 +92,8 @@ search. A failed phase or an asymmetric contrast returns `updated=False`, carrie
 the free activity and keeps weights and binding. An exception changes neither
 object. `result.delta` is the raw EP derivative before projection; compare
 committed parameters to measure the applied step. `observe` is single-threaded
-and raises `TypeError` for anything but the base class, including
-[`RecordPatchNet`](record-patch.md) and the [partitioned net](partitioned.md).
+and raises `TypeError` for anything but the base class, including the
+[partitioned net](partitioned.md).
 
 A parameter fingerprint binds the memory to the network: a change made outside
 `observe` or `project` makes the next call raise `ValueError`, while resetting

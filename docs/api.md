@@ -8,14 +8,12 @@ keyword.
 | --- | --- |
 | [Brain](#brain-cadence) | `Brain`, its methods, attributes and checkpoint formats |
 | [Arousal](#arousal-cadencearousal) | `ArousalConfig`, `Arousal` |
-| [Streams](#streams-cadencestream) and [records](#records-cadencerecords) | `Trace`, `Echo`, `Afterglow`, `Efference`, `History`, `Recall`, `FastSynapses`, `SynapticMemory`, `PatternSeparator`, `stateful`, `Records`, `Mulberry32` |
+| [Streams](#streams-cadencestream) | `Trace`, `Echo`, `Afterglow`, `Efference`, `History`, `Recall`, `FastSynapses`, `SynapticMemory`, `PatternSeparator`, `stateful` |
 | [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence`, `Bins` |
 | [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `RefinementReport`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
 | [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Protocol`, `Row`, `Receipt`, timing |
 | [Temporal patch](#temporalpatchnet-cadencetemporal) | `TemporalPatchNet`, `TemporalPlan`, `TemporalMemory`, `PartitionedTemporalPatchNet` |
-| [Record patch](#recordpatchnet-cadencerecord_patch) | `RecordPatchNet`, `RecordPatchStack`, `JointRecordPatches`, `Port`, structured ports |
-| [Belief and steering](#beliefpatch-cadencebelief) | `BeliefPatch`, `Steered`, weighings, `Life`, governors, instruments |
-| [PatchNet](#patchnet-cadencepatch), [compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step), [population](#cadencepopulation) | `PatchNet`, `cadence.circuits`, `record_settlements`, `PopulationPatch` |
+| [PatchNet](#patchnet-cadencepatch), [compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step) | `PatchNet`, `cadence.circuits`, `record_settlements` |
 
 `cadence.__version__` is the installed release string.
 
@@ -288,34 +286,6 @@ cadence.stream.columns(index) -> slice | ndarray
 
 `stateful` is `embedded` plus a `context` range for a `Trace`; `columns` returns a slice for a
 contiguous index.
-
-## Records (`cadence.records`)
-
-```text
-Records(inputs, fields, *, cells=8000, active=40, rate=0.2, valued=(),
-        valued_rate=1.0, habituation=1e-5, bias=0.3, pathways=(),
-        pathway_rate=0.002, tasks=(), fan_in=0, seed=0, averaging=False,
-        homeostasis=0.0)
-Mulberry32(seed)
-```
-
-A delta-rule store over sparse codes of readings; the options table and the read/write
-recipe are in [records](records.md#records).
-
-| Member | Behaviour |
-| --- | --- |
-| `code(readings, *, adapt=False, valued=True) -> (2, batch, cells)` | Plain and valued codes; `adapt=True` first moves the running mean and pathway norms. |
-| `witness(readings)` | The adaptation of `code(adapt=True)` without coding, plus the `homeostasis` step. |
-| `read(code) -> dict` | Each field's read. |
-| `write(code, targets, known=None) -> int`, `write_batch(codes, targets) -> int` | One outcome, or many against the tables as they stood; invalid or nonfinite updates change nothing. |
-| `parameters() -> int`, `state()`, `load_state(state)`, `to_dict()` | Record entries; the learned arrays; their atomic replacement; the configuration including `averaging` and `homeostasis`, from which `Records(**to_dict())` rebuilds the same cells. |
-
-Construction raises `ValueError` for nonpositive sizes, `active > cells`, no fields, a
-`valued` name outside `fields`, rates outside their ranges, a negative `bias`, an index outside
-the reading, fewer than `active` cells per task group, and a `fan_in` without `pathways` or
-above their count. `Mulberry32` is the 32-bit generator
-the store draws from, so a page implementing the same generator reproduces its cells:
-`random()`, `batch(n)`, `normals(n)`, `state`.
 
 ## Learning (`cadence.learning`)
 
@@ -679,192 +649,6 @@ The temporal model with boolean `A`/`B`/`C` masks (omitted masks allow every ent
 through the subclass. `TemporalMemory.observe` refuses it before any change. Guide:
 [experimental fixed connectivity](partitioned.md).
 
-## RecordPatchNet (`cadence.record_patch`)
-
-```text
-RecordPatchNet(inputs, hidden, outputs, *, seed=0, output_precision=None,
-               cells=4096, active=32, record_rate=0.5, habituation=1e-5,
-               record_bias=0.3, slowest=128.0, record_averaging=False,
-               record_homeostasis=0.0, groups=None, record_writes="sequential",
-               record_width=None, port=None)
-```
-
-A gated linear context whose `Records` store patches the slow readout. `record_averaging` and
-`record_homeostasis` pass to `Records`; `groups` makes the ports categorical;
-`record_writes="batch"` writes a call's moments through `write_batch`; `record_width` stores a
-fixed random sign code of the residual; `port` is a `StructuredPort`. Guide:
-[RecordPatchNet](record-patch.md).
-
-| Member | Behaviour |
-| --- | --- |
-| `observe(inputs, target, *, rate=1.0, backtrack=False, write=True) -> RecordObservation` | Predicts with the records at the start of the call, steps the slow readout, writes the residual. At `rate=0` it returns `updated=False`, `reason="no_step"`. |
-| `imagine(inputs, *, state=None)`, `advance(inputs)`, `reset()` | Private; carries context; clears context and keeps parameters and records. |
-| `dream(inputs)`, `sleep(cues, *, passes=1, rate=1.0, backtrack=False, dawn_passes=2) -> dict` | The store's completion of a cue; the night that moves dreams into the slow weights ([records by day, weights by night](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night)). |
-| `detune(inputs, target, *, beta=1e-3, state=None, tolerance=1e-14, max_iterations=10000) -> RecordContrast` | Both detuned equilibria by conjugate gradients; changes nothing. |
-| `parameters()`, `set_parameters(mapping)`, `records`, `readback()`, `output_precision`, `set_output_precision(precision)` | `G`, `g`, `B`, `b`, `C`, `c`; the store; a `RecordReadback`. |
-| `snapshot()`, `RecordPatchNet.restore(snapshot)`, `save(path, *, compressed=True)`, `RecordPatchNet.load(path)` | `cadence-record-patch/2`, or `/3` with groups, batch writes, a record width or a port. |
-
-`RecordPath(hidden, output, gate, read, loss, slow_loss)` with `slow_output` and
-`final_state`; `RecordObservation(updated, reason, prediction, delta, initial_loss,
-final_loss, accepted_rate, replay_losses, replay_calls, writes)`; `RecordContrast(contrast,
-plus_hidden, minus_hidden, plus_energy, minus_energy, iterations, residuals, converged)`;
-`RecordReadback(state, updates, writes, parameter_revision, state_parameter_revision,
-record_entries)`.
-
-```text
-RecordPatchStack(inputs, hidden, outputs, *, lower=None, seed=0, slowest=128.0,
-                 groups=None, lower_port=None, **upper)
-JointRecordPatches(cortices, own_inputs, ports, *, rounds=1, damping=1.0,
-                   cross_adjoint=True)
-Port(source, target, start, width)
-cadence.record_ports.build(hidden, own_inputs, outputs, ports, *, seed, rounds=1,
-    damping=1.0, cross_adjoint=True, groups=None, **records) -> JointRecordPatches
-```
-
-`RecordPatchStack` puts a context patch of width `lower` below a `RecordPatchNet`;
-`observe`, `imagine` (`state` is the pair of contexts), `advance`, `reset`, `parameters`,
-`set_parameters`, `snapshot` and `restore`; `observe` returns `StackObservation(updated,
-reason, prediction, delta, initial_loss, final_loss, accepted_rate, writes)`.
-`JointRecordPatches` couples patches through ports over `rounds` Jacobi rounds: `observe(xs,
-targets, *, rate=1.0, backtrack=False, write=True) -> JointObservation(updated, reason,
-settled, delta, initial_loss, final_loss, accepted_rate, replay_calls, writes)`, where
-`settled` carries the paths with `seam` and `settle` per moment and round, `imagine(xs, *,
-states=None)`, `advance(xs)`, `reset`, `parameters`, `parameter_count`, `record_entries`,
-`state`, `snapshot`, `restore`, `clone`, `save`, `load`, and `cut = True` zeroes every port.
-Lists must match the patch count; nonfinite paths are refused; a failed joint write restores
-earlier writes. `build` grows the patches at the widths the ports need
-([joined patches](record-patch.md#several-patches-joined-by-ports)).
-
-## Ports (`cadence.ports`)
-
-```text
-MapBlock(start, channels_in, height, width, channels_out, kernel, stride=1)
-DenseBlock(start, inputs, outputs)
-StructuredPort(inputs, blocks, broadcast=None, mask=None)
-```
-
-A `MapBlock` is a tied local kernel over a grid of the inputs (`inputs`, `outputs`,
-`out_height`, `out_width`, `weights`), a `DenseBlock` a matrix over a slice. `StructuredPort` has `apply(u, weights)`, `transpose(v, weights)`, `gradient(v, u)`,
-`initial(rng, scale)`, `weight_shape(block)`, `dense_matrix(weights)`, `to_dict()` and
-`from_dict(d)`; `broadcast=(start, count)` tiles a slice into every map block, and `mask`
-names the inputs the port hears. `RecordPatchNet(port=)`, `RecordPatchStack(lower_port=)` and
-`BeliefPatch` read through it ([maps](record-patch.md#maps-a-structured-input-port)).
-
-## BeliefPatch (`cadence.belief`)
-
-```text
-BeliefPatch(observation, actions, belief, outputs, *, iterations=2, damping=0.5,
-            cells=4096, active=32, record_rate=0.5, record_width=64,
-            habituation=1e-5, record_bias=0.3, output_precision=None, seed=0)
-```
-
-A belief carried by a learned transition and repaired by evidence through a
-`StructuredPort`, with a record store read inside the repair. Guide:
-[the belief patch](belief.md).
-
-| Member | Behaviour |
-| --- | --- |
-| `assimilate(observations, actions, observed=None, *, state=None, gains=None, probe=False, keep_live=False) -> BeliefPath` | Advances the belief through observed moments; learns and writes nothing. |
-| `imagine(actions, *, state=None, gains=None) -> BeliefPath` | The transition alone, private. |
-| `observe(observations, actions, target=None, *, observed=None, rate=1.0, write=False, state=None, gains=None, loss_weight=None, output_gradient=None, backtrack=None, probe=False, keep_live=False) -> BeliefObservation` | One backward scan and an admitted step ([an admitted step](belief.md#an-admitted-step)); `output_gradient` replaces `target` and writes nothing. |
-| `readback(observations, actions, *, state=None, probe=True) -> BeliefReadback`, `encode(observations)` | One moment's expectation, probes and surprise; the encoded evidence. Both change nothing. |
-| `set_implied_reading(implied, units=None)` | Declares the reading each block should give, enabling `surprise`; not part of a snapshot. |
-| `step_size`, `reset_step()`, `macs_per_moment(*, probes=False, surprise=True)`, `readback_macs(*, probe=True)`, `cost`, `reset_cost()` | Admission memory and cost ([the cost of a moment](belief.md#the-cost-of-a-moment)). |
-| `reset()`, `state`, `parameters()`, `set_parameters()`, `set_output_precision()`, `records`, `block_count`, `snapshot()`, `restore()`, `save()`, `load()` | `reset` keeps the step size and counters; saves are `cadence-belief/1`. |
-
-`BeliefPath(belief, expectation, residual, output, read, loss, step, evidence, code, gains,
-residual_alone, surprise)` with `slow_output` and `final_state`.
-`BeliefObservation(updated, reason, path, delta, initial_loss, writes, final_loss,
-accepted_rate, replay_calls, gain_gradient)`. `BeliefReadback(expectation, residual_alone,
-surprise, evidence)`. With torch, `cadence.belief_torch.TorchBelief(port, actions, belief,
-outputs, *, iterations=2, damping=0.5, record_width=64)` is the slow half as a module:
-`forward(observations, actions, state=None, reads=None, gains=None, observed=None)`,
-`export()`, `load(params)`.
-
-## Steered (`cadence.steering`)
-
-```text
-Steered(cortex, steering=None, weighing=None, *, reads_output=False, evidence=(),
-        extra=None, extra_channels=0, rate_scale=1.0, lagged=False, relative=False,
-        reads_age=False, age_core=0.5)
-Softmax(blocks, *, span=1.0)
-Gaze(blocks, *, sigma, cut=2.5, lamp=0.2, span=0.5, price=0.0, start=0.0)
-Rule(fn, *, macs=0)
-```
-
-A `BeliefPatch` cortex whose block gains a steering `BeliefPatch` sets through a weighing, or
-a hand-written `Rule`, or nothing. The readback channels and switches are tabled in
-[a brain that reads itself](steering.md#the-steered-cortex).
-
-| Member | Behaviour |
-| --- | --- |
-| `run(observations, actions, target=None, *, rate=0.0, state=None, keep_live=False, learn_cortex=True, backtrack=True) -> SteeredPath` | The moments of a chunk; with a target and a rate one joint admitted step. `learn_cortex=False` lets the cortex sleep. |
-| `boundary() -> Boundary`, `reset()` | A detached copy of where the life is, for `run(state=...)`; `reset` forgets it. |
-| `ablation`, `deaf` | `None`, `"cut"` or a callable over the gains; a mask of readback channels zeroed at run time. |
-| `readback_names`, `layout`, `channels`, `probes_on`, `step_size`, `reset_step()`, `moments_per_decision()`, `macs_per_moment()`, `cost`, `reset_cost()`, `parameter_count()`, `parameters()`, `set_parameters()` | Layout and cost. |
-| `snapshot()`, `Steered.restore(snapshot, *, rule=None, extra=None, ablation=None)`, `save()`, `Steered.load(path, **kw)` | Saves the live boundary and run state as `cadence-steered/1`; callables are supplied again, and the cortex's implied reading is declared again. |
-
-`SteeredPath(output, gains, readback, residual, steering_output, loss, price, updated,
-steering_updated, step, halvings, replays, reason, last, last_steering)` with `objective`.
-`Boundary(cortex, steering, output, residual, weighing, moments, heard)`. A weighing
-(`cadence.steering.Weighing`, with `Softmax` and `Gaze`; not exported at the top level) has
-`begin(n)`, `gains(y, state) -> (gains, state)`, `pull(ys, gains, dgains, states)`,
-`price(ys, states)` and `to_dict()`; `Gaze` adds `profile(centre)` and `turn(y)`
-([the weighing](steering.md#the-weighing)).
-
-## Life (`cadence.life`)
-
-```text
-Life(patch, governor, *, habit, propose, advance, cost, target, baseline=1.0,
-     residual0=1.0, config=None, refit=None, keep_records=True)
-LifeConfig(window=96, passes=6, learn_rate=0.1, rollback=True, validity=0.9,
-           min_window=32, min_cooldown=32, cooldown=0, keep=512, horizon=6,
-           hold=True, baseline_rate=0.02, floor=1.0, habituate=2.0,
-           slow_rate=0.02, recent=96, write=False, learn_cortex=True, extra={})
-```
-
-The decision loop over a `BeliefPatch` or `Steered`, with a governor choosing habit,
-imagination or learning. The application supplies `habit(reading) -> action`,
-`propose(reading) -> (candidates, actions)`, `advance(reading, output) -> reading`,
-`cost(readings, actions) -> (candidates,)` and `target(reading, next) -> (outputs,)`.
-`baseline` and `residual0` (finite, positive) are the routine surprise and residual that
-scale the readback; `refit(life)` runs after each kept learning window and its result is
-stored in that `learns` entry; `keep_records=False` keeps no `Decision` copies. The
-`LifeConfig` fields, `learn_cortex` and `extra` included, are tabled in
-[a life with a governor](steering.md#a-life-with-a-governor); construction refuses
-non-integer counts, negative rates and `baseline_rate` or `slow_rate` outside `[0, 1]`.
-
-| Member | Behaviour |
-| --- | --- |
-| `decide(reading) -> action`, `outcome(next_reading) -> Decision`, `step(reading, world) -> (next_reading, Decision)` | One decision, closed by what the world returned. |
-| `readback()`, `signals() -> Signals` | The seven-channel readback (`cadence.life.READBACK`); what a governor reads. |
-| `records`, `learns`, `totals`, `compute()`, `reset()` | Every decision and learn call; the cost per decision. `reset` drops unfinished decisions and replay windows. A failed learning step restores parameters, records and counts. |
-
-`Decision(t, mode, action, expected, residual, readback, governor_steps, imagined, learned,
-surprise, baseline, target)`. `Signals(readback, surprise, baseline, residual, slow, mode,
-recent, can_learn)`.
-
-A governor implements `Governor`: `settle(signals) -> (mode, steps)` returns `"habit"`,
-`"imagine"` or `"learn"` and the steps it took, `after(signals)` sees the outcome, `reset()`,
-and `synapses` prices the steps. Provided: `PatchGovernor(genome=None, *, cortex=4,
-model=GOVERNOR_MODEL, budget=200, chunk=10, tolerance=1e-3)` with `hand_set(cortex)`,
-`space(cortex)`, `converged` and `residual` (a capped solve selects habit);
-`ThresholdGovernor(genome=None)` with `HAND_SET`, `SPACE` and `persist`;
-`AlwaysAwake(genome=None)`; `NeverWakes()`.
-
-## Instruments (`cadence.instruments`)
-
-```text
-orienting(gain, events, *, pre=4, post=12, quiet=None, bins=10) -> dict
-dishabituation(rows, *, consequential, kind, window=60, count=2) -> dict
-```
-
-`orienting` returns `rows` (per event baseline, peak, capture, latency, return and
-`return_censored`), `kinds` (count, first and last `bins` captures, curve, mean capture,
-latency shares, mean return over uncensored events), `pre` and `post`. `dishabituation`
-returns `before`, `after` and `events`. Guide:
-[the instruments of the orienting response](steering.md#the-instruments-of-the-orienting-response).
-
 ## PatchNet (`cadence.patch`)
 
 ```text
@@ -948,26 +732,3 @@ runs synchronously with recording suspended. Nested contexts restore the previou
 exit, callback failures propagate, and the recorded arrays own their storage. Treat the shared
 connectome as read-only. For a display see
 [the brain in a browser page](brain.md#the-brain-in-a-browser-page).
-
-## `cadence.population`
-
-Needs torch ([many brains on one device](population.md)).
-
-```text
-PopulationPatch(inputs, hidden, outputs, *, instances, streams, seed=0, cells=4096,
-                active=32, record_rate=0.5, habituation=1e-5, record_bias=0.3,
-                slowest=2.0, groups=None, device=None, dtype=torch.float32)
-PopulationPatch.from_patch(net, *, instances, streams, device=None, dtype=torch.float32)
-device_of(name=None) -> torch.device
-```
-
-Record patches in lockstep on one device. `groups` is `None` or `(outputs,)`.
-
-| Member | Behaviour |
-| --- | --- |
-| `imagine(inputs, *, stream_of=None) -> dict` | `output`, `slow`, `read`, `hidden`, `code`, `familiarity` for `(instances, N, inputs)`; private. `stream_of` `(N,)` or `(instances, N)` assigns each moment to a stream's store. |
-| `observe(inputs, target, *, rate=1.0, write=True, mask=None, stream_of=None, weight=None) -> dict` | One moment per stream: slow step and record writes. `mask` `(instances, streams)` names the streams with a moment; `stream_of` teaches several queued moments of one stream at once; `weight` `(outputs,)` or `(instances, outputs)` reweights a linear readout's errors. Every change is staged; a nonfinite result raises `ValueError` and changes nothing. |
-| `code(readings)`, `read(code)`, `familiarity(indices, values, stream_of=None)`, `stream_loss(slow, target, weight=None)`, `loss(slow, target)` | The store's code and read; how much of a code falls on written cells; losses. |
-| `clear_records()`, `inherit(parents, *, sigma=0.0, generator=None)`, `parameters()`, `state()`, `memory_bytes()` | Bookkeeping and selection. |
-
-`device_of` picks cuda, then mps, then cpu.

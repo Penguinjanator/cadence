@@ -1,10 +1,10 @@
 # Standalone memory stores
 
-These stores work next to a `NeuralGraph` or a record patch without `Brain.compose`: the
-records cortex `cd.Records`, `cd.FastSynapses` with its `cd.PatternSeparator`,
-`cd.SynapticMemory` used directly, and the fading traces of `cadence.stream`. Each writes by
-one delta-rule correction or a fixed decay, and none settles. The memories of a composed
-brain are in [Memory](memory.md); signatures are in the [API reference](api.md#streams-cadencestream).
+These stores work next to a `NeuralGraph` without `Brain.compose`: `cd.FastSynapses` with
+its `cd.PatternSeparator`, `cd.SynapticMemory` used directly, and the fading traces of
+`cadence.stream`. Each writes by one delta-rule correction or a fixed decay, and none
+settles. The memories of a composed brain are in [Memory](memory.md); signatures are in the
+[API reference](api.md#streams-cadencestream).
 
 ## One correction
 
@@ -13,10 +13,9 @@ For a unit key `k`, value `v` and matrix `M`, a write is `M += rate * outer(k, v
 `rate=1` the key reads back `v` at once, a repeated correct observation has zero residual,
 and the read at an earlier key `q` moves by `dot(q, k)` times the error: orthogonal records
 are kept, overlapping ones interfere. A read is one linear product, with no softmax and no
-settling. `FastSynapses(rule="delta")` and `SynapticMemory` scale keys to unit length;
-`Records` uses its unit-length sparse code as the key. A fixed matrix cannot hold
-contradictory values, nearly parallel keys or more independent values than its key rank
-exactly; measure retention on the streams the store will see.
+settling. `FastSynapses(rule="delta")` and `SynapticMemory` scale keys to unit length. A
+fixed matrix cannot hold contradictory values, nearly parallel keys or more independent
+values than its key rank exactly; measure retention on the streams the store will see.
 
 ```python
 import numpy as np
@@ -40,76 +39,13 @@ assert np.allclose(p @ M, [0.0, 1.0])                     # p kept its record
 assert np.allclose(write(M, k, np.array([0.0, 2.0])), 0)  # a repeat writes nothing
 ```
 
-## Records
+## A store or a settling learner
 
-`cd.Records(inputs, fields)` keeps one table per predicted field and one record per cell. A
-reading is coded in three steps: each unit's running mean is subtracted, a fixed random
-projection plus fixed offsets drives `cells` cells, and the `active` strongest keep their
-rectified drive, scaled to unit length. This expansion is a fixed sparse code. A read sums the records of the
-active cells weighted by their activity; a write moves exactly those records by the error.
-
-```python
-records = cd.Records(6, {"next": 3, "reward": 1}, valued=["reward"], cells=4000, active=40)
-reading = np.array([1.0, 0.0, 0.0, 0.0, 1.0, 0.0])    # one of three places, one of three actions
-code = records.code(reading, adapt=True)[:, 0]        # a witnessed reading, shape (2, cells)
-records.write(code, {"next": np.array([0.0, 1.0, 0.0]), "reward": np.array([1.0])})
-after = records.read(code)
-print(after["next"], after["reward"])                 # [0.  0.2 0. ] [1.]
-
-other = records.code(np.array([0.0, 1.0, 0.0, 0.0, 1.0, 0.0]))[:, 0]   # another place
-moved = 0.2 * (code[0] @ other[0]) * np.array([0.0, 1.0, 0.0])          # rate x overlap x error
-assert np.allclose(records.read(other)["next"], moved)
-
-twin = cd.Records(**records.to_dict())                # the same fixed cells, rebuilt from the seed
-twin.load_state(records.state())                      # and the same learned state
-assert np.allclose(twin.read(code)["next"], after["next"])
-```
-
-`code(readings, *, adapt=False, valued=True)` returns `(2, batch, cells)`: the plain code,
-then the valued code. `write(code, targets, known=None)` takes one `(2, cells)` code, writes
-the fields named in `targets` and returns their count; `known` masks the observed entries of
-a target, and the others keep their records. `write_batch(codes, targets)` takes every error
-against the tables as they stood at the call and moves each cell by the mean of its writers'
-moves, so agreeing writers do not overshoot. Invalid input leaves every table unchanged.
-
-| Setting | Default | What it does |
-|---|---|---|
-| `cells`, `active` | 8000, 40 | Code width and cells kept per reading. Fewer active cells mean less sharing between readings. |
-| `rate` | 0.2 | Write rate of the consequence fields, in `[0, 2]`: a regularity is averaged over many outcomes. |
-| `valued`, `valued_rate` | `()`, 1.0 | Fields read and written through the valued code; at 1.0 one exposure writes the target. Without `pathways` or `tasks` the valued code is the plain code. |
-| `habituation` | `1e-5` | Slowest rate of the running mean. With `adapt=True` the mean moves at `max(habituation, 1 / seen)`; 0 codes raw readings. With the mean subtracted, a unit constant across readings adds nothing and a small cue moves the code. |
-| `bias` | 0.3 | Scale of the fixed offsets, in drive units. A reading far below unit variance per unit lets the offsets pick the same winners every time. |
-| `pathways`, `pathway_rate` | `()`, 0.002 | Index arrays into the reading. The valued code divides each pathway by its running norm (`pathway_norm`), so a one-unit goal has a say comparable to a dense observation. |
-| `tasks` | `()` | Indices of one-hot task units. Cells split into one group per task (`task_of_cell`, each of at least `active` cells); the valued code draws winners from the group of the largest task unit, or from every cell when none is positive, so a value learned for one task survives the rewards of the next. |
-| `fan_in` | 0 | Each cell reads that many of the pathways (needs `pathways`, at most their count) plus every input outside them, so a consequence learned at one place generalises across what the cell does not read. |
-| `averaging` | `False` | Each consequence cell's rate becomes the larger of `rate` and one over the code mass written into it, at most 1: a fresh cell takes its first outcome whole, a used one averages. |
-| `homeostasis` | 0.0 | Applied by `witness` only (`code(adapt=True)` skips it): tracks each cell's activation share (`usage`) and moves its offset (`boost`, within three times `drive_scale`) so the share approaches `active / cells` and no cell becomes a hub. Every code adds `boost`. |
-| `seed` | 0 | Starts the `Mulberry32` generator that draws the projection, then the offsets, the task groups and each cell's pathways ([export of a trained store](record-patch.md)). |
-
-Witnessed readings adapt; code an imagined one (a candidate action, a predicted next
-observation) with `adapt=False` and the same missing flags as the witnessed readings it
-stands for, or its read goes through cells nobody wrote. `valued=False` leaves the valued
-code NaN when only consequence fields are read. `witness(readings)` applies the adaptation
-without coding, plus the homeostasis step, for a caller that codes after the outcome is
-known. Keep components that vary without deciding the outcome, such as a context trace, out
-of the reading, and give each unit of a concatenated reading unit variance
-([diagnosing a record store](record-patch.md#diagnosing-a-record-store)).
-
-A read is one product of the code with each table and a write one outer-product step per
-field, on NumPy. `tables` maps each field to its `(cells, width)` records and `parameters()`
-counts their entries; `projection` and `offset` are fixed and rebuilt from `to_dict()`.
-`state()` returns the learned arrays (`table_<field>`, `mean`, `seen`, `pathway_norm`,
-`writes`, `count`, `usage`, `boost`, `drive_scale`);
-`load_state` replaces them atomically and refuses any other key set or wrong shapes.
-
-## Records or a settling learner
-
-Records suffice when the outcome follows its reading (the consequence of an action, the
-reward of a choice, a fact seen at a place), the reading holds what decides it, and readings
-that should generalise share cells. They learn from one correlated stream in its own order
-([records tests](../tests/test_records.py)). Completing a partial reading, carrying context
-across a delay and crediting late reward need a settled region ([write a cortex](cortex.md));
-the [certificate](certificate.md) covers that settling and not the records. A dense learner
+A delta-rule store suffices when the outcome follows its key (the consequence of an action,
+the reward of a choice, a fact seen at a place), the key holds what decides it, and keys
+that should generalise overlap. Completing a partial reading, carrying context across a
+delay and crediting late reward need a settled region ([write a cortex](cortex.md)); the
+[certificate](certificate.md) covers that settling and not the stores. A dense learner
 moves every prediction with each update, which rehearsal of retained real observations
 counters. Give a baseline the same replay policy, and never replay obsolete evidence.
 

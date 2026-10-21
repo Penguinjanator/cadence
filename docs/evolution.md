@@ -191,7 +191,7 @@ assert parallel.best == lineage.best and parallel.best_fitness == lineage.best_f
 | Mechanism | Changes | Leaves as it is |
 |---|---|---|
 | Selection (`evolve`) | The genome of the next generation: region sizes and projection densities, signs and scales, and so the connectome a life starts from | Every synapse and record inside a life |
-| Learning inside a life | Synapses (`Learner`, `ActorCritic`) and records (`Records.write`) | The genome |
+| Learning inside a life | Synapses (`Learner`, `ActorCritic`) and memory writes (`SynapticMemory.observe`) | The genome |
 | [Candidate sampling](concepts.md#detuning-inside-a-life) | The drive of one decision, and so the equilibrium the brain reads | Parameters, records and genome |
 
 The mechanisms combine inside the fitness. A life that samples candidate actions scores the

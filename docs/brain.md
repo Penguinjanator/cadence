@@ -164,7 +164,6 @@ set a positive `need` ([reset and save](continuous.md#reset-and-save)).
 | --- | --- |
 | Vector senses, several motors | One motor slot per motor, `live` and `retune`, each real action paired with its outcome across stage changes, as in the [Robot Arena demo](https://github.com/muellerberndt/cadence-demos/tree/main/robot-arena). |
 | Pixels and a teacher | Image `inputs`, teaching through `step`; teaching rates are `learning_*`, reward rates `actor_*`. See the [Atari demo](https://github.com/muellerberndt/cadence-demos/tree/main/atari-arcade). |
-| Retained events | The separate [`RecordPatchNet`](record-patch.md) with its own rates and guarantees, as in the [Amen demo](https://github.com/muellerberndt/cadence-demos/tree/main/amen). |
 
 Gain, bias and solver steps are distinct levers: gain scales synaptic drive in the
 whole graph, a population bias moves selected neurons' operating points, and steps and

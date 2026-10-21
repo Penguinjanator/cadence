@@ -177,9 +177,8 @@ prerequisite actions: [sequential tasks](sequential-tasks.md#what-breaks-a-chain
 
 `step` cannot tell a replayed observation from a live one, so replaying a saved copy's day
 with the reward each choice earned is more experience at the same rates; a pass boundary is
-an ordinary transition unless `done` marks it. `Brain.compose` has no night of its own (the
-[record patch](record-patch.md#acquisition-in-two-phases-records-by-day-weights-by-night)
-has one). In the [night-replay chamber](../benchmarks/replay/README.md) a night is worth
+an ordinary transition unless `done` marks it. `Brain.compose` has no night of its own. In
+the [night-replay chamber](../benchmarks/replay/README.md) a night is worth
 about as many fresh decisions when the day's updates are sound and harms when they are not.
 Read `capped` (outcomes beyond the cap teach their sign alone), `saturation` and the
 [working trace](memory.md#memory-in-the-composed-brain) first; a smaller actor rate makes

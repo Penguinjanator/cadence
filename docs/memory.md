@@ -39,8 +39,8 @@ learned weights, and `fit` starts with a `reset()`. Test a memory through `act`,
 `live` on a continuing stream. `save` keeps every memory in the table, per-stream traces
 included, and `Brain.load` continues the stream where it stopped.
 
-Stores used directly, outside a composed brain (`Records`, `FastSynapses`, `PatternSeparator`,
-`SynapticMemory`, the `Trace` family, `RecordPatchNet`, the belief patch's records), are listed
+Stores used directly, outside a composed brain (`FastSynapses`, `PatternSeparator`,
+`SynapticMemory`, the `Trace` family), are listed
 [at the end](#stores-outside-the-composed-brain).
 
 ## Which memory for which task
@@ -328,7 +328,5 @@ assert forgetting.act(place, greedy=True)[0] == 0   # without them the newborn a
 <a id="records"></a>
 <a id="reading-and-writing-directly"></a>
 
-- [Standalone memory stores](records.md): `Records`, `FastSynapses`, `PatternSeparator`, `SynapticMemory` and the `Trace` family used directly.
-- [RecordPatchNet](record-patch.md): a sequence learner whose one-shot records patch a slow readout.
-- [The belief patch](belief.md): a belief carried by a learned transition, with a record store read inside the repair.
+- [Standalone memory stores](records.md): `FastSynapses`, `PatternSeparator`, `SynapticMemory` and the `Trace` family used directly.
 - [Protect a temporal response](temporal-memory.md): a `TemporalPatchNet` tool that protects chosen responses during later updates; not a brain memory.

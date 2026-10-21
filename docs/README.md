@@ -36,13 +36,9 @@ is pinned to the release tag.
 | Memory across moments | `Brain.compose` memory settings | [Memory](memory.md) |
 | Change settings of a living brain | `brain.retune(...)`, `brain.describe()` | [Retune the same life](brain.md#retune-the-same-life) |
 | Learned consequences and planning | `TemporalPatchNet`, `TemporalPatchNet.plan` | [Temporal](temporal.md), [planning](planning.md) |
-| Sequence records | `RecordPatchNet` | [Record patch](record-patch.md) |
-| Belief under action | `BeliefPatch` | [Belief](belief.md) |
-| Self-readback gains and a governed life | `Steered`, `Life` | [Steering](steering.md) |
 | Custom anatomy | `Genome`, `develop`, `NeuralGraph` | [Write a cortex](cortex.md) |
 | Connectome import | `NeuralGraph` from a measured wiring diagram | [Connectomes](connectomes.md) |
 | Selection across lives | `genes`, `evolve`, `cadence.genome.mutate` | [Evolution](evolution.md) |
-| Many brains on a GPU | `cadence.population.PopulationPatch` (torch) | [Population](population.md) |
 
 Each model family carries its own guarantee, and one family's guarantee does not certify a
 composition of families ([contracts](contracts.md)).
@@ -61,7 +57,7 @@ composition of families ([contracts](contracts.md)).
 | Memory | [Memory](memory.md) | every memory type and when to use it |
 | | [Episodic memory](episodic.md) | `memory_choice=True` records that vote in the choice |
 | | [Recall memory](recall.md) | `recall=True` slots and the learned address |
-| | [Standalone stores](records.md) | `Records`, `FastSynapses` and other stores used directly |
+| | [Standalone stores](records.md) | `FastSynapses`, `SynapticMemory`, `PatternSeparator` and the traces used directly |
 | Learning and reward | [Learning](learning.md) | the free/nudged rule and teaching budgets |
 | | [Reward](reward.md) | three-factor rule, critic, dopamine, `ActorCritic` |
 | Build and wire | [Build your own brain](build.md) | tutorials on your own data |
@@ -74,10 +70,6 @@ composition of families ([contracts](contracts.md)).
 | | [Planning](planning.md) | private repair of input ports toward a goal |
 | | [Protect temporal responses](temporal-memory.md) | `TemporalPatchNet` tool that protects chosen responses; not a brain memory |
 | | [Partitioned](partitioned.md) | fixed connectivity masks, experimental |
-| | [Record patch](record-patch.md) | `RecordPatchNet` and its compositions |
-| | [Population](population.md) | `PopulationPatch` on torch |
-| | [Belief](belief.md) | `BeliefPatch` assimilation and imagination |
-| | [Steering](steering.md) | `Steered` and `Life` |
 | Evaluate | [Evaluate a brain](evaluation.md) | task design, baselines, controls |
 | | [Protocols](protocols.md) | held-out predicate tests |
 | | [Receipts](receipts.md) | outcomes bound to source hashes |
