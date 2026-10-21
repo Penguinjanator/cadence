@@ -57,6 +57,28 @@
   resets as it does without it. At the default, `keep_arousal=False`, every brain resets,
   acts and saves as in 0.84.3.
 
+- The documentation is reorganized: 63 pages and 16,193 lines become 45 pages and 10,463
+  lines, with `docs/README.md` as the single entry and catalogue, one owning guide per setting
+  and `docs/api.md` for signatures. `docs/memory.md` describes the eight memories of the
+  composed brain in one table, which memory serves which task from this repository's
+  benchmarks, one runnable example per memory and the observation code (`code=units`);
+  `docs/recall.md` (the recall memory and its options) and `docs/records.md` (standalone
+  delta-rule stores) are new; `docs/evaluation.md` replaces task-design, scaling, missteps and
+  creativity. The pages architecture, context, creativity, equilibrium-world-models,
+  experience, howto-demo, index, interaction, missteps, pages, recursive-training, scaling,
+  settling-literature, task-design and tasks, and the equilibrium folder's BOOTSTRAP, DRSN,
+  ELEMENT, EXPERIMENTAL, PERFORMANCE and VARIANTS, are merged into the remaining guides or
+  removed.
+- Docstrings and comments across `src/` describe current behaviour only, with no version
+  narration, run records or issue history, and link to the new pages; docstrings that
+  disagreed with the code beside them are corrected. Code and every message string are
+  unchanged, verified on the syntax tree, and the modules hashed into population and
+  reinforcement checkpoints (`_repair.py`, `cortex.py`, `reinforcement.py`) are byte for byte
+  as they were, so existing checkpoints keep loading.
+- `MANIFESTO.md` and `AGENTS.md` state the principle that the brain computes, and indexes its
+  memories, on learned compressed representations of meaning: raw observations are what it
+  receives, and the code it learns from them is what the cortex settles on and what the
+  memories store and address ([issue 211](https://github.com/muellerberndt/cadence/issues/211)).
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
