@@ -413,7 +413,7 @@ a space to select on it. A positive `need_scale` rouses an adult whose income fa
 that share of its learned reward spread, whatever the unit of its rewards, and leaves a life
 that never paid at all calm (its scale is zero). At `need_scale=0.1`, with the actor step at
 the composed founder, against the founder on fresh seeds the composed brain kept every
-chamber of the preservation panel: in the [key-door chamber](../benchmarks/keydoor/README.md)
+preservation chamber: in the [key-door chamber](../benchmarks/keydoor/README.md)
 it acquired rule A on 10 of 16 lives against 8 of 16, with fed rule-ends calm on 20 of 21
 and unfed ones aroused (late aroused share .10 at fed rule-ends against .84 at unfed ones,
 where the founder is calm at both, .01 and .00, with 17 of 17 fed rule-ends calm and 16 of

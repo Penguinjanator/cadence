@@ -20,7 +20,7 @@ has an onset in it while it still emits holds, and the majority fixed point seal
 Teaching uses an explicit label-based mismatch policy, not ``Brain.live``: a row answered
 right teaches nothing, a wrong or refused answer is followed by one lesson on that row;
 a lesson on every row (the
-watching recipe of the C64 lane) made the pattern come and go from pass to pass on the
+watching recipe of the C64 composer) made the pattern come and go from pass to pass on the
 development seeds. Arms on the same founder weights and the same rows:
 
 - ``copy``      the copy at the protocol's decay under the declared contract;

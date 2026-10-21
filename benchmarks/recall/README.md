@@ -587,7 +587,7 @@ intact brain recalls, and the shuffled forks follow the transplanted trace.
 **The operating-point screens behind the recipe (development founders 304, 305, 306 and 1,
 32 training and 8 evaluation repeats; the selected recipe's receipt is
 `results/development-finite-5-scale2-eta0.2-2026-10-10.json.gz`, the other screens' receipts,
-2.7 MB each, are retained in the lane's evidence bundle outside the repository).** The
+2.7 MB each, are retained in the evidence outside the repository).** The
 association layer of the composed brain is near silent: under the recipe its activations
 have an RMS of 0.05 (0.09, 0.15 and 0.26 at sensory scale 2, 4 and 8), and the paired trace
 distance at QUERY grows with the scale (0.005 to 0.028) while its ratio to the trace's RMS

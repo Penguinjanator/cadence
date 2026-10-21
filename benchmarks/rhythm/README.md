@@ -685,7 +685,7 @@ an onset every four rows, the heard event and a constant drive as the only input
 event as the only label, 256 taught rows. After teaching, every arm plays four closed loops
 from primes at every phase of the pattern: 16 real rows, then 64 rows hearing nothing but
 its own last answer. [`protocol-loop.json`](protocol-loop.json) declares the pattern, the
-C64 lane's recipe of 0.73.1 at the rate of 0.01 it measured as the edge, the copy, the
+C64 composer's recipe of 0.73.1 at the rate of 0.01 it measured as the edge, the copy, the
 teaching contract, the seeds and the gates.
 
 The `copy` arm supplies a decaying history of heard inputs by directly editing the brain's
@@ -751,7 +751,7 @@ reconstruct every corrected metric. The original confirmation records zero refus
 The first contract issued the copy after the act during a play's prime, so the copy ran one
 row behind the heard stream there and nowhere else; 2 of 6 founders looped
 (`results/development-loop-first-contract-2026-10-08.json.gz`). With the contract corrected
-and the open-loop watching added, the lesson-on-every-row recipe of the C64 lane showed
+and the open-loop watching added, the lesson-on-every-row recipe of the C64 composer showed
 the real failure: the pattern came and went from pass to pass. Founder 0 at decay 0.8 read
 0.75, 0.86, 0.97, 0.99, 0.75, 0.97, 1.0, 0.9, 0.76, 0.99 and ended at 0.75 after 24 passes
 of 255 lessons each; which founders watched the pattern at the end was a matter of when

@@ -105,7 +105,7 @@
   `genes`), and `ArousalConfig.space()` leaves it out, so seeded
   mutations at the founder draw as before and copy the zero to the child; add it to a space
   to select on it. At `need_scale=0.1`, with the actor step at the composed founder, against
-  the founder on fresh seeds the composed brain kept every chamber of the preservation panel:
+  the founder on fresh seeds the composed brain kept every preservation chamber:
   key-door rule A acquired on 10 of 16 lives against 8 of 16, with fed rule-ends calm on 20
   of 21 and unfed ones aroused (late aroused share .10 at fed rule-ends against .84 at unfed
   ones, where the founder is calm at both, .01 and .00, with 17 of 17 fed rule-ends calm and
