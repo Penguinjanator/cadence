@@ -1684,10 +1684,11 @@ class Brain:
 
     def _unit_read(self, x: np.ndarray, drive: np.ndarray, *, memory: bool) -> np.ndarray:
         """With ``learned_code_output="unit"``: the drive with the term that makes the
-        association neurons read the rectified code at unit length, the key the memories
-        use, in place of the code units' activations: the region's output gain ``1 / |a|``
-        per stream, entered as a drive from the moment's phase (the code units hold their
-        fixed point through the settle, as nothing in the graph leads back into them)."""
+        association neurons read the rectified code at unit length (``LearnedCode.output_of``:
+        a code weaker than the floor is read as it is, scaled by one over the floor), in
+        place of the code units' activations: the region's output gain per stream, entered as
+        a drive from the moment's phase (the code units hold their fixed point through the
+        settle, as nothing in the graph leads back into them)."""
         code = self.learned_code
         assert code is not None
         coded = self._coded_moment
@@ -1700,7 +1701,7 @@ class Brain:
             )
         if len(s) != len(drive):
             return drive
-        unit = code.code_of(s)
+        unit = code.output_of(s)
         synapses, j, m = self._code_forward
         weights = np.zeros((len(self.association_index), code.units))
         weights[m, j] = self.brain.efficacy[synapses]

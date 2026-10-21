@@ -40,7 +40,9 @@
   under-active rows a silent unit counts as in such a row, so no observation is left
   without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`) and
   `learned_code_output` (`"unit"`: the first module reads the rectified code at unit
-  length; `"raw"` reads the activations as they are) and `learned_code_identity` (0.5: the memories' key is the rectified code
+  length; `"raw"` reads the activations as they are), `learned_code_floor` (1.0: a code
+  weaker than one full input's activation is read as it is over that norm, so a blank
+  moment held up by the prediction alone is not raised to full length) and `learned_code_identity` (0.5: the memories' key is the rectified code
   at unit length joined to the observation's own identity, `unit([sqrt(1 - w) code,
   sqrt(w) unit(x)])`, of width `units + inputs`, so a binding stays readable by the
   identity part while the code part moves; at 0 the code alone); the lesson's contrast and the dopamine leave

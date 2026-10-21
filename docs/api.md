@@ -304,7 +304,7 @@ contiguous index.
 ```text
 LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, predictor=0.03,
             threshold=0.1, threshold_rate=0.001, target=0.1, repair=1.0, silence=10.0,
-            place="free", output="unit", identity=0.5)
+            place="free", output="unit", floor=1.0, identity=0.5)
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
@@ -315,7 +315,8 @@ the model), the lateral `connectome`
 and `graph` of the units (the sub-network a moment's code phase settles). `lateral()`,
 `lateral_efficacy()`, `gram()`; `stimulus(sensory, context)`, `prediction(context)`,
 `settle(stimulus, warm, *, budget, tolerance, damping=3) -> Equilibrium`,
-`code_of(activation)` (the rectified code at unit length), `residuals(sensory, activation,
+`code_of(activation)` (the rectified code at unit length), `output_of(activation)` (what the
+module reads with the unit read: the rectified code over its norm or over the floor), `residuals(sensory, activation,
 context)`; `standing() -> Nudge | None` (the region's quadratic boundary toward zero at gain
 `top_down` over its units); `stability(v) -> int` (the halvings of the step the settled
 code's competition is stable under), `rest_stability() -> int` (the same over every state

@@ -305,7 +305,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
         "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "unit", "identity": 0.5,
+        "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
     }
     with pytest.raises(ValueError, match="output is one of"):
         composed(learned_code_output="norm")
@@ -952,6 +952,16 @@ def test_the_module_reads_the_code_at_unit_length_when_set():
     for output in ("unit", "raw"):
         brain = composed(seed=6, learned_code_output=output)
         x = tokens(3, 8)
+        terms = []  # the term the moment's settle carries on the association neurons
+        unit_read = brain._unit_read
+
+        def recorded(x_, drive, *, memory, unit_read=unit_read, terms=terms,
+                     index=brain.association_index):
+            out = unit_read(x_, drive, memory=memory)
+            terms.append((out - drive)[:, index])
+            return out
+
+        brain._unit_read = recorded
         brain.act(x, greedy=True)
         state = brain.basal_ganglia.state
         synapses, j, m = brain._code_forward
@@ -959,15 +969,33 @@ def test_the_module_reads_the_code_at_unit_length_when_set():
         weights = np.zeros((64, UNITS))
         weights[m, j] = brain.brain.efficacy[synapses]
         s = np.atleast_2d(state.activation)[:, brain.code_index]
-        drive = brain.stimulus(x)[:, brain.association_index]
-        read = s @ weights.T + drive  # the code's synaptic input plus the moment's drive
+        phase = brain.learned_code.last["activation"]  # the moment's code phase
+        np.testing.assert_allclose(s, phase, atol=1e-3)  # the code units hold its fixed point
         if output == "unit":
-            expected = brain.learned_code.code_of(s) @ weights.T
-            assert brain.last_settlement["qualified"]
+            assert terms and brain.last_settlement["qualified"]
+            read = s @ weights.T + terms[0]  # the code's synaptic input plus the term
+            expected = brain.learned_code.output_of(phase) @ weights.T
+            np.testing.assert_allclose(read, expected, atol=1e-3)
         else:
-            expected = s @ weights.T
-            np.testing.assert_array_equal(drive, 0.0)
-        np.testing.assert_allclose(read, expected, atol=1e-5)
+            assert not terms
+
+
+def test_the_unit_read_does_not_raise_a_weak_code():
+    """A token's code is read at unit length; a code weaker than the floor (one full
+    input's activation, times ``learned_code_floor``) is read as it is over the floor, so a
+    blank moment held up by the prediction alone stays weak; at floor 0 every code that is
+    not silent is read at unit length."""
+    code = composed(seed=2).learned_code
+    least = float(code.model.activation(np.array([1.0]))[0])
+    strong = np.zeros((1, UNITS))
+    strong[0, :3] = [0.4, 0.3, 0.2]
+    weak = 0.05 * strong
+    np.testing.assert_allclose(np.linalg.norm(code.output_of(strong)), 1.0)
+    np.testing.assert_allclose(code.output_of(weak), weak / least)
+    assert np.linalg.norm(code.output_of(weak)) < 0.1
+    assert not code.output_of(np.zeros((1, UNITS))).any()
+    code.floor = 0.0
+    np.testing.assert_allclose(np.linalg.norm(code.output_of(weak)), 1.0)
 
 
 def test_the_region_learns_from_the_moments_free_settle_alone():

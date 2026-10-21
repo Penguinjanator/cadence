@@ -133,7 +133,9 @@ class LearnedCode:
     row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
     silent unit in such a row counts as), ``place`` (what the place stores key on) and
     ``output`` (what the module reads of the code: the activations, or the rectified code
-    at unit length as the memories key on it) and ``identity`` (the weight of the
+    at unit length as the memories key on it), ``floor`` (the norm, in units of the
+    activation one full input gives its unit, below which the unit read does not raise a
+    code) and ``identity`` (the weight of the
     observation's own identity in the memories' key, a construction setting: the key width
     follows it).
     Validation refuses a value outside its domain before anything is built.
@@ -154,6 +156,7 @@ class LearnedCode:
     silence: float = 10.0
     place: str = "free"
     output: str = "unit"
+    floor: float = 1.0
     identity: float = 0.5
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
@@ -162,11 +165,11 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place", "output", "identity",
+        "silence", "place", "output", "floor", "identity",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
-        "place", "output",
+        "place", "output", "floor",
     )
     CONSTRUCTION = ("threshold", "identity")
     # what the place stores key on: the context-free code (``"free"``, the observation
@@ -187,13 +190,13 @@ class LearnedCode:
         return {
             "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
             "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
-            "place": "free", "output": "unit", "identity": 0.5,
+            "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
         }
 
     @staticmethod
     def setting(name: str, value: Any) -> Any:
         """One gene, validated and converted."""
-        if name in ("top_down", "rate", "threshold", "threshold_rate", "silence"):
+        if name in ("top_down", "rate", "threshold", "threshold_rate", "silence", "floor"):
             return real(name, value, low=0)
         if name == "predictor":
             return real(name, value, low=0, high=1)
@@ -406,6 +409,19 @@ class LearnedCode:
         if not np.all(phase.qualified):
             self.work["capped"] += 1
         return phase
+
+    def output_of(self, activation: np.ndarray) -> np.ndarray:
+        """What the first module reads of the code with ``output`` ``"unit"``: the rectified
+        activation divided by its norm, or by the floor when the norm is smaller, ``a /
+        max(|a|, floor * f(1))`` (``f(1)`` the activation one full input gives the unit whose
+        column matches it, before its threshold): a code at least that strong is read at unit
+        length, a weaker one (a blank moment's, held up only by the prediction) stays
+        weak."""
+        a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
+        least = self.floor * float(np.asarray(self.model.activation(np.array([1.0]))).item())
+        norm = np.linalg.norm(a, axis=1, keepdims=True)
+        scale = np.maximum(norm, least)
+        return np.asarray(a / np.where(scale > 0.0, scale, 1.0))
 
     def code_of(self, activation: np.ndarray) -> np.ndarray:
         """The code the memories key on: the rectified activation at unit length."""
