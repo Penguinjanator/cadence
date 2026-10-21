@@ -797,6 +797,36 @@ def test_a_configuration_assigned_after_compose_holds_through_a_change_of_step()
     assert described["learning"]["free_steps"] == 512 and described["learning"]["eta"] == 0.25
 
 
+def test_a_halved_step_stops_a_settle_at_the_same_movement_per_unit_time():
+    """A settle stops once no activation moves more than the tolerance in one step, so a
+    brain that steps with its code (``learned_code_held=False``) scales its learner's tolerance
+    with the step as it scales the budgets; the description keeps the tolerance as configured.
+    A brain without the region integrated at a quarter of the step with the tolerance so
+    scaled stops at the first step whose movement per unit time falls below the tolerance,
+    the rule its own step follows."""
+    brain = composed(seed=2, learned_code_held=False)
+    base = brain.learner.config
+    brain._restep(2)
+    assert brain.learner.config.tolerance == base.tolerance / 4
+    assert brain.learner.config.free_steps == base.free_steps * 4
+    assert brain.describe()["learning"]["tolerance"] == base.tolerance
+    brain._restep(0)
+    assert brain.learner.config == base
+    plain = cd.Brain.compose(INPUTS, ACTIONS, modules=(16,), seed=2)
+    drive = plain.stimulus(tokens(3, 8))
+    for halvings in (0, 2):
+        graph = plain.brain
+        model = graph.neuron_model.replace(dt=float(np.ldexp(1.0, -halvings)))
+        graph = cadence_brain.Brain(graph.connectome, model, efficacy=graph.efficacy,
+                                    log_gain=graph.log_gain, bias=graph.bias)
+        tolerance = cd.Brain._scaled_learning(plain.learner.config, halvings).tolerance
+        settled = graph.settle_batch(drive, steps=4096, tolerance=tolerance, trajectory=True)
+        path = [np.zeros_like(settled.trajectory[0]), *settled.trajectory]
+        rate = [float(np.abs(b - a).max()) / model.dt for a, b in zip(path[:-1], path[1:], strict=True)]
+        stop = next(i for i, r in enumerate(rate) if r < plain.learner.config.tolerance)
+        assert len(settled.trajectory) == stop + 1  # it stopped there, by movement per unit time
+
+
 def test_a_brain_with_the_region_deep_copies_and_imagines():
     """``copy.deepcopy`` of a brain with the region: the copy shares the immutable
     connectomes and holds its own tables, state and generators, acts as the original acts,

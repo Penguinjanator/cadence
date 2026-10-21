@@ -1770,12 +1770,16 @@ class Brain:
     @staticmethod
     def _scaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
         """The learner's budgets for the model's step halved ``halvings`` times: the same time
-        in every phase."""
+        in every phase; and its tolerance halved as often, since a settle stops once no
+        activation moves more than the tolerance in one step, so that it stops at the same
+        movement per unit time."""
         if not halvings:
             return config
         return replace(
             config, free_steps=config.free_steps << halvings,
             nudged_steps=config.nudged_steps << halvings,
+            tolerance=None if config.tolerance is None
+            else float(np.ldexp(config.tolerance, -halvings)),
         )
 
     @staticmethod
@@ -1786,12 +1790,15 @@ class Brain:
 
     @staticmethod
     def _unscaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
-        """The learner's budgets in the model's step from the ones at ``halvings``."""
+        """The learner's budgets and tolerance in the model's step from the ones at
+        ``halvings``."""
         if not halvings:
             return config
         return replace(
             config, free_steps=config.free_steps >> halvings,
             nudged_steps=config.nudged_steps >> halvings,
+            tolerance=None if config.tolerance is None
+            else float(np.ldexp(config.tolerance, halvings)),
         )
 
     @staticmethod
