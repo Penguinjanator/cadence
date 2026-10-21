@@ -82,7 +82,7 @@
   loses `command`), was neutral where it was read, and the window key and the efference copy
   carry the same information. `recall_episodes="keep"`, a stream's slots kept across an ended
   episode, lowered success by .108 on a crafting chain whose observation names the stage: an
-  ended episode empties the slots, as the founder did, and `Brain.reset(keep_memory=True)`
+  ended episode empties the slots, as the founder did, and `Brain.reset(keep=("slots",))`
   keeps them across a reset as before (`Recall.end` stays for it). `recall_recency=None`,
   the power-law age charge `r * log(1 + age)` (`Recall.charges`), failed its confirmation on
   the camera task's founders; a number keeps the linear charge `recency * age`.
@@ -112,12 +112,12 @@
   want is at least the unmet share of `need_scale * scale`, the scale as it stood before the
   outcome entered it; the want and heat read afterwards use the scale as it stands; youth and
   a scale no outcome has entered leave it at zero, so a default `reset()` zeroes it until
-  outcomes enter the new stream's scale, and `reset(keep_arousal=True)` keeps it. A save
+  outcomes enter the new stream's scale, and `reset(keep=("arousal",))` keeps it. A save
   carries the gene under `cadence-arousal/3` only above zero; saves of earlier formats load
   with `need_scale=0`, and a positive `need_scale` under an earlier format is refused. At the
   founder every brain, checkpoint and composed life is byte-identical to the library before
   the gene (pinned); `describe()` carries the gene at zero (`arousal_need_scale` under
-  `genes`, `need_scale` under `arousal`), and `ArousalConfig.space()` leaves it out, so seeded
+  `genes`), and `ArousalConfig.space()` leaves it out, so seeded
   mutations at the founder draw as before and copy the zero to the child; add it to a space
   to select on it. At `need_scale=0.1`, with the actor step at the composed founder, against
   the founder on fresh seeds the composed brain kept every chamber of the preservation panel:
@@ -150,17 +150,16 @@
   labels the observation it reached, and `lesson` teaches it, with a runnable snippet.
 - The composition guide lists `normalize=0` among a fresh `LearnerConfig()`'s values.
 
-- `Brain.reset(keep_arousal=True)` (opt-in) keeps the arousal state as it is: its level, the
+- `Brain.reset(keep=("arousal",))` (opt-in) keeps the arousal state as it is: its level, the
   counts, the recent and long-run reward, the usual errors, the reward scale, the age and
   the work counts carry into the new stream, as when the state saved before the reset
   (`Arousal.to_dict`) is restored after it (`Arousal.from_dict`). In the two-armed bandit
   whose paying arm moved, adults reset this way woke and chose as they did living on
   without the reset, at every one of 120 moments in 5 of 5 seeds, the newly paying arm at
   each of the last 40; a default reset left them at none of the 120. Reset into a stream
-  that paid as before they kept their arm calm at all 120 moments in 5 of 5 seeds. The
-  keyword must be a boolean, checked before anything changes; a brain without arousal
-  resets as it does without it. At the default, `keep_arousal=False`, every brain resets,
-  acts and saves as in 0.84.3.
+  that paid as before they kept their arm calm at all 120 moments in 5 of 5 seeds. A brain
+  without arousal resets as it does without it. At the default, `keep=()`, every brain
+  resets, acts and saves as in 0.84.3.
 
 - The documentation is reorganized: 63 pages and 16,193 lines become 45 pages and 10,463
   lines, with `docs/README.md` as the single entry and catalogue, one owning guide per setting
@@ -325,6 +324,18 @@
   composed brain is unchanged on the 12-brain digest ledger, descriptions and checkpoints
   included. The chambers that set a scale or a teaching step pass the same values the new
   way.
+- One reset and one description. `reset(*, keep=())` names what a reset carries over:
+  `"slots"` keeps the recall memory's slots and `"arousal"` the whole arousal state; other
+  names are refused before anything changes. `retune` loses `reset_arousal` and resets
+  nothing (`brain.arousal.reset()` resets the arousal), and `fit` keeps the arousal state as
+  it is: a control on independent samples does not change a life. `describe()` returns four
+  sections: `layout` (the regions; `code`, what the memories key on; `learned_code`;
+  `composition`, the construction choices), `genes` (every setting by the name `compose`
+  and `retune` take, `teaching` among them, `"custom"` for steps set outside both teaching
+  points), `memories` (each member of `brain.memories` with its settings and counts) and
+  `pending`; the configuration and memory sections, `observation_code`, `initialization`
+  and `pending_feedback` move into them. Arrays, actions and checkpoints are unchanged on
+  the 12-brain digest ledger, and every description holds what it held, in the new layout.
 
 ## 0.84.3 — 2026-10-19
 
