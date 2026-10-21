@@ -169,7 +169,8 @@ their shape. Keep row identities fixed until `reset()`.
 
 `Brain.load` reads it and, through 0.85.x, the formats of 0.84.3 (`cadence-generic/1` to `/9`);
 a setting of 0.84.3 that this version removed loads at the value whose law this version keeps
-and is refused otherwise with a message naming 0.84.3. Record and recall key widths are checked
+and is refused otherwise with a message naming 0.84.3; a file saved with a resting bias loads as
+it is, the biases it set being in the saved arrays. Record and recall key widths are checked
 against the code; code tables that do not read every ON and OFF channel twice with positive
 weights are refused, as is a code whose metadata lacks the `cover` field; a recall window of
 another length is refused; learned-code tables that disagree with the saved synapses and
