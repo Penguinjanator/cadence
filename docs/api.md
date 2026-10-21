@@ -22,8 +22,7 @@ keyword.
 
 ```text
 Brain.compose(inputs, actions, *, connectome=None, modules=(64,), observers=(),
-              lateral=None, sensory_scale=1.0, working_memory_scale=1.2,
-              history_scale=1.2, recall_scale=1.2, features=8, field=3, code=None,
+              lateral=None, teaching=None, scales=None, features=8, field=3, code=None,
               learned_code=None, seed=0, slots=1, **options) -> Brain
 ```
 
@@ -42,8 +41,14 @@ to a learned sparse code of the observation, read by the cortex and keyed on by 
 memories, with the genes `learned_code_top_down`, `learned_code_rate`,
 `learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate`,
 `learned_code_target`, `learned_code_repair`, `learned_code_silence`,
-`learned_code_place`, `learned_code_output` and `learned_code_identity` ([the learned code](code.md)). The `*_scale` arguments are initial
-projection magnitudes, fixed at construction. `options` takes every constructor keyword below
+`learned_code_place`, `learned_code_output` and `learned_code_identity` ([the learned code](code.md)). `scales` maps
+`"sensory"`, `"trace"`, `"history"` and `"recall"` to the initial magnitudes of the projections
+from those regions (founders 1.0, 1.2, 1.2, 1.2; a name left out keeps its founder), fixed at
+construction. `teaching` is the teaching point of the lesson's learner, `"founder"` (unset) or
+`"normalized"`: it sets `eta`, `eta_bias`, `normalize` and `normalize_floor`, whose
+`learning_` names it replaces ([many lessons](learning.md#many-lessons-the-normalized-point-for-imitation)),
+and `retune(teaching=...)` moves a living brain between the two; `learning=LearnerConfig(...)`
+replaces the whole configuration instead. `options` takes every constructor keyword below
 and every `learning_<field>`, `actor_<field>` and `arousal_<field>` name; with
 `memory_choice=True` it fills in the episodic founders. The region map and the founder table
 are in [compose a brain](brain.md#defaults-and-expert-overrides); the memory settings are owned
@@ -56,8 +61,8 @@ Refusals: unknown names, the bare `eta` or `eta_bias`, and duplicate aliases rai
 `connectome` wraps a custom anatomy with the same founders, the episodic founders filled in
 under `memory_choice=True`: its `sensory` (or `visual/input`) population holds the inputs (the
 code's units with `code=units`) and its `motor` population the actions. It brings its own
-layout, so `modules`, `observers`, `lateral`, the `*_scale` arguments, `features` and `field`
-stay at their founders (`ValueError` otherwise). `Genome.composed` returns the layout
+layout, so `modules`, `observers`, `lateral`, `scales`, `features` and `field` stay at their
+founders (`ValueError` otherwise). `Genome.composed` returns the layout
 `compose` develops, to edit or evolve ([genome, development,
 brain](brain.md#genome-development-brain)).
 
@@ -98,7 +103,9 @@ pass these here or use `compose` ([episodic settings](episodic.md#settings)).
 | a missing population that a switched-on component needs | `ValueError` |
 
 The efference projection into `association` has the fixed initial scale 12.0; the working
-trace's `working_memory_scale` founder is 1.2.
+trace's (`scales["trace"]`) founder is 1.2. The arguments of 0.84.3 `sensory_scale`,
+`working_memory_scale`, `history_scale` and `recall_scale` raise `ValueError` naming their
+`scales` key.
 
 ### Methods
 

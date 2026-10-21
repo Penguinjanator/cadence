@@ -95,8 +95,8 @@ eligibility_steps=12` ([defaults table](brain.md#defaults-and-expert-overrides))
 | `eligibility_steps` | `None` | Steps of each reward-nudged phase; `None` uses the learner's `nudged_steps` |
 
 `beta`, the base `temperature` and `tolerance` come from the learner's `LearnerConfig`
-(composed: `learning_beta`, `temperature`); `learning_eta` and `learning_eta_bias` govern
-only lessons.
+(composed: `learning_beta`, `temperature`); the teaching point (`teaching`) sets the steps
+of lessons alone.
 
 - `act(drive, greedy=False, temperature=None, *, bias=None)`: one temperature or one per
   slot; `bias` adds a `(batch, motor)` vote before each softmax (the episodic memory votes

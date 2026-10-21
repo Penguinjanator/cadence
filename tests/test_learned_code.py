@@ -721,8 +721,8 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     brain.lesson(x, [1, 2])
     brain.step(x)
     brain.step(x, reward=[1.0, 0.0])
-    brain.retune(learning_eta=0.4, actor_eta=0.5)
-    assert brain._learning_base.eta == 0.4 and brain.learner.config.eta == 0.4
+    brain.retune(teaching="normalized", actor_eta=0.5)
+    assert brain._learning_base.eta == 0.003 and brain.learner.config.eta == 0.003
     assert brain.learner.config.free_steps == 1024 << brain._stepping
     assert brain.basal_ganglia.config.eta == 0.5
     assert brain.basal_ganglia.config.eligibility_steps == 12 << brain._stepping

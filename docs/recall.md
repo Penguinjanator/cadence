@@ -43,7 +43,7 @@ and a name finds the moment it was stated in. `p` is kept in `brain.recall.atten
 `recall` region is driven at
 `amplitude * sum p V` and the `next` region at `amplitude * sum p N`, held through the settle as a sensory drive is: the settle answers
 on the mixture the address chose and cannot revise the choice. Both regions reach the
-association region through one-way plastic synapses of initial magnitude `recall_scale`.
+association region through one-way plastic synapses of initial magnitude `scales["recall"]`.
 
 A number `recall_null` adds a slot of logit `null / temperature` that reads nothing, so a
 moment that matches no slot recalls little.
@@ -114,7 +114,7 @@ map.
 | `recall_address_temperature` | `0.1` | retune | Temperature of the slots' scores in the address lesson |
 | `recall_capacity` | `64` | construction | Slots per stream, oldest dropped first |
 | `recall_next` | `True` | construction | The `next` region and each slot's next |
-| `recall_scale` | `1.2` | construction | Initial magnitude of the two projections (a `compose` argument) |
+| `scales["recall"]` | `1.2` | construction | Initial magnitude of the two projections (a `compose` argument) |
 | `recall_address_step` | `"lms"` | retune | `"toward"`: the named keys less the attended mixture |
 | `recall_null` | `None` | retune | A number adds a null slot; a non-finite logit is refused |
 | `recall_address_reward` | `0.0` | retune | Rate at which reward trains the address map |

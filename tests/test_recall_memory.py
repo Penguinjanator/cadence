@@ -7,6 +7,7 @@ import importlib.util
 import inspect
 import json
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import MappingProxyType, SimpleNamespace
 
@@ -293,7 +294,7 @@ def test_the_founders_are_the_declared_genes():
         "amplitude": 3.0, "temperature": 0.25, "heard": 1.0, "recency": 0.25,
         "address": 0.01, "address_temperature": 0.1, "capacity": 64, "next": True,
     }
-    assert inspect.signature(cd.Brain.compose).parameters["recall_scale"].default == 1.2
+    assert composed().describe()["initialization"]["composition"]["recall_scale"] == 1.2
     assert inspect.signature(cd.Brain).parameters["recall"].default is False
     described = composed().describe()["genes"]
     assert {k: v for k, v in described.items() if k.startswith("recall_")} == {
@@ -330,7 +331,7 @@ def test_the_memory_adds_its_two_regions_and_their_projections_last():
 
 
 def test_the_projections_start_at_their_scale_like_the_working_trace():
-    quiet, loud = composed(recall_scale=1.2), composed(recall_scale=12.0)
+    quiet, loud = composed(scales={"recall": 1.2}), composed(scales={"recall": 12.0})
     recall, following = regions(quiet)
     rows = np.isin(np.asarray(quiet.connectome.pre), np.r_[recall, following])
     np.testing.assert_allclose(
@@ -674,8 +675,8 @@ def test_two_thousand_dense_lessons_keep_the_map_finite_and_the_brain_acting():
     """The address learner alone, the graph's plasticity off: 2,000 lessons on the dense
     observation are all taken, the map and the address stay finite, and the brain acts and
     learns after them."""
-    brain = cd.Brain.compose(512, 2, modules=(8,), episodic=False, recall=True, seed=2,
-                             learning_eta=0, learning_eta_bias=0)
+    brain = cd.Brain.compose(512, 2, modules=(8,), episodic=False, recall=True, seed=2)
+    brain.retune(learning=replace(brain.learner.config, eta=0.0, eta_bias=0.0))
     brain.act(np.eye(512)[[0]], greedy=True)
     x = np.ones((1, 512))
     efficacy = brain.brain.efficacy.copy()
@@ -1096,7 +1097,7 @@ def test_the_read_and_lesson_genes_retune_and_the_layout_is_a_construction_setti
     assert brain.recall.amplitude == 1.5 and brain.recall.address == 0.0
     assert brain.describe()["genes"]["recall_temperature"] == 0.5
     for name, value in (("recall", False), ("recall_capacity", 8), ("recall_next", False),
-                        ("recall_scale", 2.0)):
+                        ("scales", {"recall": 2.0})):
         with pytest.raises(ValueError, match="construction setting"):
             brain.retune(**{name: value})
     with pytest.raises(ValueError):
@@ -1117,7 +1118,7 @@ def test_the_read_and_lesson_genes_retune_and_the_layout_is_a_construction_setti
         {"recall": True, "recall_next": 1},
         {"recall": True, "recall_recency": -0.1},
         {"recall": True, "recall_heard": float("nan")},
-        {"recall": True, "recall_scale": -1.0},
+        {"recall": True, "scales": {"recall": -1.0}},
     ],
 )
 def test_invalid_genes_are_refused(genes):

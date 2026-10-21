@@ -182,13 +182,15 @@ def make_brain(point: dict[str, Any], seed: int) -> cd.Brain:
         INPUTS,
         ACTIONS,
         modules=tuple(int(w) for w in point["modules"]),
-        sensory_scale=float(point["sensory_scale"]),
+        # frozen protocols ran the composition of releases before 0.82.0: the carried
+        # interpretation read back at scale 12
+        scales={
+            "sensory": float(point["sensory_scale"]),
+            "trace": float(point.get("trace_scale", 12.0)),
+        },
         temperature=float(point["temperature"]),
         working_memory_amplitude=float(point["trace_amplitude"]),
         working_memory_decay=float(point["trace_decay"]),
-        # frozen protocols ran the composition of releases before 0.82.0: the carried
-        # interpretation read back at scale 12
-        working_memory_scale=float(point.get("trace_scale", 12.0)),
         consolidation=float(point["consolidation"]),
         episodic=bool(point.get("episodic", True)),
         memory_rate=float(point.get("memory_rate", 1.0)),

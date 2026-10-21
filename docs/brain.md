@@ -25,11 +25,11 @@ The composed graph, in the order its regions are developed:
 
 | Region | Neurons | Wiring | Home |
 | --- | --- | --- | --- |
-| `sensory`, or `visual` for an image | `inputs`, the `code=units` code, or the visual cortex | Projects to the first module (to `code` with a learned code); initial scale `sensory_scale` | [image inputs](#image-inputs) |
-| `code` | `learned_code` units | With `learned_code=units`: the dictionary from `sensory`, lateral inhibition through its Gram matrix, the predictor from `prefrontal`; projects to the first module at `sensory_scale` | [the learned code](code.md) |
+| `sensory`, or `visual` for an image | `inputs`, the `code=units` code, or the visual cortex | Projects to the first module (to `code` with a learned code); initial scale `scales["sensory"]` | [image inputs](#image-inputs) |
+| `code` | `learned_code` units | With `learned_code=units`: the dictionary from `sensory`, lateral inhibition through its Gram matrix, the predictor from `prefrontal`; projects to the first module at `scales["sensory"]` | [the learned code](code.md) |
 | `module_0` ... | `modules[:-1]` | A chain of reciprocal projections | this page |
 | `association` | `modules[-1]` | Reciprocal with `motor` | this page |
-| `prefrontal` | one per association neuron | The working trace of the settled association, held at `working_memory_amplitude` 3.0, read through a plastic projection of initial scale `working_memory_scale` 1.2 | [memory](memory.md#working-trace) |
+| `prefrontal` | one per association neuron | The working trace of the settled association, held at `working_memory_amplitude` 3.0, read through a plastic projection of initial scale `scales["trace"]` 1.2 | [memory](memory.md#working-trace) |
 | `motor` | `actions`, in `slots` | Lateral inhibition within a slot | [motor competition](#operating-point-and-motor-competition) |
 | `observer_0` ... | `observers` | Reciprocal with every module, `motor` and earlier observers | below |
 | `efference` | `actions` | With `efference_amplitude` above 0 | [memory](memory.md#efference-copy) |
@@ -77,7 +77,7 @@ are the control for any change you measure.
 ```python
 tuned = Brain.compose(
     inputs=4, actions=2, arousal=True,
-    sensory_scale=2.0, actor_eta=0.1, actor_eta_bias=0.01, arousal_youth=30,
+    scales={"sensory": 2.0}, actor_eta=0.1, actor_eta_bias=0.01, arousal_youth=30,
 )
 settings = tuned.describe()
 assert settings["genes"]["actor_eta"] == 0.1
@@ -91,36 +91,40 @@ configurations and `initialization` (construction choices, not current weights).
 | --- | --- | --- | --- |
 | `modules`, `observers` | `(64,)`, `()` | construction | [map](#brain) |
 | `lateral`, `slots` | -0.5 up to 8 actions and 0.0 above, `1` | construction | [motor competition](#operating-point-and-motor-competition) |
-| `sensory_scale`, `features`, `field`, `seed` | `1.0`, `8`, `3`, `0` | construction | [image inputs](#image-inputs) |
-| `learning_beta`, `learning_eta`, `learning_eta_bias`, `temperature` | `0.1`, `0.5`, `0.05`, `0.2` | retune | [learning](learning.md#7-every-knob) |
+| `scales`: `"sensory"`, `"trace"`, `"history"`, `"recall"` | `1.0`, `1.2`, `1.2`, `1.2` | construction | [image inputs](#image-inputs), [memory](memory.md#working-trace) |
+| `features`, `field`, `seed` | `8`, `3`, `0` | construction | [image inputs](#image-inputs) |
+| `teaching` | `"founder"`: steps 0.5 and 0.05 on the raw contrast; `"normalized"`: 0.003 and 0.0003 under a running RMS (0.99, floor 1e-4) | retune | [learning](learning.md#many-lessons-the-normalized-point-for-imitation) |
+| `learning_beta`, `temperature` | `0.1`, `0.2` | retune | [learning](learning.md#7-every-knob) |
 | `learning_free_steps`, `learning_nudged_steps`, `learning_tolerance`, `learning_qualified`, `learning_damping` | `1024`, `12`, `0.003`, `False`, `3` | retune | [learning](learning.md#qualified-teaching-budgets) |
 | `learning_scale_cap`, `learning_surprise` | `8.0`, `False` | retune | [learning](learning.md#7-every-knob) |
-| `learning_normalize`, `learning_normalize_floor`, `learning_momentum` | `0.0`, `0.001`, `0.9` | retune | [learning](learning.md#rates-under-normalization) |
+| `learning_momentum` | `0.9` | retune | [learning](learning.md#rates-under-normalization) |
 | `actor_gamma`, `actor_lam`, `actor_eligibility_steps`, `actor_eta`, `actor_eta_bias`, `actor_eta_critic` | `0.9`, `0.8`, `12`, `1.0`, `0.05`, `0.3` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `actor_dopamine_cap` | `1.0` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `arousal` | off; `True` is `ArousalConfig()` | construction (switch), retune (fields) | [continuous](continuous.md#routine-and-repair-live) |
 | `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor`, `arousal_fast`, `arousal_slow` | `0.2`, `0.9`, `2.0`, `0.1`, `0.05`, `0.005` | retune | [continuous](continuous.md#routine-and-repair-live) |
 | `arousal_heat`, `arousal_youth`, `arousal_value_surprise`, `arousal_need`, `arousal_need_scale` | `2.0`, `100`, `1.0`, `0.0`, `0.0` | retune | [continuous](continuous.md#routine-and-repair-live) |
-| `working_memory_*` | scale `1.2`, amplitude `3.0`, decay `0.0` | scale at construction | [memory](memory.md#working-trace) |
+| `working_memory_*` | amplitude `3.0`, decay `0.0` | retune | [memory](memory.md#working-trace) |
 | `efference_*` | amplitude `0.0` (absent), decay `0.2` | a positive amplitude at construction adds it | [memory](memory.md#efference-copy) |
-| `history_*` | decays `()` (absent), amplitude `3.0`, scale `1.2` | decays and scale at construction | [memory](memory.md#heard-history) |
+| `history_*` | decays `()` (absent), amplitude `3.0` | decays at construction | [memory](memory.md#heard-history) |
 | `episodic`, `memory_rate`, `memory_decay`, `memory_amplitude`, `consolidation` | `True`, `1.0` (`0.5` with `memory_choice`), `0.9`, `1.0`, `0.05` | `episodic` at construction | [memory](memory.md#associative-store-the-hippocampus) |
 | `code` | unset: the observation itself | construction | [memory](memory.md#the-observation-code) |
 | `memory_choice` and the other `memory_*` episodic settings | `False` | construction | [episodic memory](episodic.md) |
-| `recall`, `recall_scale` and every `recall_*` | `False` | see the page | [recall memory](recall.md) |
+| `recall` and every `recall_*` | `False` | see the page | [recall memory](recall.md) |
 | `backend`, `device` | `"cpu"`, `None` | construction | [backends](backends.md) |
 
 Override rules:
 
 - Every field of `LearnerConfig`, `ActorCriticConfig` and `ArousalConfig` is a
-  `learning_<field>`, `actor_<field>` or `arousal_<field>` name. `temperature` aliases
+  `learning_<field>`, `actor_<field>` or `arousal_<field>` name, but the teaching steps
+  and their normalization (`eta`, `eta_bias`, `normalize`, `normalize_floor`), which
+  `teaching` sets: their names raise `ValueError`. `temperature` aliases
   `learning_temperature` and sets both the teaching softmax and the sampled policy.
 - Unknown names and the ambiguous bare `eta` or `eta_bias` raise `TypeError`.
 - `arousal=True` uses the founders, a mapping such as `arousal={"heat": 1.0}` patches
   them, an `ArousalConfig` replaces them, and `arousal_*` names need one of the three.
   Without `arousal`, `live` raises `ValueError`.
-- A changed rate keeps the existing bias rate; `actor_eta_bias=None` (or
-  `learning_eta_bias=None`) derives one tenth of the new rate.
+- A changed actor rate keeps the existing bias rate; `actor_eta_bias=None` derives one
+  tenth of the new rate.
 - A setting for an absent component, such as `memory_rate` with `episodic=False`, has
   no effect; `describe()` omits it and `retune` refuses it.
 - `learning=LearnerConfig(...)` and `reward=ActorCriticConfig(...)` replace the whole

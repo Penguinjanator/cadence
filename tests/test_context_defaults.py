@@ -30,7 +30,7 @@ def test_the_default_trace_is_exactly_the_last_interpretation():
 
 
 def test_the_scale_changes_only_the_projection_that_reads_the_carried_interpretation():
-    control = cd.Brain.compose(3, 2, modules=(9, 6), seed=11, working_memory_scale=12.0)
+    control = cd.Brain.compose(3, 2, modules=(9, 6), seed=11, scales={"trace": 12.0})
     quiet = cd.Brain.compose(3, 2, modules=(9, 6), seed=11)
     first, second = control.connectome, quiet.connectome
     for field in ("pre", "post", "count"):
@@ -42,9 +42,11 @@ def test_the_scale_changes_only_the_projection_that_reads_the_carried_interpreta
     np.testing.assert_array_equal(second.sign[~reading], first.sign[~reading])
     np.testing.assert_array_equal(control.brain.bias, quiet.brain.bias)
     with pytest.raises(ValueError, match="construction setting"):
-        quiet.retune(working_memory_scale=12.0)
+        quiet.retune(scales={"trace": 12.0})
+    with pytest.raises(ValueError, match="scales"):  # the argument of 0.84.3, renamed
+        cd.Brain.compose(3, 2, working_memory_scale=12.0)
     with pytest.raises(ValueError):
-        cd.Brain.compose(3, 2, working_memory_scale=-1.0)
+        cd.Brain.compose(3, 2, scales={"trace": -1.0})
 
 
 def test_a_newborn_reads_its_context_as_the_earlier_quiet_operating_point_did():
@@ -53,7 +55,7 @@ def test_a_newborn_reads_its_context_as_the_earlier_quiet_operating_point_did():
     # is ten times clearer, so learning can strengthen the influence where it pays.
     cue, go = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]), np.array([[0.0, 0.0, 1.0]] * 2)
     states = []
-    for options in ({}, {"working_memory_amplitude": 0.3, "working_memory_scale": 12.0}):
+    for options in ({}, {"working_memory_amplitude": 0.3, "scales": {"trace": 12.0}}):
         brain = cd.Brain.compose(3, 2, seed=8, **options)
         brain.act(cue, greedy=True)
         _, free = brain._settled(go)
@@ -122,7 +124,7 @@ def test_a_continuing_brain_can_learn_to_ignore_a_history_that_does_not_matter()
     actor = {"actor_gamma": 0.0, "actor_lam": 0.0}
     assert contextual_bandit(cd.Brain.compose(4, 4, seed=1, **actor), 1) >= 0.9
     earlier = cd.Brain.compose(
-        4, 4, seed=1, working_memory_decay=0.2, working_memory_scale=12.0, **actor
+        4, 4, seed=1, working_memory_decay=0.2, scales={"trace": 12.0}, **actor
     )
     assert contextual_bandit(earlier, 1) < 0.5
 
@@ -130,7 +132,7 @@ def test_a_continuing_brain_can_learn_to_ignore_a_history_that_does_not_matter()
 def test_a_saved_brain_keeps_the_trace_it_was_built_with(tmp_path):
     earlier = cd.Brain.compose(
         inputs=3, actions=2, seed=2, working_memory_amplitude=0.3, working_memory_decay=0.2,
-        working_memory_scale=12.0,
+        scales={"trace": 12.0},
     )
     x = np.array([[1.0, 0.0, 0.5]])
     earlier.act(x)
@@ -142,7 +144,7 @@ def test_a_saved_brain_keeps_the_trace_it_was_built_with(tmp_path):
 
 
 def test_provenance_saved_before_0_82_reads_as_the_fixed_scale_12(tmp_path):
-    brain = cd.Brain.compose(inputs=3, actions=2, seed=7, working_memory_scale=12.0)
+    brain = cd.Brain.compose(inputs=3, actions=2, seed=7, scales={"trace": 12.0})
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
         arrays = earlier({name: data[name] for name in data.files})

@@ -32,7 +32,7 @@ next action before changing a rate ([reward traps](reward.md#traps-with-their-me
 
 **Loud carried context.** In a chain the next action depends on what the brain sees now. A
 carried interpretation fed back too strongly makes it depend on the moment before. The
-founder `working_memory_scale` of 1.2 lets the present decide at birth, and learning
+founder trace scale (`scales["trace"]`) of 1.2 lets the present decide at birth, and learning
 strengthens the carry where the past predicts the outcome ([memory](memory.md#working-trace)).
 
 **Continued learning.** A policy acquired at the nursery's actor step can erode under its own

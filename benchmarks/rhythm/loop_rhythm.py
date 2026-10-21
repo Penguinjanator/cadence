@@ -151,7 +151,7 @@ def make_brain(seed: int, protocol: dict, arm: str) -> Brain:
         "working_memory_amplitude": recipe["trace_amplitude"],
         "working_memory_decay": recipe["trace_decay"],
         # the composition of releases before 0.82.0 read the trace back at scale 12
-        "working_memory_scale": recipe.get("trace_scale", 12.0),
+        "scales": {"trace": recipe.get("trace_scale", 12.0)},
         "learning": LearnerConfig(**recipe["learning"]),
     }
     if arm in ("copy", "own", "frozen"):

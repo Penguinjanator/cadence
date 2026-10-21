@@ -83,9 +83,8 @@ class Genome:
         from .generic import _layout
 
         keywords = (
-            "modules", "observers", "lateral", "sensory_scale", "working_memory_scale",
-            "history_scale", "recall_scale", "features", "field", "code", "learned_code",
-            "seed", "slots",
+            "modules", "observers", "lateral", "scales", "features", "field", "code",
+            "learned_code", "seed", "slots",
         )
         layout = {name: settings.pop(name) for name in keywords if name in settings}
         return _layout(inputs, actions, settings, **layout)[0]

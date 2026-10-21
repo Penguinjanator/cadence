@@ -375,7 +375,7 @@ def alternation_after_teaching(seed, echo, bouts=24, events=12, window=48):
         episodic=False,
         working_memory_decay=0.1,
         working_memory_amplitude=3.0,
-        working_memory_scale=12.0,  # the steady-rhythm chamber's composition
+        scales={"trace": 12.0},  # the steady-rhythm chamber's composition
         **genes,
     )
     rng = np.random.default_rng(seed)

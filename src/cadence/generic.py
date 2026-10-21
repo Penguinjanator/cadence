@@ -44,7 +44,16 @@ from typing import Any
 
 import numpy as np
 
-from ._configuration import arousal_config, configured, plain, real, split_genes
+from ._configuration import (
+    arousal_config,
+    configured,
+    plain,
+    real,
+    rescaled,
+    scales_of,
+    split_genes,
+    taught,
+)
 from .arousal import Arousal, ArousalConfig
 from .brain import Backend, BrainState, Equilibrium, Nudge
 from .brain import Brain as NeuralGraph
@@ -1250,10 +1259,7 @@ def _layout(
     modules: Sequence[int] = (64,),
     observers: Sequence[int] = (),
     lateral: float | None = None,
-    sensory_scale: float = 1.0,
-    working_memory_scale: float = 1.2,
-    history_scale: float = 1.2,
-    recall_scale: float = 1.2,
+    scales: Mapping[str, Any] | None = None,
     features: int = 8,
     field: int = 3,
     code: int | None = None,
@@ -1265,6 +1271,10 @@ def _layout(
     ``options`` are compose's other settings; the efference copy, the heard history, the recall
     memory and the learned code's ``cortex`` and ``identity`` add regions and projections, and
     the rest do not change the layout."""
+    for name in options:
+        refusal = rescaled(name)
+        if refusal is not None:
+            raise ValueError(refusal)
 
     def size(value: Any) -> int:
         if isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer)):
@@ -1293,11 +1303,10 @@ def _layout(
     ) > 0
     code_width = (learned + (inputs if joined else 0)) if learned else (units or inputs)
     heard_width = learned or sensory_width  # what the history hears: the code it reads
-    sensory_scale = real("sensory_scale", sensory_scale, low=0)
-    working_memory_scale = real("working_memory_scale", working_memory_scale, low=0)
-    history_scale = real("history_scale", history_scale, low=0)
+    scale = scales_of(scales)
+    sensory_scale, working_memory_scale = scale["sensory"], scale["trace"]
+    history_scale, recall_scale = scale["history"], scale["recall"]
     heard = _history_decays(options.get("history_decays", ()))
-    recall_scale = real("recall_scale", recall_scale, low=0)
     recalled = _recall_genes(
         options.get("recall", False),
         {name: value for name, value in options.items() if name.startswith("recall_")},
@@ -2186,10 +2195,8 @@ class Brain:
         modules: Sequence[int] = (64,),
         observers: Sequence[int] = (),
         lateral: float | None = None,
-        sensory_scale: float = 1.0,
-        working_memory_scale: float = 1.2,
-        history_scale: float = 1.2,
-        recall_scale: float = 1.2,
+        teaching: str | None = None,
+        scales: Mapping[str, float] | None = None,
         features: int = 8,
         field: int = 3,
         code: int | None = None,
@@ -2250,15 +2257,20 @@ class Brain:
 
         Observer wiring is experimental.
         Inputs are fixed external drives; their neural representations can vary.
-        ``sensory_scale`` sets the initial sensory projection's magnitude (founder 1.0).
-        It is a construction setting; ``retune`` refuses it.
-        ``working_memory_scale`` sets the initial magnitude of the plastic projection
-        through which the prefrontal region feeds the carried interpretation back to the
-        association region. The prefrontal region holds the copy at
-        ``working_memory_amplitude`` (3.0); the founder scale is 1.2, and learning
-        strengthens the projection where the past predicts the outcome. It is a
-        construction setting, like ``sensory_scale``.
-        ``options`` accepts the constructor's memory settings and every existing
+        ``scales`` maps ``"sensory"``, ``"trace"``, ``"history"`` and ``"recall"`` to the
+        initial magnitudes of the projections from the sensory region (founder 1.0), from the
+        prefrontal region that feeds the carried interpretation back to the association
+        region (1.2: the prefrontal region holds the copy at ``working_memory_amplitude``
+        3.0, and learning strengthens the projection where the past predicts the outcome),
+        from the heard history (1.2) and from the recall and next regions (1.2); a name left
+        out keeps its founder. It is a construction setting; ``retune`` refuses it.
+        ``teaching`` is the teaching point of the lesson's learner: ``"founder"`` (steps 0.5
+        and 0.05 on the raw contrast, momentum 0.9) or ``"normalized"`` (steps 0.003 and
+        0.0003 under a running RMS of forgetting 0.99 and floor 1e-4, momentum 0.9), the
+        point for many lessons, as in imitation; ``retune(teaching=...)`` moves a living
+        brain to the other. ``learning=LearnerConfig(...)`` replaces the whole
+        configuration instead, the expert's way to other steps.
+        ``options`` accepts the constructor's memory settings and every other
         configuration field as ``learning_<field>``, ``actor_<field>`` or
         ``arousal_<field>``. ``temperature`` aliases ``learning_temperature``.
         ``arousal=True`` enables the founder arousal config; a mapping patches
@@ -2272,15 +2284,15 @@ class Brain:
         block of ``inputs`` neurons per decay, each block a fading trace of the observations
         as heard (the values the sensory neurons were stimulated with, before settling) at
         its own decay, held at ``history_amplitude`` (3.0) and read by the association
-        region through a plastic projection of initial magnitude ``history_scale`` (1.2),
-        initialized like the working trace's. After each act the blocks take in the
+        region through a plastic projection of initial magnitude ``scales["history"]``
+        (1.2), initialized like the working trace's. After each act the blocks take in the
         observation the brain acted on, so at a decision the history holds the past and the
         sensory drive the present. The founder ``history_decays=()`` builds the brain
-        without it. ``history_scale`` is a construction setting.
+        without it.
         ``recall=True`` adds the recall memory, an index of the stream's own recent moments:
         a ``recall`` and a ``next`` region (one neuron per value coordinate each), read by
         the association region through plastic projections of initial magnitude
-        ``recall_scale`` (1.2), appended after any history. After each act, and after each
+        ``scales["recall"]`` (1.2), appended after any history. After each act, and after each
         moment ``wait`` senses, the moment is written as one slot per stream (``Recall``):
         its key the event heard (``recall_heard`` 1.0 times the observation code, the
         observation itself or the brain's sparse code of it), its value the event, and the
@@ -2314,7 +2326,7 @@ class Brain:
         its own, zeros before a stream's first moment and after an episode ends: a key of
         ``k * code`` values, the address and the map's outputs as wide.
         The founder ``recall=False`` builds the brain without it.
-        ``recall_scale``, ``recall_capacity``, ``recall_next``, ``recall_window`` and
+        ``recall_capacity``, ``recall_next``, ``recall_window`` and
         ``recall_window_decay`` are construction settings; the keys, the values and the
         address map follow the observation code's width, a brain's ``code`` among the ways
         to bound it. The settings of 0.84.3 that this version removed (``recall_write``,
@@ -2367,11 +2379,17 @@ class Brain:
 
         genome, layout = _layout(
             inputs, actions, options, modules=modules, observers=observers, lateral=lateral,
-            sensory_scale=sensory_scale, working_memory_scale=working_memory_scale,
-            history_scale=history_scale, recall_scale=recall_scale, features=features,
-            field=field, code=code, learned_code=learned_code, seed=seed, slots=slots,
+            scales=scales, features=features, field=field, code=code,
+            learned_code=learned_code, seed=seed, slots=slots,
         )
         units, learned = layout["units"], layout["learned"]
+        if teaching is not None:
+            if "learning" in options:
+                raise ValueError(
+                    "teaching sets the teaching point of the composed founders and learning= "
+                    "replaces the whole configuration: pass one of them"
+                )
+            options["learning"] = taught(teaching, _learning())
         if "episodic" in options and not isinstance(options["episodic"], bool):
             raise ValueError("episodic must be boolean")
         if options.get("episodic", True) and options.get("memory_choice") is True:
@@ -2389,13 +2407,12 @@ class Brain:
                 tuple(modules) != (64,)
                 or tuple(observers) != ()
                 or lateral is not None
-                or (sensory_scale, working_memory_scale, history_scale, recall_scale)
-                != (1.0, 1.2, 1.2, 1.2)
+                or scales is not None
                 or (features, field) != (8, 3)
             ):
                 raise ValueError(
-                    "a connectome brings its own layout: modules, observers, lateral, the "
-                    "projection scales, features and field are compose's layout settings"
+                    "a connectome brings its own layout: modules, observers, lateral, "
+                    "scales, features and field are compose's layout settings"
                 )
             populations = connectome.populations
             sensory = populations.get("sensory", populations.get("visual/input", ()))
@@ -2474,17 +2491,27 @@ class Brain:
             raise ValueError("reset_arousal must be boolean")
         options = dict(genes)
         construction = {
-            "inputs", "actions", "modules", "observers", "lateral", "sensory_scale",
-            "working_memory_scale", "slots", "seed", "episodic", "backend",
-            "device", "connectome", "history_decays", "history_scale", *_EPISODIC_SETTINGS,
-            "recall", "recall_scale", *(f"recall_{name}" for name in Recall.CONSTRUCTION),
+            "inputs", "actions", "modules", "observers", "lateral", "scales", "slots", "seed",
+            "episodic", "backend", "device", "connectome", "history_decays",
+            *_EPISODIC_SETTINGS, "recall", *(f"recall_{name}" for name in Recall.CONSTRUCTION),
             *(f"recall_{name}" for name in Recall.CONSTRUCTION_OPTIONS), "code",
             "learned_code", *(f"learned_code_{name}" for name in LearnedCode.CONSTRUCTION),
         }
         for name in options:
+            refusal = rescaled(name)
+            if refusal is not None:
+                raise ValueError(refusal)
             if name in construction:
                 raise ValueError(f"{name} is a construction setting; retune preserves the brain")
+        point = options.pop("teaching", None)
+        if point is not None and "learning" in options:
+            raise ValueError(
+                "teaching sets the teaching point and learning= replaces the whole "
+                "configuration: pass one of them"
+            )
         learning = options.pop("learning", self._learning_base)
+        if point is not None:
+            learning = taught(point, learning)
         reward = options.pop("reward", self._reward_base)
         current_arousal = None if self.arousal is None else self.arousal.config
         arousal = options.pop("arousal", current_arousal)

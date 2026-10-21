@@ -165,7 +165,7 @@ def make_brain(
     # frozen protocols ran the composition of releases before 0.82.0: the retention they
     # leave unnamed was 0.2, and the carried interpretation was read back at scale 12
     options["working_memory_decay"] = point.get("trace_decay", 0.2)
-    options["working_memory_scale"] = point.get("trace_scale", 12.0)
+    options["scales"] = {"trace": point.get("trace_scale", 12.0)}
     if "consolidation" in point:
         options["consolidation"] = point["consolidation"]
     if point.get("efference_amplitude"):

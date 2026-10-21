@@ -92,8 +92,8 @@ def test_the_history_adds_only_its_blocks_and_their_projection():
 
 
 def test_the_projection_starts_at_its_scale_like_the_working_trace():
-    quiet = composed(decays=(0.5,), history_scale=1.2)
-    loud = composed(decays=(0.5,), history_scale=12.0)
+    quiet = composed(decays=(0.5,), scales={"history": 1.2})
+    loud = composed(decays=(0.5,), scales={"history": 12.0})
     history = np.asarray(quiet.connectome.populations["history"])
     rows = np.isin(np.asarray(quiet.connectome.pre), history)
     np.testing.assert_allclose(
@@ -275,7 +275,7 @@ def test_the_amplitude_retunes_and_the_blocks_are_construction_settings():
     brain.live(CUE)
     brain.retune(history_amplitude=1.5)
     assert brain.history.amplitude == 1.5 and brain.describe()["genes"]["history_amplitude"] == 1.5
-    for name, value in (("history_decays", (0.1,)), ("history_scale", 2.0)):
+    for name, value in (("history_decays", (0.1,)), ("scales", {"history": 2.0})):
         with pytest.raises(ValueError, match="construction setting"):
             brain.retune(**{name: value})
     with pytest.raises(ValueError):

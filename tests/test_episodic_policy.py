@@ -10,6 +10,8 @@ the decisions taken since that outcome.
 
 from __future__ import annotations
 
+from dataclasses import replace
+
 import numpy as np
 import pytest
 from checkpoints import metadata
@@ -17,9 +19,13 @@ from checkpoints import metadata
 import cadence as cd
 
 
-def episodic(*args, **options) -> cd.Brain:
-    """``Brain.compose`` with the episodic memory."""
-    return cd.Brain.compose(*args, **{"memory_choice": True, **options})
+def episodic(*args, frozen: bool = False, **options) -> cd.Brain:
+    """``Brain.compose`` with the episodic memory; ``frozen``: the cortex learns nothing from
+    lessons (the composed teaching founders at step zero)."""
+    brain = cd.Brain.compose(*args, **{"memory_choice": True, **options})
+    if frozen:
+        brain.retune(learning=replace(brain.learner.config, eta=0.0, eta_bias=0.0))
+    return brain
 
 
 def one_hot(index: int, width: int) -> np.ndarray:
@@ -43,9 +49,8 @@ def path(brain: cd.Brain) -> list[tuple[int, float, bool]]:
 
 def cued(seed: int, **options) -> tuple[cd.Brain, dict[int, np.ndarray], np.ndarray]:
     """A brain shown each cue's answer once at the go moment after it. Its cortex learns
-    nothing from the lessons (``learning_eta=0``): the records alone carry them."""
-    brain = episodic(3, 2, modules=(8,), seed=seed, learning_eta=0, learning_eta_bias=0,
-                     **options)
+    nothing from the lessons (``frozen``): the records alone carry them."""
+    brain = episodic(3, 2, modules=(8,), seed=seed, frozen=True, **options)
     cues, go = {0: one_hot(0, 3), 1: one_hot(1, 3)}, one_hot(2, 3)
     for cue, shown in cues.items():
         brain.reset()
@@ -59,8 +64,7 @@ def misled() -> tuple[cd.Brain, np.ndarray, int]:
     """A brain whose memory turns its cortex's answer into the other act: one demonstration of
     the other action is recorded, and the cortex learns nothing from it."""
     x = one_hot(0, 3)
-    brain = episodic(3, 2, modules=(8,), seed=3, learning_surprise=True, learning_eta=0,
-                     learning_eta_bias=0)
+    brain = episodic(3, 2, modules=(8,), seed=3, learning_surprise=True, frozen=True)
     cortical = int(brain.act(x, greedy=True)[0])
     brain.reset()
     brain.step(x, teacher=[1 - cortical])
@@ -121,7 +125,7 @@ def test_a_surprise_lesson_corrects_an_act_the_memory_made_wrong(tmp_path):
 def test_an_act_the_memory_makes_right_is_no_surprise_and_gets_no_lesson():
     brain, x, cortical = misled()
     shown = 1 - cortical  # what the brain does, by its memory against its cortex
-    brain.retune(learning_eta=0.5, learning_eta_bias=0.05)  # the cortex could learn again
+    brain.retune(teaching="founder")  # the cortex could learn again
     graph = brain.brain
     parameters = [np.array(getattr(graph, name), copy=True) for name in ("efficacy", "bias")]
     writes = brain.hippocampus.writes, brain.context_memory.writes
@@ -186,8 +190,7 @@ def test_an_aroused_brain_owns_the_samples_of_its_complete_greedy_choice():
     x = one_hot(0, 2)
     # place records alone, and nothing learned or written while it lives: the vote stays
     brain = episodic(2, 2, modules=(8,), seed=0, memory_context=0.0, arousal={"youth": 1000},
-                     learning_eta=0, learning_eta_bias=0, actor_eta=0, actor_eta_bias=0,
-                     actor_eta_critic=0)
+                     frozen=True, actor_eta=0, actor_eta_bias=0, actor_eta_critic=0)
     cortical = int(brain.act(x, greedy=True)[0])
     brain.reset()
     brain.step(x, teacher=[1 - cortical])

@@ -300,7 +300,9 @@ Calibrate on training inputs and freeze the result before evaluation.
 ## 7. Every knob
 
 `LearnerConfig()` holds the standalone defaults below. Each field is the `learning_<field>`
-override of `compose` and `retune`, with the composed founders in
+override of `compose` and `retune`, but `eta`, `eta_bias`, `normalize` and `normalize_floor`,
+which the teaching point sets (`teaching="founder"` or `"normalized"`), with the composed
+founders in
 [defaults and expert overrides](brain.md#defaults-and-expert-overrides);
 `learning=LearnerConfig(...)` replaces the composed config whole. A standalone learner's frozen
 config changes between updates with `learner.config = dataclasses.replace(learner.config,
@@ -366,9 +368,10 @@ and actual step sizes. `LearnerConfig` warns when `normalize > 0` and `eta` or `
 
 ### Many lessons: the normalized point for imitation
 
-For a brain that learns a demonstrator's policy from many lessons, set the teaching learner to
-`learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003` and
-`learning_eta_bias=0.0003`, and teach about 32 rows per lesson. In a copy measurement a composed
+For a brain that learns a demonstrator's policy from many lessons, compose it with
+`teaching="normalized"` (the teaching learner's steps 0.003 and 0.0003 under a running RMS of
+forgetting 0.99 and floor 1e-4, momentum 0.9) or move a living brain there with
+`retune(teaching="normalized")`, and teach about 32 rows per lesson. In a copy measurement a composed
 brain with one region of 256 neurons (`Brain.compose(260, 3, modules=(256,))`) learned the moves
 of a three-move look-ahead demonstrator in a light-cycle game on a 24 x 24 grid: 260 inputs of an
 egocentric view, three actions, about 124,000 labelled moments from 1,400 games, and 100 further
@@ -432,9 +435,7 @@ def demonstrator(position):  # the policy the brain watches: 1 steps right, 0 st
 def move(position, action):
     return np.clip(position + np.where(action == 1, 1, -1), 0, 4)
 
-IMITATION = {"learning_normalize": 0.99, "learning_normalize_floor": 1e-4,
-             "learning_eta": 0.003, "learning_eta_bias": 0.0003}  # the point above
-pupil = cd.Brain.compose(inputs=5, actions=2, seed=0, **IMITATION)
+pupil = cd.Brain.compose(inputs=5, actions=2, seed=0, teaching="normalized")  # the point above
 position = np.full(32, 2)  # 32 streams, one per batch row, starting in the middle
 for moment in range(32):  # bootstrap by watching: the demonstrator's moves are executed
     label = demonstrator(position)

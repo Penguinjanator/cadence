@@ -64,8 +64,8 @@ point where it differs from the founders.
 | Carry a cue across a short delay to its reward | working trace (on) | delayed response: seeds 8 to 13 solve at 0.96 to 1.00 ([test](../tests/test_context_defaults.py)) | a history that carries nothing useful, next row |
 | Answer from the present when the history does not matter | the founder; try `working_memory_amplitude=0.0` as the control | continuing contextual bandit with `actor_gamma=0.0, actor_lam=0.0`, seeds 0 to 5: 0.23 to 1.00, mean 0.60, chance 0.25 ([test](../tests/test_context_defaults.py)) | the actor has to learn the trace away |
 | Hold one cue and replace it with a later one over a delay | no measured memory; the working trace fails it | [recall benchmark](../benchmarks/recall/README.md): a tuned working-trace recipe without the associative store fails on fresh founders; recall memory and heard history are not measured there | a loop strong enough to hold a cue resists the next write |
-| Alternate or sequence its own actions under identical input | efference copy at `efference_amplitude=3.0`, `efference_decay=0.0` | [rhythm](../benchmarks/rhythm/README.md), `modules=(32,)`, `episodic=False`, `working_memory_decay=0.1, working_memory_scale=12.0`: alternation 0.97 and 0.93 against 0.50 and 0.40 with the trace alone; uniform random alternates at 0.50 | delayed-credit foraging ([key-door](../benchmarks/keydoor/README.md)): a copy at amplitude 0.3 feeds less at every delay, and at 3.0 the creature does not feed |
-| Learn which action pays in a situation, and reverse quickly | associative store (on) | [reversal](../benchmarks/reversal/README.md), `modules=(32,)`, `working_memory_amplitude=0.3, working_memory_scale=12.0, working_memory_decay=0.2, consolidation=0.25`, actor rate 0.1 (bias 0.01): memory alone 1.00 from 300 exposures against the graph alone 0.60 to 0.80 under rule A | at the composed founders the chamber stays at chance (`defaults` 0.48 to 0.53); noisy pay overwrites a one-shot record, next row |
+| Alternate or sequence its own actions under identical input | efference copy at `efference_amplitude=3.0`, `efference_decay=0.0` | [rhythm](../benchmarks/rhythm/README.md), `modules=(32,)`, `episodic=False`, `working_memory_decay=0.1, scales={"trace": 12.0}`: alternation 0.97 and 0.93 against 0.50 and 0.40 with the trace alone; uniform random alternates at 0.50 | delayed-credit foraging ([key-door](../benchmarks/keydoor/README.md)): a copy at amplitude 0.3 feeds less at every delay, and at 3.0 the creature does not feed |
+| Learn which action pays in a situation, and reverse quickly | associative store (on) | [reversal](../benchmarks/reversal/README.md), `modules=(32,)`, `working_memory_amplitude=0.3, scales={"trace": 12.0}, working_memory_decay=0.2, consolidation=0.25`, actor rate 0.1 (bias 0.01): memory alone 1.00 from 300 exposures against the graph alone 0.60 to 0.80 under rule A | at the composed founders the chamber stays at chance (`defaults` 0.48 to 0.53); noisy pay overwrites a one-shot record, next row |
 | Noisy or signed pay | `memory_rate=0.2` | [competing](../benchmarks/competing/README.md): acquires as at 1.0 and halves the loss | half the loss is left |
 | Situations whose keys overlap strongly | a standalone `FastSynapses` behind a centered, habituated `PatternSeparator` ([records](records.md)); not available on the founder store | 64 keys of cosine 0.9, expansion 1024, 8 winners: revision accuracy at least 0.95, at least 0.5 above the plain store ([test](../tests/test_separation.py)) | the founder store has no separator; the episodic memory's fixed separator is uncentered and not measured by this test |
 | Credit an action paid a few moments later | actor eligibility (on) | [key-door](../benchmarks/keydoor/README.md), `modules=(32,)` at the same operating point (scale 12.0, decay 0.2): fed 0.92 at delays 2 and 5; `actor_lam=0` falls to 0.53 at delay 5 | delay 10: 0.49 against a tabular learner's 0.83 to 0.90 |
@@ -100,7 +100,7 @@ assert not brain.working_memory.trace.any()
 | --- | --- | --- | --- | --- |
 | `working_memory_amplitude` | 3.0 | `retune` | the copy should weigh more in the settle and in learning | the carried context should fade (0 silences it) |
 | `working_memory_decay` | 0.0, in [0, 1) | `retune` | the context changes slowly and should be averaged over moments | 0 carries the last interpretation only |
-| `working_memory_scale` | 1.2 | construction (`compose` argument) | the past must matter from the first moment, before learning | the brain repeats itself and ignores what it sees |
+| `scales["trace"]` | 1.2 | construction (`compose` argument) | the past must matter from the first moment, before learning | the brain repeats itself and ignores what it sees |
 | `modules` | `(64,)` | construction | more items or distractors: `modules=(128,)` | a narrow last module such as `(48, 24)` carries little |
 
 `Brain(connectome, ...)` has a trace when the connectome has a `prefrontal` region.
@@ -152,7 +152,7 @@ trace = brain.history.trace                               # two blocks of three 
 assert trace.shape == (1, 6) and trace[0, 3] > 0          # the slow block holds the cue
 ```
 
-`history_decays` (`()`, each in [0, 1)) and `history_scale` (1.2, the projection's initial
+`history_decays` (`()`, each in [0, 1)) and `scales["history"]` (1.2, the projection's initial
 magnitude, a `compose` argument) are construction settings; `history_amplitude` (3.0) can be
 retuned. On a coded vector brain the blocks hold the code. Three decays at 256 inputs and
 four actions add 768 neurons and 49,152 synapses to a founder of 21,004 synapses.

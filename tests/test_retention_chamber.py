@@ -88,7 +88,7 @@ def test_constructor_preserves_the_ordinary_declared_gene(chamber):
     # the chamber froze the working trace of its release (amplitude 3, retention 0.2, scale 12)
     ordinary = cd.Brain.compose(8, 2, modules=(32,), lateral=-0.5, seed=0,
                                 working_memory_amplitude=3.0, working_memory_decay=0.2,
-                                working_memory_scale=12.0)
+                                scales={"trace": 12.0})
     left, right = chamber.model_identity(candidate), chamber.model_identity(ordinary)
     assert left == right
     assert left["learner"]["normalize"] == 0
