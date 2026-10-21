@@ -137,7 +137,9 @@ class LearnedCode:
     activation one full input gives its unit, below which the unit read does not raise a
     code), ``cortex`` (whether the first module reads the observation beside the code, a
     construction setting), ``scale`` (the memories' key at unit length or at the norm of the
-    observation itself, a construction setting) and ``identity`` (the weight of the
+    observation itself, a construction setting), ``held`` (the code units held at the code
+    phase's fixed point through the whole settle, a construction setting) and ``identity``
+    (the weight of the
     observation's own identity in the memories' key, a construction setting: the key width
     follows it).
     Validation refuses a value outside its domain before anything is built.
@@ -162,6 +164,7 @@ class LearnedCode:
     identity: float = 0.5
     cortex: str = "code"
     scale: str = "unit"
+    held: bool = True
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
@@ -169,13 +172,13 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place", "output", "floor", "identity", "cortex", "scale",
+        "silence", "place", "output", "floor", "identity", "cortex", "scale", "held",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
         "place", "output", "floor",
     )
-    CONSTRUCTION = ("threshold", "identity", "cortex", "scale")
+    CONSTRUCTION = ("threshold", "identity", "cortex", "scale", "held")
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
@@ -202,7 +205,7 @@ class LearnedCode:
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
-            "cortex": "code", "scale": "unit",
+            "cortex": "code", "scale": "unit", "held": True,
         }
 
     @staticmethod
@@ -238,6 +241,10 @@ class LearnedCode:
             if not isinstance(value, str) or value not in LearnedCode.SCALES:
                 raise ValueError(f"scale is one of {LearnedCode.SCALES}")
             return value
+        if name == "held":
+            if not isinstance(value, (bool, np.bool_)):
+                raise ValueError("held is True or False")
+            return bool(value)
         if name == "identity":
             number = real(name, value, low=0, high=1)
             if number >= 1:
