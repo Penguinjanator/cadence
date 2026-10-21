@@ -336,6 +336,21 @@
   `pending`; the configuration and memory sections, `observation_code`, `initialization`
   and `pending_feedback` move into them. Arrays, actions and checkpoints are unchanged on
   the 12-brain digest ledger, and every description holds what it held, in the new layout.
+- The documentation is organized by situation: the 26 pages left by the reorganization above
+  and the removals of this release become 14, each answering what you want and what to use.
+  `docs/start.md` (a creature in a body: `compose`, `live`, `wait`, `reset`, `save` and
+  `Brain.load`), `docs/teach.md` (lessons, `step` with a teacher, the teaching point, the
+  brain's own path), `docs/reward.md` (with the sequential tasks), `docs/memory.md` (the
+  family, the episodic and recall memories in full, the standalone stores),
+  `docs/senses.md` (images, the observation code, the learned code), `docs/tune.md` (the
+  region map, the founders, `retune`, the operating point), `docs/evaluate.md` (baselines,
+  independent-sample controls, receipts), `docs/anatomy.md` (genomes, cortices,
+  connectomes, evolution), `docs/settling.md` (the neuron, the free/nudged rule, the
+  certificate), and `docs/backends.md`, `docs/troubleshooting.md`, `docs/contracts.md` and
+  `docs/api.md`; `docs/README.md` is the catalogue by situation, and the README carries the
+  comparison for machine-learning readers. Every section keeps its heading and text, so its
+  anchor holds on its new page, and every link of the documentation, the README, the
+  benchmark READMEs and the library's docstrings and warnings points to the new place.
 
 ## 0.84.3 — 2026-10-19
 
