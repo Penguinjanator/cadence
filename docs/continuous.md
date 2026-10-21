@@ -20,9 +20,12 @@ change, no associative write; earlier eligibility fades one step. Two things rou
   the critic's value of the situation and, weighed by `record_surprise`, the
   associative record held for the chosen action. Only outcomes of the brain's own
   greedy choices can surprise it or move its usual error.
-- **Want**: the recent reward falls below what this life usually pays, or below
-  the body's `need`. The need's want is the unmet share of the need; it never
-  habituates and a rare reward's small mean cannot dilute it.
+- **Want**: the recent reward falls below what this life usually pays, below
+  the body's `need`, or below `need_scale` times the spread of the rewards the
+  brain has learned from. The need's want is the unmet share of the need; it never
+  habituates and a rare reward's small mean cannot dilute it. The scaled need is a
+  need in units of that spread (opt-in, founder 0): it applies after youth, once an
+  outcome has entered the scale, and follows what the life's rewards spread over.
 
 An aroused brain samples its policy, learns from every outcome as `step` does and
 writes the outcome that woke it to memory. Want heats one uniformly chosen motor slot
@@ -68,18 +71,21 @@ The law, per outcome with unsigned temporal-difference error `error`:
 
 ```text
 surprise = log(error / (tolerance * usual + floor * scale))   when positive, else 0
-want     = max(clip((longrun - recent) / scale, 0, 1), clip((need - recent) / need, 0, 1))
+want     = max(clip((longrun - recent) / scale, 0, 1), clip((need - recent) / need, 0, 1),
+               clip((need_scale * scale - recent) / (need_scale * scale), 0, 1))
 level    = decay * level + (1 - decay) * (surprise + want)
 ```
 
 `usual` is the running own-choice error, `recent` and `longrun` the reward at the
 `fast` and `slow` rates, `scale` the spread of learned outcomes around `longrun`; a
-want term with a zero denominator is zero. The record channel has its own `usual`, and
-surprise is the larger weighted channel. The brain is aroused while
-`level >= threshold` and for its first `youth` moments. Set genes with
-`arousal_<field>` at `compose` or `retune`
+want term with a zero denominator is zero. The `need_scale` term reads the scale as it
+stood before the outcome entered it, applies after `youth` and is zero while no outcome
+has entered the scale; the want and heat read afterwards use the scale as it stands. The
+record channel has its own `usual`, and surprise is the larger weighted channel. The
+brain is aroused while `level >= threshold` and for its first `youth` moments. Set genes
+with `arousal_<field>` at `compose` or `retune`
 ([composition](brain.md#defaults-and-expert-overrides)); construction refuses values
-outside their ranges, a negative `need` and `fast < slow`.
+outside their ranges, a negative `need` or `need_scale` and `fast < slow`.
 
 | Gene | Founder | Effect |
 | --- | --- | --- |
@@ -94,6 +100,7 @@ outside their ranges, a negative `need` and `fast < slow`.
 | `value_surprise` | 1.0 | weight of surprise at the critic's forecast |
 | `record_surprise` | 0.0 | weight of surprise at the action's record; on the [odour nursery](../benchmarks/reversal/README.md#how-the-operating-point-and-the-founders-were-selected) it wakes lives sooner and leaves more of them searching too briefly |
 | `need` | 0.0 | reward per moment the body requires; 0 removes the need's want |
+| `need_scale` | 0.0 | the need as a share of the reward scale, `need_scale * scale`, after youth; 0 removes it |
 
 `brain.last_arousal` snapshots the latest moment: `mode`, `level`, `error`,
 `record_error`, `surprise`, `want`, `temperature`, per-slot `temperatures`,
@@ -109,6 +116,28 @@ At `need=0` an adult whose life always paid poorly is not roused; bootstrap it w
 adaptation, and a minority of lives never find the moved reward. In an unchanging
 world, reward noise rouses the founders for a small share of moments. A routine moment
 pays one full settle.
+
+`need_scale` is opt-in: at the founder 0 every brain, checkpoint and composed life is as
+without it, and a checkpoint carries the gene (`cadence-arousal/3`) only above zero. It is
+outside `ArousalConfig.space()`, so seeded mutations at the founder draw as before; add it to
+a space to select on it. A positive `need_scale` rouses an adult whose income falls below
+that share of its learned reward spread, whatever the unit of its rewards, and leaves a life
+that never paid at all calm (its scale is zero). At `need_scale=0.1`, with the actor step at
+the composed founder, against the founder on fresh seeds the composed brain kept every
+chamber of the preservation panel: in the [key-door chamber](../benchmarks/keydoor/README.md)
+it acquired rule A on 10 of 16 lives against 8 of 16, with fed rule-ends calm on 20 of 21
+and unfed ones aroused (late aroused share .10 at fed rule-ends against .84 at unfed ones,
+where the founder is calm at both, .01 and .00, with 17 of 17 fed rule-ends calm and 16 of
+16 lives calm in every rule); in the [prerequisite chain](../benchmarks/chain/README.md) 3 of
+12 lives collapsed onto one action against 12 of 12 and 7 of 12 learned the chain against 1
+of 12; the [odour nursery](../benchmarks/reversal/README.md) passed 8 of 12 lives in both;
+and a two-armed bandit with reversal won 30 of 30 blocks in both. The cost follows from the
+law: in a world whose income stays below the share, the want stays at the unmet share and
+the level settles above the threshold, so the brain stays aroused and pays learning sweeps
+at every moment. With pay at the end of the chain, 5 of 6 lives stayed aroused for .60 to
+.67 of the life on an income of .017 to .022 per moment, the sixth, earning .15 per moment,
+for .06, and the founder's 6 lives, all collapsed, for .02. Through `step` the gene is
+inert.
 
 <a id="observations-actions-and-reward"></a>
 
@@ -267,13 +296,15 @@ efference copy, the heard history and the episodic context, plus `last_learning`
 recall slots survive only with `keep_memory=True` ([recall](recall.md)). Arousal
 starts calm with its references cleared and its age kept, as after
 `retune(reset_arousal=True)`, so an adult at `need=0` is roused only by surprise and
-can stay calm in a world that stopped paying. `keep_arousal=True` keeps the arousal
-state as it is: its level, its recent and long-run reward, its usual errors, its reward
-scale, their counts, its age and its work counts carry into the new stream, as when the
-state saved before the reset with `brain.arousal.to_dict()` is restored after it with
-`Arousal.from_dict`, and a brain aroused when it was reset begins the new stream
-aroused. Where the world may stop paying, reset with `keep_arousal=True`, set a positive
-`need`, or keep living without the reset.
+can stay calm in a world that stopped paying; its reward scale is cleared too, so a
+positive `need_scale` wants nothing until outcomes enter the new stream's scale.
+`keep_arousal=True` keeps the arousal state as it is: its level, its recent and long-run
+reward, its usual errors, its reward scale (and with it the scaled need), their counts,
+its age and its work counts carry into the new stream, as when the state saved before
+the reset with `brain.arousal.to_dict()` is restored after it with `Arousal.from_dict`,
+and a brain aroused when it was reset begins the new stream aroused. Where the world may
+stop paying, reset with `keep_arousal=True`, set a positive `need`, or keep living
+without the reset.
 
 In a two-armed bandit with one constant observation whose paying arm moved after 300
 moments (`Brain.compose(1, 2, modules=(16,), arousal=True)`, seeds 0 to 4), adults reset
