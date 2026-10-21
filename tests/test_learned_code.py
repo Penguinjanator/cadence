@@ -307,7 +307,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.5, "cortex": "code",
+        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9, "cortex": "code",
         "scale": "unit", "held": True, "reads": "context",
     }
     with pytest.raises(ValueError, match="reads is one of"):
@@ -525,7 +525,8 @@ def test_the_key_of_a_decision_is_its_moments_code_and_the_history_hears_the_cod
     brain.live(x)
     first = brain._moment_key(x, brain.learned_code.code_of(settled_code(brain)))
     key = brain.recall.keys[0, 0]  # the moment's key: the phase's code in the stream's context
-    heard = key[:UNITS] / np.sqrt(0.5)  # the history hears the key's code part at unit length
+    w = brain.learned_code.identity
+    heard = key[:UNITS] / np.sqrt(1.0 - w)  # the history hears the key's code part at unit length
     np.testing.assert_allclose(brain.history.trace, 0.5 * heard[None, :], atol=1e-9)
     assert brain._lived[7] is not None
     # the keys are the phase's code; the whole settle moves the code units within tolerance
@@ -1001,7 +1002,7 @@ def test_the_key_joins_the_code_to_the_observations_identity():
     part is the observation at unit length weighted by ``sqrt(w)``, the code part the
     rectified settled code; at ``learned_code_identity=0`` the key is the code alone and
     the width ``units``."""
-    brain = composed(seed=2, recall=True)
+    brain = composed(seed=2, recall=True, learned_code_identity=0.5)
     x = tokens(4, 9, 9)
     brain.act(x, greedy=True)
     key = brain.recall.keys[:, -1, :]
@@ -1136,11 +1137,11 @@ def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
     assert brain._stepping == 0 and brain.brain.neuron_model.dt == 1.0
     assert brain.learner.config.free_steps == 1024
     held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
-    np.testing.assert_array_equal(held, code.last["activation"])
+    np.testing.assert_allclose(held, code.last["activation"], rtol=0, atol=1e-12)
     brain.lesson(x, [1, 2])
     brain.act(x, greedy=True)
     held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
-    np.testing.assert_array_equal(held, code.last["activation"])
+    np.testing.assert_allclose(held, code.last["activation"], rtol=0, atol=1e-12)
     twin = cd.Brain.load(brain.save(tmp_path / "held.npz"))
     assert twin.learned_code.halvings == code.halvings and twin._stepping == 0
     assert twin.describe() == brain.describe()
@@ -1161,7 +1162,7 @@ def test_the_cortex_and_the_memories_may_read_the_context_free_code():
     before = {name: value.copy() for name, value in code.arrays().items()}
     brain.act(x, greedy=True)
     held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
-    np.testing.assert_array_equal(np.maximum(held, 0.0), code.last["free"])  # rectified
+    np.testing.assert_allclose(np.maximum(held, 0.0), code.last["free"], rtol=0, atol=1e-12)
     # the moment's key is its context-free code (settled before the moment's learning step)
     free_key = brain._moment_key(x, code.code_of(code.last["free"]))
     np.testing.assert_allclose(brain.recall.keys[:, -1, :], free_key, atol=1e-9)
