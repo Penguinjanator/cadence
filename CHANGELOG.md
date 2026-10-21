@@ -295,6 +295,20 @@
   `memory_replay` and `memory_demonstrations` read the episodic member's settings. Every
   array, action, description and checkpoint on the 12-brain digest ledger is unchanged, and
   the benchmark chambers give the same outputs.
+- One constructor: `Brain.compose(inputs, actions, ...)` builds every composed brain, and
+  `Brain.compose(inputs, actions, connectome=...)` wraps a custom anatomy with the same
+  founders, the episodic founders filled in under `memory_choice=True`. The anatomy brings
+  its own layout, so `modules`, `observers`, `lateral`, the projection scales, `features`
+  and `field` stay at their founders, and its sensory and motor populations hold the inputs
+  and the actions. `Genome.composed(inputs, actions, ...)` returns the layout `compose`
+  develops, to edit or evolve, and `Brain.observation_width` becomes
+  `Genome.observation_width`. `Brain.build` and `Brain.genome`, the single-region layout (a
+  sensory region, one association region and the motor region, with an optional
+  prefrontal region read at scale 12), leave: `Brain.compose(inputs, actions,
+  modules=(hidden,))` is that brain with a working trace read at scale 1.2, and
+  `Brain(connectome, ...)` wraps any anatomy as before. Every composed brain is unchanged
+  on the 12-brain digest ledger, and the benchmark chambers give the same outputs. The
+  single-region layout lives on in release 0.84.3.
 
 ## 0.84.3 — 2026-10-19
 
