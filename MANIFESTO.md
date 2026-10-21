@@ -47,8 +47,8 @@ repair inside the settle, slowly enough that stored keys stay readable; a backpr
 embedding table is a control. The memories key on the observation, on a fixed random code of
 it, or, opt-in, on the code a region of the brain's own neurons learns while it lives
 (`learned_code=units`; [the learned code](docs/senses.md#the-learned-code) states its costs
-and limits). A learned code that binds by itself at camera width is open in
-[#211](https://github.com/muellerberndt/cadence/issues/211).
+and limits). At camera width it binds by itself on frames presented at unit length
+([#211](https://github.com/muellerberndt/cadence/issues/211)).
 
 **The transformer's parts, settled.** Everything that makes a transformer effective has its
 version here as settling and local repair: the embedding is a learned code of meaning, the
