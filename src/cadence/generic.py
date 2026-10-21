@@ -1390,10 +1390,8 @@ class Brain:
         # With a learned code the brain integrates every phase at the step the code's
         # competition is stable under (``LearnedCode.stability``), the model's step halved
         # ``_stepping`` times, with the step budgets scaled to keep each phase's time; the
-        # configurations as given are kept as the base the scaling reads.
+        # configurations in the model's step are the ones in use unscaled by the level.
         self._stepping = 0
-        self._learning_base = learning
-        self._reward_base = reward
         if learned:
             self.learner.standing = self._standing()
         self.working_memory: Trace | None = None
@@ -1769,6 +1767,34 @@ class Brain:
             return config
         return replace(config, eligibility_steps=config.eligibility_steps << halvings)
 
+    @staticmethod
+    def _unscaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
+        """The learner's budgets in the model's step from the ones at ``halvings``."""
+        if not halvings:
+            return config
+        return replace(
+            config, free_steps=config.free_steps >> halvings,
+            nudged_steps=config.nudged_steps >> halvings,
+        )
+
+    @staticmethod
+    def _unscaled_reward(config: ActorCriticConfig, halvings: int) -> ActorCriticConfig:
+        if not halvings or config.eligibility_steps is None:
+            return config
+        return replace(config, eligibility_steps=config.eligibility_steps >> halvings)
+
+    @property
+    def _learning_base(self) -> LearnerConfig:
+        """The learner's configuration in the model's step: the one in use, its budgets
+        unscaled by the stepping level, so a configuration assigned to ``learner.config``
+        holds through a change of step, its budgets read at the level in effect."""
+        return self._unscaled_learning(self.learner.config, self._stepping)
+
+    @property
+    def _reward_base(self) -> ActorCriticConfig:
+        """The actor's configuration in the model's step, as ``_learning_base``."""
+        return self._unscaled_reward(self.basal_ganglia.config, self._stepping)
+
     def _restep(self, halvings: int) -> None:
         """The brain at the model's step halved ``halvings`` times: the graph rebuilt at that
         step with its parameters as they are, the learner's and the actor's budgets scaled,
@@ -1777,6 +1803,8 @@ class Brain:
             return
         code = self.learned_code
         assert code is not None
+        # the configurations in use, in the model's step: assigned ones included
+        learning, reward = self._learning_base, self._reward_base
         graph = self.brain
         self.learner.brain = NeuralGraph(
             graph.connectome,
@@ -1789,8 +1817,8 @@ class Brain:
             layout=graph.layout,
             precision=graph.precision,
         )
-        self.learner.config = self._scaled_learning(self._learning_base, halvings)
-        self.basal_ganglia.config = self._scaled_reward(self._reward_base, halvings)
+        self.learner.config = self._scaled_learning(learning, halvings)
+        self.basal_ganglia.config = self._scaled_reward(reward, halvings)
         code.restep(halvings)
         self._stepping = halvings
 
@@ -2414,7 +2442,6 @@ class Brain:
 
         # Publication begins only after all validation. Never reconstruct a live
         # memory or optimizer to change its scalar settings.
-        self._learning_base, self._reward_base = learning, reward
         self.learner.config = self._scaled_learning(learning, self._stepping)
         agent = self.basal_ganglia
         agent.config = reward = self._scaled_reward(reward, self._stepping)
@@ -4608,20 +4635,11 @@ class Brain:
                         "the saved learned code tables disagree with the saved synapses and "
                         "biases of the code region"
                     )
-                # the saved step and budgets are the base's, scaled: the base is read back
+                # the saved budgets are scaled to the saved step: the configurations in the
+                # model's step are read back from them at that level
                 stepping = int(meta["learned_code"]["stepping"])
                 region.restep(stepping)
                 result._stepping = stepping
-                result._learning_base = replace(
-                    learner.config, free_steps=learner.config.free_steps >> stepping,
-                    nudged_steps=learner.config.nudged_steps >> stepping,
-                )
-                saved_reward = result.basal_ganglia.config
-                result._reward_base = (
-                    saved_reward if saved_reward.eligibility_steps is None else replace(
-                        saved_reward, eligibility_steps=saved_reward.eligibility_steps >> stepping
-                    )
-                )
                 learner.standing = result._standing()  # the loaded learner's boundary
             if heard is not None:
                 assert result.history is not None  # validated above: the population is there
@@ -4644,10 +4662,6 @@ class Brain:
                     recall.command = data["recall/command"].astype(float)
                 recall.writes = int(recalled["writes"])
             result.learner = learner
-            if result.learned_code is None:
-                # the configurations as saved are the base (the region's scaling reads them)
-                result._learning_base = learner.config
-                result._reward_base = result.basal_ganglia.config
             # Initialization provenance is separate from the saved, possibly learned bias.
             result.resting_bias = resting_bias
             result._composition = composition

@@ -760,6 +760,32 @@ def test_a_one_input_world_settles_at_the_step_its_dictionary_allows():
         assert code.stability(v) <= code.rest_stability()
 
 
+def test_a_configuration_assigned_after_compose_holds_through_a_change_of_step():
+    """A chamber's actor and learner configurations, assigned after compose, hold when a
+    code phase changes the brain's step: their budgets scale as the founder's do, every
+    other setting stays as assigned, and the description reports them in the model's step."""
+    from dataclasses import replace
+
+    brain = cd.Brain.compose(1, 2, arousal=True, learned_code=64, seed=0)
+    brain.basal_ganglia.config = replace(
+        brain.basal_ganglia.config, eta=0.1, eta_bias=0.01, lam=0.95, gamma=0.95,
+        eta_critic=5.0, eligibility_steps=12,
+    )
+    brain.learner.config = replace(brain.learner.config, eta=0.25, free_steps=512)
+    brain.live(np.ones((1, 1)))  # one input: the first phase changes the step
+    level = brain._stepping
+    assert level >= 1
+    actor = brain.basal_ganglia.config
+    assert (actor.eta, actor.eta_bias, actor.lam, actor.gamma, actor.eta_critic) == (
+        0.1, 0.01, 0.95, 0.95, 5.0
+    )
+    assert actor.eligibility_steps == 12 << level
+    assert brain.learner.config.eta == 0.25 and brain.learner.config.free_steps == 512 << level
+    described = brain.describe()
+    assert described["actor"]["eligibility_steps"] == 12 and described["actor"]["eta"] == 0.1
+    assert described["learning"]["free_steps"] == 512 and described["learning"]["eta"] == 0.25
+
+
 def test_a_brain_with_the_region_deep_copies_and_imagines():
     """``copy.deepcopy`` of a brain with the region: the copy shares the immutable
     connectomes and holds its own tables, state and generators, acts as the original acts,
