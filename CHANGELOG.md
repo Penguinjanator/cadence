@@ -56,7 +56,11 @@
   region, and the region's phase steps alone; `False` settles them with the whole graph at
   the code's step; it needs `learned_code_reads="context"`), `learned_code_reads` (`"free"`: the cortex and the
   memories read the context-free code while the code in context, with the prediction's
-  pull, is what the region learns from) and `learned_code_identity` (0.9: the memories' key is the rectified code
+  pull, is what the region learns from), `learned_code_fields` (`None`: one field; a
+  sequence of field widths shares the units among the observation's fields, each unit
+  reading its field alone, the competition block-diagonal), `learned_code_active` (0: a unit
+  firing below this activation counts as under-active in the thresholds' share) and
+  `learned_code_identity` (0.9: the memories' key is the rectified code
   at unit length joined to the observation's own identity, `unit([sqrt(1 - w) code,
   sqrt(w) unit(x)])`, of width `units + inputs`, so a binding stays readable by the
   identity part while the code part moves; at 0 the code alone); the lesson's contrast and the dopamine leave

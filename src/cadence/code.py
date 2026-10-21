@@ -111,6 +111,21 @@ def _unit_columns(values: np.ndarray) -> np.ndarray:
     return np.asarray(values / np.where(norm > 0.0, norm, 1.0))
 
 
+def _allocation(widths: tuple[int, ...], units: int) -> tuple[int, ...]:
+    """Units per field: in proportion to the fields' widths, at least two each, the
+    remainders given to the largest fractional shares first."""
+    total = float(sum(widths))
+    raw = [units * width / total for width in widths]
+    counts = [max(2, int(np.floor(share))) for share in raw]
+    while sum(counts) < units:
+        gaps = [share - count for share, count in zip(raw, counts, strict=True)]
+        counts[int(np.argmax(gaps))] += 1
+    while sum(counts) > units:
+        spare = [i for i, count in enumerate(counts) if count > 2]
+        counts[min(spare, key=lambda i: raw[i] - counts[i])] -= 1
+    return tuple(counts)
+
+
 def _unit_rows(values: np.ndarray) -> np.ndarray:
     """Each row scaled to unit length; a row without a positive entry stays zero."""
     norm = np.linalg.norm(values, axis=1, keepdims=True)
@@ -138,7 +153,10 @@ class LearnedCode:
     code), ``cortex`` (whether the first module reads the observation beside the code, a
     construction setting), ``scale`` (the memories' key at unit length or at the norm of the
     observation itself, a construction setting), ``held`` (the code units held at the code
-    phase's fixed point through the whole settle, a construction setting), ``reads`` (what
+    phase's fixed point through the whole settle, a construction setting), ``fields`` (the
+    widths of the observation's fields, each unit reading one, a construction setting),
+    ``active`` (the activation a unit must reach to count as active in the thresholds'
+    share), ``reads`` (what
     the cortex and the memories read of a held code: the code in context or the context-free
     code, a construction setting) and ``identity``
     (the weight of the
@@ -168,6 +186,8 @@ class LearnedCode:
     scale: str = "observation"
     held: bool = True
     reads: str = "free"
+    fields: tuple[int, ...] | None = None
+    active: float = 0.0
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
@@ -176,12 +196,13 @@ class LearnedCode:
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
         "silence", "place", "output", "floor", "identity", "cortex", "scale", "held", "reads",
+        "fields", "active",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
         "place", "output", "floor",
     )
-    CONSTRUCTION = ("threshold", "identity", "cortex", "scale", "held", "reads")
+    CONSTRUCTION = ("threshold", "identity", "cortex", "scale", "held", "reads", "fields")
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
@@ -214,6 +235,7 @@ class LearnedCode:
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9,
             "cortex": "code", "scale": "observation", "held": True, "reads": "free",
+            "fields": None, "active": 0.0,
         }
 
     @staticmethod
@@ -257,6 +279,20 @@ class LearnedCode:
             if not isinstance(value, str) or value not in LearnedCode.READS:
                 raise ValueError(f"reads is one of {LearnedCode.READS}")
             return value
+        if name == "fields":
+            if value is None:
+                return None
+            if isinstance(value, (str, bytes)) or not hasattr(value, "__iter__"):
+                raise ValueError("fields is None or a sequence of field widths")
+            widths = tuple(value)
+            if not widths or any(
+                isinstance(w, (bool, np.bool_)) or not isinstance(w, (int, np.integer)) or w < 1
+                for w in widths
+            ):
+                raise ValueError("fields is None or a sequence of positive field widths")
+            return tuple(int(w) for w in widths)
+        if name == "active":
+            return real(name, value, low=0)
         if name == "identity":
             number = real(name, value, low=0, high=1)
             if number >= 1:
@@ -281,6 +317,20 @@ class LearnedCode:
             setattr(self, name, self.setting(name, getattr(self, name)))
         if self.reads == "free" and not self.held:
             raise ValueError("reads \"free\" needs the held code (held=True)")
+        # the fields: each unit reads one field of the observation's coordinates
+        self.mask: np.ndarray | None = None
+        self.field_units: tuple[int, ...] = (self.units,)
+        if self.fields is not None:
+            if sum(self.fields) != self.inputs:
+                raise ValueError(
+                    f"the fields' widths sum to {sum(self.fields)}, not to the {self.inputs} inputs"
+                )
+            if self.units < 2 * len(self.fields):
+                raise ValueError("a learned code holds at least two units per field")
+            self.field_units = _allocation(self.fields, self.units)
+            field_of_input = np.repeat(np.arange(len(self.fields)), self.fields)
+            field_of_unit = np.repeat(np.arange(len(self.fields)), self.field_units)
+            self.mask = field_of_input[:, None] == field_of_unit[None, :]
         amplitude = np.array([self.model.stimulus_amplitude])
         full = float(np.asarray(self.model.activation(amplitude)).item())
         if not full > 0.0:
@@ -289,7 +339,10 @@ class LearnedCode:
             )
         self.read = 1.0 / full
         rng = np.random.default_rng(np.random.SeedSequence([self.seed, _CODE_STREAM]))
-        self.dictionary = _unit_columns(rng.standard_normal((self.inputs, self.units)))
+        draw = rng.standard_normal((self.inputs, self.units))
+        if self.mask is not None:
+            draw = draw * self.mask
+        self.dictionary = _unit_columns(draw)
         self.weights = np.zeros((self.units, self.context))
         self.thresholds = np.full(self.units, float(self.threshold))
         # the sub-network: the units with every ordered pair of lateral synapses
@@ -410,6 +463,8 @@ class LearnedCode:
         norms = np.linalg.norm(dictionary, axis=0)
         if not np.allclose(norms, 1.0, rtol=0, atol=1e-9):
             raise ValueError("a learned code's dictionary has unit-length columns")
+        if self.mask is not None and dictionary[~self.mask].any():
+            raise ValueError("a learned code's dictionary reads its own fields only")
         self.dictionary, self.weights, self.thresholds = dictionary, weights, thresholds
         self.install()
 
@@ -513,9 +568,10 @@ class LearnedCode:
             if fired.any():
                 residual = x - a @ self.dictionary.T
                 dictionary = self.dictionary.copy()
-                dictionary[:, fired] = _unit_columns(
-                    dictionary[:, fired] + self.rate * (residual.T @ a[:, fired])
-                )
+                step = dictionary[:, fired] + self.rate * (residual.T @ a[:, fired])
+                if self.mask is not None:  # a unit's column stays within its field
+                    step = step * self.mask[:, fired]
+                dictionary[:, fired] = _unit_columns(step)
                 if not np.isfinite(dictionary).all():
                     raise ValueError("the learned code's dictionary must remain finite")
                 self.dictionary = dictionary
@@ -535,8 +591,9 @@ class LearnedCode:
             own = a
             if free is not None:
                 own = np.maximum(np.atleast_2d(np.asarray(free, dtype=float)), 0.0)
-            # the share: the observations a unit fires for on their own, context-free
-            active = (own > 0.0).astype(float) - self.target
+            # the share: the observations a unit fires for on their own, context-free, at an
+            # activation above ``active`` (a unit firing below it counts as under-active)
+            active = (own > self.active).astype(float) - self.target
             step = self.threshold_rate * active.sum(axis=0)
             if self.silence:
                 # the repair: a row whose code leaves at least the share ``repair`` of its

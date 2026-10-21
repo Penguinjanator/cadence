@@ -308,8 +308,14 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9, "cortex": "code",
-        "scale": "observation", "held": True, "reads": "free",
+        "scale": "observation", "held": True, "reads": "free", "fields": None, "active": 0.0,
     }
+    with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
+        composed(learned_code_fields=(20, 30))
+    with pytest.raises(ValueError, match="positive field widths"):
+        composed(learned_code_fields=(53, 0))
+    with pytest.raises(ValueError, match="two units per field"):
+        composed(units=4, learned_code_fields=(20, 20, 13))
     with pytest.raises(ValueError, match="reads is one of"):
         composed(learned_code_reads="both")
     with pytest.raises(ValueError, match="needs the held code"):
@@ -1179,6 +1185,61 @@ def test_the_cortex_and_the_memories_may_read_the_context_free_code():
     step = expected[:, fired] + code.rate * (residual.T @ a[:, fired])
     expected[:, fired] = step / np.linalg.norm(step, axis=0, keepdims=True)
     np.testing.assert_allclose(code.dictionary, expected, atol=1e-9)
+
+
+def test_fields_give_each_unit_one_field_of_the_observation(tmp_path):
+    """With ``learned_code_fields`` each unit reads one field of the observation's
+    coordinates: the units are shared among the fields in proportion to their widths, a
+    unit's dictionary column is zero outside its field through every learning step, the
+    competition (the Gram's off-diagonal) is zero between fields, a checkpoint continues the
+    life and refuses a column that reads another field; one field is the region as without
+    fields, bit for bit."""
+    brain = composed(seed=3, recall=True, learned_code_fields=(13, 40))
+    code = brain.learned_code
+    assert code.field_units == (16, 48) and sum(code.field_units) == UNITS
+    field = np.repeat([0, 1], code.field_units)
+    assert not code.dictionary[~code.mask].any()
+    np.testing.assert_array_equal(code.gram()[field[:, None] != field[None, :]], 0.0)
+    for t in range(12):
+        brain.act(tokens(t % INPUTS, (7 * t) % INPUTS), greedy=True)
+    assert code.work["updates"] == 12 and not code.dictionary[~code.mask].any()
+    np.testing.assert_allclose(np.linalg.norm(code.dictionary, axis=0), 1.0)
+    path = brain.save(tmp_path / "fields.npz")
+    twin = cd.Brain.load(path)
+    assert twin.learned_code.fields == (13, 40) and twin.learned_code.field_units == (16, 48)
+    x = tokens(2, 5)
+    np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
+    with np.load(path, allow_pickle=False) as data:
+        arrays = {name: data[name].copy() for name in data.files}
+    arrays["learned_code/dictionary"][0, 20] = 0.1  # unit 20 (field 1) reading input 0 (field 0)
+    column = arrays["learned_code/dictionary"][:, 20]
+    arrays["learned_code/dictionary"][:, 20] = column / np.linalg.norm(column)
+    np.savez(tmp_path / "other.npz", **arrays)
+    with pytest.raises(ValueError, match="reads its own fields only"):
+        cd.Brain.load(tmp_path / "other.npz")
+    one = composed(seed=3, learned_code_fields=(INPUTS,))
+    np.testing.assert_array_equal(
+        one.learned_code.dictionary, composed(seed=3).learned_code.dictionary
+    )
+
+
+def test_a_unit_below_the_active_floor_counts_as_under_active():
+    """With ``learned_code_active`` a unit that fires below that activation counts as
+    under-active in the thresholds' share, so a frequent observation's units are not faded
+    toward zero; at the founder 0 any firing counts."""
+    code = composed(seed=5, learned_code_active=0.05).learned_code
+    x = np.zeros((2, INPUTS))
+    a = np.zeros((2, UNITS))
+    a[:, 0] = 0.02  # fires weakly in both rows
+    a[:, 1] = 0.30  # fires strongly in both rows
+    before = code.thresholds.copy()
+    code.learn(x, a, None, free=a)
+    step = code.threshold_rate
+    assert np.isclose(code.thresholds[0], before[0] - step * 2 * code.target)  # under-active
+    assert np.isclose(code.thresholds[1], before[1] + step * 2 * (1 - code.target))
+    plain = composed(seed=5).learned_code
+    plain.learn(x, a, None, free=a)
+    assert np.isclose(plain.thresholds[0], before[0] + step * 2 * (1 - plain.target))
 
 
 def test_the_capped_read_holds_a_code_to_one_full_inputs_norm():
