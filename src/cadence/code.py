@@ -146,7 +146,7 @@ class LearnedCode:
     context: int
     model: NeuronModel
     seed: int = 0
-    top_down: float = 4.0
+    top_down: float = 2.0
     rate: float = 0.125
     predictor: float = 0.03
     threshold: float = 0.1
@@ -188,7 +188,7 @@ class LearnedCode:
     def founders(cls) -> dict[str, Any]:
         """The founder value of every gene."""
         return {
-            "top_down": 4.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
+            "top_down": 2.0, "rate": 0.125, "predictor": 0.03, "threshold": 0.1,
             "threshold_rate": 0.001, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
         }

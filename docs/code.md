@@ -136,7 +136,7 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | Setting | Founder | When | What it sets |
 | --- | --- | --- | --- |
 | `learned_code` | `None` | construction | the region, of that many units (at least 2); `None` builds nothing |
-| `learned_code_top_down` | 4.0 | retune | weight of the prediction's drive on the code units |
+| `learned_code_top_down` | 2.0 | retune | weight of the prediction's drive on the code units and gain of the pull toward it; the smallest weight at which the context-free codes of a group's members come together in the embedding chamber's pilots |
 | `learned_code_rate` | 0.125 | retune | the dictionary's Hebbian rate per row and moment |
 | `learned_code_predictor` | 0.03 | retune | the share of a row's prediction gap the predictor closes per event, in [0, 1], normalized by the context's energy |
 | `learned_code_threshold` | 0.1 | construction | every unit's initial threshold |

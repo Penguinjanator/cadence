@@ -31,7 +31,7 @@
   residual normalized by the context's energy, homeostatic thresholds whose share reads
   the context-free code, so that what the context predicts may recruit a unit without
   raising its threshold), its genes
-  `learned_code_top_down` (4.0), `learned_code_rate` (0.125), `learned_code_predictor`
+  `learned_code_top_down` (2.0), `learned_code_rate` (0.125), `learned_code_predictor`
   (0.03, the share of a row's gap per event), `learned_code_threshold` (0.1),
   `learned_code_threshold_rate` (0.001), `learned_code_target` (0.1),
   `learned_code_repair` (1.0, the share of a row's input energy its code may leave

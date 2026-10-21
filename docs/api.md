@@ -302,7 +302,7 @@ contiguous index.
 ## The learned code (`cadence.code`)
 
 ```text
-LearnedCode(inputs, units, context, model, seed=0, top_down=4.0, rate=0.125, predictor=0.03,
+LearnedCode(inputs, units, context, model, seed=0, top_down=2.0, rate=0.125, predictor=0.03,
             threshold=0.1, threshold_rate=0.001, target=0.1, repair=1.0, silence=10.0,
             place="free", output="unit", floor=1.0, identity=0.5)
 ```
