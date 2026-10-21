@@ -127,18 +127,21 @@ def test_readings_change_nothing(tmp_path):
 
 
 def test_the_library_arm_holds_the_region_inside_the_brain_at_the_prototypes_effective_rates():
-    """The library arms compose the brain with ``learned_code=UNITS``: the per-row rates give
-    the prototype's effective step at this chamber's batch, the bottom-up arm has no top-down
-    weight, and a life's moments settle the region with the brain."""
+    """The library arms compose the brain with ``learned_code=UNITS``: the arm sets its rates
+    explicitly, the per-row rates that give the prototype's effective step at this chamber's
+    batch (the predictor closes the prototype's whole gap per update over the batch's rows),
+    the bottom-up arm has no top-down weight, and a life's moments settle the region with the
+    brain."""
     life = em.Life("library", 3)
     brain = life.brain
     assert life.code is None and life.library and life.coded
     assert brain.learned_code is not None and brain.code_width == em.UNITS
     genes = brain.describe()["genes"]
     assert genes["learned_code_top_down"] == em.TOP_DOWN["library"]
-    assert genes["learned_code_rate"] == em.CODE.dictionary_rate / em.BATCH
-    assert genes["learned_code_predictor"] == em.CODE.predictor_rate / em.BATCH
-    assert genes["learned_code_threshold_rate"] == em.CODE.threshold_rate / em.BATCH
+    assert genes["learned_code_rate"] == em.LIBRARY["rate"] == em.CODE.dictionary_rate / em.BATCH
+    assert genes["learned_code_predictor"] == em.LIBRARY["predictor"] == 1.0 / em.BATCH
+    assert genes["learned_code_threshold_rate"] == em.LIBRARY["threshold_rate"]
+    assert em.LIBRARY["threshold_rate"] == em.CODE.threshold_rate / em.BATCH
     assert genes["learned_code_target"] == em.CODE.target
     assert em.Life("library_bottom_up", 3).brain.describe()["genes"]["learned_code_top_down"] == 0.0
     for seq, target in _rounds(3, 2):

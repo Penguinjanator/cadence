@@ -25,7 +25,9 @@
   come to overlap strongly settles instead of oscillating under the synchronous sweep; a
   phase that does not settle at the brain's step is settled once more at the step the
   dictionary's coupling allows over every state (`LearnedCode.rest_stability`) before the
-  moment is refused, so a world of one input settles from its first moment. The
+  moment is refused, so a world of one input settles from its first moment; a brain that
+  steps with its code scales its learner's tolerance with the step as it scales the
+  budgets, so a settle stops at the same activation movement per unit time. The
   region learns at every accepted moment, from the moment's free settle alone, by local
   rules (Hebbian on the reconstruction residual, the delta rule on the prediction's
   residual normalized by the context's energy, homeostatic thresholds whose share reads
@@ -40,9 +42,21 @@
   under-active rows a silent unit counts as in such a row, so no observation is left
   without a unit; the thresholds have no ceiling), `learned_code_place` (`"free"`) and
   `learned_code_output` (`"unit"`: the first module reads the rectified code at unit
-  length; `"raw"` reads the activations as they are), `learned_code_floor` (1.0: a code
-  weaker than one full input's activation is read as it is over that norm, so a blank
-  moment held up by the prediction alone is not raised to full length) and `learned_code_identity` (0.5: the memories' key is the rectified code
+  length; `"raw"` reads the activations as they are), `learned_code_floor` (0: every code
+  that is not silent is read at unit length; above 0 a code weaker than that many full
+  inputs' activation is read as it is over that norm, so a blank moment held up by the
+  prediction alone is not raised to full length; `"capped"` reads
+  the code as it is with its norm capped at one full input's), `learned_code_cortex`
+  (`"code"`; with `"both"` the first module reads the observation as a brain without the
+  region does and the code beside it), `learned_code_scale` (`"observation"`:
+  the memories' key takes the norm the observation itself would have as a key, the scale
+  the recall's temperature was set for; `"unit"` keeps it at unit length), `learned_code_held` (`True`: the code units are
+  held at the code phase's fixed point through the whole settle, a source to the cortex, so
+  the rest of the brain keeps the model's step and its learning phases as without the
+  region, and the region's phase steps alone; `False` settles them with the whole graph at
+  the code's step; it needs `learned_code_reads="context"`), `learned_code_reads` (`"free"`: the cortex and the
+  memories read the context-free code while the code in context, with the prediction's
+  pull, is what the region learns from) and `learned_code_identity` (0.9: the memories' key is the rectified code
   at unit length joined to the observation's own identity, `unit([sqrt(1 - w) code,
   sqrt(w) unit(x)])`, of width `units + inputs`, so a binding stays readable by the
   identity part while the code part moves; at 0 the code alone); the lesson's contrast and the dopamine leave

@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import tempfile
 from pathlib import Path
 
 import numpy as np
@@ -250,7 +251,7 @@ def tokens(*indices: int) -> np.ndarray:
 
 
 def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
-    brain = composed()
+    brain = composed(learned_code_held=False, learned_code_reads="context")  # the tables in the whole graph's synapses
     populations = brain.connectome.populations
     assert list(populations)[:3] == ["sensory", "code", "association"]
     assert len(populations["code"]) == UNITS and brain.code_width == UNITS + INPUTS
@@ -301,7 +302,8 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
     assert described["learned_code"]["units"] == UNITS
     assert described["initialization"]["composition"]["learned_code"] == UNITS
     assert {k: v for k, v in described["genes"].items() if k.startswith("learned_code")} == {
-        f"learned_code_{name}": value for name, value in cd.LearnedCode.founders().items()
+        f"learned_code_{name}": value
+        for name, value in {**cd.LearnedCode.founders(), "held": False, "reads": "context"}.items()
     }
     assert brain.parameters() >= code.parameters()
 
@@ -310,8 +312,19 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     assert cd.LearnedCode.founders() == {
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
+        "place": "free", "output": "unit", "floor": 0.0, "identity": 0.9, "cortex": "code",
+        "scale": "observation", "held": True, "reads": "free",
     }
+    with pytest.raises(ValueError, match="reads is one of"):
+        composed(learned_code_reads="both")
+    with pytest.raises(ValueError, match="needs the held code"):
+        composed(learned_code_reads="free", learned_code_held=False)
+    with pytest.raises(ValueError, match="scale is one of"):
+        composed(learned_code_scale="raw")
+    with pytest.raises(ValueError, match="held is True or False"):
+        composed(learned_code_held="yes")
+    with pytest.raises(ValueError, match="cortex is one of"):
+        composed(learned_code_cortex="sensory")
     with pytest.raises(ValueError, match="output is one of"):
         composed(learned_code_output="norm")
     with pytest.raises(ValueError, match="identity must lie in"):
@@ -419,7 +432,7 @@ def test_the_code_is_a_fixed_point_of_the_whole_settle_and_the_memories_key():
 
 
 def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_thresholds():
-    brain = composed()
+    brain = composed(learned_code_held=False, learned_code_reads="context")  # the graph takes the tables as synapses
     code = brain.learned_code
     before = {name: value.copy() for name, value in code.arrays().items()}
     x = tokens(1, 2, 5, 9)
@@ -517,7 +530,8 @@ def test_the_key_of_a_decision_is_its_moments_code_and_the_history_hears_the_cod
     brain.live(x)
     first = brain._moment_key(x, brain.learned_code.code_of(settled_code(brain)))
     key = brain.recall.keys[0, 0]  # the moment's key: the phase's code in the stream's context
-    heard = key[:UNITS] / np.sqrt(0.5)  # the history hears the key's code part at unit length
+    w = brain.learned_code.identity
+    heard = key[:UNITS] / np.sqrt(1.0 - w)  # the history hears the key's code part at unit length
     np.testing.assert_allclose(brain.history.trace, 0.5 * heard[None, :], atol=1e-9)
     assert brain._lived[6] is not None
     # the keys are the phase's code; the whole settle moves the code units within tolerance
@@ -612,10 +626,8 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
     def long_column(meta, copy):
         copy["learned_code/dictionary"][:, 0] *= 2.0
 
-    def other_dictionary(meta, copy):  # unit columns that disagree with the saved synapses
-        column = copy["learned_code/dictionary"][:, 0].copy()
-        copy["learned_code/dictionary"][:, 0] = copy["learned_code/dictionary"][:, 1]
-        copy["learned_code/dictionary"][:, 1] = column
+    def held_synapse(meta, copy):  # a held code's synapses in the whole graph carry nothing
+        copy["efficacy"][brain._code_synapses["dictionary"][0][0]] = 0.5
 
     def lone_code(meta, copy):
         del meta["lived"]
@@ -632,7 +644,7 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
         ("wrong_shape", wrong_shape, "invalid saved learned code table: thresholds"),
         ("negative_threshold", negative_threshold, "thresholds are nonnegative"),
         ("long_column", long_column, "unit-length columns"),
-        ("other_dictionary", other_dictionary, "disagree with the saved synapses"),
+        ("held_synapse", held_synapse, "disagree with the saved synapses"),
         ("lone_code", lone_code, "saved lived code belongs to a lived action"),
     ):
         with pytest.raises(ValueError, match=message):
@@ -670,7 +682,8 @@ def test_the_brain_integrates_at_the_step_the_codes_competition_is_stable_under(
     around the code's fixed point at the model's step; the region reports the halvings the
     settled code needs, the brain re-steps its graph and scales the step budgets, the
     description keeps the configurations as given, and a checkpoint carries the level."""
-    brain = composed(seed=8, units=24, recall=True, learned_code_top_down=4.0)
+    brain = composed(seed=8, units=24, recall=True, learned_code_top_down=4.0,
+                     learned_code_held=False, learned_code_reads="context")  # the brain steps with the code
     code = brain.learned_code
     assert brain._stepping == 0 and brain.learner.standing is not None
     # just above threshold (slope .5) the restoring term alone asks for the halved step at
@@ -758,7 +771,9 @@ def test_a_one_input_world_settles_at_the_step_its_dictionary_allows():
         for moment in range(100):
             reward = None if moment == 0 else [float(rng.random() < 0.7)]
             brain.live(np.ones((1, 1)), reward=reward)  # never refused
-        assert brain._stepping >= 3
+        # the code's phase steps alone; the brain keeps the model's step
+        assert code.halvings >= 3 and brain._stepping == 0
+        assert brain.brain.neuron_model.dt == 1.0
     # the bound over every state holds at states the region reaches and at random ones
     code = composed(seed=3).learned_code
     for v in np.random.default_rng(4).normal(0.0, 0.5, (20, 1, UNITS)):
@@ -771,7 +786,8 @@ def test_a_configuration_assigned_after_compose_holds_through_a_change_of_step()
     other setting stays as assigned, and the description reports them in the model's step."""
     from dataclasses import replace
 
-    brain = cd.Brain.compose(1, 2, arousal=True, learned_code=64, seed=0)
+    brain = cd.Brain.compose(1, 2, arousal=True, learned_code=64, seed=0,
+                             learned_code_held=False, learned_code_reads="context")  # the brain steps with the code
     brain.basal_ganglia.config = replace(
         brain.basal_ganglia.config, eta=0.1, eta_bias=0.01, lam=0.95, gamma=0.95,
         eta_critic=5.0, eligibility_steps=12,
@@ -789,6 +805,36 @@ def test_a_configuration_assigned_after_compose_holds_through_a_change_of_step()
     described = brain.describe()
     assert described["actor"]["eligibility_steps"] == 12 and described["actor"]["eta"] == 0.1
     assert described["learning"]["free_steps"] == 512 and described["learning"]["eta"] == 0.25
+
+
+def test_a_halved_step_stops_a_settle_at_the_same_movement_per_unit_time():
+    """A settle stops once no activation moves more than the tolerance in one step, so a
+    brain that steps with its code (``learned_code_held=False, learned_code_reads="context"``) scales its learner's tolerance
+    with the step as it scales the budgets; the description keeps the tolerance as configured.
+    A brain without the region integrated at a quarter of the step with the tolerance so
+    scaled stops at the first step whose movement per unit time falls below the tolerance,
+    the rule its own step follows."""
+    brain = composed(seed=2, learned_code_held=False, learned_code_reads="context")
+    base = brain.learner.config
+    brain._restep(2)
+    assert brain.learner.config.tolerance == base.tolerance / 4
+    assert brain.learner.config.free_steps == base.free_steps * 4
+    assert brain.describe()["learning"]["tolerance"] == base.tolerance
+    brain._restep(0)
+    assert brain.learner.config == base
+    plain = cd.Brain.compose(INPUTS, ACTIONS, modules=(16,), seed=2)
+    drive = plain.stimulus(tokens(3, 8))
+    for halvings in (0, 2):
+        graph = plain.brain
+        model = graph.neuron_model.replace(dt=float(np.ldexp(1.0, -halvings)))
+        graph = cadence_brain.Brain(graph.connectome, model, efficacy=graph.efficacy,
+                                    log_gain=graph.log_gain, bias=graph.bias)
+        tolerance = cd.Brain._scaled_learning(plain.learner.config, halvings).tolerance
+        settled = graph.settle_batch(drive, steps=4096, tolerance=tolerance, trajectory=True)
+        path = [np.zeros_like(settled.trajectory[0]), *settled.trajectory]
+        rate = [float(np.abs(b - a).max()) / model.dt for a, b in zip(path[:-1], path[1:], strict=True)]
+        stop = next(i for i, r in enumerate(rate) if r < plain.learner.config.tolerance)
+        assert len(settled.trajectory) == stop + 1  # it stopped there, by movement per unit time
 
 
 def test_a_brain_with_the_region_deep_copies_and_imagines():
@@ -820,7 +866,8 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     the observation settled alone; the recall slots and the context records on the moment's
     code in its context; ``learned_code_place="context"`` keys the place stores on the
     moment's code; the place phase is reported and costs nothing without a place store."""
-    brain = composed(seed=9, recall=True, memory_choice=True, arousal=True)
+    brain = composed(seed=9, recall=True, memory_choice=True, arousal=True,
+                     learned_code_reads="context")  # the keying split under the context read
     code = brain.learned_code
     assert code.place == "free"
     # a predictor with weight: at birth it is zero and the two keys coincide
@@ -861,14 +908,16 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     assert not np.array_equal(again[1], key)
     # without a place store the context-free phase still runs for the thresholds' share,
     # and the place key is the moment's key; with the stores keyed in context the same
-    bare = composed(seed=9, episodic=False)
+    bare = composed(seed=9, episodic=False, learned_code_reads="context")
     bare.act(token, greedy=True)
     assert bare.last_settlement["context_free_steps"] > 0
     assert bare._coded_moment[3] is bare._coded_moment[1]
-    frozen = composed(seed=9, episodic=False, learned_code_threshold_rate=0.0)
+    frozen = composed(seed=9, episodic=False, learned_code_threshold_rate=0.0,
+                      learned_code_reads="context")
     frozen.act(token, greedy=True)  # thresholds frozen, no place store: no second phase
     assert "context_free_steps" not in frozen.last_settlement
-    in_context = composed(seed=9, learned_code_place="context", arousal=True)
+    in_context = composed(seed=9, learned_code_place="context", arousal=True,
+                          learned_code_reads="context")
     in_context.live(context)
     in_context.live(token, reward=[0.0])
     assert in_context._coded_moment[3] is in_context._coded_moment[1]
@@ -961,7 +1010,7 @@ def test_the_key_joins_the_code_to_the_observations_identity():
     part is the observation at unit length weighted by ``sqrt(w)``, the code part the
     rectified settled code; at ``learned_code_identity=0`` the key is the code alone and
     the width ``units``."""
-    brain = composed(seed=2, recall=True)
+    brain = composed(seed=2, recall=True, learned_code_identity=0.5)
     x = tokens(4, 9, 9)
     brain.act(x, greedy=True)
     key = brain.recall.keys[:, -1, :]
@@ -1009,8 +1058,8 @@ def test_the_module_reads_the_code_at_unit_length_when_set():
             read = s @ weights.T + terms[0]  # the code's synaptic input plus the term
             expected = brain.learned_code.output_of(phase) @ weights.T
             np.testing.assert_allclose(read, expected, atol=1e-3)
-        else:
-            assert not terms
+        else:  # the held code's drive alone, nothing on the association neurons
+            assert all(not term.any() for term in terms)
 
 
 def test_the_unit_read_does_not_raise_a_weak_code():
@@ -1018,7 +1067,7 @@ def test_the_unit_read_does_not_raise_a_weak_code():
     input's activation, times ``learned_code_floor``) is read as it is over the floor, so a
     blank moment held up by the prediction alone stays weak; at floor 0 every code that is
     not silent is read at unit length."""
-    code = composed(seed=2).learned_code
+    code = composed(seed=2, learned_code_floor=1.0).learned_code
     least = float(code.model.activation(np.array([1.0]))[0])
     strong = np.zeros((1, UNITS))
     strong[0, :3] = [0.4, 0.3, 0.2]
@@ -1029,6 +1078,125 @@ def test_the_unit_read_does_not_raise_a_weak_code():
     assert not code.output_of(np.zeros((1, UNITS))).any()
     code.floor = 0.0
     np.testing.assert_allclose(np.linalg.norm(code.output_of(weak)), 1.0)
+
+
+def test_the_cortex_reads_the_observation_beside_the_code():
+    """With ``learned_code_cortex="both"`` the first module reads the observation as a
+    brain without the region reads it, through plastic synapses from every sensory neuron,
+    and the code beside it; the region's own synapses are those of the founder layout, a
+    lesson moves the observation's synapses, a checkpoint continues the life, and a
+    connectome that disagrees with the setting is refused."""
+    brain = composed(seed=4, recall=True, learned_code_cortex="both", learned_code_output="capped")
+    pre, post = np.asarray(brain.connectome.pre), np.asarray(brain.connectome.post)
+    beside = np.isin(pre, brain.sensory_index) & np.isin(post, brain.association_index)
+    assert beside.sum() == INPUTS * 64
+    assert brain.learner.plastic_synapses[beside].all()
+    assert len(brain._code_synapses["dictionary"][0]) == INPUTS * UNITS
+    assert brain.describe()["observation_code"]["cortex"] == "observation and code"
+    x = tokens(2, 6)
+    brain.act(x, greedy=True)
+    efficacy = brain.brain.efficacy[beside].copy()
+    brain.lesson(x, [1, 3])
+    assert not np.array_equal(brain.brain.efficacy[beside], efficacy)
+    twin = cd.Brain.load(brain.save(Path(tempfile.mkdtemp()) / "both.npz"))
+    assert twin.learned_code.cortex == "both" and twin.describe() == brain.describe()
+    np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
+    with pytest.raises(ValueError, match="disagrees with the connectome"):
+        cd.Brain(brain.connectome, learned_code=UNITS)  # the founder "code" on this layout
+    founder = composed(seed=4)
+    with pytest.raises(ValueError, match="disagrees with the connectome"):
+        cd.Brain(founder.connectome, learned_code=UNITS, learned_code_cortex="both")
+
+
+def test_the_key_takes_the_observations_norm_when_set():
+    """With ``learned_code_scale="observation"`` the memories' key is the joined key times the
+    observation's norm, the norm the observation would have as a key: a two-hot observation's
+    key has norm sqrt(2), a one-hot one's is as at unit scale, and the history still hears the
+    code at unit length."""
+    x = tokens(3, 9)
+    x[1, 20] = 1.0  # the second stream: two inputs at once
+    unit = composed(seed=6, recall=True, history_decays=(0.5,), learned_code_scale="unit")
+    scaled = composed(seed=6, recall=True, history_decays=(0.5,), learned_code_scale="observation")
+    unit.act(x, greedy=True)
+    scaled.act(x, greedy=True)
+    keys = scaled.recall.keys[:, -1, :]
+    np.testing.assert_allclose(np.linalg.norm(keys, axis=1), [1.0, np.sqrt(2.0)], atol=1e-9)
+    np.testing.assert_allclose(keys[0], unit.recall.keys[0, -1, :], atol=1e-9)
+    np.testing.assert_allclose(keys[1], np.sqrt(2.0) * unit.recall.keys[1, -1, :], atol=1e-9)
+    np.testing.assert_allclose(scaled.history.trace, unit.history.trace, atol=1e-9)
+
+
+def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
+    """With the code held (the founder), nothing leads into the code units in the whole
+    graph and the moment's drive holds them at the code phase's fixed point: through the free
+    settle and a lesson's phases they publish the phase's code exactly, the brain integrates
+    at the model's step with its budgets as configured while the region's phase steps alone,
+    no standing boundary acts on the whole graph, and a checkpoint continues the life."""
+    brain = composed(seed=3, recall=True, learned_code_top_down=4.0,  # a stepping phase
+                     learned_code_reads="context")  # held at the code in context
+    code = brain.learned_code
+    assert code.held and brain.learner.standing is None
+    for name in ("dictionary", "lateral", "predictor"):
+        synapses = brain._code_synapses[name][0]
+        assert not brain.brain.efficacy[synapses].any()
+    x = tokens(3, 9)
+    for _ in range(4):
+        brain.act(x, greedy=True)
+    assert code.halvings >= 1  # the phase stepped
+    assert brain._stepping == 0 and brain.brain.neuron_model.dt == 1.0
+    assert brain.learner.config.free_steps == 1024
+    held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
+    np.testing.assert_allclose(held, code.last["activation"], rtol=0, atol=1e-12)
+    brain.lesson(x, [1, 2])
+    brain.act(x, greedy=True)
+    held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
+    np.testing.assert_allclose(held, code.last["activation"], rtol=0, atol=1e-12)
+    twin = cd.Brain.load(brain.save(tmp_path / "held.npz"))
+    assert twin.learned_code.halvings == code.halvings and twin._stepping == 0
+    assert twin.describe() == brain.describe()
+    np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
+
+
+def test_the_cortex_and_the_memories_may_read_the_context_free_code():
+    """With ``learned_code_reads="free"`` the code units are held at the context-free code's
+    fixed point (the observation's code settled alone), the recall keys are the context-free
+    keys, and the region learns from the code in context, the prediction's pull in it."""
+    brain = composed(seed=4, recall=True, learned_code_reads="free")
+    code = brain.learned_code
+    x = tokens(2, 6)
+    brain.act(x, greedy=True)  # the trace now carries a moment
+    code.weights[:] = 1.0  # every unit predicted from any context: the code in context differs
+    code.install()
+    brain.learner.brain = brain._installed(brain.brain)
+    before = {name: value.copy() for name, value in code.arrays().items()}
+    brain.act(x, greedy=True)
+    held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
+    np.testing.assert_allclose(np.maximum(held, 0.0), code.last["free"], rtol=0, atol=1e-12)
+    # the moment's key is its context-free code (settled before the moment's learning step)
+    free_key = brain._moment_key(x, code.code_of(code.last["free"]))
+    np.testing.assert_allclose(brain.recall.keys[:, -1, :], free_key, atol=1e-9)
+    # the dictionary's step reads the code in context, not the context-free one
+    a = np.maximum(code.last["activation"], 0.0)
+    assert not np.allclose(a, code.last["free"])
+    residual = code.read * code.last["sensory"] - a @ before["dictionary"].T
+    fired = (a > 0).any(axis=0)
+    expected = before["dictionary"].copy()
+    step = expected[:, fired] + code.rate * (residual.T @ a[:, fired])
+    expected[:, fired] = step / np.linalg.norm(step, axis=0, keepdims=True)
+    np.testing.assert_allclose(code.dictionary, expected, atol=1e-9)
+
+
+def test_the_capped_read_holds_a_code_to_one_full_inputs_norm():
+    """With ``learned_code_output="capped"`` a code stronger than one full input is read
+    at that input's norm and a weaker one as it is."""
+    code = composed(seed=2, learned_code_output="capped", learned_code_floor=1.0).learned_code
+    least = float(code.model.activation(np.array([1.0]))[0])
+    strong = np.zeros((1, UNITS))
+    strong[0, :3] = [0.6, 0.5, 0.4]
+    weak = 0.2 * strong
+    np.testing.assert_allclose(np.linalg.norm(code.output_of(strong)), least)
+    np.testing.assert_allclose(code.output_of(weak), weak)
+    assert not code.output_of(np.zeros((1, UNITS))).any()
 
 
 def test_the_region_learns_from_the_moments_free_settle_alone():
@@ -1083,7 +1251,7 @@ def test_the_thresholds_share_reads_the_context_free_code():
 
 
 def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():
-    brain = composed(seed=7)
+    brain = composed(seed=7, learned_code_held=False, learned_code_reads="context")  # the predictor in the graph's synapses
     brain.act(tokens(3), greedy=True)
     brain.learned_code.weights[:] = 0.1
     brain.retune(learned_code_top_down=2.0, learned_code_target=0.2)

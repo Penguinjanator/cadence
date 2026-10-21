@@ -627,7 +627,9 @@ def _validate_learned_code(meta: dict[str, Any], data: Mapping[str, Any], learne
             raise ValueError(f"saved learned code {name} must be a nonnegative integer")
     # the step the brain integrates at: the model's halved ``stepping`` times, saved with it
     dt = learner.brain.neuron_model.dt
-    if dt != float(np.ldexp(1.0, -int(spec["stepping"]))):
+    # a held code steps its own phase alone: the brain keeps the model's step
+    expected = 1.0 if spec["held"] else float(np.ldexp(1.0, -int(spec["stepping"])))
+    if dt != expected:
         raise ValueError("the saved learned code's stepping disagrees with the saved step")
     work = spec["work"]
     if not isinstance(work, dict) or any(
@@ -1446,6 +1448,17 @@ class Brain:
             )
             self._code_synapses = self._learned_code_synapses()
             self._code_forward = self._learned_code_forward()
+            # the first module reads the observation beside the code only with cortex "both"
+            pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+            beside = bool(
+                (np.isin(pre, self.sensory_index) & ~np.isin(post, self.code_index)).any()
+            )
+            if beside != (self.learned_code.cortex == "both"):
+                raise ValueError(
+                    f"learned_code_cortex {self.learned_code.cortex!r} disagrees with the "
+                    "connectome: with \"both\" the sensory neurons project to the first module "
+                    "beside the code, with \"code\" to the code region alone"
+                )
             brain = self._installed(brain)
             plastic_synapses = np.ones(connectome.synapses, dtype=bool)
             for synapses, _, _ in self._code_synapses.values():
@@ -1749,29 +1762,34 @@ class Brain:
         return synapses, codes[pre[synapses]], targets[post[synapses]]
 
     def _unit_read(self, x: np.ndarray, drive: np.ndarray, *, memory: bool) -> np.ndarray:
-        """With ``learned_code_output="unit"``: the drive with the term that makes the
-        association neurons read the rectified code at unit length (``LearnedCode.output_of``:
-        a code weaker than the floor is read as it is, scaled by one over the floor), in
-        place of the code units' activations: the region's output gain per stream, entered as
-        a drive from the moment's phase (the code units hold their fixed point through the
-        settle, as nothing in the graph leads back into them)."""
+        """The drive with the code's terms from the moment's phase. With the code held
+        (``learned_code_held``), the code units' drive is the phase's potential less their
+        bias: nothing leads into them in the whole graph, so they sit at the phase's fixed
+        point through the settle, a source to the cortex as the sensory neurons are. With
+        ``learned_code_output`` ``"unit"`` or ``"capped"``, the association neurons' term
+        that makes them read the code as ``LearnedCode.output_of`` gives it in place of the
+        code units' activations: the region's output gain per stream."""
         code = self.learned_code
         assert code is not None
         coded = self._coded_moment
         if coded is not None and coded[0] is x and coded[2] is not None:
-            s = np.atleast_2d(np.asarray(coded[2].activation, dtype=float))
+            phase = coded[2]
         else:
-            s = np.atleast_2d(
-                np.asarray(self._settle_code(x, context=memory, report=False).state.activation,
-                           dtype=float)
-            )
+            in_context = memory and code.reads != "free"
+            phase = self._settle_code(x, context=in_context, report=False).state
+        s = np.atleast_2d(np.asarray(phase.activation, dtype=float))
         if len(s) != len(drive):
             return drive
+        out = drive.copy()
+        if code.held:
+            v = np.atleast_2d(np.asarray(phase.v, dtype=float))
+            out[:, self.code_index] = v - self.brain.bias[self.code_index]
+        if code.output == "raw":
+            return out
         unit = code.output_of(s)
         synapses, j, m = self._code_forward
         weights = np.zeros((len(self.association_index), code.units))
         weights[m, j] = self.brain.efficacy[synapses]
-        out = drive.copy()
         out[:, self.association_index] += (unit - s) @ weights.T
         return out
 
@@ -1783,11 +1801,11 @@ class Brain:
         assert code is not None
         efficacy, bias = graph.efficacy.copy(), graph.bias.copy()
         synapses, i, j = self._code_synapses["dictionary"]
-        efficacy[synapses] = code.read * code.dictionary[i, j]
+        efficacy[synapses] = 0.0 if code.held else code.read * code.dictionary[i, j]
         synapses, j, k = self._code_synapses["lateral"]
-        efficacy[synapses] = code.lateral()[j, k]
+        efficacy[synapses] = 0.0 if code.held else code.lateral()[j, k]
         synapses, i, j = self._code_synapses["predictor"]
-        efficacy[synapses] = code.top_down * code.weights[j, i]
+        efficacy[synapses] = 0.0 if code.held else code.top_down * code.weights[j, i]
         bias[self.code_index] = -code.thresholds
         return graph.with_parameters(efficacy=efficacy, bias=bias)
 
@@ -1796,8 +1814,8 @@ class Brain:
         gain ``learned_code_top_down`` on the code units, nothing elsewhere; None at gain 0
         or without the region."""
         code = self.learned_code
-        if code is None or not code.top_down:
-            return None
+        if code is None or not code.top_down or code.held:
+            return None  # a held code takes its pull inside its own phase alone
         n = self.connectome.n
         gain = np.zeros(n)
         gain[self.code_index] = code.top_down
@@ -1812,21 +1830,30 @@ class Brain:
         s = np.atleast_2d(np.asarray(state.activation, dtype=float))
         coded = self._coded_moment  # the moment's context-free code: the share and the repair
         free = None if coded is None else coded[4]
+        activation = s[:, self.code_index]
+        last = code.last
+        if code.held and last is not None and len(np.atleast_2d(last["activation"])) == len(s):
+            # the code in context, with the prediction's pull, is what the region learns
+            # from, whichever code the cortex reads
+            activation = np.atleast_2d(np.asarray(last["activation"], dtype=float))
         if code.learn(
-            s[:, self.sensory_index], s[:, self.code_index], s[:, self.prefrontal_index],
-            free=free,
+            s[:, self.sensory_index], activation, s[:, self.prefrontal_index], free=free,
         ):
             self.learner.brain = self._installed(self.brain)
 
     @staticmethod
     def _scaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
         """The learner's budgets for the model's step halved ``halvings`` times: the same time
-        in every phase."""
+        in every phase; and its tolerance halved as often, since a settle stops once no
+        activation moves more than the tolerance in one step, so that it stops at the same
+        movement per unit time."""
         if not halvings:
             return config
         return replace(
             config, free_steps=config.free_steps << halvings,
             nudged_steps=config.nudged_steps << halvings,
+            tolerance=None if config.tolerance is None
+            else float(np.ldexp(config.tolerance, -halvings)),
         )
 
     @staticmethod
@@ -1837,12 +1864,15 @@ class Brain:
 
     @staticmethod
     def _unscaled_learning(config: LearnerConfig, halvings: int) -> LearnerConfig:
-        """The learner's budgets in the model's step from the ones at ``halvings``."""
+        """The learner's budgets and tolerance in the model's step from the ones at
+        ``halvings``."""
         if not halvings:
             return config
         return replace(
             config, free_steps=config.free_steps >> halvings,
             nudged_steps=config.nudged_steps >> halvings,
+            tolerance=None if config.tolerance is None
+            else float(np.ldexp(config.tolerance, halvings)),
         )
 
     @staticmethod
@@ -1862,6 +1892,17 @@ class Brain:
     def _reward_base(self) -> ActorCriticConfig:
         """The actor's configuration in the model's step, as ``_learning_base``."""
         return self._unscaled_reward(self.basal_ganglia.config, self._stepping)
+
+    def _step_region(self, halvings: int) -> None:
+        """The step of the code's phase: with the code held, the region's sub-network alone
+        (the rest of the brain keeps the model's step and its budgets); otherwise the brain's
+        (``_restep``)."""
+        code = self.learned_code
+        assert code is not None
+        if code.held:
+            code.restep(halvings)
+        else:
+            self._restep(halvings)
 
     def _restep(self, halvings: int) -> None:
         """The brain at the model's step halved ``halvings`` times: the graph rebuilt at that
@@ -2280,6 +2321,13 @@ class Brain:
                 Projection("sensory", "code", scale=1.0, reciprocal=False),
                 Projection("code", names[0], scale=sensory_scale, reciprocal=False),
             ]
+            reads = LearnedCode.setting(
+                "cortex", options.get("learned_code_cortex", LearnedCode.founders()["cortex"])
+            )
+            if reads == "both":  # the observation as a brain without the region reads it
+                projections.append(
+                    Projection("sensory", names[0], scale=sensory_scale, reciprocal=False)
+                )
         else:
             projections = [
                 Projection(regions[0].name, names[0], scale=sensory_scale, reciprocal=False)
@@ -2602,7 +2650,10 @@ class Brain:
                 else (0 if self.sparse_code is None else int(self.sparse_code.expansion)),
                 "fan_in": 0 if self.sparse_code is None else int(self.sparse_code.fan_in),
                 "winners": 0 if self.sparse_code is None else int(self.sparse_code.winners),
-                "cortex": "code" if self.coded_cortex or learned is not None else "observation",
+                "cortex": (
+                    "observation and code" if learned is not None and learned.cortex == "both"
+                    else "code" if self.coded_cortex or learned is not None else "observation"
+                ),
                 "separator": None
                 if self.hippocampus is None or self.hippocampus.separator is None
                 else ("sparse" if self.hippocampus.separator.fan_in else "dense"),
@@ -2654,6 +2705,8 @@ class Brain:
         context (the working trace, or ``trace``) unless ``context`` is off."""
         if self.learned_code is None:
             return x if self.sparse_code is None else _unit_rows(self.sparse_code.code(x))
+        if self.learned_code.reads == "free":
+            context = False  # the cortex and the memories read the context-free code
         phase = self._settle_code(x, context=context, trace=trace)
         return self._moment_key(x, self.learned_code.code_of(phase.state.activation))
 
@@ -2675,20 +2728,24 @@ class Brain:
         code = self.learned_code
         phase = self._settle_code(x, context=context, trace=trace)
         key = self._moment_key(x, code.code_of(phase.state.activation))
-        place, free_code = key, None
-        # the context-free code: the place key, and what the thresholds' share and the
-        # repair read at a moment the region learns from (an imagined branch learns nothing)
+        place, free_code, held = key, None, phase.state
+        # the context-free code: the place key, what the thresholds' share and the repair
+        # read at a moment the region learns from (an imagined branch learns nothing), and
+        # with ``learned_code_reads="free"`` what the cortex and the memories read
         placed = self.hippocampus is not None and code.place == "free"
-        if context and (placed or (trace is None and code.threshold_rate > 0)):
+        reads_free = code.reads == "free"
+        if context and (placed or reads_free or (trace is None and code.threshold_rate > 0)):
             free = self._settle_code(x, context=False, report=False)
             free_code = np.maximum(np.asarray(free.state.activation, dtype=float), 0.0)
             assert code.last is not None
             code.last["free"] = free_code
-            if placed:
+            if placed or reads_free:
                 place = self._moment_key(x, code.code_of(free_code))
+            if reads_free:
+                key, held = place, free.state
             assert self._code_settlement is not None
             self._code_settlement["context_free_steps"] = int(free.steps)
-        self._coded_moment = (x, key, phase.state, place, free_code)
+        self._coded_moment = (x, key, held, place, free_code)
         return key
 
     def _moment_key(self, x: np.ndarray, code: np.ndarray) -> np.ndarray:
@@ -2698,14 +2755,20 @@ class Brain:
         ``learned_code_identity``, so that a binding stays readable by the identity part
         while the code part moves as the region learns; the code alone at ``w`` 0."""
         region = self.learned_code
-        if region is None or not region.identity:
+        if region is None:
             return code
-        weight = region.identity
-        identity = _unit_rows(np.atleast_2d(np.asarray(x, dtype=float)))
-        joined = np.concatenate(
-            [np.sqrt(1.0 - weight) * np.atleast_2d(code), np.sqrt(weight) * identity], axis=1
-        )
-        return _unit_rows(joined)
+        key = np.atleast_2d(code)
+        if region.identity:
+            weight = region.identity
+            identity = _unit_rows(np.atleast_2d(np.asarray(x, dtype=float)))
+            key = _unit_rows(
+                np.concatenate([np.sqrt(1.0 - weight) * key, np.sqrt(weight) * identity], axis=1)
+            )
+        if region.scale == "observation":
+            # the norm the observation itself would have as a key: the recall's temperature
+            # reads the keys' dot products at that scale
+            key = key * np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)[:, None]
+        return np.asarray(key)
 
     def _settle_code(
         self, x: np.ndarray, *, context: bool = True, trace: Trace | None = None,
@@ -2746,38 +2809,43 @@ class Brain:
                 current.steps,
             )
         stimulus = code.stimulus(sensory, z)
-        phase = code.settle(stimulus, warm, budget=cfg.free_steps, tolerance=tolerance)
+
+        def budget() -> int:
+            # the free budget at the phase's step: the brain's budgets are scaled with it, a
+            # held code's phase scales its own
+            steps = self.learner.config.free_steps
+            return steps << code.halvings if code.held else steps
+
+        phase = code.settle(stimulus, warm, budget=budget(), tolerance=tolerance)
         if not np.all(phase.qualified):
             # once more at the step the dictionary's coupling allows over every state the
-            # region can reach; the brain's step is left as it was when this fails too
-            previous, rest = self._stepping, code.rest_stability()
+            # region can reach; the step is left as it was when this fails too
+            previous, rest = code.halvings, code.rest_stability()
             if rest > previous:
-                self._restep(rest)
-                cfg = self.learner.config
-                phase = code.settle(stimulus, warm, budget=cfg.free_steps, tolerance=tolerance)
+                self._step_region(rest)
+                phase = code.settle(stimulus, warm, budget=budget(), tolerance=tolerance)
                 if not np.all(phase.qualified):
-                    self._restep(previous)
-                    cfg = self.learner.config
+                    self._step_region(previous)
         if not np.all(phase.qualified):
             self._code_settlement = {
                 "code_steps": int(phase.steps),
                 "code_residual": float(np.max(phase.residual)),
-                "code_halvings": int(self._stepping),
+                "code_halvings": int(code.halvings),
             }
             raise RuntimeError(
-                f"the code region did not settle within {cfg.free_steps} steps: "
-                f"residual={float(np.max(phase.residual)):.6g}, tolerance={cfg.tolerance:g}; "
+                f"the code region did not settle within {budget()} steps: "
+                f"residual={float(np.max(phase.residual)):.6g}, tolerance={tolerance:g}; "
                 "no action issued"
             )
         if not report:
             return phase
-        # the step every phase of this moment integrates at: the one the settled code's
-        # competition is stable under
-        self._restep(code.stability(phase.state.v))
+        # the step the code's phase integrates at: the one the settled code's competition is
+        # stable under (the whole brain's too when the code is not held)
+        self._step_region(code.stability(phase.state.v))
         self._code_settlement = {
             "code_steps": int(phase.steps),
             "code_residual": float(np.max(phase.residual)),
-            "code_halvings": int(self._stepping),
+            "code_halvings": int(code.halvings),
         }
         code.last = {
             "sensory": sensory, "context": z, "activation": np.asarray(phase.state.activation),
@@ -2829,10 +2897,13 @@ class Brain:
         code part at unit length (the identity part is the observation the history would
         hear without a code)."""
         region = self.learned_code
-        if region is not None and region.identity:
-            part = np.atleast_2d(code)[:, : region.units]
-            return np.asarray(part / np.sqrt(1.0 - region.identity))
-        return code if self.coded_cortex or region is not None else x
+        if region is not None:
+            part = np.atleast_2d(code)[:, : region.units] / np.sqrt(1.0 - region.identity)
+            if region.scale == "observation":
+                norm = np.linalg.norm(np.atleast_2d(np.asarray(x, dtype=float)), axis=1)
+                part = part / np.where(norm > 0.0, norm, 1.0)[:, None]
+            return np.asarray(part)
+        return code if self.coded_cortex else x
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
         """The drive of a batch of observations: the sensory neurons stimulated, plus the
@@ -2854,7 +2925,8 @@ class Brain:
         drive[:, self.sensory_index] = (
             self._sensed(x, code) * self.brain.neuron_model.stimulus_amplitude
         )
-        if self.learned_code is not None and self.learned_code.output == "unit":
+        region = self.learned_code
+        if region is not None and (region.output != "raw" or region.held):
             drive = self._unit_read(x, drive, memory=memory)
         if memory and self.working_memory is not None:
             drive = self.working_memory.stimulate(drive)
@@ -4648,7 +4720,7 @@ class Brain:
                 # model's step are read back from them at that level
                 stepping = int(meta["learned_code"]["stepping"])
                 region.restep(stepping)
-                result._stepping = stepping
+                result._stepping = 0 if region.held else stepping
                 learner.standing = result._standing()  # the loaded learner's boundary
             if heard is not None:
                 assert result.history is not None  # validated above: the population is there
