@@ -64,10 +64,10 @@
   context; the associative store and the episodic place records key on the context-free
   code (a second code phase, `context_free_steps`), so a known situation is found again along a
   new path. The heard history holds the code and the recall memory's event values are
-  codes; a decision keeps the key it was taken under until its outcome. Checkpoint format
-  `cadence-generic/10` carries the tables; `describe`,
-  `parameters` and `retune` cover the region; `LearnedCode` is exported. With the founder
-  `learned_code=None` every brain, checkpoint and life is the one of 0.84.3 byte for byte
+  codes; a decision keeps the key it was taken under until its outcome. The checkpoint
+  carries the tables as its `learned_code` group; `describe`, `parameters` and `retune` cover
+  the region; `LearnedCode` is exported. With the founder `learned_code=None` every brain,
+  checkpoint and life is the one of the library without the region
   (`tests/test_learned_code.py`).
 - Settings of the recall memory that 0.84.3 took are removed, each refused by name at
   `compose` and `retune` with a message naming 0.84.3 as the release that takes it, and a
@@ -90,12 +90,9 @@
   four binding tasks (token .06, succession .07, fresh bindings .55, camera .00): the values
   are the events, and the `recall` and `next` regions hold one neuron per code unit.
   `recall_context` and `recall_context_decay`, a fading history of the earlier events added
-  to every key (`Recall.history`), were never read above zero in a chamber. The 0.84.3
-  format always wrote `value`, `context` and `context_decay`, so `describe()` and a
-  checkpoint still carry `recall_value="event"`, `recall_context=0.0` and
-  `recall_context_decay=0.5`, the one value each, under `genes` and `recall`, with the empty
-  history array, and a file written here reads in 0.84.3; the next checkpoint format drops
-  them. The binding instrument keeps its arms (`benchmarks/binding/index_read.py`) with
+  to every key (`Recall.history`), were never read above zero in a chamber. A checkpoint of
+  0.84.3 carries `value`, `context` and `context_decay` at their one value with an empty
+  history array and loads. The binding instrument keeps its arms (`benchmarks/binding/index_read.py`) with
   their protocol.
 - `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
   its settlement and repair-network version in Cadence (the embedding as a learned code of
