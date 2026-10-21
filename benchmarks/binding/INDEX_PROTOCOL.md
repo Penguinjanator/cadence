@@ -326,3 +326,12 @@ applies to each window arm against the `index` arm on the same founders; `chain`
 reported. Declared expectation: both window arms keep every gate the `index` arm passes; `chain`
 stays below the gate. The window's main readings are outside this instrument (a music row loop and
 a word stream) and are declared with their own instruments.
+
+## Note, 21 October 2026: options the library removed
+
+The library removed settings of its recall memory whose readings were negative or never
+confirmed; release 0.84.3 of `cadence-net` is where they live on. This instrument keeps every
+arm and probe above, with their receipts, as the record of those readings:
+
+- `write="aroused"` (the `repeat` probe's arm; the library's `recall_write="aroused"`):
+  neutral on every binding chamber.

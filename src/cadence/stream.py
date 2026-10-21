@@ -305,8 +305,7 @@ class Recall:
     address of a moment computed before its settle and the recalled drive held through it.
 
     Each moment the brain accepts (an act, a moment ``wait`` senses) is written after its
-    settle as one slot per stream (``witness``); with ``write="aroused"`` a moment is written
-    for the streams that chose it aroused alone. The slot's key is ``heard * x``: ``x`` is
+    settle as one slot per stream (``witness``). The slot's key is ``heard * x``: ``x`` is
     the observation as given (a brain gives its observation code), and with ``context`` the
     fading history of the events before it is added. The slot's value is
     the event ``x`` (``value="event"``) or the settled activity of the association region
@@ -347,8 +346,7 @@ class Recall:
     named keys less the mixture the address attended to (``p`` over the slots alone, a null
     slot left out, as in the prior): to first order the step raises the logits of the slots
     the scores name against those the address attended to, whatever the keys' norms.
-    ``capacity`` bounds the slots per stream, the oldest dropped first (with aroused writes
-    in a batch, the store's columns: a stream that wrote fewer holds fewer). ``reset`` empties
+    ``capacity`` bounds the slots per stream, the oldest dropped first. ``reset`` empties
     streams, and an empty stream reads silence. ``end`` ends their episodes and keeps their
     slots: the latest slot of each learns no successor from the next episode's first moment,
     and the moment before begins afresh; the brain ends an episode so with
@@ -395,7 +393,6 @@ class Recall:
     context_decay: float = 0.5
     # the options beside the founder memory (``OPTIONS``)
     address_step: str = "lms"
-    write: str = "always"
     null: float | None = None
     address_reward: float = 0.0
     episodes: str = "forget"
@@ -420,7 +417,6 @@ class Recall:
 
     VALUES = ("event", "cortex")
     STEPS = ("lms", "toward")
-    WRITES = ("always", "aroused")
     EPISODES = ("forget", "keep")
     KEYS = ("event", "predecessor")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
@@ -433,10 +429,12 @@ class Recall:
     # differs from its founder, and a saved memory without one takes its founder; each is
     # runtime except the key and the window, which shape the memory
     OPTIONS = (
-        "address_step", "write", "null", "address_reward", "episodes", "key", "window",
+        "address_step", "null", "address_reward", "episodes", "key", "window",
         "window_decay",
     )
     CONSTRUCTION_OPTIONS = ("key", "window", "window_decay")
+    # the settings of 0.84.3 this version removed, refused by name with a message naming it
+    RETIRED = ("write",)
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -454,8 +452,16 @@ class Recall:
         return {name: defaults[name] for name in cls.OPTIONS}
 
     @staticmethod
+    def removed(name: str) -> str:
+        """The refusal of a setting this version removed: ``recall_<name>`` of ``RETIRED``."""
+        return f"recall_{name} was removed in this version; cadence-net 0.84.3 takes it"
+
+    @staticmethod
     def setting(name: str, value: Any) -> Any:
-        """One setting, validated and converted; ``name`` is a field of the memory."""
+        """One setting, validated and converted; ``name`` is a field of the memory. A
+        setting this version removed is refused by name."""
+        if name in Recall.RETIRED:
+            raise ValueError(Recall.removed(name))
         if name == "recency":
             return None if value is None else real(name, value, low=0)
         if name in ("amplitude", "address", "context"):
@@ -491,10 +497,6 @@ class Recall:
         if name == "address_step":
             if not isinstance(value, str) or value not in Recall.STEPS:
                 raise ValueError(f"address_step is one of {Recall.STEPS}")
-            return value
-        if name == "write":
-            if not isinstance(value, str) or value not in Recall.WRITES:
-                raise ValueError(f"write is one of {Recall.WRITES}")
             return value
         if name == "null":
             return None if value is None else real(name, value)
@@ -884,27 +886,17 @@ class Recall:
         return np.asarray(settled[:, cols], dtype=float).copy()
 
     def witness(
-        self,
-        observations: np.ndarray,
-        state: BrainState,
-        *,
-        aroused: bool | np.ndarray = True,
-        command: np.ndarray | None = None,
+        self, observations: np.ndarray, state: BrainState, *, command: np.ndarray | None = None
     ) -> None:
         """After the settle: the ``(batch, inputs)`` observations the streams acted on join
         their slots under the moment's key, the slot before learns them as its next, and the
-        settled cortex of ``state`` and the history move on to this moment. ``aroused`` marks
-        the streams that chose the moment aroused, one flag or one per stream: with
-        ``write="aroused"`` only those streams write it, and a moment no stream writes leaves
-        the slots as they were. ``command``, the ``(batch, motor)`` one-hot of the command each
+        settled cortex of ``state`` and the history move on to this moment. ``command``, the
+        ``(batch, motor)`` one-hot of the command each
         stream issued at this moment, is what the predecessor key reads at the next moment;
         without one (a moment ``wait`` senses) the last command stays. Another batch size
         begins the streams with empty memories first. An imagined branch moves the cortex and
         the history only."""
         x = self._port(observations)
-        flags = np.asarray(aroused)
-        if flags.dtype != np.bool_ or flags.shape not in ((), (len(x),)):
-            raise ValueError("aroused marks the streams that chose the moment aroused")
         issued = None
         if command is not None and self.key == "predecessor":
             issued = np.asarray(command, dtype=float)
@@ -918,15 +910,8 @@ class Recall:
             raise ValueError("the settled state needs one row per stream")
         if not self._private:
             value = moment.event if self.value == "event" else cortex
-            if self.write == "always" or flags.all():
-                self._observe(moment.key, value)
-                self.writes += len(x)
-            elif flags.any():
-                written = np.broadcast_to(flags, (len(x),)).copy()
-                self._observe(moment.key, value, written)
-                self.writes += int(written.sum())
-            elif len(x) != self.streams:
-                self._empty(len(x))  # another batch begins with empty memories, as a write would
+            self._observe(moment.key, value)
+            self.writes += len(x)
         self.previous = cortex
         if self.context:
             h = self.history if len(self.history) == len(x) else np.zeros_like(moment.event)
@@ -947,38 +932,30 @@ class Recall:
                 self.command = np.zeros((len(x), self.commands))
         self.last = None
 
-    def _observe(
-        self, key: np.ndarray, value: np.ndarray, written: np.ndarray | None = None
-    ) -> None:
+    def _observe(self, key: np.ndarray, value: np.ndarray) -> None:
         """Write one moment per stream: the latest slot learns what followed it, a new slot
-        holds this moment; beyond ``capacity`` the oldest slot is dropped. With ``written``,
-        one flag per stream, the new slot is a column every stream has and the written
-        streams alone hold (the others keep zeros there), and each written stream's latest
-        held slot, wherever it lies, learns this moment as its next. A stream whose latest
-        slot closed an episode (``end``) teaches it nothing, and its new slot is open again."""
+        holds this moment; beyond ``capacity`` the oldest slot is dropped. A stream that began
+        since the others (``reset`` of its rows) holds fewer slots: its latest held slot,
+        wherever it lies, learns this moment as its next. A stream whose latest slot closed
+        an episode (``end``) teaches it nothing, and its new slot is open again."""
         if len(key) != self.streams:
             self._empty(len(key))
         nexts = self.nexts
         if self.slots:
             nexts = nexts.copy()
-            if written is None and self.held.all() and not self.ended.any():
+            if self.held.all() and not self.ended.any():
                 nexts[:, -1] = value
             else:
-                # each written stream's latest held slot learns what followed it, unless it
-                # closed an episode
+                # each stream's latest held slot learns what followed it, unless it closed an
+                # episode
                 held = self.held
                 rows = held.any(axis=1) & ~self.ended
-                if written is not None:
-                    rows &= written
                 latest = held.shape[1] - 1 - np.argmax(held[:, ::-1], axis=1)
                 index = np.flatnonzero(rows)
                 nexts[index, latest[index]] = value[index]
         fresh = np.ones((len(key), 1), dtype=bool)
-        if written is not None:
-            fresh = written[:, None].copy()
-            key, value = np.where(fresh, key, 0.0), np.where(fresh, value, 0.0)
-        if self.ended.any():  # a written stream's new slot is open to its successor
-            self.ended = self.ended & ~fresh[:, 0]
+        if self.ended.any():  # every stream's new slot is open to its successor
+            self.ended = np.zeros(len(key), dtype=bool)
         keys = np.concatenate([self.keys, key[:, None, :]], axis=1)
         values = np.concatenate([self.values, value[:, None, :]], axis=1)
         nexts = np.concatenate([nexts, np.zeros_like(value)[:, None, :]], axis=1)

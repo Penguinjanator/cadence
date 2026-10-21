@@ -225,7 +225,7 @@ columns of a copy (another batch size reads silence). `reset(batch, rows=None)`,
 Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25,
        capacity=64, value="event", next=True, address=0.01,
        address_temperature=0.1, context=0.0, context_decay=0.5,
-       address_step="lms", write="always", null=None, address_reward=0.0,
+       address_step="lms", null=None, address_reward=0.0,
        episodes="forget", key="event", window=1, window_decay=1.0,
        source="sensory", target="recall", inputs=0, writes=0)
 ```
@@ -239,14 +239,14 @@ when it differs from the `source` population (a coded brain passes the code widt
 | Member | Behaviour |
 | --- | --- |
 | `stimulate(drive, observations)` | Addresses the moment, fixes the softmax over the slots (`attended`) and writes the read into `recall` and, with `next`, `next`. |
-| `witness(observations, state, *, aroused=True, command=None)` | Writes the moment as a slot after its settle; with `write="aroused"` only for the streams `aroused` marks. `command` feeds `key="predecessor"`. |
+| `witness(observations, state, *, command=None)` | Writes the moment as a slot after its settle. `command` feeds `key="predecessor"`. |
 | `learn(graph, learned) -> dict` | The address lesson after a teaching step; returns `address_rows`, `address_error`, `address_refused`. A nonfinite step is refused per row. |
 | `contrast_rows(graph, plus, minus)`, `propose(step)`, `accept(proposal)` | Reward training of the address map at `address_reward > 0`; `ActorCritic` calls them. `contrast_rows` is `None` at 0. |
 | `end(batch, rows=None)` | Ends episodes and keeps the slots; the latest slot learns no successor. |
 | `weights(address)`, `ages()`, `charges()`, `readback(graph, region, movement)`, `activity(state)` | The read's slot shares, slot ages, age charges, and the association movement read back through the recall synapses. |
 | `reset(batch, rows=None)`, `keep(rows)`, `snapshot()`, `restore(snapshot)`, `reading()`, `hold(reading)`, `imagined()` | Stream bookkeeping; `imagined()` is a copy that reads the live slots and writes none. |
-| `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)` | The always-described genes, the eight options saved only where they differ, validation of one gene, the null slot's logit. |
-| `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `VALUES`, `STEPS`, `WRITES`, `EPISODES`, `KEYS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, and the allowed values of `value`, `address_step`, `write`, `episodes` and `key`. |
+| `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)`, `Recall.removed(name)` | The always-described genes, the seven options saved only where they differ, validation of one gene, the null slot's logit, the refusal of a removed setting. |
+| `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `RETIRED`, `VALUES`, `STEPS`, `EPISODES`, `KEYS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, the settings this version removed, and the allowed values of `value`, `address_step`, `episodes` and `key`. |
 | `keys`, `values`, `nexts`, `held`, `previous`, `history`, `ended`, `before`, `command`, `past`, `w_x`, `w_c`, `b`, `address_width`, `neurons`, `streams`, `slots`, `attended`, `to_dict()` | State arrays and sizes. |
 
 Construction and `Brain.retune` refuse a `null` whose logit is not finite.

@@ -160,13 +160,16 @@ def _history_decays(value: Any) -> tuple[float, ...]:
 def _recall_genes(recall: Any, genes: dict[str, Any]) -> dict[str, Any]:
     """The recall memory's settings, validated: its founders with every ``recall_<setting>``
     of ``genes`` over them (those names are removed from ``genes``), an option only where it
-    is given, or an empty mapping for a brain without it."""
+    is given, or an empty mapping for a brain without it. A setting of 0.84.3 that this
+    version removed is refused by name (``Recall.RETIRED``)."""
     if not isinstance(recall, bool):
         raise ValueError("recall must be boolean")
     founders = Recall.founders()
     settings: dict[str, Any] = {}
     for name in [name for name in genes if name.startswith("recall_")]:
         setting = name[len("recall_"):]
+        if setting in Recall.RETIRED:
+            raise ValueError(Recall.removed(setting))
         if setting not in founders and setting not in Recall.OPTIONS:
             raise TypeError(f"unknown brain setting: {name!r}")
         settings[setting] = Recall.setting(setting, genes.pop(name))
@@ -795,7 +798,8 @@ def _validate_recall_state(
     width: int,
 ) -> None:
     """The settings, slots and address map of a recall memory (formats /8 and /9); ``width``
-    is the observation code's, the observations the memory is given."""
+    is the observation code's, the observations the memory is given. A file saved under a
+    setting this version removed is refused with a message naming 0.84.3."""
     populations = learner.brain.connectome.populations
     recalled = meta.get("recall")
     if recalled is None:
@@ -803,9 +807,11 @@ def _validate_recall_state(
             raise ValueError("saved recall state requires recall metadata")
         return
     names = {*Recall.RUNTIME, *Recall.CONSTRUCTION}
+    # a setting this version removed was saved only where it differed from its founder
+    optional = {"inputs", *Recall.OPTIONS, *Recall.RETIRED}
     if (
         not isinstance(recalled, dict)
-        or set(recalled) - {"inputs", *Recall.OPTIONS}
+        or set(recalled) - optional
         != names | {"source", "target", "neurons", "writes"}
         or recalled["source"] not in ("sensory", "visual/input")
         or recalled["source"] not in populations
@@ -813,6 +819,9 @@ def _validate_recall_state(
         or "recall" not in populations
     ):
         raise ValueError("invalid saved recall ports")
+    for name in Recall.RETIRED:
+        if name in recalled:
+            raise ValueError(_removed_recall(name, recalled[name]))
     settings = {name: Recall.setting(name, recalled[name]) for name in names}
     # an option is saved where it differs from its founder, and takes its founder where absent
     settings.update({name: Recall.setting(name, recalled[name]) for name in Recall.OPTIONS
@@ -898,6 +907,14 @@ def _validate_recall_state(
         "trace", "pending", "ended"
     } != expected:
         raise ValueError("unexpected saved recall arrays")
+
+
+def _removed_recall(name: str, value: Any) -> str:
+    """The refusal of a checkpoint saved under a recall setting this version removed."""
+    return (
+        f"this checkpoint was saved with the recall memory's {name}={value!r}, which this "
+        "version removed; load it with cadence-net 0.84.3"
+    )
 
 
 def _validate_episodic_state(
@@ -1607,9 +1624,7 @@ class Brain:
         ``"lms"`` step toward the named keys; ``recall_recency=None`` charges a slot's age
         ``r * log(1 + age)``, ``r = recall_heard^2 / recall_temperature / log(1 +
         recall_capacity)``, so an unmatched old slot's weight falls as a power of its age;
-        ``recall_write="aroused"`` writes a
-        moment only when its act was sampled (and a moment ``wait`` senses while a sampled
-        action awaits its outcome); a number ``recall_null`` adds a null slot of logit
+        a number ``recall_null`` adds a null slot of logit
         ``recall_null / recall_temperature`` that reads nothing; and
         ``recall_address_reward`` above zero lets reward train the address map, each sampled
         act keeping the step its lesson would take as the map's eligibility and each outcome
@@ -1635,7 +1650,9 @@ class Brain:
         ``recall_scale``, ``recall_capacity``, ``recall_value``, ``recall_next``,
         ``recall_key``, ``recall_window`` and ``recall_window_decay`` are construction
         settings; the keys, the event values and the address map follow the observation code's
-        width, a brain's ``code`` among the ways to bound it.
+        width, a brain's ``code`` among the ways to bound it. The settings of 0.84.3 that this
+        version removed (``recall_write``) are refused by name; the CHANGELOG gives each one's
+        reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -1905,6 +1922,8 @@ class Brain:
                 memory_changes.append((self.context_memory, field, value))
         for name in [name for name in options if name.startswith("recall_")]:
             setting = name[len("recall_"):]
+            if setting in Recall.RETIRED:
+                raise ValueError(Recall.removed(setting))
             if setting not in Recall.RUNTIME and setting not in Recall.OPTIONS:
                 raise TypeError(f"unknown brain setting: {name!r}")
             if self.recall is None:
@@ -2452,10 +2471,9 @@ class Brain:
         learning, no write to the associative memory, no parameter changes; the
         eligibility of earlier sampled actions fades by one step, as time passes. The
         working trace, the heard history and the recall memory's slots advance at every
-        accepted moment, calm or aroused (with ``recall_write="aroused"`` the slots at the
-        aroused moments alone); the recall memory's address map changes in lessons and, with
-        ``recall_address_reward``, by the outcomes of sampled actions. Its forecasts for the
-        preceding action were the critic's value when it acted and, when it has an
+        accepted moment, calm or aroused; the recall memory's address map changes in lessons
+        and, with ``recall_address_reward``, by the outcomes of sampled actions. Its
+        forecasts for the preceding action were the critic's value when it acted and, when it has an
         associative memory, the record it held for that action; the outcome is
         measured against the value with the value of the present state and against
         the record as it is, and a surprising outcome or a reward below what life
@@ -2660,9 +2678,8 @@ class Brain:
         The brain settles the present observation from its current activity, reading its
         working trace, the copy of its last command, its heard history, its recall memory and
         its associative memory; its working trace advances to that state, its heard history
-        takes in the observation and its recall memory writes the moment (with
-        ``recall_write="aroused"`` when the awaited action was sampled). It issues no action
-        and takes no outcome:
+        takes in the observation and its recall memory writes the moment. It issues no
+        action and takes no outcome:
         the awaited action keeps the forecasts made before it, its eligibility and the
         situation it was chosen in, and ``live`` later credits its actual outcome to it
         once. Parameters, the critic, eligibility traces, associative memory, random
@@ -2702,9 +2719,7 @@ class Brain:
         if self.history is not None:
             self.history.hear(self._sensed(x, code))  # what was sensed joins the heard past
         if self.recall is not None:
-            # the sensed moment joins the stream's slots; with ``recall_write="aroused"`` only
-            # while the action it awaits was sampled
-            self.recall.witness(code, state, aroused=self._moment is not None)
+            self.recall.witness(code, state)  # the sensed moment joins the stream's slots
         if self.context_memory is not None:
             self._context = self._episode_key(code)  # what was sensed enters the temporal context
         self._awaiting = (current, state)
@@ -3004,11 +3019,11 @@ class Brain:
             # past; the next drive holds the present
             self.history.hear(self._sensed(x, code))
         if self.recall is not None:
-            # the moment acted on joins the stream's slots (with ``recall_write="aroused"`` a
-            # sampled act's alone); its settled cortex enters the next moment's address, and
-            # with the predecessor key the moment and its command the next moment's key
+            # the moment acted on joins the stream's slots; its settled cortex enters the next
+            # moment's address, and with the predecessor key the moment and its command the
+            # next moment's key
             command = self._command(action) if self.recall.key == "predecessor" else None
-            self.recall.witness(code, free, aroused=not greedy, command=command)
+            self.recall.witness(code, free, command=command)
         if bias is not None:
             if key is not None:
                 # what the stream did joins its temporal context after what it saw

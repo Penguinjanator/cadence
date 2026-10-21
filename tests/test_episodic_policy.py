@@ -251,10 +251,10 @@ def test_an_imagined_branch_gives_the_predecessor_key_the_act_the_brain_would_is
     commands = []
     release = cd.Recall.witness
 
-    def witness(self, observations, state, *, aroused=True, command=None):
+    def witness(self, observations, state, *, command=None):
         if self._private:
             commands.append(int(np.argmax(command[0])))
-        release(self, observations, state, aroused=aroused, command=command)
+        release(self, observations, state, command=command)
 
     monkeypatch.setattr(cd.Recall, "witness", witness)
     before = brain.save(tmp_path / "before.npz")

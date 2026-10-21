@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- Settings of the recall memory that 0.84.3 took are removed, each refused by name at
+  `compose` and `retune` with a message naming 0.84.3 as the release that takes it, and a
+  checkpoint saved under one is refused on load with a message naming 0.84.3; each was read before
+  it left, and every founder brain, checkpoint and composed life is byte-identical to the
+  library before the removal (pinned), the options having been saved only where they
+  differed from their founders. `recall_write="aroused"`, a moment written only when its act
+  was sampled (`Recall.witness` loses `aroused`, and every write is a slot each stream
+  holds), was neutral on every chamber it was read on. The binding instrument keeps its arms
+  (`benchmarks/binding/index_read.py`) with their protocol.
 - `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
   its settlement and repair-network version in Cadence (the embedding as a learned code of
   meaning, the residual stream as the settling cortex, attention as a recall memory over the

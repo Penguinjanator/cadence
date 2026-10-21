@@ -92,8 +92,7 @@ action for one continuing stream; supply one observation row per call. It needs
 learning; youth (the first 100 moments) or arousal enables exploration, learning
 and writes to the associative memory. There is no training/inference mode switch.
 The working trace advances at every accepted moment; with the opt-in recall
-memory (`recall=True`) its slots advance at every accepted moment too, or only at
-aroused moments with `recall_write="aroused"`.
+memory (`recall=True`) its slots advance at every accepted moment too.
 [Continuous interaction](https://github.com/muellerberndt/cadence/blob/main/docs/continuous.md)
 covers arousal, resets and saved continuation.
 

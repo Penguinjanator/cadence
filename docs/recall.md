@@ -56,9 +56,7 @@ so a moment that matches no slot recalls little.
 
 After each act, and after each moment `wait` senses, every stream writes one slot and the
 slot before learns the new value as its next. Beyond `recall_capacity` the oldest slot is
-dropped. With `recall_write="aroused"` only moments whose act was sampled are written
-(`step`, `act` without `greedy`, an aroused `live` moment, a moment waited on a sampled
-action); in a batch the capacity then bounds the store's columns. Imagination writes none.
+dropped. Imagination writes none.
 
 The address lesson runs after each teacher lesson (`step(..., teacher=...)` or
 `brain.lesson`). It reads the association region's movement between the nudged phases back
@@ -125,7 +123,6 @@ map.
 | `recall_next` | `True` | construction | The `next` region and each slot's next |
 | `recall_scale` | `1.2` | construction | Initial magnitude of the two projections (a `compose` argument) |
 | `recall_address_step` | `"lms"` | retune | `"toward"`: the named keys less the attended mixture |
-| `recall_write` | `"always"` | retune | `"aroused"`: write only moments whose act was sampled |
 | `recall_null` | `None` | retune | A number adds a null slot; a non-finite logit is refused |
 | `recall_address_reward` | `0.0` | retune | Rate at which reward trains the address map |
 | `recall_episodes` | `"forget"` | retune | `"keep"`: slots survive an ended episode |
@@ -139,13 +136,12 @@ The [API reference](api.md#recall-memory-genes) gives the `Recall` class signatu
 ```python
 optioned = Brain.compose(
     inputs=4, actions=2, modules=(16,), seed=1, recall=True,
-    recall_address_step="toward", recall_recency=None, recall_write="aroused",
-    recall_null=0.0, recall_address_reward=0.1, recall_episodes="keep",
+    recall_address_step="toward", recall_recency=None, recall_null=0.0,
+    recall_address_reward=0.1, recall_episodes="keep",
 )
 other = np.array([[0.0, 1.0, 0.0, 0.0]])
-optioned.act(fact)                               # sampled: written
-optioned.act(other)                              # sampled: written
-optioned.act(other, greedy=True)                 # greedy: not written under recall_write="aroused"
+optioned.act(fact)                               # every act writes a slot, sampled or greedy
+optioned.act(other, greedy=True)
 assert optioned.recall.slots == 2
 optioned.stimulus(np.array([[0.0, 0.0, 1.0, 0.0]]))  # matches no slot
 assert optioned.recall.attended.sum() < 1.0      # the null slot takes the rest
@@ -157,6 +153,14 @@ windowed = Brain.compose(inputs=4, actions=2, modules=(16,), seed=1, recall=True
                          recall_window=2, recall_key="predecessor")
 assert windowed.recall.address_width == 2 * 4 + 4 + 2
 ```
+
+## Removed in this version
+
+Settings of 0.84.3 that left in this version, each refused by name with a message naming
+0.84.3 as the release that takes it, with the reading that retired it:
+
+- `recall_write="aroused"`, a moment written only when its act was sampled: neutral on every
+  chamber it was read on; every accepted moment is written.
 
 ## Cost
 
