@@ -57,7 +57,9 @@ def test_sampled_lived_checkpoint_preserves_one_pending_action(tmp_path, defect)
             del arrays["moment/" + defect.removeprefix("missing_")]
 
     _rewrite(path, corrupt)
-    with pytest.raises(ValueError):
+    # a lived action that differs from the pending action it was saved with is refused by name
+    mismatch = defect in ("observations", "action", "forecast")
+    with pytest.raises(ValueError, match="pending feedback" if mismatch else None):
         cd.Brain.load(path)
 
 
