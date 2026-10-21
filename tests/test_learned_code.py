@@ -221,6 +221,50 @@ def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, 
     assert checkpoint_digest(brain.save(tmp_path / "founder.npz")) == spec["checkpoint"]
 
 
+def region_digest(brain: cd.Brain, acts: list[int], path: Path) -> str:
+    """SHA-256 over a life with the region: its acts, every array of the checkpoint it saves
+    (the metadata, which names the region's settings, left out) and the region's work."""
+    h = hashlib.sha256(json.dumps(acts).encode())
+    with np.load(path, allow_pickle=False) as data:
+        for name in sorted(data.files):
+            if name in ("meta", "generic"):
+                continue
+            value = data[name]
+            h.update(name.encode() + str(value.dtype).encode() + str(value.shape).encode())
+            h.update(np.ascontiguousarray(value).tobytes())
+    h.update(json.dumps(brain.learned_code.work, sort_keys=True).encode())
+    return h.hexdigest()
+
+
+# Two founder lives with the region, recorded on the head before the region's settings were
+# folded into constants: whatever is removed or fixed, a founder lives them bit for bit.
+REGION_FOUNDERS: dict[str, dict] = {
+    "region": {
+        "build": (16, 8, {"modules": (24,), "seed": 5, "learned_code": 16, "recall": True}),
+        "life": taught,
+        "digest": "94d206f3e577543af81f32d1c179ba5cf76832c08ae89738db92b0737afc4538",
+    },
+    "region_fields": {
+        "build": (16, 4, {"modules": (24,), "seed": 6, "learned_code": 16,
+                          "learned_code_fields": (8, 8), "memory_choice": True,
+                          "arousal": True}),
+        "life": lived,
+        "digest": "b9939769e80193130ad7c0a3b64b684814d73f728dcb5321467cc2b8a652eb15",
+    },
+}
+
+
+@pytest.mark.skipif(not NUMPY_SOLVER, reason=BYTES_REASON)
+@pytest.mark.parametrize("name", sorted(REGION_FOUNDERS))
+def test_a_founder_with_the_region_lives_its_recorded_life(tmp_path, name):
+    spec = REGION_FOUNDERS[name]
+    inputs, actions, options = spec["build"]
+    brain = cd.Brain.compose(inputs, actions, **options)
+    acts = spec["life"](brain)
+    path = brain.save(tmp_path / "region.npz")
+    assert region_digest(brain, acts, path) == spec["digest"]
+
+
 def test_learned_code_none_is_the_founder_and_the_width_is_as_before():
     assert cd.Brain.observation_width(53) == 53 and cd.Brain.observation_width(53, 24) == 24
     assert cd.Brain.observation_width(53, None, 16) == 16 + 53  # the key joins the identity
