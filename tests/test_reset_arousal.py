@@ -469,8 +469,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3328, 547],
         ],
         "format": "cadence-generic/3",
-        "names": "5ba93168468320d38dcfeaa5fb3656396b5a51dc3b0752754badc7f7fa7e66b6",
-        "checkpoint": "4ae706955251a786f047ebd6485970ac0c41e9b8968609c9c5700612f524ef25",
+        "names": "0d66da3365c3dd3eb20a818ae910b0f42f38b2e957d8667100322412a62c03f9",
+        "checkpoint": "58d9db655115efbecbbb851ae28dc4ae16d206cb28eb82ad06a7cc45ef66f74d",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
@@ -484,8 +484,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 288, 151],
         ],
         "format": "cadence-generic/8",
-        "names": "c6ac85931040064ccea980308a4eacf763d9480057cf5aae9e5a29ab8cff5b76",
-        "checkpoint": "b2fbe665a41824b7387f0c10c5c2beaf930ca5b7fcd1d9502ece09585b238fc3",
+        "names": "0624617ac2a8160b04cfb478001ed82f9eb982d92ece84789974ae64108db965",
+        "checkpoint": "497e3e91c715848bc1f3cb60e68cd3169a339f2a2a0793c559e6742c94af49fe",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
@@ -497,8 +497,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 544, 301],
         ],
         "format": "cadence-generic/6",
-        "names": "2733528d3e07230712ce85b22a30e1a8eb96f5ce5f84c1326b5ff6bde7c64a97",
-        "checkpoint": "64b9e686d58ad8f3066f9c188255302b75a13ff1559ebaafe2a6a881742e9634",
+        "names": "3d07f60219b802d1c6077f1190609cc7211b3a6ef50275beb84eb253f2bb6fca",
+        "checkpoint": "2386f2511bbd43f9e8cb34ab3d825a0f88c3403da5af0a88f91bcea71bc59f4b",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
@@ -507,8 +507,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "acts": "0011010000000111111101000",
         "left": [],
         "format": "cadence-generic/2",
-        "names": "1009005150dc48d076ab9d17775e97493a8eeb4c04355b157e929c4d5582021f",
-        "checkpoint": "1d7a942a7e6fcd7e797ee82f4348ce33dde87cd83060dcd73a8d3916b6a97dd0",
+        "names": "4d36d84e68feb73b1b2eedc4de6c9e70769defa7231704e42b9531303f837703",
+        "checkpoint": "061982f7b1ea471e24ec22d38aa2e1e570d0debfd2fcb8b983c1e5497adccbf7",
     },
 }
 

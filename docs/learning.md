@@ -363,7 +363,8 @@ The composed rates (`eta=0.5` teaching, 1.0 actor) are unnormalized; normalized 
 steps can dwarf the raw signals and saturate the outputs. Retune `eta` and `eta_bias` together;
 a development sweep might start at `eta` 0.001 to 0.003, checked against acquisition, retention
 and actual step sizes. `LearnerConfig` warns when `normalize > 0` and `eta` or `eta_bias` exceeds
-0.05; smaller rates can also fail. The actor's case is in [reward](reward.md#rates-under-normalization).
+0.05; smaller rates can also fail. The actor steps on its raw contrast
+([actor rates](reward.md#actor-rates)).
 
 ### Many lessons: the normalized point for imitation
 

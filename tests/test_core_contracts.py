@@ -175,7 +175,7 @@ def test_bad_transition_does_not_change_memory_or_eligibility():
 
 @pytest.mark.parametrize(
     "field,value",
-    [("gamma", 1.1), ("lam", -1), ("eta", float("nan")), ("normalize", 1), ("dopamine_cap", -1)],
+    [("gamma", 1.1), ("lam", -1), ("eta", float("nan")), ("eta_critic", -1), ("dopamine_cap", -1)],
 )
 def test_reward_configuration_is_validated(field, value):
     with pytest.raises(ValueError):

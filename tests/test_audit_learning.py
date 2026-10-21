@@ -168,11 +168,12 @@ def test_host_apply_keeps_the_torch_kernel_and_the_settled_states_on_it() -> Non
     rng = np.random.default_rng(0)
     brain = cd.NeuralGraph(c, cd.learning_neuron_model(dt=1.0), backend="torch", device="cpu")
     learner = cd.Learner(brain, c.populations["output"], cd.LearnerConfig(tolerance=1e-5), tie_groups=tie)
-    agent = cd.ActorCritic(learner, c.populations["hidden"], cd.ActorCriticConfig(normalize=0.9))
+    agent = cd.ActorCritic(learner, c.populations["hidden"], cd.ActorCriticConfig())
     kernel = brain._torch
     d, _ = _drive(c, rng, 4)
     agent.act(d)
-    agent.learn(np.ones(4), np.zeros(4, dtype=bool), d)  # normalize > 0: the host path
+    learner._device_kernel = lambda plus, minus: None  # the update takes the host path
+    agent.learn(np.ones(4), np.zeros(4, dtype=bool), d)
     assert learner.brain._torch is kernel  # not rebuilt
     assert agent.state is not None and agent.state.device is not None
     assert agent.state.device["holder"] is kernel  # the next free phase still rests there

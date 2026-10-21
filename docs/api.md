@@ -403,7 +403,7 @@ file is refused with a message naming the release that reads it.
 ```text
 ActorCritic(learner, critic, config=None, seed=0)
 ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=None, eta_critic=0.05,
-                  normalize=0.0, momentum=0.0, dopamine_cap=1.0, eligibility_steps=None)
+                  dopamine_cap=1.0, eligibility_steps=None)
 ```
 
 The reward learner of a stream: a `Learner` whose outputs are the actions, a learned linear
@@ -419,8 +419,7 @@ and the decision contract are in [learning from reward](reward.md#settings).
 | `reset()`, `parameters()`, `to_dict()` | Clears cache, eligibility and salience; keeps learned parameters. |
 | `state`, `salience`, `memory`, `trace`, `trace_memory` | The latest free phase; per-sender salience weights; a memory with learned parameters (`Recall`) and its eligibility. |
 
-Construction warns when `eta_bias` exceeds a positive `eta` and when `normalize > 0` with an
-actor rate above 0.05.
+Construction warns when `eta_bias` exceeds a positive `eta`.
 
 ## NeuralGraph (`cadence`)
 

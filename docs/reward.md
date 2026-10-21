@@ -91,8 +91,6 @@ eligibility_steps=12` ([defaults table](brain.md#defaults-and-expert-overrides))
 | `eta` | `0.5` | Actor synapse step per unit dopamine per unit trace |
 | `eta_bias` | `None` | Bias step; `None` derives `eta / 10` at construction |
 | `eta_critic` | `0.05` | Critic step |
-| `normalize` | `0.0` | Forgetting factor of each parameter's RMS that divides its step ([below](#rates-under-normalization)) |
-| `momentum` | `0.0` | Each parameter steps on a running average of its own steps |
 | `dopamine_cap` | `1.0` | Clip of the actor's signal; `0` for none |
 | `eligibility_steps` | `None` | Steps of each reward-nudged phase; `None` uses the learner's `nudged_steps` |
 
@@ -244,16 +242,12 @@ Each is a property of the rule or the readout, with its reading in the `learn` r
 - **Eligibility mixed along one approach.** Several decisions in one episode put approach and
   avoid nudges in one trace; take one decision per episode and credit it.
 
-## Rates under normalization
+## Actor rates
 
-With `normalize > 0` each actor parameter's step is divided by the bias-corrected running
-RMS of its own raw steps plus `1e-3` (with `momentum`, the numerator is their bias-corrected
-running mean). Efficacies (`eta`) and biases (`eta_bias`) are normalized separately on the
-actor's own history, independently of the [learner's](learning.md#rates-under-normalization).
-A consistent signal then steps by about the rate, so both rates are absolute per-parameter
-steps, and a bias rate far above the synapse rate makes a policy whose greedy action
-ignores the observation; `eta` from 0.001 to 0.003 is a starting range. A named
-`actor_eta` in `Brain.compose` or `retune` keeps the current bias rate; pass
-`actor_eta_bias=None` to derive `eta / 10` again. Construction emits a `RuntimeWarning`, and changes nothing, when
-`normalize > 0` with `eta` or `eta_bias` above 0.05, or when `eta_bias` exceeds a positive
-`eta`. `eta_critic` is outside both.
+Every actor parameter steps by its rate times the dopamine times its own eligibility: there
+is no running average of the steps and no division by their size, so the rates are steps
+per unit dopamine per unit trace. A bias rate far above the synapse rate makes a policy whose
+greedy action ignores the observation. A named `actor_eta` in `Brain.compose` or `retune`
+keeps the current bias rate; pass `actor_eta_bias=None` to derive `eta / 10` again.
+Construction emits a `RuntimeWarning`, and changes nothing, when `eta_bias` exceeds a
+positive `eta`. `eta_critic` is outside it.

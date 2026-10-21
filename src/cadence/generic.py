@@ -64,10 +64,6 @@ _REWARD_ARRAYS = (
     "trace",
     "trace_bias",
     "trace_critic",
-    "second_moment",
-    "second_moment_bias",
-    "velocity",
-    "velocity_bias",
     "salience",
     "_drive",
 )
@@ -741,11 +737,6 @@ def _validate_life_state(
     if ("actor/trace" in data) != ("actor/trace_bias" in data):
         raise ValueError("incomplete saved eligibility traces")
     array("actor/w_critic", (association,))
-    for name in ("second_moment", "second_moment_bias", "velocity", "velocity_bias"):
-        size = n if name.endswith("bias") else learner.brain.connectome.synapses
-        value = array("actor/" + name, (size,))
-        if name.startswith("second_moment") and (value < 0).any():
-            raise ValueError(f"negative saved second moment: {name}")
     for name, width in (
         ("trace", learner.brain.connectome.synapses),
         ("trace_bias", n),
@@ -1043,9 +1034,11 @@ def _removed_recall(name: str, value: Any) -> str:
 def _actor_config(values: Any) -> ActorCriticConfig:
     """A saved actor's config. One saved by 0.84.3 names genes this version removed; it loads
     where they leave the law of this version (the dopamine uncentred, so its floor and scale
-    are never read, and the critic's step divided by its trace's energy, learning from the
-    actor's bounded dopamine), and is refused with a message naming 0.84.3 otherwise. The
-    running level of the centred dopamine that 0.84.3 saved beside it is not read."""
+    are never read, the critic's step divided by its trace's energy, learning from the
+    actor's bounded dopamine, and every synapse stepping on its own contrast, without momentum
+    or RMS normalization), and is refused with a message naming 0.84.3 otherwise. The running
+    level of the centred dopamine and the optimizer moments that 0.84.3 saved beside it are
+    not read."""
     if not isinstance(values, dict):
         raise ValueError("invalid saved actor config")
     values = dict(values)
@@ -1055,6 +1048,8 @@ def _actor_config(values: Any) -> ActorCriticConfig:
         ("dopamine_center", (0, 0.0)),
         ("critic_normalize", (True,)),
         ("critic_signal", ("auto", "modulated")),
+        ("normalize", (0, 0.0)),
+        ("momentum", (0, 0.0)),
     ):
         if name in values:
             value = values.pop(name)

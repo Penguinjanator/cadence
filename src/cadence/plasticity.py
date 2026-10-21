@@ -17,9 +17,7 @@ action that was taken, so the eligibility is the score of that
 action and the goal enters only through the nudge. The critic is a linear
 reading of the neurons named for it, trained by its own trace, divided by the
 trace's energy, on the actor's dopamine: the prediction error capped at
-``dopamine_cap``.
-``normalize`` divides each synapse's step by the running RMS of its own
-steps, the local counterpart of an adaptive optimiser. A ``memory`` with learned
+``dopamine_cap``. A ``memory`` with learned
 parameters of its own (``contrast_rows``, ``propose`` and ``accept``, as ``Recall`` has)
 keeps their eligibility in a trace of its own, ``trace_memory``: each sampled act's
 per-row contrast joins it, it decays as every synapse's trace does, and the same dopamine
@@ -63,10 +61,6 @@ class ActorCriticConfig:
     eta: float = 0.5  # actor step per unit dopamine per unit trace
     eta_bias: float | None = None  # bias step; None derives eta / 10 at construction
     eta_critic: float = 0.05
-    normalize: float = 0.0  # >0: forgetting factor of the per-synapse RMS that divides its step
-    # >0: each synapse steps on a running average of its own steps, so sign noise cancels before
-    # the RMS divides it
-    momentum: float = 0.0
     dopamine_cap: float = 1.0  # actor modulation saturates here (0: no cap)
     # settle steps of the two nudged phases that score a sampled action; None uses the
     # learner's nudged_steps
@@ -87,8 +81,7 @@ class ActorCriticConfig:
         ):
             raise ValueError("eligibility_steps must be a nonnegative integer, or None")
         if self.eta_bias is None:
-            # The bias rate follows the synapse rate unless chosen. Under RMS normalization
-            # both are absolute steps.
+            # The bias rate follows the synapse rate unless chosen.
             if not np.isfinite(self.eta) or self.eta < 0:
                 raise ValueError("eta must be finite and nonnegative")
             object.__setattr__(self, "eta_bias", self.eta / 10.0)
@@ -97,29 +90,17 @@ class ActorCriticConfig:
         for name in ("gamma", "lam"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
-        for name in ("normalize", "momentum"):
-            if not 0 <= getattr(self, name) < 1:
-                raise ValueError(f"{name} must lie in [0, 1)")
         for name in ("eta", "eta_bias", "eta_critic", "dopamine_cap"):
             value = getattr(self, name)
             if not np.isfinite(value) or value < 0:
                 raise ValueError(f"{name} must be finite and nonnegative")
-        if self.normalize > 0 and max(self.eta, eta_bias) > 0.05:
-            warnings.warn(
-                "ActorCriticConfig with normalize > 0 and eta or eta_bias above 0.05: "
-                "RMS normalization can make parameter steps much larger than raw contrasts "
-                "suggest and may saturate the policy. Consider smaller actor rates; "
-                "see docs/reward.md#rates-under-normalization.",
-                RuntimeWarning,
-                stacklevel=3,
-            )
         if self.eta > 0 and eta_bias > self.eta:
             warnings.warn(
                 f"ActorCriticConfig with eta_bias ({eta_bias:g}) above eta ({self.eta:g}): "
                 "the actor's bias step dominates its synapse step and the greedy policy tends "
                 "to one action whatever the observation. The default couples eta_bias to "
                 "eta / 10; when lowering eta through dataclasses.replace, set eta_bias too, or "
-                "pass eta_bias=None to re-derive it. See docs/reward.md#rates-under-normalization.",
+                "pass eta_bias=None to re-derive it. See docs/reward.md#actor-rates.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -184,10 +165,6 @@ class ActorCritic:
         self._pending_memory: np.ndarray | None = None
         # one stream's traces on the torch device, when it settles there
         self._trace_device: Any = None
-        self.second_moment = np.zeros(self.synapses)
-        self.second_moment_bias = np.zeros(self.n)
-        self.velocity = np.zeros(self.synapses)
-        self.velocity_bias = np.zeros(self.n)
         # (batch, neurons): when set before ``learn``, each synapse's eligibility is weighted by
         # its pre neuron's salience (a ``Trace.ringing``: what is still ringing gets written)
         self.salience: np.ndarray | None = None
@@ -478,14 +455,7 @@ class ActorCritic:
         saved.update(
             {
                 name: getattr(self, name)
-                for name in (
-                    "_trace_device",
-                    "velocity",
-                    "velocity_bias",
-                    "second_moment",
-                    "second_moment_bias",
-                    "updates",
-                )
+                for name in ("_trace_device", "updates")
             }
         )
         try:
@@ -522,8 +492,7 @@ class ActorCritic:
         decay = cfg.gamma * cfg.lam
         device_kernel = None
         if kind == "states":  # the two phases as states: on the device when they settled there
-            if cfg.momentum == 0 and cfg.normalize == 0:
-                device_kernel = self.learner._device_kernel(first, second)
+            device_kernel = self.learner._device_kernel(first, second)
             if device_kernel is None:
                 first, second = first.activation, second.activation
                 kind = "phases"
@@ -611,30 +580,8 @@ class ActorCritic:
             step_scale = (delta[:, None] * self.trace).mean(axis=0)
             step_bias = (delta[:, None] * self.trace_bias).mean(axis=0)
         self.updates += 1
-        raw_scale, raw_bias = step_scale, step_bias
-        if (
-            cfg.momentum > 0
-        ):  # a running average of each synapse's own steps, corrected for its short history
-            self.velocity = cfg.momentum * self.velocity + (1 - cfg.momentum) * step_scale
-            self.velocity_bias = cfg.momentum * self.velocity_bias + (1 - cfg.momentum) * step_bias
-            correction = 1.0 - cfg.momentum**self.updates
-            step_scale, step_bias = self.velocity / correction, self.velocity_bias / correction
-        if (
-            cfg.normalize > 0
-        ):  # divided by the running RMS of each synapse's own raw steps, corrected likewise
-            rho = cfg.normalize
-            self.second_moment = rho * self.second_moment + (1 - rho) * raw_scale**2
-            self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_bias**2
-            correction = 1.0 - rho**self.updates
-            step_scale = step_scale / (np.sqrt(self.second_moment / correction) + 1e-3)
-            step_bias = step_bias / (np.sqrt(self.second_moment_bias / correction) + 1e-3)
         step_scale = cfg.eta * step_scale
         step_bias = cfg.eta_bias * step_bias
-        if not all(
-            np.isfinite(getattr(self, name)).all()
-            for name in ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
-        ):
-            raise ValueError("optimizer moments must remain finite")
         critic_weights, critic_bias = self._critic_candidate(delta)
         # the memory's parameters step on their trace by the same dopamine, checked before
         # anything is installed
@@ -870,8 +817,7 @@ class ActorCritic:
         Every eligibility trace decays by ``gamma * lam``, the step ``learn`` applies
         between two sampled actions, so the credit of earlier actions keeps fading with
         time while nothing is learned; a memory's trace decays with them. ``done`` rows
-        forget their traces, as in ``learn``. Parameters, the critic and optimizer
-        history are unchanged.
+        forget their traces, as in ``learn``. Parameters and the critic are unchanged.
         """
         decay = self.config.gamma * self.config.lam
         ended = None if done is None else np.asarray(done)
@@ -900,7 +846,7 @@ class ActorCritic:
                 value[ended] = 0.0
 
     def reset(self) -> None:
-        """Clear stream state and eligibility; keep learned parameters and optimizer history."""
+        """Clear stream state and eligibility; keep learned parameters."""
         self._free = None
         self._free_brain = None
         self._drive = None

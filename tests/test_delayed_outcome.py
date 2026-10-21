@@ -68,9 +68,6 @@ def _durable(brain: cd.Brain) -> dict[str, Any]:
         "efficacy": np.asarray(brain.brain.efficacy).copy(),
         "bias": np.asarray(brain.brain.bias).copy(),
         "critic": np.append(agent.w_critic, agent.b_critic),
-        "moments": np.concatenate(
-            [agent.velocity, agent.velocity_bias, agent.second_moment, agent.second_moment_bias]
-        ),
         "consolidated": memory.consolidated.copy(),
         "strength": memory.strength.copy(),
         "mass": memory.mass.copy(),

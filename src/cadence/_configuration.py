@@ -41,6 +41,8 @@ _REMOVED = {
     "actor_center_scale",
     "actor_critic_signal",
     "actor_critic_normalize",
+    "actor_normalize",
+    "actor_momentum",
 }
 
 

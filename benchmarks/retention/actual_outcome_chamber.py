@@ -92,8 +92,7 @@ def make_brain(seed):
                                free_steps=1024, nudged_steps=12, tolerance=0.003,
                                momentum=0.9, normalize=0, qualified=False, damping=3),
         reward=ActorCriticConfig(gamma=0.9, lam=0.8, eta=1, eta_bias=0.05,
-                                 eta_critic=0.3, eligibility_steps=12, normalize=0,
-                                 momentum=0, dopamine_cap=1),
+                                 eta_critic=0.3, eligibility_steps=12, dopamine_cap=1),
         consolidation=0.05, episodic=True, working_memory_decay=0.2,
         working_memory_amplitude=3,
         working_memory_scale=12.0,  # the composition of releases before 0.82.0
@@ -725,9 +724,6 @@ def capacity(brain):
             "working_capacity_bytes": 8 * 32 * 8 * 2 + 8,
             "actor_trace_capacity_bytes": 8 * (brain.connectome.synapses + brain.connectome.n
                                                 + 33) * 8,
-            "actor_optimizer_bytes": sum(getattr(actor, name).nbytes for name in
-                                         ("velocity", "velocity_bias", "second_moment",
-                                          "second_moment_bias")),
             "learner_optimizer_bytes": sum(getattr(brain.learner, name).nbytes for name in
                                            ("velocity", "velocity_bias", "second_moment",
                                             "second_moment_bias")),

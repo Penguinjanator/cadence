@@ -24,6 +24,8 @@ REMOVED: dict[str, dict] = {
         "center_scale": True,
         "critic_normalize": True,
         "critic_signal": "auto",
+        "normalize": 0.0,
+        "momentum": 0.0,
     },
 }
 
