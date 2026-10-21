@@ -2099,14 +2099,15 @@ class Brain:
         visual cortex.
         ``learned_code=units`` (opt-in; a vector brain, without ``code``) places a ``code``
         region of that many neurons between the sensory region and the first module: a
-        learned sparse code of the observation, settled with the rest of the brain under
-        lateral competition through its dictionary and drawn toward the prediction the
-        working trace makes of it, learning every accepted moment by local rules
-        (``LearnedCode``). The cortex reads the code, the heard history holds it, and the
-        memories key on the rectified settled code at unit length joined to the
-        observation's own identity. ``learned_code_fields`` declares the observation's
-        fields; every other part of the region is a constant of it; the founder
-        ``learned_code=None`` builds the brain without the region.
+        learned sparse code of the observation, settled in the region's own phase before
+        the rest of the brain, under lateral competition through its dictionary and drawn
+        toward the prediction the working trace makes of it, then held as a source through
+        the whole settle; it learns at every accepted moment by local rules
+        (``LearnedCode``). The cortex reads the context-free code, the observation settled
+        alone, the heard history holds it, and every memory keys on it at unit length,
+        joined to the observation's own identity. ``learned_code_fields`` declares the
+        observation's fields; every other part of the region is a constant of it; the
+        founder ``learned_code=None`` builds the brain without the region.
 
         ``modules`` specifies a chain of reciprocally connected processing
         regions. The final region is the association cortex. ``observers``
