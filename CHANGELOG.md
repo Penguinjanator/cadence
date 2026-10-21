@@ -53,7 +53,9 @@
   held at the code phase's fixed point through the whole settle, a source to the cortex, so
   the rest of the brain keeps the model's step and its learning phases as without the
   region, and the region's phase steps alone; `False` settles them with the whole graph at
-  the code's step) and `learned_code_identity` (0.5: the memories' key is the rectified code
+  the code's step), `learned_code_reads` (`"context"`; with `"free"` the cortex and the
+  memories read the context-free code while the code in context, with the prediction's
+  pull, is what the region learns from) and `learned_code_identity` (0.5: the memories' key is the rectified code
   at unit length joined to the observation's own identity, `unit([sqrt(1 - w) code,
   sqrt(w) unit(x)])`, of width `units + inputs`, so a binding stays readable by the
   identity part while the code part moves; at 0 the code alone); the lesson's contrast and the dopamine leave

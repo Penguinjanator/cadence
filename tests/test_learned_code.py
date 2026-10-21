@@ -308,8 +308,12 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
         "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
         "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
         "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5, "cortex": "code",
-        "scale": "unit", "held": True,
+        "scale": "unit", "held": True, "reads": "context",
     }
+    with pytest.raises(ValueError, match="reads is one of"):
+        composed(learned_code_reads="both")
+    with pytest.raises(ValueError, match="needs the held code"):
+        composed(learned_code_reads="free", learned_code_held=False)
     with pytest.raises(ValueError, match="scale is one of"):
         composed(learned_code_scale="raw")
     with pytest.raises(ValueError, match="held is True or False"):
@@ -1141,6 +1145,35 @@ def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
     assert twin.learned_code.halvings == code.halvings and twin._stepping == 0
     assert twin.describe() == brain.describe()
     np.testing.assert_array_equal(twin.act(x, greedy=True), brain.act(x, greedy=True))
+
+
+def test_the_cortex_and_the_memories_may_read_the_context_free_code():
+    """With ``learned_code_reads="free"`` the code units are held at the context-free code's
+    fixed point (the observation's code settled alone), the recall keys are the context-free
+    keys, and the region learns from the code in context, the prediction's pull in it."""
+    brain = composed(seed=4, recall=True, learned_code_reads="free")
+    code = brain.learned_code
+    x = tokens(2, 6)
+    brain.act(x, greedy=True)  # the trace now carries a moment
+    code.weights[:] = 1.0  # every unit predicted from any context: the code in context differs
+    code.install()
+    brain.learner.brain = brain._installed(brain.brain)
+    before = {name: value.copy() for name, value in code.arrays().items()}
+    brain.act(x, greedy=True)
+    held = np.atleast_2d(brain.basal_ganglia.state.activation)[:, brain.code_index]
+    np.testing.assert_array_equal(np.maximum(held, 0.0), code.last["free"])  # rectified
+    # the moment's key is its context-free code (settled before the moment's learning step)
+    free_key = brain._moment_key(x, code.code_of(code.last["free"]))
+    np.testing.assert_allclose(brain.recall.keys[:, -1, :], free_key, atol=1e-9)
+    # the dictionary's step reads the code in context, not the context-free one
+    a = np.maximum(code.last["activation"], 0.0)
+    assert not np.allclose(a, code.last["free"])
+    residual = code.read * code.last["sensory"] - a @ before["dictionary"].T
+    fired = (a > 0).any(axis=0)
+    expected = before["dictionary"].copy()
+    step = expected[:, fired] + code.rate * (residual.T @ a[:, fired])
+    expected[:, fired] = step / np.linalg.norm(step, axis=0, keepdims=True)
+    np.testing.assert_allclose(code.dictionary, expected, atol=1e-9)
 
 
 def test_the_capped_read_holds_a_code_to_one_full_inputs_norm():

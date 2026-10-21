@@ -138,7 +138,9 @@ class LearnedCode:
     code), ``cortex`` (whether the first module reads the observation beside the code, a
     construction setting), ``scale`` (the memories' key at unit length or at the norm of the
     observation itself, a construction setting), ``held`` (the code units held at the code
-    phase's fixed point through the whole settle, a construction setting) and ``identity``
+    phase's fixed point through the whole settle, a construction setting), ``reads`` (what
+    the cortex and the memories read of a held code: the code in context or the context-free
+    code, a construction setting) and ``identity``
     (the weight of the
     observation's own identity in the memories' key, a construction setting: the key width
     follows it).
@@ -165,6 +167,7 @@ class LearnedCode:
     cortex: str = "code"
     scale: str = "unit"
     held: bool = True
+    reads: str = "context"
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
@@ -172,13 +175,13 @@ class LearnedCode:
 
     GENES = (
         "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "place", "output", "floor", "identity", "cortex", "scale", "held",
+        "silence", "place", "output", "floor", "identity", "cortex", "scale", "held", "reads",
     )
     RUNTIME = (
         "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
         "place", "output", "floor",
     )
-    CONSTRUCTION = ("threshold", "identity", "cortex", "scale", "held")
+    CONSTRUCTION = ("threshold", "identity", "cortex", "scale", "held", "reads")
     # what the place stores key on: the context-free code (``"free"``, the observation
     # settled alone, as ``Brain.observation_code`` gives it) or the moment's code in its
     # context (``"context"``, the key of the context records and the recall slots)
@@ -194,6 +197,11 @@ class LearnedCode:
     # the memories' key at unit length (``"unit"``), or at the norm the observation itself
     # would have as a key (``"observation"``), the scale the recall's temperature reads
     SCALES = ("unit", "observation")
+    # what the cortex and the memories read of a held code: the moment's code in its
+    # context (``"context"``), or the context-free code (``"free"``), the observation's code
+    # settled alone, while the code in context, with the prediction's pull, is what the
+    # dictionary and the predictor learn from
+    READS = ("context", "free")
     # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
     # worst mode of the synchronous sweep contracts by at least a half per sweep
     STEP_MARGIN = 1.5
@@ -205,7 +213,7 @@ class LearnedCode:
             "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
             "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
             "place": "free", "output": "unit", "floor": 1.0, "identity": 0.5,
-            "cortex": "code", "scale": "unit", "held": True,
+            "cortex": "code", "scale": "unit", "held": True, "reads": "context",
         }
 
     @staticmethod
@@ -245,6 +253,10 @@ class LearnedCode:
             if not isinstance(value, (bool, np.bool_)):
                 raise ValueError("held is True or False")
             return bool(value)
+        if name == "reads":
+            if not isinstance(value, str) or value not in LearnedCode.READS:
+                raise ValueError(f"reads is one of {LearnedCode.READS}")
+            return value
         if name == "identity":
             number = real(name, value, low=0, high=1)
             if number >= 1:
@@ -267,6 +279,8 @@ class LearnedCode:
         self.seed = int(self.seed)
         for name in self.GENES:
             setattr(self, name, self.setting(name, getattr(self, name)))
+        if self.reads == "free" and not self.held:
+            raise ValueError("reads \"free\" needs the held code (held=True)")
         amplitude = np.array([self.model.stimulus_amplitude])
         full = float(np.asarray(self.model.activation(amplitude)).item())
         if not full > 0.0:
