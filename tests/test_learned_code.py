@@ -266,7 +266,9 @@ def test_a_founder_with_the_region_lives_its_recorded_life(tmp_path, name):
 
 # the settings the readings retired, each with a value it once took
 REMOVED = {"cortex": "code", "output": "unit", "floor": 0.0, "scale": "observation",
-           "place": "free", "reads": "free", "held": True}
+           "place": "free", "reads": "free", "held": True, "top_down": 2.0, "rate": 0.125,
+           "predictor": 0.0625, "threshold": 0.1, "threshold_rate": 0.000625,
+           "target": 0.1, "repair": 1.0, "silence": 10.0, "identity": 0.9, "active": 0.05}
 
 
 def test_the_settings_the_readings_retired_are_refused_by_name():
@@ -285,7 +287,6 @@ def test_the_settings_the_readings_retired_are_refused_by_name():
 def test_learned_code_none_is_the_founder_and_the_width_is_as_before():
     assert cd.Brain.observation_width(53) == 53 and cd.Brain.observation_width(53, 24) == 24
     assert cd.Brain.observation_width(53, None, 16) == 16 + 53  # the key joins the identity
-    assert cd.Brain.observation_width(53, None, 16, learned_code_identity=0.0) == 16
     for value in (None, 0):
         brain = cd.Brain.compose(53, 4, modules=(8,), seed=2, learned_code=value)
         assert brain.learned_code is None and brain.code_width == 53
@@ -369,41 +370,34 @@ def test_the_region_joins_the_connectome_with_its_three_synapse_groups():
     assert brain.parameters() >= code.parameters()
 
 
-def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
-    assert cd.LearnedCode.founders() == {
-        "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
-        "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-        "identity": 0.9,
-        "fields": None, "active": 0.05,
-    }
+def test_the_constants_and_the_one_setting_and_bad_settings_are_refused():
+    assert cd.LearnedCode.founders() == {"fields": None}
+    assert cd.LearnedCode.GENES == ("fields",) and not cd.LearnedCode.RUNTIME
+    code = composed().learned_code
+    for name, value in (("top_down", 2.0), ("rate", 0.125), ("predictor", 0.0625),
+                        ("threshold", 0.1), ("threshold_rate", 0.000625), ("target", 0.1),
+                        ("repair", 1.0), ("silence", 10.0), ("active", 0.05),
+                        ("identity", 0.9)):
+        assert getattr(cd.LearnedCode, name.upper()) == value == getattr(code, name)
+    assert code.learning is True
     with pytest.raises(ValueError, match="sum to 50, not to the 53 inputs"):
         composed(learned_code_fields=(20, 30))
     with pytest.raises(ValueError, match="positive field widths"):
         composed(learned_code_fields=(53, 0))
     with pytest.raises(ValueError, match="two units per field"):
         composed(units=4, learned_code_fields=(20, 20, 13))
-    with pytest.raises(ValueError, match="identity must lie in"):
-        composed(learned_code_identity=1.0)
-    with pytest.raises(ValueError, match="repair must lie in"):
-        composed(learned_code_repair=0.0)
-    with pytest.raises(ValueError, match="repair"):
-        composed(learned_code_repair=1.5)
     with pytest.raises(ValueError, match="at least 2 units"):
         composed(units=1)
     with pytest.raises(ValueError, match="learned_code must be an integer"):
         composed(units=2.5)
     with pytest.raises(ValueError, match="need learned_code=units"):
-        cd.Brain.compose(53, 4, modules=(8,), learned_code_rate=0.1)
+        cd.Brain.compose(53, 4, modules=(8,), learned_code_fields=(53,))
     with pytest.raises(TypeError, match="unknown brain setting"):
         composed(learned_code_speed=0.1)
     with pytest.raises(ValueError, match="joins the observation itself"):
         composed(code=64)
     with pytest.raises(ValueError, match="a vector brain"):
         cd.Brain.compose((8, 8), 2, modules=(8,), learned_code=32)
-    with pytest.raises(ValueError, match="target must lie in"):
-        composed(learned_code_target=1.0)
-    with pytest.raises(ValueError, match="rate must be finite and lie in"):
-        composed(learned_code_rate=-0.1)
     episodic = composed(memory_choice=True)  # the stores separate the code's keys
     assert episodic.hippocampus.separator is not None
     assert episodic.hippocampus.separator.expansion == 1024
@@ -413,9 +407,7 @@ def test_the_founders_are_the_declared_genes_and_bad_settings_are_refused():
     with pytest.raises(ValueError, match="construction setting"):
         brain.retune(learned_code=32)
     with pytest.raises(ValueError, match="construction setting"):
-        brain.retune(learned_code_threshold=0.2)
-    with pytest.raises(ValueError, match="requires its existing learned code"):
-        composed(units=None).retune(learned_code_rate=0.0)
+        brain.retune(learned_code_fields=(53,))
     # a custom anatomy needs the region and its complete synapses
     regions = [Region("sensory", 8), cortex(6, lateral=-1.0, name="code"),
                Region("association", 8), prefrontal_cortex(8), motor_cortex(2)]
@@ -451,8 +443,8 @@ def test_the_code_is_a_fixed_point_of_the_whole_settle_and_the_memories_key():
     at unit length; the reconstruction error fell over the phase's sweeps."""
     # the region's rates frozen: its learning after the moment would change the equations
     # the settled state is checked against
-    brain = composed(recall=True, learned_code_rate=0.0, learned_code_predictor=0.0,
-                     learned_code_threshold_rate=0.0)
+    brain = composed(recall=True)
+    brain.learned_code.learning = False
     x = tokens(3, 7, 11)
     brain.act(x, greedy=True)
     report = brain.last_settlement
@@ -544,15 +536,18 @@ def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_t
     settled = {name: value.copy() for name, value in code.arrays().items()}
     brain.act(x, greedy=True)
     assert np.abs(code.dictionary - settled["dictionary"]).max() < 1e-2
-    # zero rates freeze the tables
-    brain.retune(learned_code_rate=0.0, learned_code_predictor=0.0,
-                 learned_code_threshold_rate=0.0)
+    # the learning switch holds the tables still
+    code.learning = False
     frozen = {name: value.copy() for name, value in code.arrays().items()}
     brain.act(tokens(4, 4, 4, 4), greedy=True)
     for name, value in frozen.items():
         np.testing.assert_array_equal(getattr(code, name), value)
     # the thresholds never fall below zero
-    low = composed(seed=3, learned_code_threshold=0.0, learned_code_threshold_rate=0.5)
+    low = composed(seed=3)
+    low.learned_code.thresholds[:] = 0.0
+    low.learned_code.threshold_rate = 0.5
+    low.learned_code.install()
+    low.learner.brain = low._installed(low.brain)
     low.act(tokens(1), greedy=True)
     assert (low.learned_code.thresholds >= 0.0).all()
 
@@ -697,7 +692,7 @@ def test_a_checkpoint_carries_the_region_and_a_tampered_one_is_refused(tmp_path)
         ("earlier_format", earlier_format, "belongs to checkpoint format cadence-generic/10"),
         ("other_units", other_units, "is not the saved learned code of 32 units"),
         ("unknown_field", unknown_field, "invalid saved learned code metadata"),
-        ("bad_gene", bad_gene, "invalid saved learned code target"),
+        ("bad_gene", bad_gene, "invalid saved learned code metadata"),
         ("no_table", no_table, "missing saved learned code table: weights"),
         ("wrong_shape", wrong_shape, "invalid saved learned code table: thresholds"),
         ("negative_threshold", negative_threshold, "thresholds are nonnegative"),
@@ -794,8 +789,7 @@ def test_every_memory_keys_on_the_context_free_code():
     code.install()
     brain.learner.brain = brain._installed(brain.brain)
     # the tables held still, so the moment's key and a later context-free settle agree
-    brain.retune(learned_code_rate=0.0, learned_code_predictor=0.0,
-                 learned_code_threshold_rate=0.0)
+    code.learning = False
     context, token = tokens(40), tokens(3)
     brain.live(context)
     before = brain._context.copy()
@@ -843,8 +837,9 @@ def test_a_long_stream_leaves_the_code_alive(tmp_path):
     thresholds stay finite and nonnegative, every token keeps at least one active unit in
     context and context-free, and at least one unit is in use per token; a checkpoint with
     a negative threshold is refused."""
-    brain = composed(seed=11, units=32, recall=True, learned_code_threshold_rate=0.01)
+    brain = composed(seed=11, units=32, recall=True)
     code = brain.learned_code
+    code.threshold_rate = 0.01
     rng = np.random.default_rng(5)
     for t in range(2000):
         token = int(rng.integers(6))
@@ -886,7 +881,8 @@ def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained(
     np.testing.assert_allclose(
         code.thresholds, np.maximum(code.threshold + code.threshold_rate * share, 0.0)
     )
-    repairing = composed(seed=4, learned_code_repair=0.5)
+    repairing = composed(seed=4)
+    repairing.learned_code.repair = 0.5
     repairing.act(x, greedy=True)
     code = repairing.learned_code
     a = np.maximum(code.last["activation"], 0.0)
@@ -907,24 +903,18 @@ def test_the_repair_lowers_the_silent_units_of_rows_the_code_leaves_unexplained(
 
 
 def test_the_key_joins_the_code_to_the_observations_identity():
-    """The memories' key is ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])``: the identity
-    part is the observation at unit length weighted by ``sqrt(w)``, the code part the
-    rectified settled code; at ``learned_code_identity=0`` the key is the code alone and
-    the width ``units``."""
-    brain = composed(seed=2, recall=True, learned_code_identity=0.5)
+    """The memories' key is ``unit([sqrt(1 - w) code, sqrt(w) unit(x)])`` at the region's
+    identity weight ``w`` (.9): the identity part is the observation at unit length weighted
+    by ``sqrt(w)``, the code part the rectified settled code."""
+    brain = composed(seed=2, recall=True)
+    w = cd.LearnedCode.IDENTITY
     x = tokens(4, 9, 9)
     brain.act(x, greedy=True)
     key = brain.recall.keys[:, -1, :]
     assert key.shape == (3, UNITS + INPUTS)
-    np.testing.assert_allclose(key[:, UNITS:], np.sqrt(0.5) * x, atol=1e-12)
-    np.testing.assert_allclose(np.linalg.norm(key[:, :UNITS], axis=1), np.sqrt(0.5), atol=1e-3)
+    np.testing.assert_allclose(key[:, UNITS:], np.sqrt(w) * x, atol=1e-12)
+    np.testing.assert_allclose(np.linalg.norm(key[:, :UNITS], axis=1), np.sqrt(1 - w), atol=1e-3)
     np.testing.assert_allclose(key[1], key[2], atol=1e-3)  # the same token, the same key
-    alone = composed(seed=2, recall=True, learned_code_identity=0.0)
-    alone.act(x, greedy=True)
-    assert alone.code_width == UNITS and alone.recall.keys.shape[-1] == UNITS
-    np.testing.assert_allclose(
-        alone.recall.keys[:, -1, :], alone.learned_code.code_of(settled_code(alone)), atol=1e-3
-    )
     assert brain.observation_code(x).shape == (3, UNITS + INPUTS)
 
 
@@ -978,8 +968,9 @@ def test_a_held_code_is_a_source_and_the_brain_keeps_the_models_step(tmp_path):
     settle and a lesson's phases they publish the phase's code exactly, the brain integrates
     at the model's step with its budgets as configured while the region's phase steps alone,
     no standing boundary acts on the whole graph, and a checkpoint continues the life."""
-    brain = composed(seed=3, recall=True, learned_code_top_down=4.0)  # a stepping phase
+    brain = composed(seed=3, recall=True)
     code = brain.learned_code
+    code.top_down = 4.0  # a stepping phase
     for name in ("dictionary", "lateral", "predictor"):
         synapses = brain._code_synapses[name][0]
         assert not brain.brain.efficacy[synapses].any()
@@ -1070,7 +1061,7 @@ def test_a_unit_below_the_active_floor_counts_as_under_active():
     """With ``learned_code_active`` a unit that fires below that activation counts as
     under-active in the thresholds' share, so a frequent observation's units are not faded
     toward zero; at the founder 0 any firing counts."""
-    code = composed(seed=5, learned_code_active=0.05).learned_code
+    code = composed(seed=5).learned_code
     x = np.zeros((2, INPUTS))
     a = np.zeros((2, UNITS))
     a[:, 0] = 0.02  # fires weakly in both rows
@@ -1080,7 +1071,8 @@ def test_a_unit_below_the_active_floor_counts_as_under_active():
     step = code.threshold_rate
     assert np.isclose(code.thresholds[0], before[0] - step * 2 * code.target)  # under-active
     assert np.isclose(code.thresholds[1], before[1] + step * 2 * (1 - code.target))
-    plain = composed(seed=5, learned_code_active=0.0).learned_code
+    plain = composed(seed=5).learned_code
+    plain.active = 0.0
     plain.learn(x, a, None, free=a)
     assert np.isclose(plain.thresholds[0], before[0] + step * 2 * (1 - plain.target))
 
@@ -1136,15 +1128,26 @@ def test_the_thresholds_share_reads_the_context_free_code():
     assert code.work["repairs"] == int(repair.sum())
 
 
-def test_retune_changes_the_rates_and_the_top_down_weight_in_the_same_life():
+def test_the_two_switches_act_on_the_life_and_the_checkpoint_keeps_them(tmp_path):
+    """``top_down`` 0 takes the prediction off the region's drive (the control without the
+    top-down boundary) and ``learning`` False holds every table still; both are the
+    instance's, a deep copy and a checkpoint keep them, and a retune names neither."""
     brain = composed(seed=7)
     brain.act(tokens(3), greedy=True)
-    brain.learned_code.weights[:] = 0.1
-    brain.retune(learned_code_top_down=3.0, learned_code_target=0.2)
     code = brain.learned_code
-    assert code.top_down == 3.0 and code.target == 0.2
+    code.weights[:] = 0.1
     z = np.ones((1, code.context))
-    np.testing.assert_allclose(code.stimulus(np.zeros((1, INPUTS)), z), 3.0 * code.prediction(z))
-    assert brain.describe()["genes"]["learned_code_top_down"] == 3.0
-    with pytest.raises(ValueError, match="target must lie in"):
-        brain.retune(learned_code_target=0.0)
+    np.testing.assert_allclose(code.stimulus(np.zeros((1, INPUTS)), z), 2.0 * code.prediction(z))
+    code.top_down = 0.0
+    assert not code.stimulus(np.zeros((1, INPUTS)), z).any()
+    code.learning = False
+    before = {name: value.copy() for name, value in code.arrays().items()}
+    brain.act(tokens(5), greedy=True)
+    for name, value in before.items():
+        np.testing.assert_array_equal(getattr(code, name), value)
+    assert brain.describe()["learned_code"]["top_down"] == 0.0
+    assert brain.describe()["learned_code"]["learning"] is False
+    twin = cd.Brain.load(brain.save(tmp_path / "switched.npz"))
+    assert twin.learned_code.top_down == 0.0 and twin.learned_code.learning is False
+    copied = copy.deepcopy(brain)
+    assert copied.learned_code.top_down == 0.0 and copied.learned_code.learning is False

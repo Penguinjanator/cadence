@@ -102,20 +102,21 @@ synapse of the region. With `a` the rectified code, `a_free` the moment's contex
 (the region settled on the observation alone, a second code phase, `context_free_steps`), `x'` the sensory activation as read (at the gain above), `z` the
 prefrontal activation and `p = W z`:
 
-| Table | Rule | Gene (founder) |
+| Table | Rule | Constant |
 | --- | --- | --- |
-| dictionary | `Phi += rate * sum_rows (x' - Phi a) a^T`, each column scaled back to unit length | `learned_code_rate` (0.125) |
+| dictionary | `Phi += rate * sum_rows (x' - Phi a) a^T`, each column scaled back to unit length | `RATE` 0.125 |
 | lateral weights | recomputed from the dictionary | with the dictionary |
-| predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = predictor / max(\|z\|^2, predictor^2)`: a row closes the share `predictor` of its own gap whatever its context's energy (the prefrontal activation is small in the brain's units); a context fainter than `\|z\| = predictor` is counted at that energy, so no row commands a synaptic step above its gap | `learned_code_predictor` (0.0625) |
-| thresholds | `t += threshold_rate * sum_rows ((a_free > 0) - target)`: a unit's share is the share of the observations that drive it on their own, so what the context predicts may recruit a unit without raising its threshold and the context-free code keeps the target share by construction; floored at 0; the repair: a row whose code leaves at least the share `repair` of its input's energy unexplained (`\|x' - Phi a\|^2 >= repair * \|x'\|^2`; at the founder level 1 a row whose code is silent or worse than nothing), in context or context-free where the place key is settled, lowers the threshold of every unit silent in it by `threshold_rate * silence`; a unit that fires, and a row the code reconstructs, are left to the share rule; there is no ceiling | `learned_code_threshold_rate` (0.000625), `learned_code_target` (0.1), `learned_code_repair` (1.0), `learned_code_silence` (10) |
+| predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = predictor / max(\|z\|^2, predictor^2)`: a row closes the share `predictor` of its own gap whatever its context's energy (the prefrontal activation is small in the brain's units); a context fainter than `\|z\| = predictor` is counted at that energy, so no row commands a synaptic step above its gap | `PREDICTOR` 0.0625 |
+| thresholds | `t += threshold_rate * sum_rows ((a_free > 0) - target)`: a unit's share is the share of the observations that drive it on their own, so what the context predicts may recruit a unit without raising its threshold and the context-free code keeps the target share by construction; floored at 0; the repair: a row whose code leaves at least the share `repair` of its input's energy unexplained (`\|x' - Phi a\|^2 >= repair * \|x'\|^2`; at the founder level 1 a row whose code is silent or worse than nothing), in context or context-free where the place key is settled, lowers the threshold of every unit silent in it by `threshold_rate * silence`; a unit that fires, and a row the code reconstructs, are left to the share rule; there is no ceiling | `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `REPAIR` 1.0, `SILENCE` 10, `ACTIVE` 0.05 |
 
 The brain's graph takes the new tables at once. While the code fits, the residuals are small
 and nothing moves. The lesson's contrast and the dopamine leave the region's synapses and
 biases alone (the learner's plastic masks exclude them), and lessons, `fit`, `predict` and
 `imagine` take no step. Under `live` a calm brain learns nothing from its outcome and writes
-no record; the region still takes its step, as the traces advance at every moment. A rate of
-zero freezes that part; `retune` changes every rate and `learned_code_top_down` in the same
-life.
+no record; the region still takes its step, as the traces advance at every moment.
+`brain.learned_code.learning = False` holds every table still (a reading on a copy), and
+`brain.learned_code.top_down = 0` takes the prediction off the region (the control without
+the top-down boundary); a deep copy and a checkpoint keep both.
 
 ```python
 teacher = Brain.compose(inputs=53, actions=4, seed=1, learned_code=64, recall=True)
@@ -126,7 +127,7 @@ assert teacher.learned_code.work["updates"] == 3
 assert teacher.recall.keys.shape == (1, 3, 64 + 53) # the slots hold the moments' keys
 teacher.lesson(sentence[1], [2])                     # a lesson moves the plastic synapses alone
 assert teacher.learned_code.work["updates"] == 3
-teacher.retune(learned_code_rate=0.0)                # the dictionary stays from here on
+teacher.learned_code.learning = False               # the tables stay from here on
 ```
 
 ## Settings
@@ -134,20 +135,17 @@ teacher.retune(learned_code_rate=0.0)                # the dictionary stays from
 | Setting | Founder | When | What it sets |
 | --- | --- | --- | --- |
 | `learned_code` | `None` | construction | the region, of that many units (at least 2); `None` builds nothing |
-| `learned_code_top_down` | 2.0 | retune | weight of the prediction's drive on the code units and gain of the pull toward it; the smallest weight at which the context-free codes of a group's members come together in the embedding chamber's pilots |
-| `learned_code_rate` | 0.125 | retune | the dictionary's Hebbian rate per row and moment |
-| `learned_code_predictor` | 0.0625 | retune | the share of a row's prediction gap the predictor closes per event, in [0, 1], normalized by the context's energy |
-| `learned_code_threshold` | 0.1 | construction | every unit's initial threshold |
-| `learned_code_threshold_rate` | 0.000625 | retune | the homeostatic rate per row |
-| `learned_code_target` | 0.1 | retune | the share of rows a unit should be active in |
-| `learned_code_repair` | 1.0 | retune | the share of a row's input energy its code may leave unexplained, in (0, 1], before the row lowers the thresholds of its silent units: at 1 a row whose code is silent (or worse than nothing); lower, a row the code reconstructs poorly |
-| `learned_code_silence` | 10 | retune | how many under-active rows a silent unit counts as in a row that repairs: its threshold falls by `threshold_rate * silence` per such row, so no observation is left without a unit; 0 leaves the thresholds to the share rule alone; `brain.learned_code.work["repairs"]` counts the unit-rows it lowered |
 | `learned_code_fields` | `None` | construction | the widths of the observation's fields (a sequence summing to `inputs`; `None` is one field): the units are shared among the fields in proportion to their widths (at least two each), each unit's dictionary column reads its field alone through every learning step, and the competition among the units (the Gram) is block-diagonal, so a recombination of fields is a recombination of their codes and a second input in another field keeps its own code |
-| `learned_code_active` | 0.05 | retune | the activation a unit must reach to count as active in the thresholds' share: a unit firing below it counts as under-active, so the homeostasis does not fade every unit of a frequent observation toward zero; 0 counts any firing |
-| `learned_code_identity` | 0.9 | construction | the weight of the observation's own identity in the memories' key, in [0, 1); the key width is `units + inputs`, or `units` at 0 |
 
-Refused with `ValueError`: `learned_code` below 2, a repair level outside (0, 1], an
-identity weight outside [0, 1), a `learned_code_*` gene without the region,
+Every other part of the region is a constant of it, the value the readings selected:
+`LearnedCode.TOP_DOWN` 2.0 (the prediction's weight on the code units and the gain of the
+pull toward it), `RATE` 0.125, `PREDICTOR` 0.0625, `THRESHOLD` 0.1 (every unit's initial
+threshold), `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `REPAIR` 1.0, `SILENCE` 10, `ACTIVE`
+0.05 (the activation the strongest unit of each field in a row must reach to count as
+active in the thresholds' share) and `IDENTITY` 0.9 (the weight of the observation's own
+identity in the memories' key).
+
+Refused with `ValueError`: `learned_code` below 2, `learned_code_fields` without the region,
 `code` beside `learned_code` (a key that joins the observation's own identity to its meaning
 is not built in this version), an image brain, a backend other than `cpu`, and a custom
 connectome
@@ -166,7 +164,10 @@ key; a key at unit length lost the binding family's continuing task) and
 context-free code) and `learned_code_reads` (the cortex and the memories read the
 context-free code; the code in context lost the embedding chamber's fresh founders, 7 of 12
 at .90 against 11 of 12) and `learned_code_held` (the code is held as a source; settling it
-with the whole graph at the code's step lost the binding family and delayed cues).
+with the whole graph at the code's step lost the binding family and delayed cues). The
+constants are refused by name as settings: `learned_code_top_down`, `_rate`, `_predictor`,
+`_threshold`, `_threshold_rate`, `_target`, `_repair`, `_silence`, `_active` and
+`_identity`.
 
 ## When to declare fields
 

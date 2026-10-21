@@ -42,10 +42,7 @@ code of that many units and, for a vector brain, makes the sensory region that c
 ([the observation code](memory.md#the-observation-code)). `learned_code=units` (a vector
 brain, without `code`) adds a `code` region of that many neurons that settles with the brain
 to a learned sparse code of the observation, read by the cortex and keyed on by the
-memories, with the genes `learned_code_top_down`, `learned_code_rate`,
-`learned_code_predictor`, `learned_code_threshold`, `learned_code_threshold_rate`,
-`learned_code_target`, `learned_code_repair`, `learned_code_silence`,
-`learned_code_identity` ([the learned code](code.md)). The `*_scale` arguments are initial
+memories, with the one setting `learned_code_fields` ([the learned code](code.md)). The `*_scale` arguments are initial
 projection magnitudes, fixed at construction. `options` takes every constructor keyword below
 and every `learning_<field>`, `actor_<field>` and `arousal_<field>` name; with
 `memory_choice=True` it fills in the episodic founders. The region map and the founder table
@@ -302,9 +299,7 @@ contiguous index.
 ## The learned code (`cadence.code`)
 
 ```text
-LearnedCode(inputs, units, context, model, seed=0, top_down=2.0, rate=0.125, predictor=0.0625,
-            threshold=0.1, threshold_rate=0.000625, target=0.1, repair=1.0, silence=10.0,
-            identity=0.9, fields=None, active=0.05)
+LearnedCode(inputs, units, context, model, seed=0, fields=None)
 ```
 
 The learned code region's tables and rules, built by `Brain.compose(..., learned_code=units)`
@@ -326,8 +321,13 @@ and whose residual the repair reads), `install()`,
 `take(dictionary, weights, thresholds)`;
 `arrays()`, `genes()`, `to_dict()`, `parameters()`, `nbytes()`, `work` (settles, rows, sweeps,
 capped settles, updates, and `repairs`, the unit-rows the repair lowered), `last` (the latest phase's sensory activation, context, activation,
-prediction and, at a learned moment, the context-free code `free`). `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and
-validate the genes; `GENES`, `RUNTIME` and `CONSTRUCTION` name them, and `REMOVED` the
+prediction and, at a learned moment, the context-free code `free`); the constants
+`TOP_DOWN`, `RATE`, `PREDICTOR`, `THRESHOLD`, `THRESHOLD_RATE`, `TARGET`, `REPAIR`,
+`SILENCE`, `ACTIVE` and `IDENTITY`, held as the instance's attributes of the same names in
+lower case, `learning` (False holds every table still) and `top_down` (0 is the control
+without the top-down boundary) the two a reading or a control changes on a copy.
+`LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and validate the one
+setting, `fields`; `GENES`, `RUNTIME` and `CONSTRUCTION` name it, and `REMOVED` the
 settings the readings retired with what the region does instead. Guide:
 [the learned code](code.md).
 

@@ -92,7 +92,6 @@ from typing import Any
 
 import numpy as np
 
-from ._configuration import real
 from .brain import Brain as NeuralGraph
 from .brain import BrainState, Equilibrium, Nudge
 from .connectome import Connectome
@@ -134,26 +133,25 @@ def _unit_rows(values: np.ndarray) -> np.ndarray:
 
 @dataclass
 class LearnedCode:
-    """The learned code region's tables, genes, sub-network and rules; see the module note.
+    """The learned code region's tables, sub-network and rules; see the module note.
 
     ``inputs`` is the sensory width, ``units`` the region's, ``context`` the prefrontal
     width; ``model`` the brain's neuron model, under which the region settles, and from
     which the read gain follows (``read``, one over the activation one input at amplitude
-    1 gives a sensory neuron at rest). The genes are
-    ``top_down`` (the prediction's weight on the units), ``rate`` (the dictionary's Hebbian
-    rate per row), ``predictor`` (the share of a row's prediction gap closed per event),
-    ``threshold`` (the initial threshold of every unit, a construction setting),
-    ``threshold_rate`` and ``target`` (the share of rows a unit should be active in),
-    ``repair`` (the share of a row's input energy its code may leave unexplained before the
-    row lowers its silent units' thresholds) and ``silence`` (how many under-active rows a
-    silent unit in such a row counts as), ``fields`` (the
-    widths of the observation's fields, each unit reading one, a construction setting),
-    ``active`` (the activation a unit must reach to count as active in the thresholds'
-    share) and ``identity``
-    (the weight of the
-    observation's own identity in the memories' key, a construction setting: the key width
-    follows it).
-    Validation refuses a value outside its domain before anything is built.
+    1 gives a sensory neuron at rest). ``fields`` (the widths of the observation's fields,
+    each unit reading one) is the region's one setting, fixed at construction. Its rules
+    run at constants the readings selected (``TOP_DOWN``, the prediction's weight on the
+    units; ``RATE``, the dictionary's Hebbian rate per row; ``PREDICTOR``, the share of a
+    row's prediction gap closed per event; ``THRESHOLD``, the initial threshold of every
+    unit; ``THRESHOLD_RATE`` and ``TARGET``, the share of rows a unit should be active in;
+    ``REPAIR``, the share of a row's input energy its code may leave unexplained before the
+    row lowers its silent units' thresholds; ``SILENCE``, how many under-active rows a
+    silent unit in such a row counts as; ``ACTIVE``, the activation the strongest unit of a
+    row must reach to count as active in the thresholds' share; ``IDENTITY``, the weight of
+    the observation's own identity in the memories' key), held as the instance's
+    attributes of the same names in lower case. Two of them are for readings and controls:
+    ``learning`` (True; False holds every table still, for a reading on a copy) and
+    ``top_down`` (0 is the control without the top-down boundary).
     """
 
     inputs: int
@@ -161,30 +159,26 @@ class LearnedCode:
     context: int
     model: NeuronModel
     seed: int = 0
-    top_down: float = 2.0
-    rate: float = 0.125
-    predictor: float = 0.0625
-    threshold: float = 0.1
-    threshold_rate: float = 0.000625
-    target: float = 0.1
-    repair: float = 1.0
-    silence: float = 10.0
-    identity: float = 0.9
     fields: tuple[int, ...] | None = None
-    active: float = 0.05
     dictionary: np.ndarray = field(init=False, repr=False)
     weights: np.ndarray = field(init=False, repr=False)
     thresholds: np.ndarray = field(init=False, repr=False)
     read: float = field(init=False)
 
-    GENES = (
-        "top_down", "rate", "predictor", "threshold", "threshold_rate", "target", "repair",
-        "silence", "identity", "fields", "active",
-    )
-    RUNTIME = (
-        "top_down", "rate", "predictor", "threshold_rate", "target", "repair", "silence",
-    )
-    CONSTRUCTION = ("threshold", "identity", "fields")
+    # the region's constants, the values the readings selected
+    TOP_DOWN = 2.0
+    RATE = 0.125
+    PREDICTOR = 0.0625
+    THRESHOLD = 0.1
+    THRESHOLD_RATE = 0.000625
+    TARGET = 0.1
+    REPAIR = 1.0
+    SILENCE = 10.0
+    ACTIVE = 0.05
+    IDENTITY = 0.9
+    GENES = ("fields",)
+    RUNTIME: tuple[str, ...] = ()
+    CONSTRUCTION = ("fields",)
     # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
     # worst mode of the synchronous sweep contracts by at least a half per sweep
     STEP_MARGIN = 1.5
@@ -200,37 +194,31 @@ class LearnedCode:
         "from the code in context",
         "held": "the code units are held at the code phase's fixed point through the whole "
         "settle, and the rest of the brain keeps the model's step",
+        "top_down": "the prediction's weight is a constant of the region (2.0); a control sets "
+        "brain.learned_code.top_down = 0",
+        "rate": "the region's rates are constants; a reading on a copy sets "
+        "brain.learned_code.learning = False",
+        "predictor": "the predictor's share per event is a constant of the region (0.0625)",
+        "threshold": "the initial threshold is a constant of the region (0.1)",
+        "threshold_rate": "the thresholds' rate is a constant of the region (0.000625)",
+        "target": "the thresholds' target share is a constant of the region (0.1)",
+        "repair": "the repair's level is a constant of the region (1.0)",
+        "silence": "the repair's weight is a constant of the region (10)",
+        "identity": "the identity's weight in the memories' key is a constant of the region "
+        "(0.9)",
+        "active": "the thresholds' active floor is a constant of the region (0.05)",
     }
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
-        """The founder value of every gene."""
-        return {
-            "top_down": 2.0, "rate": 0.125, "predictor": 0.0625, "threshold": 0.1,
-            "threshold_rate": 0.000625, "target": 0.1, "repair": 1.0, "silence": 10.0,
-            "identity": 0.9,
-            "fields": None, "active": 0.05,
-        }
+        """The founder value of every setting."""
+        return {"fields": None}
 
     @staticmethod
     def setting(name: str, value: Any) -> Any:
-        """One gene, validated and converted; a removed setting is refused."""
+        """One setting, validated and converted; a removed setting is refused."""
         if name in LearnedCode.REMOVED:
             raise ValueError(f"learned_code_{name} was removed: {LearnedCode.REMOVED[name]}")
-        if name in ("top_down", "rate", "threshold", "threshold_rate", "silence"):
-            return real(name, value, low=0)
-        if name == "predictor":
-            return real(name, value, low=0, high=1)
-        if name == "repair":
-            number = real(name, value, low=0, high=1)
-            if number <= 0:
-                raise ValueError("repair must lie in (0, 1]")
-            return number
-        if name == "target":
-            number = real(name, value, low=0, high=1)
-            if number <= 0 or number >= 1:
-                raise ValueError("target must lie in (0, 1)")
-            return number
         if name == "fields":
             if value is None:
                 return None
@@ -243,13 +231,6 @@ class LearnedCode:
             ):
                 raise ValueError("fields is None or a sequence of positive field widths")
             return tuple(int(w) for w in widths)
-        if name == "active":
-            return real(name, value, low=0)
-        if name == "identity":
-            number = real(name, value, low=0, high=1)
-            if number >= 1:
-                raise ValueError("identity must lie in [0, 1)")
-            return number
         raise TypeError(f"unknown learned code setting: {name!r}")
 
     def __post_init__(self) -> None:
@@ -267,6 +248,14 @@ class LearnedCode:
         self.seed = int(self.seed)
         for name in self.GENES:
             setattr(self, name, self.setting(name, getattr(self, name)))
+        # the constants as the instance's attributes; ``learning`` False holds every table
+        # still (a reading on a copy), ``top_down`` 0 is the control without the boundary
+        self.learning = True
+        self.top_down = self.TOP_DOWN
+        self.rate, self.predictor = self.RATE, self.PREDICTOR
+        self.threshold, self.threshold_rate = self.THRESHOLD, self.THRESHOLD_RATE
+        self.target, self.repair, self.silence = self.TARGET, self.REPAIR, self.SILENCE
+        self.active, self.identity = self.ACTIVE, self.IDENTITY
         # the fields: each unit reads one field of the observation's coordinates
         self.mask: np.ndarray | None = None
         self.field_units: tuple[int, ...] = (self.units,)
@@ -491,7 +480,7 @@ class LearnedCode:
         x = self.read * np.atleast_2d(np.asarray(sensory, dtype=float))
         a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
         n = len(x)
-        if not n or not (self.rate or self.predictor or self.threshold_rate):
+        if not n or not self.learning or not (self.rate or self.predictor or self.threshold_rate):
             return False
         moved = False
         if self.rate:
@@ -578,5 +567,6 @@ class LearnedCode:
         return {
             "inputs": self.inputs, "units": self.units, "context": self.context,
             "seed": self.seed, **self.genes(), "stepping": int(self.halvings),
+            "learning": bool(self.learning), "top_down": float(self.top_down),
             "work": dict(self.work),
         }

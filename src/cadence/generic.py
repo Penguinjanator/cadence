@@ -620,9 +620,13 @@ def _validate_learned_code(meta: dict[str, Any], data: Mapping[str, Any], learne
             raise ValueError("saved learned code tables require learned_code metadata")
         return 0
     populations = learner.brain.connectome.populations
-    fields = {"inputs", "units", "context", "seed", "stepping", "work", *LearnedCode.GENES}
+    fields = {"inputs", "units", "context", "seed", "stepping", "learning", "top_down", "work",
+              *LearnedCode.GENES}
     if not isinstance(spec, dict) or set(spec) != fields:
         raise ValueError("invalid saved learned code metadata")
+    if not isinstance(spec["learning"], bool):
+        raise ValueError("saved learned code learning must be boolean")
+    real("saved learned code top_down", spec["top_down"], low=0)
     for name in ("inputs", "units", "context", "seed", "stepping"):
         value = spec[name]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
@@ -692,9 +696,8 @@ def _validate_life_state(
     sensory = len(populations.get("sensory", populations.get("visual/input", ())))
     observed = sensory if code is None else code[0]
     code_width = sensory if code is None else code[1].expansion
-    if learned:  # the memories' key: the code, joined to the observation's identity when weighted
-        joined = float(meta["learned_code"]["identity"]) > 0
-        code_width = learned + (sensory if joined else 0)
+    if learned:  # the memories' key: the code, joined to the observation's identity
+        code_width = learned + sensory
 
     def array(name: str, shape: tuple[int, ...] | None = None) -> np.ndarray:
         if name not in data:
@@ -1278,10 +1281,8 @@ class Brain:
             if "prefrontal" in populations
             else np.zeros(0, np.int64)
         )
-        if learned:  # the key: the code, joined to the observation's identity when weighted
-            self.code_width = learned["units"] + (
-                self.inputs if float(learned["identity"]) > 0 else 0
-            )
+        if learned:  # the key: the code, joined to the observation's identity
+            self.code_width = learned["units"] + self.inputs
         # whether the memories key on a code of the observation (fixed or learned) rather
         # than on the observation itself
         self._coded_keys = bool(units) or bool(learned)
@@ -1753,24 +1754,18 @@ class Brain:
     @staticmethod
     def observation_width(
         inputs: int | Sequence[int], code: int | None = None, learned_code: int | None = None,
-        learned_code_identity: float | None = None,
     ) -> int:
         """The width of the observation code of a brain with these ``inputs`` (a vector
         length or an image shape), this ``code`` and this ``learned_code`` (as the
-        constructor takes them; ``learned_code_identity`` as given, the founder otherwise),
-        before the brain is built: with ``recall=True`` and event values a custom anatomy's
-        ``recall`` and ``next`` regions hold that many neurons (the association width with
-        ``recall_value="cortex"``). A learned code's key is its units, plus the inputs when
-        the key joins the observation's identity."""
+        constructor takes them), before the brain is built: with ``recall=True`` and event
+        values a custom anatomy's ``recall`` and ``next`` regions hold that many neurons (the
+        association width with ``recall_value="cortex"``). A learned code's key is its units
+        and the inputs, the code joined to the observation's identity."""
         image = _image_shape(inputs)
         width = int(np.prod(image)) if image is not None else _count("inputs", inputs, low=1)
         units = _learned_code_units(learned_code)
         if units:
-            founder = LearnedCode.founders()["identity"]
-            weight = LearnedCode.setting(
-                "identity", founder if learned_code_identity is None else learned_code_identity
-            )
-            return units + (width if weight > 0 else 0)
+            return units + width
         return _code_units(code) or width
 
     @staticmethod
@@ -1909,9 +1904,8 @@ class Brain:
         working trace makes of it, learning every accepted moment by local rules
         (``LearnedCode``). The cortex reads the code, the heard history holds it, and the
         memories key on the rectified settled code at unit length joined to the
-        observation's own identity. Its genes, ``learned_code_<name>`` for every name of
-        ``LearnedCode.GENES`` (``LearnedCode.founders()`` gives the founders; the guide's
-        table says what each sets), are passed beside it; the founder
+        observation's own identity. ``learned_code_fields`` declares the observation's
+        fields; every other part of the region is a constant of it; the founder
         ``learned_code=None`` builds the brain without the region.
 
         ``modules`` specifies a chain of reciprocally connected processing
@@ -2080,10 +2074,7 @@ class Brain:
         # the sensory region is the code when a vector brain asks for one
         coded_cortex = bool(units) and image is None
         sensory_width = units if coded_cortex else inputs
-        joined = bool(learned) and LearnedCode.setting(
-            "identity", options.get("learned_code_identity", LearnedCode.founders()["identity"])
-        ) > 0
-        code_width = (learned + (inputs if joined else 0)) if learned else (units or inputs)
+        code_width = (learned + inputs) if learned else (units or inputs)
         heard_width = learned or sensory_width  # what the history hears: the code it reads
         sensory_scale = real("sensory_scale", sensory_scale, low=0)
         working_memory_scale = real("working_memory_scale", working_memory_scale, low=0)
@@ -4495,8 +4486,7 @@ class Brain:
             neurons = learner.brain.connectome.n
             coded: int | None
             if learned:  # the key width: the units, joined to the observation's identity
-                joined = float(meta["learned_code"]["identity"]) > 0
-                coded = learned + (len(populations["sensory"]) if joined else 0)
+                coded = learned + len(populations["sensory"])
             else:
                 coded = None if code is None else code[1].expansion
             memory = _load_memory(meta["hippocampus"], data, neurons, keys=coded)
@@ -4564,8 +4554,10 @@ class Brain:
                         "the saved learned code tables disagree with the saved synapses and "
                         "biases of the code region"
                     )
-                # the region's phase at the step it was saved at
+                # the region's phase at the step it was saved at, and its two switches
                 region.restep(int(meta["learned_code"]["stepping"]))
+                region.learning = bool(meta["learned_code"]["learning"])
+                region.top_down = float(meta["learned_code"]["top_down"])
             if heard is not None:
                 assert result.history is not None  # validated above: the population is there
                 result.history.trace = data["history/trace"].astype(float)

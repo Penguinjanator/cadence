@@ -30,12 +30,12 @@ Arms, one life per founder and arm, on the same schedule of sentences and questi
 * ``gru_lm``: the same GRU that also predicts every next token (a softmax over the tokens),
   its embedding of the inputs learned by gradient from the sentences as well;
 * ``library``: the library's own code region, ``Brain.compose(INPUTS, GROUPS, modules=(64,),
-  learned_code=UNITS, learned_code_top_down=LIBRARY_TOP_DOWN, ...)``: the region settles
+  learned_code=UNITS)``, every part of it the region's constants: the region settles
   with the brain, its top-down boundary reads the working trace inside the settle, and it
   learns at every accepted moment at the per-row rates that give the prototype's effective
   step at this chamber's batch;
 * ``library_bottom_up``: the same region without its top-down boundary
-  (``learned_code_top_down=0``).
+  (``brain.learned_code.top_down = 0``, the control).
 
 Every brain arm teaches with ``learning_surprise`` (rows the brain already answers as shown
 are not taught); every other gene is the founder's. Readings run on copies of the life with
@@ -118,13 +118,10 @@ TOP_DOWN = {"learned": 4.0, "learned_g2": 2.0, "bottom_up": 0.0, "shuffled": 4.0
             "library": LIBRARY_TOP_DOWN, "library_bottom_up": 0.0}
 CODE_ARMS = tuple(TOP_DOWN)
 LIBRARY_ARMS = ("library", "library_bottom_up")  # the library's region, inside the brain's settle
-# the library region's genes: the prototype's rates per moment are means over the BATCH
-# streams, so the per-row rates of the library give the same effective step; the
-# prototype's predictor closed its whole gap per update on a unit-length context with a
-# bias input (rate 0.5 at energy 2), so the library's share per row is 1 / BATCH
-LIBRARY = {"rate": 2.0 / BATCH, "predictor": 1.0 / BATCH, "threshold": 0.1,
-           "threshold_rate": 0.01 / BATCH, "target": 0.1,
-           "identity": 0.0}  # the chamber reads the code's own transfer: the key is the code
+# the library region runs at its constants, the prototype's rates per moment as per-row rates
+# at this chamber's batch: the prototype's rates are means over the BATCH streams, and its
+# predictor closed its whole gap per update on a unit-length context with a bias input
+# (rate 0.5 at energy 2), so the library's share per row is 1 / BATCH
 SCHEDULE_SEED, HOLDOUT_SEED, PANEL_SEED, GRU_SEED, UNIFORM_SEED, CHANGE_SEED, SHUFFLE_SEED = (
     51101, 51102, 51103, 51104, 51105, 51106, 51107,
 )
@@ -208,21 +205,19 @@ class Life:
     arms hold the region inside the brain (``learned_code``): the brain receives the
     observation, settles the region with itself and learns it at every accepted moment."""
 
-    def __init__(self, arm: str, seed: int, *, code: Any = CODE,
-                 library: dict[str, Any] | None = None) -> None:
+    def __init__(self, arm: str, seed: int, *, code: Any = CODE) -> None:
         from cadence import Brain
 
         self.arm, self.seed = arm, seed
         self.code = None
         self.library = arm in LIBRARY_ARMS
         if self.library:
-            genes = dict(LIBRARY, **(library or {}))
-            top_down = genes.pop("top_down", TOP_DOWN[arm])  # a pilot's weight over the arm's
             self.brain = Brain.compose(
                 INPUTS, ACTIONS, modules=(WIDTH,), seed=seed, learning_surprise=True,
-                learned_code=UNITS, learned_code_top_down=top_down,
-                **{f"learned_code_{name}": value for name, value in genes.items()},
+                learned_code=UNITS,
             )
+            assert self.brain.learned_code is not None
+            self.brain.learned_code.top_down = TOP_DOWN[arm]  # 0: the bottom-up control
         elif arm in CODE_ARMS:
             settings = cr.CodeSettings(**{**code.to_dict(), "top_down": TOP_DOWN[arm]})
             self.brain = Brain.compose(settings.units, ACTIONS, modules=(WIDTH,), seed=seed,
@@ -253,8 +248,7 @@ class Life:
         if self.code is not None:
             self.code.learning = False
         elif self.library:
-            self.brain.retune(learned_code_rate=0.0, learned_code_predictor=0.0,
-                              learned_code_threshold_rate=0.0)
+            self.brain.learned_code.learning = False
 
     def reset(self) -> None:
         self.brain.reset()
@@ -277,7 +271,7 @@ class Life:
         self.work["act_rows"] += len(y)
         if self.library and self.top_down is not None:
             # a reading's override of the boundary at this moment alone, on a copy
-            self.brain.retune(learned_code_top_down=self.top_down)
+            self.brain.learned_code.top_down = self.top_down
         try:
             action = self.brain.act(y, greedy=True)
         except RuntimeError:
@@ -804,7 +798,7 @@ def life_run(spec: dict[str, Any]) -> dict[str, Any]:
     elif arm == "uniform":
         life = None
     else:
-        life = Life(arm, seed, code=code, library=spec.get("library"))
+        life = Life(arm, seed, code=code)
     failed = 0
     nursery = int(spec.get("nursery", NURSERY))
     for _ in range(nursery):
@@ -915,8 +909,7 @@ def receipt(out: Path, args: argparse.Namespace, elapsed: float) -> list[dict[st
                           "WIDTH": WIDTH, "SENTENCES": SENTENCES, "BATCH": BATCH,
                           "NURSERY": args.nursery, "PANEL": PANEL,
                           "CHANGE_ROUNDS": CHANGE_ROUNDS, "CODE": CODE.to_dict(), "GRU": GRU,
-                          "GATE": GATE, "LIBRARY": LIBRARY, "TOP_DOWN": TOP_DOWN,
-                          "library_over": args.library}}
+                          "GATE": GATE, "TOP_DOWN": TOP_DOWN}}
     (out / "receipt.json").write_text(json.dumps(body, indent=1, default=float) + "\n")
     return rows
 
@@ -930,16 +923,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--seeds", nargs="*", type=int, default=list(FOUNDERS))
     parser.add_argument("--budgets", nargs="*", type=int, default=list(BUDGETS))
     parser.add_argument("--nursery", type=int, default=NURSERY)
-    parser.add_argument("--library", type=json.loads, default={},
-                        help="genes over the library arms' (a pilot); declared runs leave it")
     args = parser.parse_args(argv)
     lives = args.out / "lives"
     began = time.monotonic()
     if args.command == "run":
         lives.mkdir(parents=True, exist_ok=True)
         specs = [{"arm": arm, "seed": seed, "budgets": sorted(args.budgets),
-                  "nursery": args.nursery, "lives": str(lives),
-                  **({"library": args.library} if args.library else {})}
+                  "nursery": args.nursery, "lives": str(lives)}
                  for arm in sorted(args.arms, key=ORDER.index) for seed in args.seeds]
         specs = [spec for spec in specs if not (lives / life_name(spec)).exists()]
         with get_context("spawn").Pool(max(1, min(args.workers, len(specs) or 1))) as pool:
