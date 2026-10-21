@@ -85,13 +85,18 @@
 - Docstrings and comments across `src/` describe current behaviour only, with no version
   narration, run records or issue history, and link to the new pages; docstrings that
   disagreed with the code beside them are corrected. Code and every message string are
-  unchanged, verified on the syntax tree, and the modules hashed into population and
-  reinforcement checkpoints (`_repair.py`, `cortex.py`, `reinforcement.py`) are byte for byte
-  as they were, so existing checkpoints keep loading.
+  unchanged, verified on the syntax tree.
 - `MANIFESTO.md` and `AGENTS.md` state the principle that the brain computes, and indexes its
   memories, on learned compressed representations of meaning: raw observations are what it
   receives, and the code it learns from them is what the cortex settles on and what the
   memories store and address ([issue 211](https://github.com/muellerberndt/cadence/issues/211)).
+- Remove the population solver, `cadence.experimental.equilibrium` (12 modules), with its tests
+  (`tests/equilibrium`, 1,053 of the 3,960 collected tests), guides (`docs/equilibrium`, 9
+  pages) and examples (`examples/equilibrium`, 11 scripts with their receipts). The composed
+  brain never imported it and no benchmark used it; every composed brain, checkpoint and
+  composed life is byte-identical. Its projected-gradient state-and-error readback lives on in
+  release 0.84.3, which also loads its checkpoints, and in the application demos that pin
+  `cadence-net==0.70.0`.
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain
