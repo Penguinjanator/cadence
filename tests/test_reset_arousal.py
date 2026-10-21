@@ -451,11 +451,10 @@ def _compact(state: dict[str, Any]) -> list[float]:
     ]
 
 # Recorded on 0.84.3 (8dc92d8): each founder's connectome and parameters, the acts of its
-# life and what each reset left its arousal, and the format and the member and metadata names
-# (``names``) of the checkpoint it saves. The contents of every array of that checkpoint
-# (``checkpoint``) are those of 0.84.3 with the arousal state in the layout of
-# ``cadence-arousal/4``, re-recorded where the record channel left after every other value
-# matched.
+# life and what each reset left its arousal, and the format, the member and metadata names
+# (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
+# Where the library later removed a setting that was inert at its founder, the names and
+# checkpoint digests were re-recorded after every other value matched the recording.
 FOUNDERS: dict[str, dict[str, Any]] = {
     "adult": {
         "build": (1, 2, {"modules": (16,), "seed": 0, "arousal": True}),
@@ -470,8 +469,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3328, 547],
         ],
         "format": "cadence-generic/3",
-        "names": "a2556d56acd5de594cda87ec20272b09e5c26e3e8dc6370b6e39eae567c53f4e",
-        "checkpoint": "7365e6ef04d26857663e323012be1802044e63003ca9309a4b920a36607ce13f",
+        "names": "5ba93168468320d38dcfeaa5fb3656396b5a51dc3b0752754badc7f7fa7e66b6",
+        "checkpoint": "4ae706955251a786f047ebd6485970ac0c41e9b8968609c9c5700612f524ef25",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
@@ -485,8 +484,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 288, 151],
         ],
         "format": "cadence-generic/8",
-        "names": "f68680bd8a9b32b381bdd3620503110329f7b2ebec08401a86188c413a7f49e0",
-        "checkpoint": "3c76c5f7b94371d11b4ba62580044be7dcf91c42eb6a6b539ac2c556ef12ad33",
+        "names": "c6ac85931040064ccea980308a4eacf763d9480057cf5aae9e5a29ab8cff5b76",
+        "checkpoint": "b2fbe665a41824b7387f0c10c5c2beaf930ca5b7fcd1d9502ece09585b238fc3",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
@@ -498,8 +497,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 544, 301],
         ],
         "format": "cadence-generic/6",
-        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "dd58f90b766941933949d4a7dded364f7957657ff5985bc78138726439090a5c",
+        "names": "2733528d3e07230712ce85b22a30e1a8eb96f5ce5f84c1326b5ff6bde7c64a97",
+        "checkpoint": "64b9e686d58ad8f3066f9c188255302b75a13ff1559ebaafe2a6a881742e9634",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
@@ -508,8 +507,8 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "acts": "0011010000000111111101000",
         "left": [],
         "format": "cadence-generic/2",
-        "names": "5a728760433a9dea87769077dd838133cd49a8637125759627166a31d5cf16a8",
-        "checkpoint": "301f7f4aaca6de114ef8f3fb07553b8dadb67f1dd4c40c9ef8ae091055d3e3ee",
+        "names": "1009005150dc48d076ab9d17775e97493a8eeb4c04355b157e929c4d5582021f",
+        "checkpoint": "1d7a942a7e6fcd7e797ee82f4348ce33dde87cd83060dcd73a8d3916b6a97dd0",
     },
 }
 

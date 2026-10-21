@@ -51,8 +51,9 @@ name: `trace-1-0.8` sets `working_memory_amplitude=1.0, working_memory_decay=0.8
 `trace-off` sets the amplitude to zero, `actor-0.1` and `actor-0.03` set the actor's
 `eta` with `eta_bias` a tenth of it, `no-memory` passes `episodic=False`,
 `frozen-actor` zeroes the actor and critic rates, `no-cost` removes the cost of a
-move, `reward/5` divides every reward by five and `centered` sets
-`dopamine_center=0.9`.
+move and `reward/5` divides every reward by five. The `centered` rows of the tables set
+`dopamine_center=0.9`, the centred dopamine that the library removed after 0.84.3; the
+arm runs on releases up to 0.84.3, and its readings stay as recorded.
 
 ```bash
 python benchmarks/replay/night_replay.py --seeds 5 --days 40 --rounds 3 --workers 4 --out night.json

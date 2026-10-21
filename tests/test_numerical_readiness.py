@@ -69,7 +69,7 @@ def test_rejected_update_keeps_optimizer_history_and_retry(backend):
 
 
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
-def test_critic_overflow_rejects_actor_trace_and_reward_statistics_atomically(backend):
+def test_critic_overflow_rejects_the_actor_trace_atomically(backend):
     if backend == "torch":
         pytest.importorskip("torch")
     graph = cd.layered(1, 2, 2, seed=3)
@@ -78,16 +78,16 @@ def test_critic_overflow_rejects_actor_trace_and_reward_statistics_atomically(ba
                  **({"device": "cpu"} if backend == "torch" else {})),
         graph.populations["output"],
     )
+    # uncapped, the critic's step on a reward of ten overflows
     actor = cd.ActorCritic(learner, graph.populations["hidden"],
-                         cd.ActorCriticConfig(eta_critic=1e308, dopamine_center=.5,
-                                              critic_signal="td"))
+                         cd.ActorCriticConfig(eta_critic=1e308, dopamine_cap=0.0))
     drive = np.full((1, graph.n), .1)
     actor.act(drive)
     pending = actor._pending
     weights, bias = learner.brain.efficacy.copy(), learner.brain.bias.copy()
     with np.errstate(over="ignore", invalid="ignore"), pytest.raises(ValueError, match="critic"):
         actor.learn(np.array([10.]), np.array([True]), drive)
-    assert actor._pending is pending and actor._valence is None
+    assert actor._pending is pending
     assert actor.trace is actor.trace_bias is actor.trace_critic is actor._trace_device is None
     assert actor.updates == learner.updates == 0
     assert actor.b_critic == 0 and not actor.w_critic.any()
@@ -95,15 +95,6 @@ def test_critic_overflow_rejects_actor_trace_and_reward_statistics_atomically(ba
     np.testing.assert_array_equal(learner.brain.bias, bias)
     actor.learn(np.array([0.]), np.array([True]), drive)
     assert actor.updates == learner.updates == 1
-
-
-@pytest.mark.parametrize("per_stream", [False, True])
-def test_valence_overflow_does_not_poison_running_statistics(per_stream):
-    valence = cd.Valence(level=.5, per_stream=per_stream)
-    with np.errstate(over="ignore"), pytest.raises(ValueError, match="moments"):
-        valence(np.array([1e200]))
-    assert valence.mean == 0 and valence.var == 1
-    assert np.isfinite(valence(np.array([1.]))).all()
 
 
 @pytest.mark.parametrize("threshold", [np.nan, np.inf, -1])

@@ -83,7 +83,7 @@ def test_hypothetical_stimulus_cannot_erase_carried_context():
         np.testing.assert_array_equal(current, saved)
 
 
-@pytest.mark.parametrize("array_name", ["free/v", "pending/value", "working/trace", "valence/var"])
+@pytest.mark.parametrize("array_name", ["free/v", "pending/value", "working/trace"])
 def test_invalid_lifetime_arrays_are_rejected_at_load(tmp_path, array_name):
     brain = cd.Brain.build(2, 2, hidden=6, working_memory=True)
     brain.step(np.eye(2))
@@ -141,7 +141,6 @@ def test_separator_can_average_large_representable_keys():
         "cold-dtype",
         "negative-updates",
         "fractional-steps",
-        "negative-variance",
         "critic-shape",
         "missing-metadata",
     ],
@@ -165,8 +164,6 @@ def test_invalid_continuation_structure_is_rejected(tmp_path, corruption):
         meta["updates"] = -1
     elif corruption == "fractional-steps":
         meta["pending_plus_steps"] = 0.5
-    elif corruption == "negative-variance":
-        data["valence/var"] = np.full_like(data["valence/var"], -1.0)
     elif corruption == "critic-shape":
         meta["b_critic"] = [0.0]
     elif corruption == "missing-metadata":

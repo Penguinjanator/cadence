@@ -118,7 +118,8 @@ def test_multi_module_composition_description_survives_sorted_checkpoint_metadat
         {"learning_eta": np.nan},
         {"arousal_need": np.inf},
         {"learning_free_steps": 2.5},
-        {"actor_center_scale": 1},
+        {"actor_center_scale": True},
+        {"actor_dopamine_center": 0.0},
         {"temperature": 0.3, "learning_temperature": 0.4},
         {"arousal": {"need": 1.0}, "arousal_need": 2.0},
         {"sensory_scale": -1.0},
@@ -199,18 +200,6 @@ def test_retune_matches_the_existing_stage_operation_and_preserves_pending_credi
     assert_archives_equal(archive(brain, tmp_path, "live"), archive(restored, tmp_path, "resumed"))
 
 
-def test_retune_preserves_valence_history_and_updates_its_effective_settings():
-    brain = small(actor_dopamine_center=0.2)
-    acquire(brain)
-    valence = brain.basal_ganglia.valence
-    mean, variance = np.asarray(valence.mean).copy(), np.asarray(valence.var).copy()
-    brain.retune(actor_dopamine_center=0.4, actor_dopamine_floor=0.2, actor_center_scale=False)
-    assert brain.basal_ganglia.valence is valence
-    assert valence.level == 0.4 and valence.floor == 0.2 and valence.units
-    np.testing.assert_array_equal(valence.mean, mean)
-    np.testing.assert_array_equal(valence.var, variance)
-
-
 def test_memory_and_trace_tuning_keeps_learned_contents(tmp_path):
     brain = small(efference_amplitude=0.2)
     acquire(brain)
@@ -257,9 +246,7 @@ def test_retune_cannot_create_missing_components(options):
 
 def test_description_is_detached_observational_and_survives_checkpoints(tmp_path):
     brain = small(sensory_scale=2.0)
-    assert brain.basal_ganglia._valence is None
     description = brain.describe()
-    assert brain.basal_ganglia._valence is None
     json.dumps(description, allow_nan=False)
     assert description["genes"]["actor_eta"] == 0.03
     assert description["genes"]["learning_eta"] == 0.5

@@ -110,8 +110,8 @@ its work.
   neuron model's global gain (`NeuronModel.gain`); the per-neuron scale of a neuron's
   outgoing synapses, applied as `exp(log_gain[pre])` and fixed by the learner; the
   learned per-neuron offset.
-- **Eligibility trace, dopamine, valence.** Per-synapse memory of recent contrasts; the
-  broadcast prediction error that gates them; the object that centers and caps it.
+- **Eligibility trace, dopamine.** Per-synapse memory of recent contrasts; the broadcast
+  prediction error, capped, that gates them.
 - **Receipt.** A JSON file binding a result to the sources that produced it, with a
   digest and a verifier ([receipts](receipts.md)).
 

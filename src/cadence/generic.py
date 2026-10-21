@@ -758,10 +758,6 @@ def _validate_life_state(
     ):
         if "actor/" + name in data:
             array("actor/" + name, (batch, width))
-    for name in ("mean", "var"):
-        value = array("valence/" + name)
-        if value.shape not in ((), (batch,)) or (name == "var" and (value < 0).any()):
-            raise ValueError(f"invalid saved valence: {name}")
     if "prepared" in data:
         array("prepared", (batch, observed))
     if meta.get("pending", False):
@@ -1042,6 +1038,32 @@ def _removed_recall(name: str, value: Any) -> str:
         f"this checkpoint was saved with the recall memory's {setting}, which this version "
         "removed; load it with cadence-net 0.84.3"
     )
+
+
+def _actor_config(values: Any) -> ActorCriticConfig:
+    """A saved actor's config. One saved by 0.84.3 names genes this version removed; it loads
+    where they leave the law of this version (the dopamine uncentred, so its floor and scale
+    are never read, and the critic's step divided by its trace's energy, learning from the
+    actor's bounded dopamine), and is refused with a message naming 0.84.3 otherwise. The
+    running level of the centred dopamine that 0.84.3 saved beside it is not read."""
+    if not isinstance(values, dict):
+        raise ValueError("invalid saved actor config")
+    values = dict(values)
+    for name in ("dopamine_floor", "center_scale"):  # read only by the centred dopamine
+        values.pop(name, None)
+    for name, kept in (
+        ("dopamine_center", (0, 0.0)),
+        ("critic_normalize", (True,)),
+        ("critic_signal", ("auto", "modulated")),
+    ):
+        if name in values:
+            value = values.pop(name)
+            if isinstance(value, bool) != isinstance(kept[0], bool) or value not in kept:
+                raise ValueError(
+                    f"this checkpoint was saved with the actor's {name}={value!r}, which this "
+                    "version removed; load it with cadence-net 0.84.3"
+                )
+    return ActorCriticConfig(**values)
 
 
 def _validate_episodic_state(
@@ -2447,10 +2469,6 @@ class Brain:
         self.learner.config = self._scaled_learning(learning, self._stepping)
         agent = self.basal_ganglia
         agent.config = reward = self._scaled_reward(reward, self._stepping)
-        if agent._valence is not None:
-            agent._valence.level = reward.dopamine_center
-            agent._valence.floor = reward.dopamine_floor
-            agent._valence.units = not reward.center_scale
         if self.arousal is not None:
             assert arousal is not None
             self.arousal.config = arousal
@@ -4401,8 +4419,6 @@ class Brain:
         if agent._trace_device is not None:
             for name, tensor in zip(("trace", "trace_bias"), agent._trace_device, strict=True):
                 data["actor/" + name] = tensor.detach().cpu().double().numpy()
-        for name in ("mean", "var"):
-            data["valence/" + name] = np.asarray(getattr(agent.valence, name))
         if agent.state is not None:
             for name in ("v", "activation", "adaptation"):
                 data["free/" + name] = np.asarray(getattr(agent.state, name))
@@ -4542,7 +4558,7 @@ class Brain:
             result = cls(
                 learner.brain.connectome,
                 episodic=False,
-                reward=ActorCriticConfig(**meta["reward"]),
+                reward=_actor_config(meta["reward"]),
                 slots=[int(k) for k in learner.slot_sizes],
                 code=0 if code is None else code[1].expansion,
                 inputs=code[0] if code is not None and code[2] else None,
@@ -4639,8 +4655,6 @@ class Brain:
             agent.updates, agent.b_critic = int(meta["updates"]), float(meta["b_critic"])
             result.rng.bit_generator.state = meta["rng"]
             agent.rng.bit_generator.state = meta["actor_rng"]
-            agent.valence.mean = data["valence/mean"].copy()
-            agent.valence.var = data["valence/var"].copy()
             if meta["free_steps"] is not None:
                 agent._free = BrainState(
                     data["free/v"].copy(),

@@ -14,6 +14,18 @@ FOUNDERS = {
     "learning": {f.name: f.default for f in fields(LearnerConfig)},
     "reward": {f.name: f.default for f in fields(ActorCriticConfig)},
 }
+# Settings a later library removed, with the value at which the recorded law is the law of that
+# library: a checkpoint it writes cannot carry them, so the record names them at that value.
+REMOVED: dict[str, dict] = {
+    "learning": {},
+    "reward": {
+        "dopamine_center": 0.0,
+        "dopamine_floor": 0.0,
+        "center_scale": True,
+        "critic_normalize": True,
+        "critic_signal": "auto",
+    },
+}
 
 
 def read(path):
@@ -82,12 +94,16 @@ def verify(folder):
                 generic = json.loads(str(saved["generic"]))
             for name, effective in (("learning", meta["config"]), ("reward", generic["reward"])):
                 # A checkpoint written by a later library may carry settings the campaign did
-                # not declare; they must sit at that setting's founder value.
-                recorded = result["graph"][name]
+                # not declare; they must sit at that setting's founder value. The settings it
+                # removed must be recorded and requested at the value its law keeps.
                 founders = FOUNDERS[name]
+                removed = {k: v for k, v in REMOVED[name].items() if k not in founders}
+                recorded = {k: v for k, v in result["graph"][name].items() if k not in removed}
+                gone = {k: v for k, v in result["graph"][name].items() if k in removed}
                 check(
                     identity + " saved " + name,
-                    {k: effective.get(k) for k in recorded} == recorded
+                    all(removed[k] == value for k, value in gone.items())
+                    and {k: effective.get(k) for k in recorded} == recorded
                     and all(
                         k in founders and founders[k] == value
                         for k, value in effective.items()
@@ -96,7 +112,10 @@ def verify(folder):
                 )
                 check(
                     identity + " requested " + name,
-                    all(effective.get(k) == value for k, value in protocol[name].items()),
+                    all(
+                        removed[k] == value if k in removed else effective.get(k) == value
+                        for k, value in protocol[name].items()
+                    ),
                 )
             check(
                 identity + " acquisition",

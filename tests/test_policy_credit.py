@@ -96,39 +96,6 @@ def test_reward_nudge_matches_the_log_policy_derivative(slots):
 
 
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
-def test_critic_keeps_reward_units_when_actor_dopamine_is_centred_or_clipped(backend):
-    from dataclasses import replace
-
-    if backend == "torch":
-        pytest.importorskip("torch")
-    results = []
-    for cap, centre in ((0.0, 0.0), (0.01, 0.9)):
-        ac, drive = actor(backend=backend)
-        drive = np.repeat(drive[:1], len(drive), axis=0)
-        ac.config = replace(
-            ac.config,
-            eta=0.0,
-            eta_bias=0.0,
-            eta_critic=0.5,
-            gamma=0.0,
-            lam=0.0,
-            dopamine_cap=cap,
-            dopamine_center=centre,
-            critic_signal="td",
-        )
-        # An immediate constant return has a known value, whatever modulation
-        # is chosen for the actor. This also checks repeated critic updates.
-        for _ in range(120):
-            ac.act(drive)
-            report = ac.learn(np.full(len(drive), 10.0), np.ones(len(drive), bool), drive)
-        results.append((ac.value_of(drive), report))
-    np.testing.assert_allclose(results[0][0], results[1][0], atol=1e-10)
-    np.testing.assert_allclose(results[1][0], 10.0, atol=0.1)
-    assert results[1][1]["delta"] <= 0.01
-    assert results[1][1]["td_error"] < 0.1
-
-
-@pytest.mark.parametrize("backend", ["cpu", "torch"])
 def test_calibrated_critic_padding_does_not_change_real_transitions(backend):
     from dataclasses import replace
 
@@ -140,7 +107,6 @@ def test_calibrated_critic_padding_does_not_change_real_transitions(backend):
         drive = drive[:2]
         if padded:
             drive = np.concatenate([drive, np.zeros_like(drive[:1])])
-        ac.config = replace(ac.config, critic_signal="td", dopamine_center=0.9)
         # Fix phase work: a padding row may otherwise change batchwise stopping.
         ac.learner.config = replace(ac.learner.config, tolerance=None)
         for step in range(6):

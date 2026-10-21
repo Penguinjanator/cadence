@@ -92,9 +92,6 @@ for each finding ([check before the first lesson](reward.md#check-before-the-fir
 **The curve is flat, `report["saturation"]` near 1, `report["trace"]` near 0.** The readout
 latched ([the traps](reward.md#traps-with-their-measurements)).
 
-**The value runs away under `dopamine_center`.** Leave `critic_signal="auto"` (the default),
-which gives the critic the raw error when the dopamine is centred.
-
 **A decision costs ten times a settle on torch.** Clipping efficacies with `with_parameters`
 after every decision re-uploads every weight; use `LearnerConfig(scale_cap=...)` instead.
 

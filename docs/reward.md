@@ -44,32 +44,15 @@ efficacy[e] += eta * delta * elig[e]
 
 `delta` is the same for every synapse and sets the sign and size of each change; `V` is a
 linear readout of the critic neurons, usually the hidden population. The actor's signal is
-clipped at `dopamine_cap` and can be centred (below). `critic_signal="td"` teaches the
-critic the raw error, which fits discounted return in reward units; `"modulated"` gives it
-the actor's signal, which can stabilize an update without predicting return. A critic fed
-the centred signal chases a moving target and its value runs away, so `"auto"` picks
-`"td"` exactly when `dopamine_center > 0`.
+clipped at `dopamine_cap`. The critic learns from the same clipped signal, its step divided
+by its trace's energy: the bounded signal stabilizes the update, and the critic need not
+predict the return in reward units.
 
 Sampling and eligibility use the same temperature. With temperature `T_i` for slot `i`, its
 nudge mask is scaled by `c/T_i`, `c` the smallest of the base and supplied temperatures, so
 the contrast estimates `c * grad(log policy)` summed over slots. The trace lives per stream:
 it carries across moments, a routine (unaroused) moment of `live` fades it by `gamma * lam`
 (`fade`), and `done` or `reset` clears it.
-
-## Centered dopamine and selective activity
-
-With `dopamine_center > 0` each stream keeps a running mean and scale of its prediction
-error, and the actor's dopamine is the deviation from that level. `center_scale=True`
-divides it by the running scale; `False` keeps the reward's own units. `dopamine_floor`
-zeroes the signal within that many scales of the level, so familiar outcomes move no actor
-synapse; it has no effect without centering. Momentum, the critic, the eligibility phases
-and memory writes run regardless, so a zero signal is not zero computation.
-
-`Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True)` is this signal
-without a critic: `level`, `floor` and `cap` act as `dopamine_center`, `dopamine_floor` and
-`dopamine_cap`, `units=False` as `center_scale=True`, and `per_stream=False` keeps one level
-for all streams. Call it with one `delta` per stream (optional boolean `observed`);
-`reset()` forgets the level.
 
 ## A custom reward learner
 
@@ -111,8 +94,6 @@ eligibility_steps=12` ([defaults table](brain.md#defaults-and-expert-overrides))
 | `normalize` | `0.0` | Forgetting factor of each parameter's RMS that divides its step ([below](#rates-under-normalization)) |
 | `momentum` | `0.0` | Each parameter steps on a running average of its own steps |
 | `dopamine_cap` | `1.0` | Clip of the actor's signal; `0` for none |
-| `dopamine_center`, `dopamine_floor`, `center_scale` | `0.0`, `0.0`, `True` | [Centred dopamine](#centered-dopamine-and-selective-activity) |
-| `critic_signal`, `critic_normalize` | `"auto"`, `True` | The [critic's signal](#eligibility-traces-and-dopamine); its step divided by its trace's energy |
 | `eligibility_steps` | `None` | Steps of each reward-nudged phase; `None` uses the learner's `nudged_steps` |
 
 `beta`, the base `temperature` and `tolerance` come from the learner's `LearnerConfig`

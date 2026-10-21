@@ -28,13 +28,20 @@ _KINDS = {
     "arousal": ArousalConfig,
 }
 _FIELDS = {prefix: {field.name for field in fields(kind)} for prefix, kind in _KINDS.items()}
-_BOOLEAN = {"centered", "qualified", "surprise", "center_scale", "critic_normalize"}
+_BOOLEAN = {"centered", "qualified", "surprise"}
 _INTEGER = {"free_steps", "nudged_steps", "damping", "eligibility_steps", "youth"}
-_STRING = {"nudge", "critic_signal"}
+_STRING = {"nudge"}
 _OPTIONAL = {"eta_bias", "tolerance", "eligibility_steps"}
 # Settings of 0.84.3 that this version removed, refused by name with a message naming that
 # release, at ``compose`` and ``retune`` and in an arousal mapping.
-_REMOVED = {"arousal_record_surprise"}
+_REMOVED = {
+    "arousal_record_surprise",
+    "actor_dopamine_center",
+    "actor_dopamine_floor",
+    "actor_center_scale",
+    "actor_critic_signal",
+    "actor_critic_normalize",
+}
 
 
 def removed(name: str) -> str:

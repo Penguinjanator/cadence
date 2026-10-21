@@ -40,11 +40,7 @@ from .learning import (
 )
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
-from .plasticity import (
-    ActorCritic,
-    ActorCriticConfig,
-    Valence,
-)
+from .plasticity import ActorCritic, ActorCriticConfig
 from .receipts import Receipt, canonical_json
 from .recording import SettlementRecord, record_settlements
 from .reference import conformance
@@ -70,7 +66,6 @@ __all__ = [
     "PatternSeparator",
     "ActorCritic",
     "ActorCriticConfig",
-    "Valence",
     "Adaptation",
     "Region",
     "Brain",

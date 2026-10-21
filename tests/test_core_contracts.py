@@ -299,7 +299,7 @@ def test_complete_brain_checkpoint_resumes_learning_and_memory(tmp_path, backend
         episodic=True,
         backend=backend,
         device="cpu" if backend == "torch" else None,
-        reward=cd.ActorCriticConfig(dopamine_center=0.5),
+        reward=cd.ActorCriticConfig(),
     )
     drive = np.eye(2)
     for _ in range(3):

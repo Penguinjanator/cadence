@@ -9,7 +9,7 @@ keyword.
 | [Brain](#brain-cadence) | `Brain`, its methods, attributes and checkpoint formats |
 | [Arousal](#arousal-cadencearousal) | `ArousalConfig`, `Arousal` |
 | [Streams](#streams-cadencestream) | `Trace`, `Efference`, `History`, `Recall`, `FastSynapses`, `SynapticMemory`, `PatternSeparator` |
-| [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence` |
+| [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig` |
 | [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
 | [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Receipt` |
 | [Recording](#record-every-settling-step) | `record_settlements` |
@@ -398,16 +398,12 @@ configuration; `backend`, `device` and `precision` may differ from the saved one
 composed brain. The format is `cadence-checkpoint/2`; `/1` loads, and a `cadence-checkpoint/3`
 file is refused with a message naming the release that reads it.
 
-## The agent and the valence (`cadence.plasticity`)
+## The agent (`cadence.plasticity`)
 
 ```text
 ActorCritic(learner, critic, config=None, seed=0)
 ActorCriticConfig(gamma=0.99, lam=0.9, eta=0.5, eta_bias=None, eta_critic=0.05,
-                  normalize=0.0, momentum=0.0, dopamine_cap=1.0,
-                  dopamine_center=0.0, dopamine_floor=0.0, center_scale=True,
-                  critic_normalize=True, critic_signal="auto",
-                  eligibility_steps=None)
-Valence(level=0.0, floor=0.0, cap=1.0, units=True, per_stream=True, mean=0.0, var=1.0)
+                  normalize=0.0, momentum=0.0, dopamine_cap=1.0, eligibility_steps=None)
 ```
 
 The reward learner of a stream: a `Learner` whose outputs are the actions, a learned linear
@@ -420,13 +416,11 @@ and the decision contract are in [learning from reward](reward.md#settings).
 | `learn(reward, done, next_drive, bootstrap=None, *, observed=None, warm=None) -> dict` | The TD error made into dopamine and written through the eligibility. At least one row must be `observed`. `bootstrap` applies only to `done` rows: a truncated row passes `done=True` with the value of its last observation (`value_of`) as `bootstrap`; other `done` rows bootstrap from zero. |
 | `fade(done=None)` | One moment without a new eligibility: every trace decays by `gamma * lam`. |
 | `probabilities(state, temperature=None, *, bias=None)`, `value(state)`, `value_of(drive)`, `settle(drive)` | Policy, critic value, a cold settle. |
-| `reset()`, `parameters()`, `to_dict()` | Clears cache, eligibility, salience and centering; keeps learned parameters. |
-| `state`, `salience`, `memory`, `trace`, `trace_memory`, `valence`, `delta_mean`, `delta_var` | The latest free phase; per-sender salience weights; a memory with learned parameters (`Recall`) and its eligibility; the valence and its statistics. |
+| `reset()`, `parameters()`, `to_dict()` | Clears cache, eligibility and salience; keeps learned parameters. |
+| `state`, `salience`, `memory`, `trace`, `trace_memory` | The latest free phase; per-sender salience weights; a memory with learned parameters (`Recall`) and its eligibility. |
 
-`ActorCriticConfig.critic_target` is the resolved `critic_signal`; construction warns when
-`eta_bias` exceeds a positive `eta` and when `normalize > 0` with an actor rate above 0.05.
-`Valence` turns a prediction error into dopamine: `valence(delta, observed=None)` and
-`reset()`.
+Construction warns when `eta_bias` exceeds a positive `eta` and when `normalize > 0` with an
+actor rate above 0.05.
 
 ## NeuralGraph (`cadence`)
 

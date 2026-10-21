@@ -196,8 +196,8 @@ FOUNDERS = {
         "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1, 1, 1],
         "format": "cadence-generic/2",
-        "names": "5a728760433a9dea87769077dd838133cd49a8637125759627166a31d5cf16a8",
-        "checkpoint": "4232fd81a58cace3cc1e76bbc7141a02c2599bfab0679cc9bfae1dfee891a76e",
+        "names": "1009005150dc48d076ab9d17775e97493a8eeb4c04355b157e929c4d5582021f",
+        "checkpoint": "74b7f1e437a0afb1bcb889eb46e01995b2793e10fbc1f7a552006505681ce530",
     },
     "lived": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True,
@@ -207,8 +207,8 @@ FOUNDERS = {
         "digest": "b66e821b4d3c975000dc59663c7ce2babaf0473d232af438a689f12b9fbbee67",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1],
         "format": "cadence-generic/7",
-        "names": "3bd868a50c41cec95565033bf2e031622c05d08536e236a036a5b09278273eaf",
-        "checkpoint": "b122c752c2597834f5131cf486137d9ab3395ebdfccb2d3aefa666d60aa94fca",
+        "names": "018543732f5df0415fe9874279fa82c3b2add61759dcf89701a4dd1247678418",
+        "checkpoint": "3fedafac7679da355d4ef830563b107a2289511cf4aa457c00ee8f6cc41d8c56",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -217,8 +217,8 @@ FOUNDERS = {
         "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
-        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "58461155de6669ff9e01940d78f6adfe702fe864fc7c592dc6e5b00115210f4b",
+        "names": "2733528d3e07230712ce85b22a30e1a8eb96f5ce5f84c1326b5ff6bde7c64a97",
+        "checkpoint": "46756cc5abf9d2bbe84a8114661f2bfb628c4286b15e83e633d82b327e0d2f30",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -229,8 +229,8 @@ FOUNDERS = {
                  0, 1, 0, 0, 0, 0, 2, 2, 6, 3, 0, 0, 4, 4, 0, 0, 0, 0, 7, 4, 0, 4, 1, 3, 0, 0,
                  4, 0, 6, 4, 4, 0, 0, 4],
         "format": "cadence-generic/2",
-        "names": "49432123dd7f5680292be4549853a2b548d82f2ad5b13ea765b047db8720a407",
-        "checkpoint": "24dbfcae5f2fe0bf4be6622ddd082c62fa0584ca326b04a350391b0b95b0c44e",
+        "names": "b3fcb3a242278756f2a81624c3a163e50d2c55a4ce770046a776d78cd1246212",
+        "checkpoint": "4f4978a4eaab12b6cb28809e0fdf6198d30d518d3a4f001760808dfc8ce5ed98",
     },
 }
 

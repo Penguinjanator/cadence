@@ -73,12 +73,13 @@ def test_bootstrap_value_enters_the_dopamine_of_a_truncated_row() -> None:
 def test_observed_padding_is_excluded_and_a_batch_without_a_real_row_is_refused() -> None:
     c, _, _ = _setup()
     rng = np.random.default_rng(2)
-    agent = _agent("cpu", cd.ActorCriticConfig(dopamine_center=0.9))
+    agent = _agent("cpu")
     agent.act(_drive(c, rng, 2))
     with pytest.raises(ValueError, match="real transition"):
         agent.learn(np.ones(2), np.zeros(2, dtype=bool), _drive(c, rng, 2), observed=np.zeros(2, dtype=bool))
     agent.learn(np.ones(2), np.zeros(2, dtype=bool), _drive(c, rng, 2), observed=np.array([True, False]))
-    assert agent.valence.mean[1] == 0.0 and agent.valence.mean[0] != 0.0
+    assert agent.trace is not None  # the padding row forgets its trace, the real row keeps it
+    assert not agent.trace[1].any() and agent.trace[0].any()
 
 
 def test_act_refreshes_after_learning_and_a_new_batch_size_drops_the_traces() -> None:

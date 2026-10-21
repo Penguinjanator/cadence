@@ -530,10 +530,11 @@ LIVES: dict[str, tuple[tuple[int, int, dict[str, Any]], Life]] = {
                  streams),
 }
 # Recorded on main at c7dc2f0 (0.84.3 with ``reset(keep_arousal=True)``): each life's acts,
-# the format and the member and metadata names of the checkpoint it saves. What its resets
-# left the arousal and the arousal at the end (digests of the saved states) and the contents
-# of every array of its checkpoint are those of main in the layout of ``cadence-arousal/4``,
-# re-recorded where the record channel left after every other value matched.
+# what its resets left the arousal and the arousal at the end (digests of the saved states),
+# and the format, the member and metadata names and the contents of every array of the
+# checkpoint it saves. Where the library later removed a setting that was inert at its
+# founder, the state, names and checkpoint digests were re-recorded after every other value
+# matched the recording.
 PINS: dict[str, dict[str, str]] = {
     "adult": {
         "acts": (
@@ -542,8 +543,8 @@ PINS: dict[str, dict[str, str]] = {
             "0000000000000000000000000000000000000000000"
         ),
         "format": "cadence-generic/3",
-        "names": "a2556d56acd5de594cda87ec20272b09e5c26e3e8dc6370b6e39eae567c53f4e",
-        "checkpoint": "7d0bab57f9ad6583470499cc7456fad9bc19d23c5619e7b433896759b5840a0e",
+        "names": "5ba93168468320d38dcfeaa5fb3656396b5a51dc3b0752754badc7f7fa7e66b6",
+        "checkpoint": "b9b594f5a820f88964118d8c92b3cd815403d1d55565345c0dfb1d8b13592332",
         "left": "9369e9b9ef6ea69c41ca7c9df69a3ccd1a65a94c677ea7a38287a8302da1ce9e",
         "arousal": "82930a7673513d9ce243d643a81e968e5e9d6bc52e526b78abe7356c5b31fb60",
     },
@@ -554,24 +555,24 @@ PINS: dict[str, dict[str, str]] = {
             "0111111111111111111111111111111111111111100"
         ),
         "format": "cadence-generic/3",
-        "names": "b6a65dae0eaab25db0caf6cb4691b71a079d90080e67ef5cbd76ed0e7aaede79",
-        "checkpoint": "54e13d832780e672d51609418fdf5c78fa628dff4114583edfa41a32eb9e5c24",
+        "names": "8598e907b74ee8e1f58d9c492b1fafd523f59b4ee89e28abb2ab65916453e183",
+        "checkpoint": "0ba0c103eeeada86175c229e15e6c7ea1791b0f06cf0d0d40a9297456b5cac32",
         "left": "5fe084619d8817251b331ed1f4a4ed9f13423af747216eff94e132d108af1ae6",
         "arousal": "609c15d6720de27c34cea0e220c670f9a949f5e8a3caef1fa5704501952d0ec0",
     },
     "composed": {
         "acts": "11110110010001100100010001000000000000",
         "format": "cadence-generic/8",
-        "names": "f68680bd8a9b32b381bdd3620503110329f7b2ebec08401a86188c413a7f49e0",
-        "checkpoint": "645c92dc555e89c8929841985aa5063fd474dce2d55390ad75bd6c87eb4679c5",
+        "names": "c6ac85931040064ccea980308a4eacf763d9480057cf5aae9e5a29ab8cff5b76",
+        "checkpoint": "e23f117e3743ab6a5e9c83fcceea8560b8a7a207ac6af1a205e64be5e45e4a82",
         "left": "8330ed860dd21843e2e489451ab3781b77bf825f67c413f1fe58b977e4cc38b5",
         "arousal": "d61a624596feedda53e9a3aee2ebde66dc0f820eb4d42431759425e3fbcb9fcc",
     },
     "episodic": {
         "acts": "11111101111111111111111111111111111110",
         "format": "cadence-generic/6",
-        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "4ca210205e92cdfaf0457d6a8824bcec1d15b07f5965c9e88749f222ba7a3f27",
+        "names": "2733528d3e07230712ce85b22a30e1a8eb96f5ce5f84c1326b5ff6bde7c64a97",
+        "checkpoint": "f641693728a51bbce14c2c15ad03c518706c71f7eb0d0327709cde39f4ee9493",
         "left": "75aef03fedbfcc5455e1febf4dcb7db64373faedc62d1288b23d73eca88a3ba0",
         "arousal": "cb50b5df1de334b9b8f16a0644bfd9a380fb5b620db0e54ed70523d1fa627d93",
     },

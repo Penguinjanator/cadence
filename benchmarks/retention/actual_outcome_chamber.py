@@ -93,8 +93,7 @@ def make_brain(seed):
                                momentum=0.9, normalize=0, qualified=False, damping=3),
         reward=ActorCriticConfig(gamma=0.9, lam=0.8, eta=1, eta_bias=0.05,
                                  eta_critic=0.3, eligibility_steps=12, normalize=0,
-                                 momentum=0, dopamine_cap=1, dopamine_center=0,
-                                 dopamine_floor=0, critic_normalize=True, critic_signal="auto"),
+                                 momentum=0, dopamine_cap=1),
         consolidation=0.05, episodic=True, working_memory_decay=0.2,
         working_memory_amplitude=3,
         working_memory_scale=12.0,  # the composition of releases before 0.82.0
@@ -112,7 +111,6 @@ def model_identity(brain):
             "populations": {name: array_hash(value)
                             for name, value in brain.connectome.populations.items()},
             "learner": learner.config.to_dict(), "actor": brain.basal_ganglia.config.to_dict(),
-            "critic_target": brain.basal_ganglia.config.critic_target,
             "neuron": graph.neuron_model.to_dict(), "trace": brain.working_memory.to_dict(),
             "hippocampus": brain.hippocampus.to_dict(), "layout": graph.layout.to_dict(),
             "backend": graph.backend, "precision": graph.precision,

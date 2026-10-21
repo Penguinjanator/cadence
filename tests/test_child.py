@@ -2,8 +2,8 @@
 
 A child learning games keeps a permanent world model (the synapses), sees one frame and keeps
 each moment reverberating for seconds before it vanishes (the settled state and its
-afterglow), and changes the world model only when a moment carried a positive or negative
-signal, in proportion (the eligibility trace times a dopamine that is quiet otherwise).
+afterglow), and changes the world model when a moment carried a positive or negative signal,
+in proportion (the eligibility trace times the dopamine).
 These tests are the small experiments for each capability."""
 
 from __future__ import annotations
@@ -48,7 +48,6 @@ def test_the_trace_credits_an_action_paid_three_moments_later() -> None:
             lam=lam,
             eta=1.0,
             eta_critic=0.0,
-            dopamine_center=0.0,
             dopamine_cap=0.0,
         )
         batch = 32
@@ -71,44 +70,6 @@ def test_the_trace_credits_an_action_paid_three_moments_later() -> None:
     print(f"delayed credit: hit rate {with_trace:.2f} with the trace, {without:.2f} without")
     assert with_trace >= 0.8
     assert without <= 0.65
-
-
-def test_the_dopamine_is_quiet_for_the_usual_and_speaks_for_more_or_less() -> None:
-    """The child's rule: no critic, the reward in its own units less the usual level, nothing
-    within the usual; a reward that is what it always was moves no synapse, one that is missing
-    or larger does, in proportion."""
-    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
-    ac, learner = _actor(
-        connectome,
-        gamma=0.0,
-        lam=0.0,
-        eta=0.5,
-        eta_critic=0.0,
-        dopamine_center=0.5,
-        center_scale=False,
-        dopamine_floor=1.0,
-        dopamine_cap=10.0,
-    )
-    rng = np.random.default_rng(3)
-    drive, _ = _bandit_drive(rng, 8, connectome, learner)
-    ones = np.ones(8)
-    for _ in range(30):  # the usual: a reward of one every moment
-        ac.act(drive)
-        ac.learn(ones, np.zeros(8, dtype=bool), drive)
-
-    def change(reward: float) -> float:
-        before = learner.brain.weights.copy()
-        ac.act(drive)
-        ac.learn(np.full(8, reward), np.zeros(8, dtype=bool), drive)
-        return float(np.abs(learner.brain.weights - before).sum())
-
-    usual, missing, bigger = change(1.0), change(0.0), change(11.0)
-    print(
-        f"synapse change for the usual {usual:.4f}, a missing reward {missing:.4f}, a reward ten larger {bigger:.4f}"
-    )
-    assert usual == 0.0
-    assert missing > 0.0
-    assert bigger > missing
 
 
 def test_a_capped_activity_change_carries_the_moment_before_and_a_full_one_forgets_it() -> None:
@@ -178,7 +139,6 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
                 eta=1.0,
                 eta_bias=0.05,  # the historical recipe of this measurement (issue 143)
                 eta_critic=0.0,
-                dopamine_center=0.0,
                 dopamine_cap=0.0,
             ),
             seed=0,
@@ -232,19 +192,3 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
     )
     assert weighted > 0.9
     assert plain > 0.9
-
-
-def test_the_valence_is_one_element() -> None:
-    """The Valence alone: level, units, floor, cap; and the agent's dopamine is the same object."""
-    v = cd.Valence(level=0.5, floor=1.0, cap=10.0, units=True)
-    for _ in range(30):
-        v(np.array([1.0, 1.0]))
-    assert np.array_equal(v(np.array([1.0, 1.0])), [0.0, 0.0])  # the usual: quiet
-    missing, bigger = v(np.array([0.0, 0.0])), v(np.array([11.0, 11.0]))
-    assert missing[0] < 0 < bigger[0] and abs(bigger[0]) > abs(missing[0])
-    assert v(np.array([1000.0, 1000.0]))[0] == 10.0  # the cap
-    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
-    ac, _ = _actor(
-        connectome, dopamine_center=0.5, dopamine_floor=1.0, dopamine_cap=10.0, center_scale=False
-    )
-    assert isinstance(ac.valence, cd.Valence) and ac.valence.floor == 1.0 and ac.valence.units

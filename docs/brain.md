@@ -98,7 +98,7 @@ configurations and `initialization` (construction choices, not current weights).
 | `learning_normalize`, `learning_normalize_floor`, `learning_momentum` | `0.0`, `0.001`, `0.9` | retune | [learning](learning.md#rates-under-normalization) |
 | `actor_gamma`, `actor_lam`, `actor_eligibility_steps`, `actor_eta`, `actor_eta_bias`, `actor_eta_critic` | `0.9`, `0.8`, `12`, `1.0`, `0.05`, `0.3` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `actor_normalize`, `actor_momentum` | `0.0`, `0.0` | retune | [reward](reward.md#rates-under-normalization) |
-| `actor_dopamine_cap`, `actor_dopamine_center`, `actor_dopamine_floor`, `actor_center_scale`, `actor_critic_normalize`, `actor_critic_signal` | `1.0`, `0.0`, `0.0`, `True`, `True`, `"auto"` | retune | [reward](reward.md#centered-dopamine-and-selective-activity) |
+| `actor_dopamine_cap` | `1.0` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `arousal` | off; `True` is `ArousalConfig()` | construction (switch), retune (fields) | [continuous](continuous.md#routine-and-repair-live) |
 | `arousal_threshold`, `arousal_decay`, `arousal_tolerance`, `arousal_floor`, `arousal_fast`, `arousal_slow` | `0.2`, `0.9`, `2.0`, `0.1`, `0.05`, `0.005` | retune | [continuous](continuous.md#routine-and-repair-live) |
 | `arousal_heat`, `arousal_youth`, `arousal_value_surprise`, `arousal_need`, `arousal_need_scale` | `2.0`, `100`, `1.0`, `0.0`, `0.0` | retune | [continuous](continuous.md#routine-and-repair-live) |

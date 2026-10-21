@@ -92,7 +92,6 @@ def test_constructor_preserves_the_ordinary_declared_gene(chamber):
     left, right = chamber.model_identity(candidate), chamber.model_identity(ordinary)
     assert left == right
     assert left["learner"]["normalize"] == left["actor"]["normalize"] == 0
-    assert left["critic_target"] == "modulated"
     assert chamber.capacity(candidate)["C_shape"] == [8, 2]
     assert chamber.capacity(candidate)["strength_capacity_shape"] == [8, 8, 2]
 

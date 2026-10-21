@@ -117,7 +117,7 @@ def test_refused_reward_preserves_both_memories_and_retries_exactly_once(
             eta=0.1, eta_bias=0.01,
             momentum=0.5 if optimizer == "adaptive" else 0,
             normalize=0.9 if optimizer == "adaptive" else 0,
-            dopamine_center=0.5, eligibility_steps=12,
+            eligibility_steps=12,
         ),
     )
     separator = cd.PatternSeparator(2, 8, 3, seed=7, center=0.3 if kind == "fast" else 0)
