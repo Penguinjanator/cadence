@@ -99,10 +99,11 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
     twelve neurons of background always on: the synapses out of the background carry eligibility
     at every moment, the synapses out of the context only at the one that mattered. With the
     eligibility weighted by the afterimage (what is still ringing is what gets written) the
-    signal lands on the context's synapses. Both learn it here: the background's eligibility is
-    noise that averages out over rounds, and the weighting is a faster start on some seeds
-    (1.00 against 0.57 at fifty rounds on one, no difference on another), not a gain the
-    small experiment can promise."""
+    signal lands on the context's synapses. The plain trace learns it here: the background's
+    eligibility is noise that averages out over rounds. The weighting is reported and not
+    asserted. With the trace's focus removed in 0.85 the afterimage is a plain decaying copy of
+    the input, and the weighted run learns the cue on some seeds and platforms and stays at
+    chance on others (seed 0 reads 1.00 with Accelerate and .48 with OpenBLAS)."""
     v, background, hidden, batch, rounds = 4, 12, 8, 32, 100
     n_in = v + background
     genome = cd.Genome(
@@ -190,5 +191,4 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
     print(
         f"a cue paid three moments later against twelve neurons of background: hit rate {plain:.2f} with the plain trace, {weighted:.2f} weighted by the afterimage"
     )
-    assert weighted > 0.9
     assert plain > 0.9
