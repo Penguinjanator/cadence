@@ -11,7 +11,7 @@ from __future__ import annotations
 from . import regions
 from .arousal import Arousal, ArousalConfig
 from .brain import Brain as NeuralGraph
-from .brain import BrainState, Equilibrium, Nudge, RefinementReport, available_backends
+from .brain import BrainState, Equilibrium, Nudge, available_backends
 from .certificate import (
     Certificate,
     EPStructure,
@@ -39,7 +39,6 @@ from .learning import (
 )
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
-from .patch import PatchNet, PatchObservation
 from .plasticity import (
     ActorCritic,
     ActorCriticConfig,
@@ -66,8 +65,6 @@ from .stream import (
 __all__ = [
     "Arousal",
     "ArousalConfig",
-    "PatchNet",
-    "PatchObservation",
     "Certificate",
     "EPStructure",
     "certificate",
@@ -107,7 +104,6 @@ __all__ = [
     "NeuralGraph",
     "BrainState",
     "Equilibrium",
-    "RefinementReport",
     "Connectome",
     "available_backends",
     "canonical_json",

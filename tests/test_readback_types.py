@@ -18,25 +18,13 @@ def _frozen(result: object, name: str) -> None:
 
 
 # ---------------------------------------------------------------------------- continuous brains
-def test_patch_observation_equilibrium_and_ep_structure() -> None:
-    p = cd.PatchNet.create(2, 5, 1, seed=3, density=1, tolerance=1e-7)
-    structure = cd.ep_structure(p.brain)
+def test_ep_structure() -> None:
+    graph = cd.layered(2, 5, 1, seed=3, density=1)
+    brain = cd.NeuralGraph(graph, cd.learning_neuron_model())
+    structure = cd.ep_structure(brain, fixed_inputs=graph.populations["input"])
     assert isinstance(structure, cd.EPStructure)
     _frozen(structure, "tolerance")
     assert structure.compatible and structure.to_dict()["compatible"] is True
-
-    x = p.stimulus(np.array([[0.0, 1.0], [1.0, 0.0]]), amplitude=2)
-    phase = p.settle(x)
-    assert isinstance(phase, cd.Equilibrium)
-    _frozen(phase, "steps")
-    assert phase.residual.shape == (2,) and np.all(phase.converged)
-
-    report = p.observe(x, np.array([[0.2], [0.8]]), source_id="one")
-    assert isinstance(report, cd.PatchObservation)
-    assert isinstance(report.free, cd.Equilibrium)
-    _frozen(report, "updated")
-    assert report.updated and report.reason == "updated"
-    assert all(np.all(q.converged) for q in (report.free, report.plus, report.minus))
 
 
 def test_equilibrium_from_brain_equilibrate() -> None:

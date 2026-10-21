@@ -70,28 +70,3 @@ def test_empty_phase_rows_cannot_update():
     with pytest.raises(ValueError, match="same nonempty .* shape"):
         learner.update(empty, empty)
     assert learner.updates == 0
-
-
-@pytest.mark.parametrize("backend", ["cpu", "torch"])
-@pytest.mark.parametrize("budget", [8, 32])
-def test_nonfinite_joint_solve_does_not_poison_patch_continuation(backend, budget):
-    if backend == "torch":
-        pytest.importorskip("torch")
-    graph = cd.Connectome.from_synapses(2, pre=[0, 1], post=[1, 0],
-                                       sign=[1e308, 1e308])
-    brain = cd.NeuralGraph(graph, cd.NeuronModel(gain=1), backend=backend, device="cpu")
-    learner = cd.Learner(brain, [1], cd.LearnerConfig(nudge="quadratic"))
-    patch = cd.PatchNet(learner, steps=budget, chunk=8)
-    patch.settle(np.zeros((1, 2)))
-    before = patch.state
-    with np.errstate(over="ignore", invalid="ignore"):
-        result = patch.observe(np.full((1, 2), 1e308), np.zeros((1, 1)), source_id="bad")
-    assert result.reason == "free_unconverged" and not result.updated
-    assert not result.free.converged.any() and result.free.steps == 8
-    assert not np.isfinite(result.free.state.v).all()
-    np.testing.assert_array_equal(patch.state.v, before.v)
-    assert learner.updates == 0 and "bad" not in patch._sources
-    # A finite zero-drive equilibrium is valid even for these extreme weights;
-    # retry must not require an implicit reset to clear the failed iterate.
-    retry = patch.settle(np.zeros((1, 2)))
-    assert retry.converged.all() and retry.steps == 0

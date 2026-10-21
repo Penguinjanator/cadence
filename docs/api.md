@@ -10,7 +10,7 @@ keyword.
 | [Arousal](#arousal-cadencearousal) | `ArousalConfig`, `Arousal` |
 | [Streams](#streams-cadencestream) | `Trace`, `Echo`, `Afterglow`, `Efference`, `History`, `Recall`, `FastSynapses`, `SynapticMemory`, `PatternSeparator`, `stateful` |
 | [Learning](#learning-cadencelearning), [checkpoints](#checkpoints-cadencecheckpoint), [reward](#the-agent-and-the-valence-cadenceplasticity) | `LearnerConfig`, `Learner`, `GraphHolder`, `LearningPhaseError`, graph factories and diagnostics, `save`, `load`, `ActorCritic`, `ActorCriticConfig`, `Valence`, `Bins` |
-| [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `RefinementReport`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
+| [The graph](#neuralgraph-cadence) | `NeuralGraph`, `BrainState`, `Equilibrium`, `Nudge`, `Connectome`, `NeuronModel`, `Adaptation`, blocks, `Certificate`, the neuron-by-neuron reference |
 | [Wiring and instruments](#regions-and-genome-cadenceregions-cadencegenome) | `Region`, `regions`, `Projection`, `Genome`, `develop`, `evolve`, `genes`, `Protocol`, `Row`, `Receipt`, timing |
 | [Compositions](#optional-task-compositions-cadencecircuits), [recording](#record-every-settling-step) | `cadence.circuits`, `record_settlements` |
 
@@ -415,8 +415,7 @@ stability, uniqueness or task quality ([the certificate](certificate.md)).
 | Type | Fields |
 | --- | --- |
 | `BrainState(v, activation, adaptation, steps, trajectory=None, activity_change=None, device=None)` | `(n,)` or `(batch, n)` arrays; `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`. |
-| `Equilibrium(state, residual, steps, tolerance, refinement=None, residual_checks=0, damping_halvings=0, stagnation_checks=0)` | Per-row `converged` and `qualified`; `steps` counts local sweeps. |
-| `RefinementReport(local_residual, steps, min_curvature, status)` | Newton refinement of a hybrid `PatchNet` solve; `status` per row is `local`, `refined` or a failure reason. |
+| `Equilibrium(state, residual, steps, tolerance, residual_checks=0, damping_halvings=0, stagnation_checks=0)` | Per-row `converged` and `qualified` (the residual within `tolerance`); `steps` counts local sweeps. |
 | `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None, anchor=None, anchor_gain=None)` | Extra drive `beta * mask * (target - s)`, or against `softmax(s / T)` per group; `weight` scales rows. `anchor` and `anchor_gain` (supplied together, finite, gain nonnegative per neuron) add `anchor_gain * (anchor - s)`, unscaled by `beta`, mask or weight. `drive(s)`. |
 
 `available_backends() -> dict` names what is installed, such as

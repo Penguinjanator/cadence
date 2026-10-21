@@ -1,8 +1,6 @@
-"""Temporal overlap is an explicit fixed boundary, separate from teaching evidence."""
+"""A nudge's anchor is an explicit fixed boundary, separate from teaching evidence."""
 
 from __future__ import annotations
-
-import json
 
 import numpy as np
 import pytest
@@ -80,25 +78,6 @@ def test_anchor_settling_and_residual_match_independent_equations_on_backends(so
             np.testing.assert_allclose(reference.v, expected, atol=1e-12, rtol=1e-12)
 
 
-def test_each_observation_holds_the_previous_boundary_across_all_phases():
-    p = cd.PatchNet.create(2, 4, 1, seed=3, density=1, context_strength=2, tolerance=1e-8)
-    cue = p.stimulus([[0.2, 0.8]], amplitude=2)
-    p.settle(cue)
-    previous = p.state.activation.copy()
-    records = []
-    with cd.record_settlements(records.append):
-        report = p.observe(cue * 0.4, [[0.7]], source_id="real:2")
-    assert report.updated
-    assert {record.nudge.beta for record in records} == {0, 0.1, -0.1}
-    for record in records:
-        np.testing.assert_array_equal(record.nudge.anchor, previous)
-        np.testing.assert_array_equal(record.nudge.anchor_gain, p.context_strength * p.context_mask)
-    assert not np.array_equal(previous, report.free.state.activation)
-    np.testing.assert_array_equal(p.state.activation, report.free.state.activation)
-    assert not p.context_mask[p.input_index].any()
-    assert not p.context_mask[p.output_index].any()
-
-
 def test_fixed_boundary_contrast_matches_finite_difference_bias_gradient():
     graph = cd.Connectome.from_synapses(2, pre=[0, 1], post=[1, 0], sign=[0.2, 0.2])
     model = cd.learning_neuron_model(leak=1.0, dt=0.2)
@@ -127,59 +106,6 @@ def test_fixed_boundary_contrast_matches_finite_difference_bias_gradient():
         losses.append(0.5 * (state.state.activation[0, 1] - y[0, 1]) ** 2)
     numerical_descent = -(losses[0] - losses[1]) / (2 * eps)
     assert local_descent == pytest.approx(numerical_descent, rel=1e-5, abs=1e-9)
-
-
-def test_temporal_context_is_checkpointed_private_and_washes_out(tmp_path):
-    p = cd.PatchNet.create(2, 4, 1, seed=3, density=1, context_strength=2, tolerance=1e-9)
-    cue, blank = p.stimulus([[0.2, 0.8]], amplitude=2), p.stimulus([[0.0, 0.0]])
-    p.observe(cue, [[0.7]], source_id="first")
-    snapshot = p.snapshot()
-    branches = p.imagine([blank, blank])
-    assert len(branches) == 2
-    for key, value in snapshot.items():
-        np.testing.assert_array_equal(p.snapshot()[key], value)
-    resumed = cd.PatchNet.load(p.save(tmp_path / "context"))
-    for owner in (p, resumed):
-        assert owner.observe(blank, [[0.4]], source_id="next").updated
-    for key, value in p.snapshot().items():
-        np.testing.assert_array_equal(resumed.snapshot()[key], value)
-    # Here the context is a fading boundary, not a permanent bit or new observation.
-    first = p.settle(blank).state.activation.copy()
-    for _ in range(64):
-        late = p.settle(blank)
-        assert np.all(late.converged)
-    p.reset()
-    cold = p.settle(blank)
-    assert np.max(np.abs(first - cold.state.activation)) > 1e-4
-    for _ in range(64):
-        cold = p.settle(blank)
-    np.testing.assert_allclose(late.state.activation, cold.state.activation, atol=1e-7)
-
-
-def test_reset_and_explicit_zero_boundary_give_the_same_cold_equations():
-    p = cd.PatchNet.create(2, 4, 1, seed=3, density=1, context_strength=2, tolerance=1e-9)
-    cue = p.stimulus([[0.2, 0.8]], amplitude=2)
-    p.observe(cue, [[0.7]])
-    zeros = np.zeros_like(cue)
-    cold = cd.BrainState(zeros.copy(), zeros.copy(), zeros.copy(), 0)
-    branch = p.imagine([cue], state=cold)[0]
-    p.reset()
-    actual = p.settle(cue)
-    np.testing.assert_array_equal(actual.state.v, branch.state.v)
-    np.testing.assert_array_equal(actual.residual, branch.residual)
-
-
-def test_old_patch_checkpoints_load_without_temporal_context(tmp_path):
-    p = cd.PatchNet.create(2, 4, 1, seed=3)
-    data = p.snapshot()
-    metadata = json.loads(str(data["patch"]))
-    metadata["format"] = "cadence-patch/1"
-    del metadata["context_strength"], metadata["context_mask"]
-    data["patch"] = np.array(json.dumps(metadata))
-    path = tmp_path / "old.npz"
-    np.savez(path, **data)
-    restored = cd.PatchNet.load(path)
-    assert restored.context_strength == 0
 
 
 @pytest.mark.parametrize(
