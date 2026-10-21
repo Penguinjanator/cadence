@@ -54,6 +54,10 @@ class SynapticMemory(FastSynapses):
         else:
             self.strength[rows] = self.consolidated
 
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps, the consolidated records among them."""
+        return {**super().arrays(), "consolidated": self.consolidated}
+
     def clear(self) -> None:
         """Explicitly erase both persistent and transient associations."""
         self.consolidated.fill(0)

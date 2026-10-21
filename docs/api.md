@@ -139,6 +139,7 @@ their shape. Keep row identities fixed until `reset()`.
 | --- | --- |
 | `connectome`, `brain`, `learner` | the developed graph, the current `NeuralGraph` (`learner.brain`) and the `Learner` |
 | `basal_ganglia` | the `ActorCritic` reading the association region |
+| `memories` | the present memories by name, in the order the brain reads them ([`Memories`](#the-memories-cadencememories)) |
 | `working_memory`, `efference`, `history`, `recall` | the `Trace`, `Efference`, `History` and `Recall`, each `None` when absent |
 | `hippocampus` | the associative `SynapticMemory` (with `memory_choice` the episodic place records), or `None` with `episodic=False` |
 | `context_memory` | the episodic context records with `memory_choice` and a positive `memory_context`, else `None` |
@@ -216,6 +217,27 @@ is refused. A `cadence-arousal/1` or unversioned state without `rewards` takes i
 the action's record forecast, which this version removed: one weighed at the founder zero
 loads without its readings, and one weighed above zero is refused with a message naming
 0.84.3.
+
+## The memories (`cadence.memories`)
+
+```text
+Memories(members)
+Moment(observations, code, place, stores=True)
+```
+
+`brain.memories` is a `Memories`: a read-only mapping from a memory's name to the memory, the
+present ones only, in the order `working_memory`, `efference`, `history`, `recall`,
+`hippocampus`. Every member keeps the contract `Memory`:
+
+| Member | Behaviour |
+| --- | --- |
+| `stimulus(drive, moment) -> drive` | the drive of a moment before the settle with what the memory adds: the trace or history read, the recall memory's address of `moment.code`, the store's read under `moment.place` (of the drive without one; nothing when `moment.stores` is false, as under an episodic vote) |
+| `branch()` | a private copy for an imagined branch, which reads the live state and writes none |
+| `begin(keep=False)` | the streams begin afresh as `Brain.reset` begins them: the stores keep their records, and with `keep` the recall memory its slots |
+| `reset(batch, rows=None)`, `keep(rows)` | fresh streams, all or `rows`; the state of `rows` kept |
+| `to_dict()`, `arrays()` | the settings and counts, and the arrays a checkpoint keeps under `memories/<name>/` |
+
+`Memories.stimulus(drive, moment)` applies every member in order.
 
 ## Streams (`cadence.stream`)
 

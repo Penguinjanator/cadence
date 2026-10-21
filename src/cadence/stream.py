@@ -150,6 +150,27 @@ class Trace:
             "neurons": int(len(self.glow)),
         }
 
+    # -- the memory contract (``cadence.memories``)
+
+    def stimulus(self, drive: np.ndarray, moment: Any = None) -> np.ndarray:
+        """The trace read into a drive copy (``stimulate``)."""
+        return self.stimulate(drive)
+
+    def branch(self) -> Trace:
+        """A private copy for an imagined branch, its arrays its own."""
+        branch = copy(self)
+        for name in ("trace", "last", "cold"):
+            setattr(branch, name, getattr(self, name).copy())
+        return branch
+
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh."""
+        self.reset(0)
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps."""
+        return {name: getattr(self, name) for name in ("trace", "last", "cold")}
+
 
 @dataclass
 class Efference(Trace):
@@ -275,6 +296,26 @@ class History:
             "target": self.target,
             "neurons": int(len(self.glow)),
         }
+
+    # -- the memory contract (``cadence.memories``)
+
+    def stimulus(self, drive: np.ndarray, moment: Any = None) -> np.ndarray:
+        """The history read into a drive copy (``stimulate``)."""
+        return self.stimulate(drive)
+
+    def branch(self) -> History:
+        """A private copy for an imagined branch, its trace its own."""
+        branch = copy(self)
+        branch.trace = self.trace.copy()
+        return branch
+
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh."""
+        self.reset(0)
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps."""
+        return {"trace": self.trace}
 
 
 class _Moment(NamedTuple):
@@ -672,6 +713,37 @@ class Recall:
         end is committed; once it is, that read is the moment's, so the act it decides keeps
         the read's eligibility and ``attended`` describes it."""
         self.last, self._attended = reading
+
+    # -- the memory contract (``cadence.memories``)
+
+    def stimulus(self, drive: np.ndarray, moment: Any) -> np.ndarray:
+        """The moment's address read into a drive copy (``stimulate`` with its code)."""
+        return self.stimulate(drive, moment.code)
+
+    def branch(self) -> Recall:
+        """A private copy for an imagined branch (``imagined``)."""
+        return self.imagined()
+
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh: with ``keep`` each ends an episode and its slots stay
+        (``end``), else the slots are emptied; the address map is learned and stays."""
+        if keep:
+            self.end(self.streams)
+        else:
+            self.reset(0)
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps: the slots, the address map, the streams whose latest
+        slot closed an episode (while one does) and the window's previous events."""
+        out = {
+            name: getattr(self, name)
+            for name in ("keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b")
+        }
+        if self.ended.any():
+            out["ended"] = self.ended
+        if self.window > 1:
+            out["past"] = self.past
+        return out
 
     def imagined(self) -> Recall:
         """A private copy for an imagined branch: it reads the live slots and writes none; the
@@ -1502,6 +1574,32 @@ class FastSynapses:
         key, for a memory keyed on a code of the observation rather than on neurons."""
         out = drive if inplace else np.array(drive, dtype=float)
         out[:, self._post_columns] += self.read(out) if key is None else self.recall(key)
+        return out
+
+    # -- the memory contract (``cadence.memories``)
+
+    def stimulus(self, drive: np.ndarray, moment: Any) -> np.ndarray:
+        """The read added to a drive copy: under the moment's ``place`` key, or of the drive
+        itself without one; nothing where the stores do not read into the drive."""
+        if not moment.stores:
+            return drive
+        if moment.place is None:  # an instrument may wrap the drive's own read
+            return self.stimulate(drive)
+        return self.stimulate(drive, key=moment.place)
+
+    def branch(self) -> FastSynapses:
+        """An imagined branch reads the records and writes none: the memory itself."""
+        return self
+
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh; the records stay."""
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps: the ports, strengths, masses and the separator's
+        tables."""
+        out = {name: getattr(self, name) for name in ("pre", "post", "strength", "mass")}
+        if self.separator is not None:
+            out.update({"separator/" + k: v for k, v in self.separator.arrays().items()})
         return out
 
     def update(

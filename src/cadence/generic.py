@@ -52,6 +52,7 @@ from .code import LearnedCode
 from .connectome import Connectome
 from .genome import Genome, Projection, develop
 from .learning import Learner, LearnerConfig, learning_neuron_model
+from .memories import Memories, Moment
 from .memory import SynapticMemory
 from .plasticity import ActorCritic, ActorCriticConfig
 from .regions import Region, cortex, motor_cortex, prefrontal_cortex, slot_sizes, visual_cortex
@@ -1070,17 +1071,6 @@ def _actor_config(values: Any) -> ActorCriticConfig:
     return ActorCriticConfig(**values)
 
 
-def _store_arrays(memory: FastSynapses) -> dict[str, np.ndarray]:
-    """The arrays of an associative store: its ports, strengths and masses, the consolidated
-    records of a ``SynapticMemory`` and its separator's tables."""
-    arrays = {name: getattr(memory, name) for name in ("pre", "post", "strength", "mass")}
-    if memory.separator is not None:
-        arrays.update({"separator/" + k: v for k, v in memory.separator.arrays().items()})
-    if isinstance(memory, SynapticMemory):
-        arrays["consolidated"] = memory.consolidated
-    return arrays
-
-
 def _earlier_layout(
     saved: dict[str, Any], data: Mapping[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -1618,6 +1608,30 @@ class Brain:
     def brain(self) -> NeuralGraph:
         """The current learned dynamics; learning can replace this NeuralGraph instance."""
         return self.learner.brain
+
+    @property
+    def memories(self) -> Memories:
+        """The present memories by name, in the order the brain reads and writes them, each
+        keeping one contract (``cadence.memories``): ``brain.memories["recall"]`` is
+        ``brain.recall``."""
+        return Memories(
+            {
+                "working_memory": self.working_memory,
+                "efference": self.efference,
+                "history": self.history,
+                "recall": self.recall,
+                "hippocampus": self.hippocampus,
+            }
+        )
+
+    def _read_moment(self, x: np.ndarray, code: np.ndarray, place: Any = None) -> Moment:
+        """What the memories read of a moment: the store reads under the place key with a
+        code (computed here unless given, only where the store reads into the drive), the
+        drive itself without one, and nothing under an episodic vote."""
+        reads = self.hippocampus is not None and not self.memory_choice
+        if reads and self._coded_keys and place is None:
+            place = self._placed(x)
+        return Moment(x, code, place if self._coded_keys else None, not self.memory_choice)
 
     @property
     def pending_feedback(self) -> bool:
@@ -2928,22 +2942,10 @@ class Brain:
         region = self.learned_code
         if region is not None and (region.output != "raw" or region.held):
             drive = self._unit_read(x, drive, memory=memory)
-        if memory and self.working_memory is not None:
-            drive = self.working_memory.stimulate(drive)
-        if memory and self.efference is not None:
-            drive = self.efference.stimulate(drive)
-        if memory and self.history is not None:
-            drive = self.history.stimulate(drive)
-        if memory and self.recall is not None:
-            # the moment's address, before its settle, reads the stream's slots
-            drive = self.recall.stimulate(drive, code)
-        if memory and self.hippocampus is not None and not self.memory_choice:
-            # without a code the call reads the drive itself (an instrument may wrap it)
-            drive = (
-                self.hippocampus.stimulate(drive)
-                if not self._coded_keys
-                else self.hippocampus.stimulate(drive, key=self._placed(x))
-            )
+        if memory:
+            # every memory in order; the recall memory's address, before the settle, reads the
+            # stream's slots
+            drive = self.memories.stimulus(drive, self._read_moment(x, code))
         return drive
 
     # -- independent-sample convenience operations (no mode switch)
@@ -3644,8 +3646,6 @@ class Brain:
         This imagines the brain's responses, not an unobserved environment's
         dynamics.
         """
-        from copy import copy
-
         from .brain import _copy_state
 
         if (
@@ -3670,18 +3670,11 @@ class Brain:
         current = _copy_state(self._activity())
         if current is not None and len(np.atleast_2d(current.v)) != batch:
             raise ValueError("imagined batch must match the live streams; reset for new streams")
-        trace = copy(self.working_memory)
-        if trace is not None:
-            for name in ("trace", "last", "cold"):
-                setattr(trace, name, getattr(trace, name).copy())
-        echo = copy(self.efference)
-        if echo is not None:
-            for name in ("trace", "last", "cold"):
-                setattr(echo, name, getattr(echo, name).copy())
-        heard = copy(self.history)
-        if heard is not None:
-            heard.trace = heard.trace.copy()
-        recalled = None if self.recall is None else self.recall.imagined()
+        # every memory's private branch: the traces and the history follow the branch, the
+        # recall memory reads the live slots and writes none, the stores are read
+        branch = Memories({name: memory.branch() for name, memory in self.memories.items()})
+        trace, echo = branch.get("working_memory"), branch.get("efference")
+        heard, recalled = branch.get("history"), branch.get("recall")
         # the branch issues the act the brain would issue where the act is heard, by the copy
         # of the command; the episodic vote is read under the branch's own temporal context,
         # the stream's moved on privately by the branch's acts
@@ -3693,21 +3686,7 @@ class Brain:
             drive = self.stimulus(value, memory=False)
             code = self._coded(value)
             place = self._placed(value)
-            if trace is not None:
-                drive = trace.stimulate(drive)
-            if echo is not None:
-                drive = echo.stimulate(drive)
-            if heard is not None:
-                drive = heard.stimulate(drive)
-            if recalled is not None:
-                # the imagined moment addresses the live slots; nothing is written
-                drive = recalled.stimulate(drive, code)
-            if self.hippocampus is not None and not self.memory_choice:
-                drive = (
-                    self.hippocampus.stimulate(drive)
-                    if not self._coded_keys
-                    else self.hippocampus.stimulate(drive, key=place)
-                )
+            drive = branch.stimulus(drive, self._read_moment(value, code, place))
             phase = self._equilibrate(
                 drive, current, budget=budget << self._stepping, tolerance=tolerance
             )
@@ -4329,16 +4308,10 @@ class Brain:
         if not isinstance(keep_arousal, bool):
             raise ValueError("keep_arousal must be boolean")
         self.basal_ganglia.reset()
-        if self.working_memory is not None:
-            self.working_memory.reset(0)
-        if self.efference is not None:
-            self.efference.reset(0)
-        if self.history is not None:
-            self.history.reset(0)
-        if self.recall is not None and keep_memory:
-            self.recall.end(self.recall.streams)  # the slots stay, the moment before is fresh
-        elif self.recall is not None:
-            self.recall.reset(0)  # the slots are emptied; the address map is learned and stays
+        for memory in self.memories.values():
+            # the streams begin afresh; the stores' records stay, and with keep_memory the
+            # recall memory's slots
+            memory.begin(keep=keep_memory)
         self._moment = None
         self._moment_code = None
         self._coded_moment = None
@@ -4470,39 +4443,22 @@ class Brain:
     def _saved_memories(self) -> dict[str, tuple[Any, dict[str, np.ndarray]]]:
         """Each present memory's settings and arrays, in the order the brain reads them."""
         agent = self.basal_ganglia
-        out: dict[str, tuple[Any, dict[str, np.ndarray]]] = {}
-        for name, trace in (("working_memory", self.working_memory), ("efference", self.efference)):
-            if trace is not None:
-                out[name] = (
-                    trace.to_dict(),
-                    {field: getattr(trace, field) for field in ("trace", "last", "cold")},
-                )
-        if self.history is not None:
-            out["history"] = (self.history.to_dict(), {"trace": self.history.trace})
-        recall = self.recall
-        if recall is not None:
-            arrays = {
-                field: getattr(recall, field)
-                for field in ("keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b")
-            }
-            if recall.ended.any():  # streams whose latest slot closed an episode
-                arrays["ended"] = recall.ended
-            if recall.window > 1:  # the window's previous events
-                arrays["past"] = recall.past
+        out: dict[str, tuple[Any, dict[str, np.ndarray]]] = {
+            name: (memory.to_dict(), memory.arrays()) for name, memory in self.memories.items()
+        }
+        if "recall" in out:
             # the actor's eligibility of the address map, and the pending action's contrast
+            arrays = out["recall"][1]
             if agent.trace_memory is not None:
                 arrays["trace"] = agent.trace_memory
             if agent._pending is not None and agent._pending_memory is not None:
                 arrays["pending"] = agent._pending_memory
-            out["recall"] = (recall.to_dict(), arrays)
-        if self.hippocampus is not None:
-            out["hippocampus"] = (self.hippocampus.to_dict(), _store_arrays(self.hippocampus))
         if self.memory_choice:
             temporal = self.context_memory
             arrays = {}
             if temporal is not None:
                 arrays.update(
-                    {"context_memory/" + k: v for k, v in _store_arrays(temporal).items()}
+                    {"context_memory/" + k: v for k, v in temporal.arrays().items()}
                 )
                 if self._context is not None:
                     arrays["context"] = self._context

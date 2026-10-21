@@ -40,6 +40,14 @@ learned weights, and `fit` starts with a `reset()`. Test a memory through `act`,
 `live` on a continuing stream. `save` keeps every memory in the table, per-stream traces
 included, and `Brain.load` continues the stream where it stopped.
 
+`brain.memories` holds the present memories by name, in the order the brain reads them before
+a settle and writes them after it: `working_memory`, `efference`, `history`, `recall` and
+`hippocampus`; `brain.memories["recall"]` is `brain.recall`. Every member keeps one contract
+(`cadence.memories`): `stimulus(drive, moment)` adds what it holds to the drive of a moment,
+`branch()` gives an imagined branch a private copy, `begin(keep=False)` starts its streams
+afresh as `reset` does, `reset(batch, rows=None)` and `keep(rows)` act on streams, and
+`to_dict()` and `arrays()` are what a checkpoint keeps of it, under `memories/<name>/`.
+
 Stores used directly, outside a composed brain (`FastSynapses`, `PatternSeparator`,
 `SynapticMemory`, the `Trace` family), are listed
 [at the end](#stores-outside-the-composed-brain).
@@ -318,12 +326,9 @@ assert forgetting.act(place, greedy=True)[0] == 0   # without them the newborn a
 
 | Memory | Erase it on a copy |
 | --- | --- |
-| Working trace | `brain.working_memory.reset(1)` |
-| Efference copy | `brain.efference.reset(1)` |
-| Heard history | `brain.history.reset(1)` |
-| Associative store | `brain.hippocampus.reset(1)` clears `F`; `brain.hippocampus.clear()` erases `C` too |
+| Any member of `brain.memories` | `brain.memories[name].reset(1)` empties its stream: the trace, the history, the recall memory's slots, the associative store's `F` |
+| Associative store | `brain.hippocampus.clear()` erases `C` too |
 | Episodic memory | `brain.hippocampus.clear()` and `brain.context_memory.clear()` ([episodic](episodic.md#check-that-the-memory-does-the-work)) |
-| Recall memory | `brain.recall.reset(1)` empties the slots |
 | Any memory read | `brain.retune(<memory>_amplitude=0.0)` silences it and keeps what it holds |
 
 ## Stores outside the composed brain

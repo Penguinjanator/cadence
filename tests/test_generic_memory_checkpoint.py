@@ -222,3 +222,37 @@ def test_malformed_memory_rejected_before_resumed_composition_is_constructed(
     with pytest.raises(ValueError):
         cd.Brain.load(path)
     assert path.read_bytes() == before
+
+
+def test_the_memories_are_one_ordered_family_under_one_contract():
+    """``brain.memories`` names the present memories in the order the brain reads them; each
+    member is the brain's own attribute and keeps the contract of ``cadence.memories``."""
+    from cadence.memories import Memories, Moment
+
+    brain = cd.Brain.compose(4, 2, modules=(8,), seed=3, recall=True, efference_amplitude=1.0,
+                             history_decays=(0.2, 0.8))
+    memories = brain.memories
+    assert isinstance(memories, Memories)
+    assert list(memories) == ["working_memory", "efference", "history", "recall", "hippocampus"]
+    for name, memory in memories.items():
+        assert memory is getattr(brain, name)
+        for method in ("stimulus", "branch", "begin", "reset", "keep", "to_dict", "arrays"):
+            assert callable(getattr(memory, method)), (name, method)
+    assert list(cd.Brain.compose(4, 2, modules=(8,), episodic=False).memories) == [
+        "working_memory"
+    ]
+    x = np.eye(4)[[0]]
+    brain.act(x, greedy=True)
+    drive = np.zeros((1, brain.connectome.n))
+    moment = Moment(x, x, None, True)
+    read = memories.stimulus(drive, moment)
+    for memory in memories.values():
+        drive = memory.stimulus(drive, moment)
+    np.testing.assert_array_equal(read, drive)  # the family reads as its members in order
+    branch = memories["working_memory"].branch()
+    branch.trace[:] = 7.0
+    assert not np.any(brain.working_memory.trace == 7.0)  # a branch's state is its own
+    brain.memories["recall"].reset(1)
+    assert brain.recall.slots == 0
+    with pytest.raises(ValueError, match="unknown memory"):
+        Memories({"cortex": brain.working_memory})
