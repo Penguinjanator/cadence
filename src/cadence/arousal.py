@@ -31,12 +31,7 @@ It applies after youth and once an outcome has entered the scale; a scale of zer
 after a default reset, leaves it at zero. A need is a level of reward and a scaled need
 a share of what the life's rewards spread over, so a life that pays rarely wants once its
 income falls below that share of its spread. A need scale of zero has no want of its own.
-A brain with an associative memory also forecasts the outcome of the action it chose, from
-the record it holds for that action in that situation; the error of that record against
-the outcome is a second surprise with its own usual size, and the moment's surprise is the
-larger of the two, each weighted by its gene (``value_surprise``, ``record_surprise``).
-The founder weighs the record's surprise at zero, so only the value forecast can surprise
-a brain until ``record_surprise`` is set above zero.
+The surprise is weighted by ``value_surprise``.
 Only the outcome of the brain's own best guess can surprise it and enters its usual
 forecast error. Every actual outcome enters the recent and long-run reward: exploring
 does not stop the brain from noticing what its life pays. The brain is aroused while
@@ -73,9 +68,10 @@ __all__ = ["Arousal", "ArousalConfig"]
 
 MODES = ("routine", "aroused")
 _TINY = 1e-12  # keeps the unit of surprise positive in a world that has paid nothing yet
-_SAVED_FORMAT = "cadence-arousal/2"  # the law at the founder need scale of zero
-_SCALED_FORMAT = "cadence-arousal/3"  # a save that carries a positive ``need_scale``
-_FORMATS = ("cadence-arousal/1", _SAVED_FORMAT, _SCALED_FORMAT)
+_FORMAT = "cadence-arousal/4"  # every gene of the law and the state it reads
+# The formats of 0.84.3, read through ``_earlier``: /2 at the founder need scale of zero, /3
+# with a positive one, /1 and the unversioned save before the reward count.
+_EARLIER = ("cadence-arousal/1", "cadence-arousal/2", "cadence-arousal/3")
 
 
 def _log_ratio(error: float, unit: float) -> float:
@@ -112,7 +108,6 @@ class ArousalConfig:
     heat: float = 2.0  # exploration temperature gained per unit of want
     youth: int = 100  # the first moments of a life are aroused
     value_surprise: float = 1.0  # weight of the surprise at a contradicted value forecast
-    record_surprise: float = 0.0  # weight of the surprise at a contradicted action record
     need: float = 0.0  # the reward per moment the body requires; the unmet share is a want
     need_scale: float = 0.0  # a need in reward scales, need_scale * scale, after youth
 
@@ -135,7 +130,6 @@ class ArousalConfig:
             raise ValueError("fast must be at least slow; equal rates remove the long-run want")
         _real("heat", self.heat, low=0.0)
         _real("value_surprise", self.value_surprise, low=0.0)
-        _real("record_surprise", self.record_surprise, low=0.0)
         _real("need", self.need, low=0.0)
         _real("need_scale", self.need_scale, low=0.0)
         if (
@@ -154,10 +148,10 @@ class ArousalConfig:
     def space() -> dict[str, tuple[Any, ...]]:
         """The gene space of the law for ``cadence.genes``; mutate ``to_dict()`` over it.
 
-        ``fast`` at ``slow`` removes the long-run want, a large ``tolerance`` removes surprise,
-        ``heat`` at zero removes the wider exploration, either surprise weight at zero
-        removes that channel and ``need`` at zero removes the need's want: the controls are
-        inside the space. A mutation that leaves ``fast`` below ``slow`` is refused at
+        ``fast`` at ``slow`` removes the long-run want, a large ``tolerance`` or
+        ``value_surprise`` at zero removes surprise, ``heat`` at zero removes the wider
+        exploration and ``need`` at zero removes the need's want: the controls are inside the
+        space. A mutation that leaves ``fast`` below ``slow`` is refused at
         construction. ``need_scale`` is left out, so a seeded mutation of the founder draws
         as it did before the gene and copies the founder zero to the child; to select on it,
         add it to the space, as ``{**ArousalConfig.space(), "need_scale": ("linear", 0.02,
@@ -172,7 +166,6 @@ class ArousalConfig:
             "heat": ("linear", 0.5, 0.0, 4.0),
             "youth": ("int", 0, 1000),
             "value_surprise": ("linear", 0.3, 0.0, 2.0),
-            "record_surprise": ("linear", 0.3, 0.0, 2.0),
             "need": ("linear", 0.02, 0.0, 1.0),
         }
 
@@ -200,12 +193,10 @@ class Arousal:
         self.outcomes = 0  # own outcomes that entered the usual TD error
         self.rewards = 0  # all outcomes that entered the recent and long-run reward
         self.spreads = 0  # outcomes that entered the reward scale
-        self.records = 0  # own outcomes that an action record had forecast
         self._square = 0.0
         self._recent = 0.0
         self._longrun = 0.0
         self._usual = 0.0
-        self._usual_record = 0.0
 
     # -- what the stream is used to: running averages, corrected for their short history
 
@@ -238,11 +229,6 @@ class Arousal:
     def usual(self) -> float:
         """The running size of the temporal-difference error."""
         return self._reading(self._usual, self.config.slow)
-
-    @property
-    def usual_record(self) -> float:
-        """The running size of the error of the action records' forecasts."""
-        return self._reading(self._usual_record, self.config.slow, self.records)
 
     def _want(self, longrun: float, recent: float, scale: float) -> float:
         """The shortfall of the recent reward below the long-run reward in reward scales,
@@ -294,7 +280,6 @@ class Arousal:
         *,
         own: bool = True,
         learned: bool = True,
-        record_error: float | None = None,
     ) -> tuple[float, float]:
         """Take one outcome: the unsigned TD error against the forecast made before it and
         the reward. Returns the surprise and the want that entered the level.
@@ -303,24 +288,16 @@ class Arousal:
         surprise it and enters its usual forecast error. Every actual outcome enters
         recent and long-run reward, so income stays current while exploring. ``learned`` says
         the brain learns from the outcome (it was sampled while aroused); learned outcomes
-        and the outcome that wakes the brain enter the reward scale. ``record_error`` is
-        the unsigned error of the record the brain held for the chosen action against the
-        outcome, when it held one; it is measured against its own usual size, and the
-        larger of the two weighted surprises enters the level. A stream's first own
-        outcome of either kind has no usual error to be measured against and is no
-        surprise."""
+        and the outcome that wakes the brain enter the reward scale. A stream's first own
+        outcome has no usual error to be measured against and is no surprise."""
         error, reward = abs(float(error)), float(reward)
         if not np.isfinite(error) or not np.isfinite(reward):
             raise ValueError("error and reward must be finite")
-        if record_error is not None:
-            record_error = abs(float(record_error))
-            if not np.isfinite(record_error):
-                raise ValueError("record_error must be finite")
         c = self.config
-        outcomes, spreads, records = self.outcomes, self.spreads, self.records
+        outcomes, spreads = self.outcomes, self.spreads
         rewards = self.rewards + 1
         recent, longrun, usual = self._recent, self._longrun, self._usual
-        usual_record, square, scale = self._usual_record, self._square, self.scale
+        square, scale = self._square, self.scale
         recent += c.fast * (reward - recent)
         longrun += c.slow * (reward - longrun)
         surprise = 0.0
@@ -332,14 +309,6 @@ class Arousal:
             unit = c.tolerance * previous_usual + c.floor * scale + _TINY
             if error > unit and not first:
                 surprise = c.value_surprise * _log_ratio(error, unit)
-            if record_error is not None:
-                previous_record = self.usual_record
-                first_record = records == 0
-                records += 1
-                usual_record += c.slow * (record_error - usual_record)
-                unit = c.tolerance * previous_record + c.floor * scale + _TINY
-                if record_error > unit and not first_record:
-                    surprise = max(surprise, c.record_surprise * _log_ratio(record_error, unit))
         expected = self._reading(longrun, c.slow, rewards)
         want = self._want(expected, self._reading(recent, c.fast, rewards), scale)
         level = c.decay * self.level + (1.0 - c.decay) * (surprise + want)
@@ -349,13 +318,12 @@ class Arousal:
                 square += c.slow * ((reward - expected) ** 2 - square)
             except OverflowError as exc:
                 raise ValueError("arousal moments must remain finite") from exc
-        if not np.isfinite([recent, longrun, usual, usual_record, square, level]).all():
+        if not np.isfinite([recent, longrun, usual, square, level]).all():
             raise ValueError("arousal moments must remain finite")
         # Admit the complete outcome together so an unrepresentable spread can be retried.
-        self.outcomes, self.spreads, self.records = outcomes, spreads, records
-        self.rewards = rewards
+        self.outcomes, self.spreads, self.rewards = outcomes, spreads, rewards
         self._recent, self._longrun, self._usual = recent, longrun, usual
-        self._usual_record, self._square, self.level = usual_record, square, level
+        self._square, self.level = square, level
         return surprise, want
 
     def lived(self, sweeps: int, learning_sweeps: int = 0) -> None:
@@ -369,27 +337,19 @@ class Arousal:
     # -- continuation
 
     def to_dict(self) -> dict[str, Any]:
-        """The complete state. A positive ``need_scale`` is saved under ``cadence-arousal/3``;
-        at the founder zero the gene is left out and the save is the ``cadence-arousal/2``
-        save of the law without it."""
-        config = self.config.to_dict()
-        scaled = config["need_scale"] > 0.0
-        if not scaled:
-            del config["need_scale"]
+        """The complete state under ``cadence-arousal/4``: every gene and every reading."""
         return {
-            "format": _SCALED_FORMAT if scaled else _SAVED_FORMAT,
-            "config": config,
+            "format": _FORMAT,
+            "config": self.config.to_dict(),
             "level": float(self.level),
             "age": int(self.age),
             "outcomes": int(self.outcomes),
             "rewards": int(self.rewards),
             "spreads": int(self.spreads),
-            "records": int(self.records),
             "square": float(self._square),
             "recent": float(self._recent),
             "longrun": float(self._longrun),
             "usual": float(self._usual),
-            "usual_record": float(self._usual_record),
             "moments": {mode: int(self.moments[mode]) for mode in MODES},
             "sweeps": {mode: int(self.sweeps[mode]) for mode in MODES},
             "learning_sweeps": int(self.learning_sweeps),
@@ -397,51 +357,28 @@ class Arousal:
 
     @classmethod
     def from_dict(cls, values: Any) -> Arousal:
-        """Restore a saved arousal, rejecting incomplete or invalid state."""
+        """Restore a saved arousal, rejecting incomplete or invalid state. A save of 0.84.3
+        (``cadence-arousal/1`` to ``/3``, or unversioned) loads as its state in this format."""
         if not isinstance(values, dict) or not isinstance(values.get("config"), dict):
             raise ValueError("invalid saved arousal")
-        if "format" in values and values["format"] not in _FORMATS:
-            raise ValueError("invalid saved arousal format")
-        config = values["config"]
-        genes = set(ArousalConfig.__slots__)
-        if "format" not in values and set(config) == genes - {"need", "need_scale"}:
-            # An unversioned save without ``need`` holds the zero-need law. The format
-            # marker distinguishes that schema from a save missing a gene.
-            config = {**config, "need": 0.0}
-        if values.get("format") != _SCALED_FORMAT:
-            # A save under an earlier format holds the founder need scale of zero, left out
-            # or written as zero; a save that carries a positive one is marked
-            # cadence-arousal/3.
-            if config.get("need_scale", 0.0) != 0.0:
-                raise ValueError("a scaled need belongs to saved arousal format cadence-arousal/3")
-            if "need_scale" not in config and set(config) == genes - {"need_scale"}:
-                config = {**config, "need_scale": 0.0}
-        if set(config) != genes:
-            raise ValueError("invalid or incomplete saved arousal config")
         try:
+            if values.get("format") != _FORMAT:
+                values = _earlier(values)
+            config = values["config"]
+            if set(config) != set(ArousalConfig.__slots__):
+                raise ValueError("invalid or incomplete saved arousal config")
             arousal = cls(ArousalConfig(**config))
-            # A cadence-arousal/1 or unversioned save counted only own outcomes in its income.
-            # Its readings load as saved, its reward count defaults to its outcome count, and
-            # further outcomes enter by the current law.
-            rewards = (
-                values["rewards"]
-                if values.get("format") in (_SAVED_FORMAT, _SCALED_FORMAT)
-                else values.get("rewards", values["outcomes"])
-            )
-            if isinstance(rewards, bool) or not isinstance(rewards, int) or rewards < 0:
-                raise ValueError("invalid saved arousal count: rewards")
-            for name in ("age", "outcomes", "spreads", "records", "learning_sweeps"):
+            for name in ("age", "outcomes", "rewards", "spreads", "learning_sweeps"):
                 value = values[name]
                 if isinstance(value, bool) or not isinstance(value, int) or value < 0:
                     raise ValueError(f"invalid saved arousal count: {name}")
-            arousal.age, arousal.outcomes = values["age"], values["outcomes"]
-            if rewards < arousal.outcomes:
+            if values["rewards"] < values["outcomes"]:
                 raise ValueError("invalid saved arousal count: rewards")
-            arousal.rewards = rewards
-            arousal.spreads, arousal.records = values["spreads"], values["records"]
+            arousal.age, arousal.outcomes = values["age"], values["outcomes"]
+            arousal.rewards, arousal.spreads = values["rewards"], values["spreads"]
             arousal.learning_sweeps = values["learning_sweeps"]
-            nonnegative = ("level", "square", "usual", "usual_record")
-            for name in ("level", "square", "recent", "longrun", "usual", "usual_record"):
+            nonnegative = ("level", "square", "usual")
+            for name in ("level", "square", "recent", "longrun", "usual"):
                 value = values[name]
                 if isinstance(value, bool) or not isinstance(value, (int, float)):
                     raise ValueError(f"invalid saved arousal value: {name}")
@@ -450,7 +387,6 @@ class Arousal:
             arousal.level = float(values["level"])
             arousal._square, arousal._recent = float(values["square"]), float(values["recent"])
             arousal._longrun, arousal._usual = float(values["longrun"]), float(values["usual"])
-            arousal._usual_record = float(values["usual_record"])
             for name in ("moments", "sweeps"):
                 counts = values[name]
                 if not isinstance(counts, dict) or set(counts) != set(MODES):
@@ -463,3 +399,51 @@ class Arousal:
         except (KeyError, TypeError) as exc:
             raise ValueError("invalid or incomplete saved arousal") from exc
         return arousal
+
+
+def _earlier(values: dict[str, Any]) -> dict[str, Any]:
+    """A save of 0.84.3 as its state in ``cadence-arousal/4``. Format /2 left out the founder
+    need scale of zero and /3 carried a positive one; /1 and the unversioned save counted
+    only own outcomes in their income, so their reward count defaults to their outcome count
+    and further outcomes enter by the current law; an unversioned save without ``need`` holds
+    the zero-need law. Every one of them carried the record channel, a second surprise at
+    the error of the outcome forecast by the action's record, which this version removed: at
+    its founder weight of zero it never entered the level, and its readings are dropped; a
+    save that weighed it otherwise is refused with a message naming 0.84.3."""
+    if "format" in values and values["format"] not in _EARLIER:
+        raise ValueError("invalid saved arousal format")
+    config = dict(values["config"])
+    genes = set(ArousalConfig.__slots__) | {"record_surprise"}
+    if "format" not in values and set(config) == genes - {"need", "need_scale"}:
+        # the format marker distinguishes that schema from a save missing a gene
+        config["need"] = 0.0
+    if values.get("format") != "cadence-arousal/3":
+        if config.get("need_scale", 0.0) != 0.0:
+            raise ValueError("a scaled need belongs to saved arousal format cadence-arousal/3")
+        if "need_scale" not in config and set(config) == genes - {"need_scale"}:
+            config["need_scale"] = 0.0
+    if set(config) != genes:
+        raise ValueError("invalid or incomplete saved arousal config")
+    weight = config.pop("record_surprise")
+    if isinstance(weight, bool) or weight != 0.0:
+        raise ValueError(
+            "this arousal was saved with record_surprise above zero, which this version "
+            "removed; load it with cadence-net 0.84.3"
+        )
+    records, usual = values["records"], values["usual_record"]
+    if isinstance(records, bool) or not isinstance(records, int) or records < 0:
+        raise ValueError("invalid saved arousal count: records")
+    if (
+        isinstance(usual, bool)
+        or not isinstance(usual, (int, float))
+        or not np.isfinite(usual)
+        or usual < 0
+    ):
+        raise ValueError("invalid saved arousal value: usual_record")
+    rewards = (
+        values["rewards"]
+        if values.get("format") in ("cadence-arousal/2", "cadence-arousal/3")
+        else values.get("rewards", values["outcomes"])
+    )
+    state = {k: v for k, v in values.items() if k not in ("records", "usual_record")}
+    return {**state, "format": _FORMAT, "config": config, "rewards": rewards}

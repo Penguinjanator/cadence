@@ -174,7 +174,7 @@ def test_a_greedy_act_the_vote_decided_is_owned_and_its_outcome_can_surprise(tmp
         for reward in [0.0] * 5 + [1.0]:  # as forecast five times, then far beyond it
             assert subject._lived[5]
             subject.live(x, reward=[reward])
-        assert subject.arousal.outcomes == subject.arousal.records == 6
+        assert subject.arousal.outcomes == 6
         reading = subject.last_arousal
         assert reading["mode"] == "aroused" and reading["surprise"] > 0 and reading["recorded"]
         assert subject.hippocampus.writes == writes + 1  # the outcome that woke it

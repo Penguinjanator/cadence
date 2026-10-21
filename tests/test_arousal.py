@@ -21,6 +21,16 @@ def calm_brain(seed: int = 0, **genes) -> cd.Brain:
     )
 
 
+def as_saved_by_0843(state: dict, *, records: int = 0, usual_record: float = 0.0) -> dict:
+    """An arousal state as 0.84.3 saved it: the record channel at its founder weight of zero
+    with its readings, and the need scale at zero left out (``cadence-arousal/2``)."""
+    config = {k: v for k, v in state["config"].items() if k != "need_scale"}
+    assert state["config"]["need_scale"] == 0.0
+    config["record_surprise"] = 0.0
+    return {**state, "format": "cadence-arousal/2", "config": config, "records": records,
+            "usual_record": usual_record}
+
+
 def snapshot(brain: cd.Brain) -> dict[str, np.ndarray]:
     agent, memory = brain.basal_ganglia, brain.hippocampus
     return {
@@ -190,11 +200,11 @@ def test_explored_outcomes_change_income_without_surprising_or_recalibrating_err
     arousal = cd.Arousal(cd.ArousalConfig(youth=0))
     for moment in range(300):
         arousal.outcome(0.1, float(moment % 2))
-    usual = (arousal.usual, arousal.usual_record, arousal.outcomes, arousal.records)
+    usual = (arousal.usual, arousal.outcomes)
     income = (arousal.recent, arousal.longrun)
     surprise, _ = arousal.outcome(5.0, -3.0, own=False)  # a costly exploration
     assert surprise == 0.0
-    assert (arousal.usual, arousal.usual_record, arousal.outcomes, arousal.records) == usual
+    assert (arousal.usual, arousal.outcomes) == usual
     assert arousal.recent < income[0] and arousal.longrun < income[1]
     assert arousal.rewards == 301
     assert arousal.outcome(5.0, -3.0)[0] > 1.0  # the same outcome of its own best guess
@@ -225,23 +235,39 @@ def test_equal_rates_remove_the_want_and_a_wide_tolerance_removes_surprise():
     assert no_surprise.outcome(1.5, 1.0)[0] == 0.0
 
 
-def test_a_contradicted_action_record_is_its_own_surprise_channel():
-    weighted = cd.Arousal(cd.ArousalConfig(youth=0, record_surprise=1.0))
-    silent = cd.Arousal(cd.ArousalConfig(youth=0, record_surprise=0.0))  # the founders
-    for arousal in (weighted, silent):
-        for moment in range(300):  # a usual TD error of 0.5, records that are right
-            arousal.outcome(0.5, float(moment % 2), record_error=0.0)
-        assert arousal.records == 300 and arousal.usual_record == 0.0
-    # the TD error of this outcome is usual; the record held for the action was wrong by 2
-    assert weighted.outcome(0.5, -1.0, record_error=2.0)[0] > 1.0 and weighted.aroused
-    assert silent.outcome(0.5, -1.0, record_error=2.0)[0] == 0.0 and not silent.aroused
-    assert silent.usual_record > 0.0  # the record channel is measured whatever its weight
-    none = cd.Arousal(cd.ArousalConfig(youth=0, record_surprise=1.0))
-    for moment in range(50):
-        none.outcome(0.5, float(moment % 2))  # a brain without records
-    assert none.records == 0 and none.outcome(0.5, -1.0)[0] == 0.0
-    with pytest.raises(ValueError):
-        none.outcome(0.5, 0.0, record_error=float("nan"))
+def test_the_record_channel_of_0843_is_refused_by_name_and_its_founder_saves_load():
+    """The record channel, a second surprise at the outcome the action's record forecast, is
+    removed: its gene is refused by name at compose, retune and in an arousal mapping, and a
+    state saved by 0.84.3 loads as the same state without the channel's readings at the
+    founder weight of zero, while a positive weight is refused; each refusal names 0.84.3."""
+    with pytest.raises(TypeError):
+        cd.ArousalConfig(record_surprise=0.0)
+    for genes in ({"arousal": True, "arousal_record_surprise": 0.0},
+                  {"arousal": {"record_surprise": 0.0}}):
+        with pytest.raises(ValueError, match="record_surprise was removed.*0.84.3"):
+            cd.Brain.compose(4, 2, modules=(8,), **genes)
+    brain = calm_brain()
+    with pytest.raises(ValueError, match="arousal_record_surprise was removed.*0.84.3"):
+        brain.retune(arousal_record_surprise=1.0)
+    assert "arousal_record_surprise" not in brain.describe()["genes"]
+    assert "record_surprise" not in cd.ArousalConfig.space()
+    arousal = cd.Arousal(cd.ArousalConfig(youth=2))
+    for value in (0.5, 1.0, 0.2):
+        arousal.outcome(value, value)
+        arousal.lived(7, 3)
+    state = arousal.to_dict()
+    assert state["format"] == "cadence-arousal/4" and state["config"]["need_scale"] == 0.0
+    assert "records" not in state and "usual_record" not in state
+    saved = as_saved_by_0843(state, records=2, usual_record=0.3)
+    assert cd.Arousal.from_dict(saved).to_dict() == state
+    weighed = {**saved, "config": {**saved["config"], "record_surprise": 0.5}}
+    with pytest.raises(ValueError, match="record_surprise above zero.*0.84.3"):
+        cd.Arousal.from_dict(weighed)
+    for key, bad in (("records", -1), ("usual_record", float("nan"))):
+        with pytest.raises(ValueError, match=key):
+            cd.Arousal.from_dict({**saved, key: bad})
+    with pytest.raises(ValueError, match="incomplete saved arousal"):
+        cd.Arousal.from_dict({k: v for k, v in saved.items() if k != "records"})
 
 
 def test_arousal_state_round_trips_and_rejects_corruption():
@@ -265,7 +291,7 @@ def test_legacy_arousal_without_need_migrates_without_changing_its_saved_state()
     for value in (0.5, 1.0, 0.2):
         arousal.outcome(value, value)
         arousal.lived(7, 3)
-    legacy = arousal.to_dict()
+    legacy = as_saved_by_0843(arousal.to_dict())
     del legacy["format"]
     del legacy["config"]["need"]
     restored = cd.Arousal.from_dict(legacy)
@@ -276,7 +302,7 @@ def test_legacy_arousal_without_need_migrates_without_changing_its_saved_state()
         corrupt = {**legacy, "config": {k: v for k, v in legacy["config"].items() if k != gene}}
         with pytest.raises(ValueError, match="incomplete saved arousal config"):
             cd.Arousal.from_dict(corrupt)
-    for format in (None, "cadence-arousal/0", "cadence-arousal/4"):
+    for format in (None, "cadence-arousal/0", "cadence-arousal/5"):
         with pytest.raises(ValueError, match="arousal format"):
             cd.Arousal.from_dict({**legacy, "format": format})
 
@@ -485,6 +511,7 @@ def test_a_legacy_saved_brain_continues_with_zero_need(tmp_path):
     with np.load(path) as archive:
         arrays = {key: archive[key] for key in archive.files}
     meta = json.loads(str(arrays["generic"]))
+    meta["arousal"] = as_saved_by_0843(meta["arousal"])  # an unversioned save before ``need``
     del meta["arousal"]["format"]
     del meta["arousal"]["config"]["need"]
     arrays["generic"] = np.array(json.dumps(meta))
@@ -560,25 +587,6 @@ def test_a_stepped_brain_continues_through_live_and_reset_begins_calm():
     brain.act(eye[[1]], greedy=True)  # another operation takes the stream
     with pytest.raises(RuntimeError, match="preceding action"):
         brain.live(eye[[2]], reward=[1.0])
-
-
-def test_live_forecasts_its_action_from_the_record_it_holds(tmp_path):
-    brain = calm_brain(seed=7)
-    eye = np.eye(4)
-    brain.live(eye[[0]])
-    assert brain.last_arousal["record_error"] is None  # no outcome yet
-    assert brain._lived[6] == pytest.approx(0.0)  # an empty memory forecasts nothing
-    brain.live(eye[[1]], reward=[1.0])  # the outcome of the first action, forecast 0
-    assert brain.last_arousal["record_error"] == pytest.approx(1.0)
-    twin = cd.Brain.load(brain.save(tmp_path / "life.npz"))
-    assert twin._lived[6] == pytest.approx(brain._lived[6])
-    graph = cd.Brain.compose(
-        4, 2, modules=(16,), seed=0, episodic=False, arousal=cd.ArousalConfig(youth=0)
-    )
-    graph.live(eye[[0]])
-    assert graph._lived[6] is None
-    graph.live(eye[[1]], reward=[1.0])
-    assert graph.last_arousal["record_error"] is None  # no memory, no record forecast
 
 
 def test_a_slotted_brain_lives_and_owns_only_its_best_guess_in_every_slot():

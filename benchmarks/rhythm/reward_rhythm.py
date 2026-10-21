@@ -115,7 +115,11 @@ def make_brain(seed: int, protocol: dict, arm: str) -> Brain:
         options["efference_amplitude"] = point["efference_amplitude"]
         options["efference_decay"] = point["efference_decay"]
     if arm not in ("step", "frozen"):
+        # the frozen protocols name the record channel's weight at its founder zero, the law
+        # without the channel, which the library removed after 0.84.3
         genes = {k: v for k, v in protocol["arousal"].items() if k != "note"}
+        if genes.pop("record_surprise", 0.0) != 0.0:
+            raise ValueError("record_surprise above zero needs cadence-net 0.84.3")
         options["arousal"] = cd.ArousalConfig(**genes)
     brain = Brain.compose(
         inputs.INPUTS, inputs.ACTIONS, modules=tuple(point["modules"]), seed=seed, **options

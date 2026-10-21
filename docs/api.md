@@ -177,8 +177,8 @@ than its own and a format name without its component; it also reads `cadence-gen
 
 ```text
 ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05,
-              slow=0.005, heat=2.0, youth=100, value_surprise=1.0,
-              record_surprise=0.0, need=0.0, need_scale=0.0)
+              slow=0.005, heat=2.0, youth=100, value_surprise=1.0, need=0.0,
+              need_scale=0.0)
 Arousal(config=None)
 ```
 
@@ -194,19 +194,23 @@ meaning of each gene are in [routine and repair](continuous.md#routine-and-repai
 
 | Member | Behaviour |
 | --- | --- |
-| `outcome(error, reward, *, own=True, learned=True, record_error=None) -> (surprise, want)` | Applies one outcome. Only `own` outcomes can surprise and enter `usual`; every outcome moves `recent` and `longrun`; `learned` outcomes, and any in youth or that leave the stream aroused, enter `scale`. An outcome whose statistics cannot stay finite raises `ValueError` and changes nothing. |
+| `outcome(error, reward, *, own=True, learned=True) -> (surprise, want)` | Applies one outcome. Only `own` outcomes can surprise and enter `usual`; every outcome moves `recent` and `longrun`; `learned` outcomes, and any in youth or that leave the stream aroused, enter `scale`. An outcome whose statistics cannot stay finite raises `ValueError` and changes nothing. |
 | `lived(sweeps, learning_sweeps=0)` | Counts one moment in `moments`, `sweeps` (per mode), `learning_sweeps` and `age`. |
 | `reset()` | Begins another stream calm; clears the averages and their counts, the reward scale among them (so a scaled need is zero until outcomes enter it again), keeps `age` and the work counts. `Brain.reset(keep_arousal=True)` leaves the state as it is. |
-| `to_dict()`, `Arousal.from_dict(values)` | The complete state, marked `cadence-arousal/2`; `cadence-arousal/3` carries a positive `need_scale`, which a save at the founder 0 leaves out. |
-| `level`, `age`, `moments`, `sweeps`, `learning_sweeps`, `outcomes`, `rewards`, `records`, `spreads`, `config` | State and counters: `outcomes` counts own outcomes, `rewards` all outcomes, `records` record-channel outcomes. |
-| `aroused`, `mode`, `want`, `heat`, `usual`, `usual_record`, `recent`, `longrun`, `scale` | Read-only: `aroused` while `level >= threshold` or within `youth`; `heat` is `1 + config.heat * want`. |
+| `to_dict()`, `Arousal.from_dict(values)` | The complete state with every gene, marked `cadence-arousal/4`. |
+| `level`, `age`, `moments`, `sweeps`, `learning_sweeps`, `outcomes`, `rewards`, `spreads`, `config` | State and counters: `outcomes` counts own outcomes, `rewards` all outcomes. |
+| `aroused`, `mode`, `want`, `heat`, `usual`, `recent`, `longrun`, `scale` | Read-only: `aroused` while `level >= threshold` or within `youth`; `heat` is `1 + config.heat * want`. |
 
-`from_dict` reads `cadence-arousal/3`, `cadence-arousal/2`, `cadence-arousal/1` and
-unversioned states. It requires every gene and continuation field, except that an unversioned
-state with the gene set before `need` loads with `need=0` and a state under a format before
-`cadence-arousal/3` loads with `need_scale=0`, left out or written as zero; a positive
-`need_scale` under an earlier format is refused. A `cadence-arousal/1` or unversioned state
-without `rewards` takes it from `outcomes`.
+`from_dict` reads `cadence-arousal/4` and the states of 0.84.3: `cadence-arousal/3`,
+`cadence-arousal/2`, `cadence-arousal/1` and unversioned states. It requires every gene and
+continuation field, except that an unversioned state with the gene set before `need` loads
+with `need=0` and a state under a format before `cadence-arousal/3` loads with
+`need_scale=0`, left out or written as zero; a positive `need_scale` under an earlier format
+is refused. A `cadence-arousal/1` or unversioned state without `rewards` takes it from
+`outcomes`. The states of 0.84.3 carry the record channel, a second surprise at the outcome
+the action's record forecast, which this version removed: one weighed at the founder zero
+loads without its readings, and one weighed above zero is refused with a message naming
+0.84.3.
 
 ## Streams (`cadence.stream`)
 

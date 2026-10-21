@@ -7,8 +7,8 @@ import cadence as cd
 
 
 def test_checkpoint_cannot_silently_replace_a_missing_arousal_gene_with_its_default():
-    # a save at the founder need scale of zero leaves that gene out (cadence-arousal/2); a save
-    # above zero carries it (cadence-arousal/3), and either save misses no other gene
+    # a save carries every gene (cadence-arousal/4), at the founder need scale of zero as above
+    # it, and misses none
     for config in (cd.ArousalConfig(youth=7, heat=3.0),
                    cd.ArousalConfig(youth=7, heat=3.0, need_scale=0.2)):
         arousal = cd.Arousal(config)

@@ -430,19 +430,19 @@ def check_waiting_needs_a_live_action_awaiting_its_outcome() -> None:
 
 
 def check_a_routine_outcome_after_a_wait_is_measured_against_its_own_forecasts() -> None:
-    """A calm action waits; its outcome is measured against the record held when it acted."""
+    """A calm action waits; its outcome is measured against the forecast made when it acted."""
     brain = _life(youth=0)
     for _ in range(6):
         brain.live(EYE[[0]], reward=None if brain.decision_id is None else [0.0])
     lived = brain._lived
     assert not lived[3] and brain.last_arousal["mode"] == "routine"
-    action, record = int(lived[1][0]), lived[6]
+    action, forecast = int(lived[1][0]), lived[2]
     recalled = {cue: brain.hippocampus.recall(EYE[[cue]])[0].copy() for cue in (1, 2)}
     for frame in (EYE[[1]], EYE[[2]]):
         brain.wait(frame)
+    assert brain._lived is not None and brain._lived[2] == forecast  # the waits keep it
     brain.live(EYE[[3]], reward=[-1.0], decision_id=brain.decision_id)
     reading = brain.last_arousal
-    assert reading["record_error"] == pytest.approx(abs(-1.0 - record))
     assert reading["mode"] == "aroused" and reading["recorded"] and not reading["learned"]
     assert brain.hippocampus.recall(EYE[[0]])[0][action] < -0.5  # where the action was chosen
     for cue, value in recalled.items():  # and not where the stream waited

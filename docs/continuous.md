@@ -16,10 +16,9 @@ of a brain composed with `arousal=True`. A calm brain answers with the greedy ch
 of one qualified settle and learns nothing: no eligibility phases, no parameter
 change, no associative write; earlier eligibility fades one step. Two things rouse it:
 
-- **Surprise**: the outcome contradicts the forecast made before acting, which is
-  the critic's value of the situation and, weighed by `record_surprise`, the
-  associative record held for the chosen action. Only outcomes of the brain's own
-  greedy choices can surprise it or move its usual error.
+- **Surprise**: the outcome contradicts the forecast made before acting, the critic's
+  value of the situation. Only outcomes of the brain's own greedy choices can surprise
+  it or move its usual error.
 - **Want**: the recent reward falls below what this life usually pays, below
   the body's `need`, or below `need_scale` times the spread of the rewards the
   brain has learned from. The need's want is the unmet share of the need; it never
@@ -81,8 +80,7 @@ level    = decay * level + (1 - decay) * (surprise + want)
 want term with a zero denominator is zero. The `need_scale` term reads the scale as it
 stood before the outcome entered it, applies after `youth` and is zero while no outcome
 has entered the scale; the want and heat read afterwards use the scale as it stands. The
-record channel has its own `usual`, and surprise is the larger weighted channel. The
-brain is aroused while `level >= threshold` and for its first `youth` moments. Set genes
+surprise is weighted by `value_surprise`. The brain is aroused while `level >= threshold` and for its first `youth` moments. Set genes
 with `arousal_<field>` at `compose` or `retune`
 ([composition](brain.md#defaults-and-expert-overrides)); construction refuses values
 outside their ranges, a negative `need` or `need_scale` and `fast < slow`.
@@ -98,13 +96,12 @@ outside their ranges, a negative `need` or `need_scale` and `fast < slow`.
 | `heat` | 2.0 | temperature gain per unit of want on the heated slot; 0 removes it |
 | `youth` | 100 | first moments of a life spent aroused |
 | `value_surprise` | 1.0 | weight of surprise at the critic's forecast |
-| `record_surprise` | 0.0 | weight of surprise at the action's record; on the [odour nursery](../benchmarks/reversal/README.md#how-the-operating-point-and-the-founders-were-selected) it wakes lives sooner and leaves more of them searching too briefly |
 | `need` | 0.0 | reward per moment the body requires; 0 removes the need's want |
 | `need_scale` | 0.0 | the need as a share of the reward scale, `need_scale * scale`, after youth; 0 removes it |
 
 `brain.last_arousal` snapshots the latest moment: `mode`, `level`, `error`,
-`record_error`, `surprise`, `want`, `temperature`, per-slot `temperatures`,
-`heated_slot`, `learned`, `recorded`, `sweeps` and `learning_sweeps`; it is `None`
+`surprise`, `want`, `temperature`, per-slot `temperatures`, `heated_slot`, `learned`,
+`recorded`, `sweeps` and `learning_sweeps`; it is `None`
 after construction, reset or load. `brain.arousal` counts `moments` and `sweeps` per
 mode, `learning_sweeps` and `age` ([class methods](api.md#arousal-cadencearousal)).
 An action that `step` or `act` sampled is adopted, so a bootstrapped brain continues
@@ -117,9 +114,8 @@ adaptation, and a minority of lives never find the moved reward. In an unchangin
 world, reward noise rouses the founders for a small share of moments. A routine moment
 pays one full settle.
 
-`need_scale` is opt-in: at the founder 0 every brain, checkpoint and composed life is as
-without it, and a checkpoint carries the gene (`cadence-arousal/3`) only above zero. It is
-outside `ArousalConfig.space()`, so seeded mutations at the founder draw as before; add it to
+`need_scale` is opt-in: at the founder 0 every brain and composed life is as without it. It
+is outside `ArousalConfig.space()`, so seeded mutations at the founder draw as before; add it to
 a space to select on it. A positive `need_scale` rouses an adult whose income falls below
 that share of its learned reward spread, whatever the unit of its rewards, and leaves a life
 that never paid at all calm (its scale is zero). At `need_scale=0.1`, with the actor step at

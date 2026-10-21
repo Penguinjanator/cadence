@@ -133,6 +133,8 @@ def taught(brain: cd.Brain) -> list[int]:
 # member and metadata names and the contents of every array of the checkpoint it saves. The
 # descriptions of the founders with arousal are those of the branch the region merged into,
 # whose description carries the arousal gene need_scale.
+# Where the library later removed a setting that was inert at its founder, the description
+# and checkpoint digests were re-recorded after every other value matched the recording.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
@@ -151,8 +153,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
         "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "2a2bdcd2f204f66b80c2c67d1af5d1c84dad39220a13caefc2a08bdc42986ac0",
-        "describe": "7cb38f49e64f5ad4b616a14f7bd06c267879b0d0a0b94be05002eb858cb966df",
+        "checkpoint": "1b4639403e32a944d47278376375f4399a4bf2050e8d5080e72cf1990e2b4e96",
+        "describe": "adebb46ebcb3464b2220906424262e8327e634bca20d7172efda5c5eb06bc197",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -163,8 +165,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-generic/8",
         "names": "17b2b7a61fa822e150659b765cef59befb6219db6791a720d7ff79b32498636c",
-        "checkpoint": "41f1e5283168a9f7969ae08f166ef1e3169f390edc59f3ce361bea31c5524321",
-        "describe": "87c9aa2d717c4adacce092e045b0857256457fd5782339c85e20037c49665613",
+        "checkpoint": "f6b6143a21156202c0f3ff6d8df7584a3a32c3b53ba7cd236aed3204b9c28aab",
+        "describe": "3b5a46746367a0363d856eb7e2ece908ed4efde0e5cc35f6694851a33131b2ec",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
@@ -185,8 +187,8 @@ FOUNDERS: dict[str, dict] = {
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-generic/6",
         "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "7b8bf9c566606464d87941f321b4aac2421a7c07b882959ae3bc160512efa90e",
-        "describe": "1d4172fe6bd3a8d533e96fa7abc687fe2bde7fdc8d392f28831b69cffd61d879",
+        "checkpoint": "dc255ebfda147493824364b2ff5ba4fffb47a8d73eeaa016f78c7b832dee8e85",
+        "describe": "946072ae83d93cfa22da0c811ea513d2fc9302c69430defad3cf26840d1592af",
     },
 }
 
@@ -516,9 +518,9 @@ def test_the_key_of_a_decision_is_its_moments_code_and_the_history_hears_the_cod
     key = brain.recall.keys[0, 0]  # the moment's key: the phase's code in the stream's context
     heard = key[:UNITS] / np.sqrt(0.5)  # the history hears the key's code part at unit length
     np.testing.assert_allclose(brain.history.trace, 0.5 * heard[None, :], atol=1e-9)
-    assert brain._lived[7] is not None
+    assert brain._lived[6] is not None
     # the keys are the phase's code; the whole settle moves the code units within tolerance
-    np.testing.assert_allclose(brain._lived[7], first, atol=1e-3)
+    np.testing.assert_allclose(brain._lived[6], first, atol=1e-3)
     np.testing.assert_allclose(key, first[0], atol=1e-3)
     brain.live(tokens(9), reward=[1.0])  # the outcome wakes the brain: recorded under the code
     assert brain.hippocampus.writes >= 1
@@ -839,7 +841,7 @@ def test_the_place_stores_key_on_the_context_free_code_and_the_others_on_the_mom
     np.testing.assert_allclose(place, brain.observation_code(token), atol=5e-3)
     assert not np.array_equal(key, place)  # the context predicted the token's units
     np.testing.assert_array_equal(brain.recall.keys[0, -1], key[0])  # the slot: in context
-    np.testing.assert_array_equal(brain._lived[7], place)  # the decision's place key
+    np.testing.assert_array_equal(brain._lived[6], place)  # the decision's place key
     np.testing.assert_array_equal(brain._paths[0][-1][2], place[0])  # the path: the place key
     width = brain.code_width
     np.testing.assert_allclose(  # the context key: the moment's key with the history

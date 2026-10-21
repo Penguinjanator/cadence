@@ -115,6 +115,8 @@ def lived(brain: cd.Brain) -> list[int]:
 # (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
 # The recall memory's checkpoint metadata changed since, so a brain with it has its
 # checkpoint contents compared with those of the same life lived again instead.
+# Where the library later removed a setting that was inert at its founder, the description
+# and checkpoint digests were re-recorded after every other value matched the recording.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
@@ -133,7 +135,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
         "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "2a2bdcd2f204f66b80c2c67d1af5d1c84dad39220a13caefc2a08bdc42986ac0",
+        "checkpoint": "1b4639403e32a944d47278376375f4399a4bf2050e8d5080e72cf1990e2b4e96",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
@@ -168,7 +170,7 @@ FOUNDERS: dict[str, dict] = {
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
         "format": "cadence-generic/6",
         "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "7b8bf9c566606464d87941f321b4aac2421a7c07b882959ae3bc160512efa90e",
+        "checkpoint": "dc255ebfda147493824364b2ff5ba4fffb47a8d73eeaa016f78c7b832dee8e85",
     },
     "image": {
         # an image shape through Brain.build: the hippocampus of earlier releases keyed on
@@ -247,15 +249,19 @@ def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, 
 
 
 def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
-    """The fixture, the recall founder after its life at the final format: it loads and saves
-    again with the same arrays and metadata, continues, and the continued life's checkpoint
-    reloads and saves the same; on the NumPy solver the continuation is the recorded one and
-    the same life lived again saves the fixture's bytes."""
+    """The fixture, the recall founder after its life saved by 0.84.3: it loads, and saved
+    again in this version's format it reloads and saves the same; it continues, and the
+    continued life's checkpoint reloads and saves the same; on the NumPy solver the
+    continuation is the recorded one and the same life lived again saves what the loaded
+    fixture saves."""
     fixture = FIXTURES / "recalled.npz"
     provenance = json.loads((FIXTURES / "provenance.json").read_text())
     brain = cd.Brain.load(fixture)
     assert brain.sparse_code is None and brain.recall is not None and brain.memory_choice
-    assert checkpoint_digest(brain.save(tmp_path / "again.npz")) == checkpoint_digest(fixture)
+    again = brain.save(tmp_path / "again.npz")
+    assert checkpoint_digest(cd.Brain.load(again).save(tmp_path / "twice.npz")) == (
+        checkpoint_digest(again)
+    )
     acts = [int(np.asarray(brain.live(STREAM[(t + 1) % 4], reward=[float(t % 2)]))[0])
             for t in range(6)]
     continued = brain.save(tmp_path / "continued.npz")
@@ -268,7 +274,7 @@ def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
         relived = cd.Brain.compose(inputs, actions, **options)
         FOUNDERS["recalled"]["life"](relived)
         assert checkpoint_digest(relived.save(tmp_path / "relived.npz")) == (
-            checkpoint_digest(fixture)
+            checkpoint_digest(again)
         )
     with np.load(fixture, allow_pickle=False) as data:
         meta = json.loads(str(data["generic"]))

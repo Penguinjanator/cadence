@@ -32,6 +32,14 @@ _BOOLEAN = {"centered", "qualified", "surprise", "center_scale", "critic_normali
 _INTEGER = {"free_steps", "nudged_steps", "damping", "eligibility_steps", "youth"}
 _STRING = {"nudge", "critic_signal"}
 _OPTIONAL = {"eta_bias", "tolerance", "eligibility_steps"}
+# Settings of 0.84.3 that this version removed, refused by name with a message naming that
+# release, at ``compose`` and ``retune`` and in an arousal mapping.
+_REMOVED = {"arousal_record_surprise"}
+
+
+def removed(name: str) -> str:
+    """The refusal of a setting this version removed."""
+    return f"{name} was removed in this version; cadence-net 0.84.3 takes it"
 
 
 def real(name: str, value: Any, *, low: float = -np.inf, high: float = np.inf) -> float:
@@ -60,6 +68,8 @@ def split_genes(genes: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
     for name, value in values.items():
         if name in ("eta", "eta_bias"):
             raise TypeError(f"{name} is ambiguous; use actor_{name} or learning_{name}")
+        if name in _REMOVED:
+            raise ValueError(removed(name))
         prefix, _, field = name.partition("_")
         if prefix not in _FIELDS or field not in _FIELDS[prefix]:
             raise TypeError(f"unknown brain setting: {name!r}")
@@ -74,6 +84,9 @@ def configured(base: Config, changes: Mapping[str, Any], prefix: str) -> Config:
         raise ValueError(f"{prefix} configuration must be {expected.__name__}")
     updates = dict(changes)
     unknown = set(updates) - _FIELDS[prefix]
+    for name in sorted(unknown):
+        if f"{prefix}_{name}" in _REMOVED:
+            raise ValueError(removed(f"{prefix}_{name}"))
     if unknown:
         raise TypeError(f"unknown {prefix} setting: {sorted(unknown)[0]!r}")
     # Config constructors validate ranges and relationships. Validate scalar kinds

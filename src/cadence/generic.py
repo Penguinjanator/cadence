@@ -799,7 +799,7 @@ def _validate_life_state(
             or not isinstance(lived.get("own"), bool)
         ):
             raise ValueError("invalid saved lived forecast")
-        recorded = lived.get("recorded")
+        recorded = lived.get("recorded")  # the record channel's forecast, which 0.84.3 saved
         if recorded is not None and (
             isinstance(recorded, bool)
             or not isinstance(recorded, (int, float))
@@ -1529,14 +1529,11 @@ class Brain:
         self._last_settlement: Mapping[str, Any] | None = None
         # ``live``: the arousal of the stream, and the action it issued that awaits an outcome
         # (observations, action, the value forecast made before the outcome, sampled?, its
-        # free state, the brain's own best guess?, the record's forecast of the outcome, the
-        # code it was keyed on with a learned code)
+        # free state, the brain's own best guess?, the code it was keyed on with a learned
+        # code)
         self.arousal: Arousal | None = None if arousal is None else Arousal(arousal)
         self._lived: (
-            tuple[
-                np.ndarray, np.ndarray, float, bool, BrainState, bool, float | None,
-                np.ndarray | None,
-            ]
+            tuple[np.ndarray, np.ndarray, float, bool, BrainState, bool, np.ndarray | None]
             | None
         ) = None
         self._last_arousal: Mapping[str, Any] | None = None
@@ -3166,11 +3163,10 @@ class Brain:
         working trace, the heard history and the recall memory's slots advance at every
         accepted moment, calm or aroused; the recall memory's address map changes in lessons
         and, with ``recall_address_reward``, by the outcomes of sampled actions. Its
-        forecasts for the preceding action were the critic's value when it acted and, when it has an
-        associative memory, the record it held for that action; the outcome is
-        measured against the value with the value of the present state and against
-        the record as it is, and a surprising outcome or a reward below what life
-        usually pays raises the arousal (``Arousal`` gives the law). Only the outcome of the
+        forecast for the preceding action was the critic's value when it acted; the outcome
+        is measured against it with the value of the present state, and a surprising outcome
+        or a reward below what life usually pays raises the arousal (``Arousal`` gives the
+        law). Only the outcome of the
         brain's own best guess can surprise it: the act it would issue greedily, read when the
         action is issued, with ``memory_choice`` the readout with the episodic vote, so a
         greedy act the vote decided is its own. Aroused, the brain samples its
@@ -3223,7 +3219,6 @@ class Brain:
             raise ValueError("done must be one boolean for the stream")
         answer: tuple[np.ndarray, BrainState] | None = None
         error = surprise = want = 0.0
-        record_error = None if lived is None or lived[6] is None else abs(float(r[0]) - lived[6])
         sweeps = learning_sweeps = 0
         learned = recorded = False
         if sampled:
@@ -3246,9 +3241,7 @@ class Brain:
             # enters its income. An adopted action has no record and counts as its own.
             own = True if lived is None else lived[5]
             try:
-                surprise, want = arousal.outcome(
-                    error, float(r[0]), own=own, learned=sampled, record_error=record_error
-                )
+                surprise, want = arousal.outcome(error, float(r[0]), own=own, learned=sampled)
             except ValueError as exc:
                 if sampled:
                     raise ValueError(
@@ -3279,7 +3272,7 @@ class Brain:
                 assert lived is not None
                 if not self.memory_choice:
                     self._record(
-                        self._key_of(lived[0], lived[7]), lived[1], r,
+                        self._key_of(lived[0], lived[6]), lived[1], r,
                         SynapticMemory.salience_vector(np.abs(r), 1),
                     )
                     recorded = True
@@ -3287,7 +3280,7 @@ class Brain:
                     # the outcome that woke the brain surprised it: known at any reward
                     self._record_outcome(
                         lived[0], lived[1], r, ended, np.ones(1, bool), woken=True,
-                        code=lived[7],
+                        code=lived[6],
                     )
                     recorded = True
                 if recorded and not self.memory_choice:
@@ -3340,7 +3333,6 @@ class Brain:
             aroused,
             state,
             best == chosen,
-            self._recorded(place, chosen),
             place.copy() if self.learned_code is not None else None,
         )
         self._last_arousal = MappingProxyType(
@@ -3348,7 +3340,6 @@ class Brain:
                 "mode": arousal.mode,
                 "level": float(arousal.level),
                 "error": float(error),
-                "record_error": None if record_error is None else float(record_error),
                 "surprise": float(surprise),
                 "want": float(want),
                 "temperature": None if temperature is None else float(temperature),
@@ -3460,19 +3451,6 @@ class Brain:
         """The stream's current activity, warm start of its next settle."""
         awaited = self._awaited()
         return self.basal_ganglia.state if awaited is None else awaited
-
-    def _recorded(self, code: np.ndarray, chosen: list[int]) -> float | None:
-        """The outcome the associative memory forecasts for the chosen action in this
-        situation (``code`` its observation code): the mean of the records it holds for the
-        chosen motor neurons, in reward units. None without a memory, or when its reads are
-        silent."""
-        memory = self.hippocampus
-        if memory is None or not np.isfinite(memory.amplitude) or memory.amplitude == 0.0:
-            return None
-        units = np.asarray(chosen) + np.asarray(self.learner.slot_offsets)[: len(chosen)]
-        read = self._vote(code, self._decided(1)) if self.memory_choice else memory.recall(code)
-        values = np.asarray(read)[0, units] / memory.amplitude
-        return float(np.mean(values)) if np.isfinite(values).all() else None
 
     def _forecast(self, x: np.ndarray, ended: bool) -> tuple[np.ndarray, BrainState]:
         """Read the next value without changing the stream. A finished episode's
@@ -4320,10 +4298,9 @@ class Brain:
                     "forecast": float(lived[2]),
                     "sampled": bool(lived[3]),
                     "own": bool(lived[5]),
-                    "recorded": None if lived[6] is None else float(lived[6]),
                 }
-                if lived[7] is not None:  # the code the lived action was keyed on
-                    data["lived/code"] = lived[7]
+                if lived[6] is not None:  # the code the lived action was keyed on
+                    data["lived/code"] = lived[6]
         if self.efference is not None:
             # The copy is part of the continuation; earlier formats cannot carry it. A brain
             # without one writes the metadata of the earlier formats unchanged.
@@ -4787,7 +4764,6 @@ class Brain:
             if "lived" in meta:
                 state = agent._free  # validated above: a lived action has its free state
                 assert state is not None
-                recorded = meta["lived"].get("recorded")
                 result._lived = (
                     data["lived/observations"].copy(),
                     data["lived/action"].copy(),
@@ -4795,7 +4771,6 @@ class Brain:
                     bool(meta["lived"]["sampled"]),
                     state,
                     bool(meta["lived"]["own"]),
-                    None if recorded is None else float(recorded),
                     data["lived/code"].astype(float) if "lived/code" in data else None,
                 )
             if "awaiting" in meta:

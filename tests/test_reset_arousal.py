@@ -3,8 +3,9 @@
 The arousal state carries into the new stream as it is (its level, the counts, the recent and
 long-run reward, the usual errors, the reward scale, the age and the work counts), as when the
 state saved before the reset is restored after it. At the default, ``keep_arousal=False``,
-every brain resets, acts and saves as in 0.84.3: the founders, their checkpoints and the
-composed lives pinned below were recorded on 0.84.3.
+every brain resets and acts as in 0.84.3 and saves what 0.84.3 saved but the record channel
+it no longer has: the founders, their checkpoints and the composed lives pinned below were
+recorded on 0.84.3.
 """
 
 from __future__ import annotations
@@ -37,10 +38,7 @@ FACT = np.array([[1.0, 0.0, 0.0, 1.0]])
 NAME = np.array([[1.0, 0.0, 0.0, 0.0]])
 STREAM = (CUE, GO, FACT, NAME)
 # What the default reset forgets beside the level: the counts and the running statistics.
-STATISTICS = (
-    "outcomes", "rewards", "spreads", "records",
-    "square", "recent", "longrun", "usual", "usual_record",
-)
+STATISTICS = ("outcomes", "rewards", "spreads", "square", "recent", "longrun", "usual")
 
 
 def saved(path: Path) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
@@ -453,8 +451,11 @@ def _compact(state: dict[str, Any]) -> list[float]:
     ]
 
 # Recorded on 0.84.3 (8dc92d8): each founder's connectome and parameters, the acts of its
-# life and what each reset left its arousal, and the format, the member and metadata names
-# (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
+# life and what each reset left its arousal, and the format and the member and metadata names
+# (``names``) of the checkpoint it saves. The contents of every array of that checkpoint
+# (``checkpoint``) are those of 0.84.3 with the arousal state in the layout of
+# ``cadence-arousal/4``, re-recorded where the record channel left after every other value
+# matched.
 FOUNDERS: dict[str, dict[str, Any]] = {
     "adult": {
         "build": (1, 2, {"modules": (16,), "seed": 0, "arousal": True}),
@@ -466,11 +467,11 @@ FOUNDERS: dict[str, dict[str, Any]] = {
             "0000000000000000000000"
         ),
         "left": [
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3328, 547],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3328, 547],
         ],
         "format": "cadence-generic/3",
         "names": "a2556d56acd5de594cda87ec20272b09e5c26e3e8dc6370b6e39eae567c53f4e",
-        "checkpoint": "ff751eaf314e2b92957cacf1a150e7a69cb6545436497d3d94f83d76ea7b8445",
+        "checkpoint": "7365e6ef04d26857663e323012be1802044e63003ca9309a4b920a36607ce13f",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
@@ -480,12 +481,12 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "digest": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
         "acts": "111101100100011000000000000000000",
         "left": [
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 288, 151],
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 288, 151],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 288, 151],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 288, 151],
         ],
         "format": "cadence-generic/8",
         "names": "f68680bd8a9b32b381bdd3620503110329f7b2ebec08401a86188c413a7f49e0",
-        "checkpoint": "9c54fb001f45561b8c08b921fdf7de34e93982c6e3c454eeed1e72399b8679ae",
+        "checkpoint": "3c76c5f7b94371d11b4ba62580044be7dcf91c42eb6a6b539ac2c556ef12ad33",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
@@ -493,12 +494,12 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
         "acts": "111111011111111111111111111111111",
         "left": [
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 320, 203],
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 544, 301],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 320, 203],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 544, 301],
         ],
         "format": "cadence-generic/6",
         "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "77580a29f3eb5fef73b9e0da08bf6eac55df4c29cee5c3c901194bb44ee3cd93",
+        "checkpoint": "dd58f90b766941933949d4a7dded364f7957657ff5985bc78138726439090a5c",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),

@@ -48,7 +48,8 @@ def test_the_protocol_is_the_frozen_one(protocol):
     assert seeds["confirmation"] == list(range(500, 510))
     assert protocol["tabular"]["alpha"] == 1.0 and protocol["tabular"]["epsilon"] == 0.1
     assert protocol.get("payoff", "sugar") == "sugar" and protocol["reliability"] == 1.0
-    assert cd.ArousalConfig(**protocol["arousal"]) == cd.ArousalConfig()  # the founders
+    founders = cd.ArousalConfig(**nursery.arousal_genes(protocol["arousal"]))
+    assert founders == cd.ArousalConfig()  # the founders
     assert protocol["operating_point"] == {
         "modules": [32],
         "trace_amplitude": 0.3,

@@ -187,6 +187,8 @@ def _taught(brain):
 # Recorded with the composition before the option: each founder's connectome and parameters,
 # the acts of a short life, and the format, the member and metadata names (``names``) and
 # the contents of every array (``checkpoint``) of the checkpoint it saves.
+# Where the library later removed a setting that was inert at its founder, the description
+# and checkpoint digests were re-recorded after every other value matched the recording.
 FOUNDERS = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
@@ -206,7 +208,7 @@ FOUNDERS = {
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 1, 0, 1, 1],
         "format": "cadence-generic/7",
         "names": "3bd868a50c41cec95565033bf2e031622c05d08536e236a036a5b09278273eaf",
-        "checkpoint": "d47dbfd3384183656d14ff93db5b188d93977f8aed24312996a4550f2e2cd88d",
+        "checkpoint": "b122c752c2597834f5131cf486137d9ab3395ebdfccb2d3aefa666d60aa94fca",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
@@ -216,7 +218,7 @@ FOUNDERS = {
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
         "format": "cadence-generic/6",
         "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "8dc684beb8322e013c9002414bdf6d2b053cde7cff51ffd6ccaec9b54944386a",
+        "checkpoint": "58461155de6669ff9e01940d78f6adfe702fe864fc7c592dc6e5b00115210f4b",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
