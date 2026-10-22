@@ -33,6 +33,15 @@ Ordinary query initialization is not an established repair. Retention,
 resource comparisons, fresh confirmation and longer-world evaluation remain
 closed for this point.
 
+The separate [minimal two-binding prerequisite](MINIMAL_BINDING.md) keeps the
+same reader and local learner, but uses two active values and a fixed A/B
+answer order. All eight cases are trained and evaluated, with no held-out
+claim. Its [staged protocol](minimal-binding-protocol.json) requires new matched
+exposed/held-read capacity before either learned H2 founder. Actual one-fact
+donor swaps, erasures, shams and head lesions distinguish content use from
+useful parallel selection. It cannot pass or explain the original task, and
+opens no longer-world comparison by itself.
+
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
 competitive reader described in [the binding instrument](../binding/index_read.py)

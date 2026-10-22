@@ -283,6 +283,9 @@ def test_capacity_controller_to_typed_receipt_uses_real_q1_constructors_without_
 ):
     """Synthetic trial answers isolate controller plumbing, not scientific acquisition."""
     ctx = subject.context()
+    # Source archives need not contain Git. This synthetic instrument test
+    # supplies its own revision while production execution keeps its guard.
+    monkeypatch.setattr(ctx.sr, "revision", lambda: "a" * 40)
     original_factory = ctx.admission.make_brain
     original_snapshot = ctx.relevance.parameter_snapshot
 
