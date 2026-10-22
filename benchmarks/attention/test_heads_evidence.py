@@ -97,6 +97,23 @@ def test_content_and_numerical_diagnostic_use_the_same_public_dispatch() -> None
         assert valid, (name, message)
 
 
+def test_positive_capacity_and_negative_learned_readers_preserve_their_separate_gates() -> None:
+    capacity_name = "founder-capacity-extended.json"
+    relevance_name = "heads-relevance-founder-extended.json"
+    for name in (capacity_name, relevance_name):
+        valid, message = verifier.verify(RESULTS / name)
+        assert valid, (name, message)
+    capacity, relevance = receipt(capacity_name), receipt(relevance_name)
+    assert capacity["body"]["capacity_admitted"] is True
+    body = relevance["body"]
+    assert body["capacity_reference"] == capacity["digest"]
+    assert body["passed"] is False and body["selected"] is None
+    assert len(body["runs"]) == 10 and not any(run["passed"] for run in body["runs"])
+    assert body["candidate_rounds_used"] == 1 and body["confirmation_seeds_used"] == []
+    assert body["cumulative_host_seconds"] == (
+        capacity["body"]["cumulative_host_seconds"] + body["elapsed_host_seconds"])
+
+
 def test_prior_chain_charges_all_failed_controls_and_the_diagnostic_once() -> None:
     initial, corrected, longer, fixed = [receipt(name) for name in CAPACITY]
     for previous, following in zip((initial, corrected, longer),

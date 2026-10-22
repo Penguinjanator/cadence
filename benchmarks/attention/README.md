@@ -7,8 +7,13 @@ are not two attention heads. A benchmark-only [multi-head instrument](heads.py)
 now supplies independent live query/read ports over the same witnessed bank.
 Its [two-binding protocol](HEADS_PROTOCOL.md) requires behavioral comparisons
 before claiming a useful second head.
-The [empty-read experiment](EMPTY_BOUNDARY.md) tests the current capacity
-blocker before any learned-head comparison.
+The [extended capacity control](results/founder-capacity-extended.json) now
+passes acquisition on both exposed and both supplied-read founders. The first
+[learned-reader comparison](results/heads-relevance-founder-extended.json)
+fails all ten declared cells: H2 hits its training time limit; the one-head
+variants refuse a numerical solve. Useful parallel heads remain unproved.
+See the [parallel-head assessment](PARALLEL_HEADS_ASSESSMENT.md) for the
+predeclared distinction between retrieval success and a useful second head.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier

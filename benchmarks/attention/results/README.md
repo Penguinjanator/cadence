@@ -1,4 +1,4 @@
-# Retained admission failures
+# Retained attention evidence
 
 `admission-256.json` is the first declared recipe; `admission-1024.json` is its
 solver-budget retry. `damping-readback.json` is a diagnostic replay of the latter
@@ -126,3 +126,21 @@ or parallel-head benefit result. The stage costs 294.088845 host seconds;
 cumulative retained work is 1,050.140569 seconds. The
 [parallel-head assessment](../PARALLEL_HEADS_ASSESSMENT.md) was declared before
 any learned-reader cell. Confirmation founders remain unopened.
+
+## Learned-reader development: all ten cells fail
+
+[heads-relevance-founder-extended.json](heads-relevance-founder-extended.json)
+retains one agreement round across H1, H2, wider H1, duplicated-port H1 and
+larger-work H1, each on founders 0 and 1. H2 reaches 321/289 rounds before
+its training host cap, with zero training action/lesson refusals, 16/48 and
+26/48 trained pairs correct, and 0/16 held-out pairs correct. The one-head
+variants stop at 58–141 rounds on prefix/query qualification refusals; their
+zero final scores are unanswered/refused panels, not wrong qualified answers.
+See the [full table](../HEADS_PROTOCOL.md#learned-reader-development-no-admitted-candidate).
+
+All ten cells fail the original acquisition/transfer gates. Retention and
+representation probes remain unrun; confirmation founders remain unopened.
+The stage costs 1,287.076165 host seconds and brings cumulative retained work
+to 2,337.216734 seconds. The distinct-evidence and useful-parallel-head claims
+are unestablished. Research parameter arrays stay local; they are not saved
+continuing-brain checkpoints.

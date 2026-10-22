@@ -307,3 +307,31 @@ Before the first learned-reader cell, the
 requirements for distinct evidence, both-head usefulness and improvement
 against completed one-head/resource controls. The runner's generic pass or
 selected-arm flag does not establish those claims.
+
+## Learned-reader development: no admitted candidate
+
+The [first agreement-only comparison](results/heads-relevance-founder-extended.json)
+retains all ten arm/founder cells under the extended protocol. None passes.
+
+| Arm | Founder 0: completed rounds / stop | Founder 1: completed rounds / stop |
+| --- | --- | --- |
+| H1 | 135 / prefix refusal | 113 / query refusal |
+| H2 | 321 / training host cap | 289 / training host cap |
+| H1-width | 58 / prefix refusal | 99 / query refusal |
+| H1-port-copies | 137 / prefix refusal | 68 / query refusal |
+| H1-work | 127 / query refusal | 141 / prefix refusal |
+
+H2 has zero training action or lesson refusals, but incomplete acquisition:
+trained exact-pair accuracy is 16/48 and 26/48, with 0/16 held-out correct in
+both founders. It does not meet the unchanged trained or transfer floors.
+The other arms' zero final scores reflect refused/unanswered panels; they
+are not evidence of zero accuracy among qualified answers. More width,
+duplicated ports and the larger sweep ceiling do not qualify those points.
+
+No arm enters retention or the representation probe; no fresh confirmation
+founder opens. This consumes the one declared agreement candidate round.
+The stage takes 1,287.076165 host seconds, bringing cumulative retained work
+to 2,337.216734 seconds. No parallel-head advantage, continuing-life or
+Stone Age result follows. Further repair must first distinguish numerical
+refusal from capped acquisition; a generic negative pass flag does not
+localize a head-count defect.
