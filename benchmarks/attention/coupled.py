@@ -17,7 +17,7 @@ bypasses compiled kernels; it is not a new library option.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -31,6 +31,28 @@ def frozen(array: Any, dtype: Any = float) -> np.ndarray:
     out = np.array(array, dtype=dtype, copy=True)
     out.flags.writeable = False
     return out
+
+
+def selected_rows(rows: Any, batch: int) -> np.ndarray:
+    """Unique stream indices, preserving an explicit order or a boolean mask's order."""
+    selected = np.asarray(rows)
+    if selected.ndim != 1:
+        raise ValueError("rows must be a one-dimensional mask or integer indices")
+    if selected.dtype == np.bool_:
+        if selected.shape != (batch,):
+            raise ValueError("a row mask needs one flag per stream")
+        return np.flatnonzero(selected)
+    if not selected.size:
+        return np.zeros(0, dtype=np.int64)
+    if selected.dtype.kind not in "iu":
+        raise ValueError("row indices must be integers")
+    if ((selected < 0).any() or (selected > np.iinfo(np.int64).max).any()
+            or (selected >= batch).any()):
+        raise ValueError("row index is outside the memory streams")
+    selected = selected.astype(np.int64)
+    if len(np.unique(selected)) != len(selected):
+        raise ValueError("row indices must be unique")
+    return selected
 
 
 @dataclass(frozen=True)
@@ -93,6 +115,20 @@ class Memory:
             raise ValueError("memory shapes must match stream, slot and port widths")
         if (self.ages < 0).any():
             raise ValueError("ages must be nonnegative")
+
+    @property
+    def streams(self) -> int:
+        return int(len(self.keys))
+
+    def take(self, rows: Any) -> Memory:
+        """An immutable snapshot of selected streams, in the supplied order.
+
+        A boolean mask has one flag per stream. Integer indices may reorder the streams
+        but must be unique. Ports, ages and settings keep the same meanings in every phase.
+        """
+        index = selected_rows(rows, self.streams)
+        return replace(self, keys=self.keys[index], values=self.values[index],
+                       held=self.held[index])
 
     def _ports(self, state: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         state = np.asarray(state, dtype=float)
@@ -165,9 +201,9 @@ class Memory:
 class Graph(NeuralGraph):
     """CPU reference that includes memory in every transport AND residual check.
 
-    Parameter copies retain the boundary. Damping and partial-row teaching are
-    intentionally refused by this component instrument rather than silently
-    losing or broadcasting the boundary. Production integration is a later gate.
+    Parameter copies retain the boundary. Saved-drive teaching explicitly takes
+    matching stream rows. Damping remains unsupported because its fallback would
+    lose the boundary. Production integration is a later gate.
     """
 
     memory: Memory | None = None
@@ -252,6 +288,42 @@ class AttentionBrain(Brain):
         if not greedy:
             raise NotImplementedError("reward eligibility is not integrated in this instrument")
         return super().act(observations, greedy=True, **options)
+
+    def teach_saved(
+        self, drive: np.ndarray, target: np.ndarray, wrong: Any, memory_snapshot: Memory,
+    ) -> Any:
+        """Teach selected rows of one captured pre-query drive and memory boundary.
+
+        The caller captures both before the query act writes a new moment. Its actual wrong
+        rows choose the lesson externally; every free/positive/negative phase reads the same
+        immutable subset. No stimulus is rebuilt, no moment is witnessed and no separate
+        address lesson runs. Returns ``Learner.step``'s pair, or None without selected rows.
+        """
+        cfg = self.learner.config
+        if not cfg.qualified or cfg.damping or cfg.surprise:
+            raise ValueError("saved attention lessons need qualified phases and damping=surprise=0")
+        graph = self.brain
+        if not isinstance(graph, Graph):
+            raise ValueError("saved attention lessons need the experimental graph")
+        drive = np.asarray(drive, dtype=float)
+        if (drive.ndim != 2 or drive.shape[1] != graph.connectome.n or not len(drive)
+                or not np.isfinite(drive).all()):
+            raise ValueError("saved drive must be a nonempty finite stream-by-neuron array")
+        target = self.learner._labels(np.asarray(target))
+        if len(target) != len(drive) or memory_snapshot.streams != len(drive):
+            raise ValueError("saved drive, labels and memory need the same streams")
+        rows = selected_rows(wrong, len(drive))
+        if not len(rows):
+            return None
+        subset = memory_snapshot.take(rows)
+        graph.memory = subset
+        try:
+            return self.learner.step(drive[rows], target[rows])
+        finally:
+            # A successful local update replaces the graph. Restore both versions so no
+            # live or retained graph keeps a smaller batch's boundary after this lesson.
+            graph.memory = memory_snapshot
+            self.brain.memory = memory_snapshot
 
     def imagine(self, *args: Any, **kwargs: Any) -> Any:
         raise NotImplementedError("private imagination is not integrated in this instrument")
