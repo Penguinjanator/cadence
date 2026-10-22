@@ -61,6 +61,7 @@ testpaths = [
     "benchmarks/competing", "benchmarks/chain",
     "benchmarks/stream_words", "benchmarks/binding",
     "benchmarks/instruments",
+    "benchmarks/learned_code",
 ]
 
 [tool.ruff]

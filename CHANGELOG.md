@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- A checkpoint saved immediately after `reset(keep="slots")` loads its retained recall
+  rows even though the reset cleared the current neural state. Both current and supported
+  earlier checkpoint formats preserve the next actions and reward updates at this boundary.
+- A learned code follows `live`'s arousal gate: routine answers and `wait` moments while
+  a routine action awaits its outcome keep its dictionary, predictor and thresholds still.
+  Aroused moments resume its local learning; explicit `act` and `step` retain their
+  every-moment rule. The learned-code benchmark tests now run in the default test suite.
+- The learned code's predictor bounds its simultaneous update for batches above 16 rows.
+  Repeated contexts in larger batches could amplify the prediction error and make its
+  weights diverge. Dividing the aggregate step by `max(1, rows * predictor)` keeps its
+  normalized context coupling at most one; the founder law through 16 rows is unchanged.
 - `Brain.reset()` keeps the arousal state by default: its `keep` is `("arousal",)`, so a reset
   stream begins with the level, the reward references and the reward scale the brain was
   used to ([#213](https://github.com/muellerberndt/cadence/issues/213)). `reset(keep=())` is
@@ -58,14 +69,16 @@
   `unit([sqrt(1 - w) code, sqrt(w) unit(x)])` at the norm the observation itself has as a
   key, so a binding stays readable while the code moves. An observation wider than the code
   (more inputs than units, a camera's frame) is keyed on the code alone, so that the key
-  keeps the code's width (`LearnedCode.joins`, `code_width` then `units`): in the camera
-  chamber, its frames at unit length, a code of 128 units answers the held-out pairs at .970
+  keeps the code's width (`LearnedCode.joins`, `code_width` then `units`). In the camera
+  chamber a separate `CodeRegion` prototype, with an imprinted dictionary, 256 nursery rounds,
+  no top-down boundary and body inputs beside the code, answers the held-out pairs at .970
   against .927 for the fixed random code of 1,024 units on the development founders, with a
-  recall address map of 0.198 MB against 9.331 MB. With `memory_choice=True` the episodic
+  recall address map of 0.198 MB against 9.331 MB; these readings do not establish the
+  integrated region's camera behavior. With `memory_choice=True` the episodic
   stores separate the keys as an observation's (1,024 cells, 24 winners). The region learns
-  at every accepted moment by local rules (Hebbian on the reconstruction
+  at accepted explicit acts and aroused `live` moments by local rules (Hebbian on the reconstruction
   residual, the delta rule on the prediction's residual, homeostatic thresholds whose share
-  reads the context-free code and holds each row's strongest unit above an active floor,
+  counts units driven above the active floor by the context-free code,
   and a repair that lowers the thresholds of a silent row's units); the lesson's contrast
   and the dopamine leave it alone. The one setting is `learned_code_fields` (`None`: one
   field; a sequence of field widths shares the units among the observation's channels,
@@ -117,12 +130,12 @@
   0.84.3 carries `value`, `context` and `context_decay` at their one value with an empty
   history array and loads. The binding instrument keeps its arms (`benchmarks/binding/index_read.py`) with
   their protocol.
-- `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
-  its version in Cadence as settling and local repair (the embedding as a learned code of
-  meaning, the residual stream as the settling cortex, attention as a recall memory over the
-  brain's own moments, the logits as the motor population inside the settle), that what was
-  tested and did not work is removed or folded into what did, and that the documentation is
-  organized by situation with the interface kept as simple as possible for users.
+- `MANIFESTO.md` and `AGENTS.md` use transformer capabilities as design comparisons with
+  learned codes, the settling cortex, recall memory and the motor population. Recall selects
+  before the neural settle and holds its read fixed; selection that revises with the present
+  interpretation remains a goal. These comparisons need behavioral and work measurements.
+  What was tested and did not work is removed or folded into what did, and the documentation
+  is organized by situation with the interface kept as simple as possible for users.
 - The memory guide's episodic part (`docs/memory.md`) states a limit of `memory_choice=True`
   in a continuing life: a record that paid is not extinguished by failures that pay nothing,
   since a zero outcome in the middle of an attempt writes nothing and replay only adds

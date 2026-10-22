@@ -294,3 +294,35 @@ def test_the_episodic_records_are_the_last_member_and_save_as_their_group(tmp_pa
     assert len(loaded.paths[0]) == len(records.paths[0])
     brain.reset()
     assert records.context is None and records.decision is None and records.paths == []
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("keep", ["slots", ("slots", "arousal")])
+def test_retained_recall_slots_resume_when_saved_immediately_after_reset(tmp_path, legacy, keep):
+    """A reset can keep the old streams' recall slots before the next streams act. Saving
+    at that boundary preserves the slots and the following acquired life in either format."""
+    original = cd.Brain.compose(4, 2, modules=(5,), seed=9, recall=True, arousal=True)
+    observations = np.eye(4)
+    original.step(observations[[0, 1]])
+    original.step(observations[[1, 2]], reward=[1.0, -0.5])
+    original.reset(keep=keep)
+    assert original.basal_ganglia.state is None and original.recall.slots == 2
+    path = original.save(tmp_path / "between-streams.npz")
+    if legacy:
+        with np.load(path, allow_pickle=False) as saved:
+            arrays = earlier({name: saved[name].copy() for name in saved.files})
+        np.savez(path, **arrays)
+    restored = cd.Brain.load(path)
+    for name, value in original.recall.arrays().items():
+        np.testing.assert_array_equal(value, restored.recall.arrays()[name], err_msg=name)
+    for index in range(3):
+        x = observations[[index, (index + 1) % 4]]
+        feedback = {} if index == 0 else {"reward": [0.5, -0.25]}
+        np.testing.assert_array_equal(original.step(x, **feedback), restored.step(x, **feedback))
+        np.testing.assert_array_equal(original.brain.efficacy, restored.brain.efficacy)
+        np.testing.assert_array_equal(original.brain.bias, restored.brain.bias)
+        np.testing.assert_array_equal(
+            original.basal_ganglia.state.activation, restored.basal_ganglia.state.activation
+        )
+        for name, value in original.recall.arrays().items():
+            np.testing.assert_array_equal(value, restored.recall.arrays()[name], err_msg=name)

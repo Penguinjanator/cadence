@@ -1,9 +1,9 @@
 """A learned code of meaning: a region of the brain's own neurons settling to a sparse code.
 
 ``Brain.compose(..., learned_code=units)`` places a ``code`` region of that many neurons
-between the sensory region and the first module. Its synapses are the brain's synapses,
-read in every sweep as every other synapse is, and the region settles with the rest of the
-brain under the brain's neuron model:
+between the sensory region and the first module. Its synapses and biases form the region's
+own sub-network, qualified before its context-free code is held as a source through the
+whole brain's settle. The region uses the brain's neuron model:
 
 * the dictionary ``Phi`` (``inputs`` by ``units``, unit-length columns) is the one-way
   synapses from the sensory neurons at the gain ``read = 1 / f(A)`` (``f`` the neuron's
@@ -31,8 +31,10 @@ fixed point depends on the observation and the trace alone; the brain settles it
 with the same solver and tolerance, addresses its memories on it, and settles the whole
 graph warm from it.
 
-Learning is local to each boundary and happens at every accepted moment, each row of the
-batch one event, from the moment's free settle alone: the lesson's nudged phases, the
+Learning is local to each boundary and happens at each accepted explicit ``act`` or ``step``
+moment, and in ``live`` while aroused; ``wait`` follows the issued action's mode. Routine
+``live`` moments keep the tables still. Each row of the batch is one event, from the
+moment's free settle alone: the lesson's nudged phases, the
 outcome's eligibility phases, the imagined branches and the readings taken on copies enter
 no table, as the contrast and the dopamine enter no synapse of the region
 (``a = max(s, 0)``, the rectified code;
@@ -42,11 +44,15 @@ no table, as the contrast and the dopamine enter no synapse of the region
   a^T``, each column then scaled back to unit length (a unit's own synaptic scaling);
 * the lateral weights, recomputed from the dictionary;
 * the predictor, the delta rule on the top-down residual normalized by the context's
-  energy, ``W += sum_rows r_row (a - p) z^T`` with ``r_row = predictor / max(|z|^2,
-  predictor^2)``: a row closes the share ``predictor`` of its own gap whatever the
+  energy, ``W += sum_rows r_row (a - p) z^T / max(1, rows * predictor)`` with
+  ``r_row = predictor / max(|z|^2,
+  predictor^2)``: before the batch bound, a row closes the share ``predictor`` of its own gap
+  whatever the
   magnitude of its context (the prefrontal activation is small in the brain's units), a
   context fainter than ``|z| = predictor`` counted at that energy, so that no row commands a
-  synaptic step above its gap;
+  synaptic step above its gap. The batch divisor bounds the sum of simultaneous context
+  updates, so repeated rows cannot amplify the prediction error; the founder rate leaves
+  batches of at most 16 rows unchanged;
 * the thresholds, homeostatic, ``t += threshold_rate * sum_rows ((a_free > active) -
   target)`` with ``a_free`` the moment's context-free code (the region settled on the
   observation alone, the code ``Brain.observation_code`` gives) and ``active`` the active
@@ -150,8 +156,8 @@ class LearnedCode:
     unit; ``THRESHOLD_RATE`` and ``TARGET``, the share of rows a unit should be active in;
     ``REPAIR``, the share of a row's input energy its code may leave unexplained before the
     row lowers its silent units' thresholds; ``SILENCE``, how many under-active rows a
-    silent unit in such a row counts as; ``ACTIVE``, the activation the strongest unit of a
-    row must reach to count as active in the thresholds' share; ``IDENTITY``, the weight of
+    silent unit in such a row counts as; ``ACTIVE``, the activation a unit must reach to
+    count as active in the thresholds' share; ``IDENTITY``, the weight of
     the observation's own identity in the memories' key), held as the instance's
     attributes of the same names in lower case. Two of them are for readings and controls:
     ``learning`` (True; False holds every table still, for a reading on a copy) and
@@ -516,7 +522,13 @@ class LearnedCode:
             # predictor^2; a silent context (z = 0) moves nothing
             rate = self.predictor / np.maximum(np.sum(z * z, axis=1), self.predictor**2)
             error = a - self.prediction(z)
-            weights = self.weights + (error * rate[:, None]).T @ z
+            # Each normalized context outer product has trace at most ``predictor``.
+            # Their positive-semidefinite sum therefore has largest eigenvalue at most
+            # n * predictor: this divisor keeps every mode of the simultaneous update
+            # non-expansive, including duplicate contexts in a large batch. At the founder
+            # rate it preserves the original law through 16 rows, the chamber batch size.
+            divisor = max(1.0, n * self.predictor)
+            weights = self.weights + ((error * rate[:, None]).T @ z) / divisor
             if not np.isfinite(weights).all():
                 raise ValueError("the learned code's predictor must remain finite")
             self.weights = weights

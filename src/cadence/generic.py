@@ -1000,6 +1000,10 @@ def _validate_recall_state(
     keys = data.get("recall/keys")
     if keys is None or keys.ndim != 3:
         raise ValueError("invalid saved recall state: keys")
+    if meta["free_steps"] is None:
+        # A reset that keeps slots clears the free state before the next streams act.
+        # The retained slots still own their rows independently of that cleared state.
+        batch = keys.shape[0]
     slots = keys.shape[1]
     if keys.shape[0] != batch or slots > settings["capacity"]:
         raise ValueError("saved recall slots must belong to the saved streams, within capacity")
@@ -1536,7 +1540,7 @@ class Brain:
         )
         self.code_width = units or self.inputs
         # the learned code: a region of the brain's own neurons that settles to a sparse
-        # code of the observation and learns every moment; the memories key on it
+        # code of the observation; explicit acts and aroused live moments learn it
         learned = _learned_code_genes(learned_code, genes)  # its genes leave ``genes`` here
         if learned and self.sparse_code is not None:
             raise ValueError(_LEARNED_CODE_TOGETHER)
@@ -1624,7 +1628,7 @@ class Brain:
         # The learned code's tables are the brain's synapses and biases: the dictionary from
         # the sensory neurons, the lateral weights among the code units and the predictor
         # from the prefrontal region, with the thresholds as the units' biases. The region
-        # installs them itself at every accepted moment, so the lesson's contrast and the
+        # installs them after its own local learning step, so the lesson's contrast and the
         # dopamine leave them alone.
         self.learned_code: LearnedCode | None = None
         self._code_synapses: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {}
@@ -2103,7 +2107,7 @@ class Brain:
         learned sparse code of the observation, settled in the region's own phase before
         the rest of the brain, under lateral competition through its dictionary and drawn
         toward the prediction the working trace makes of it, then held as a source through
-        the whole settle; it learns at every accepted moment by local rules
+        the whole settle; explicit acts and aroused ``live`` moments learn it by local rules
         (``LearnedCode``). The cortex reads the context-free code, the observation settled
         alone, the heard history holds it, and every memory keys on it at unit length,
         joined to the observation's own identity. ``learned_code_fields`` declares the
@@ -3337,7 +3341,9 @@ class Brain:
         # vote under the decision's own key, one choice per slot
         guessed = self._greedy(answer[1], place, self._decision_key(code))
         best = [int(choice) for choice in np.atleast_1d(guessed[0])]
-        action = self._choose(x, *answer, greedy=not aroused, temperature=temperatures)
+        action = self._choose(
+            x, *answer, greedy=not aroused, temperature=temperatures, learn_code=aroused
+        )
         state = agent.state
         assert state is not None
         if agent._pending is not None:
@@ -3387,7 +3393,9 @@ class Brain:
         the awaited action keeps the forecasts made before it, its eligibility and the
         situation it was chosen in, and ``live`` later credits its actual outcome to it
         once. Parameters, the critic, eligibility traces, associative memory, random
-        state, the command copy and the arousal state stay as they were: eligibility,
+        state, the command copy and the arousal state stay as they were. A learned code
+        follows the issued action's mode: routine ``live`` waits keep its tables still,
+        and other waits take its local learning step. Eligibility,
         arousal, its age and youth advance with outcomes and live moments, and one
         outcome is one temporal-difference step however many moments were waited. The
         settle is reported by ``last_settlement`` with ``operation`` ``wait``; like the
@@ -3418,8 +3426,10 @@ class Brain:
         drive = self.stimulus(x)
         state = self._qualified(drive, self._activity(), operation="wait")
         code = self._coded(x)
-        if self.learned_code is not None:
-            self._learn_code(state)  # the region's step at every accepted moment
+        lived = self._lived
+        routine = lived is not None and lived[4] is current and not lived[3]
+        if self.learned_code is not None and not routine:
+            self._learn_code(state)  # routine live moments keep the region's tables still
         if self.working_memory is not None:
             self.working_memory.update(state)
         if self.history is not None:
@@ -3692,8 +3702,13 @@ class Brain:
         *,
         greedy: bool,
         temperature: float | Sequence[float] | np.ndarray | None = None,
+        learn_code: bool = True,
     ) -> np.ndarray:
-        """Issue the action of a qualified free state: the stream advances to it."""
+        """Issue the action of a qualified free state: the stream advances to it.
+
+        ``live`` holds the code's tables still in routine; explicit acts keep its local
+        learning rule, including greedy acts.
+        """
         self.basal_ganglia._free = free
         self.basal_ganglia._free_brain = self.brain
         self.basal_ganglia._drive = drive.copy()
@@ -3708,7 +3723,7 @@ class Brain:
             bias = episodic.vote(place, key)
         action = self.basal_ganglia.act(drive, greedy=greedy, temperature=temperature, bias=bias)
         state = self.basal_ganglia.state
-        if self.learned_code is not None and state is not None:
+        if learn_code and self.learned_code is not None and state is not None:
             self._learn_code(state)  # the region's step at every accepted moment
         if self.working_memory is not None and state is not None:
             self.working_memory.update(state)

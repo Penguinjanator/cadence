@@ -41,8 +41,9 @@ and `memory_fan_in`, and keys stored under one code do not match another.
 `Genome.observation_width(inputs, code)` gives the key width before building, the size of a
 custom anatomy's `recall` and `next` regions. The code is fixed and learns nothing.
 `learned_code=units` (opt-in, without `code`) adds a code region of the brain's own neurons
-that settles to a learned sparse code of the observation and learns every moment; the cortex
-reads it and the memories key on it ([the learned code](#the-learned-code)).
+that settles to a learned sparse code of the observation; explicit acts and aroused `live`
+moments learn it. The cortex reads it and the memories key on it
+([the learned code](#the-learned-code)).
 
 ```python
 from cadence import Genome
@@ -61,8 +62,9 @@ assert len(coded.connectome.populations["sensory"]) == 1024  # the cortex reads 
 
 `Brain.compose(..., learned_code=units)` adds a `code` region of that many neurons between the
 sensory region and the first module. The region learns a compressed code of the observation
-by local rules at every accepted moment; the cortex computes on that code and every memory
-keys on it, joined to the observation's own identity. The founder `learned_code=None` builds
+by local rules at accepted explicit acts and aroused `live` moments; the cortex computes on
+that code and every memory keys on it, joined to the observation's own identity.
+The founder `learned_code=None` builds
 the brain without it and keys the memories on [the observation code](#the-observation-code)
 as before; `code=units`, the fixed random code, is the control at matched width.
 
@@ -104,10 +106,14 @@ a delay through the episodic memory takes about twice the experience to master.
 Present wide images at unit length: the region reads a lit pixel as one full input, so a
 frame at pixel scale overwhelms its units. An observation wider than the code keys the
 memories on the code alone ([what the memories key on](#what-the-memories-key-on)). In the
-camera chamber (`benchmarks/learned_code/camera.py`), its frames at unit length, a code of
+camera chamber (`benchmarks/learned_code/camera.py`), a separate `CodeRegion` prototype with
 128 units answers the held-out pairs at .970 against .927 for the fixed random code of 1,024
-units on the development founders, with a recall address map of 0.198 MB against 9.331 MB;
-the region's stored dictionary takes 13.1 MB.
+units on the development founders, with a recall address map of 0.198 MB against 9.331 MB
+and a stored dictionary of 13.1 MB. That prototype imprints its dictionary on the first
+frames, receives 256 nursery rounds, omits the top-down boundary, and passes the body inputs
+beside its code into a brain without `learned_code`. Those scores establish that prototype's
+behavior; they do not establish camera performance for `Brain.compose(learned_code=...)`.
+The integrated region's camera behavior still needs a matched measurement.
 
 ### What the region is
 
@@ -160,8 +166,10 @@ own association activity would copy the code it reads.
 
 ### How it learns
 
-At every accepted moment (each `act`, `step` and `live` answer, and each moment `wait` senses)
-the region takes one step from the moment's settle, each row of the batch one event; the
+At every accepted `act` and `step` answer the region takes one step from the moment's
+settle, each row of the batch one event. In `live` it learns only while aroused: routine
+answers keep all its tables still. `wait` follows the issued action's mode, keeping the
+tables still while a routine `live` action awaits its outcome and learning otherwise. The
 lesson's nudged phases, the outcome's eligibility phases, the imagined branches and the
 readings taken on copies enter no table, as the contrast and the dopamine enter no synapse of
 the region. With `a` the rectified code in context, `a_free` the context-free code, `x'` the
@@ -171,8 +179,13 @@ sensory activation as read, `z` the prefrontal activation and `p = W z`:
 | --- | --- | --- |
 | dictionary | `Phi += rate * sum_rows (x' - Phi a) a^T`, each column scaled back to unit length | `RATE` 0.125 |
 | lateral weights | recomputed from the dictionary | with the dictionary |
-| predictor | `W += sum_rows r_row (a - p) z^T`, `r_row = predictor / max(\|z\|^2, predictor^2)`: a row closes the share `predictor` of its own gap whatever its context's energy | `PREDICTOR` 0.0625 |
-| thresholds | `t += threshold_rate * sum_rows (counted(a_free) - target)`: a unit's share is the share of the observations that drive it on their own; the strongest unit of each field in a row counts only above the active floor, so a frequent observation keeps its best unit; floored at 0, no ceiling; the repair: a row whose code leaves at least the share `repair` of its input's energy unexplained lowers the threshold of every unit silent in it by `threshold_rate * silence` | `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `ACTIVE` 0.05, `REPAIR` 1.0, `SILENCE` 10 |
+| predictor | `W += sum_rows r_row (a - p) z^T / max(1, rows * predictor)`, `r_row = predictor / max(\|z\|^2, predictor^2)`: context energy normalizes each row's gap, and the batch divisor bounds simultaneous updates | `PREDICTOR` 0.0625 |
+| thresholds | `t += threshold_rate * sum_rows ((a_free > active) - target)`: a unit's share is the share of the observations that drive it on their own above the active floor; floored at 0, no ceiling; the repair: a row whose code leaves at least the share `repair` of its input's energy unexplained lowers the threshold of every unit silent in it by `threshold_rate * silence` | `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `ACTIVE` 0.05, `REPAIR` 1.0, `SILENCE` 10 |
+
+The predictor's batch divisor prevents repeated contexts in a large batch from amplifying
+the prediction error: the sum of the normalized context outer products has trace at most
+`rows * predictor`, so the divided update has eigenvalues at most one. At the founder rate,
+batches of at most 16 rows, including the embedding chamber's, retain the same update.
 
 While the code fits, the residuals are small and nothing moves. The lesson's contrast and the
 dopamine leave the region's synapses and biases alone (the learner's plastic masks exclude

@@ -570,6 +570,75 @@ def test_the_region_learns_every_moment_on_its_residuals_and_homeostasis_moves_t
     assert (low.learned_code.thresholds >= 0.0).all()
 
 
+@pytest.mark.parametrize("batch", (1, 16, 32, 64, 128))
+def test_repeated_contexts_contract_predictor_error_at_every_batch_size(batch):
+    """A repeated normalized LMS context has one analytic error mode. Its coefficient
+    must stay in [0, 1], including for nonzero initial weights and batches above 16 rows.
+    """
+    code = cd.LearnedCode(4, 8, 3, cd.learning_neuron_model(), seed=2)
+    code.rate = code.threshold_rate = 0.0  # isolate the predictor from other local rules
+    code.weights[:] = np.random.default_rng(7).normal(size=code.weights.shape)
+    context = np.array([[0.5, -0.25, 0.75]])
+    target = np.random.default_rng(8).random((1, code.units))
+    rows = np.repeat(context, batch, axis=0)
+    activation = np.repeat(target, batch, axis=0)
+    alpha = min(batch * code.predictor, 1.0)
+    for _ in range(4):
+        before = code.prediction(context)
+        error = np.linalg.norm(target - before)
+        code.learn(np.zeros((batch, code.inputs)), activation, rows)
+        after = code.prediction(context)
+        np.testing.assert_allclose(after, before + alpha * (target - before), atol=1e-14)
+        assert np.linalg.norm(target - after) <= error + 1e-14
+
+
+def test_a_large_batch_of_continuing_brains_keeps_its_predictor_bounded():
+    brain = cd.Brain.compose(4, 2, modules=(8,), learned_code=8, seed=2)
+    x = np.tile([1.0, 0.0, 0.0, 0.0], (128, 1))
+    for _ in range(30):
+        brain.act(x, greedy=True)
+        assert np.isfinite(brain.learned_code.weights).all()
+        assert np.linalg.norm(brain.learned_code.weights) < 10.0
+
+
+def test_routine_live_and_wait_keep_the_code_tables_still_until_aroused(tmp_path):
+    brain = composed(arousal=True, arousal_youth=0, arousal_decay=0.0, arousal_need=1.0)
+    code = brain.learned_code
+    tables = {name: value.copy() for name, value in code.arrays().items()}
+    efficacy, bias = brain.brain.efficacy.copy(), brain.brain.bias.copy()
+
+    brain.live(tokens(1))
+    assert brain.last_arousal["mode"] == "routine" and brain.pending_feedback
+    brain.wait(tokens(2))
+    brain.wait(tokens(3))
+    resumed = cd.Brain.load(brain.save(tmp_path / "routine.npz"))
+    resumed.wait(tokens(4))
+    assert resumed.learned_code.work["updates"] == 0
+    for name, value in tables.items():
+        np.testing.assert_array_equal(getattr(resumed.learned_code, name), value)
+    assert code.work["updates"] == 0
+    for name, value in tables.items():
+        np.testing.assert_array_equal(getattr(code, name), value)
+    np.testing.assert_array_equal(brain.brain.efficacy, efficacy)
+    np.testing.assert_array_equal(brain.brain.bias, bias)
+
+    # The unmet need wakes this same acquired life; its next accepted answer and wait learn.
+    brain.live(tokens(5), reward=[0.0])
+    assert brain.last_arousal["mode"] == "aroused" and code.work["updates"] == 1
+    assert any(not np.array_equal(getattr(code, name), value) for name, value in tables.items())
+    brain.wait(tokens(6))
+    assert code.work["updates"] == 2
+
+    # Explicit controls keep their every-moment rule, including a greedy act and the wait
+    # following an action sampled by step rather than a routine live decision.
+    explicit = composed(arousal=True, arousal_youth=0)
+    explicit.act(tokens(1), greedy=True)
+    assert explicit.learned_code.work["updates"] == 1
+    explicit.step(tokens(2))
+    explicit.wait(tokens(3))
+    assert explicit.learned_code.work["updates"] == 3
+
+
 def test_the_lesson_and_the_outcome_leave_the_region_to_its_own_rule():
     brain = composed(recall=True)
     x = tokens(2, 6)
