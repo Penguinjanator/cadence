@@ -91,3 +91,14 @@ its maximum and observed row flags; its individual residuals cannot be recompute
 Binary states and orchestration helpers remain local, identified by hashes.
 Public custody/arithmetic verification is not an independent solver replay and
 does not admit any behavioral or semantic claim.
+
+## Matched empty-read repair: retained failure
+
+[empty-boundary-development.json](empty-boundary-development.json) compares
+the original mask with zero-content restoring agreement. Masked founders
+reproduce 42/21 completed rounds and every original training/work/final-parameter
+field. Occupied-query phases and updates match between settings before the old
+refusals. Restoring founders reach 140/279 rounds, then refuse a nonempty prefix
+and query. They still fail the original acquisition gate; no learned-head
+comparison or fresh confirmation follows. The source-frozen run takes
+92.824283 host seconds. See the [boundary law and scope](../EMPTY_BOUNDARY.md).

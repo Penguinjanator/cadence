@@ -135,8 +135,7 @@ def test_empty_wrong_mask_runs_no_phase_and_changes_no_boundary(monkeypatch):
     assert brain.learner.updates == 0
 
 
-@pytest.mark.parametrize("setting,value", [("surprise", True), ("qualified", False),
-                                           ("damping", 1)])
+@pytest.mark.parametrize("setting,value", [("surprise", True), ("qualified", False)])
 def test_saved_lesson_refuses_unsupported_phase_policies_before_mutation(setting, value):
     brain, drive, memory = captured_brain()
     original, live_boundary = brain.brain, brain.brain.memory

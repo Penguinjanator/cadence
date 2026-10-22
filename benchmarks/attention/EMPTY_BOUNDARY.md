@@ -62,3 +62,25 @@ cases are reported separately. A single repaired settle, a small residual or
 different attention weights cannot pass acquisition or establish a useful
 second head. Learned selection, causal interventions, held-out transfer and
 resource controls remain subsequent gates.
+
+## Retained development result
+
+The [matched run](results/empty-boundary-development.json), frozen at
+`607d4e80`, **fails acquisition**. The old masked runs reproduce their training,
+work and final parameter digests exactly. All overlapping occupied query drives,
+bank contents, decisions, free/nudged phases, parameter updates and optimizer
+history match between settings.
+
+| Empty boundary | Founder | Completed rounds / 512 | First refused boundary |
+| --- | --- | --- | --- |
+| Historical mask | 0 | 42 | First prefix; empty bank |
+| Historical mask | 1 | 21 | First prefix; empty bank |
+| Restoring agreement | 0 | 140 | Second prefix; one witnessed record |
+| Restoring agreement | 1 | 279 | Query; witnessed bank retained |
+
+The restoring option removes the original early failure but does not meet the
+unchanged 95% gate. Evaluation panels refuse and count all their unanswered
+slots wrong; their reported zero accuracy is not evidence that previously
+correct decisions became incorrect. The run takes 92.824283 host seconds,
+with earlier capacity and diagnostic charges retained separately. No learned
+head comparison, contextual readout or confirmation is opened by this result.

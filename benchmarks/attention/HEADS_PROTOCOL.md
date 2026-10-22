@@ -242,3 +242,38 @@ retains the complete failed readings. Cumulative capacity/diagnostic work is
 are consumed; no candidate equation round or fresh confirmation is run.
 Contextual readout transfer remains unrun. Resolve this shared acquisition/
 qualified-settling failure with supplied facts before a selector claim.
+
+## Matched empty-read boundary repair
+
+The separately frozen [empty-read experiment](EMPTY_BOUNDARY.md) preserves the
+old masked control and tests agreement with zero content when no record is held.
+Its [receipt](results/empty-boundary-development.json) reproduces both old
+failures and verifies identical occupied-query learning trajectories. Restoring
+founders reach 140/279 rounds, then refuse a populated-memory prefix and query
+respectively. Both still fail acquisition. The 2,048-sweep cap, tolerance and
+teacher are unchanged. Learned relevance, head benefit and representation
+transfer remain unrun.
+
+## Founder numerical control
+
+The [founder control](heads-founder-protocol.json) restores the numerical
+settings already used by the composed brain: initial step `1.0` and up to
+three halvings within one total qualified-sweep budget. The earlier prototype
+had explicitly reduced the step to `.1` and disabled damping. Its rejection
+was necessary while the library fallback constructed a plain graph and lost
+the experimental memory force.
+
+The benchmark now clones its own graph for the same bounded fallback, keeping
+the identical witnessed boundary and checking the original complete equations.
+No memory equation, teacher, rate, tolerance, head anatomy or initialization
+policy changes in this control. Empty-read restoring remains enabled. All four
+exposed/supplied-read founder cells must complete the unchanged acquisition
+gates before any learned-head comparison. Capacity has a separately declared
+360-host-second budget; a subsequent relevance stage, if admitted, has 600
+additional host seconds and retains all previous charges. The fallback shares
+the 2,048-sweep cap across attempts; it does not raise it.
+
+Local spectra motivate this comparison but do not establish convergence: a
+coarse step can be unstable, numerical attempts can enter different basins, and
+later learned parameters remain untested until the run. Earlier failed runs,
+including the smaller-step and initial-guess diagnostics, are not discarded.

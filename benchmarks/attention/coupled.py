@@ -26,6 +26,7 @@ from typing import Any
 import numpy as np
 
 from cadence import Brain, NeuralGraph
+from cadence.brain import BrainState, Equilibrium, Nudge
 from cadence.genome import Genome, Projection, develop
 from cadence.regions import Region
 
@@ -220,9 +221,9 @@ def anchor_setting(value: Any, mode: str) -> bool:
 class Graph(NeuralGraph):
     """CPU reference that includes memory in every transport AND residual check.
 
-    Parameter copies retain the boundary. Saved-drive teaching explicitly takes
-    matching stream rows. Damping remains unsupported because its fallback would
-    lose the boundary. Production integration is a later gate.
+    Parameter copies and bounded numerical damping retain the exact boundary.
+    Saved-drive teaching explicitly takes matching stream rows. Production
+    integration is a later gate.
     """
 
     memory: Memory | None = None
@@ -252,10 +253,74 @@ class Graph(NeuralGraph):
         result = super()._synaptic_input(s, blocks)
         return result if self.memory is None else result + self.memory.drive(s)
 
-    def equilibrate(self, *args: Any, damping: int = 0, **kwargs: Any) -> Any:
-        if damping:
-            raise ValueError("attention instrument requires damping=0")
-        return super().equilibrate(*args, damping=0, **kwargs)
+    def _with_dt(self, dt: float) -> Graph:
+        """A numerical candidate on the same parameters and immutable boundary."""
+        candidate = Graph(
+            self.connectome, self.neuron_model.replace(dt=dt), backend=self.backend,
+            efficacy=self.efficacy, log_gain=self.log_gain, bias=self.bias,
+            dense_limit=self.dense_limit, layout=self.layout, precision=self.precision,
+        )
+        candidate.memory = self.memory
+        return candidate
+
+    def equilibrate(
+        self, drive: np.ndarray, *, budget: int = 512, chunk: int = 32,
+        tolerance: float = 1e-5, state: BrainState | None = None,
+        mask: np.ndarray | None = None, nudge: Nudge | None = None, damping: int = 0,
+    ) -> Equilibrium:
+        """The library's bounded halving schedule with memory in every candidate.
+
+        Halvings share one sweep budget, preserve every live coordinate and check
+        the original complete equations. Numerical damping changes no memory,
+        parameters or teaching nudge.
+        """
+        for name, value, minimum in (
+            ("budget", budget, 0), ("chunk", chunk, 1), ("damping", damping, 0),
+        ):
+            if (isinstance(value, bool) or not isinstance(value, (int, np.integer))
+                    or value < minimum):
+                raise ValueError(f"{name} must be an integer >= {minimum}")
+        if not np.isfinite(tolerance) or tolerance < 0:
+            raise ValueError("tolerance must be finite and nonnegative")
+        if not damping:
+            return super().equilibrate(
+                drive, budget=budget, chunk=chunk, tolerance=tolerance,
+                state=state, mask=mask, nudge=nudge, damping=0,
+            )
+        attempts = min(damping + 1, max(1, budget))
+        minimum_rule = self.neuron_model.replace(
+            dt=float(np.ldexp(self.neuron_model.dt, -(attempts - 1))))
+        minimum_rule._validate_precision("float64")  # this reference graph is CPU float64
+        used = checks = stagnation_checks = 0
+        current_state = state
+        for halving in range(attempts):
+            portion = (budget - used + attempts - halving - 1) // (attempts - halving)
+            candidate = self if halving == 0 else self._with_dt(
+                float(np.ldexp(self.neuron_model.dt, -halving)))
+            phase = candidate._equilibrate_local(
+                drive, state=current_state, budget=portion, chunk=chunk,
+                tolerance=tolerance, mask=mask, nudge=nudge,
+                stop_if_stalled=halving < attempts - 1,
+            )
+            used += phase.steps
+            checks += phase.residual_checks
+            stagnation_checks += phase.stagnation_checks
+            error = phase.residual
+            if halving:
+                error = self.residual(drive, phase.state, mask=mask, nudge=nudge)
+                checks += 1
+            result = Equilibrium(
+                phase.state, error, used, tolerance, residual_checks=checks,
+                damping_halvings=halving, stagnation_checks=stagnation_checks,
+            )
+            if np.all(result.qualified) or used >= budget:
+                return result
+            if not all(np.isfinite(value).all() for value in (
+                phase.state.v, phase.state.activation, phase.state.adaptation,
+            )):
+                return result
+            current_state = phase.state
+        return result
 
 
 class AttentionBrain(Brain):
@@ -282,8 +347,8 @@ class AttentionBrain(Brain):
         if mode not in ("agreement", "linear", "competitive"):
             raise ValueError("unknown memory equation")
         empty_anchor = anchor_setting(empty_anchor, mode)
-        options.update(recall=True, recall_address=0.0, recall_null=0.0,
-                       learning_qualified=True, learning_damping=0)
+        options.update(recall=True, recall_address=0.0, recall_null=0.0, learning_qualified=True)
+        options.setdefault("learning_damping", 0)
         options.setdefault("learning_nudged_steps", options.get("learning_free_steps", 1024))
         genome = Genome.composed(inputs, actions, seed=seed, **options)
         width = Genome.observation_width(inputs, options.get("code"), options.get("learned_code"))
@@ -329,8 +394,8 @@ class AttentionBrain(Brain):
         address lesson runs. Returns ``Learner.step``'s pair, or None without selected rows.
         """
         cfg = self.learner.config
-        if not cfg.qualified or cfg.damping or cfg.surprise:
-            raise ValueError("saved attention lessons need qualified phases and damping=surprise=0")
+        if not cfg.qualified or cfg.surprise:
+            raise ValueError("saved attention lessons need qualified phases and surprise=0")
         graph = self.brain
         if not isinstance(graph, Graph):
             raise ValueError("saved attention lessons need the experimental graph")
@@ -378,8 +443,9 @@ class AttentionBrain(Brain):
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
         cfg = self.learner.config
-        if not cfg.qualified or cfg.damping or cfg.surprise:
-            raise ValueError("attention instrument needs qualified full-row teaching and damping=0")
+        if not cfg.qualified or cfg.surprise:
+            raise ValueError(
+                "attention instrument needs qualified full-row teaching and surprise=0")
         if self.recall is None or self.recall.address != 0 or self.recall.window != 1:
             raise ValueError("attention instrument requires one-event keys and no address lesson")
         drive = super().stimulus(observations, memory=memory)

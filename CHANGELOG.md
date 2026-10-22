@@ -14,6 +14,10 @@
   representation probe. Original failures and the 95% gate remain intact;
   learned relevance and useful head specialization still need behavioral evidence.
   This adds no supported attention mode to `Brain.compose` and changes no retrieval defaults.
+- Preserve the experimental memory boundary through qualified step-halving attempts
+  and clear stale boundary caches on trial reset. Add a matched empty-read
+  agreement control and retain its failed acquisition result; numerical work
+  and the original 95% floor remain explicit.
 
 ## 0.85.1 — 2026-10-22
 

@@ -22,12 +22,14 @@ import numpy as np
 import cadence
 from cadence import Brain
 from cadence.learning import LearningPhaseError
-from cadence.receipts import Receipt, canonical_sha256, source_manifest
+from cadence.receipts import Receipt, canonical_json, canonical_sha256, source_manifest
 
 HERE = Path(__file__).resolve().parent
 PROTOCOL = HERE / "heads-protocol.json"
 PROTOCOL_NAMES = ("heads-protocol.json", "heads-longer-protocol.json",
-                  "heads-fixed-read-protocol.json", "heads-anchored-protocol.json")
+                  "heads-fixed-read-protocol.json", "heads-anchored-protocol.json",
+                  "heads-founder-protocol.json")
+FOUNDER_PROTOCOL = "heads-founder-protocol.json"
 
 
 def protocol_path(name: str) -> Path:
@@ -83,6 +85,10 @@ def sources(protocol: Path | None = None) -> list[tuple[str, Path]]:
         names.append("heads-protocol.json")
     if active.name == "heads-fixed-read-protocol.json":
         names += ["heads-longer-protocol.json", "fixed_read.py"]
+    if active.name == FOUNDER_PROTOCOL:
+        names += ["heads-longer-protocol.json", "heads-fixed-read-protocol.json",
+                  "fixed_read.py", "empty-boundary-protocol.json",
+                  "empty_boundary_admission.py", "verify.py", "admission.py"]
     names += ["dual_binding.py", "heads.py", "coupled.py", "repair_admission.py",
               "repair-protocol.json"]
     paths = [("benchmarks/attention/" + name, active if name == active.name else HERE / name)
@@ -90,6 +96,10 @@ def sources(protocol: Path | None = None) -> list[tuple[str, Path]]:
     paths += [("benchmarks/binding/token_binding.py", Path(binding.__file__)),
               ("benchmarks/relevance/selective_recall.py", Path(sr.__file__)),
               ("benchmarks/relevance/acquisition_controls.py", Path(repair.controls.__file__))]
+    if active.name == FOUNDER_PROTOCOL:
+        paths += [("benchmarks/attention/results/" + name, HERE / "results" / name)
+                  for name in ("empty-boundary-development.json",
+                               "heads-capacity-fixed-read.json")]
     return paths + [("src/cadence/" + str(p.relative_to(package)), p)
                     for p in sorted(package.rglob("*.py"))]
 
@@ -143,6 +153,8 @@ def make_brain(arm: str, seed: int, protocol: dict[str, Any], mode="agreement") 
         options = {k: v for k, v in options.items() if not k.startswith("recall_")}
         brain = Brain.compose(task.INPUTS, task.VALUES * task.SLOTS, seed=seed, **options)
         original = brain.brain
+        if "numerical_control" in protocol and original.neuron_model.dt != protocol["dt"]:
+            raise ValueError("actual composed founder dt differs from the frozen control")
         brain.learner.brain = heads.Graph(
             original.connectome, original.neuron_model.replace(dt=protocol["dt"]),
             efficacy=original.efficacy, bias=original.bias, log_gain=original.log_gain)
@@ -166,6 +178,61 @@ def make_brain(arm: str, seed: int, protocol: dict[str, Any], mode="agreement") 
     if arm == "supplied_reads" and not fixed_capacity:
         brain._supplied_content_amplitude = content_amplitude
     return brain
+
+
+def founder_defaults() -> dict[str, Any]:
+    """Inspect the actual composed founder without a settle or a dt override."""
+    brain = Brain.compose(task.INPUTS, task.VALUES * task.SLOTS, modules=(32,),
+                          episodic=False, seed=0)
+    return {"neuron_model": brain.brain.neuron_model.to_dict(),
+            "learning_damping": brain.learner.config.damping}
+
+
+def numerical_settings(brain: Brain) -> dict[str, Any]:
+    return {"dt": float(brain.brain.neuron_model.dt),
+            "damping": int(brain.learner.config.damping),
+            "empty_anchor": bool(getattr(brain, "empty_anchor", False))}
+
+
+def numerical_check(result: dict[str, Any], protocol: dict[str, Any]) -> str | None:
+    """Bind actual settings on the new control; historical receipts stay unchanged."""
+    expected = make_brain(result["arm"], result["seed"], protocol, result["mode"])
+    if (result["numerical_policy"] != numerical_settings(expected)
+            or result["neuron_model"] != expected.brain.neuron_model.to_dict()
+            or result["learning_config"] != expected.learner.config.to_dict()
+            or result["resolved"]["genes"] != expected.describe()["genes"]
+            or result["neurons"] != expected.connectome.n
+            or result["synapses"] != expected.connectome.synapses
+            or result["mode"] != "agreement"):
+        return "founder numerical settings differ"
+    return None
+
+
+def founder_prior(path: Path, protocol: dict[str, Any]) -> Receipt:
+    """Verify the failed old field against its archived sources, not the new field."""
+    verifier = load("heads_founder_historical_verifier", HERE / "verify.py")
+    valid, message = verifier.verify(path)
+    receipt, declared = Receipt.read(path), protocol["prior"]
+    if (not valid or receipt.kind != declared["receipt_kind"]
+            or receipt.digest != declared["receipt_digest"]
+            or receipt.body["passed"] is not False
+            or receipt.body["cumulative_host_seconds"]
+            != declared["receipt_cumulative_host_seconds"]):
+        raise ValueError("founder control requires the verified failed empty-boundary receipt: "
+                         + message)
+    return receipt
+
+
+def founder_previous(protocol: dict[str, Any], receipt: Receipt) -> float:
+    declared = protocol["prior"]
+    charges = [receipt.body["cumulative_host_seconds"],
+               declared["failure_diagnostic_host_seconds"],
+               declared["initializer_diagnostic_host_seconds"],
+               declared["algebra_audit_host_seconds"]]
+    if (not np.isfinite(charges).all() or min(charges) < 0
+            or sum(charges) != declared["previous_host_seconds"]):
+        raise ValueError("founder prior cumulative charges differ")
+    return float(sum(charges))
 
 
 def prepare(brain: Brain, rows: np.ndarray, arm: str, condition="intact"):
@@ -313,6 +380,27 @@ def acquired(result, floor):
         return False
 
 
+def budgeted_evaluation(brain, arm, rows, deadline, condition="intact"):
+    """Start no new panel after this phase expires; retain all unanswered rows."""
+    if time.monotonic() < deadline:
+        return evaluate(brain, arm, rows, condition)
+    answers = np.full((len(rows), 2), -1, dtype=np.int64)
+    return {"status": "unrun_budget", "answers": answers.tolist(),
+            "scores": task.scores(answers, rows), "work": asdict(sr.Work()),
+            "association": None, "attention": None}
+
+
+def founder_evaluated(result):
+    """Held accuracy is unrestricted, but every intact panel must be measured."""
+    return all(
+        result["evaluation"][name].get("status", "completed") == "completed"
+        and not result["evaluation"][name]["work"]["action_refusals"]
+        and not task.scores(result["evaluation"][name]["answers"],
+                            task.panel(name))["unanswered_slots"]
+        for name in ("train", "held_out", "all")
+    )
+
+
 def trial(arm, seed, protocol, deadline, mode="agreement"):
     began = time.monotonic()
     brain = make_brain(arm, seed, protocol, mode)
@@ -321,18 +409,23 @@ def trial(arm, seed, protocol, deadline, mode="agreement"):
                            "softmax_elements", "memory_drive_evaluations",
                            "fixed_read_coordinate_updates")}
     schedule = task.draw(seed, protocol["task"]["rounds"], protocol["task"]["batch"])
+    def panel(rows, condition="intact"):
+        if "numerical_control" in protocol:
+            return budgeted_evaluation(brain, arm, rows, deadline, condition)
+        return evaluate(brain, arm, rows, condition)
+
     with metered(cost):
-        frozen = evaluate(brain, arm, task.panel("all"))
+        frozen = panel(task.panel("all"))
         training = train(brain, arm, schedule, min(
             deadline, time.monotonic() + protocol["budget"]["training_seconds_per_arm"]))
         final = sr.parameter_digest(brain)
-        evaluation = {name: evaluate(brain, arm, task.panel(name))
+        evaluation = {name: panel(task.panel(name))
                       for name in ("train", "held_out", "all")}
         if arm != "exposed":
-            evaluation["erased"] = evaluate(brain, arm, task.panel("all"), "erased")
+            evaluation["erased"] = panel(task.panel("all"), "erased")
             if arm == "h2":
                 for h in range(2):
-                    evaluation[f"head_{h}"] = evaluate(brain, arm, task.panel("all"), f"head_{h}")
+                    evaluation[f"head_{h}"] = panel(task.panel("all"), f"head_{h}")
     random = np.random.default_rng(np.random.SeedSequence([622023, seed])).integers(
         task.VALUES, size=(len(task.CASES), 2))
     result = {
@@ -349,7 +442,12 @@ def trial(arm, seed, protocol, deadline, mode="agreement"):
     }
     floor = protocol["gates"]["exposed_acquisition_floor" if arm == "exposed"
                                else "content_use_floor"]
-    result["acquired"] = acquired(result, floor)
+    result["acquired"] = acquired(result, floor) and (
+        "numerical_control" not in protocol or founder_evaluated(result))
+    if "numerical_control" in protocol:
+        result.update(numerical_policy=numerical_settings(brain),
+                      learning_config=brain.learner.config.to_dict(),
+                      evaluation_parameters=sr.parameter_digest(brain))
     return result
 
 
@@ -367,6 +465,22 @@ def check(body, protocol=None):
             protocol = json.loads(PROTOCOL.read_text())
         if body["protocol"] != protocol:
             return "heads protocol differs"
+        founder = selector == FOUNDER_PROTOCOL
+        if founder:
+            defaults = founder_defaults()
+            if (defaults["neuron_model"]["dt"] != 1.0
+                    or defaults["learning_damping"] != 3
+                    or body["founder_defaults"] != defaults):
+                return "actual composed founder defaults differ"
+            prior = founder_prior(HERE / "results" / protocol["prior"]["receipt_file"], protocol)
+            previous = founder_previous(protocol, prior)
+            elapsed = body["elapsed_host_seconds"]
+            if (not np.isfinite(elapsed) or elapsed < 0
+                    or body["prior_reference"] != prior.digest
+                    or body["previous_host_seconds"] != previous
+                    or body["budget_scope"] != "additional_founder_capacity_stage"
+                    or body["cumulative_host_seconds"] != previous + elapsed):
+                return "founder cumulative budget differs"
         runs = body["runs"]
         seeds = protocol["development_seeds"]
         first = [("exposed", seed) for seed in seeds]
@@ -377,6 +491,13 @@ def check(body, protocol=None):
         if [(r["arm"], r["seed"]) for r in runs] != expected:
             return "missing, duplicate or unpermitted capacity arms"
         for result in runs:
+            if founder:
+                problem = numerical_check(result, protocol)
+                if problem:
+                    return problem
+                if (result["parameters_preserved"]
+                        != (result["final_parameters"] == result["evaluation_parameters"])):
+                    return "founder evaluation parameter preservation differs"
             training = result["training"]
             rounds = training["rounds"]
             if (type(rounds) is not int or not 0 <= rounds <= protocol["task"]["rounds"]
@@ -398,7 +519,9 @@ def check(body, protocol=None):
                 return "capacity schedule differs"
             floor = protocol["gates"]["exposed_acquisition_floor" if result["arm"] == "exposed"
                                        else "content_use_floor"]
-            if result["acquired"] != acquired(result, floor):
+            expected_acquired = acquired(result, floor) and (
+                not founder or founder_evaluated(result))
+            if result["acquired"] != expected_acquired:
                 return "capacity gate differs"
         capacity = len(runs) == 2 * len(seeds) and all(r["acquired"] for r in runs)
         decision = ("capacity_admitted; selection_and_causal_gates_pending" if capacity else
@@ -441,19 +564,26 @@ def verify_prior(prior: Path) -> Receipt:
     return receipt
 
 
-def run(prior: Path | None = None):
+def run(prior: Path | None = None, journal: Path | None = None):
     if PROTOCOL.name == "heads-anchored-protocol.json":
         raise ValueError("use heads_relevance.py after verified empty-boundary capacity")
     protocol = json.loads(PROTOCOL.read_text())
     manifest = source_manifest(sources())
     began = time.monotonic()
     previous, reference = 0.0, None
+    founder = PROTOCOL.name == FOUNDER_PROTOCOL
+    defaults = founder_defaults() if founder else None
+    if founder and (defaults["neuron_model"]["dt"] != 1.0
+                    or defaults["learning_damping"] != 3):
+        raise ValueError("actual composed founder defaults differ from dt1/damping3")
+    if founder and prior is None:
+        raise ValueError("the founder control requires its retained failed empty-boundary receipt")
     if PROTOCOL.name == "heads-longer-protocol.json" and prior is None:
         raise ValueError("the numerical retry requires its retained failed base admission")
     if PROTOCOL.name == "heads-fixed-read-protocol.json" and prior is None:
         raise ValueError("the anchored control revision requires its failed longer admission")
     if prior is not None:
-        receipt = verify_prior(prior)
+        receipt = founder_prior(prior, protocol) if founder else verify_prior(prior)
         if (PROTOCOL.name == "heads-longer-protocol.json"
                 and receipt.body.get("protocol_file", "heads-protocol.json")
                 != "heads-protocol.json"):
@@ -462,20 +592,29 @@ def run(prior: Path | None = None):
                 and receipt.body.get("protocol_file", "heads-protocol.json")
                 != "heads-longer-protocol.json"):
             raise ValueError("the one anchored control revision must follow the longer protocol")
-        previous = (receipt.body["elapsed_host_seconds"]
+        previous = (founder_previous(protocol, receipt) if founder else
+                    receipt.body["elapsed_host_seconds"]
                     + receipt.body.get("previous_host_seconds", 0.0))
         reference = receipt.digest
     diagnostic = protocol.get("diagnostic_charge_seconds", 0.0)
     if not np.isfinite(diagnostic) or diagnostic < 0:
         raise ValueError("diagnostic host charge must be finite and nonnegative")
     previous += diagnostic
-    deadline = began + max(0, protocol["budget"]["development_total_host_seconds"] - previous)
+    allowance = protocol["budget"]["development_total_host_seconds"]
+    deadline = began + (allowance if founder else max(0, allowance - previous))
     runs = []
     stop = None
     for arm in ("exposed", "supplied_reads"):
         for seed in protocol["development_seeds"]:
             result = trial(arm, seed, protocol, deadline)
             runs.append(result)
+            if journal is not None:
+                journal.parent.mkdir(parents=True, exist_ok=True)
+                journal.write_text(canonical_json({"status": "running_unverified",
+                    "protocol": protocol, "protocol_file": PROTOCOL.name, "runs": runs,
+                    "source": manifest, "source_revision": sr.revision(),
+                    "previous_host_seconds": previous, "prior_reference": reference,
+                    "elapsed_host_seconds": time.monotonic() - began}) + "\n")
             print(json.dumps({"arm": arm, "seed": seed, "acquired": result["acquired"],
                               "train": result["evaluation"]["train"]["scores"],
                               "rounds": result["training"]["rounds"]}), flush=True)
@@ -496,6 +635,12 @@ def run(prior: Path | None = None):
         "previous_host_seconds": previous, "prior_reference": reference,
         "cadence_version": cadence.__version__, "numpy_version": np.__version__,
     }
+    if founder:
+        body.update(founder_defaults=defaults, budget_scope="additional_founder_capacity_stage",
+                    cumulative_host_seconds=previous + body["elapsed_host_seconds"])
+    if journal is not None:
+        journal.write_text(canonical_json({"status": "complete_unverified", "body": body,
+                                          "source": manifest}) + "\n")
     problem = check(body)
     if problem:
         raise AssertionError(problem)
@@ -512,6 +657,6 @@ if __name__ == "__main__":
     PROTOCOL = protocol_path(args.protocol)
     if args.out.exists():
         raise FileExistsError(args.out)
-    receipt = run(args.prior)
+    receipt = run(args.prior, args.out.with_suffix(".partial.json"))
     receipt.write(args.out)
     print(receipt.body["decision"])

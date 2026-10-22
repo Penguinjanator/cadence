@@ -41,6 +41,29 @@ def test_anchored_relevance_dispatch_rejects_a_missing_dependency_inventory(tmp_
     assert message == "anchored relevance source manifest paths differ"
 
 
+@pytest.mark.parametrize("stage", ["admission", "relevance"])
+def test_founder_dispatch_requires_the_complete_dependency_inventory(tmp_path, stage):
+    path = tmp_path / "unbound-founder.json"
+    Receipt.build(f"cadence-attention-heads-{stage}/1",
+                  {"protocol_file": "heads-founder-protocol.json"}, []).write(path)
+    valid, message = verifier.verify(path)
+    assert not valid
+    assert message == "founder control source manifest paths differ"
+
+
+def test_retained_empty_read_repair_verifies_without_admitting_learned_heads():
+    path = RESULTS / "empty-boundary-development.json"
+    valid, message = verifier.verify(path)
+    assert valid, message
+    body = Receipt.read(path).body
+    assert body["masked_historical_reproduced"] is True
+    assert body["occupied_query_overlap_identical"] is True
+    assert [r["training"]["rounds"] for r in body["runs"]] == [42, 21, 140, 279]
+    assert body["passed"] is False
+    assert body["candidate_rounds_used"] == 0
+    assert body["confirmation_seeds_used"] == []
+
+
 def receipt(name: str) -> dict:
     return json.loads((RESULTS / name).read_text())
 

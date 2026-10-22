@@ -184,8 +184,8 @@ class MultiHeadBrain(AttentionBrain):
             raise ValueError("heads require saved-row teaching and one-event keys")
         if mode not in ("agreement", "linear", "competitive"):
             raise ValueError("unknown memory equation")
-        options.update(recall=True, recall_address=0.0, recall_null=0.0,
-                       learning_qualified=True, learning_damping=0)
+        options.update(recall=True, recall_address=0.0, recall_null=0.0, learning_qualified=True)
+        options.setdefault("learning_damping", 0)
         options.setdefault("learning_nudged_steps", options.get("learning_free_steps", 1024))
         genome = Genome.composed(inputs, actions, seed=seed, **options)
         width = Genome.observation_width(inputs, options.get("code"), options.get("learned_code"))
@@ -238,8 +238,8 @@ class MultiHeadBrain(AttentionBrain):
                 self.brain.memory = MultiMemory((self.brain.memory,))
             return drive
         cfg = self.learner.config
-        if not cfg.qualified or cfg.damping or cfg.surprise:
-            raise ValueError("heads require qualified saved-row teaching and damping=surprise=0")
+        if not cfg.qualified or cfg.surprise:
+            raise ValueError("heads require qualified saved-row teaching and surprise=0")
         recall = self.recall
         if recall is None or recall.address != 0 or recall.window != 1:
             raise ValueError("heads require one-event keys and no address lesson")

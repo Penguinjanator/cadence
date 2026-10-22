@@ -61,6 +61,10 @@ def sources() -> list[tuple[str, Path]]:
         paths += empty_owner().sources() + [(
             "benchmarks/attention/results/" + declared["capacity_receipt_file"],
             HERE / "results" / declared["capacity_receipt_file"])]
+    if admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL:
+        declared = json.loads(admission.PROTOCOL.read_text())["relevance_stage"]
+        paths.append(("benchmarks/attention/results/" + declared["capacity_receipt_file"],
+                      HERE / "results" / declared["capacity_receipt_file"]))
     unique = {}
     for name, path in paths:
         if name in unique and unique[name].resolve() != path.resolve():
@@ -182,6 +186,11 @@ def verify_capacity(path: Path) -> Receipt:
     admission.PROTOCOL = admission.protocol_path(
         receipt.body.get("protocol_file", "heads-protocol.json"))
     expected = admission.sources()
+    if admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL:
+        valid, message = Receipt.verify(path, sources=expected, check=capacity_check)
+        if not valid or receipt.kind != "cadence-attention-heads-admission/1":
+            raise ValueError("founder capacity prerequisite: " + message)
+        return receipt
     if [entry["path"] for entry in receipt.source["files"]] != [name for name, _ in expected]:
         raise ValueError("capacity prerequisite: source manifest paths differ")
     bound = []
@@ -557,6 +566,9 @@ def trial(arm, seed, mode, protocol, deadline, parameters=None):
             "neurons": brain.connectome.n, "synapses": brain.connectome.synapses,
             "resolved": brain.describe(), "neuron_model": brain.brain.neuron_model.to_dict(),
         }
+        if "numerical_control" in protocol:
+            result.update(numerical_policy=admission.numerical_settings(brain),
+                          learning_config=brain.learner.config.to_dict())
         result["metrics"] = metrics(result, protocol)
         retention = {"status": "not_run_primary_failed", "passed": False}
         if result["metrics"]["primary_passed"]:
@@ -589,17 +601,20 @@ def run(capacity_path: Path, parameters: Path | None = None) -> Receipt:
     capacity = verify_capacity(capacity_path)
     protocol = json.loads(admission.PROTOCOL.read_text())
     anchored = getattr(capacity, "kind", None) == EMPTY_KIND
-    if anchored:
-        retained = HERE / "results" / protocol["prerequisites"]["capacity_receipt_file"]
+    founder = admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL
+    if anchored or founder:
+        stage = protocol["relevance_stage"] if founder else protocol["prerequisites"]
+        retained = HERE / "results" / stage["capacity_receipt_file"]
         if Receipt.read(retained).digest != capacity.digest:
             raise ValueError("retain the verified capacity receipt at its declared filename")
     manifest = source_manifest(sources())
     began = time.monotonic()
-    spent = (capacity.body["cumulative_host_seconds"] if anchored else
+    spent = (capacity.body["cumulative_host_seconds"] if anchored or founder else
              capacity.body["elapsed_host_seconds"]
              + capacity.body.get("previous_host_seconds", 0.0))
-    allowance = protocol["budget"]["development_total_host_seconds"]
-    deadline = began + (allowance if anchored else max(0.0, allowance - spent))
+    allowance = (protocol["relevance_stage"]["development_total_host_seconds"] if founder else
+                 protocol["budget"]["development_total_host_seconds"])
+    deadline = began + (allowance if anchored or founder else max(0.0, allowance - spent))
     runs, selected = [], None
     for mode in protocol["candidate_order"]:
         for arm in ARMS:
@@ -642,6 +657,12 @@ def run(capacity_path: Path, parameters: Path | None = None) -> Receipt:
             empty_boundary_host_seconds=capacity.body["elapsed_host_seconds"],
             cumulative_host_seconds=spent + body["elapsed_host_seconds"],
         )
+    if founder:
+        body.update(capacity_receipt_file=protocol["relevance_stage"]["capacity_receipt_file"],
+                    budget_scope="additional_relevance_stage",
+                    previous_host_seconds=capacity.body["previous_host_seconds"],
+                    founder_capacity_host_seconds=capacity.body["elapsed_host_seconds"],
+                    cumulative_host_seconds=spent + body["elapsed_host_seconds"])
     problem = check(body)
     if problem:
         raise AssertionError(problem)
@@ -655,6 +676,7 @@ def check(body):
                 or body["protocol"] != protocol or body["confirmation_seeds_used"]):
             return "protocol or unopened confirmation differs"
         anchored = admission.PROTOCOL.name == ANCHORED_PROTOCOL
+        founder = admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL
         if anchored:
             declared = protocol["prerequisites"]
             capacity = anchored_capacity(HERE / "results" / declared["capacity_receipt_file"])
@@ -674,6 +696,21 @@ def check(body):
                     or body["cumulative_host_seconds"]
                     != prior["cumulative_host_seconds"] + body["elapsed_host_seconds"]):
                 return "anchored prerequisite or cumulative budget differs"
+        if founder:
+            declared = protocol["relevance_stage"]
+            capacity = verify_capacity(HERE / "results" / declared["capacity_receipt_file"])
+            prior = capacity.body
+            elapsed = body["elapsed_host_seconds"]
+            if (body["capacity_receipt_file"] != declared["capacity_receipt_file"]
+                    or body["capacity_reference"] != capacity.digest
+                    or body["budget_scope"] != "additional_relevance_stage"
+                    or body["previous_host_seconds"] != prior["previous_host_seconds"]
+                    or body["founder_capacity_host_seconds"] != prior["elapsed_host_seconds"]
+                    or body["capacity_host_seconds"] != prior["cumulative_host_seconds"]
+                    or not np.isfinite(elapsed) or elapsed < 0
+                    or body["cumulative_host_seconds"]
+                    != prior["cumulative_host_seconds"] + elapsed):
+                return "founder prerequisite or cumulative budget differs"
         runs = body["runs"]
         selected = None
         used_modes = []
@@ -690,6 +727,10 @@ def check(body):
                         continue
                     if anchored and (result["empty_anchor"] is not True or mode != "agreement"):
                         return "anchored relevance boundary or equation differs"
+                    if founder:
+                        problem = admission.numerical_check(result, protocol)
+                        if problem or result["empty_anchor"] is not True:
+                            return problem or "founder relevance empty boundary differs"
                     if set(result["evaluation"]) != {"train", "held_out", "all"}:
                         return "missing relevance panel"
                     conditions = {"intact", "erase_0", "erase_1", "neutral_sham", "reorder",

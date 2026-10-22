@@ -256,6 +256,6 @@ def test_partial_rows_and_changed_equations_refuse_instead_of_broadcasting_memor
     with pytest.raises(ValueError, match="streams"):
         graph.memory.drive(np.zeros((2, 4)))
     with pytest.raises(ValueError, match="damping"):
-        graph.equilibrate(np.zeros((1, 4)), damping=1)
+        graph.equilibrate(np.zeros((1, 4)), damping=-1)
     with pytest.raises(ValueError, match="CPU"):
         Graph(graph.connectome, graph.neuron_model, backend="torch")

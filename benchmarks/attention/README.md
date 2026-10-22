@@ -74,8 +74,11 @@ relation recomputed in **every sweep and residual check**. No unresolved query
 or read is frozen to publish an answer. A slot is written only after an actual
 accepted observation, never from a teacher label or an imagined event.
 
-The prototype uses the CPU float64 reference path and refuses damping rather
-than allowing a fallback to drop the memory equations. It has no supported
+The prototype uses the CPU float64 reference path. Its bounded step-halving
+fallback now retains the same immutable memory boundary in every numerical
+candidate and checks the original full equations. Historical recipes retain
+damping zero; the [founder numerical control](heads-founder-protocol.json)
+tests the composed brain's existing step and damping policy. It has no supported
 reward, private imagination or pending-checkpoint continuation contract yet.
 Saved-drive teaching now takes corresponding rows of the immutable memory
 snapshot through all phases, restoring the complete boundary on success or
