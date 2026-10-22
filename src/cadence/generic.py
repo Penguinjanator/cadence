@@ -767,7 +767,7 @@ def _validate_life_state(
             count("pending_" + phase + "_steps")
             for name in ("v", "activation", "adaptation"):
                 array(f"pending/{phase}/{name}", (batch, n))
-    if "moment/observations" in data or "moment/action" in data:
+    if meta.get("pending", False) or "moment/observations" in data or "moment/action" in data:
         if not meta.get("pending", False):
             raise ValueError("saved action observations need pending credit")
         array("moment/observations", (batch, observed))
@@ -2512,7 +2512,7 @@ class Brain:
           a custom anatomy), provenance rather than a description of learned weights.
         - ``genes``: every setting by the name ``compose`` and ``retune`` take, the teaching
           point as ``teaching`` (``"custom"`` for steps that ``learning=LearnerConfig(...)``
-          set outside both points).
+          set outside both points, whose four effective settings are then under ``learning``).
         - ``memories``: one entry per member of ``brain.memories``, its ``to_dict()``.
         - ``pending``: whether an issued action owns the next real outcome.
 
@@ -2531,6 +2531,8 @@ class Brain:
         # the nudge is a standalone Learner's choice, a composed brain's the cross-entropy; the
         # steps and their normalization are the teaching point's
         genes: dict[str, Any] = {"teaching": teaching}
+        if teaching == "custom":
+            genes["learning"] = steps
         genes.update(
             {
                 f"learning_{name}": value
@@ -2742,7 +2744,16 @@ class Brain:
             previous, rest = code.halvings, code.rest_stability()
             if rest > previous:
                 self._step_region(rest)
-                phase = code.settle(stimulus, warm, budget=budget(), tolerance=tolerance)
+                fallback = code.settle(stimulus, warm, budget=budget(), tolerance=tolerance)
+                # Both attempts are work of this phase, even though the fallback starts
+                # from the original warm state. Keep its actual final state and residual.
+                phase = Equilibrium(
+                    fallback.state, fallback.residual, phase.steps + fallback.steps,
+                    fallback.tolerance,
+                    residual_checks=phase.residual_checks + fallback.residual_checks,
+                    damping_halvings=fallback.damping_halvings,
+                    stagnation_checks=phase.stagnation_checks + fallback.stagnation_checks,
+                )
                 if not np.all(phase.qualified):
                     self._step_region(previous)
         if not np.all(phase.qualified):
@@ -4178,6 +4189,8 @@ class Brain:
                 )
             composition = _load_composition(meta.get("composition"), learner)
             populations = learner.brain.connectome.populations
+            if not np.array_equal(learner.output_index, populations.get("motor", ())):
+                raise ValueError("saved learner outputs must match the motor population in order")
             code = _load_code(
                 meta, data, len(populations.get("sensory", populations.get("visual/input", ())))
             )

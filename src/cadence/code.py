@@ -79,20 +79,22 @@ code, sqrt(w) unit(x)])`` with ``w`` the identity weight 0.9 (``LearnedCode.IDEN
 moves as the region learns. An observation wider than the code is keyed on the code
 alone (``LearnedCode.joins``), so that the key keeps the code's width.
 
-The code's fixed points are stable equilibria of the neuron equations (the lateral weights
-are minus a Gram matrix, so the coupling's eigenvalues stay below the unit's slope), but the
-brain's synchronous sweep at the model's step can oscillate around one when several units
-with overlapping columns are active together: the sweep contracts only while ``dt * (1 -
-mu_min)`` stays below 2, ``mu_min`` the smallest eigenvalue of the slope-weighted lateral
-coupling. ``stability`` reports the halvings of the step the settled code needs, and the
-code's phase integrates at that step with its budget scaled to keep the same time
+With the founder standing gain 2, the lateral coupling less that gain is ``-I - G``,
+``G`` the dictionary's Gram matrix, so the slope-weighted coupling is nonpositive. The
+brain's synchronous sweep can still oscillate when overlapping columns are active together:
+its negative modes need ``dt * (1 - mu_min) < 2``. ``stability`` reports the halvings for
+that bound. Local contraction also requires the largest slope-weighted coupling eigenvalue
+below one; custom controls, including ``top_down=0`` with a large negative-branch leak,
+need that separate check. Damping cannot stabilize an intrinsically growing mode.
+The code's phase integrates at its selected step with its budget scaled to preserve the
+model integration horizon
 (``restep``); the code is held as a source through the whole settle, so the rest of the
-brain keeps the model's step. The restoring term adds ``top_down`` times the slope to the
-coupling's diagonal. ``rest_stability`` bounds the same over every state the region can
-reach (the slopes at their largest, every unit active), from the dictionary alone: a code
+brain keeps the model's step. The restoring term subtracts ``top_down`` times the slope from
+the coupling's diagonal. ``rest_stability`` bounds the same negative modes over every state
+the region can reach, using the largest slope on either activation branch: a code
 phase that does not settle at its step is settled once more at that bound before the moment
-is refused, so a dictionary whose columns all overlap (one input: every column is plus or
-minus the same vector) settles from its first moment.
+is refused. This bound is available from the first moment even when the dictionary's
+columns all overlap (one input: every column is plus or minus the same vector).
 """
 
 from __future__ import annotations
@@ -116,8 +118,18 @@ _CODE_STREAM = 7109
 
 def _unit_columns(values: np.ndarray) -> np.ndarray:
     """Each column scaled to unit length; a zero column stays zero."""
-    norm = np.linalg.norm(values, axis=0, keepdims=True)
-    return np.asarray(values / np.where(norm > 0.0, norm, 1.0))
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        norm = np.linalg.norm(values, axis=0, keepdims=True)
+    out = values / np.where(norm > 0.0, norm, 1.0)
+    # Keep the ordinary arithmetic unchanged; rescale only columns whose squared norm
+    # overflowed or underflowed although their finite coordinates are nonzero.
+    exceptional = (~np.isfinite(norm) | ((norm == 0.0) & (values != 0.0).any(axis=0)))[0]
+    if exceptional.any():
+        part = values[:, exceptional]
+        scale = np.max(np.abs(part), axis=0, keepdims=True)
+        scaled = part / np.where(scale > 0.0, scale, 1.0)
+        out[:, exceptional] = scaled / np.linalg.norm(scaled, axis=0, keepdims=True)
+    return np.asarray(out)
 
 
 def _allocation(widths: tuple[int, ...], units: int) -> tuple[int, ...]:
@@ -137,8 +149,14 @@ def _allocation(widths: tuple[int, ...], units: int) -> tuple[int, ...]:
 
 def _unit_rows(values: np.ndarray) -> np.ndarray:
     """Each row scaled to unit length; a row without a positive entry stays zero."""
-    norm = np.linalg.norm(values, axis=1, keepdims=True)
-    return np.asarray(values / np.where(norm > 0.0, norm, 1.0))
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        norm = np.linalg.norm(values, axis=1, keepdims=True)
+    out = values / np.where(norm > 0.0, norm, 1.0)
+    nonzero = (values != 0.0).any(axis=1)[:, None]
+    exceptional = (~np.isfinite(norm) | ((norm == 0.0) & nonzero))[:, 0]
+    if exceptional.any():
+        out[exceptional] = _unit_columns(values[exceptional].T).T
+    return np.asarray(out)
 
 
 @dataclass
@@ -189,8 +207,8 @@ class LearnedCode:
     GENES = ("fields",)
     RUNTIME: tuple[str, ...] = ()
     CONSTRUCTION = ("fields",)
-    # the sweep's contraction bound: ``dt * (1 - mu_min)`` is kept at or below this, so the
-    # worst mode of the synchronous sweep contracts by at least a half per sweep
+    # Keep the lower end of the linearized sweep's spectrum at least -0.5.
+    # Contraction also requires its upper end below one.
     STEP_MARGIN = 1.5
     # settings the readings retired, refused by name with what the region does instead
     REMOVED = {
@@ -325,12 +343,13 @@ class LearnedCode:
     # -- the step
 
     def stability(self, v: np.ndarray) -> int:
-        """The halvings of the model's step under which the synchronous sweep contracts
-        around the fixed points at potentials ``v`` (``(batch, units)``): the least ``h``
+        """The step's halvings that damp the negative modes at potentials ``v``
+        (``(batch, units)``): the least ``h``
         with ``dt / 2^h * (1 - mu_min) <= STEP_MARGIN``, ``mu_min`` the smallest eigenvalue
         over the rows of ``D^1/2 (L - top_down I) D^1/2`` (``D`` the activation's slopes at
         ``v``, ``L`` the lateral weights, ``top_down`` the standing boundary's gain); 0 when
-        the sweep contracts at the model's own step."""
+        the bound holds at the model's own step. Local contraction also requires the largest
+        coupling eigenvalue below one, as the founder standing gain ensures."""
         v = np.atleast_2d(np.asarray(v, dtype=float))
         slopes = np.maximum(self.model.slope_at(v), 0.0)
         root = np.sqrt(slopes)
@@ -344,14 +363,19 @@ class LearnedCode:
         return 0 if need <= 1.0 else int(np.ceil(np.log2(need)))
 
     def rest_stability(self) -> int:
-        """The halvings of the model's step under which the synchronous sweep contracts
-        around any fixed point the region can reach: the bound of ``stability`` over every
-        state, from the dictionary alone. With every slope at most the activation's largest,
+        """The negative-mode step bound of ``stability`` over every state, from the
+        dictionary alone. With every slope at most the activation's largest,
         ``s_max``, the coupling's smallest eigenvalue is at least ``s_max (1 - lambda_max(G)
-        - top_down)``, ``G`` the dictionary's Gram matrix."""
+        - top_down)``, ``G`` the dictionary's Gram matrix. This does not stabilize a custom
+        control whose largest coupling eigenvalue is at least one."""
         rest = float(self.model.rest_emission)
         steepest = max(rest, 0.5)  # the active branch's steepest point of the sigmoid
-        s_max = self.model.slope * steepest * (1.0 - steepest) / (1.0 - rest)
+        positive = self.model.slope * steepest * (1.0 - steepest) / (1.0 - rest)
+        negative_peak = min(rest, 0.5)
+        negative = (
+            self.model.leak * self.model.slope * negative_peak * (1.0 - negative_peak) / rest
+        )
+        s_max = max(positive, negative)
         largest = float(np.linalg.eigvalsh(self.gram())[-1])
         mu = s_max * (1.0 - largest - self.top_down)
         need = self.model.dt * (1.0 - mu) / self.STEP_MARGIN
@@ -369,14 +393,23 @@ class LearnedCode:
 
     def restep(self, halvings: int) -> None:
         """The sub-network at the model's step halved ``halvings`` times."""
+        if (
+            isinstance(halvings, (bool, np.bool_))
+            or not isinstance(halvings, (int, np.integer))
+            or halvings < 0
+        ):
+            raise ValueError("halvings must be a nonnegative integer")
+        halvings = int(halvings)
         if halvings == self.halvings:
             return
-        self.halvings = int(halvings)
-        self.graph = NeuralGraph(
+        if halvings > 1074 or np.ldexp(self.model.dt, -halvings) <= 0.0:
+            raise ValueError("the learned code's step must remain positive")
+        graph = NeuralGraph(
             self.connectome,
-            self.model.replace(dt=float(np.ldexp(self.model.dt, -self.halvings))),
+            self.model.replace(dt=float(np.ldexp(self.model.dt, -halvings))),
             efficacy=self.lateral_efficacy(), bias=-self.thresholds,
         )
+        self.halvings, self.graph = halvings, graph
 
     # -- the tables as synapses
 
@@ -494,12 +527,44 @@ class LearnedCode:
         rectified activation of the region settled on the observation alone) where one was
         settled: the thresholds' share reads it, and the repair reads what it leaves
         unexplained beside the code in context; without it the code itself serves both.
-        The sub-network takes the new tables."""
-        x = self.read * np.atleast_2d(np.asarray(sensory, dtype=float))
-        a = np.maximum(np.atleast_2d(np.asarray(activation, dtype=float)), 0.0)
+        The sub-network takes the new tables. Invalid inputs or a nonfinite proposal refuse
+        the complete step, preserving the tables, graph and work counts. If a column's
+        proposed vector cancels exactly, its existing direction stays."""
+        def rows(value: np.ndarray, width: int, name: str) -> np.ndarray:
+            out = np.atleast_2d(np.asarray(value, dtype=float))
+            if out.ndim != 2 or out.shape[1] != width or not np.isfinite(out).all():
+                raise ValueError(f"{name} must have finite rows of width {width}")
+            return out
+
+        x = rows(sensory, self.inputs, "sensory")
+        a = rows(activation, self.units, "activation")
+        z = None if context is None else rows(context, self.context, "context")
+        own = None if free is None else rows(free, self.units, "free code")
+        if any(len(value) != len(x) for value in (a, z, own) if value is not None):
+            raise ValueError("the learned code's inputs need one row per event")
+        with np.errstate(over="ignore", invalid="ignore"):
+            x = self.read * x
+        if not np.isfinite(x).all():
+            raise ValueError("the learned code's sensory read must remain finite")
+        a = np.maximum(a, 0.0)
+        own = None if own is None else np.maximum(own, 0.0)
         n = len(x)
         if not n or not self.learning or not (self.rate or self.predictor or self.threshold_rate):
             return False
+        saved = self.dictionary, self.weights, self.thresholds, self.graph, self.work.copy()
+        try:
+            return self._learn(x, a, z, own)
+        except Exception:
+            self.dictionary, self.weights, self.thresholds, self.graph, work = saved
+            self.work.clear()
+            self.work.update(work)
+            raise
+
+    def _learn(
+        self, x: np.ndarray, a: np.ndarray, context: np.ndarray | None, free: np.ndarray | None,
+    ) -> bool:
+        """The original local rules on validated rows, rolled back by ``learn`` on refusal."""
+        n = len(x)
         moved = False
         if self.rate:
             # the columns of the units that fired move and are scaled back to unit length; a
@@ -511,6 +576,13 @@ class LearnedCode:
                 step = dictionary[:, fired] + self.rate * (residual.T @ a[:, fired])
                 if self.mask is not None:  # a unit's column stays within its field
                     step = step * self.mask[:, fired]
+                if not np.isfinite(step).all():
+                    raise ValueError("the learned code's dictionary must remain finite")
+                cancelled = ~(step != 0.0).any(axis=0)
+                if cancelled.any():
+                    # A zero vector has no direction to scale back to unit length.
+                    # Keep that unit's existing direction instead of erasing its dictionary.
+                    step[:, cancelled] = dictionary[:, fired][:, cancelled]
                 dictionary[:, fired] = _unit_columns(step)
                 if not np.isfinite(dictionary).all():
                     raise ValueError("the learned code's dictionary must remain finite")
@@ -551,6 +623,8 @@ class LearnedCode:
                 step = step - self.threshold_rate * self.silence * repairs
                 self.work["repairs"] += int(repairs.sum())
             self.thresholds = np.maximum(self.thresholds + step, 0.0)
+            if not np.isfinite(self.thresholds).all():
+                raise ValueError("the learned code's thresholds must remain finite")
             moved = True
         self.work["updates"] += 1
         self.work["update_rows"] += n

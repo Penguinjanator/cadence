@@ -34,6 +34,25 @@ from .learning import LearnedState
 __all__ = ["Trace", "FastSynapses", "History", "Recall", "columns"]
 
 
+def _stream_rows(rows: np.ndarray, batch: int) -> np.ndarray:
+    """Validate stream indices or a boolean mask before changing any stream state."""
+    selected = np.asarray(rows)
+    if (
+        selected.ndim != 1
+        or (selected.size and selected.dtype.kind not in "biu")
+        or (selected.dtype.kind == "b" and selected.shape != (batch,))
+    ):
+        raise ValueError("rows must be stream indices or a boolean mask matching the batch")
+    if not selected.size and selected.dtype.kind != "b":
+        return np.zeros(0, dtype=np.int64)
+    try:
+        return np.asarray(np.arange(batch, dtype=np.int64)[selected], dtype=np.int64)
+    except IndexError as exc:
+        raise ValueError(
+            "rows must be stream indices or a boolean mask matching the batch"
+        ) from exc
+
+
 def columns(index: np.ndarray) -> slice | np.ndarray:
     """A slice when the neurons are one contiguous range, else the index array.
 
@@ -618,11 +637,13 @@ class Recall:
         """Empty every stream, or the streams of ``rows`` only (streams that begin again): their
         slots, the cortex of the moment before and the window's events. The address map is
         learned and stays."""
+        if rows is not None:
+            rows = _stream_rows(rows, batch)
         if rows is None or self.streams != batch:
             self._empty(batch)
             return
         chosen = np.zeros(batch, dtype=bool)
-        chosen[np.asarray(rows, dtype=np.int64)] = True
+        chosen[rows] = True
         if chosen.all():
             self._empty(batch)
             return
@@ -660,11 +681,13 @@ class Recall:
         events) begins afresh. The
         address map is learned and stays. Another batch size empties the streams, as
         ``reset`` does."""
+        if rows is not None:
+            rows = _stream_rows(rows, batch)
         if self.streams != batch:
             self._empty(batch)
             return
         chosen = np.zeros(batch, dtype=bool)
-        chosen[slice(None) if rows is None else np.asarray(rows, dtype=np.int64)] = True
+        chosen[slice(None) if rows is None else rows] = True
         if not chosen.any():
             return
         # new arrays, never writes into the old ones: a caller may hold them to restore
@@ -675,6 +698,7 @@ class Recall:
 
     def keep(self, rows: np.ndarray) -> None:
         """Keep the memories of ``rows`` only (streams that ended are dropped)."""
+        rows = _stream_rows(rows, self.streams)
         self.keys, self.values, self.nexts, self.held = (
             a[rows] for a in (self.keys, self.values, self.nexts, self.held)
         )

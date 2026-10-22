@@ -118,7 +118,7 @@ trace's (`scales["trace"]`) founder is 1.2. The arguments of 0.84.3 `sensory_sca
 | `fit(observations, labels, *, epochs=30, batch=32) -> list[float]`, `predict(observations)`, `accuracy(observations, labels)` | Independent samples, without traces or recall; `fit` resets the streams first, keeping the arousal, and returns training accuracy per epoch. Noninteger labels and mismatched batches raise before any update. | [independent-sample controls](evaluate.md#independent-sample-controls) |
 | `retune(**genes) -> Brain` | Changes mutable settings in the same life, atomically, and resets nothing (`brain.arousal.reset()` resets the arousal). Refuses construction settings, absent components, and `learning_beta` (or the recall address genes under `recall_address_reward`) while a sampled action awaits feedback. | [retune the same life](tune.md#retune-the-same-life) |
 | `reset(*, keep=("arousal",))` | Clears per-stream state and eligibility; keeps records and weights. `keep` names what carries over: `"arousal"`, the default, keeps the whole arousal state, its level included, as saving `brain.arousal.to_dict()` before the reset and restoring it with `Arousal.from_dict` after it does; `"slots"` keeps the recall slots and ends each stream's episode. A reset that does not keep `"arousal"` (`keep=()`, `keep=("slots",)`) begins the arousal calm, its reward scale cleared (a `need_scale` want returns once outcomes enter it), and keeps its age. Other names raise `ValueError`, checked before anything changes; the keywords of 0.84.3 (`keep_memory`, `keep_arousal`) raise `TypeError` naming their `keep` form. | [reset and save](start.md#reset-and-save) |
-| `describe() -> dict` | JSON-safe `layout` (regions, `code`, `composition`), `genes` (every setting by its `compose` name), `memories` (each member's `to_dict()`) and `pending`. | [defaults](tune.md#defaults-and-expert-overrides) |
+| `describe() -> dict` | JSON-safe `layout` (regions, `code`, `composition`), `genes` (every setting by its `compose` name; at `teaching="custom"`, `learning` gives the four effective expert teaching settings), `memories` (each member's `to_dict()`) and `pending`. | [defaults](tune.md#defaults-and-expert-overrides) |
 | `observation_code(observations) -> (batch, code_width)` | The unit-length key every memory reads and writes; with a learned code, the code the observations settle to without a context. | [the observation code](senses.md#the-observation-code), [the learned code](senses.md#the-learned-code) |
 | `stimulus(observations, *, memory=True) -> drive` | The drive of a batch; with `memory` the trace, copy, history, recall and hippocampal reads are added, and the recall address is fixed for the moment. | [memory](memory.md) |
 | `parameters() -> int` | Actor and critic parameters, the consolidated memory matrix, a recall address map and a learned code's tables. | |
@@ -174,7 +174,9 @@ it is, the biases it set being in the saved arrays. Record and recall key widths
 against the code; code tables that do not read every ON and OFF channel twice with positive
 weights are refused, as is a code whose metadata lacks the `cover` field; a recall window of
 another length is refused; learned-code tables that disagree with the saved synapses and
-biases of the code region are refused.
+biases of the code region are refused. A pending sampled action needs its saved observation,
+action and, with a learned code, its decision-time code. The learner's output order must
+match the motor population, so action indices keep their meaning after loading.
 
 ## Arousal (`cadence.arousal`)
 
