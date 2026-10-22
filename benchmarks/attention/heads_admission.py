@@ -26,6 +26,14 @@ from cadence.receipts import Receipt, canonical_sha256, source_manifest
 
 HERE = Path(__file__).resolve().parent
 PROTOCOL = HERE / "heads-protocol.json"
+PROTOCOL_NAMES = ("heads-protocol.json", "heads-longer-protocol.json")
+
+
+def protocol_path(name: str) -> Path:
+    """Only the two declared, repository-owned recipes may select a run."""
+    if name not in PROTOCOL_NAMES:
+        raise ValueError("choose a declared heads protocol")
+    return HERE / name
 
 
 def load(name: str, path: Path) -> Any:
@@ -44,11 +52,16 @@ binding = load("heads_binding_forks", HERE.parent / "binding" / "token_binding.p
 sr = repair.sr
 
 
-def sources() -> list[tuple[str, Path]]:
+def sources(protocol: Path | None = None) -> list[tuple[str, Path]]:
+    active = PROTOCOL if protocol is None else protocol
     package = Path(cadence.__file__).resolve().parent
-    paths = [("benchmarks/attention/" + name, HERE / name) for name in (
-        "heads_admission.py", "heads-protocol.json", "dual_binding.py", "heads.py",
-        "coupled.py", "repair_admission.py", "repair-protocol.json")]
+    names = ["heads_admission.py", active.name]
+    if active.name != "heads-protocol.json":
+        names.append("heads-protocol.json")
+    names += ["dual_binding.py", "heads.py", "coupled.py", "repair_admission.py",
+              "repair-protocol.json"]
+    paths = [("benchmarks/attention/" + name, active if name == active.name else HERE / name)
+             for name in names]
     paths += [("benchmarks/binding/token_binding.py", Path(binding.__file__)),
               ("benchmarks/relevance/selective_recall.py", Path(sr.__file__)),
               ("benchmarks/relevance/acquisition_controls.py", Path(repair.controls.__file__))]
@@ -306,10 +319,16 @@ def trial(arm, seed, protocol, deadline, mode="agreement"):
     return result
 
 
-def check(body):
+def check(body, protocol=None):
     """Recompute admission from decisions, complete panels and the frozen protocol."""
     try:
-        protocol = json.loads(PROTOCOL.read_text())
+        selector = body.get("protocol_file", "heads-protocol.json")
+        if selector not in PROTOCOL_NAMES:
+            return "undeclared heads protocol"
+        if protocol is None:
+            if selector != PROTOCOL.name:
+                return "heads protocol selector differs"
+            protocol = json.loads(PROTOCOL.read_text())
         if body["protocol"] != protocol:
             return "heads protocol differs"
         runs = body["runs"]
@@ -358,27 +377,54 @@ def check(body):
         return "incomplete or invalid capacity receipt"
 
 
+def verify_prior(prior: Path) -> Receipt:
+    """A historical failure is checked against ITS protocol and source snapshots."""
+    receipt = Receipt.read(prior)
+    prior_path = protocol_path(receipt.body.get("protocol_file", "heads-protocol.json"))
+    prior_protocol = json.loads(prior_path.read_text())
+    expected = sources(prior_path)
+    if [entry["path"] for entry in receipt.source["files"]] != [name for name, _ in expected]:
+        raise ValueError("prior source manifest paths differ")
+    frozen = []
+    for entry, (name, current) in zip(receipt.source["files"], expected, strict=True):
+        digest = entry["sha256"]
+        if (not isinstance(digest, str) or len(digest) != 64
+                or any(character not in "0123456789abcdef" for character in digest)):
+            raise ValueError("invalid prior source digest")
+        snapshot = HERE / "results" / "sources" / (digest + ".txt")
+        frozen.append((name, snapshot if snapshot.exists() else current))
+    ok, message = Receipt.verify(
+        prior, sources=frozen, check=lambda body: check(body, protocol=prior_protocol))
+    if (not ok or receipt.kind != "cadence-attention-heads-admission/1"
+            or receipt.body["capacity_admitted"]):
+        raise ValueError("prior failed admission must verify: " + message)
+    previous = [receipt.body["elapsed_host_seconds"],
+                receipt.body.get("previous_host_seconds", 0.0)]
+    if not np.isfinite(previous).all() or min(previous) < 0:
+        raise ValueError("prior host work must be finite and nonnegative")
+    return receipt
+
+
 def run(prior: Path | None = None):
     protocol = json.loads(PROTOCOL.read_text())
     manifest = source_manifest(sources())
     began = time.monotonic()
     previous, reference = 0.0, None
+    if PROTOCOL.name == "heads-longer-protocol.json" and prior is None:
+        raise ValueError("the numerical retry requires its retained failed base admission")
     if prior is not None:
-        receipt = Receipt.read(prior)
-        frozen = []
-        available = dict(sources())
-        for entry in receipt.source["files"]:
-            snapshot = HERE / "results" / "sources" / (entry["sha256"] + ".txt")
-            if entry["path"] not in available:
-                raise ValueError("prior source is not part of this instrument")
-            frozen.append((entry["path"], snapshot if snapshot.exists()
-                           else available[entry["path"]]))
-        ok, message = Receipt.verify(prior, sources=frozen, check=check)
-        if not ok or receipt.body["capacity_admitted"]:
-            raise ValueError("prior failed admission must verify: " + message)
+        receipt = verify_prior(prior)
+        if (PROTOCOL.name == "heads-longer-protocol.json"
+                and receipt.body.get("protocol_file", "heads-protocol.json")
+                != "heads-protocol.json"):
+            raise ValueError("the one numerical retry must follow the base protocol")
         previous = (receipt.body["elapsed_host_seconds"]
                     + receipt.body.get("previous_host_seconds", 0.0))
         reference = receipt.digest
+    diagnostic = protocol.get("diagnostic_charge_seconds", 0.0)
+    if not np.isfinite(diagnostic) or diagnostic < 0:
+        raise ValueError("diagnostic host charge must be finite and nonnegative")
+    previous += diagnostic
     deadline = began + max(0, protocol["budget"]["development_total_host_seconds"] - previous)
     runs = []
     stop = None
@@ -397,7 +443,8 @@ def run(prior: Path | None = None):
     if manifest != source_manifest(sources()):
         raise RuntimeError("source changed during run; preserve diagnostics and rerun")
     body = {
-        "protocol": protocol, "runs": runs, "capacity_admitted": stop is None,
+        "protocol": protocol, "protocol_file": PROTOCOL.name,
+        "runs": runs, "capacity_admitted": stop is None,
         "decision": stop or "capacity_admitted; selection_and_causal_gates_pending",
         "candidate_rounds_used": 0, "confirmation_seeds_used": [],
         "source_revision": sr.revision(),
@@ -414,8 +461,11 @@ def run(prior: Path | None = None):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
-    parser.add_argument("--prior", type=Path, help="Retained failed admission charged to this budget")
+    parser.add_argument("--prior", type=Path,
+                        help="Retained failed admission charged to this budget")
+    parser.add_argument("--protocol", choices=PROTOCOL_NAMES, default=PROTOCOL.name)
     args = parser.parse_args()
+    PROTOCOL = protocol_path(args.protocol)
     if args.out.exists():
         raise FileExistsError(args.out)
     receipt = run(args.prior)

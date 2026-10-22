@@ -184,6 +184,8 @@ def test_meter_charges_residual_checks_and_saved_teaching_and_restores_patch() -
         assert work.lessons == 1 and work.teaching_residual_checks > 0
         assert brain.brain.memory is saved
     assert admission.heads.Graph._synaptic_input is original
+
+
 def test_supplied_capacity_control_disables_memory_for_every_prefix_moment():
     protocol = json.loads(admission.PROTOCOL.read_text())
     brain = admission.make_brain("supplied_reads", 0, protocol)
@@ -198,4 +200,98 @@ def test_supplied_capacity_control_disables_memory_for_every_prefix_moment():
     assert all(member.amplitude == 0.0 for member in memory.memories)
     assert admission.protocol_amplitude(brain) == 3.0
     assert max(drive[:, memory.memories[0].read].ravel()) == 3.0
+
+
+@pytest.mark.parametrize("selector", [
+    "../heads-protocol.json", "other.json", "/heads-protocol.json",
+])
+def test_protocol_selector_rejects_any_unfrozen_file(selector):
+    with pytest.raises(ValueError, match="declared"):
+        admission.protocol_path(selector)
+
+
+def test_variant_sources_bind_both_active_and_original_protocols(monkeypatch):
+    original = admission.HERE / "heads-protocol.json"
+    longer = admission.protocol_path("heads-longer-protocol.json")
+    monkeypatch.setattr(admission, "PROTOCOL", longer)
+    paths = dict(admission.sources())
+    assert paths["benchmarks/attention/heads-longer-protocol.json"] == longer
+    assert paths["benchmarks/attention/heads-protocol.json"] == original
+    assert len(paths) == len(admission.sources())
+
+
+def test_historical_check_uses_its_frozen_base_protocol_when_variant_is_active(monkeypatch):
+    path = admission.HERE / "results" / "heads-capacity-corrected.json"
+    body = json.loads(path.read_text())["body"]
+    base = json.loads((admission.HERE / "heads-protocol.json").read_text())
+    longer = admission.protocol_path("heads-longer-protocol.json")
+    monkeypatch.setattr(admission, "PROTOCOL", longer)
+    assert admission.check(body, protocol=base) is None
+    assert admission.check(body) == "heads protocol selector differs"
+    assert admission.verify_prior(path).body["protocol"] == base
+
+
+def test_numeric_retry_changes_only_declared_solver_budgets_in_the_brain():
+    base = json.loads((admission.HERE / "heads-protocol.json").read_text())
+    longer = json.loads(admission.protocol_path("heads-longer-protocol.json").read_text())
+    for data in (base, longer):
+        data["brain"]["modules"] = [4]
+    before = admission.make_brain("h1", 0, base)
+    after = admission.make_brain("h1", 0, longer)
+    work_control = admission.make_brain("h1_more_steps", 0, longer)
+    assert after.learner.config.free_steps == after.learner.config.nudged_steps == 2048
+    assert work_control.learner.config.free_steps == 4096
+    assert work_control.learner.config.nudged_steps == 4096
+    for key in before.learner.config.__slots__:
+        if key not in ("free_steps", "nudged_steps"):
+            assert getattr(before.learner.config, key) == getattr(after.learner.config, key)
+    for key in ("efficacy", "bias", "log_gain"):
+        np.testing.assert_array_equal(getattr(before.brain, key), getattr(after.brain, key))
+    assert before.brain.neuron_model == after.brain.neuron_model
+
+
+def failed_result(arm, seed, data):
+    evaluation = {}
+    for name in ("train", "held_out", "all"):
+        rows = task.panel(name)
+        answers = np.full((len(rows), 2), -1, dtype=np.int64)
+        evaluation[name] = {"answers": answers.tolist(), "scores": task.scores(answers, rows),
+                            "work": {"action_refusals": 0}}
+    return {"arm": arm, "seed": seed, "acquired": False, "parameters_preserved": True,
+            "training": {"completed": False, "rounds": 0, "wrong_counts": [],
+                         "work": {"action_refusals": 0, "lesson_refusals": 0}},
+            "initial": evaluation["all"], "evaluation": evaluation,
+            "schedule_sha256": admission.canonical_sha256(task.draw(
+                seed, data["task"]["rounds"], data["task"]["batch"]))}
+
+
+def test_retry_charges_the_complete_prior_chain_and_declared_diagnostics(tmp_path, monkeypatch):
+    data = json.loads(admission.protocol_path("heads-longer-protocol.json").read_text())
+    data["task"]["rounds"] = 3
+    frozen = tmp_path / "heads-longer-protocol.json"
+    frozen.write_text(json.dumps(data))
+    monkeypatch.setattr(admission, "PROTOCOL", frozen)
+    monkeypatch.setattr(admission.time, "monotonic", lambda: 100.0)
+    prior = SimpleNamespace(body={"elapsed_host_seconds": 10.0, "previous_host_seconds": 20.0},
+                            digest="d" * 64)
+    monkeypatch.setattr(admission, "verify_prior", lambda path: prior)
+    deadlines = []
+
+    def trial(arm, seed, protocol, deadline):
+        deadlines.append(deadline)
+        return failed_result(arm, seed, protocol)
+
+    monkeypatch.setattr(admission, "trial", trial)
+    receipt = admission.run(Path("retained-prior.json"))
+    expected = 30.0 + data["diagnostic_charge_seconds"]
+    assert receipt.body["previous_host_seconds"] == expected
+    assert receipt.body["prior_reference"] == prior.digest
+    assert receipt.body["protocol_file"] == "heads-longer-protocol.json"
+    assert deadlines == [100.0 + 600.0 - expected] * 2
+    assert admission.check(receipt.body) is None
+    with pytest.raises(ValueError, match="requires"):
+        admission.run()
+    prior.body["protocol_file"] = "heads-longer-protocol.json"
+    with pytest.raises(ValueError, match="one numerical retry"):
+        admission.run(Path("retained-prior.json"))
 

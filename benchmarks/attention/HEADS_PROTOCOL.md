@@ -182,3 +182,27 @@ must use a different unused founder block. No paid run, library integration,
 reward-learning, private-imagination or exact saved-continuation claim follows
 from this protocol; those remain separate preservation requirements before
 integration, along with the existing sequence and sentence-training gates.
+
+## Declared numerical admission retry
+
+The [initial admission](results/heads-capacity-initial.json) and
+[corrected control](results/heads-capacity-corrected.json) retain both failures.
+The first mistakenly left memory coupling active during the supplied-read
+prefix; the correction disables it throughout that control, as declared.
+Both exposed founders learn every training pair. Supplied-read founders still
+refuse a prefix after 30/13 completed rounds in the corrected instrument.
+
+An [exact boundary diagnostic](results/heads-capacity-diagnostic.json) reproduces
+founder 0's parameters and decisions. Its first refusal starts from rest with
+an empty bank and zero memory drive: residual `.009084` at 1,024 sweeps falls
+below `.003` after 160 more sweeps at the same `.1` step. Damping within the
+original 1,024 budget still fails. This locates one numerical budget failure;
+it does not establish that later boundaries or any selector pass.
+
+The separate [longer protocol](heads-longer-protocol.json) declares **one**
+numerical retry at 2,048 free/nudged sweeps for every arm, with 4,096 for the
+larger-work single-head control. The step, tolerance, teaching, anatomy,
+candidate equations and gates stay fixed. The previous 128.228748 host seconds
+and conservative 30.519933-second diagnostic charge consume 158.748681 of the
+same 600-second budget. Another failure stops this numerical retry; it does
+not authorize another sweep-cap search. No confirmation founder is opened.
