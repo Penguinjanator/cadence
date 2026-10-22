@@ -406,3 +406,29 @@ contact, teacher or head role changes. Fresh matched exposed/supplied-read
 capacity must pass before both H2 founders run; the eight matched one-head and
 resource comparisons open only if both H2 primary and retention gates pass.
 Original failed results and all behavioral floors remain in force.
+
+### Ordinary-query result
+
+The [new matched capacity receipt](results/query-founder-capacity.json)
+passes all four cells: 512 rounds, zero action/lesson refusals and 100% trained
+exact pairs. Held-out scores are 0/16, 0/16, 0/16 and 4/16 for exposed0/1 and
+supplied-read0/1; capacity imposes no held-out accuracy floor. This stage uses
+305.571460 host seconds.
+
+The [learned H2 receipt](results/query-founder-h2.json) is negative in both
+founders. Query refusals stop training at 297/182 rounds, with no teaching
+refusals. Trained and all-case panels also refuse their query after successful
+prefixes; their unanswered scores are not accuracy measurements of qualified
+answers. Both held-out panels complete and answer 0/16 pairs correctly.
+The changed initialization has not repaired acquisition or numerical
+qualification. No retention, representation probe, matched resource control,
+fresh confirmation or longer-world run opens. Its 464.384521 host seconds bring
+cumulative retained model work to 3,518.474520 seconds. The original q0 results
+and all acceptance floors remain unchanged.
+
+```sh
+PYTHONPATH=src python benchmarks/attention/query_founder_campaign.py \
+  --verify benchmarks/attention/results/query-founder-capacity.json
+PYTHONPATH=src python benchmarks/attention/query_founder_campaign.py \
+  --verify benchmarks/attention/results/query-founder-h2.json
+```

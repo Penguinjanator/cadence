@@ -24,6 +24,15 @@ runner requires new matched capacity before H2, and both H2 founders before
 matched one-head/resource comparisons. The old positive capacity receipt is
 baseline evidence for the original initializer.
 
+That [matched capacity run](results/query-founder-capacity.json) passes all
+four 512-round acquisition controls without refusals. The changed
+[learned-reader run](results/query-founder-h2.json) nevertheless fails: its
+two founders stop on query refusals after 297/182 rounds. Trained and all-case
+query panels refuse; held-out queries complete but score 0/16 in both founders.
+Ordinary query initialization is not an established repair. Retention,
+resource comparisons, fresh confirmation and longer-world evaluation remain
+closed for this point.
+
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
 competitive reader described in [the binding instrument](../binding/index_read.py)

@@ -74,3 +74,13 @@ the complete behavioral, memory-causality and resource comparisons in the
 This raw-input component control tests coupled retrieval and acquisition.
 It does not establish contextual meaning codes, integrated continuing
 behavior or a supported public attention lifecycle.
+
+## Measured outcome
+
+All four [matched capacity cells](results/query-founder-capacity.json) complete
+512 rounds and acquire every trained pair without action or lesson refusals.
+The [learned-reader cells](results/query-founder-h2.json) stop on query refusals
+after 297/182 rounds. Their trained/all-case panels refuse; both held panels
+complete but score 0/16. This initial-condition test is negative. It opens no
+retention, resource comparison, confirmation or longer-world evaluation, and
+does not justify changing a library default.
