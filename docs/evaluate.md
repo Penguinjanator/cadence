@@ -54,6 +54,13 @@ budget (the [key-door benchmark](../benchmarks/keydoor/README.md) runs random,
 tabular and recurrent arms beside the brain). A copied target, a new decoder,
 an added intention input or a larger action vocabulary makes a different task.
 
+The [coupled-memory experiment](../benchmarks/attention/README.md) separates
+joint-equation and local-credit checks from learned relevance. Its exposed-fact
+admission control currently fails the declared acquisition/completion gate;
+the retained failures do not diagnose a retrieval deficit. The prototype adds
+no supported `Brain.compose` mode. Causal relevance, semantic addressing,
+retention and continuing-life integration still require their own evidence.
+
 ## Report per-behaviour errors
 
 Common easy outputs hide errors on rare decisive ones, so report the error per

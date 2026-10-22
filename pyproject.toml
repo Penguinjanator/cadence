@@ -62,6 +62,7 @@ testpaths = [
     "benchmarks/stream_words", "benchmarks/binding",
     "benchmarks/instruments",
     "benchmarks/learned_code",
+    "benchmarks/attention",
 ]
 
 [tool.ruff]

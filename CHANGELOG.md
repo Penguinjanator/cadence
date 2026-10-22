@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add a coupled-memory component experiment under `benchmarks/attention`: live
+  query/read equations, independent derivative and local-credit checks, and retained
+  exposed-fact admission failures. The admission gate remains open; this adds no
+  supported attention mode to `Brain.compose` and changes no retrieval defaults.
+
 ## 0.85.1 — 2026-10-22
 
 - `live(..., salience=[...])` accepts the explicit outcome importance already supported by
