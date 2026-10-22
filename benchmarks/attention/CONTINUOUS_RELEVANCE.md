@@ -1,6 +1,6 @@
 # Shared continuous-payload relevance component
 
-This prepared component assay asks whether one live coupled read learns to select the fact requested by the present question. The shared scalar payload changes on every round and in a separate held sample. There are no measurements from this task yet. The original failed tasks, receipts and acceptance criteria remain unchanged.
+This component assay asks whether one live coupled read learns to select the fact requested by the present question. The shared scalar payload changes on every round and in a separate held sample. All four capacity controls pass, but both learned founders fail acquisition and causal relevance. The original failed tasks, receipts and acceptance criteria remain unchanged.
 
 The nine input coordinates are name A/B at 0/1, a shared scalar quantity at 2, fact marker at 3, neutral at 4, ask A/B at 5/6, and the exposed control's two quantities at 7/8. A fact carries its name and actual quantity; the later question carries only its ask marker. The exposed control receives both actual unselected quantities. The final binary answer is the class of the asked quantity, with threshold .5. The teacher supplies only that final answer on wrong rows. It supplies no address, selector or head-role label.
 
@@ -34,3 +34,61 @@ The controller retains actual prefix/query/teacher/refusal work and cortical and
 The scalar payload prevents separate A-value/B-value coordinates from directly delivering two independent scalars in one fixed read. Fresh values remove the earlier four exact binary codepoints. This is still an empirical generalization and causal-use test, not a proof that majority selection is necessary. Soft name masses can encode a quantity difference; together with their scalar mixture they can retain both quantities. Pure tests preserve that counterexample and a fixed equal-mixture ambiguity. A broader useful-soft-view criterion would need its own prospective protocol and measurements.
 
 Constructor and instrument tests forbid graph equilibration. They cover actual Recall storage, paired-bank custody, native wrong-row teaching inputs, donor and sham changes, exact work census, live-query selector recomputation, source/revision/prior gates, full research snapshots, progress and interruption accounting. Pure task tests forbid model imports. Passing these software tests will not count as a behavioral result.
+
+## Measured result
+
+The frozen source is `37436c4feeef002a792aa49e628437f997928a4b`.
+All four [capacity controls](results/continuous-relevance-capacity-summary.json)
+complete 512 training rounds and answer all 512 fresh questions correctly,
+including each question, presentation order and unequal-fact subset.
+Both learned H1 founders also complete 512 rounds without an action or teaching
+refusal, but their [held readings](results/continuous-relevance-h1-summary.json)
+fail the required 95% floors:
+
+| Learned founder | Overall | Ask A | Ask B | Unequal facts |
+| --- | ---: | ---: | ---: | ---: |
+| 0 | 69.5% | 79.3% | 59.8% | 54.3% |
+| 1 | 66.6% | 64.8% | 68.4% | 43.4% |
+
+Changing the irrelevant actual fact changes 39.1%/21.9% of A/B answers in
+founder 0 and 31.6%/61.3% in founder 1. Both have zero qualifying selective
+histories out of 128 unequal histories for each question. Neither passes the
+acquisition, causal, interface or selection gates. Conditional retention stays
+unrun. Concentration is a sufficient operational criterion rather than a
+necessity theorem, but dropping it would not repair these functional failures.
+
+Capacity costs 111.46122733317316 host seconds and learned H1 costs
+424.0804257921409, bringing the complete recorded campaign ledger to
+6047.898006087701 host seconds. These are host times, not physical energy.
+All 72 new source tests and the same 72 tests against the unchanged installed
+0.85.1 package pass; neither software panel measures learned behavior.
+
+The linked files are aggregate summaries, explicitly distinct from complete
+typed receipts. Full per-neuron readings and parameter/optimizer archives are
+retained outside Git. Each summary records its complete receipt digest, raw
+archive hash, source closure, all aggregate scores, work and parameter hashes.
+The full receipts passed the controller's canonical/source/arithmetic verifier.
+This result admits no library option, default change or longer-world attention
+claim.
+
+To generate new complete receipts with the frozen recipe, use fresh output
+paths and the checkout's actual commit. The first command must pass before the
+second can run:
+
+```sh
+PYTHONPATH=src CADENCE_FUSED=0 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+  python benchmarks/attention/continuous_relevance_campaign.py \
+  --runtime . --stage capacity --commit "$(git rev-parse HEAD)" \
+  --out /tmp/continuous-capacity.json --parameters /tmp/continuous-capacity-parameters
+PYTHONPATH=src CADENCE_FUSED=0 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+  python benchmarks/attention/continuous_relevance_campaign.py \
+  --runtime . --capacity /tmp/continuous-capacity.json \
+  --stage learned_h1 --commit "$(git rev-parse HEAD)" \
+  --out /tmp/continuous-h1.json --parameters /tmp/continuous-h1-parameters
+PYTHONPATH=src python benchmarks/attention/continuous_relevance_campaign.py \
+  --runtime . --capacity /tmp/continuous-capacity.json --verify /tmp/continuous-h1.json
+```
+
+Use one local worker and one BLAS thread, including the corresponding platform
+thread settings. The controller's cooperative deadlines do not replace a hard
+host watchdog.

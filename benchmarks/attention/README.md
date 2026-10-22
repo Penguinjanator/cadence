@@ -67,10 +67,11 @@ fail distinct-head specialization; no matched H1 resource comparison has run.
 The new [continuous-payload single-head component](CONTINUOUS_RELEVANCE.md)
 tests both questions with fresh scalar values in a shared payload coordinate.
 It requires its own exposed and supplied-address capacity controls before
-learned H1 evaluation. Its source and software checks are prepared; no
-behavioral result from this task is available yet. This reset-round component
-does not establish learned meaning codes, continuing-life preservation or a
-Stone Age advantage.
+learned H1 evaluation. All four controls pass at 100% on fresh values, but the
+two learned H1 founders reach only 69.5% and 66.6% and fail causal relevance.
+The [aggregate result](results/continuous-relevance-h1-summary.json) preserves
+that negative outcome. This reset-round component establishes no learned
+meaning codes, continuing-life preservation or Stone Age advantage.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
