@@ -79,7 +79,11 @@ def test_boolean_keep_matches_the_same_explicit_stream_indices(name: str) -> Non
 @pytest.mark.parametrize("operation", ["reset", "keep"])
 @pytest.mark.parametrize(
     "selection",
-    [np.array([True, False]), np.array([0.5]), np.array([[0]]), np.array([0, 3])],
+    [
+        np.array([True, False]), np.array([0.5]), np.array([[0]]), np.array([0, 3]),
+        np.array([np.iinfo(np.uint64).max], dtype=np.uint64),
+        np.array([np.iinfo(np.uint64).max - 1], dtype=np.uint64),
+    ],
 )
 def test_invalid_stream_selection_is_rejected_without_partial_changes(
     name: str, operation: str, selection: np.ndarray

@@ -41,6 +41,7 @@ def _stream_rows(rows: np.ndarray, batch: int) -> np.ndarray:
         selected.ndim != 1
         or (selected.size and selected.dtype.kind not in "biu")
         or (selected.dtype.kind == "b" and selected.shape != (batch,))
+        or (selected.dtype.kind == "u" and (selected >= batch).any())
     ):
         raise ValueError("rows must be stream indices or a boolean mask matching the batch")
     if not selected.size and selected.dtype.kind != "b":
