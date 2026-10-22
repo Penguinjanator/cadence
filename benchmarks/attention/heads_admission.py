@@ -28,8 +28,10 @@ HERE = Path(__file__).resolve().parent
 PROTOCOL = HERE / "heads-protocol.json"
 PROTOCOL_NAMES = ("heads-protocol.json", "heads-longer-protocol.json",
                   "heads-fixed-read-protocol.json", "heads-anchored-protocol.json",
-                  "heads-founder-protocol.json")
+                  "heads-founder-protocol.json", "heads-founder-extended-protocol.json")
 FOUNDER_PROTOCOL = "heads-founder-protocol.json"
+FOUNDER_EXTENDED_PROTOCOL = "heads-founder-extended-protocol.json"
+FOUNDER_PROTOCOLS = (FOUNDER_PROTOCOL, FOUNDER_EXTENDED_PROTOCOL)
 
 
 def protocol_path(name: str) -> Path:
@@ -85,10 +87,12 @@ def sources(protocol: Path | None = None) -> list[tuple[str, Path]]:
         names.append("heads-protocol.json")
     if active.name == "heads-fixed-read-protocol.json":
         names += ["heads-longer-protocol.json", "fixed_read.py"]
-    if active.name == FOUNDER_PROTOCOL:
+    if active.name in FOUNDER_PROTOCOLS:
         names += ["heads-longer-protocol.json", "heads-fixed-read-protocol.json",
                   "fixed_read.py", "empty-boundary-protocol.json",
                   "empty_boundary_admission.py", "verify.py", "admission.py"]
+    if active.name == FOUNDER_EXTENDED_PROTOCOL:
+        names.append(FOUNDER_PROTOCOL)
     names += ["dual_binding.py", "heads.py", "coupled.py", "repair_admission.py",
               "repair-protocol.json"]
     paths = [("benchmarks/attention/" + name, active if name == active.name else HERE / name)
@@ -96,10 +100,13 @@ def sources(protocol: Path | None = None) -> list[tuple[str, Path]]:
     paths += [("benchmarks/binding/token_binding.py", Path(binding.__file__)),
               ("benchmarks/relevance/selective_recall.py", Path(sr.__file__)),
               ("benchmarks/relevance/acquisition_controls.py", Path(repair.controls.__file__))]
-    if active.name == FOUNDER_PROTOCOL:
+    if active.name in FOUNDER_PROTOCOLS:
         paths += [("benchmarks/attention/results/" + name, HERE / "results" / name)
                   for name in ("empty-boundary-development.json",
                                "heads-capacity-fixed-read.json")]
+    if active.name == FOUNDER_EXTENDED_PROTOCOL:
+        paths.append(("benchmarks/attention/results/founder-capacity-development.json",
+                      HERE / "results" / "founder-capacity-development.json"))
     return paths + [("src/cadence/" + str(p.relative_to(package)), p)
                     for p in sorted(package.rglob("*.py"))]
 
@@ -213,12 +220,17 @@ def founder_prior(path: Path, protocol: dict[str, Any]) -> Receipt:
     verifier = load("heads_founder_historical_verifier", HERE / "verify.py")
     valid, message = verifier.verify(path)
     receipt, declared = Receipt.read(path), protocol["prior"]
+    failed = (receipt.body.get("capacity_admitted") is False
+              if declared["receipt_kind"] == "cadence-attention-heads-admission/1" else
+              receipt.body.get("passed") is False)
     if (not valid or receipt.kind != declared["receipt_kind"]
             or receipt.digest != declared["receipt_digest"]
-            or receipt.body["passed"] is not False
+            or not failed
+            or ("receipt_protocol_file" in declared and receipt.body.get("protocol_file")
+                != declared["receipt_protocol_file"])
             or receipt.body["cumulative_host_seconds"]
             != declared["receipt_cumulative_host_seconds"]):
-        raise ValueError("founder control requires the verified failed empty-boundary receipt: "
+        raise ValueError("founder control requires its verified failed prior receipt: "
                          + message)
     return receipt
 
@@ -465,7 +477,7 @@ def check(body, protocol=None):
             protocol = json.loads(PROTOCOL.read_text())
         if body["protocol"] != protocol:
             return "heads protocol differs"
-        founder = selector == FOUNDER_PROTOCOL
+        founder = selector in FOUNDER_PROTOCOLS
         if founder:
             defaults = founder_defaults()
             if (defaults["neuron_model"]["dt"] != 1.0
@@ -571,13 +583,13 @@ def run(prior: Path | None = None, journal: Path | None = None):
     manifest = source_manifest(sources())
     began = time.monotonic()
     previous, reference = 0.0, None
-    founder = PROTOCOL.name == FOUNDER_PROTOCOL
+    founder = PROTOCOL.name in FOUNDER_PROTOCOLS
     defaults = founder_defaults() if founder else None
     if founder and (defaults["neuron_model"]["dt"] != 1.0
                     or defaults["learning_damping"] != 3):
         raise ValueError("actual composed founder defaults differ from dt1/damping3")
     if founder and prior is None:
-        raise ValueError("the founder control requires its retained failed empty-boundary receipt")
+        raise ValueError("the founder control requires its retained failed prior receipt")
     if PROTOCOL.name == "heads-longer-protocol.json" and prior is None:
         raise ValueError("the numerical retry requires its retained failed base admission")
     if PROTOCOL.name == "heads-fixed-read-protocol.json" and prior is None:

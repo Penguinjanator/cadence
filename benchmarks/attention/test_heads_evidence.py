@@ -42,10 +42,12 @@ def test_anchored_relevance_dispatch_rejects_a_missing_dependency_inventory(tmp_
 
 
 @pytest.mark.parametrize("stage", ["admission", "relevance"])
-def test_founder_dispatch_requires_the_complete_dependency_inventory(tmp_path, stage):
+@pytest.mark.parametrize("protocol", ["heads-founder-protocol.json",
+                                      "heads-founder-extended-protocol.json"])
+def test_founder_dispatch_requires_the_complete_dependency_inventory(tmp_path, stage, protocol):
     path = tmp_path / "unbound-founder.json"
     Receipt.build(f"cadence-attention-heads-{stage}/1",
-                  {"protocol_file": "heads-founder-protocol.json"}, []).write(path)
+                  {"protocol_file": protocol}, []).write(path)
     valid, message = verifier.verify(path)
     assert not valid
     assert message == "founder control source manifest paths differ"
@@ -60,6 +62,21 @@ def test_retained_empty_read_repair_verifies_without_admitting_learned_heads():
     assert body["occupied_query_overlap_identical"] is True
     assert [r["training"]["rounds"] for r in body["runs"]] == [42, 21, 140, 279]
     assert body["passed"] is False
+    assert body["candidate_rounds_used"] == 0
+    assert body["confirmation_seeds_used"] == []
+
+
+def test_retained_founder_control_preserves_the_host_capped_failure():
+    path = RESULTS / "founder-capacity-development.json"
+    valid, message = verifier.verify(path)
+    assert valid, message
+    body = Receipt.read(path).body
+    assert [r["training"]["rounds"] for r in body["runs"]] == [512, 512, 419, 370]
+    assert all(not r["training"]["work"]["action_refusals"]
+               and not r["training"]["work"]["lesson_refusals"] for r in body["runs"])
+    assert [r["evaluation"]["train"]["scores"]["exact_pair_accuracy"]
+            for r in body["runs"]] == [1.0, 1.0, 1.0, 0.875]
+    assert body["capacity_admitted"] is False
     assert body["candidate_rounds_used"] == 0
     assert body["confirmation_seeds_used"] == []
 

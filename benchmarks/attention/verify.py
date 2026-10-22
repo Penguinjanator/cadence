@@ -88,11 +88,13 @@ def verify(path: Path) -> tuple[bool, str]:
             if protocol_file not in ("heads-protocol.json", "heads-longer-protocol.json",
                                      "heads-fixed-read-protocol.json",
                                      "heads-anchored-protocol.json",
-                                     "heads-founder-protocol.json"):
+                                     "heads-founder-protocol.json",
+                                     "heads-founder-extended-protocol.json"):
                 return False, "unknown heads protocol"
             owner = repair if receipt.kind.endswith("admission/1") else repair.admission
             owner.PROTOCOL = HERE / protocol_file
-            if (protocol_file in ("heads-anchored-protocol.json", "heads-founder-protocol.json")
+            if (protocol_file in ("heads-anchored-protocol.json", "heads-founder-protocol.json",
+                                  "heads-founder-extended-protocol.json")
                     and [entry["path"] for entry in receipt.source["files"]]
                     != [name for name, _ in repair.sources()]):
                 return False, ("anchored relevance source manifest paths differ"

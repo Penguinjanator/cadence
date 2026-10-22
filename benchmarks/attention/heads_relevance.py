@@ -61,7 +61,7 @@ def sources() -> list[tuple[str, Path]]:
         paths += empty_owner().sources() + [(
             "benchmarks/attention/results/" + declared["capacity_receipt_file"],
             HERE / "results" / declared["capacity_receipt_file"])]
-    if admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL:
+    if admission.PROTOCOL.name in admission.FOUNDER_PROTOCOLS:
         declared = json.loads(admission.PROTOCOL.read_text())["relevance_stage"]
         paths.append(("benchmarks/attention/results/" + declared["capacity_receipt_file"],
                       HERE / "results" / declared["capacity_receipt_file"]))
@@ -186,7 +186,7 @@ def verify_capacity(path: Path) -> Receipt:
     admission.PROTOCOL = admission.protocol_path(
         receipt.body.get("protocol_file", "heads-protocol.json"))
     expected = admission.sources()
-    if admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL:
+    if admission.PROTOCOL.name in admission.FOUNDER_PROTOCOLS:
         valid, message = Receipt.verify(path, sources=expected, check=capacity_check)
         if not valid or receipt.kind != "cadence-attention-heads-admission/1":
             raise ValueError("founder capacity prerequisite: " + message)
@@ -601,7 +601,7 @@ def run(capacity_path: Path, parameters: Path | None = None) -> Receipt:
     capacity = verify_capacity(capacity_path)
     protocol = json.loads(admission.PROTOCOL.read_text())
     anchored = getattr(capacity, "kind", None) == EMPTY_KIND
-    founder = admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL
+    founder = admission.PROTOCOL.name in admission.FOUNDER_PROTOCOLS
     if anchored or founder:
         stage = protocol["relevance_stage"] if founder else protocol["prerequisites"]
         retained = HERE / "results" / stage["capacity_receipt_file"]
@@ -676,7 +676,7 @@ def check(body):
                 or body["protocol"] != protocol or body["confirmation_seeds_used"]):
             return "protocol or unopened confirmation differs"
         anchored = admission.PROTOCOL.name == ANCHORED_PROTOCOL
-        founder = admission.PROTOCOL.name == admission.FOUNDER_PROTOCOL
+        founder = admission.PROTOCOL.name in admission.FOUNDER_PROTOCOLS
         if anchored:
             declared = protocol["prerequisites"]
             capacity = anchored_capacity(HERE / "results" / declared["capacity_receipt_file"])

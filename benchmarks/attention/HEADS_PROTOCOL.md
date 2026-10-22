@@ -277,3 +277,20 @@ Local spectra motivate this comparison but do not establish convergence: a
 coarse step can be unstable, numerical attempts can enter different basins, and
 later learned parameters remain untested until the run. Earlier failed runs,
 including the smaller-step and initial-guess diagnostics, are not discarded.
+
+**Result:** both exposed founders finish 512 rounds with 100% trained accuracy.
+Supplied-read founders reach 419/370 rounds with zero action or teaching
+refusals, then hit the 120-host-second training guard. Their trained pair
+accuracy is 100%/87.5%; all four held-out pair readings are 0%. The
+[capped receipt](results/founder-capacity-development.json) fails admission:
+the original 512-round requirement is retained. It costs 254.714154 host
+seconds, bringing retained work to 756.051724 seconds.
+
+The [host-time extension](heads-founder-extended-protocol.json) keeps every
+task, neural, teacher and qualified-sweep setting unchanged. It declares 240
+host seconds per capacity arm and 600 additional seconds total before rerunning
+the same four controls. Its later relevance stage, only after complete positive
+capacity, declares 240 seconds per training call and 3,000 additional seconds
+for all ten cells and conditional retention/probes. Earlier capped and
+held-out failures remain recorded; the extension supplies no new behavioral
+claim before it runs.

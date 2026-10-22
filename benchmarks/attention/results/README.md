@@ -102,3 +102,15 @@ refusals. Restoring founders reach 140/279 rounds, then refuse a nonempty prefix
 and query. They still fail the original acquisition gate; no learned-head
 comparison or fresh confirmation follows. The source-frozen run takes
 92.824283 host seconds. See the [boundary law and scope](../EMPTY_BOUNDARY.md).
+
+## Founder numerical control: host-capped
+
+[founder-capacity-development.json](founder-capacity-development.json) uses
+the composed brain's step `1.0` and existing bounded halving, with memory kept
+in every attempt. Both exposed controls complete 512 rounds at 100% trained
+accuracy. Supplied-read founders hit the host limit after 419/370 rounds,
+with zero action or teaching refusals and 100%/87.5% trained pair accuracy.
+Every held-out pair reading is 0%. The full-round gate is unmet and no learned
+head test is admitted. Actual cost is 254.714154 host seconds; cumulative
+retained cost is 756.051724 seconds. The separately declared
+[extension](../heads-founder-extended-protocol.json) changes only host guards.
