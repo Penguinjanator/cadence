@@ -67,7 +67,9 @@ def verify(path: Path) -> tuple[bool, str]:
     arithmetic = check
     modules = {"cadence-attention-acquisition-repair/1": "repair_admission.py",
                "cadence-attention-content-control/1": "content_control.py",
-               "cadence-attention-heads-admission/1": "heads_admission.py"}
+               "cadence-attention-heads-admission/1": "heads_admission.py",
+               "cadence-attention-heads-relevance/1": "heads_relevance.py",
+               "cadence-attention-heads-capacity-diagnostic/1": "diagnostic_verification.py"}
     if receipt.kind in modules:
         spec = importlib.util.spec_from_file_location(
             "attention_receipt_verifier", HERE / modules[receipt.kind])
@@ -75,6 +77,14 @@ def verify(path: Path) -> tuple[bool, str]:
         repair = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = repair
         spec.loader.exec_module(repair)
+        if receipt.kind in ("cadence-attention-heads-admission/1",
+                            "cadence-attention-heads-relevance/1"):
+            protocol_file = receipt.body.get("protocol_file", "heads-protocol.json")
+            if protocol_file not in ("heads-protocol.json", "heads-longer-protocol.json",
+                                     "heads-fixed-read-protocol.json"):
+                return False, "unknown heads protocol"
+            owner = repair if receipt.kind.endswith("admission/1") else repair.admission
+            owner.PROTOCOL = HERE / protocol_file
         arithmetic = repair.check
     return Receipt.verify(path, sources=sources, check=arithmetic)
 

@@ -233,8 +233,8 @@ All four development lives (founders 0/1, recall-port/sensory arms) complete
 action or teaching refusals. Erasing content reduces accuracy to 50%. Relevant
 flips and donor content are followed perfectly; irrelevant flips and identical
 shams change no answer. Only actual wrong decisions are taught from their saved
-pre-query drives. Total host time is 59.53 seconds. The [receipt](
-results/content-results-development.json) and original source snapshot are
+pre-query drives. Total host time is 59.52 seconds. The
+[receipt](results/content-results-development.json) and original source snapshot are
 retained; final binary checkpoints remain local. Founders 300–319 are unopened.
 
 ```sh
@@ -273,4 +273,38 @@ has been learned.
 ```sh
 PYTHONPATH=src python benchmarks/attention/heads_admission.py \
   --out /tmp/attention-heads-capacity.json
+```
+
+## Dual-binding capacity result: still blocked
+
+Both exposed founders complete 512 rounds at 100% on the 48 training cases.
+The supplied-read controls do not complete the declared acquisition run:
+
+| Read control | Sweep cap | Completed rounds, founders 0 / 1 | Stop |
+| --- | --- | --- | --- |
+| Original external drive, erroneous prefix coupling | 1,024 | 30 / 24 | Prefix refuses |
+| Corrected external drive, coupling disabled throughout | 1,024 | 30 / 13 | Prefix refuses |
+| Same corrected control, declared numerical retry | 2,048 | 83 / 42 | Prefix refuses |
+| Held-address agreement, matching the candidate's restoring law | 2,048 | 42 / 21 | Prefix refuses |
+
+Each supplied-control life has one refused action and zero teaching refusals.
+The [protocol amendments](HEADS_PROTOCOL.md#declared-numerical-admission-retry)
+retain every failed run and the exact single-boundary numerical diagnosis.
+The [final control receipt](results/heads-capacity-fixed-read.json) qualifies
+neither learned selection nor useful head specialization. Total capacity and
+diagnostic work is 304.11 host seconds, including conservative charges for an
+interrupted diagnostic helper, within the shared 600-second cap.
+
+**No behavioral candidate equation round was run; confirmation remains
+unopened.** The original 95% acquisition and later relevance gates stay fixed.
+The multi-head anatomy, matched causal runner and contextual-state diagnostic
+are implemented, but their behavioral and representation claims remain unrun.
+The next failure to resolve is reliable acquisition/settling with supplied
+content in this reciprocal multi-output composition, before attributing a
+deficit to learned selection or adding another head mechanism. The earlier
+single-query content and acquisition passes retain their separate scope.
+
+```sh
+PYTHONPATH=src python benchmarks/attention/verify.py \
+  benchmarks/attention/results/heads-capacity-fixed-read.json
 ```

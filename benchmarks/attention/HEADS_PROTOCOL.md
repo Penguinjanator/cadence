@@ -232,3 +232,13 @@ linear equations; this control is not a third candidate equation. Its single
 declared revision shares the remaining 348.877009 host seconds after the
 251.122991 seconds already charged. Earlier failures and confirmation holds
 remain intact.
+
+**Result of this control revision:** both exposed lives again complete 512
+rounds at 100% accuracy on training pairs. Held-address supplied-read founders
+stop after 42/21 rounds on a refused prefix, with one action refusal and zero
+teaching refusals each. The [receipt](results/heads-capacity-fixed-read.json)
+retains the complete failed readings. Cumulative capacity/diagnostic work is
+304.109854 host seconds. The numerical retry and declared control revision
+are consumed; no candidate equation round or fresh confirmation is run.
+Contextual readout transfer remains unrun. Resolve this shared acquisition/
+qualified-settling failure with supplied facts before a selector claim.
