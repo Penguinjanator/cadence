@@ -79,3 +79,31 @@ Passing this assay would establish bounded learned raw-memory relevance.
 It would establish neither a parallel-head advantage nor the learned-code,
 outcome, imagination and continuation preservation required before an
 integrated creature comparison.
+
+## Measured result
+
+All four [matched capacity cells](results/single-relevance-capacity.json)
+complete 512 rounds, answer all 16 questions correctly and have zero action
+or teaching refusals. Both [learned H1 founders](results/single-relevance-h1.json)
+also complete 512 rounds without refusals and answer 16/16 correctly.
+
+Both learned founders follow relevant donor changes perfectly, preserve
+answers under irrelevant donor changes and lose .50 accuracy when the asked
+fact is erased. Their full primary gates nevertheless fail:
+
+| Founder | Learned answers | Neutral-erasure changes | Irrelevant-fact erasure | Requested-record selection |
+| --- | --- | --- | --- | --- |
+| 0 | 16/16 | 2/16 | No answer changes | Fails |
+| 1 | 16/16 | 4/16 | Erasing B changes 4/8 answers about A | Fails |
+
+Both readers retain broad mixtures. Neither meets the declared mass/margin
+gate on any unequal row, so correct answers do not establish question-specific
+memory selection. Record reordering changes no answers. Frozen and shuffled
+interfaces lose .375 accuracy for founder 0 and .50 for founder 1, with the
+transport caveat above. These losses cannot rescue the failed causal gate.
+Retention is not opened for either founder.
+
+Capacity costs 96.664401 host seconds and learned H1 costs 179.175963,
+bringing cumulative retained model work to 4,428.819964 seconds. This resolves
+basic acquisition on this small task, while learned selective relevance,
+nuisance robustness and longer-world admission remain unfinished.

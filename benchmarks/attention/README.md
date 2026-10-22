@@ -50,8 +50,11 @@ changes 4/8 and 2/8 answers. Both also fail the predeclared named-record
 specialization gate. The full primary gate remains negative; retention and
 resource comparisons stay closed. The separate [direct single-head test](SINGLE_RELEVANCE.md)
 checks both questions on copies of the same witnessed history, with new matched
-capacity and causal selection gates. It must establish learned coupled H1
-relevance before any longer-world attention claim.
+capacity and causal selection gates. Its four capacity controls pass, and both
+learned founders answer all 16 questions correctly. Both nevertheless depend
+on irrelevant context and fail question-specific record selection. The
+[retained H1 result](results/single-relevance-h1.json) does not admit learned
+relevance or longer-world attention claims.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
