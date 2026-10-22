@@ -114,3 +114,15 @@ Every held-out pair reading is 0%. The full-round gate is unmet and no learned
 head test is admitted. Actual cost is 254.714154 host seconds; cumulative
 retained cost is 756.051724 seconds. The separately declared
 [extension](../heads-founder-extended-protocol.json) changes only host guards.
+
+## Extended capacity: passed acquisition, transfer still failed
+
+[founder-capacity-extended.json](founder-capacity-extended.json) completes all
+four 512-round controls at 100% trained pair/slot/unequal/query accuracy, with
+no action or teaching refusals and complete intact evaluation panels. The
+16 held-out cases still have 0% exact-pair accuracy in every control. This
+admits the learned-reader experiment; it is no learned-selection, transfer
+or parallel-head benefit result. The stage costs 294.088845 host seconds;
+cumulative retained work is 1,050.140569 seconds. The
+[parallel-head assessment](../PARALLEL_HEADS_ASSESSMENT.md) was declared before
+any learned-reader cell. Confirmation founders remain unopened.

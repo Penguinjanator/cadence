@@ -292,5 +292,18 @@ host seconds per capacity arm and 600 additional seconds total before rerunning
 the same four controls. Its later relevance stage, only after complete positive
 capacity, declares 240 seconds per training call and 3,000 additional seconds
 for all ten cells and conditional retention/probes. Earlier capped and
-held-out failures remain recorded; the extension supplies no new behavioral
-claim before it runs.
+held-out failures remain recorded.
+
+**Extension result:** all four controls complete 512 rounds with 100% trained
+pair/slot/unequal/query accuracy and zero action or teaching refusals. All
+intact panels are answered, but all held-out pair accuracies remain 0%.
+The [positive capacity receipt](results/founder-capacity-extended.json) admits
+learned-reader development; it establishes neither transfer nor learned
+selection. This stage costs 294.088845 host seconds, bringing retained work
+to 1,050.140569 seconds. No confirmation founder is opened.
+
+Before the first learned-reader cell, the
+[parallel-head assessment](PARALLEL_HEADS_ASSESSMENT.md) fixes separate
+requirements for distinct evidence, both-head usefulness and improvement
+against completed one-head/resource controls. The runner's generic pass or
+selected-arm flag does not establish those claims.
