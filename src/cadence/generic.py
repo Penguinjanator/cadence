@@ -767,7 +767,7 @@ def _validate_life_state(
             count("pending_" + phase + "_steps")
             for name in ("v", "activation", "adaptation"):
                 array(f"pending/{phase}/{name}", (batch, n))
-    if "moment/observations" in data or "moment/action" in data:
+    if meta.get("pending", False) or "moment/observations" in data or "moment/action" in data:
         if not meta.get("pending", False):
             raise ValueError("saved action observations need pending credit")
         array("moment/observations", (batch, observed))
@@ -2512,7 +2512,7 @@ class Brain:
           a custom anatomy), provenance rather than a description of learned weights.
         - ``genes``: every setting by the name ``compose`` and ``retune`` take, the teaching
           point as ``teaching`` (``"custom"`` for steps that ``learning=LearnerConfig(...)``
-          set outside both points).
+          set outside both points, whose four effective settings are then under ``learning``).
         - ``memories``: one entry per member of ``brain.memories``, its ``to_dict()``.
         - ``pending``: whether an issued action owns the next real outcome.
 
@@ -2531,6 +2531,8 @@ class Brain:
         # the nudge is a standalone Learner's choice, a composed brain's the cross-entropy; the
         # steps and their normalization are the teaching point's
         genes: dict[str, Any] = {"teaching": teaching}
+        if teaching == "custom":
+            genes["learning"] = steps
         genes.update(
             {
                 f"learning_{name}": value
@@ -2742,7 +2744,16 @@ class Brain:
             previous, rest = code.halvings, code.rest_stability()
             if rest > previous:
                 self._step_region(rest)
-                phase = code.settle(stimulus, warm, budget=budget(), tolerance=tolerance)
+                fallback = code.settle(stimulus, warm, budget=budget(), tolerance=tolerance)
+                # Both attempts are work of this phase, even though the fallback starts
+                # from the original warm state. Keep its actual final state and residual.
+                phase = Equilibrium(
+                    fallback.state, fallback.residual, phase.steps + fallback.steps,
+                    fallback.tolerance,
+                    residual_checks=phase.residual_checks + fallback.residual_checks,
+                    damping_halvings=fallback.damping_halvings,
+                    stagnation_checks=phase.stagnation_checks + fallback.stagnation_checks,
+                )
                 if not np.all(phase.qualified):
                     self._step_region(previous)
         if not np.all(phase.qualified):
@@ -3170,7 +3181,8 @@ class Brain:
         return teaching
 
     def live(
-        self, observations: Any, *, reward: Any = None, done: Any = None, decision_id: Any = None
+        self, observations: Any, *, reward: Any = None, done: Any = None,
+        salience: Any = None, decision_id: Any = None,
     ) -> np.ndarray:
         """One moment of a continuing life: routine while outcomes match, repair when not.
 
@@ -3201,7 +3213,7 @@ class Brain:
         If the forecast settle refuses, nothing has changed and the same call can
         be retried. If the answer refuses after the outcome was taken, the
         outcome stays learned and counted: retry with ``live(observations)``
-        without that reward. Readings of the moment are in ``last_arousal``.
+        without reward, done or salience. Readings of the moment are in ``last_arousal``.
 
         An omitted reward is a zero outcome, not a missing one. When the outcome
         comes later than the next observations, sense them with ``wait`` and report
@@ -3210,6 +3222,13 @@ class Brain:
         situation as an immediate outcome would be. ``decision_id`` names the action
         the outcome belongs to (``Brain.decision_id``); any other value is refused
         with ``ValueError`` before anything changes.
+
+        ``salience`` is an optional nonnegative one-row importance of that actual outcome,
+        as in ``step``. When the outcome is learned, a positive mark makes even a zero
+        outcome known to the episodic records without changing its reward or closing replay.
+        It also sets consolidation's importance when an outcome wakes a routine brain.
+        A mark does not itself wake the brain or permit a calm write. It needs a preceding
+        action and is validated before feedback or forecasting changes anything.
         """
         arousal = self.arousal
         if arousal is None:
@@ -3228,7 +3247,9 @@ class Brain:
         routine = lived is not None and not lived[3] and not sampled
         if decision_id is not None:
             self._owned(decision_id)
-        if not sampled and not routine and (reward is not None or done is not None):
+        if not sampled and not routine and (
+            reward is not None or done is not None or salience is not None
+        ):
             raise RuntimeError("feedback needs a preceding action; start with live(observations)")
         r = np.zeros(1) if reward is None else np.asarray(reward, dtype=float)
         ended = np.zeros(1, bool) if done is None else np.asarray(done)
@@ -3236,12 +3257,15 @@ class Brain:
             raise ValueError("reward must be one finite value for the stream")
         if ended.shape != (1,) or ended.dtype != np.bool_:
             raise ValueError("done must be one boolean for the stream")
+        importance = (
+            None if salience is None else SynapticMemory.salience_vector(salience, 1)
+        )
         answer: tuple[np.ndarray, BrainState] | None = None
         error = surprise = want = 0.0
         sweeps = learning_sweeps = 0
         learned = recorded = False
         if sampled:
-            report = self.learn(r, ended, x)
+            report = self.learn(r, ended, x, salience=importance)
             self._lived = None  # accepted feedback must never become pending again
             self.last_learning = report
             error = float(report["td_error"])
@@ -3265,7 +3289,7 @@ class Brain:
                 if sampled:
                     raise ValueError(
                         "feedback was accepted but arousal could not update; "
-                        "retry live(observations) without reward or done"
+                        "retry live(observations) without reward or done or salience"
                     ) from exc
                 raise
             self._lived = None  # this outcome is taken, exactly once
@@ -3292,7 +3316,9 @@ class Brain:
                 if not self.memory_choice:
                     self._record(
                         self._key_of(lived[0], lived[6]), lived[1], r,
-                        SynapticMemory.salience_vector(np.abs(r), 1),
+                        SynapticMemory.salience_vector(
+                            np.abs(r) if importance is None else importance, 1
+                        ),
                     )
                     recorded = True
                 else:
@@ -3301,6 +3327,7 @@ class Brain:
                     self._episodic.outcome(
                         self._key_of(lived[0], lived[6]), lived[1], r, ended,
                         np.ones(1, bool), gamma=agent.config.gamma, woken=True,
+                        salience=importance,
                     )
                     recorded = True
                 if recorded and not self.memory_choice:
@@ -4178,6 +4205,8 @@ class Brain:
                 )
             composition = _load_composition(meta.get("composition"), learner)
             populations = learner.brain.connectome.populations
+            if not np.array_equal(learner.output_index, populations.get("motor", ())):
+                raise ValueError("saved learner outputs must match the motor population in order")
             code = _load_code(
                 meta, data, len(populations.get("sensory", populations.get("visual/input", ())))
             )

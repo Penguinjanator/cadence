@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.85.1 — 2026-10-22
+
+- `live(..., salience=[...])` accepts the explicit outcome importance already supported by
+  `step`. A positive mark lets an aroused episodic brain record a known zero-valued outcome
+  while leaving its actual reward at zero for replay; it also controls consolidation on a
+  waking write. A mark alone does not wake a calm brain or make it learn. Validation and
+  decision ownership are checked before feedback changes state. This supplies the missing
+  `live` control from [#210](https://github.com/muellerberndt/cadence/issues/210), not automatic
+  extinction or a general remedy for reward-only chains; the reported residual harm remains.
+- A pending-action checkpoint must carry its decision-time observation, action and learned
+  code where applicable. Missing records now raise on load rather than silently losing the
+  action's associative-memory write. Composed checkpoints also validate that learner outputs
+  retain the motor population's order and action meanings. Valid earlier formats still load.
+- Recall and episodic memory accept boolean stream masks consistently for selective reset,
+  end and keep operations. Invalid selections raise before any stream changes; a masked
+  reset preserves the other streams' slots, context and replay paths.
+- Learned-code local updates validate all input shapes and finite values before changing
+  tables, and roll back tables, graph and work counts if a later proposal fails. Column
+  normalization handles finite values whose squared norms overflow or underflow; exact
+  cancellation preserves the previous column's direction. Ordinary normalization is unchanged.
+  The fallback integration bound includes the neuron's negative activation branch, and
+  invalid step halvings leave the graph and its reported step consistent. Code-phase
+  diagnostics count the failed initial attempt as well as its fallback's sweeps.
+- `describe()` includes the four effective expert teaching settings under `genes["learning"]`
+  when `teaching` is `"custom"`. Founder and normalized teaching descriptions keep their
+  existing form. This patch changes no composed defaults, checkpoint format or memory-selection
+  mechanism.
+
 ## 0.85.0 — 2026-10-22
 
 - The memory guide scopes the paid-record reversal workarounds to their measured tasks:

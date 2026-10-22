@@ -40,7 +40,7 @@ from typing import Any, NamedTuple, Protocol
 import numpy as np
 
 from .memory import SynapticMemory
-from .stream import FastSynapses
+from .stream import FastSynapses, _stream_rows
 
 __all__ = ["EpisodicRecords", "Memories", "Memory", "Moment"]
 
@@ -224,6 +224,7 @@ class EpisodicRecords:
         if rows is None:
             self.begin()
             return
+        rows = _stream_rows(rows, batch)
         if self.context is not None and len(self.context) == batch:
             self.context[rows] = 0.0
         if len(self.paths) == batch:
@@ -232,6 +233,12 @@ class EpisodicRecords:
 
     def keep(self, rows: np.ndarray) -> None:
         """The state of the streams in ``rows``, the others dropped."""
+        batch = (
+            len(self.context) if self.context is not None
+            else len(self.decision) if self.decision is not None
+            else len(self.paths)
+        )
+        rows = _stream_rows(rows, batch)
         if self.context is not None:
             self.context = self.context[rows]
         if self.decision is not None:

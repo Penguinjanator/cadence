@@ -149,16 +149,22 @@ settle its units are a source, their synapses in the whole graph carry nothing, 
 moment's drive holds them at the phase's fixed point, so the rest of the brain integrates at
 the model's step with its budgets, its adaptation and its learning phases as a brain without
 the region has them. `last_settlement` reports the phase as `code_steps`, `code_residual` and
-`code_halvings` beside the whole graph's `steps`.
+`code_halvings` beside the whole graph's `steps`. `code_steps` and `context_free_steps`
+include every attempt, including an initial phase that failed before its fallback; the
+reported residual describes the final attempt.
 
-The code's fixed points are stable equilibria of the neuron equations, but a synchronous sweep
-at the model's step can oscillate around one when units with overlapping columns are active
-together. After each phase the region reports the halvings of the step its settled code needs
+At the founder standing gain of 2, the code's slope-weighted lateral coupling is nonpositive,
+but a synchronous sweep at the model's step can still oscillate when units with overlapping
+columns are active together. After each phase the region reports the step's halvings for
+those negative modes
 (`LearnedCode.stability`), and its next phase runs at that step with its budget scaled by the
 same power of two. A phase that does not qualify is settled once more at the step the
-dictionary's coupling allows over every state (`LearnedCode.rest_stability`), and refuses the
+dictionary's negative modes allow over every state (`LearnedCode.rest_stability`), and refuses the
 moment with `RuntimeError` before anything changes when it does not qualify there either, as a
 refused free solve does. A world of one input needs this from its first moment.
+Local contraction also requires the largest slope-weighted coupling eigenvalue below one.
+Custom controls such as `top_down=0` with a large negative-branch leak need that separate
+check: damping cannot stabilize an intrinsically growing mode.
 
 The top-down boundary reads the working trace, the settled association activity of the moment
 before, and never the association region of the moment: a prediction read from the moment's

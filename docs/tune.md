@@ -83,6 +83,12 @@ memories key on; `composition`, the construction choices, not current weights), 
 (each member of `brain.memories` with its settings and counts) and `pending` (whether an
 issued action owns the next outcome).
 
+For an expert `LearnerConfig` outside both teaching points, `genes["teaching"]` is
+`"custom"` and `genes["learning"]` gives its effective `eta`, `eta_bias`, `normalize` and
+`normalize_floor`. Named teaching points need only their name. These four expert values
+are a diagnostic mapping; change them with `learning=LearnerConfig(...)` at construction
+or `retune`, as before.
+
 | Setting | Composed founder | Changed at | Home |
 | --- | --- | --- | --- |
 | `modules`, `observers` | `(64,)`, `()` | construction | [map](#brain) |
