@@ -3,9 +3,9 @@
 The standalone component controller is implemented. All 48 focused checks
 pass: 29 pure task tests, nine immutable-bank checks and ten controller
 checks including fresh constructors and synthetic capacity/H2/retention
-stages. Neural equilibration is forbidden in those tests; no scientific
-campaign has run. Freeze the complete source before executing either stage.
-The measured ordinary-query outcomes remain separate evidence.
+stages. Neural equilibration is forbidden in those tests. The subsequent
+scientific capacity and learned-reader runs are retained below. The measured
+ordinary-query outcomes remain separate evidence.
 
 The task reduces the earlier four-value, query-dependent output problem to
 eight cases: `A,B ∈ {0,1}`, each with the two fact orders. Both actual facts
@@ -132,3 +132,41 @@ Stages are serial. Each has its own additional deadline, includes attempted
 and refused work, and retains every capped or unrun cell as a failure. No
 extra seed, initialization search, comparator stage or larger-world run
 opens automatically.
+
+## Measured result
+
+All four [capacity cells](results/minimal-binding-capacity.json) complete
+512 rounds, answer 8/8 pairs and have zero action or lesson refusals.
+Both [learned H2 founders](results/minimal-binding-h2.json) also complete
+512 rounds and answer 8/8 pairs without refusals. Every causal panel completes
+and qualifies. Both follow the actual A-only and B-only donor changes
+perfectly, preserve the other answer, and lose .50 relevant-slot accuracy
+when either fact is erased.
+
+The full primary gate still fails in both founders:
+
+| Founder | Trained pairs | Neutral-record changes | Named-record specialization | Retention |
+| --- | --- | --- | --- | --- |
+| 0 | 8/8 | 4/8 answers change | Fails | Not opened |
+| 1 | 8/8 | 2/8 answers change | Fails | Not opened |
+
+Reordering records or head descriptors changes no answers. Each head lesion
+and the clone intervention loses 6/8 pairs in both founders, but those
+interventions also alter restoring forces or cortical transport. They do not
+isolate a head-count advantage. The heads use broad mixtures; they fail the
+predeclared majority/margin test for distinct named-record selection.
+That test is sufficient for this specific specialization claim, not necessary
+for every possible useful soft representation. No matched H1 resource
+comparison has run, so this result establishes no parallel-head benefit.
+
+Training used a constant unit-amplitude neutral event. The failed neutral
+intervention scales its key and value to .5 while leaving both facts and the
+query fixed. This exposes nuisance dependence; it identifies no missing query
+force or update-sign defect. A future data-variation control must retain this
+failure and declare its own matched capacity, source and cost before running.
+
+Capacity uses 195.990749 host seconds and H2 uses 438.514331, bringing cumulative
+retained model work to 4,152.979600 seconds. Retention, resource comparisons,
+fresh confirmation and longer-world runs remain closed for this point.
+Learned coupled single-head relevance also needs its own direct test; exposed
+or supplied-content acquisition is not that evidence.

@@ -42,6 +42,15 @@ donor swaps, erasures, shams and head lesions distinguish content use from
 useful parallel selection. It cannot pass or explain the original task, and
 opens no longer-world comparison by itself.
 
+The [minimal capacity controls](results/minimal-binding-capacity.json) now
+pass, and both [learned H2 founders](results/minimal-binding-h2.json) acquire
+all eight pairs without refusals. They follow both actual donor facts and
+fail appropriately under record erasure, but changing the neutral record
+changes 4/8 and 2/8 answers. Both also fail the predeclared named-record
+specialization gate. The full primary gate remains negative; retention and
+resource comparisons stay closed. Learned coupled H1 relevance still needs
+a direct single-question test before any longer-world attention claim.
+
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
 competitive reader described in [the binding instrument](../binding/index_read.py)

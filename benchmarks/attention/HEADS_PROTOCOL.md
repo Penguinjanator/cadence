@@ -432,3 +432,20 @@ PYTHONPATH=src python benchmarks/attention/query_founder_campaign.py \
 PYTHONPATH=src python benchmarks/attention/query_founder_campaign.py \
   --verify benchmarks/attention/results/query-founder-h2.json
 ```
+
+## Smaller simultaneous-binding prerequisite
+
+The separately declared [eight-case chamber](MINIMAL_BINDING.md) removes
+requested output permutation, two values and held-pair transfer. It changes
+no reader equation or learner. New matched capacity passes in all four cells.
+Both learned H2 founders then complete 512 rounds, answer 8/8 pairs and
+qualify every causal panel. Donor changes are followed perfectly; erasing
+either actual fact loses .50 corresponding-slot accuracy.
+
+Both primary gates nevertheless fail: half-amplitude neutral key/value
+changes alter 4/8 and 2/8 answers. Both fail the existing majority/margin
+specialization requirement. Retention, resource comparisons and larger-world
+runs remain closed; this is not a pass or diagnosis of the original task.
+The two stages add 195.990749 and 438.514331 host seconds, respectively,
+bringing retained model work to 4,152.979600 seconds. The exact typed receipts
+and all prior negatives remain unchanged.
