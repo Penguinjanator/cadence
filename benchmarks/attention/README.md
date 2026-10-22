@@ -59,7 +59,10 @@ relevance or longer-world attention claims.
 The separately declared [neutral-variation control](NEUTRAL_VARIATION.md) changes
 only the actually witnessed neutral strength during training. It preserves
 these failures and all original minimal-task criteria, and requires fresh
-matched capacity before either learned H2 founder.
+matched capacity before either learned H2 founder. Those controls pass, and both
+[learned founders](results/neutral-variation-h2.json) now pass content use,
+neutral-context robustness and 256-round same-task continuation. Both still
+fail distinct-head specialization; no matched H1 resource comparison has run.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
