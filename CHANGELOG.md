@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.85.0 — 2026-10-22
 
+- The memory guide scopes the paid-record reversal workarounds to their measured tasks:
+  intermediate penalties can stop replay and harm reward chains, and explicit salience is a
+  `step` option, not a `live` option. Automatic extinction remains unimplemented (#210).
 - A checkpoint saved immediately after `reset(keep="slots")` loads its retained recall
   rows even though the reset cleared the current neural state. Both current and supported
   earlier checkpoint formats preserve the next actions and reward updates at this boundary.
