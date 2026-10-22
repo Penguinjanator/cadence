@@ -2,8 +2,11 @@
 
 This is a **component experiment**, on branch `coupled-memory-attention` from
 v0.85.1. It does not change `Brain.compose` or the existing held-query reader.
-One query selects both an event and its witnessed successor; these are not two
-attention heads. Multiple heads remain a later, matched-cost comparison.
+The original query selects both an event and its witnessed successor; these
+are not two attention heads. A benchmark-only [multi-head instrument](heads.py)
+now supplies independent live query/read ports over the same witnessed bank.
+Its [two-binding protocol](HEADS_PROTOCOL.md) requires behavioral comparisons
+before claiming a useful second head.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
@@ -66,7 +69,9 @@ accepted observation, never from a teacher label or an imagined event.
 The prototype uses the CPU float64 reference path and refuses damping rather
 than allowing a fallback to drop the memory equations. It has no supported
 reward, private imagination or pending-checkpoint continuation contract yet.
-These lifecycle gates, backend conformance, partial-row teaching, causal
+Saved-drive teaching now takes corresponding rows of the immutable memory
+snapshot through all phases, restoring the complete boundary on success or
+refusal. These lifecycle gates, backend conformance, causal
 relevance, learned semantic codes and retention must pass before integration.
 Raw coordinates in the admission chamber are explicitly a control. Neither its
 finite acquisition nor a small joint residual establishes learned meaning,
@@ -188,10 +193,10 @@ All sixteen fact/order/query cases are taught, using raw input coordinates as
 an explicit control. Fresh founders do not establish unseen-binding or semantic
 generalization. Trace-erased queries also qualify, but their mean accuracy is
 77.5%; the intact acquisition result uses the continuing trial's prefix context.
-This is not yet a test that the cortex can use content delivered through the
-recall ports. The coupled reader still needs that content-use check, correct
-partial-row memory snapshots, learned causal relevance, abstention, retention
-and lifecycle integration. No behavioral coupled candidate was run. Seeds
+This acquisition panel alone does not test content delivered through recall
+ports; the separate development control below does. The coupled reader still
+needs learned causal relevance, abstention, retention and lifecycle integration.
+No behavioral coupled candidate was run in this acquisition panel. Seeds
 100–119 are now opened for acquisition and must not be described as untouched
 confirmation seeds for a later relevance candidate.
 
@@ -212,3 +217,60 @@ matched development settings and schedules, actual answered cases, and original
 checkpoint preservation. Optimistic flags cannot hide refused or unrun queries.
 The earlier development source is retained by content hash alongside its first
 receipt; a stricter verifier does not silently rewrite historical evidence.
+
+## Supplied recall content: development passes
+
+The [content protocol](content-protocol.json) keeps the repaired 32-unit,
+qualified teaching recipe. Two actual fact events and one neutral event are
+witnessed, then the working trace and warm neural state are cleared at the
+query. Both unselected facts are supplied together through ordinary recall
+ports. The matched sensory arm receives the same content in exposed sensory
+coordinates. This explicit query boundary isolates content use; it is not a
+continuing-life result or learned selection.
+
+All four development lives (founders 0/1, recall-port/sensory arms) complete
+512 rounds and answer every case, unequal fact and query correctly, with zero
+action or teaching refusals. Erasing content reduces accuracy to 50%. Relevant
+flips and donor content are followed perfectly; irrelevant flips and identical
+shams change no answer. Only actual wrong decisions are taught from their saved
+pre-query drives. Total host time is 59.53 seconds. The [receipt](
+results/content-results-development.json) and original source snapshot are
+retained; final binary checkpoints remain local. Founders 300–319 are unopened.
+
+```sh
+PYTHONPATH=src python benchmarks/attention/content_control.py \
+  --out /tmp/attention-content-development.json
+PYTHONPATH=src python benchmarks/attention/verify.py \
+  benchmarks/attention/results/content-results-development.json
+```
+
+## Minimal two-head and contextual-representation task
+
+Each trial gives `A is value` and `B is value`, using four **shared** value
+coordinates, in either order. The same ambiguous cue asks for `AB` or `BA` in
+two four-choice motor slots during one settle. Four value pairs are withheld
+from training. Swapping the bindings preserves the query and unordered token
+multiset but changes both correct answers; an even mixture loses the bindings.
+`recall_next=False` prevents one selected event and its successor from already
+supplying the two facts.
+
+The [protocol](HEADS_PROTOCOL.md) declares a plain exposed acquisition arm, a
+two-port supplied-content capacity control, one/two independent selectors, a
+wider single-selector port, wider single-head cortex and a larger sweep cap.
+Total memory coupling stays fixed. Receipts count actual graph transports,
+memory scans, softmax elements, residual checks and refused work. More heads
+or a larger sweep cap alone do not establish improved accuracy or efficiency.
+
+The contextual representation is the **settled association activity**. The
+same cue may acquire a different interpretation as recalled bindings change.
+After retrieval and causal gates pass, a fixed diagnostic readout must transfer
+that task context to held-out pairs and fail appropriately under memory lesions.
+Distances or different attention pictures alone are insufficient. The current
+`LearnedCode` boundary is context-free; this test does not claim that its
+observation code shifts inside the settle, or that general language meaning
+has been learned.
+
+```sh
+PYTHONPATH=src python benchmarks/attention/heads_admission.py \
+  --out /tmp/attention-heads-capacity.json
+```

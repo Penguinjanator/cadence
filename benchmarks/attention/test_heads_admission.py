@@ -184,3 +184,18 @@ def test_meter_charges_residual_checks_and_saved_teaching_and_restores_patch() -
         assert work.lessons == 1 and work.teaching_residual_checks > 0
         assert brain.brain.memory is saved
     assert admission.heads.Graph._synaptic_input is original
+def test_supplied_capacity_control_disables_memory_for_every_prefix_moment():
+    protocol = json.loads(admission.PROTOCOL.read_text())
+    brain = admission.make_brain("supplied_reads", 0, protocol)
+    rows = admission.task.panel("train")[:2]
+    prefix, _ = admission.task.events(rows)
+    work = admission.sr.Work()
+    for event in prefix:
+        assert work.act(brain, event) is not None
+        assert all(member.amplitude == 0.0 for member in brain.brain.memory.memories)
+    assert brain.recall.held.any()  # The control still witnesses the actual facts.
+    _, drive, memory = admission.prepare(brain, rows, "supplied_reads")
+    assert all(member.amplitude == 0.0 for member in memory.memories)
+    assert admission.protocol_amplitude(brain) == 3.0
+    assert max(drive[:, memory.memories[0].read].ravel()) == 3.0
+

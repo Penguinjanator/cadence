@@ -110,10 +110,16 @@ def make_brain(arm: str, seed: int, protocol: dict[str, Any], mode="agreement") 
         options["learning_free_steps"] *= 2
         options["learning_nudged_steps"] *= 2
     options.update(recall_next=False)
-    return heads.MultiHeadBrain.compose(
+    content_amplitude = options["recall_amplitude"]
+    if arm == "supplied_reads":
+        options["recall_amplitude"] = 0.0  # Disable coupling in the PREFIX as well as the query.
+    brain = heads.MultiHeadBrain.compose(
         task.INPUTS, task.VALUES * task.SLOTS, seed=seed, dt=protocol["dt"], mode=mode,
         heads=2 if arm in ("h2", "supplied_reads") else 1,
         port_copies=2 if arm == "h1_wide_ports" else 1, **options)
+    if arm == "supplied_reads":
+        brain._supplied_content_amplitude = content_amplitude
+    return brain
 
 
 def prepare(brain: Brain, rows: np.ndarray, arm: str, condition="intact"):
@@ -144,7 +150,7 @@ def prepare(brain: Brain, rows: np.ndarray, arm: str, condition="intact"):
 
 
 def protocol_amplitude(brain: Brain) -> float:
-    return float(brain.recall.amplitude)
+    return float(getattr(brain, "_supplied_content_amplitude", brain.recall.amplitude))
 
 
 def act_drive(brain: Brain, query: np.ndarray, drive: np.ndarray, work):
@@ -352,11 +358,28 @@ def check(body):
         return "incomplete or invalid capacity receipt"
 
 
-def run():
+def run(prior: Path | None = None):
     protocol = json.loads(PROTOCOL.read_text())
     manifest = source_manifest(sources())
     began = time.monotonic()
-    deadline = began + protocol["budget"]["development_total_host_seconds"]
+    previous, reference = 0.0, None
+    if prior is not None:
+        receipt = Receipt.read(prior)
+        frozen = []
+        available = dict(sources())
+        for entry in receipt.source["files"]:
+            snapshot = HERE / "results" / "sources" / (entry["sha256"] + ".txt")
+            if entry["path"] not in available:
+                raise ValueError("prior source is not part of this instrument")
+            frozen.append((entry["path"], snapshot if snapshot.exists()
+                           else available[entry["path"]]))
+        ok, message = Receipt.verify(prior, sources=frozen, check=check)
+        if not ok or receipt.body["capacity_admitted"]:
+            raise ValueError("prior failed admission must verify: " + message)
+        previous = (receipt.body["elapsed_host_seconds"]
+                    + receipt.body.get("previous_host_seconds", 0.0))
+        reference = receipt.digest
+    deadline = began + max(0, protocol["budget"]["development_total_host_seconds"] - previous)
     runs = []
     stop = None
     for arm in ("exposed", "supplied_reads"):
@@ -379,6 +402,7 @@ def run():
         "candidate_rounds_used": 0, "confirmation_seeds_used": [],
         "source_revision": sr.revision(),
         "elapsed_host_seconds": time.monotonic() - began,
+        "previous_host_seconds": previous, "prior_reference": reference,
         "cadence_version": cadence.__version__, "numpy_version": np.__version__,
     }
     problem = check(body)
@@ -390,9 +414,10 @@ def run():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--prior", type=Path, help="Retained failed admission charged to this budget")
     args = parser.parse_args()
     if args.out.exists():
         raise FileExistsError(args.out)
-    receipt = run()
+    receipt = run(args.prior)
     receipt.write(args.out)
     print(receipt.body["decision"])
