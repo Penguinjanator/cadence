@@ -56,6 +56,11 @@ on irrelevant context and fail question-specific record selection. The
 [retained H1 result](results/single-relevance-h1.json) does not admit learned
 relevance or longer-world attention claims.
 
+The separately declared [neutral-variation control](NEUTRAL_VARIATION.md) changes
+only the actually witnessed neutral strength during training. It preserves
+these failures and all original minimal-task criteria, and requires fresh
+matched capacity before either learned H2 founder.
+
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
 competitive reader described in [the binding instrument](../binding/index_read.py)
