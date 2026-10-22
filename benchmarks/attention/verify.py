@@ -69,6 +69,7 @@ def verify(path: Path) -> tuple[bool, str]:
                "cadence-attention-content-control/1": "content_control.py",
                "cadence-attention-heads-admission/1": "heads_admission.py",
                "cadence-attention-heads-relevance/1": "heads_relevance.py",
+               "cadence-attention-empty-boundary-admission/1": "empty_boundary_admission.py",
                "cadence-attention-heads-capacity-diagnostic/1": "diagnostic_verification.py"}
     if receipt.kind in modules:
         spec = importlib.util.spec_from_file_location(
@@ -77,14 +78,24 @@ def verify(path: Path) -> tuple[bool, str]:
         repair = importlib.util.module_from_spec(spec)
         sys.modules[spec.name] = repair
         spec.loader.exec_module(repair)
+        if receipt.kind == "cadence-attention-empty-boundary-admission/1":
+            expected_paths = [name for name, _ in repair.sources()]
+            if [entry["path"] for entry in receipt.source["files"]] != expected_paths:
+                return False, "empty-boundary source manifest paths differ"
         if receipt.kind in ("cadence-attention-heads-admission/1",
                             "cadence-attention-heads-relevance/1"):
             protocol_file = receipt.body.get("protocol_file", "heads-protocol.json")
             if protocol_file not in ("heads-protocol.json", "heads-longer-protocol.json",
-                                     "heads-fixed-read-protocol.json"):
+                                     "heads-fixed-read-protocol.json",
+                                     "heads-anchored-protocol.json"):
                 return False, "unknown heads protocol"
             owner = repair if receipt.kind.endswith("admission/1") else repair.admission
             owner.PROTOCOL = HERE / protocol_file
+            if (protocol_file == "heads-anchored-protocol.json"
+                    and receipt.kind == "cadence-attention-heads-relevance/1"
+                    and [entry["path"] for entry in receipt.source["files"]]
+                    != [name for name, _ in repair.sources()]):
+                return False, "anchored relevance source manifest paths differ"
         arithmetic = repair.check
     return Receipt.verify(path, sources=sources, check=arithmetic)
 

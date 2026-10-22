@@ -27,7 +27,7 @@ from cadence.receipts import Receipt, canonical_sha256, source_manifest
 HERE = Path(__file__).resolve().parent
 PROTOCOL = HERE / "heads-protocol.json"
 PROTOCOL_NAMES = ("heads-protocol.json", "heads-longer-protocol.json",
-                  "heads-fixed-read-protocol.json")
+                  "heads-fixed-read-protocol.json", "heads-anchored-protocol.json")
 
 
 def protocol_path(name: str) -> Path:
@@ -139,6 +139,7 @@ def make_brain(arm: str, seed: int, protocol: dict[str, Any], mode="agreement") 
     options["modules"] = tuple(options["modules"])
     options["slots"] = 2
     if arm == "exposed":
+        options.pop("empty_anchor", None)  # Experimental boundary, not a plain Brain gene.
         options = {k: v for k, v in options.items() if not k.startswith("recall_")}
         brain = Brain.compose(task.INPUTS, task.VALUES * task.SLOTS, seed=seed, **options)
         original = brain.brain
@@ -358,6 +359,8 @@ def check(body, protocol=None):
         selector = body.get("protocol_file", "heads-protocol.json")
         if selector not in PROTOCOL_NAMES:
             return "undeclared heads protocol"
+        if selector == "heads-anchored-protocol.json":
+            return "anchored relevance protocol cannot certify capacity"
         if protocol is None:
             if selector != PROTOCOL.name:
                 return "heads protocol selector differs"
@@ -439,6 +442,8 @@ def verify_prior(prior: Path) -> Receipt:
 
 
 def run(prior: Path | None = None):
+    if PROTOCOL.name == "heads-anchored-protocol.json":
+        raise ValueError("use heads_relevance.py after verified empty-boundary capacity")
     protocol = json.loads(PROTOCOL.read_text())
     manifest = source_manifest(sources())
     began = time.monotonic()

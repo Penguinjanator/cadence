@@ -34,13 +34,97 @@ SPEC.loader.exec_module(admission)
 ARMS = ("h1", "h2", "h1_wide", "h1_wide_ports", "h1_more_steps")
 task, heads, sr = admission.task, admission.heads, admission.sr
 representation = admission.load("heads_relevance_representation", HERE / "representation.py")
+ANCHORED_PROTOCOL = "heads-anchored-protocol.json"
+EMPTY_KIND = "cadence-attention-empty-boundary-admission/1"
+_empty_owner = None
+
+
+def empty_owner():
+    global _empty_owner
+    if _empty_owner is None:
+        _empty_owner = admission.load(
+            "heads_relevance_empty_boundary", HERE / "empty_boundary_admission.py")
+    return _empty_owner
+
+
+def anchored_protocol():
+    return json.loads(admission.protocol_path(ANCHORED_PROTOCOL).read_text())
 
 
 def sources() -> list[tuple[str, Path]]:
-    return admission.sources() + [
+    paths = admission.sources() + [
         ("benchmarks/attention/heads_relevance.py", Path(__file__)),
         ("benchmarks/attention/representation.py", HERE / "representation.py"),
     ]
+    if admission.PROTOCOL.name == ANCHORED_PROTOCOL:
+        declared = anchored_protocol()["prerequisites"]
+        paths += empty_owner().sources() + [(
+            "benchmarks/attention/results/" + declared["capacity_receipt_file"],
+            HERE / "results" / declared["capacity_receipt_file"])]
+    unique = {}
+    for name, path in paths:
+        if name in unique and unique[name].resolve() != path.resolve():
+            raise ValueError("a source path has conflicting owners")
+        unique[name] = path
+    return list(unique.items())
+
+
+def anchored_capacity(path: Path) -> Receipt:
+    """New positive evidence uses exact current sources; old exposed evidence is archived."""
+    owner, protocol = empty_owner(), anchored_protocol()
+    prerequisite = protocol["prerequisites"]
+    receipt = Receipt.read(path)
+    if receipt.kind != EMPTY_KIND or prerequisite["capacity_kind"] != EMPTY_KIND:
+        raise ValueError("anchored capacity prerequisite: wrong receipt kind")
+    if owner.PROTOCOL.name != prerequisite["capacity_protocol_file"]:
+        raise ValueError("anchored capacity prerequisite: protocol owner differs")
+    valid, message = Receipt.verify(path, sources=owner.sources(), check=owner.check)
+    if not valid:
+        raise ValueError("anchored capacity prerequisite: " + message)
+    body = receipt.body
+    if (body["passed"] is not True or body["masked_historical_reproduced"] is not True
+            or body["occupied_query_overlap_identical"] is not True
+            or body["candidate_rounds_used"] != 0 or body["confirmation_seeds_used"]):
+        raise ValueError("anchored capacity prerequisite: acquisition or matched control failed")
+    positive = [run for run in body["runs"] if run["variant"] == "anchored"]
+    if ([run["seed"] for run in positive] != protocol["development_seeds"]
+            or any(run["empty_anchor"] is not True or not owner.admitted(run, body["protocol"])
+                   for run in positive)):
+        raise ValueError("anchored capacity prerequisite: missing or failed anchored founder")
+    base = json.loads(owner.BASE.read_text())
+    expected_brain = {**base["brain"], "empty_anchor": True}
+    admitted_settings = {
+        "rounds": protocol["task"]["rounds"], "batch": protocol["task"]["batch"],
+        "dt": protocol["dt"], "tolerance": protocol["brain"]["learning_tolerance"],
+        "free_steps": protocol["brain"]["learning_free_steps"],
+        "nudged_steps": protocol["brain"]["learning_nudged_steps"],
+        "total_read_amplitude": protocol["brain"]["recall_amplitude"],
+    }
+    if (protocol["brain"] != expected_brain or protocol["task"] != base["task"]
+            or protocol["dt"] != base["dt"] or protocol["gates"] != base["gates"]
+            or any(body["protocol"].get(key) != value for key, value in admitted_settings.items())
+            or body["protocol"]["gate"]["trained_floor"] != protocol["gates"]["content_use_floor"]
+            or protocol["candidate_order"] != ["agreement"]
+            or protocol["maximum_candidate_rounds"] != 1
+            or protocol["budget"].get("additional_stage") is not True):
+        raise ValueError("anchored relevance recipe differs from admitted capacity")
+    old = admission.verify_prior(HERE / "results" / prerequisite["exposed_receipt_file"])
+    if (old.digest != prerequisite["exposed_receipt_digest"]
+            or body["reference_receipt_digest"] != old.digest or old.body["protocol"] != base):
+        raise ValueError("anchored capacity prerequisite: exposed reference differs")
+    exposed = [run for run in old.body["runs"] if run["arm"] == "exposed"]
+    if ([run["seed"] for run in exposed] != protocol["development_seeds"]
+            or any(run["training"]["rounds"] != protocol["task"]["rounds"]
+                   or not admission.acquired(run, protocol["gates"]["exposed_acquisition_floor"])
+                   for run in exposed)):
+        raise ValueError("anchored capacity prerequisite: exposed acquisition failed")
+    old_files = {entry["path"]: entry["sha256"] for entry in old.source["files"]}
+    for entry in receipt.source["files"]:
+        name = entry["path"]
+        if ((name.startswith("src/cadence/") or name == "benchmarks/attention/dual_binding.py")
+                and old_files.get(name) != entry["sha256"]):
+            raise ValueError("anchored capacity prerequisite: exposed model or task differs")
+    return receipt
 
 
 def capacity_check(body: dict[str, Any]) -> str | None:
@@ -91,6 +175,10 @@ def capacity_check(body: dict[str, Any]) -> str | None:
 
 def verify_capacity(path: Path) -> Receipt:
     receipt = Receipt.read(path)
+    if receipt.kind == EMPTY_KIND:
+        receipt = anchored_capacity(path)
+        admission.PROTOCOL = admission.protocol_path(ANCHORED_PROTOCOL)
+        return receipt
     admission.PROTOCOL = admission.protocol_path(
         receipt.body.get("protocol_file", "heads-protocol.json"))
     expected = admission.sources()
@@ -442,6 +530,8 @@ def parameter_snapshot(brain, directory, *, arm, seed, mode):
 def trial(arm, seed, mode, protocol, deadline, parameters=None):
     began = time.monotonic()
     brain = admission.make_brain(arm, seed, protocol, mode)
+    if protocol["brain"].get("empty_anchor", False) and not brain.empty_anchor:
+        raise ValueError("anchored relevance requires the declared empty-read boundary")
     initial = brain.brain.efficacy.copy()
     initial_parameters = sr.parameter_digest(brain)
     cost = {key: 0 for key in ("cortical_synapse_transports", "memory_scan_macs",
@@ -458,6 +548,7 @@ def trial(arm, seed, mode, protocol, deadline, parameters=None):
         causal = evaluate_conditions(brain, arm, task.panel("all"), initial, deadline)
         result = {
             "arm": arm, "seed": seed, "mode": mode, "training": training,
+            "empty_anchor": bool(getattr(brain, "empty_anchor", False)),
             "initial": newborn, "evaluation": evaluation, "causal": causal,
             "schedule_sha256": canonical_sha256(schedule),
             "initial_parameters": initial_parameters, "final_parameters": final,
@@ -497,10 +588,18 @@ def trial(arm, seed, mode, protocol, deadline, parameters=None):
 def run(capacity_path: Path, parameters: Path | None = None) -> Receipt:
     capacity = verify_capacity(capacity_path)
     protocol = json.loads(admission.PROTOCOL.read_text())
+    anchored = getattr(capacity, "kind", None) == EMPTY_KIND
+    if anchored:
+        retained = HERE / "results" / protocol["prerequisites"]["capacity_receipt_file"]
+        if Receipt.read(retained).digest != capacity.digest:
+            raise ValueError("retain the verified capacity receipt at its declared filename")
     manifest = source_manifest(sources())
     began = time.monotonic()
-    spent = capacity.body["elapsed_host_seconds"] + capacity.body.get("previous_host_seconds", 0.0)
-    deadline = began + max(0.0, protocol["budget"]["development_total_host_seconds"] - spent)
+    spent = (capacity.body["cumulative_host_seconds"] if anchored else
+             capacity.body["elapsed_host_seconds"]
+             + capacity.body.get("previous_host_seconds", 0.0))
+    allowance = protocol["budget"]["development_total_host_seconds"]
+    deadline = began + (allowance if anchored else max(0.0, allowance - spent))
     runs, selected = [], None
     for mode in protocol["candidate_order"]:
         for arm in ARMS:
@@ -533,6 +632,16 @@ def run(capacity_path: Path, parameters: Path | None = None) -> Receipt:
                               "transports, including retention; unmatched work proves no advantage",
             "representation_probe": "Per-run diagnostic after behavioral and retention gates; "
                                     "never installed in the brain; no learned-code claim"}
+    if anchored:
+        body.update(
+            capacity_receipt_file=protocol["prerequisites"]["capacity_receipt_file"],
+            exposed_capacity_reference=protocol["prerequisites"]["exposed_receipt_digest"],
+            budget_scope="additional_relevance_stage",
+            previous_capacity_host_seconds=capacity.body["previous_capacity_host_seconds"],
+            previous_diagnostic_host_seconds=capacity.body["previous_diagnostic_host_seconds"],
+            empty_boundary_host_seconds=capacity.body["elapsed_host_seconds"],
+            cumulative_host_seconds=spent + body["elapsed_host_seconds"],
+        )
     problem = check(body)
     if problem:
         raise AssertionError(problem)
@@ -545,6 +654,26 @@ def check(body):
         if (body.get("protocol_file", "heads-protocol.json") != admission.PROTOCOL.name
                 or body["protocol"] != protocol or body["confirmation_seeds_used"]):
             return "protocol or unopened confirmation differs"
+        anchored = admission.PROTOCOL.name == ANCHORED_PROTOCOL
+        if anchored:
+            declared = protocol["prerequisites"]
+            capacity = anchored_capacity(HERE / "results" / declared["capacity_receipt_file"])
+            prior = capacity.body
+            if (body["capacity_receipt_file"] != declared["capacity_receipt_file"]
+                    or body["capacity_reference"] != capacity.digest
+                    or body["exposed_capacity_reference"] != declared["exposed_receipt_digest"]
+                    or body["budget_scope"] != "additional_relevance_stage"
+                    or body["previous_capacity_host_seconds"]
+                    != prior["previous_capacity_host_seconds"]
+                    or body["previous_diagnostic_host_seconds"]
+                    != prior["previous_diagnostic_host_seconds"]
+                    or body["empty_boundary_host_seconds"] != prior["elapsed_host_seconds"]
+                    or body["capacity_host_seconds"] != prior["cumulative_host_seconds"]
+                    or not np.isfinite(body["elapsed_host_seconds"])
+                    or body["elapsed_host_seconds"] < 0
+                    or body["cumulative_host_seconds"]
+                    != prior["cumulative_host_seconds"] + body["elapsed_host_seconds"]):
+                return "anchored prerequisite or cumulative budget differs"
         runs = body["runs"]
         selected = None
         used_modes = []
@@ -559,6 +688,8 @@ def check(body):
                         if result["passed"]:
                             return "unrun relevance cell cannot pass"
                         continue
+                    if anchored and (result["empty_anchor"] is not True or mode != "agreement"):
+                        return "anchored relevance boundary or equation differs"
                     if set(result["evaluation"]) != {"train", "held_out", "all"}:
                         return "missing relevance panel"
                     conditions = {"intact", "erase_0", "erase_1", "neutral_sham", "reorder",
@@ -628,7 +759,7 @@ def check(body):
         if (body["selected"] != selected or body["passed"] != (selected is not None)
                 or body["candidate_rounds_used"] != len(used_modes)):
             return "relevance selection differs"
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, OSError):
         return "malformed relevance readings"
     return None
 

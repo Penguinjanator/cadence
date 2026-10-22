@@ -7,6 +7,8 @@ are not two attention heads. A benchmark-only [multi-head instrument](heads.py)
 now supplies independent live query/read ports over the same witnessed bank.
 Its [two-binding protocol](HEADS_PROTOCOL.md) requires behavioral comparisons
 before claiming a useful second head.
+The [empty-read experiment](EMPTY_BOUNDARY.md) tests the current capacity
+blocker before any learned-head comparison.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
@@ -37,6 +39,12 @@ E_memory(q, r) = alpha / 2 * |r - R(q)|²
 drive_read = alpha * (R(q) - r)
 drive_query = alpha * J_R(q).T * (r - R(q))
 ```
+
+Historically the instrument multiplies this energy and both drives by a
+per-stream `any_held` mask. The opt-in `empty_anchor=True` retains the displayed
+equations on empty streams too: their null mixture is zero, so the read gets
+`-alpha*r` and the query gets zero memory force. The option is confined to the
+agreement prototype; the old masked control remains the default.
 
 The implementation evaluates the actual softmax Jacobian, including the mean
 subtraction and null probability. A transpose of the normalized recall is not

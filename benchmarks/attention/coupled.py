@@ -5,6 +5,9 @@ activations. The agreement candidate uses E = a/2 |r - R(q)|², where R is
 the softmax mixture of witnessed values (and successors). Both drives are the
 negative derivatives of that SAME energy. In particular the query drive uses
 the actual softmax Jacobian, including its subtractive mean and null slot.
+The historical default masks this energy off for an empty stream. Optional
+``empty_anchor=True`` retains the same agreement with the zero-content null:
+E = a/2 |r|², read drive -a r, and zero query drive when no record is held.
 
 The linear control uses E = -a q M r with M = K.T V / held_count.
 The competitive negative control uses -a T logsumexp((q K + r V)/T).
@@ -62,6 +65,9 @@ class Memory:
     Values concatenate event and successor coordinates; both use one selector.
     ``null`` is in unscaled match units and always denotes zero key and content.
     Slots absent from a stream have exactly zero probability and contribution.
+    ``empty_anchor`` applies only to agreement: an empty stream's live read is
+    drawn toward zero instead of omitting its agreement energy. Finite coupling
+    is a restoring force, not a clamp or a guarantee against spurious recall.
     """
 
     query: np.ndarray
@@ -75,6 +81,7 @@ class Memory:
     recency: float = 0.0
     null: float = 0.0
     mode: str = "agreement"
+    empty_anchor: bool = False
 
     def __post_init__(self) -> None:
         for name in ("amplitude", "temperature", "recency", "null"):
@@ -89,6 +96,7 @@ class Memory:
             raise ValueError("scaled memory parameters must be finite")
         if self.mode not in ("agreement", "linear", "competitive"):
             raise ValueError("unknown memory equation")
+        object.__setattr__(self, "empty_anchor", anchor_setting(self.empty_anchor, self.mode))
         for name in ("query", "read"):
             index = np.asarray(getattr(self, name))
             if (index.ndim != 1 or index.dtype.kind not in "iu" or (index < 0).any()
@@ -168,8 +176,9 @@ class Memory:
             return -self.amplitude * self.temperature * (
                 top + np.log(np.exp(logits - top[:, None]).sum(axis=1) + np.exp(null - top)))
         mixture = np.einsum("bm,bmr->br", self.weights(state), self.values)
+        occupied = np.ones(self.streams, dtype=bool) if self.empty_anchor else self.held.any(axis=1)
         return (0.5 * self.amplitude * ((r - mixture) ** 2).sum(axis=1)
-                * self.held.any(axis=1))
+                * occupied)
 
     def drive(self, state: np.ndarray) -> np.ndarray:
         q, r = self._ports(state)
@@ -188,7 +197,8 @@ class Memory:
             out[:, self.query] = self.amplitude * np.einsum("bm,bmk->bk", p, self.keys)
             out[:, self.read] = self.amplitude * mixture
             return out
-        error = (r - mixture) * self.held.any(axis=1)[:, None]
+        occupied = np.ones(self.streams, dtype=bool) if self.empty_anchor else self.held.any(axis=1)
+        error = (r - mixture) * occupied[:, None]
         score = np.einsum("br,bmr->bm", error, self.values)
         # Null contributes zero to E[score] and E[K], but retains its probability.
         centered = score - (p * score).sum(axis=1, keepdims=True)
@@ -196,6 +206,15 @@ class Memory:
                              * np.einsum("bm,bmk->bk", p * centered, self.keys))
         out[:, self.read] = -self.amplitude * error
         return out
+
+
+def anchor_setting(value: Any, mode: str) -> bool:
+    """The empty-read boundary is explicit and confined to agreement equations."""
+    if not isinstance(value, (bool, np.bool_)):
+        raise ValueError("empty_anchor must be boolean")
+    if value and mode != "agreement":
+        raise ValueError("empty_anchor is supported only for agreement memory")
+    return bool(value)
 
 
 class Graph(NeuralGraph):
@@ -248,10 +267,12 @@ class AttentionBrain(Brain):
     """
 
     mode: str = "agreement"
+    empty_anchor: bool = False
 
     @classmethod
     def compose(cls, inputs: int, actions: int, *, mode: str = "agreement",
-                dt: float = 0.1, seed: int = 0, **options: Any) -> AttentionBrain:
+                dt: float = 0.1, seed: int = 0, empty_anchor: bool = False,
+                **options: Any) -> AttentionBrain:
         if options.get("backend", "cpu") != "cpu":
             raise ValueError("attention instrument supports CPU float64 only")
         if options.get("learning_surprise", False):
@@ -260,6 +281,7 @@ class AttentionBrain(Brain):
             raise ValueError("attention instrument requires a one-event key")
         if mode not in ("agreement", "linear", "competitive"):
             raise ValueError("unknown memory equation")
+        empty_anchor = anchor_setting(empty_anchor, mode)
         options.update(recall=True, recall_address=0.0, recall_null=0.0,
                        learning_qualified=True, learning_damping=0)
         options.setdefault("learning_nudged_steps", options.get("learning_free_steps", 1024))
@@ -277,7 +299,7 @@ class AttentionBrain(Brain):
                     if k not in ("modules", "observers", "lateral", "scales")}
         brain = super().compose(inputs, actions, connectome=develop(genome, seed=seed),
                                 seed=seed, **settings)
-        brain.mode = mode
+        brain.mode, brain.empty_anchor = mode, empty_anchor
         original = brain.brain
         brain.learner.brain = Graph(original.connectome, original.neuron_model.replace(dt=dt),
                                     efficacy=original.efficacy, bias=original.bias,
@@ -288,6 +310,13 @@ class AttentionBrain(Brain):
         if not greedy:
             raise NotImplementedError("reward eligibility is not integrated in this instrument")
         return super().act(observations, greedy=True, **options)
+
+    def reset(self, *, keep: Any = ("arousal",), **renamed: Any) -> None:
+        """Begin a stream without retaining the previous solve's boundary cache."""
+        super().reset(keep=keep, **renamed)
+        self.brain.memory = None
+        if hasattr(self, "head_attended"):
+            self.head_attended = None
 
     def teach_saved(
         self, drive: np.ndarray, target: np.ndarray, wrong: Any, memory_snapshot: Memory,
@@ -377,7 +406,7 @@ class AttentionBrain(Brain):
             recall.held if matching else np.zeros((batch, 0), dtype=bool),
             recall.ages() if matching else np.zeros(0),
             amplitude=recall.amplitude, temperature=recall.temperature,
-            recency=recall.recency, mode=self.mode,
+            recency=recall.recency, mode=self.mode, empty_anchor=self.empty_anchor,
         )
         return drive
 

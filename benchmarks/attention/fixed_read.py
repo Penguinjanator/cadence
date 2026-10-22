@@ -7,8 +7,11 @@ is a control, never a candidate selector or an address teaching rule.
 
 With fixed one-hot p and target pV, E_h = alpha_h/2 ||r_h-pV||^2 * held.any.
 The query derivative is zero; the read force is alpha_h*(pV-r_h)*held.any.
-An absent named fact in a nonempty bank restores toward zero. An entirely
-empty bank has zero force, as in the original agreement equation.
+An absent named fact in a nonempty bank restores toward zero. The historical
+default gives an entirely empty bank zero force. If the supplied bank declares
+``empty_anchor=True``, retain agreement with its zero content on empty streams
+too: E_h = alpha_h/2 ||r_h||^2 and read force -alpha_h*r_h. This is finite
+restoring agreement, not a clamp or a promise of zero settled read activity.
 """
 
 from __future__ import annotations
@@ -64,11 +67,16 @@ class _Head:
     ages: np.ndarray
     amplitude: float
     mode: str = "held"
+    empty_anchor: bool = False
 
 
 @dataclass(frozen=True)
 class _Bank:
     memories: tuple[_Head, ...]
+
+    @property
+    def empty_anchor(self) -> bool:
+        return self.memories[0].empty_anchor
 
 
 @dataclass(frozen=True, init=False)
@@ -76,6 +84,7 @@ class FrozenRead:
     memories: tuple[_Head, ...]
     p_fixed: np.ndarray
     targets: np.ndarray
+    empty_anchor: bool
     fixed_selector = True
     mode = "held"
     heads = 2
@@ -85,6 +94,18 @@ class FrozenRead:
         if len(members) != 2:
             raise ValueError("fixed-name capacity control requires exactly two heads")
         first = members[0]
+        empty_anchor = getattr(bank, "empty_anchor", getattr(first, "empty_anchor", False))
+        if not isinstance(empty_anchor, (bool, np.bool_)):
+            raise ValueError("empty_anchor must be boolean")
+        empty_anchor = bool(empty_anchor)
+        for member in members:
+            setting = getattr(member, "empty_anchor", empty_anchor)
+            if not isinstance(setting, (bool, np.bool_)) or bool(setting) != empty_anchor:
+                raise ValueError("all fixed heads must share the same empty_anchor setting")
+            if empty_anchor and getattr(member, "mode", "agreement") not in ("agreement", "held"):
+                raise ValueError("empty_anchor requires agreement or held agreement memory")
+        if empty_anchor and getattr(bank, "mode", "agreement") not in ("agreement", "held"):
+            raise ValueError("empty_anchor requires agreement or held agreement memory")
         keys, values, ages = (np.asarray(getattr(first, name))
                               for name in ("keys", "values", "ages"))
         held = np.asarray(first.held)
@@ -105,7 +126,7 @@ class FrozenRead:
             if not np.isfinite(alpha) or alpha < 0:
                 raise ValueError("read amplitude must be finite and nonnegative")
             owned.append(_Head(ports(member.query), ports(member.read),
-                               keys, values, held, ages, float(alpha)))
+                               keys, values, held, ages, float(alpha), empty_anchor=empty_anchor))
         all_ports = np.concatenate([p for head in owned for p in (head.query, head.read)])
         if len(np.unique(all_ports)) != len(all_ports):
             raise ValueError("fixed heads require disjoint query and read ports")
@@ -128,6 +149,7 @@ class FrozenRead:
         object.__setattr__(self, "memories", tuple(owned))
         object.__setattr__(self, "p_fixed", frozen(selectors))
         object.__setattr__(self, "targets", frozen(target))
+        object.__setattr__(self, "empty_anchor", empty_anchor)
 
     @property
     def streams(self) -> int:
@@ -174,7 +196,7 @@ class FrozenRead:
 
     def energy(self, value: Any) -> np.ndarray:
         state = self._state(value)
-        occupied = self.held.any(axis=1)
+        occupied = np.ones(self.streams, dtype=bool) if self.empty_anchor else self.held.any(axis=1)
         out = np.zeros(self.streams)
         for index, head in enumerate(self.memories):
             error = state[:, head.read] - self.targets[index]
@@ -183,7 +205,8 @@ class FrozenRead:
 
     def drive(self, value: Any) -> np.ndarray:
         state = self._state(value)
-        occupied = self.held.any(axis=1)[:, None]
+        occupied = (np.ones(self.streams, dtype=bool) if self.empty_anchor
+                    else self.held.any(axis=1))[:, None]
         out = np.zeros_like(state)
         for index, head in enumerate(self.memories):
             out[:, head.read] = (head.amplitude

@@ -56,7 +56,7 @@ class MultiMemory:
             raise ValueError("heads require a nonempty tuple of memory boundaries")
         first = members[0]
         data = ("keys", "values", "held", "ages")
-        settings = ("mode", "temperature", "null", "recency")
+        settings = ("mode", "temperature", "null", "recency", "empty_anchor")
         for member in members[1:]:
             if (any(not np.array_equal(getattr(first, name), getattr(member, name))
                     for name in data)
@@ -104,6 +104,10 @@ class MultiMemory:
     @property
     def mode(self) -> str:
         return str(self.memories[0].mode)
+
+    @property
+    def empty_anchor(self) -> bool:
+        return self.memories[0].empty_anchor
 
     def take(self, rows: Any) -> MultiMemory:
         """Restrict the one bank once, retaining every head's stream identity."""
@@ -157,12 +161,15 @@ class MultiHeadBrain(AttentionBrain):
     @classmethod
     def compose(
         cls, inputs: int, actions: int, *, heads: int = 1, port_copies: int = 1,
-        mode: str = "agreement", dt: float = 0.1, seed: int = 0, **options: Any,
+        mode: str = "agreement", dt: float = 0.1, seed: int = 0,
+        empty_anchor: bool = False, **options: Any,
     ) -> MultiHeadBrain:
         heads = positive_count("heads", heads)
         port_copies = positive_count("port_copies", port_copies)
+        empty_anchor = coupled.anchor_setting(empty_anchor, mode)
         if heads == port_copies == 1:
-            brain = super().compose(inputs, actions, mode=mode, dt=dt, seed=seed, **options)
+            brain = super().compose(inputs, actions, mode=mode, dt=dt, seed=seed,
+                                    empty_anchor=empty_anchor, **options)
             brain.heads, brain.port_copies = heads, port_copies
             populations = brain.connectome.populations
             assert brain.recall is not None
@@ -206,6 +213,7 @@ class MultiHeadBrain(AttentionBrain):
             cls, inputs, actions, connectome=develop(anatomy, seed=seed), seed=seed, **settings,
         )
         brain.mode, brain.heads, brain.port_copies = mode, heads, port_copies
+        brain.empty_anchor = empty_anchor
         original = brain.brain
         brain.learner.brain = Graph(
             original.connectome, original.neuron_model.replace(dt=dt),
@@ -260,7 +268,7 @@ class MultiHeadBrain(AttentionBrain):
             members.append(Memory(
                 query, read, keys, values, held, ages,
                 amplitude=recall.amplitude / self.heads, temperature=recall.temperature,
-                recency=recall.recency, mode=self.mode,
+                recency=recall.recency, mode=self.mode, empty_anchor=self.empty_anchor,
             ))
         recall._attended = None
         self.brain.memory = MultiMemory(tuple(members))

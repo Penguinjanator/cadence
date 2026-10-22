@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from cadence.receipts import Receipt
+
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
 CAPACITY = ("heads-capacity-initial.json", "heads-capacity-corrected.json",
@@ -18,6 +20,25 @@ assert SPEC is not None and SPEC.loader is not None
 verifier = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = verifier
 SPEC.loader.exec_module(verifier)
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_empty_boundary_dispatch_requires_the_complete_dependency_inventory(tmp_path, partial):
+    sources = [("benchmarks/attention/heads.py", HERE / "heads.py")] if partial else []
+    path = tmp_path / "unbound.json"
+    Receipt.build("cadence-attention-empty-boundary-admission/1", {}, sources).write(path)
+    valid, message = verifier.verify(path)
+    assert not valid
+    assert message == "empty-boundary source manifest paths differ"
+
+
+def test_anchored_relevance_dispatch_rejects_a_missing_dependency_inventory(tmp_path):
+    path = tmp_path / "unbound-relevance.json"
+    Receipt.build("cadence-attention-heads-relevance/1",
+                  {"protocol_file": "heads-anchored-protocol.json"}, []).write(path)
+    valid, message = verifier.verify(path)
+    assert not valid
+    assert message == "anchored relevance source manifest paths differ"
 
 
 def receipt(name: str) -> dict:
