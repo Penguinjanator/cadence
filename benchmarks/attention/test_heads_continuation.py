@@ -231,3 +231,27 @@ def test_standalone_verifier_rejects_another_receipt_kind(tmp_path):
     path = tmp_path / "wrong-kind.json"
     subject.Receipt.build("unrelated/1", {}).write(path)
     assert subject.verify(path) == (False, "not an attention continuation receipt")
+
+
+def test_retained_completed_recipe_does_not_turn_into_an_acquisition_or_head_claim():
+    path = subject.HERE / "results" / "heads-continuation-development.json"
+    valid, message = subject.verify(path)
+    assert valid, message
+    receipt = subject.Receipt.read(path)
+    assert receipt.digest == "12c384dae5992e3675baf2d74ec38d680fc90ada107ae99598036d146d065a40"
+    body = receipt.body
+    assert not body["passed"] and not body["head_advantage_claimed"]
+    assert body["new_candidate_rounds_used"] == 0
+    assert body["confirmation_seeds_used"] == []
+    for point in body["points"]:
+        result = point["result"]
+        assert result["training"]["completed"] and result["training"]["rounds"] == 512
+        assert result["training"]["stop"] is None
+        assert result["training"]["work"]["action_refusals"] == 0
+        assert result["training"]["work"]["lesson_refusals"] == 0
+        assert result["evaluation"]["train"]["scores"]["exact_pair_accuracy"] == 8 / 48
+        assert result["evaluation"]["held_out"]["scores"]["exact_pair_accuracy"] == 0
+        assert result["metrics"]["required_causal_answers_qualified"]
+        assert not result["metrics"]["acquired"]
+        assert not result["metrics"]["causal_passed"]
+        assert result["retention"]["status"] == "not_run_primary_failed"

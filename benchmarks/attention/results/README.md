@@ -144,3 +144,25 @@ The stage costs 1,287.076165 host seconds and brings cumulative retained work
 to 2,337.216734 seconds. The distinct-evidence and useful-parallel-head claims
 are unestablished. Research parameter arrays stay local; they are not saved
 continuing-brain checkpoints.
+
+## H1 diagnostic and completed H2 recipe: acquisition still fails
+
+[heads-h1-boundary-diagnostic.json](heads-h1-boundary-diagnostic.json) reproduces
+the two first H1 refusals, capturing the actual pre-rollback state and boundary.
+Its local linearizations distinguish endpoint stability from global convergence;
+no solver rescue or new teaching is attempted. Cost is 0.859652 host seconds.
+
+[heads-continuation-development.json](heads-continuation-development.json)
+restores H2's source-bound parameters, optimizer history and counters at a reset
+round boundary and completes the same original 512-round schedules. Both founders
+have zero training refusals, but only 8/48 trained pairs and 0/16 held-out pairs
+correct. All intact panels are answered; acquisition and causal gates still fail.
+The old negative ten-cell comparison and its eight refused H1/resource controls
+are preserved unchanged. No retention, representation, fresh confirmation or
+head advantage follows. These research arrays are not full-life checkpoints.
+
+The [declaration and standalone verifier](../HEADS_PROTOCOL.md#exact-boundary-diagnostic-and-h2-recipe-completion)
+bind the original sources, receipts, exact remaining schedule and intervening
+diagnostic charge. Additional continuation work is 396.728604 host seconds;
+cumulative retained work is 2,734.804991 seconds. The historical generic verifier
+does not dispatch this new continuation kind; use the standalone command.

@@ -335,3 +335,45 @@ to 2,337.216734 seconds. No parallel-head advantage, continuing-life or
 Stone Age result follows. Further repair must first distinguish numerical
 refusal from capped acquisition; a generic negative pass flag does not
 localize a head-count defect.
+
+## Exact boundary diagnostic and H2 recipe completion
+
+The [H1 boundary diagnostic](results/heads-h1-boundary-diagnostic.json)
+reconstructs only the two original first refusals, retaining the actual field
+before action rollback. Parameters and maximum residuals match the original
+failures exactly. Each endpoint has a locally stable continuous linearization
+and a locally stable final `.125` Euler step. This is pointwise evidence;
+it proves neither global convergence nor that another schedule would rescue
+the original 2,048-sweep run. No alternative step, teacher or training run was
+tried. Its measured cost is 0.859652 host seconds.
+
+The separately frozen [continuation protocol](heads-continuation-protocol.json)
+finishes only H2's missing 191/223 draws from its original schedules. It restores
+all three parameter arrays, all four optimizer arrays and both update counters
+from source-bound research snapshots. A 2+2-round identity check compares this
+restoration with uninterrupted training. This is valid at the declared reset
+round boundary; it is not a saved continuing-life checkpoint. Equations, local
+teacher, rates, qualified-sweep caps, task and gates remain unchanged. The
+original negative ten-cell receipt and all eight failed comparators remain
+immutable; the new receipt explicitly identifies its derived combined reading.
+
+**Result:** both H2 founders complete 512 rounds with zero training action or
+lesson refusals. Each ends at 8/48 trained exact pairs and 0/16 held-out pairs
+correct, below its earlier capped trained score of 16/48 or 26/48. All intact
+panels are answered. Neither acquisition nor causal relevance passes; retention,
+representation and confirmation remain unopened. No failed H1 comparator grants
+a head advantage. This stage costs 396.728604 host seconds and brings retained
+work, including the H1 diagnostic once, to 2,734.804991 seconds.
+
+The [new receipt](results/heads-continuation-development.json) has its own strict
+offline verifier, leaving historical execution dependencies unchanged:
+
+```sh
+PYTHONPATH=src python benchmarks/attention/heads_continuation.py \
+  --verify benchmarks/attention/results/heads-continuation-development.json
+```
+
+The completed failure distinguishes limited training time from this recipe's
+acquisition problem. Check actual local lesson directions on the same captured
+memory boundary before changing the learning rule or anatomy. This result does
+not open a longer-world comparison or establish useful parallel attention.

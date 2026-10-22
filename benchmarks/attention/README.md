@@ -11,7 +11,11 @@ The [extended capacity control](results/founder-capacity-extended.json) now
 passes acquisition on both exposed and both supplied-read founders. The first
 [learned-reader comparison](results/heads-relevance-founder-extended.json)
 fails all ten declared cells: H2 hits its training time limit; the one-head
-variants refuse a numerical solve. Useful parallel heads remain unproved.
+variants refuse a numerical solve. A separately declared
+[exact H2 continuation](results/heads-continuation-development.json) finishes
+both original 512-round schedules with no refusals, but each founder ends at
+8/48 trained pairs and 0/16 held-out pairs correct. Extra training does not
+repair this acquisition failure. Useful parallel heads remain unproved.
 See the [parallel-head assessment](PARALLEL_HEADS_ASSESSMENT.md) for the
 predeclared distinction between retrieval success and a useful second head.
 
