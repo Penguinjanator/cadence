@@ -377,3 +377,32 @@ The completed failure distinguishes limited training time from this recipe's
 acquisition problem. Check actual local lesson directions on the same captured
 memory boundary before changing the learning rule or anatomy. This result does
 not open a longer-world comparison or establish useful parallel attention.
+
+## Lesson checks and an ordinary query initializer control
+
+The [prior-work ledger](results/query-founder-prior.json) retains three further
+bounded diagnostic records and their exact charges. An initial work-counter
+failure returns no phase; its corrected one-case lesson audit qualifies every
+phase. On that trained unequal case, both original and refined local contrasts
+point toward lower loss in both answer slots. The actual momentum/RMS update
+reduces total loss and corrects one slot. This identifies no simple update-sign
+or precision repair.
+
+A separate full-panel endpoint check supplies one lesson on the 40 wrong rows
+and evaluates all 48 trained rows. Both the native and zero-momentum proposals
+reduce mean cross-entropy but lose the same two previously correct pairs:
+8/48 becomes 6/48, with no new correct pairs. All three paired precision
+references qualify and preserve these decisions. This synthetic aggregate
+lesson is not an original sixteen-row minibatch or evidence of a training
+remedy. The JSON ledger verifies retained records and accounting; it does not
+independently replay binary phase states. Cumulative model work is
+2,748.518539 host seconds, including the failed instrument attempt once.
+
+The [new initializer declaration](query-founder-protocol.json) tests one
+ordinary reciprocal projection draw on each existing query/cortex interface,
+once before a fresh brain's first event. The [construction guide](QUERY_FOUNDER.md)
+states its independent seed streams and limits. No runtime equation, neuron,
+contact, teacher or head role changes. Fresh matched exposed/supplied-read
+capacity must pass before both H2 founders run; the eight matched one-head and
+resource comparisons open only if both H2 primary and retention gates pass.
+Original failed results and all behavioral floors remain in force.

@@ -18,6 +18,11 @@ both original 512-round schedules with no refusals, but each founder ends at
 repair this acquisition failure. Useful parallel heads remain unproved.
 See the [parallel-head assessment](PARALLEL_HEADS_ASSESSMENT.md) for the
 predeclared distinction between retrieval success and a useful second head.
+The [ordinary-query initialization control](QUERY_FOUNDER.md) tests one
+different starting condition for the same live query connections. Its staged
+runner requires new matched capacity before H2, and both H2 founders before
+matched one-head/resource comparisons. The old positive capacity receipt is
+baseline evidence for the original initializer.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
