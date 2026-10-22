@@ -64,6 +64,14 @@ matched capacity before either learned H2 founder. Those controls pass, and both
 neutral-context robustness and 256-round same-task continuation. Both still
 fail distinct-head specialization; no matched H1 resource comparison has run.
 
+The new [continuous-payload single-head component](CONTINUOUS_RELEVANCE.md)
+tests both questions with fresh scalar values in a shared payload coordinate.
+It requires its own exposed and supplied-address capacity controls before
+learned H1 evaluation. Its source and software checks are prepared; no
+behavioral result from this task is available yet. This reset-round component
+does not establish learned meaning codes, continuing-life preservation or a
+Stone Age advantage.
+
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
 competitive reader described in [the binding instrument](../binding/index_read.py)
