@@ -5,21 +5,18 @@ Every change must meet [the manifesto](MANIFESTO.md) and its
 requirement changes, and distinguish design goals from implemented capabilities.
 
 Start with [the guided documentation README](docs/README.md), then read the
-[continuing-world-model guide](docs/world-model.md) before designing an application,
-tutorial or experiment. Use [the catalogue](docs/README.md#all-guides) to find individual
+[continuing-world-model guide](docs/start.md#one-continuing-equilibrium-brain) before designing an application,
+tutorial or experiment. Use [the catalogue](docs/README.md#by-situation) to find individual
 guides. Read the owning guide, [numerical contracts](docs/contracts.md) and
 [API reference](docs/api.md) before changing semantics.
 
 | Task | Read and use |
 | --- | --- |
-| Build a continuing brain | [Quickstart](docs/quickstart.md), [composition](docs/brain.md), [runnable lifecycle](examples/continuing_brain.py) |
-| Manage streams, outcomes and memory | [Continuous interaction](docs/continuous.md), [memory](docs/memory.md), [episodic memory](docs/episodic.md), [recall memory](docs/recall.md), [reward](docs/reward.md), [world model](docs/world-model.md) |
-| Diagnose learning or settling work | [Learning](docs/learning.md), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
-| Use retained-record dreaming and sleep | [Record patches](docs/record-patch.md): `RecordPatchNet.dream` and `sleep`; this is a separate model from `Brain.compose` |
-| Learn transitions, plan or protect responses | [Temporal patches](docs/temporal.md), [planning](docs/planning.md), [temporal memory](docs/temporal-memory.md), [runnable example](examples/memory_imagination.py) |
-| Add optional recursive observation | [Cortical regions](docs/cortex.md), [recursive settlement](docs/recursive-settlement.md), [PatchNet training](docs/patchnet.md#train-on-observed-targets) |
-| Work on the population equilibrium solver | [Its entry guide](docs/equilibrium/README.md), [agent instructions](docs/equilibrium/AGENTS.md) and [reference](docs/equilibrium/REFERENCE.md) |
-| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluation.md), [protocols](docs/protocols.md), [receipts](docs/receipts.md) |
+| Build a continuing brain | [Quickstart](docs/start.md), [composition](docs/tune.md), [runnable lifecycle](examples/continuing_brain.py) |
+| Manage streams, outcomes and memory | [Continuous interaction](docs/start.md#continuous-interaction), [memory](docs/memory.md), [episodic memory](docs/memory.md#episodic-memory-what-happened-in-this-situation-before), [recall memory](docs/memory.md#the-recall-memory-in-full), [reward](docs/reward.md), [world model](docs/start.md#one-continuing-equilibrium-brain) |
+| Diagnose learning or settling work | [Learning](docs/settling.md#learning-the-freenudged-rule), [contracts](docs/contracts.md), [API diagnostics](docs/api.md), [troubleshooting](docs/troubleshooting.md) |
+| Add optional recursive observation | [Composition](docs/tune.md#brain) (`observers=`), [cortical regions](docs/anatomy.md#write-a-cortex) |
+| Change or release the library | [Contributing and required checks](CONTRIBUTING.md), [evaluation](docs/evaluate.md), [instruments](benchmarks/instruments/README.md), [receipts](docs/evaluate.md#receipts) |
 
 ## What Cadence is, and is not
 
@@ -47,8 +44,11 @@ The brain computes, and indexes its memories, on learned compressed
 representations of meaning; raw observations are its input. A memory keyed on
 raw observations, or on a fixed random code of them (`code=units`), finds only
 moments whose raw inputs overlap. Design keys, memories and applications for a
-learned code; the library's learned code is work in progress in
-[#211](https://github.com/muellerberndt/cadence/issues/211).
+learned code. The library's learned code is opt-in (`learned_code=units`;
+[the learned code](docs/senses.md#the-learned-code) states its costs and limits). The camera
+chamber measures a separate prototype with imprinted columns and nursery experience;
+its scores do not establish the integrated region's camera behavior
+([#211](https://github.com/muellerberndt/cadence/issues/211)).
 
 Map every capability that makes a transformer effective to its settlement form before adding a
 mechanism, and remove or fold what was tested and did not work: an option whose readings were
@@ -95,11 +95,9 @@ or blur model identities to make the design story simpler.
 The intended observer-like structure has bounded local state, sensory/action
 boundaries, inspection, retained evidence and returning constraints. Name the
 actual implementation: composed brains expose sensory/motor indices, neural
-state, a working trace and associative memory. These are not the typed `Ports`
-or record readback of the record/temporal APIs, nor the population solver's exact
-state-and-error readback. A retained trace may be a held boundary during a present
-solve; a live coordinate must still qualify. Do not freeze unresolved live state
-or weaken qualification to manufacture a whole-brain answer.
+state, a working trace and associative memory. A retained trace may be a held
+boundary during a present solve; a live coordinate must still qualify. Do not freeze unresolved live state or weaken
+qualification to manufacture a whole-brain answer.
 
 ## Build and demonstrate the lifecycle
 
@@ -139,16 +137,17 @@ in the same acquired life. `brain.describe()` reports the effective settings.
 Keep rate ownership explicit: actor rates govern reward learning, learner rates
 govern teaching, and temperature is shared. A fresh configuration dataclass is
 still a complete replacement, while named overrides preserve unspecified values.
-Consult the [defaults and tuning guide](docs/brain.md#defaults-and-expert-overrides).
+Consult the [defaults and tuning guide](docs/tune.md#defaults-and-expert-overrides).
 Application recipes are measured choices, not generally optimal defaults.
 
-`resting_bias` is an optional initialization setting, not evidence of improved
-acquisition or retention. Keep its default and the working-trace defaults as
-controls. Select alternatives with matched tasks and continuation tests;
-responsiveness under random drives or one tiny teaching assay cannot establish
-generally better defaults. The [recall instrument](benchmarks/recall/README.md)
-and [acquisition microscope](benchmarks/acquisition/README.md) have distinct
-protocols. Preserve their measured settings, failed attempts and source identity.
+The resting bias that the acquisition and rhythm chambers apply from their frozen
+recipes (the `resting_bias` setting of release 0.84.3) is not evidence of improved
+acquisition or retention. Keep the working-trace defaults as controls. Select
+alternatives with matched tasks and continuation tests; responsiveness under random
+drives or one tiny teaching assay cannot establish generally better defaults. The
+[recall instrument](benchmarks/recall/README.md) and
+[acquisition microscope](benchmarks/acquisition/README.md) have distinct protocols.
+Preserve their measured settings, failed attempts and source identity.
 
 `step` receives a current observation and the preceding executed action's actual
 outcome. `teacher` labels the current observation. Preserve stream identity,
@@ -159,31 +158,16 @@ world's transitions or turn predictions into witnessed experience.
 Distinguish implemented contracts from the desired world-model lifecycle.
 `Brain.compose` does not yet integrate learned environmental transition prediction.
 `step` does not gate learning on witnessed failure; `live` gates it by arousal
-for one stream through its [arousal law](docs/continuous.md#routine-and-repair-live).
+for one stream through its [arousal law](docs/start.md#routine-and-repair-live).
 Youth and sustained arousal also allow learning from successful outcomes. Its
 routine moment still pays one full settle. Stable inputs do not guarantee cheap
 operation. Do not invent thresholds, success policies or runtime
 changes to make documentation imply those capabilities. Missing integration and
 behavioral contracts need their own capability issues and tests.
 
-Advanced APIs have explicit contracts: `TemporalPatchNet.plan` uses a learned
-world model; `TemporalMemory` protects selected responses at finite capacity;
-record patches combine context, learned relations and writable records. The
-population solver under `cadence.experimental.equilibrium` provides exact
-state-and-error readback. Do not transfer its mathematical guarantees to a
-neural-graph or record operation without an actual correspondence.
-
-Preserve `RecordPatchNet.dream(inputs)` and `sleep(cues)`: dreams complete cues
-from retained records without learning; sleep fixes those targets, teaches slow
-weights and rewrites record residuals against the changed weights. This retained
-capability is separate from `Brain.imagine` and online `SynapticMemory`
-consolidation; `Brain.compose` does not expose the record-patch sleep cycle.
-Dreamed targets are not witnessed environmental outcomes. Use the owning guide's
-model and source-pinned evidence when reproducing sleep results.
-
-Graph and temporal learners use free/nudged equilibrium contrasts. Record and
-belief models also use explicit adjoints and record writes. State those
-mathematics accurately. A record scan is not a joint graph-equilibrium certificate.
+Graph learners use free/nudged equilibrium contrasts. State those mathematics
+accurately, and do not transfer one model's mathematical guarantees to another's
+operation without an actual correspondence.
 
 ## Numerical and behavioral contracts
 
@@ -243,8 +227,7 @@ salience do not establish general lifelong retention.
   [acquisition](tests/test_composed_acquisition.py),
   [feedback transactions](tests/test_feedback_transaction.py),
   [memory and continuation](tests/test_generic_memory_checkpoint.py),
-  [private imagination](tests/test_composed_brain.py),
-  [record recall and sleep](tests/test_record_patch.py), and
+  [private imagination](tests/test_composed_brain.py), and
   [settlement diagnostics](tests/test_settlement_reports.py).
 - Numerical changes need independent reference, derivative or adversarial checks.
   Measure behavior after teaching with answers free, and count query, training,
@@ -253,9 +236,8 @@ salience do not establish general lifelong retention.
   or improved performance need before/after behavior and cost comparisons with
   matched tasks, inputs, seeds, information and resource accounting. Keep working
   baselines and acquisition/retention thresholds when refactoring.
-- Changes to the population solver need `tests/equilibrium`; default neural
-  changes need their own tests. Optional backends must preserve the applicable
-  qualification and continuation rules.
+- Default neural changes need their own tests. Optional backends must preserve
+  the applicable qualification and continuation rules.
 
 Cadence is experimental: backward compatibility is not a design requirement.
 Save/load must still preserve the current supported model's complete continuation.
@@ -274,9 +256,7 @@ completed general cognition is not a release gate.
 ports provide a useful analogy to overlapping descriptions, but a mathematical
 correspondence must identify the variables, equations and assumptions of each
 model. In the default neural brain, qualification checks the declared state
-equations. The experimental population model qualifies stationarity of its
-energy and can retain nonzero prediction errors; neither forces all patches to
-the same value ([prediction and disagreement](docs/equilibrium/SPECIFICATION.md#prediction-and-disagreement)).
+equations; it does not force all patches to the same value.
 Keep the two projects' claims separate. OPH results do not establish a Cadence
 capability, Cadence measurements do not test OPH physics, and Cadence code and
 documentation do not depend on OPH.

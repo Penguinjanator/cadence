@@ -1,4 +1,4 @@
-"""Operating points and seams: the specific fact, the calibrated threshold, the naive seam."""
+"""Operating points and seams: the calibrated threshold, the naive seam and the preflight."""
 
 from __future__ import annotations
 
@@ -6,77 +6,6 @@ import numpy as np
 import pytest
 
 import cadence as cd
-from cadence.protocol import Levels, shared_code
-
-
-def two_codes() -> cd.Connectome:
-    """Inputs A (0, 1) and B (2, 3); hidden cells 4, 5 answer A, 6, 7 answer B, 8 answers both."""
-    pre = [0, 1, 0, 1, 2, 3, 2, 3, 0, 2]
-    post = [4, 4, 5, 5, 6, 6, 7, 7, 8, 8]
-    return cd.Connectome.from_synapses(
-        9,
-        pre=pre,
-        post=post,
-        count=[100] * len(pre),
-        populations={"a": [0, 1], "b": [2, 3], "hidden": [4, 5, 6, 7, 8]},
-    )
-
-
-def test_shared_code_is_the_intersection_over_the_union() -> None:
-    a = np.array([0, 0, 0, 0, 1, 1, 0, 0, 1], dtype=float)
-    b = np.array([0, 0, 0, 0, 0, 0, 1, 1, 1], dtype=float)
-    assert shared_code(a, b, [4, 5, 6, 7, 8], 0.5) == pytest.approx(0.2)
-    assert shared_code(a, a, [4, 5, 6, 7, 8], 0.5) == pytest.approx(1.0)
-    assert shared_code(0 * a, 0 * b, [4, 5], 0.5) == 0.0
-
-
-def test_specific_needs_two_codes_that_barely_overlap() -> None:
-    code = {"mean": 0.5, "fraction": 0.6}
-    assert cd.evaluate_predicate("specific", {**code, "shared": 0.2}, code)
-    assert not cd.evaluate_predicate("specific", {**code, "shared": 0.4}, code)
-    # a silent or near-empty code cannot be specific (a dead control has none), and a reading
-    # without a comparison cannot pass
-    dead = {"mean": 0.0, "fraction": 0.001}
-    assert not cd.evaluate_predicate("specific", {**dead, "shared": 0.0}, code)
-    assert not cd.evaluate_predicate("specific", {**code, "shared": 0.0}, dead)
-    assert not cd.evaluate_predicate("specific", code, code)
-    assert cd.evaluate_predicate(
-        "specific", {**code, "shared": 0.4}, code, Levels(specific_max=0.5)
-    )
-
-
-def test_protocol_scores_a_specific_row_and_selects_on_a_specific_fact() -> None:
-    connectome = two_codes()
-    protocol = cd.Protocol(
-        stimuli={"A": ("a",), "B": ("b",)},
-        rows=[
-            cd.Row("A and B are told apart", "A", "hidden", "specific", versus="B"),
-            cd.Row("A is not told from itself", "A", "hidden", "specific", versus="A"),
-        ],
-        training=[("A", "hidden", "specific", "B")],
-        steps=60,
-    )
-    brain = cd.NeuralGraph(connectome, cd.NeuronModel(gain=0.05))
-    score = protocol.score(brain)
-    told, same = score["rows"]
-    assert told["passed"] and told["reading"]["shared"] == pytest.approx(0.2)
-    assert not same["passed"] and same["reading"]["shared"] == pytest.approx(1.0)
-    assert score["training"][0]["versus"] == "B" and score["training"][0]["passed"]
-    # fraction counts the members in the code at code_level, the level specific uses
-    graded = cd.Protocol(
-        stimuli=protocol.stimuli, rows=protocol.rows, levels=Levels(code_level=0.05)
-    )
-    assert graded.score(brain)["rows"][0]["reading"]["fraction"] >= told["reading"]["fraction"]
-    # a gain at which nothing settles cannot pass the fact; the selection lands on one that can
-    gain, table = cd.select_gain(
-        lambda g: cd.NeuralGraph(connectome, cd.NeuronModel(gain=g)),
-        protocol,
-        [0.001, 0.05, 0.1],
-        sparsity_cap=None,
-    )
-    assert gain == 0.05
-    assert [row["facts_passed"] for row in table] == [0, 1, 1]
-    assert "A->hidden vs B" in table[1]["readings"]
 
 
 def test_calibrate_bias_brings_populations_to_their_targets() -> None:

@@ -264,4 +264,5 @@ def test_run_founder_records_interface_history_and_answer_shares(
     assert result["interface"] == "step" and result["history"] is True and result["gated"] is False
     probe = result["probes"]["12"]["greedy"]["intact"]
     assert "clean-0/answer-1-share" in probe and 0.0 <= probe["clean-0/answer-1-share"] <= 1.0
-    assert result["genes"]["actor"]["eta"] == 0.03 and result["genes"]["arousal"]["need"] == 0.2
+    genes = result["genes"]["genes"]  # the brain's description, its genes section
+    assert genes["actor_eta"] == 0.03 and genes["arousal_need"] == 0.2

@@ -27,7 +27,6 @@ def make(device: str | None, momentum: float, normalize: float) -> cd.Learner:
             normalize=normalize,
             eta=0.03,
             eta_bias=0.01,
-            decay=0.002,
             free_steps=20,
             nudged_steps=12,
             tolerance=None,

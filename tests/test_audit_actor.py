@@ -73,12 +73,13 @@ def test_bootstrap_value_enters_the_dopamine_of_a_truncated_row() -> None:
 def test_observed_padding_is_excluded_and_a_batch_without_a_real_row_is_refused() -> None:
     c, _, _ = _setup()
     rng = np.random.default_rng(2)
-    agent = _agent("cpu", cd.ActorCriticConfig(dopamine_center=0.9))
+    agent = _agent("cpu")
     agent.act(_drive(c, rng, 2))
     with pytest.raises(ValueError, match="real transition"):
         agent.learn(np.ones(2), np.zeros(2, dtype=bool), _drive(c, rng, 2), observed=np.zeros(2, dtype=bool))
     agent.learn(np.ones(2), np.zeros(2, dtype=bool), _drive(c, rng, 2), observed=np.array([True, False]))
-    assert agent.valence.mean[1] == 0.0 and agent.valence.mean[0] != 0.0
+    assert agent.trace is not None  # the padding row forgets its trace, the real row keeps it
+    assert not agent.trace[1].any() and agent.trace[0].any()
 
 
 def test_act_refreshes_after_learning_and_a_new_batch_size_drops_the_traces() -> None:
@@ -96,20 +97,3 @@ def test_act_refreshes_after_learning_and_a_new_batch_size_drops_the_traces() ->
     assert agent.state is refreshed  # the drive and parameters have not changed
     agent.act(_drive(c, rng, 2))
     assert agent.trace is None and agent.state is not None and agent.state.v.shape[0] == 2
-
-
-def test_bins_population_code_acts_and_learns_per_dimension() -> None:
-    c, model, learning = _setup()
-    rng = np.random.default_rng(4)
-    learner = cd.Learner(cd.NeuralGraph(c, model), c.populations["output"], learning)
-    bins = cd.Bins(dims=2, size=2)
-    agent = cd.ActorCritic(learner, c.populations["hidden"], population=bins)
-    d = _drive(c, rng, 3)
-    action = agent.act(d)
-    assert action.shape == (3, 2) and set(np.unique(action)) <= {-1.0, 1.0}
-    assert agent.group_id is not None
-    assert agent.group_id[learner.output_index].tolist() == [0, 0, 1, 1]
-    report = agent.learn(np.ones(3), np.zeros(3, dtype=bool), d)
-    assert report["delta"] > 0
-    assert agent.state is not None
-    assert bins.read(agent.state.activation[:, learner.output_index], 0.2).shape == (3, 2)

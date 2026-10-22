@@ -1,34 +1,166 @@
 # Changelog
 
-## Unreleased
+## 0.85.0 — 2026-10-22
 
-- `MANIFESTO.md` and `AGENTS.md` state that everything that makes a transformer effective has
-  its version in Cadence as settling and local repair (the embedding as a learned code of
-  meaning, the residual stream as the settling cortex, attention as a recall memory over the
-  brain's own moments, the logits as the motor population inside the settle), that what was
-  tested and did not work is removed or folded into what did, and that the documentation is
-  organized by situation with the interface kept as simple as possible for users.
-- The episodic memory guide states a limit of `memory_choice=True` in a continuing life: a
-  record that paid is not extinguished by failures that pay nothing, since a zero outcome in
-  the middle of an attempt writes nothing and replay only adds credit, so after a reversal
-  whose failures pay 0 the new action is often not learned. It names what today's rules
-  offer: failures that cost a little (12 of 12 lives learned the new arm in the guide's
-  reading), failures marked with `salience=`, which the records write, or the memory left off
+- The memory guide scopes the paid-record reversal workarounds to their measured tasks:
+  intermediate penalties can stop replay and harm reward chains, and explicit salience is a
+  `step` option, not a `live` option. Automatic extinction remains unimplemented (#210).
+- A checkpoint saved immediately after `reset(keep="slots")` loads its retained recall
+  rows even though the reset cleared the current neural state. Both current and supported
+  earlier checkpoint formats preserve the next actions and reward updates at this boundary.
+- A learned code follows `live`'s arousal gate: routine answers and `wait` moments while
+  a routine action awaits its outcome keep its dictionary, predictor and thresholds still.
+  Aroused moments resume its local learning; explicit `act` and `step` retain their
+  every-moment rule. The learned-code benchmark tests now run in the default test suite.
+- The learned code's predictor bounds its simultaneous update for batches above 16 rows.
+  Repeated contexts in larger batches could amplify the prediction error and make its
+  weights diverge. Dividing the aggregate step by `max(1, rows * predictor)` keeps its
+  normalized context coupling at most one; the founder law through 16 rows is unchanged.
+- `Brain.reset()` keeps the arousal state by default: its `keep` is `("arousal",)`, so a reset
+  stream begins with the level, the reward references and the reward scale the brain was
+  used to ([#213](https://github.com/muellerberndt/cadence/issues/213)). `reset(keep=())` is
+  the reset of 0.84.3 (the arousal calm, its references and scale cleared, its age kept), and
+  `keep=("slots",)` keeps the recall slots and clears the arousal as before; name both to keep
+  both. In a two-armed bandit whose paying arm moved after 300 moments
+  (`Brain.compose(1, 2, modules=(16,), arousal=True)`, seeds 0 to 4), adults reset with
+  `keep=()` chose the newly paying arm at none of the next 120 moments, while adults reset
+  keeping the arousal woke and chose it at each of the last 40, as adults living on without
+  the reset did. Founders change for every brain with arousal that is reset in a life.
+- The scaled need is a founder: `ArousalConfig.need_scale` (`arousal_need_scale`) is 0.1, so a
+  composed brain with arousal wants at least the unmet share of a tenth of its learned reward
+  spread once its youth is over and an outcome has entered the spread
+  ([#198](https://github.com/muellerberndt/cadence/issues/198)). `need_scale=0` is the law of
+  0.84.3 and stays an option. Founders change: every brain with arousal whose income falls
+  below a tenth of its reward spread after youth now wants, explores and learns where it
+  stayed calm. Saved arousal states of earlier formats load with `need_scale=0`, as written.
+- `Brain.compose` resolves an unset `lateral` to 0.0 at every menu size; an explicit
+  `lateral`, -0.5 included, is used as given
+  ([#220](https://github.com/muellerberndt/cadence/issues/220)). 0.73.0 had resolved it to
+  -0.5 for a largest motor slot of up to 8 neurons, on the measurement that the undamped free
+  solve stops settling under -0.5 from 12 actions. Measured again, the oscillation is there
+  from 4 actions on: 8-action composed brains at 8, 64 and 128 inputs, seeds 0 to 2, with 50
+  greedy acts each on uniform random observations ran the undamped half of the free budget
+  out on 94 of 450 acts, which settled only under the half-step damping fallback, at 544
+  sweeps against 32 at 0.0; with 16 rows per act every act did; and `Brain.lesson` with 16
+  rows per lesson, whose free phase has no damping fallback, exhausted its whole 1,024-sweep
+  budget on 28 of 30 lessons at 8 actions and 7 of 30 at 4, learning from an unsettled
+  state, where at 0.0 every lesson settled in about 6 sweeps. Founders change: every brain
+  `compose` or `Genome.composed` makes with `lateral` unset and a largest motor slot of at
+  most 8 neurons loses its motor-to-motor synapses, the benchmark chambers that leave
+  `lateral` unset among them (chain, competing, replay, key-door, reversal, selective recall,
+  bindings, acquisition controls, steady rhythm, reward rhythm and the CUDA chamber). Brains
+  whose largest slot exceeds 8 neurons are byte-identical.
+- `copy.deepcopy(brain)` works: a brain copies every array, store, state and random
+  generator and shares its immutable connectomes (`Connectome` copies as itself), with the
+  learned code region or without it; instruments that forked brains by hand no longer need
+  to.
+- `Brain.compose(..., learned_code=units)` (opt-in) adds a `code` region of the brain's own
+  neurons between the sensory region and the first module: a learned compressed code of the
+  observation that the cortex computes on and every memory keys on. Its tables are its
+  units' synapses and biases: a dictionary from the sensory neurons (read in units of one
+  full input), the dictionary's Gram matrix as lateral inhibition, a predictor from the
+  prefrontal region (the working trace) as a top-down boundary with a standing pull toward
+  the prediction, and a threshold per unit. A moment's settle runs the region's own phase
+  first, by the brain's solver policy; the code is held as a source through the whole
+  settle, so the rest of the brain keeps the model's step and its learning phases, and the
+  region's phase alone steps where its competition needs it (`LearnedCode.stability`, with
+  a retry at the step the dictionary allows over every state before a moment is refused).
+  At a moment the region learns from it settles twice: in the stream's context, the code
+  it learns from, and on the observation alone, the context-free code the cortex reads and
+  every memory keys on (`context_free_steps`). The first module reads the rectified code at
+  unit length. The key joins the code to the observation's own identity at weight .9,
+  `unit([sqrt(1 - w) code, sqrt(w) unit(x)])` at the norm the observation itself has as a
+  key, so a binding stays readable while the code moves. An observation wider than the code
+  (more inputs than units, a camera's frame) is keyed on the code alone, so that the key
+  keeps the code's width (`LearnedCode.joins`, `code_width` then `units`). In the camera
+  chamber a separate `CodeRegion` prototype, with an imprinted dictionary, 256 nursery rounds,
+  no top-down boundary and body inputs beside the code, answers the held-out pairs at .970
+  against .927 for the fixed random code of 1,024 units on the development founders, with a
+  recall address map of 0.198 MB against 9.331 MB; these readings do not establish the
+  integrated region's camera behavior. With `memory_choice=True` the episodic
+  stores separate the keys as an observation's (1,024 cells, 24 winners). The region learns
+  at accepted explicit acts and aroused `live` moments by local rules (Hebbian on the reconstruction
+  residual, the delta rule on the prediction's residual, homeostatic thresholds whose share
+  counts units driven above the active floor by the context-free code,
+  and a repair that lowers the thresholds of a silent row's units); the lesson's contrast
+  and the dopamine leave it alone. The one setting is `learned_code_fields` (`None`: one
+  field; a sequence of field widths shares the units among the observation's channels,
+  each unit reading its channel alone). Every other part is a constant of the region
+  (`LearnedCode.TOP_DOWN` 2.0, `RATE` 0.125, `PREDICTOR` 0.0625, `THRESHOLD` 0.1,
+  `THRESHOLD_RATE` 0.000625, `TARGET` 0.1, `ACTIVE` 0.05, `REPAIR` 1.0, `SILENCE` 10,
+  `IDENTITY` 0.9); `brain.learned_code.learning = False` holds the tables still for a
+  reading on a copy, and `brain.learned_code.top_down = 0` is the control without the
+  top-down boundary. In the embedding chamber held-out members of a group are answered at
+  1.000 on 6 of 6 development founders and 12 of 12 fresh ones, where the raw observation
+  and the fixed random code answer at chance; the binding family stays within .05 of a
+  brain without the region. Settings the readings retired are refused by name with what
+  the region does instead (`LearnedCode.REMOVED`): `learned_code_cortex` (the observation
+  beside the code read the chamber's held-out members at .24), `learned_code_output`
+  (the activations as they are read .48; a read at the observation's own loudness lost
+  delayed cues), `learned_code_floor` (.61), `learned_code_scale` (a key at unit length
+  read the continuing task at .770 against .935), `learned_code_place`,
+  `learned_code_reads` (the code in context read 7 of 12 fresh founders at .90 against 11
+  of 12), `learned_code_held` (settling the code with the whole graph lost the binding
+  family) and the constants' names. An imagined branch settles the region as a real moment
+  does and leaves its step, its work counts and its latest phase as it found them. The
+  checkpoint carries the tables and the two switches as its `learned_code` group;
+  `describe`, `parameters` and `observation_code` cover the region; `LearnedCode` is
+  exported. With the founder `learned_code=None` every brain,
+  checkpoint and life is the one of the library without the region
+  (`tests/test_learned_code.py`).
+- Settings of the recall memory that 0.84.3 took are removed, each refused by name at
+  `compose` and `retune` with a message naming 0.84.3 as the release that takes it, and a
+  checkpoint saved under one is refused on load with a message naming 0.84.3; each was read before
+  it left, and every founder brain, checkpoint and composed life is byte-identical to the
+  library before the removal (pinned), the options having been saved only where they
+  differed from their founders. `recall_write="aroused"`, a moment written only when its act
+  was sampled (`Recall.witness` loses `aroused`, and every write is a slot each stream
+  holds), was neutral on every chamber it was read on. `recall_key="predecessor"`, the
+  previous event and the one-hot of the last command in every key (`Recall.before`,
+  `Recall.command`, the `recall/before` and `recall/command` checkpoint arrays, `witness`
+  loses `command`), was neutral where it was read, and the window key and the efference copy
+  carry the same information. `recall_episodes="keep"`, a stream's slots kept across an ended
+  episode, lowered success by .108 on a crafting chain whose observation names the stage: an
+  ended episode empties the slots, as the founder did, and `Brain.reset(keep=("slots",))`
+  keeps them across a reset as before (`Recall.end` stays for it). `recall_recency=None`,
+  the power-law age charge `r * log(1 + age)` (`Recall.charges`), failed its confirmation on
+  the camera task's founders; a number keeps the linear charge `recency * age`.
+  `recall_value="cortex"`, the settled association activity as a slot's value, failed all
+  four binding tasks (token .06, succession .07, fresh bindings .55, camera .00): the values
+  are the events, and the `recall` and `next` regions hold one neuron per code unit.
+  `recall_context` and `recall_context_decay`, a fading history of the earlier events added
+  to every key (`Recall.history`), were never read above zero in a chamber. A checkpoint of
+  0.84.3 carries `value`, `context` and `context_decay` at their one value with an empty
+  history array and loads. The binding instrument keeps its arms (`benchmarks/binding/index_read.py`) with
+  their protocol.
+- `MANIFESTO.md` and `AGENTS.md` use transformer capabilities as design comparisons with
+  learned codes, the settling cortex, recall memory and the motor population. Recall selects
+  before the neural settle and holds its read fixed; selection that revises with the present
+  interpretation remains a goal. These comparisons need behavioral and work measurements.
+  What was tested and did not work is removed or folded into what did, and the documentation
+  is organized by situation with the interface kept as simple as possible for users.
+- The memory guide's episodic part (`docs/memory.md`) states a limit of `memory_choice=True`
+  in a continuing life: a record that paid is not extinguished by failures that pay nothing,
+  since a zero outcome in the middle of an attempt writes nothing and replay only adds
+  credit, so after a reversal whose failures pay 0 the new action is often not learned. It
+  names what today's rules offer: failures that cost a little (12 of 12 lives learned the
+  new arm in the guide's reading), failures marked with `salience=`, which the records
+  write, or the memory left off
   ([#210](https://github.com/muellerberndt/cadence/issues/210)).
 - `ArousalConfig` gains `need_scale` (`arousal_need_scale` at `compose` and `retune`; opt-in,
   founder 0): a need in units of the reward scale the brain has learned. At every outcome the
   want is at least the unmet share of `need_scale * scale`, the scale as it stood before the
   outcome entered it; the want and heat read afterwards use the scale as it stands; youth and
   a scale no outcome has entered leave it at zero, so a default `reset()` zeroes it until
-  outcomes enter the new stream's scale, and `reset(keep_arousal=True)` keeps it. A save
+  outcomes enter the new stream's scale, and `reset(keep=("arousal",))` keeps it. A save
   carries the gene under `cadence-arousal/3` only above zero; saves of earlier formats load
   with `need_scale=0`, and a positive `need_scale` under an earlier format is refused. At the
   founder every brain, checkpoint and composed life is byte-identical to the library before
   the gene (pinned); `describe()` carries the gene at zero (`arousal_need_scale` under
-  `genes`, `need_scale` under `arousal`), and `ArousalConfig.space()` leaves it out, so seeded
+  `genes`), and `ArousalConfig.space()` leaves it out, so seeded
   mutations at the founder draw as before and copy the zero to the child; add it to a space
   to select on it. At `need_scale=0.1`, with the actor step at the composed founder, against
-  the founder on fresh seeds the composed brain kept every chamber of the preservation panel:
+  the founder on fresh seeds the composed brain kept every preservation chamber:
   key-door rule A acquired on 10 of 16 lives against 8 of 16, with fed rule-ends calm on 20
   of 21 and unfed ones aroused (late aroused share .10 at fed rule-ends against .84 at unfed
   ones, where the founder is calm at both, .01 and .00, with 17 of 17 fed rule-ends calm and
@@ -41,57 +173,226 @@
   5 of 6 lives stayed aroused for .60 to .67 of the life on an income of .017 to .022 per
   moment, the sixth, earning .15 per moment, for .06, and the founder's 6 lives, all
   collapsed, for .02. Through `step` the gene is inert.
-- The learning guide's section "Many lessons: the normalized point for imitation" recommends
-  `learning_normalize=0.99`, `learning_normalize_floor=1e-4`, `learning_eta=0.003` and
-  `learning_eta_bias=0.0003` with lessons of about 32 rows for a brain that learns a
-  demonstrator's policy from many lessons
+- The teaching guide's section "Many lessons: the normalized point for imitation"
+  (`docs/teach.md`) recommends the teaching learner's steps 0.003 and 0.0003 under a running
+  RMS of forgetting 0.99 and floor 1e-4 (`teaching="normalized"`, below) with lessons of
+  about 32 rows for a brain that learns a demonstrator's policy from many lessons
   ([issue 215](https://github.com/muellerberndt/cadence/issues/215)). In a copy task of 260
-  inputs and three actions it agreed with the demonstrator on 0.868 / 0.866 of held-out moves
-  after 240,000 samples (two seeds), against 0.874 / 0.888 for a backpropagation network trained
-  with Adam on the same samples, where the composed founder reached 0.81 at 80,000 samples. The
-  composed founder keeps its teaching rates: with few lessons its larger steps acquire faster
-  (a taught chain from a few hundred corrections, and the token-binding content arms at long
-  budgets, [issue 218](https://github.com/muellerberndt/cadence/issues/218)). The guide also gives
+  inputs and three actions it agreed with the demonstrator on 0.868 / 0.866 of held-out
+  moves after 240,000 samples (two seeds), against 0.874 / 0.888 for a backpropagation
+  network trained with Adam on the same samples, where the composed founder reached 0.81 at
+  80,000 samples. The composed founder keeps its teaching rates: with few lessons its larger
+  steps acquire faster (a taught chain from a few hundred corrections, and the token-binding
+  content arms at long budgets,
+  [issue 218](https://github.com/muellerberndt/cadence/issues/218)). The guide also gives
   the working-trace amplitude's effect on teaching fidelity.
-- The learning guide's new section "Teach on the brain's own path" gives the DAgger recipe for a
-  brain that bootstraps by watching: its own greedy move is executed, the same demonstrator
-  labels the observation it reached, and `lesson` teaches it, with a runnable snippet.
-- The composition guide lists `normalize=0` among a fresh `LearnerConfig()`'s values.
+- The teaching guide's new section "Teach on the brain's own path" (`docs/teach.md`) gives
+  the DAgger recipe for a brain that bootstraps by watching: its own greedy move is
+  executed, the same demonstrator labels the observation it reached, and `lesson` teaches
+  it, with a runnable snippet.
+- The tuning guide (`docs/tune.md`) lists `normalize=0` among a fresh `LearnerConfig()`'s
+  values.
 
-- `Brain.reset(keep_arousal=True)` (opt-in) keeps the arousal state as it is: its level, the
+- `Brain.reset(keep=("arousal",))` (opt-in) keeps the arousal state as it is: its level, the
   counts, the recent and long-run reward, the usual errors, the reward scale, the age and
   the work counts carry into the new stream, as when the state saved before the reset
   (`Arousal.to_dict`) is restored after it (`Arousal.from_dict`). In the two-armed bandit
   whose paying arm moved, adults reset this way woke and chose as they did living on
   without the reset, at every one of 120 moments in 5 of 5 seeds, the newly paying arm at
   each of the last 40; a default reset left them at none of the 120. Reset into a stream
-  that paid as before they kept their arm calm at all 120 moments in 5 of 5 seeds. The
-  keyword must be a boolean, checked before anything changes; a brain without arousal
-  resets as it does without it. At the default, `keep_arousal=False`, every brain resets,
-  acts and saves as in 0.84.3.
+  that paid as before they kept their arm calm at all 120 moments in 5 of 5 seeds. A brain
+  without arousal resets as it does without it. At the default, `keep=()`, every brain
+  resets, acts and saves as in 0.84.3.
 
-- The documentation is reorganized: 63 pages and 16,193 lines become 45 pages and 10,463
-  lines, with `docs/README.md` as the single entry and catalogue, one owning guide per setting
-  and `docs/api.md` for signatures. `docs/memory.md` describes the eight memories of the
-  composed brain in one table, which memory serves which task from this repository's
-  benchmarks, one runnable example per memory and the observation code (`code=units`);
-  `docs/recall.md` (the recall memory and its options) and `docs/records.md` (standalone
-  delta-rule stores) are new; `docs/evaluation.md` replaces task-design, scaling, missteps and
-  creativity. The pages architecture, context, creativity, equilibrium-world-models,
+- The documentation is organized by situation: 63 pages and 16,193 lines become 14 pages and
+  about 5,400 lines, each page answering what you want and what to use. `docs/start.md` (a
+  creature in a body: `compose`, `live`, `wait`, `reset`, `save` and `Brain.load`),
+  `docs/teach.md` (lessons, `step` with a teacher, the teaching point, the brain's own
+  path), `docs/reward.md` (with the sequential tasks), `docs/memory.md` (the eight memories
+  of the composed brain in one table, which memory serves which task, a runnable example per
+  memory, the episodic and recall memories in full, the standalone stores), `docs/senses.md`
+  (images, the observation code, the learned code), `docs/tune.md` (the region map, the
+  founders, `retune`, the operating point), `docs/evaluate.md` (baselines,
+  independent-sample controls, receipts), `docs/anatomy.md` (genomes, cortices, connectomes,
+  evolution), `docs/settling.md` (the neuron, the free/nudged rule, the certificate), and
+  `docs/backends.md`, `docs/troubleshooting.md`, `docs/contracts.md` and `docs/api.md` (the
+  signatures); `docs/README.md` is the single entry and the catalogue by situation, one
+  guide owns each setting, and the README carries the comparison for machine-learning
+  readers. The pages architecture, context, creativity, equilibrium-world-models,
   experience, howto-demo, index, interaction, missteps, pages, recursive-training, scaling,
   settling-literature, task-design and tasks, and the equilibrium folder's BOOTSTRAP, DRSN,
-  ELEMENT, EXPERIMENTAL, PERFORMANCE and VARIANTS, are merged into the remaining guides or
-  removed.
+  ELEMENT, EXPERIMENTAL, PERFORMANCE and VARIANTS, are merged into these pages or removed.
+  Every section that stays keeps its heading and text, so its anchor holds on its new page,
+  and every link of the documentation, the README, the benchmark READMEs and the library's
+  docstrings and warnings points to the new place.
 - Docstrings and comments across `src/` describe current behaviour only, with no version
   narration, run records or issue history, and link to the new pages; docstrings that
   disagreed with the code beside them are corrected. Code and every message string are
-  unchanged, verified on the syntax tree, and the modules hashed into population and
-  reinforcement checkpoints (`_repair.py`, `cortex.py`, `reinforcement.py`) are byte for byte
-  as they were, so existing checkpoints keep loading.
+  unchanged, verified on the syntax tree.
 - `MANIFESTO.md` and `AGENTS.md` state the principle that the brain computes, and indexes its
   memories, on learned compressed representations of meaning: raw observations are what it
   receives, and the code it learns from them is what the cortex settles on and what the
   memories store and address ([issue 211](https://github.com/muellerberndt/cadence/issues/211)).
+- Remove the population solver, `cadence.experimental.equilibrium` (12 modules), with its tests
+  (`tests/equilibrium`, 1,053 of the 3,960 collected tests), guides (`docs/equilibrium`, 9
+  pages) and examples (`examples/equilibrium`, 11 scripts with their receipts). The composed
+  brain never imported it and no benchmark used it; every composed brain, checkpoint and
+  composed life is byte-identical. Its projected-gradient state-and-error readback lives on in
+  release 0.84.3, which also loads its checkpoints, and in the application demos that pin
+  `cadence-net==0.70.0`.
+- Remove the record era: `RecordPatchNet` with `RecordPatchStack`, `JointRecordPatches` and the
+  structured ports, the `Records` store, `BeliefPatch`, `Steered`, `Life` with its governors,
+  the orienting instruments and `cadence.population.PopulationPatch` (11 modules, 6,898 lines,
+  36 top-level exports), with 15 test files, the record and belief cases of 4 more, and the
+  record patch, belief, steering and population guides. The composed brain never imported
+  them; every composed brain, checkpoint and composed life is byte-identical. The standalone
+  stores guide keeps `FastSynapses`, `SynapticMemory`, `PatternSeparator` and the traces.
+  `RecordPatchNet.dream` and `sleep`, the belief patch, the steered cortex and the governed
+  life live on in release 0.84.3 and in the application demos that pin earlier releases; the
+  population throughput receipt stays in `benchmarks/population` as a frozen reading.
+- Remove the temporal family: `TemporalPatchNet` with `TemporalPlan` (planning by repairing
+  input ports toward a goal), `TemporalMemory` (response protection) and the experimental
+  `PartitionedTemporalPatchNet` (5 modules, 1,834 lines, the `cadence.experimental` package
+  and 7 top-level exports), with 7 test files and their fixtures, the temporal cases of 2
+  more, the memory/planning example and the temporal, planning, response-protection and
+  partitioned guides. `Brain.compose` never had a transition model and used none of them;
+  every composed brain, checkpoint and composed life is byte-identical. Learned transitions,
+  bounded planning and response protection live on in release 0.84.3.
+- Remove `PatchNet` and the hybrid Newton refinement (`patch.py` and `_refine.py`, 1,047
+  lines; the exports `PatchNet`, `PatchObservation` and `RefinementReport`; the `refinement`
+  argument of `Equilibrium`, whose `qualified` rows are now always its converged rows), with 4
+  test files, the PatchNet cases of 3 more, and the PatchNet and recursive-settlement guides.
+  `_copy_state`, which the composed brain borrowed from `patch.py`, moves unchanged to
+  `brain.py`; the tests of the `Nudge` anchor stay, in `tests/test_nudge_anchor.py`. Every
+  composed brain, checkpoint and composed life is byte-identical. Observer populations on
+  `Brain.compose(observers=...)` remain the System 2 path; `PatchNet.recursive` and the hybrid
+  solver live on in release 0.84.3.
+- Move the protocol and timing instruments out of the installed package into
+  `benchmarks/instruments`: `protocol.py` (held-out facts with preconditions, the shuffled
+  control, gain selection under a sparsity cap) and `timing.py` (the latency of a decision and
+  the machine it ran on), with their tests and their guide, which keeps running in the
+  documentation test. `Protocol`, `Row`, `evaluate_predicate`, `select_gain` and `shuffled`
+  leave the top-level exports; a source checkout imports them with `benchmarks/instruments` on
+  `sys.path`. Remove `cadence.circuits` (437 lines: the region assembler, the bounded
+  `Deliberator` search with `imagine`, `ActivityMonitor` and `reflex_arc`) with its 5 test
+  files; no composed brain, benchmark or example used it, and it lives on in release 0.84.3.
+  Every composed brain, checkpoint and composed life is byte-identical.
+- Remove the leftovers of the stream and the actor that no composed brain used: `Echo` and
+  `Afterglow` (a `Trace` with other defaults; `Trace(decay=..., source=..., target=...)` is
+  what they were), `stateful` (an embedded network plus a context range for a trace), and
+  `Bins` with the `population` argument of `ActorCritic` (a continuous action as one softmax
+  per dimension), with their tests and API rows. The categorical motor slots keep their
+  per-slot softmax, sampling and temperatures; every composed brain, checkpoint and composed
+  life is byte-identical. The population code lives on in release 0.84.3.
+- Remove the genes that no composed brain read away from their founders. Each name is
+  refused at `compose` and `retune` with a message naming 0.84.3 as the release that takes
+  it, a checkpoint of 0.84.3 that set one away from its founder is refused on load with the
+  same message (the resting bias excepted, below), and one at the founders loads. At the
+  founders every composed brain's parameters and every composed life are unchanged: on the
+  12-brain digest ledger the arrays and the actions are identical, and the descriptions and
+  checkpoints lose the removed keys. The record channel of the arousal
+  (`arousal_record_surprise`, a second surprise at the error of the outcome the action's
+  record forecast, with `Arousal.usual_record`, `Arousal.records` and
+  `last_arousal["record_error"]`) never entered the level at its founder weight of zero; on
+  the odour nursery a positive weight woke lives sooner and left more of them searching too
+  briefly. `Arousal.to_dict()` writes `cadence-arousal/4` with every gene, and
+  `ArousalConfig.space()` names ten genes. The centred dopamine (`actor_dopamine_center`,
+  `actor_dopamine_floor`, `actor_center_scale`) and the `Valence` class leave with the
+  critic's signal options (`actor_critic_signal`, `actor_critic_normalize`): the critic
+  learns from the actor's dopamine, the prediction error capped at `actor_dopamine_cap`, its
+  step divided by its trace's energy, the founder resolution of `"auto"`; the night replay
+  chamber keeps the readings of its centred arm. The actor's momentum and RMS normalization
+  (`actor_momentum`, `actor_normalize`, declined as a founder in 0.73.1) leave with the
+  actor's moment arrays; the settling learner keeps its own (`LearnerConfig.momentum` and
+  `.normalize`). The teaching law's one-sided contrast and its leak
+  (`LearnerConfig.centered` and `.decay`, `learning_centered` and `learning_decay`) leave:
+  every lesson contrasts the `+beta` and `-beta` phases. `learning_nudge` leaves `compose`
+  and `retune`: a composed brain learns with the cross-entropy nudge, and the quadratic
+  nudge stays on a standalone `Learner` for pattern targets. The working trace's focus
+  (`working_memory_focus`, `Trace.focus`), a weighting of each neuron by its movement,
+  leaves: every trace decays toward its source. The resting bias (`resting_bias`), an
+  initial bias of the processing regions, leaves: every bias starts at zero, and the
+  acquisition and rhythm chambers whose frozen recipes name it set the same arrays
+  themselves, act for act. A checkpoint of 0.84.3 saved with a resting bias loads as it is:
+  the biases it set are in the saved arrays, and the recorded value was provenance only. The
+  removed genes live on in release 0.84.3.
+- One checkpoint format, `cadence-brain/1`: `Brain.save` writes the learner's checkpoint, the
+  brain's metadata in the `brain` member (the actor's config under `actor`, the random
+  states, the free phase and a pending action, the arousal and the action `live` issued, the
+  state a waiting stream sensed, the code, and under `memories` each present memory's
+  settings), and one group of arrays per memory: `memories/working_memory/`,
+  `memories/efference/`, `memories/history/`, `memories/recall/`, `memories/hippocampus/`
+  and `memories/episodic/` (the context store, the stream's context and decision, the replay
+  paths); the learned code region is the `learned_code` group. The earlier formats, one
+  number per component a brain held, are no longer written; `Brain.load` reads them through
+  0.85.x (`cadence-generic/1` to `/9`, which 0.84.3 reads, and `/10`, which development
+  builds of the learned code wrote), and the next minor release refuses them with a message
+  naming 0.84.3. The recall memory's settings that 0.84.3 always wrote
+  (`value`, `context`, `context_decay` at their one value) and its empty context history
+  leave the description and the checkpoint. Every array and every metadata value of a
+  checkpoint is the one the earlier format held, under its new name (checked on the
+  12-brain ledger and on every pinned founder, whose checkpoint and name digests are
+  re-recorded); a file of 0.84.3 loads to the same brain. Chambers and verifiers that read
+  saved brains read either layout.
+- One memory contract, `cadence.memories`: `brain.memories` holds the present memories by
+  name, in the order the brain reads them before a settle and writes them after it
+  (`working_memory`, `efference`, `history`, `recall`, `hippocampus` and, with
+  `memory_choice=True`, `episodic`), and every member keeps one contract (`Memory`):
+  `stimulus(drive, moment)` before the settle, `branch()` for an imagined branch,
+  `begin(keep=False)` at a reset, `reset(batch, rows=None)` and `keep(rows)` on streams, and
+  `to_dict()` and `arrays()` for its checkpoint group `memories/<name>/`. The brain reads its
+  memories into the drive, branches them for `imagine`, begins them at `reset` and saves them
+  through the list; how each is written after the settle stays its own. The episodic
+  memory's vote, temporal context, replay paths, outcome writes and reverse replay leave the
+  brain for `EpisodicRecords`, the member `episodic`. `brain.working_memory`,
+  `brain.efference`, `brain.history`, `brain.recall`, `brain.hippocampus` and
+  `brain.context_memory` name the members, and `memory_choice`, `memory_context`,
+  `memory_replay` and `memory_demonstrations` read the episodic member's settings. Every
+  array, action, description and checkpoint on the 12-brain digest ledger is unchanged, and
+  the benchmark chambers give the same outputs.
+- One constructor: `Brain.compose(inputs, actions, ...)` builds every composed brain, and
+  `Brain.compose(inputs, actions, connectome=...)` wraps a custom anatomy with the same
+  founders, the episodic founders filled in under `memory_choice=True`. The anatomy brings
+  its own layout, so `modules`, `observers`, `lateral`, the projection scales, `features`
+  and `field` stay at their founders, and its sensory and motor populations hold the inputs
+  and the actions. `Genome.composed(inputs, actions, ...)` returns the layout `compose`
+  develops, to edit or evolve, and `Brain.observation_width` becomes
+  `Genome.observation_width`. `Brain.build` and `Brain.genome`, the single-region layout (a
+  sensory region, one association region and the motor region, with an optional
+  prefrontal region read at scale 12), leave: `Brain.compose(inputs, actions,
+  modules=(hidden,))` is that brain with a working trace read at scale 1.2, and
+  `Brain(connectome, ...)` wraps any anatomy as before. Every composed brain is unchanged
+  on the 12-brain digest ledger, and the benchmark chambers give the same outputs. The
+  single-region layout lives on in release 0.84.3.
+- One teaching knob and one map of projection scales. `teaching` at `compose` and `retune`
+  sets the teaching learner's steps and their normalization: `"founder"` (steps 0.5 and 0.05
+  on the raw contrast, momentum 0.9, the founder) or `"normalized"` (steps 0.003 and 0.0003
+  under a running RMS of forgetting 0.99 and floor 1e-4, momentum 0.9: the point for many
+  lessons, as in imitation). `learning_eta`, `learning_eta_bias`, `learning_normalize` and
+  `learning_normalize_floor` leave the setting names, each refused with a message naming
+  `teaching`, and `learning=LearnerConfig(...)` keeps an expert's access to any steps.
+  `scales={"sensory": 1.0, "trace": 1.2, "history": 1.2, "recall": 1.2}` at `compose` names
+  the initial magnitudes of the projections from the sensory region, the working trace, the
+  heard history and the recall memory, a name left out at its founder; `sensory_scale`,
+  `working_memory_scale`, `history_scale` and `recall_scale` are refused with a message
+  naming their key, and a checkpoint's composition record keeps the scales under their
+  earlier names. The founder point and the founder scales are the founders of 0.84.3: every
+  composed brain is unchanged on the 12-brain digest ledger, descriptions and checkpoints
+  included. The chambers that set a scale or a teaching step pass the same values the new
+  way.
+- One reset and one description. `reset(*, keep=())` names what a reset carries over:
+  `"slots"` keeps the recall memory's slots and `"arousal"` the whole arousal state; other
+  names are refused before anything changes. `retune` loses `reset_arousal` and resets
+  nothing (`brain.arousal.reset()` resets the arousal), and `fit` keeps the arousal state as
+  it is: a control on independent samples does not change a life. `describe()` returns four
+  sections: `layout` (the regions; `code`, what the memories key on; `learned_code`;
+  `composition`, the construction choices), `genes` (every setting by the name `compose`
+  and `retune` take, `teaching` among them, `"custom"` for steps set outside both teaching
+  points), `memories` (each member of `brain.memories` with its settings and counts) and
+  `pending`; the configuration and memory sections, `observation_code`, `initialization`
+  and `pending_feedback` move into them. Arrays, actions and checkpoints are unchanged on
+  the 12-brain digest ledger, and every description holds what it held, in the new layout.
+
 ## 0.84.3 — 2026-10-19
 
 - A brain saved between `lesson` and its next act loads and continues as the saved brain

@@ -17,7 +17,7 @@ per moment, probed from cleared copies. Readings come from saved copies every
 policy from stage zero, the greedy action and the right action's probability at every
 stage, the share of the life's own moments spent on its most chosen action, the aroused
 share, the learned moments and the sign of their dopamine. A development instrument of
-issues 111, 113 and 84 (``docs/sequential-tasks.md``); it establishes no default and
+issues 111, 113 and 84 (``docs/reward.md#sequential-tasks-and-prerequisite-chains``); it establishes no default and
 declares no gate.
 """
 
@@ -142,13 +142,15 @@ def make_brain(point: dict[str, Any], seed: int, world: dict[str, Any], need: fl
         INPUTS,
         world["actions"],
         modules=tuple(int(w) for w in point["modules"]),
-        sensory_scale=float(point["sensory_scale"]),
+        # frozen protocols ran the composition of releases before 0.82.0: the carried
+        # interpretation read back at scale 12
+        scales={
+            "sensory": float(point["sensory_scale"]),
+            "trace": float(point.get("trace_scale", 12.0)),
+        },
         temperature=float(point["temperature"]),
         working_memory_amplitude=float(point["trace_amplitude"]),
         working_memory_decay=float(point["trace_decay"]),
-        # frozen protocols ran the composition of releases before 0.82.0: the carried
-        # interpretation read back at scale 12
-        working_memory_scale=float(point.get("trace_scale", 12.0)),
         consolidation=float(point["consolidation"]),
         episodic=bool(point.get("episodic", True)),
         memory_rate=float(point.get("memory_rate", 1.0)),
@@ -374,7 +376,12 @@ def run_life(
         "seed": seed,
         "world": world,
         "need": need,
-        "describe": {k: brain.describe()[k] for k in ("actor", "arousal", "learning")},
+        # the configurations as the receipt has always held them
+        "describe": {
+            "actor": brain.basal_ganglia.config.to_dict(),
+            "arousal": None if brain.arousal is None else brain.arousal.config.to_dict(),
+            "learning": brain.learner.config.to_dict(),
+        },
         "probes": probes,
         "totals": totals.summary(),
         "final": probes[-1]["readings"],

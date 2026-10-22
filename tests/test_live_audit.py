@@ -2,8 +2,10 @@
 
 import json
 
+import checkpoints
 import numpy as np
 import pytest
+from checkpoints import earlier
 
 import cadence as cd
 
@@ -17,8 +19,8 @@ def _brain(*, youth=0):
 
 def _rewrite(path, change):
     with np.load(path, allow_pickle=False) as saved:
-        arrays = {name: saved[name].copy() for name in saved}
-    metadata = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: saved[name].copy() for name in saved})
+    metadata = checkpoints.metadata(arrays)
     change(metadata, arrays)
     arrays["generic"] = np.array(json.dumps(metadata))
     np.savez(path, **arrays)
@@ -57,7 +59,9 @@ def test_sampled_lived_checkpoint_preserves_one_pending_action(tmp_path, defect)
             del arrays["moment/" + defect.removeprefix("missing_")]
 
     _rewrite(path, corrupt)
-    with pytest.raises(ValueError):
+    # a lived action that differs from the pending action it was saved with is refused by name
+    mismatch = defect in ("observations", "action", "forecast")
+    with pytest.raises(ValueError, match="pending feedback" if mismatch else None):
         cd.Brain.load(path)
 
 

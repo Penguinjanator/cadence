@@ -7,8 +7,9 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from anatomy import single_region
 
-from cadence import Brain, BrainState, NeuralGraph
+from cadence import BrainState, NeuralGraph
 
 
 def reversal_boundary(backend="cpu"):
@@ -23,7 +24,8 @@ def reversal_boundary(backend="cpu"):
         torch = pytest.importorskip("torch")
         if backend == "mps" and not torch.backends.mps.is_available():
             pytest.skip("MPS hardware unavailable")
-    agent = Brain.build(
+    # the fixture was recorded on the single-region layout of earlier releases
+    agent = single_region(
         4,
         4,
         hidden=16,

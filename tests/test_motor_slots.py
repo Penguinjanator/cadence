@@ -53,11 +53,15 @@ def test_lateral_inhibition_stays_within_a_slot():
     assert all(group[p] == group[q] for p, q in pairs)
 
 
-def test_default_lateral_follows_the_largest_slot():
+def test_an_unset_lateral_wires_no_competition_in_any_slot():
     wide = cd.Brain.compose(inputs=6, actions=25, modules=(8,), seed=0, slots=(3, 13, 9))
-    assert motor_pairs(wide) == []  # a slot of 13 is a wide readout
+    assert motor_pairs(wide) == []
     narrow = cd.Brain.compose(inputs=6, actions=25, modules=(8,), seed=0, slots=5)
-    assert len(motor_pairs(narrow)) == 5 * 5 * 4  # five slots of five keep -0.5 within each
+    assert motor_pairs(narrow) == []
+    competing = cd.Brain.compose(
+        inputs=6, actions=25, modules=(8,), seed=0, slots=5, lateral=-0.5
+    )
+    assert len(motor_pairs(competing)) == 5 * 5 * 4  # an explicit weight stays within each slot
     region = motor_cortex(10, lateral=-0.5, slots=2)
     assert region.circuit is not None and region.circuit.synapses == 2 * 5 * 4
 
@@ -78,11 +82,11 @@ def test_slots_are_validated_at_composition():
             cd.Brain.compose(inputs=6, actions=25, modules=(8,), slots=bad)
 
 
-def test_build_and_genome_take_slots():
-    brain = cd.Brain.build(6, 25, hidden=8, slots=(3, 13, 9), seed=0)
+def test_compose_and_the_composed_layout_take_slots():
+    brain = cd.Brain.compose(6, 25, modules=(8,), slots=(3, 13, 9), seed=0)
     assert brain.learner.slot_sizes.tolist() == [3, 13, 9]
     assert motor_pairs(brain) == []
-    genome = cd.Brain.genome(6, 10, hidden=8, slots=2)
+    genome = cd.Genome.composed(6, 10, modules=(8,), slots=2, lateral=-0.5)
     grouped = cd.Brain(cd.develop(genome, seed=0), slots=2)
     assert grouped.learner.slot_sizes.tolist() == [5, 5]
     assert len(motor_pairs(grouped)) == 2 * 5 * 4

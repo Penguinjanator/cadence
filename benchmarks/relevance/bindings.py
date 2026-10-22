@@ -548,8 +548,8 @@ def job(spec: dict[str, Any]) -> dict[str, Any]:
         brain = compose(spec["brain"], spec["rule"], seed, bits)
         described = brain.describe()
         row["modules"] = BRAINS[spec["brain"]]
-        row["resolved_working_memory"] = described["working_memory"]
-        row["resolved_learning"] = described["learning"]
+        row["resolved_working_memory"] = described["memories"].get("working_memory")
+        row["resolved_learning"] = brain.learner.config.to_dict()
         work, reading_work = sr.Work(), sr.Work()
     else:
         model = Supervised(bits, seed, through=spec["rule"], **spec.get("gru", {}))

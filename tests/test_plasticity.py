@@ -101,12 +101,12 @@ def test_traces_reset_on_done_and_updates_are_local() -> None:
     assert np.allclose(got[~clipped], expected[~clipped])
 
 
-def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuous_bandit() -> None:
+def test_grouped_softmax_nudge_agrees_between_kernels() -> None:
 
     from cadence import brain as S
 
-    bins = cd.Bins(dims=2, size=5)
-    connectome = cd.layered(4, 8, bins.dims * bins.size, density=1.0, seed=3)
+    dims, size = 2, 5
+    connectome = cd.layered(4, 8, dims * size, density=1.0, seed=3)
     brain = cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0))
     rng = np.random.default_rng(3)
     drive = brain.stimulus_levels(np.pad(rng.random((6, 4)), ((0, 0), (0, connectome.n - 4))))
@@ -115,9 +115,9 @@ def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuou
     target[:, out[[0, 7]]] = 1.0
     mask = np.zeros(connectome.n)
     mask[out] = 1.0
-    nudge = cd.Nudge(
-        target, mask, 0.1, softmax_temperature=0.2, groups=bins.groups(out, connectome.n)
-    )
+    groups = np.full(connectome.n, -1, dtype=np.int64)
+    groups[out] = np.repeat(np.arange(dims), size)  # one softmax group per output dimension
+    nudge = cd.Nudge(target, mask, 0.1, softmax_temperature=0.2, groups=groups)
     free = brain.settle_batch(drive, steps=60, tolerance=3e-3)
     fused = brain.settle_batch(drive, steps=12, state=free, nudge=nudge, tolerance=3e-3)
     was = S._FUSED
@@ -127,43 +127,6 @@ def test_grouped_softmax_nudge_agrees_between_kernels_and_bins_learn_a_continuou
     finally:
         S._FUSED = was
     assert np.abs(fused.activation - plain.activation).max() < 1e-12
-
-    learner = cd.Learner(
-        brain,
-        connectome.populations["output"],
-        cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
-    )
-    ac = cd.ActorCritic(
-        learner,
-        connectome.populations["hidden"],
-        cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=1.0, eta_critic=0.3),
-        seed=3,
-        population=bins,
-    )
-    wanted = np.array([[0.5, -1.0], [-0.5, 1.0]])
-
-    def batch(k: int) -> tuple[np.ndarray, np.ndarray]:
-        c = rng.integers(0, 2, k)
-        x = np.zeros((k, 4))
-        x[np.arange(k), 2 * c] = 1.0
-        x[np.arange(k), 2 * c + 1] = 1.0
-        return brain.stimulus_levels(np.pad(x, ((0, 0), (0, connectome.n - 4)))), c
-
-    def error() -> float:
-        d, c = batch(200)
-        ac.reset()
-        return float(np.abs(ac.act(d, greedy=True) - wanted[c]).mean())
-
-    before = error()
-    ac.reset()
-    d, c = batch(32)
-    for _ in range(200):
-        a = ac.act(d)
-        reward = -((a - wanted[c]) ** 2).sum(axis=1)
-        d, c = batch(32)
-        ac.learn(reward, np.ones(32, dtype=bool), d)
-    after = error()
-    assert after < 0.2 and after < before
 
 
 def test_one_stream_learns_the_same_on_the_device_as_on_the_host() -> None:
@@ -193,13 +156,7 @@ def test_one_stream_learns_the_same_on_the_device_as_on_the_host() -> None:
             precision="float64" if backend == "torch" else None,
         )  # type: ignore[arg-type]
         learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
-        ac = cd.ActorCritic(
-            learner,
-            connectome.populations["hidden"],
-            ac_config,
-            seed=0,
-            population=cd.Bins(dims=2, size=2),
-        )
+        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0)
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())
@@ -249,13 +206,7 @@ def test_a_batch_of_streams_learns_the_same_on_the_device_as_on_the_host() -> No
             precision="float64" if backend == "torch" else None,
         )  # type: ignore[arg-type]
         learner = cd.Learner(brain, connectome.populations["output"], config, slots=2)
-        ac = cd.ActorCritic(
-            learner,
-            connectome.populations["hidden"],
-            ac_config,
-            seed=0,
-            population=cd.Bins(dims=2, size=2),
-        )
+        ac = cd.ActorCritic(learner, connectome.populations["hidden"], ac_config, seed=0)
         actions = []
         for k in range(5):
             actions.append(ac.act(drives[k]).copy())
@@ -273,104 +224,6 @@ def test_a_batch_of_streams_learns_the_same_on_the_device_as_on_the_host() -> No
     assert np.allclose(s_host, s_dev, atol=1e-6) and np.abs(s_host - connectome.sign).max() > 1e-4
     assert np.allclose(b_host, b_dev, atol=1e-6)
     assert np.allclose(c_host, c_dev, atol=1e-6)
-
-
-def test_actor_critic_centres_the_dopamine_per_stream() -> None:
-    """Two streams with rewards of different sizes each keep their own level: the agent's
-    valence is per stream, so the small-reward stream is not always below the mean."""
-    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
-    learner = cd.Learner(
-        cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0)),
-        connectome.populations["output"],
-        cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
-    )
-    ac = cd.ActorCritic(
-        learner,
-        connectome.populations["hidden"],
-        cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.1, eta_critic=0.0, dopamine_center=0.5),
-        seed=0,
-    )
-    rng = np.random.default_rng(1)
-    x = rng.random((2, 4))
-    drive = np.pad(x, ((0, 0), (0, connectome.n - 4)))
-    rewards = np.array([10.0, 0.1])  # stream 0 is paid a hundred times stream 1
-    ac.act(drive)
-    for _ in range(20):
-        ac.learn(rewards + rng.normal(0.0, 0.01, size=2), np.zeros(2, dtype=bool), drive)
-        ac.act(drive)
-    assert isinstance(ac.delta_mean, np.ndarray) and ac.delta_mean.shape == (2,)
-    assert ac.delta_mean[0] > ac.delta_mean[1] + 5.0  # each stream's level is its own reward's
-
-
-def test_actor_critic_dopamine_floor_is_quiet_for_the_usual_reward() -> None:
-    """With a floor, a reward at its usual level gives no dopamine and no step; a surprise does."""
-    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
-    learner = cd.Learner(
-        cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0)),
-        connectome.populations["output"],
-        cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
-    )
-    ac = cd.ActorCritic(
-        learner,
-        connectome.populations["hidden"],
-        cd.ActorCriticConfig(
-            gamma=0.0, lam=0.0, eta=0.1, eta_critic=0.0, dopamine_center=0.5, dopamine_floor=1.0
-        ),
-        seed=0,
-    )
-    rng = np.random.default_rng(2)
-    drive = np.pad(rng.random((2, 4)), ((0, 0), (0, connectome.n - 4)))
-    ac.act(drive)
-    for _ in range(30):
-        ac.learn(np.array([1.0, 1.0]), np.zeros(2, dtype=bool), drive)
-        ac.act(drive)
-    before = learner.brain.weights.copy()
-    ac.learn(np.array([1.0, 1.0]), np.zeros(2, dtype=bool), drive)  # the usual reward: quiet
-    ac.act(drive)
-    assert np.array_equal(learner.brain.weights, before)
-    ac.learn(np.array([50.0, 50.0]), np.zeros(2, dtype=bool), drive)  # a surprise: a step
-    assert not np.array_equal(learner.brain.weights, before)
-
-
-def test_actor_critic_centre_without_the_scale_keeps_the_rewards_size() -> None:
-    """Unscaled, the centred dopamine is in the reward's own units: a big surprise is big."""
-    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
-
-    def make(scale: bool) -> cd.ActorCritic:
-        learner = cd.Learner(
-            cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0)),
-            connectome.populations["output"],
-            cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
-        )
-        return cd.ActorCritic(
-            learner,
-            connectome.populations["hidden"],
-            cd.ActorCriticConfig(
-                gamma=0.0,
-                lam=0.0,
-                eta=0.0,
-                eta_critic=0.0,
-                dopamine_center=0.5,
-                dopamine_cap=0.0,
-                center_scale=scale,
-            ),
-            seed=0,
-        )
-
-    scaled, raw = make(True), make(False)
-    for ac in (scaled, raw):
-        for _ in range(20):
-            ac._centre(np.array([1.0, 1.0]))
-    big_scaled = scaled._centre(np.array([11.0, 11.0]))
-    big_raw = raw._centre(np.array([11.0, 11.0]))
-    # the running mean and scale take the new reward in first (half of it at this forgetting):
-    # a reward ten above the usual reads five in the reward's own units, and in scales it
-    # reads root two whatever its size, since the surprise inflates its own scale
-    assert abs(big_raw[0] - 5.0) < 0.1
-    assert abs(big_scaled[0] - np.sqrt(2.0)) < 0.05
-    assert (
-        abs(raw._centre(np.array([101.0, 101.0]))[0] - 47.5) < 0.5
-    )  # ten times the surprise, ten times the signal
 
 
 def test_padding_cannot_teach_the_actor_critic_or_change_the_active_update() -> None:
@@ -397,7 +250,7 @@ def test_padding_cannot_teach_the_actor_critic_or_change_the_active_update() -> 
             actor = cd.ActorCritic(
                 learner,
                 connectome.populations["hidden"],
-                cd.ActorCriticConfig(eta=0.1, dopamine_center=0.9),
+                cd.ActorCriticConfig(eta=0.1),
                 seed=3,
             )
             drive = np.zeros((batch, connectome.n))
@@ -430,19 +283,6 @@ def test_padding_cannot_teach_the_actor_critic_or_change_the_active_update() -> 
             assert np.allclose(alone, padded, atol=1e-8), backend
 
 
-def test_unobserved_rewards_do_not_enter_shared_or_per_stream_valence() -> None:
-    for per_stream in (False, True):
-        alone = cd.Valence(level=0.9, per_stream=per_stream)
-        padded = cd.Valence(level=0.9, per_stream=per_stream)
-        for reward in (1.0, -0.5, 2.0):
-            expected = alone(np.array([reward]))
-            actual = padded(np.array([reward, 10000.0]), observed=np.array([True, False]))
-            assert actual[1] == 0 and np.allclose(actual[:1], expected)
-        before = np.array(padded.mean, copy=True)
-        assert not padded(np.array([1.0, 2.0]), observed=np.zeros(2, bool)).any()
-        assert np.array_equal(before, padded.mean)
-
-
 def test_scale_cap_bounds_the_plastic_efficacy_and_is_validated() -> None:
     connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
     brain = cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0))
@@ -463,15 +303,40 @@ def test_scale_cap_bounds_the_plastic_efficacy_and_is_validated() -> None:
         raise AssertionError(f"scale_cap={bad} was accepted")
 
 
-def test_the_critic_learns_from_the_raw_error_whenever_the_dopamine_is_centred() -> None:
-    assert cd.ActorCriticConfig().critic_target == "modulated"
-    assert cd.ActorCriticConfig(dopamine_center=0.5).critic_target == "td"
-    assert (
-        cd.ActorCriticConfig(dopamine_center=0.5, critic_signal="modulated").critic_target
-        == "modulated"
+def test_the_critic_learns_the_actors_capped_dopamine() -> None:
+    """The critic steps on its trace, divided by the trace's energy, by the actor's dopamine:
+    the prediction error capped at ``dopamine_cap``, so a reward far above the cap moves it as
+    the cap does. The centred dopamine and the critic's other signals are not settings."""
+    import pytest
+
+    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
+    learner = cd.Learner(
+        cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0)),
+        connectome.populations["output"],
+        cd.LearnerConfig(beta=0.1, eta=1.0, temperature=0.2, tolerance=3e-3, nudged_steps=12),
     )
-    assert cd.ActorCriticConfig(critic_signal="td").critic_target == "td"
-    assert cd.ActorCriticConfig().to_dict()["critic_signal"] == "auto"
+    ac = cd.ActorCritic(
+        learner,
+        connectome.populations["hidden"],
+        cd.ActorCriticConfig(gamma=0.0, lam=0.0, eta=0.0, eta_critic=0.5),
+        seed=0,
+    )
+    drive = np.pad(np.random.default_rng(3).random((1, 4)), ((0, 0), (0, connectome.n - 4)))
+    ac.act(drive)
+    assert ac.state is not None
+    trace = np.append(ac.state.activation[0, ac.critic_index], 1.0)
+    ac.learn(np.array([50.0]), np.zeros(1, dtype=bool), drive)  # the error 50, capped at 1
+    step = 0.5 * trace / (1.0 + (trace**2).sum())
+    np.testing.assert_allclose(ac.w_critic, step[:-1], rtol=1e-12)
+    assert ac.b_critic == pytest.approx(step[-1], rel=1e-12)
+    for name, value in (("dopamine_center", 0.5), ("dopamine_floor", 1.0),
+                        ("center_scale", False), ("critic_normalize", False),
+                        ("critic_signal", "td")):
+        with pytest.raises(TypeError):
+            cd.ActorCriticConfig(**{name: value})
+        with pytest.raises(ValueError, match=f"actor_{name} was removed.*0.84.3"):
+            cd.Brain.compose(4, 2, modules=(8,), **{f"actor_{name}": value})
+    assert not hasattr(cd, "Valence")
 
 
 def test_the_report_reads_the_outputs_saturation_and_the_traces_size() -> None:

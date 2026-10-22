@@ -11,9 +11,7 @@ def test_income_follows_actual_rewards_with_separate_own_error_calibration():
     rewards = np.array([0.8, -0.4, 0.3, 1.2, 0.2])
     own = [False, True, False, False, True]
     for index, (reward, chosen) in enumerate(zip(rewards, own, strict=True), 1):
-        surprise, _ = arousal.outcome(
-            0.25 if chosen else 20.0, reward, own=chosen, record_error=0.5 if chosen else 30.0
-        )
+        surprise, _ = arousal.outcome(0.25 if chosen else 20.0, reward, own=chosen)
         if not chosen:
             assert surprise == 0.0
         # Independent normalized exponential weights; sampled rewards cannot vanish.
@@ -21,9 +19,8 @@ def test_income_follows_actual_rewards_with_separate_own_error_calibration():
             weights = (1 - rate) ** np.arange(index - 1, -1, -1)
             assert reading == pytest.approx(np.dot(weights, rewards[:index]) / weights.sum())
         assert arousal.rewards == index
-        assert arousal.outcomes == arousal.records == sum(own[:index])
+        assert arousal.outcomes == sum(own[:index])
         assert arousal.usual == pytest.approx(0.25 if arousal.outcomes else 0.0)
-        assert arousal.usual_record == pytest.approx(0.5 if arousal.records else 0.0)
 
 
 def test_exploration_does_not_freeze_a_richer_stages_income_or_false_want():
@@ -73,11 +70,13 @@ def test_a_genuine_unmet_need_remains_aroused_while_sampling():
 
 
 def test_prior_saved_income_keeps_its_readings_and_then_accepts_sampled_rewards():
-    arousal = cd.Arousal(cd.ArousalConfig(youth=0))
+    arousal = cd.Arousal(cd.ArousalConfig(youth=0, need_scale=0.0))  # a state 0.84.3 could save
     for reward in (0.5, 1.0, -0.1):
-        arousal.outcome(0.2, reward, record_error=0.4)
-    prior = arousal.to_dict()
+        arousal.outcome(0.2, reward)
+    prior = arousal.to_dict()  # as a cadence-arousal/1 save, with the record channel at zero
     prior["format"] = "cadence-arousal/1"
+    prior["config"] = {**prior["config"], "record_surprise": 0.0}
+    prior.update(records=3, usual_record=0.4)
     del prior["rewards"]
     restored = cd.Arousal.from_dict(prior)
     assert restored.to_dict() == arousal.to_dict()

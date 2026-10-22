@@ -179,6 +179,15 @@ def optimal(odour: int, sugar: int) -> int:
 # ------------------------------------------------------------------------------- learners
 
 
+def arousal_genes(genes: dict[str, Any]) -> dict[str, Any]:
+    """The arousal genes as the library takes them. The frozen protocols name the record
+    channel's weight at its founder zero, which is the law without the channel; the library
+    removed the channel after 0.84.3, and a weight above zero needs that release."""
+    if genes.get("record_surprise", 0.0) != 0.0:
+        raise ValueError("record_surprise above zero needs cadence-net 0.84.3")
+    return {name: value for name, value in genes.items() if name != "record_surprise"}
+
+
 def make_brain(point: dict[str, Any], seed: int, genes: dict[str, Any] | None) -> cd.Brain:
     """A composed brain at an operating point; ``genes`` adds arousal, None leaves it out."""
     options: dict[str, Any] = {}
@@ -187,13 +196,13 @@ def make_brain(point: dict[str, Any], seed: int, genes: dict[str, Any] | None) -
     # frozen protocols ran the composition of releases before 0.82.0: the retention they
     # leave unnamed was 0.2, and the carried interpretation was read back at scale 12
     options["working_memory_decay"] = point.get("trace_decay", 0.2)
-    options["working_memory_scale"] = point.get("trace_scale", 12.0)
+    options["scales"] = {"trace": point.get("trace_scale", 12.0)}
     if "consolidation" in point:
         options["consolidation"] = point["consolidation"]
     if not point.get("episodic", True):
         options["episodic"] = False
     if genes is not None:
-        options["arousal"] = cd.ArousalConfig(**genes)
+        options["arousal"] = cd.ArousalConfig(**arousal_genes(genes))
     # ``learning`` names LearnerConfig fields to set, the readout's intrinsic plasticity among
     # them; the frozen protocols name none, so their brains keep the learner's founders.
     for name, value in dict(point.get("learning", {})).items():

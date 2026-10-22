@@ -64,17 +64,6 @@ def test_layered_and_embedded_builders() -> None:
     assert counts.min() >= 2  # a shared synapse appears in every position
 
 
-def test_shuffled_keeps_degrees_and_changes_connectome() -> None:
-    w = cd.layered(6, 4, 2, density=0.6, seed=2)
-    s = cd.shuffled(w, seed=1)
-    assert s.synapses == w.synapses and s.n == w.n
-    assert s.digest() != w.digest()
-    keep = np.zeros(w.synapses, dtype=bool)
-    keep[:2] = True
-    kept = cd.shuffled(w, seed=1, keep=keep)
-    assert kept.synapses == w.synapses
-
-
 @pytest.mark.parametrize(
     "pre, post", [([3], [0]), ([-1], [2]), ([0.5], [1.5]), ([0], [3]), ([np.nan], [1])]
 )

@@ -8,7 +8,7 @@ import cadence as cd
 
 def test_explicit_default_motor_lateral_preserves_the_complete_default_composition(tmp_path):
     implicit = cd.Brain.compose(2, 3, modules=(5, 4), observers=(3,), seed=7)
-    explicit = cd.Brain.compose(2, 3, modules=(5, 4), observers=(3,), lateral=-0.5, seed=7)
+    explicit = cd.Brain.compose(2, 3, modules=(5, 4), observers=(3,), lateral=0.0, seed=7)
     for name in ("pre", "post", "count", "sign"):
         np.testing.assert_array_equal(
             getattr(implicit.connectome, name), getattr(explicit.connectome, name),

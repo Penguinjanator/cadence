@@ -7,9 +7,28 @@ import cadence as cd
 from cadence.stream import FastSynapses, Trace
 
 
-def _stateful() -> tuple[cd.Connectome, np.ndarray]:
+def context_graph(inputs: int, hidden: int, outputs: int, seed: int = 0) -> cd.Connectome:
+    """Inputs, a context range of one neuron per hidden neuron, hidden and output neurons: the
+    inputs and the context drive the hidden neurons, which exchange signals with the outputs."""
+    genome = cd.Genome(
+        regions=(
+            cd.Region("input", inputs),
+            cd.Region("context", hidden),
+            cd.Region("hidden", hidden),
+            cd.Region("output", outputs),
+        ),
+        projections=(
+            cd.Projection("input", "hidden", density=1.0, sign=0.0, scale=1.0, reciprocal=False),
+            cd.Projection("context", "hidden", density=1.0, sign=0.0, scale=1.0, reciprocal=False),
+            cd.Projection("hidden", "output", density=1.0, sign=0.0, scale=1.0),
+        ),
+    )
+    return cd.develop(genome, seed=seed)
+
+
+def _context() -> tuple[cd.Connectome, np.ndarray]:
     rng = np.random.default_rng(0)
-    c, _ = cd.stateful(8, 2, 4, 10, 3, seed=0)
+    c = context_graph(16, 10, 3, seed=0)
     d = np.zeros((5, c.n))
     for p in range(2):
         d[np.arange(5), p * 8 + rng.integers(0, 8, 5)] = 1.0
@@ -20,7 +39,7 @@ def _stateful() -> tuple[cd.Connectome, np.ndarray]:
 def test_trace_reads_only_its_source_slice_and_resets_rows(backend: str) -> None:
     if backend == "torch":
         pytest.importorskip("torch")
-    c, d = _stateful()
+    c, d = _context()
     brain = cd.NeuralGraph(c, cd.learning_neuron_model(dt=1.0), backend=backend, device="cpu" if backend == "torch" else None)
     trace = Trace(c, decay=0.5, source="hidden", target="context")
     state = brain.settle_batch(d, steps=30)
@@ -36,10 +55,8 @@ def test_trace_reads_only_its_source_slice_and_resets_rows(backend: str) -> None
     assert len(trace.trace) == 2 and trace.cold.tolist() == [False, False]
     stimulated = trace.stimulate(np.zeros((7, c.n)))  # a query cannot erase live streams
     assert len(trace.trace) == 2 and trace.trace.any() and not stimulated.any()
-    focused = Trace(c, decay=0.5, focus=1.0, source="hidden", target="context")
-    focused.update(state)
-    focused.update(state)
-    assert np.isfinite(focused.trace).all()
+    with pytest.raises(TypeError):
+        Trace(c, decay=0.5, focus=1.0, source="hidden", target="context")
 
 
 def test_synaptic_memory_salience_value_mask_and_batch_changes() -> None:

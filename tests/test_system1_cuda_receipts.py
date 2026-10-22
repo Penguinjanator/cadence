@@ -1,6 +1,7 @@
 """Reject plausible falsifications of the actual, published CPU/CUDA evidence."""
 
 import copy
+import dataclasses
 import gzip
 import importlib.util
 import json
@@ -51,12 +52,22 @@ def campaign(tmp_path, captured):
         }
         write(folder / "manifest.json", manifest)
         write(folder / "result.json", result)
+        # the record names every setting of the campaign's library; this library builds the
+        # brain from the settings it has, and the verifier reads the others
+        known = {
+            name: {f.name for f in dataclasses.fields(kind)}
+            for name, kind in (("learning", cd.LearnerConfig), ("reward", cd.ActorCriticConfig))
+        }
+        graph = {
+            name: {k: v for k, v in result["graph"][name].items() if k in known[name]}
+            for name in known
+        }
         brain = cd.Brain.compose(
             8,
             2,
             seed=0,
-            learning=cd.LearnerConfig(**result["graph"]["learning"]),
-            reward=cd.ActorCriticConfig(**result["graph"]["reward"]),
+            learning=cd.LearnerConfig(**graph["learning"]),
+            reward=cd.ActorCriticConfig(**graph["reward"]),
         )
         brain.save(folder / "acquired.npz")
         outcomes.append(record)

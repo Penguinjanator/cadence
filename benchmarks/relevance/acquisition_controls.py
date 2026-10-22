@@ -315,7 +315,7 @@ def job(
 ) -> dict[str, Any]:
     task, brain_name, rounds, seed, teaching, eta, exposed, trace, *readings = spec
     holdout, replace = (list(readings) + [False, False])[:2]
-    from cadence import Brain  # noqa: PLC0415
+    from cadence import Brain, LearnerConfig  # noqa: PLC0415
 
     began = time.monotonic()
     held = holdout_split(seed) if holdout else None
@@ -324,9 +324,17 @@ def job(
     order = np.stack([rng.permutation(len(cases)) for _ in range(rounds)])
     options: dict[str, Any] = {}
     if eta is not None:
-        # the teaching contrast's step and its bias step at the founder's ratio of one tenth
-        options["learning_eta"], options["learning_eta_bias"] = eta, eta / 10
-    options.update({f"working_memory_{name}": value for name, value in trace.items()})
+        # the teaching contrast's step and its bias step at the founder's ratio of one tenth,
+        # the composed teaching founders otherwise
+        options["learning"] = LearnerConfig(
+            beta=0.1, eta=eta, eta_bias=eta / 10, temperature=0.2, tolerance=3e-3,
+            free_steps=1024, nudged_steps=12, momentum=0.9,
+        )
+    options.update(
+        {f"working_memory_{name}": value for name, value in trace.items() if name != "scale"}
+    )
+    if "scale" in trace:
+        options["scales"] = {"trace": trace["scale"]}
     brain = Brain.compose(
         sr.INPUTS, 2, seed=seed, modules=BRAINS[brain_name], episodic=False, **options
     )
@@ -337,10 +345,10 @@ def job(
         "task": task, "brain": brain_name, "modules": BRAINS[brain_name], "rounds": rounds,
         "seed": seed, "neutral_events": NEUTRAL_EVENTS, "teaching": teaching, "exposed": exposed,
         "learning_eta": eta, "trace_genes": trace, "resolved_working_memory": {
-            k: v for k, v in brain.describe()["working_memory"].items()
+            k: v for k, v in brain.describe()["memories"]["working_memory"].items()
             if k in ("decay", "amplitude", "scale")
         }, "resolved_learning": {
-            k: v for k, v in brain.describe()["learning"].items() if k in ("eta", "eta_bias")
+            k: v for k, v in brain.learner.config.to_dict().items() if k in ("eta", "eta_bias")
         },
         "training": trained, "evaluation": evaluation,
     }

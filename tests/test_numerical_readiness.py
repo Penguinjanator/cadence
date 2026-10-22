@@ -4,117 +4,6 @@ import numpy as np
 import pytest
 
 import cadence as cd
-from cadence import RecordPatchNet
-
-
-def zero_record_net(inputs=1):
-    net = RecordPatchNet(inputs, 1, 1, cells=4, active=2)
-    parameters = net.parameters()
-    for value in parameters.values():
-        value.fill(0)
-    net.set_parameters(parameters)
-    return net
-
-
-def same_snapshot(net, before):
-    after = net.snapshot()
-    assert after.keys() == before.keys()
-    for key in before:
-        np.testing.assert_array_equal(after[key], before[key], err_msg=key)
-
-
-@pytest.mark.parametrize("backtrack", [False, True])
-def test_record_zero_rate_preserves_writes_and_activity_without_slow_update(backtrack):
-    net = zero_record_net()
-    parameters = net.parameters()
-    parameters["b"].fill(.5)
-    net.set_parameters(parameters)
-    net.records.projection.fill(0)
-    net.records.offset.fill(1)
-    original = net.parameters()
-    revision, updates = net._revision, net.updates
-    result = net.observe(np.ones((1, 1, 1)), np.ones((1, 1, 1)),
-                         rate=0, backtrack=backtrack)
-    assert not result.updated and result.reason == "no_step"
-    assert result.accepted_rate == 0 and result.replay_calls == 0
-    assert result.initial_loss == result.final_loss
-    assert result.delta is not None and np.any(result.delta["c"] != 0)
-    assert net.updates == updates and net._revision == revision
-    for key, value in net.parameters().items():
-        np.testing.assert_array_equal(value, original[key])
-    np.testing.assert_array_equal(net.state, result.prediction.final_state)
-    assert np.any(net.state != 0)
-    assert result.writes == 1 and net.records.writes == 1
-    assert np.any(net.records.tables["y"] != 0)
-
-
-@pytest.mark.parametrize("tolerance", [np.nan, np.inf, 0, -1])
-def test_record_detune_rejects_invalid_tolerance(tolerance):
-    net = zero_record_net()
-    with pytest.raises(ValueError, match="tolerance"):
-        net.detune(np.zeros((1, 1, 1)), np.zeros((1, 1, 1)), tolerance=tolerance)
-
-
-@pytest.mark.parametrize("iterations", [-1, 1.5, True])
-def test_record_detune_rejects_invalid_budget(iterations):
-    net = zero_record_net()
-    with pytest.raises(ValueError, match="max_iterations"):
-        net.detune(np.zeros((1, 1, 1)), np.zeros((1, 1, 1)), max_iterations=iterations)
-
-
-def test_record_detune_cannot_certify_a_zero_gradient_saddle():
-    net = zero_record_net()
-    parameters = net.parameters()
-    parameters["C"][:] = 10
-    net.set_parameters(parameters)
-    before = net.snapshot()
-    # For one moment, negative-phase Hessian is 1 - beta*C^2/(1-beta) < 0.
-    # Its gradient at hidden=target=0 vanishes; a residual alone misses the saddle.
-    result = net.detune(np.zeros((1, 1, 1)), np.zeros((1, 1, 1)), beta=.1)
-    assert not result.converged
-    same_snapshot(net, before)
-
-
-def test_record_detune_overflow_cannot_pass_via_nan_comparison():
-    net = zero_record_net()
-    parameters = net.parameters()
-    parameters["C"][:] = 1e200
-    net.set_parameters(parameters)
-    with np.errstate(over="ignore", invalid="ignore"):
-        result = net.detune(np.zeros((1, 1, 1)), np.ones((1, 1, 1)))
-    assert not result.converged
-    assert not any(np.isnan(x) for x in result.residuals)
-
-
-def test_record_large_finite_observation_keeps_restorable_normalization():
-    net = zero_record_net()
-    result = net.observe(np.array([[[1e200]]]), np.ones((1, 1, 1)))
-    assert result.updated and np.isfinite(net._input_norm)
-    assert net._input_norm == pytest.approx(1e198)
-    same_snapshot(RecordPatchNet.restore(net.snapshot()), net.snapshot())
-
-
-def test_record_unrepresentable_norm_fails_before_mutation():
-    net = zero_record_net(inputs=2)
-    before = net.snapshot()
-    with pytest.raises(ValueError, match="input norms"):
-        net.observe(np.full((1, 1, 2), 1.7e308), np.ones((1, 1, 1)))
-    same_snapshot(net, before)
-
-
-def test_sleep_invalid_dawn_budget_does_not_train_first():
-    net = zero_record_net()
-    net.observe(np.ones((1, 1, 1)), np.ones((1, 1, 1)), rate=0)
-    before = net.snapshot()
-    with pytest.raises(ValueError, match="dawn_passes"):
-        net.sleep([np.ones((1, 1, 1))], dawn_passes=-1)
-    same_snapshot(net, before)
-
-
-def test_sleep_zero_loss_remains_zero():
-    net = zero_record_net()
-    result = net.sleep([np.zeros((1, 1, 1))], passes=0, dawn_passes=0)
-    assert result["dream_loss_before"] == result["dream_loss_after"] == 0
 
 
 @pytest.mark.parametrize("parameter", ["efficacy", "bias"])
@@ -180,7 +69,7 @@ def test_rejected_update_keeps_optimizer_history_and_retry(backend):
 
 
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
-def test_critic_overflow_rejects_actor_trace_and_reward_statistics_atomically(backend):
+def test_critic_overflow_rejects_the_actor_trace_atomically(backend):
     if backend == "torch":
         pytest.importorskip("torch")
     graph = cd.layered(1, 2, 2, seed=3)
@@ -189,16 +78,16 @@ def test_critic_overflow_rejects_actor_trace_and_reward_statistics_atomically(ba
                  **({"device": "cpu"} if backend == "torch" else {})),
         graph.populations["output"],
     )
+    # uncapped, the critic's step on a reward of ten overflows
     actor = cd.ActorCritic(learner, graph.populations["hidden"],
-                         cd.ActorCriticConfig(eta_critic=1e308, dopamine_center=.5,
-                                              critic_signal="td"))
+                         cd.ActorCriticConfig(eta_critic=1e308, dopamine_cap=0.0))
     drive = np.full((1, graph.n), .1)
     actor.act(drive)
     pending = actor._pending
     weights, bias = learner.brain.efficacy.copy(), learner.brain.bias.copy()
     with np.errstate(over="ignore", invalid="ignore"), pytest.raises(ValueError, match="critic"):
         actor.learn(np.array([10.]), np.array([True]), drive)
-    assert actor._pending is pending and actor._valence is None
+    assert actor._pending is pending
     assert actor.trace is actor.trace_bias is actor.trace_critic is actor._trace_device is None
     assert actor.updates == learner.updates == 0
     assert actor.b_critic == 0 and not actor.w_critic.any()
@@ -206,15 +95,6 @@ def test_critic_overflow_rejects_actor_trace_and_reward_statistics_atomically(ba
     np.testing.assert_array_equal(learner.brain.bias, bias)
     actor.learn(np.array([0.]), np.array([True]), drive)
     assert actor.updates == learner.updates == 1
-
-
-@pytest.mark.parametrize("per_stream", [False, True])
-def test_valence_overflow_does_not_poison_running_statistics(per_stream):
-    valence = cd.Valence(level=.5, per_stream=per_stream)
-    with np.errstate(over="ignore"), pytest.raises(ValueError, match="moments"):
-        valence(np.array([1e200]))
-    assert valence.mean == 0 and valence.var == 1
-    assert np.isfinite(valence(np.array([1.]))).all()
 
 
 @pytest.mark.parametrize("threshold", [np.nan, np.inf, -1])

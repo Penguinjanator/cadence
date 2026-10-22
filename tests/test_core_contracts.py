@@ -65,7 +65,7 @@ def test_ending_one_stream_does_not_resettle_other_streams(backend):
 
 
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
-def test_frozen_large_synapse_survives_decay_and_clipping(backend):
+def test_frozen_large_synapse_survives_clipping(backend):
     if backend not in cd.available_backends():
         pytest.skip(backend)
     agent = controller(backend)
@@ -74,7 +74,7 @@ def test_frozen_large_synapse_survives_decay_and_clipping(backend):
     scale[0] = 12.0
     learner.brain = learner.brain.with_parameters(efficacy=scale)
     learner.plastic_synapses[0] = False
-    learner.config = cd.LearnerConfig(decay=0.1)
+    learner.config = cd.LearnerConfig()
     if backend == "cpu":
         learner.apply(np.zeros_like(scale), np.zeros(agent.n))
     else:
@@ -136,13 +136,13 @@ def test_overlapping_weight_ties_form_one_constraint():
 
 
 def test_generic_brain_exposes_current_learned_parameters():
-    brain = cd.Brain.build(2, 2, hidden=3)
+    brain = cd.Brain.compose(2, 2, modules=(3,))
     brain.fit(np.eye(2), np.array([0, 1]), epochs=1)
     assert brain.brain is brain.learner.brain
 
 
 def test_generic_brain_owns_action_and_observation_buffers():
-    brain = cd.Brain.build(2, 2, hidden=3, episodic=True)
+    brain = cd.Brain.compose(2, 2, modules=(3,), episodic=True)
     cue = np.array([[1.0, 0.0]])
     action = brain.act(cue)
     chosen = int(action[0])
@@ -156,14 +156,14 @@ def test_generic_brain_owns_action_and_observation_buffers():
 
 @pytest.mark.parametrize("labels", [[0.9, 1.0], [[0], [1]], [0]])
 def test_generic_fit_rejects_invalid_labels_before_learning(labels):
-    brain = cd.Brain.build(2, 2, hidden=3)
+    brain = cd.Brain.compose(2, 2, modules=(3,))
     with pytest.raises(ValueError):
         brain.fit(np.eye(2), labels, epochs=1)
     assert brain.learner.updates == 0
 
 
 def test_bad_transition_does_not_change_memory_or_eligibility():
-    brain = cd.Brain.build(2, 2, hidden=3, episodic=True, working_memory=True)
+    brain = cd.Brain.compose(2, 2, modules=(3,), episodic=True)
     brain.act(np.eye(2))
     trace = brain.working_memory.trace.copy()
     with pytest.raises(ValueError):
@@ -175,7 +175,7 @@ def test_bad_transition_does_not_change_memory_or_eligibility():
 
 @pytest.mark.parametrize(
     "field,value",
-    [("gamma", 1.1), ("lam", -1), ("eta", float("nan")), ("normalize", 1), ("dopamine_cap", -1)],
+    [("gamma", 1.1), ("lam", -1), ("eta", float("nan")), ("eta_critic", -1), ("dopamine_cap", -1)],
 )
 def test_reward_configuration_is_validated(field, value):
     with pytest.raises(ValueError):
@@ -272,48 +272,6 @@ def test_equilibrate_checks_the_same_nudge_and_ablation():
     )
 
 
-def test_pruned_imagination_keeps_all_root_scores_and_live_state():
-    from cadence.circuits import imagine
-
-    live = []
-
-    def move(s, a):
-        s.append(int(a))
-        return s
-
-    def value(s):
-        return sum((1 if k % 2 == 0 else -1) * a for k, a in enumerate(s))
-
-    options = dict(
-        actions=lambda s: np.arange(3),
-        transition=move,
-        evaluate=value,
-        terminal=lambda s: len(s) == 5,
-        depth=5,
-        adversarial=True,
-    )
-    exhaustive = imagine(live, **options)
-    pruned = imagine(live, **options, prune=True, clone=list)
-    assert live == [] and pruned.nodes < exhaustive.nodes
-    assert [(f.action, f.score, f.sequence) for f in pruned.futures] == [
-        (f.action, f.score, f.sequence) for f in exhaustive.futures
-    ]
-
-
-def test_imagination_budget_bounds_transition_calls():
-    from cadence.circuits import imagine
-
-    called = []
-
-    def transition(s, a):
-        called.append(a)
-        return s + 1
-
-    with pytest.raises(ValueError, match="budget"):
-        imagine(0, lambda s: (0, 1), transition, float, lambda s: False, max_nodes=1)
-    assert len(called) == 1
-
-
 def test_genome_rejects_colliding_region_names_and_changed_ports():
     from cadence.regions import Region
 
@@ -329,28 +287,18 @@ def test_genome_rejects_colliding_region_names_and_changed_ports():
         )
 
 
-def test_protocol_stimulates_all_neurons_of_a_two_neuron_brain():
-    graph = cd.Connectome.from_synapses(2, pre=[], post=[], populations={"all": [0, 1]})
-    brain = cd.NeuralGraph(graph, cd.learning_neuron_model(stimulus_amplitude=3))
-    protocol = cd.Protocol({"on": ("all",)}, [cd.Row("all-on", "on", "all", "active")])
-    report = protocol.score(brain)
-    assert report["passed"] == 1
-    assert report["rows"][0]["reading"]["fraction"] == 1
-
-
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
 def test_complete_brain_checkpoint_resumes_learning_and_memory(tmp_path, backend):
     if backend not in cd.available_backends():
         pytest.skip(backend)
-    original = cd.Brain.build(
+    original = cd.Brain.compose(
         2,
         2,
-        hidden=3,
-        working_memory=True,
+        modules=(3,),
         episodic=True,
         backend=backend,
         device="cpu" if backend == "torch" else None,
-        reward=cd.ActorCriticConfig(dopamine_center=0.5),
+        reward=cd.ActorCriticConfig(),
     )
     drive = np.eye(2)
     for _ in range(3):
@@ -374,7 +322,7 @@ def test_complete_brain_checkpoint_resumes_learning_and_memory(tmp_path, backend
 
 
 def test_failed_checkpoint_write_preserves_previous_file(tmp_path, monkeypatch):
-    brain = cd.Brain.build(2, 2, hidden=3)
+    brain = cd.Brain.compose(2, 2, modules=(3,))
     path = brain.save(tmp_path / "safe.npz")
     before = path.read_bytes()
 
@@ -390,7 +338,7 @@ def test_failed_checkpoint_write_preserves_previous_file(tmp_path, monkeypatch):
 
 
 def test_pending_action_cannot_be_silently_lost_on_save(tmp_path):
-    brain = cd.Brain.build(2, 2, hidden=3)
+    brain = cd.Brain.compose(2, 2, modules=(3,))
     brain.act(np.eye(2))
     restored = cd.Brain.load(brain.save(tmp_path / "brain.npz"))
     assert restored.basal_ganglia._pending is not None
@@ -414,28 +362,6 @@ def test_zero_density_builds_a_disconnected_sensory_projection():
     graph = cd.layered(2, 3, 2, density=0)
     assert not np.isin(graph.pre, graph.populations["input"]).any()
     assert graph.synapses > 0
-
-
-def test_bins_probabilities_normalize_each_action_dimension():
-    graph = cd.layered(2, 3, 6, density=1)
-    learner = cd.Learner(cd.NeuralGraph(graph, cd.learning_neuron_model()), graph.populations["output"])
-    agent = cd.ActorCritic(learner, graph.populations["hidden"], population=cd.Bins(2, 3))
-    state = agent.settle(np.ones((4, graph.n)))
-    probabilities = agent.probabilities(state)
-    assert probabilities.shape == (4, 2, 3)
-    np.testing.assert_allclose(probabilities.sum(axis=-1), 1)
-
-
-def test_timing_without_unix_process_statistics(monkeypatch):
-    from cadence import timing
-
-    monkeypatch.setattr(timing, "resource", None)
-    monkeypatch.delattr(timing.os, "getloadavg", raising=False)
-    result = timing.latency(lambda: None, repeats=2, warmup=0)
-    assert result["involuntary_switches"] is None
-    assert result["environment"]["load_average"] is None
-    with pytest.raises(ValueError, match="repeats"):
-        timing.latency(lambda: None, repeats=0)
 
 
 def test_corrupt_optimizer_state_is_rejected_on_load(tmp_path):

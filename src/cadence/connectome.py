@@ -88,6 +88,14 @@ class Connectome:
         for name in ("pre", "post", "count", "sign"):
             getattr(self, name).setflags(write=False)
 
+    def __copy__(self) -> Connectome:
+        return self
+
+    def __deepcopy__(self, memo: dict[int, Any]) -> Connectome:
+        """A connectome is immutable (frozen fields, read-only arrays, a read-only mapping of
+        populations): a copy shares it."""
+        return self
+
     # -- construction
 
     @classmethod

@@ -10,7 +10,7 @@ import pytest
 import cadence as cd
 
 
-@pytest.mark.parametrize("config_type", [cd.LearnerConfig, cd.ActorCriticConfig])
+@pytest.mark.parametrize("config_type", [cd.LearnerConfig])
 @pytest.mark.parametrize("rate_name", ["eta", "eta_bias"])
 @pytest.mark.parametrize("momentum", [0.0, 0.9])
 def test_either_large_normalized_rate_warns_at_the_call_site(
@@ -31,7 +31,7 @@ def test_either_large_normalized_rate_warns_at_the_call_site(
     assert len(dominating) == (1 if rate_name == "eta_bias" else 0)
 
 
-@pytest.mark.parametrize("config_type", [cd.LearnerConfig, cd.ActorCriticConfig])
+@pytest.mark.parametrize("config_type", [cd.LearnerConfig])
 @pytest.mark.parametrize("rate", [0.0, 0.001, 0.003, 0.05])
 def test_normalized_rates_through_threshold_are_silent(config_type, rate: float) -> None:
     with warnings.catch_warnings():
@@ -39,21 +39,17 @@ def test_normalized_rates_through_threshold_are_silent(config_type, rate: float)
         config_type(normalize=0.99, momentum=0.9, eta=rate, eta_bias=rate)
 
 
-@pytest.mark.parametrize("config_type", [cd.LearnerConfig, cd.ActorCriticConfig])
-def test_unnormalized_defaults_and_large_rates_are_silent(config_type) -> None:
+def test_unnormalized_defaults_and_large_rates_are_silent() -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        config_type()
-        config_type(normalize=0.0, eta=1.0, eta_bias=1.0)
+        cd.LearnerConfig()
+        cd.LearnerConfig(normalize=0.0, eta=1.0, eta_bias=1.0)
+        # the actor steps on its raw contrast: large rates are its own and silent
+        cd.ActorCriticConfig()
+        cd.ActorCriticConfig(eta=1.0, eta_bias=1.0, eta_critic=1.0)
 
 
-def test_critic_rate_is_not_subject_to_actor_rms_warning() -> None:
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")
-        cd.ActorCriticConfig(normalize=0.99, eta=0.002, eta_bias=0.001, eta_critic=1.0)
-
-
-@pytest.mark.parametrize("config_type", [cd.LearnerConfig, cd.ActorCriticConfig])
+@pytest.mark.parametrize("config_type", [cd.LearnerConfig])
 def test_invalid_configuration_raises_before_warning(config_type) -> None:
     with warnings.catch_warnings():
         warnings.simplefilter("error")
@@ -61,7 +57,7 @@ def test_invalid_configuration_raises_before_warning(config_type) -> None:
             config_type(normalize=0.99, momentum=1.0, eta=0.2)
 
 
-@pytest.mark.parametrize("config_type", [cd.LearnerConfig, cd.ActorCriticConfig])
+@pytest.mark.parametrize("config_type", [cd.LearnerConfig])
 def test_replacing_config_to_enable_normalization_warns_without_changing_rates(config_type) -> None:
     original = config_type()
     with pytest.warns(RuntimeWarning, match=config_type.__name__):

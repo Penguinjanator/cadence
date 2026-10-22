@@ -1,7 +1,12 @@
 # Population throughput
 
-`throughput.py` measures the population kernel, `cadence.population.PopulationPatch`, against
-the NumPy patch on one processor core, and writes `receipt.json` beside itself.
+A frozen reading. The population kernel, `cadence.population.PopulationPatch`, and this
+instrument's script, `throughput.py`, left the library with the record patch; release 0.84.3
+has both, and a checkout of `v0.84.3` reruns the measurement with the commands below. This
+folder keeps the receipt of 2026-09-25.
+
+`throughput.py` measures the population kernel against the NumPy patch on one processor core,
+and writes `receipt.json` beside itself.
 
 The work is one moment per brain and stream: an imagined reading, a one-moment path from
 rest, and an observation with its write, on a patch of 32 inputs, 32 channels, 8 outputs and

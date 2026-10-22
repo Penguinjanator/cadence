@@ -13,14 +13,14 @@ neurons hear nothing (they are a source range of the block transport, so their p
 computed once per settling run) and their synapses into the hidden neurons learn under the
 same free/nudged rule as every other synapse. Credit does not flow back through time: the
 rule sees the trace as a stimulus and does not differentiate through it.
-``stateful`` builds the connectome, ``Echo`` keeps the trace for a batch of streams.
+``Trace`` keeps the trace for a batch of streams.
 """
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from copy import copy
 from dataclasses import dataclass, field, fields
+from types import MappingProxyType
 from typing import Any, NamedTuple
 
 import numpy as np
@@ -29,71 +29,9 @@ from ._configuration import real
 from .brain import Brain as NeuralGraph
 from .brain import BrainState
 from .connectome import Connectome
-from .learning import LearnedState, embedded
+from .learning import LearnedState
 
-__all__ = [
-    "Trace", "Afterglow", "stateful", "Echo", "FastSynapses", "History", "Recall", "columns"
-]
-
-
-def stateful(
-    vocabulary: int,
-    positions: int,
-    dim: int,
-    hidden: int,
-    outputs: int,
-    *,
-    seed: int = 0,
-    init: float = 1.0,
-    context_init: float = 1.0,
-) -> tuple[Connectome, np.ndarray]:
-    """``embedded`` plus a context range of ``hidden`` neurons connected densely to the hidden ones.
-
-    Neurons: ``positions`` blocks of ``vocabulary`` one-hot inputs, then ``hidden`` context
-    neurons, then the embedding, hidden and output neurons of ``embedded``. Sets: ``input``,
-    ``context``, ``embedding``, ``hidden``, ``output``. Returns the connectome and the tie groups
-    of the embedding (pass to ``Learner(tie_groups=...)``).
-    """
-    base, base_tie = embedded(vocabulary, positions, dim, hidden, outputs, seed=seed, init=init)
-    n_in = positions * vocabulary
-    c0 = n_in  # the context range sits right after the inputs
-    shift = hidden  # every non-input neuron of the base moves up by the context range
-
-    def moved(index: np.ndarray) -> np.ndarray:
-        return np.where(index >= n_in, index + shift, index)
-
-    rng = np.random.default_rng(seed + 1)
-    hidden_members = np.asarray(base.populations["hidden"]) + shift
-    ctx, hid = np.meshgrid(np.arange(hidden), hidden_members, indexing="ij")
-    magnitude = rng.uniform(0.0, 1.0, size=hidden * hidden) * np.sqrt(6.0 / (2 * hidden))
-    signs = rng.choice([-1.0, 1.0], size=hidden * hidden) * magnitude * context_init
-    pre = np.concatenate([moved(base.pre), c0 + ctx.ravel()])
-    post = np.concatenate([moved(base.post), hid.ravel()])
-    count = np.concatenate([base.count, np.ones(hidden * hidden)])
-    sign = np.concatenate([base.sign, signs])
-    tie = np.concatenate([base_tie, np.full(hidden * hidden, -1)])
-    populations: dict[str, Iterable[int]] = {
-        "input": range(0, n_in),
-        "context": range(c0, c0 + hidden),
-    }
-    populations.update(
-        {k: [int(i) + shift for i in v] for k, v in base.populations.items() if k != "input"}
-    )
-    connectome = Connectome.from_synapses(
-        base.n + hidden,
-        pre=pre,
-        post=post,
-        count=count,
-        sign=sign,
-        populations=populations,
-        label=f"stateful:{positions}x{vocabulary}->{dim}->{hidden}(+{hidden} context)->{outputs}",
-    )
-    key = {(int(a), int(b)): int(g) for a, b, g in zip(pre, post, tie, strict=True)}
-    groups = np.array(
-        [key[(int(a), int(b))] for a, b in zip(connectome.pre, connectome.post, strict=True)],
-        dtype=np.int64,
-    )
-    return connectome, groups
+__all__ = ["Trace", "FastSynapses", "History", "Recall", "columns"]
 
 
 def columns(index: np.ndarray) -> slice | np.ndarray:
@@ -113,18 +51,14 @@ class Trace:
     """A quantity decaying across moments, kept per stream, entering the next settling run
     as a stimulus: the memory of the moment before.
 
-    Over a range's activation it is the trace of that range (the Echo of the interpretation
-    at ``focus`` 0); weighted by how much each neuron moved since the last moment (its share
-    of the row's mean movement, to the power ``focus``) it is brightest where the moment
-    changed, and of the input neurons it is an afterimage of the picture itself, the memory
-    that reads a cue against a static background (``tests/test_child.py``). What had
-    to change while settling stays lit; what stood still fades.
+    Over a range's activation it is the trace of that range, the echo of the interpretation;
+    of the input neurons it is an afterimage of the picture itself. ``last`` holds the
+    source read of the latest moment and ``cold`` the streams that have not been read yet.
     """
 
     connectome: Connectome
     decay: float = 0.5
     amplitude: float = 1.0  # the stimulus amplitude of the neuron model
-    focus: float = 0.0
     source: str = "hidden"  # the range traced
     # the range the trace enters as a stimulus, one neuron per source neuron
     target: str = "context"
@@ -135,8 +69,8 @@ class Trace:
     def __post_init__(self) -> None:
         if not 0 <= self.decay < 1:
             raise ValueError("decay lies in [0, 1)")
-        if not np.isfinite([self.amplitude, self.focus]).all() or self.focus < 0:
-            raise ValueError("amplitude and focus must be finite; focus must be nonnegative")
+        if not np.isfinite(self.amplitude):
+            raise ValueError("amplitude must be finite")
         self.glow = np.asarray(self.connectome.populations[self.target], dtype=np.int64)
         self.hidden = np.asarray(self.connectome.populations[self.source], dtype=np.int64)
         if len(self.glow) != len(self.hidden):
@@ -169,19 +103,11 @@ class Trace:
         return out
 
     def update(self, state: BrainState) -> None:
-        """After the free phase: the trace decays toward the source neurons' activation, each
-        weighted by its movement since the last moment when ``focus`` is above zero; a cold
-        stream's first moment weighs one."""
+        """After the free phase: the trace decays toward the source neurons' activation."""
         h = self._source_activation(state)
         if len(self.trace) != len(h):
             self.reset(len(h))
-        if self.focus:
-            moved = np.abs(h - self.last)
-            weight = (moved / (moved.mean(axis=1, keepdims=True) + 1e-9)) ** self.focus
-            weight[self.cold] = 1.0
-            self.trace = self.decay * self.trace + (1.0 - self.decay) * weight * h
-        else:
-            self.trace = self.decay * self.trace + (1.0 - self.decay) * h
+        self.trace = self.decay * self.trace + (1.0 - self.decay) * h
         self.last = h.copy()  # own the previous moment even if the caller reuses state storage
         self.cold[:] = False
 
@@ -219,36 +145,31 @@ class Trace:
         return {
             "decay": self.decay,
             "amplitude": self.amplitude,
-            "focus": self.focus,
             "source": self.source,
             "target": self.target,
             "neurons": int(len(self.glow)),
         }
 
+    # -- the memory contract (``cadence.memories``)
 
-@dataclass
-class Echo(Trace):
-    """The Trace of the hidden equilibria at focus 0, into the ``context`` range."""
+    def stimulus(self, drive: np.ndarray, moment: Any = None) -> np.ndarray:
+        """The trace read into a drive copy (``stimulate``)."""
+        return self.stimulate(drive)
 
-    def to_dict(self) -> dict[str, float | int | str]:
-        return {"decay": self.decay, "amplitude": self.amplitude, "context": int(len(self.glow))}
+    def branch(self) -> Trace:
+        """A private copy for an imagined branch, its arrays its own."""
+        branch = copy(self)
+        for name in ("trace", "last", "cold"):
+            setattr(branch, name, getattr(self, name).copy())
+        return branch
 
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh."""
+        self.reset(0)
 
-@dataclass
-class Afterglow(Trace):
-    """The Trace with the afterglow's defaults: focused, into the ``afterglow`` range."""
-
-    focus: float = 1.0
-    target: str = "afterglow"
-
-    def to_dict(self) -> dict[str, float | int | str]:
-        return {
-            "decay": self.decay,
-            "amplitude": self.amplitude,
-            "focus": self.focus,
-            "source": self.source,
-            "afterglow": int(len(self.glow)),
-        }
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps."""
+        return {name: getattr(self, name) for name in ("trace", "last", "cold")}
 
 
 @dataclass
@@ -272,8 +193,7 @@ class Efference(Trace):
 
     def issue(self, command: np.ndarray) -> None:
         """After the decision: the trace decays toward the ``(batch, motor)`` command, one
-        row per stream with ones at the motor neurons of the executed action. ``focus``
-        does not apply: a command is not a settled activation with a movement to weigh."""
+        row per stream with ones at the motor neurons of the executed action."""
         command = np.asarray(command, dtype=float)
         if command.ndim != 2 or command.shape[1] != len(self.hidden):
             raise ValueError("a command is one row of motor values per stream")
@@ -377,6 +297,26 @@ class History:
             "neurons": int(len(self.glow)),
         }
 
+    # -- the memory contract (``cadence.memories``)
+
+    def stimulus(self, drive: np.ndarray, moment: Any = None) -> np.ndarray:
+        """The history read into a drive copy (``stimulate``)."""
+        return self.stimulate(drive)
+
+    def branch(self) -> History:
+        """A private copy for an imagined branch, its trace its own."""
+        branch = copy(self)
+        branch.trace = self.trace.copy()
+        return branch
+
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh."""
+        self.reset(0)
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps."""
+        return {"trace": self.trace}
+
 
 class _Moment(NamedTuple):
     """The present moment of every stream as the recall memory addresses it."""
@@ -393,22 +333,17 @@ class Recall:
     address of a moment computed before its settle and the recalled drive held through it.
 
     Each moment the brain accepts (an act, a moment ``wait`` senses) is written after its
-    settle as one slot per stream (``witness``); with ``write="aroused"`` a moment is written
-    for the streams that chose it aroused alone. The slot's key is ``heard * x``: ``x`` is
-    the observation as given (a brain gives its observation code), and with ``context`` the
-    fading history of the events before it is added. The slot's value is
-    the event ``x`` (``value="event"``) or the settled activity of the association region
-    (``value="cortex"``), and the slot before it learns its next: the value of the moment
-    that followed it, zero until that moment comes. Before each settle the present moment's
+    settle as one slot per stream (``witness``). The slot's key is ``heard * x``: ``x`` is
+    the observation as given (a brain gives its observation code). The slot's value is the
+    event ``x``, and the slot before it learns its next: the value of the moment that
+    followed it, zero until that moment comes. Before each settle the present moment's
     address
 
-        q = heard * x + context * h + x W_x + c W_c + b
+        q = heard * x + x W_x + c W_c + b
 
-    (``h`` the fading history of the events before, ``c`` the settled association activity
-    of the moment before) weighs the stream's slots once,
-    ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``;
-    with ``recency=None`` the age charge is ``r * log(1 + age_i)``, ``charges``; with a
-    ``null`` slot of logit ``null / temperature`` in the softmax, which reads nothing, the
+    (``c`` the settled association activity of the moment before) weighs the stream's slots
+    once, ``p_i = softmax_i(q . K_i / temperature - recency * age_i)`` (kept as ``attended``;
+    with a ``null`` slot of logit ``null / temperature`` in the softmax, which reads nothing, the
     slots' shares sum to one less the null slot's), and
     ``stimulate`` sets the drive of the ``target`` region to ``amplitude * sum_i p_i V_i``
     and, with ``next``, of the ``next`` region to ``amplitude * sum_i p_i N_i``. Both
@@ -435,30 +370,18 @@ class Recall:
     named keys less the mixture the address attended to (``p`` over the slots alone, a null
     slot left out, as in the prior): to first order the step raises the logits of the slots
     the scores name against those the address attended to, whatever the keys' norms.
-    ``capacity`` bounds the slots per stream, the oldest dropped first (with aroused writes
-    in a batch, the store's columns: a stream that wrote fewer holds fewer). ``reset`` empties
+    ``capacity`` bounds the slots per stream, the oldest dropped first. ``reset`` empties
     streams, and an empty stream reads silence. ``end`` ends their episodes and keeps their
     slots: the latest slot of each learns no successor from the next episode's first moment,
-    and the moment before begins afresh; the brain ends an episode so with
-    ``episodes="keep"`` and empties the stream with the founder ``"forget"``.
-
-    With ``key="predecessor"`` (a construction setting) the key's fixed part gains the
-    stream's previous moment: ``[heard * x_t, heard * x_{t-1}, heard * c_{t-1}]``, ``x_{t-1}``
-    the event of the stream's previous moment and ``c_{t-1}`` the one-hot of the command the
-    stream issued last (given to ``witness`` at each act; a moment ``wait`` senses keeps it),
-    both zero at a stream's first moment and after the end of an episode. The address gains
-    the same width, ``address_width`` (``2 * inputs + motor`` in place of ``inputs``): the map
-    reads ``[x_t, c, 1]`` as before and writes every coordinate of the wider key. Values and
-    nexts stay the events.
+    and the moment before begins afresh; the brain ends an episode so under
+    ``Brain.reset(keep=("slots",))`` and empties the stream when an episode ends in a life.
 
     With ``window`` k above 1 (a construction setting, with ``window_decay`` d) the key's
     fixed part is an ordered window of the stream's last k events, ``[heard * x_t, d * heard
     * x_{t-1}, ..., d^(k-1) * heard * x_{t-k+1}]``, each position on coordinates of its own:
     ``x_{t-j}`` the events of the stream's previous moments, acts and moments ``wait`` senses,
-    written or not, zeros before its first moment and after an episode ends. ``context`` adds
-    its fading history on the ``x_t`` block as before, and the predecessor key's blocks follow
-    the window's. The address takes the key's width, ``k * inputs`` (plus the predecessor's
-    ``inputs + motor``); the map reads ``[x_t, c, 1]`` as before.
+    written or not, zeros before its first moment and after an episode ends. The address
+    takes the key's width, ``k * inputs``; the map reads ``[x_t, c, 1]`` as before.
 
     With ``address_reward`` above zero reward trains the map as well: at each sampled act
     the step the address lesson would take at each row, were the act's action the lesson's
@@ -467,27 +390,25 @@ class Recall:
     (``propose`` and ``accept``). The eligibility is a lesson's step at the lesson's bounded
     rate ``min(address, 1 / |z|^2)``: at ``address_reward=1`` a unit of dopamine moves the
     map by one lesson's step, and ``address=0`` leaves the map as it is under reward too.
+
+    The settings of 0.84.3 that this version removed (``RETIRED``, and ``recency=None``) are
+    refused with a message naming that release; a checkpoint of 0.84.3 carries the keys its
+    format always wrote for three of them, which load at their one value (``FORMAT``).
     """
 
     connectome: Connectome
     amplitude: float = 3.0
     temperature: float = 0.25
     heard: float = 1.0
-    recency: float | None = 0.25  # None: the power-law charge of ``charges``
+    recency: float = 0.25
     capacity: int = 64
-    value: str = "event"
     next: bool = True
     address: float = 0.01
     address_temperature: float = 0.1
-    context: float = 0.0
-    context_decay: float = 0.5
     # the options beside the founder memory (``OPTIONS``)
     address_step: str = "lms"
-    write: str = "always"
     null: float | None = None
     address_reward: float = 0.0
-    episodes: str = "forget"
-    key: str = "event"
     window: int = 1
     window_decay: float = 1.0
     source: str = "sensory"  # the observations' range
@@ -501,30 +422,24 @@ class Recall:
     nexts: np.ndarray = field(init=False, repr=False)
     held: np.ndarray = field(init=False, repr=False)
     previous: np.ndarray = field(init=False, repr=False)
-    history: np.ndarray = field(init=False, repr=False)
     w_x: np.ndarray = field(init=False, repr=False)
     w_c: np.ndarray = field(init=False, repr=False)
     b: np.ndarray = field(init=False, repr=False)
 
-    VALUES = ("event", "cortex")
     STEPS = ("lms", "toward")
-    WRITES = ("always", "aroused")
-    EPISODES = ("forget", "keep")
-    KEYS = ("event", "predecessor")
     # the settings ``Brain.retune`` may change in a life, and those that shape the memory
-    RUNTIME = (
-        "amplitude", "temperature", "heard", "recency", "address", "address_temperature",
-        "context", "context_decay",
-    )
-    CONSTRUCTION = ("capacity", "value", "next")
+    RUNTIME = ("amplitude", "temperature", "heard", "recency", "address", "address_temperature")
+    CONSTRUCTION = ("capacity", "next")
     # options beside the founder memory: a memory describes and saves an option only where it
     # differs from its founder, and a saved memory without one takes its founder; each is
-    # runtime except the key and the window, which shape the memory
-    OPTIONS = (
-        "address_step", "write", "null", "address_reward", "episodes", "key", "window",
-        "window_decay",
-    )
-    CONSTRUCTION_OPTIONS = ("key", "window", "window_decay")
+    # runtime except the window, which shapes the memory
+    OPTIONS = ("address_step", "null", "address_reward", "window", "window_decay")
+    CONSTRUCTION_OPTIONS = ("window", "window_decay")
+    # the settings of 0.84.3 this version removed, refused by name with a message naming it
+    RETIRED = ("write", "key", "episodes", "value", "context", "context_decay")
+    # the keys the checkpoint format of 0.84.3 (``cadence-generic/8`` and ``/9``) always wrote
+    # for removed settings, at the one value at which such a file loads
+    FORMAT = MappingProxyType({"value": "event", "context": 0.0, "context_decay": 0.5})
 
     @classmethod
     def founders(cls) -> dict[str, Any]:
@@ -542,11 +457,23 @@ class Recall:
         return {name: defaults[name] for name in cls.OPTIONS}
 
     @staticmethod
+    def removed(name: str) -> str:
+        """The refusal of a setting this version removed: ``recall_<name>`` of ``RETIRED``, or
+        ``recall_recency=None``."""
+        setting = (
+            "recall_recency=None, the power-law age charge,"
+            if name == "recency"
+            else f"recall_{name}"
+        )
+        return f"{setting} was removed in this version; cadence-net 0.84.3 takes it"
+
+    @staticmethod
     def setting(name: str, value: Any) -> Any:
-        """One setting, validated and converted; ``name`` is a field of the memory."""
-        if name == "recency":
-            return None if value is None else real(name, value, low=0)
-        if name in ("amplitude", "address", "context"):
+        """One setting, validated and converted; ``name`` is a field of the memory. A
+        setting this version removed is refused by name."""
+        if name in Recall.RETIRED or (name == "recency" and value is None):
+            raise ValueError(Recall.removed(name))
+        if name in ("amplitude", "recency", "address"):
             return real(name, value, low=0)
         if name in ("temperature", "address_temperature"):
             number = real(name, value, low=0)
@@ -555,11 +482,6 @@ class Recall:
             return number
         if name == "heard":
             return real(name, value)
-        if name == "context_decay":
-            number = real(name, value, low=0)
-            if number >= 1:
-                raise ValueError("context_decay must lie in [0, 1)")
-            return number
         if name == "capacity":
             if (
                 isinstance(value, (bool, np.bool_))
@@ -568,10 +490,6 @@ class Recall:
             ):
                 raise ValueError("capacity must be an integer of at least 1")
             return int(value)
-        if name == "value":
-            if not isinstance(value, str) or value not in Recall.VALUES:
-                raise ValueError(f"value is one of {Recall.VALUES}")
-            return value
         if name == "next":
             if not isinstance(value, bool):
                 raise ValueError("next must be boolean")
@@ -580,22 +498,10 @@ class Recall:
             if not isinstance(value, str) or value not in Recall.STEPS:
                 raise ValueError(f"address_step is one of {Recall.STEPS}")
             return value
-        if name == "write":
-            if not isinstance(value, str) or value not in Recall.WRITES:
-                raise ValueError(f"write is one of {Recall.WRITES}")
-            return value
         if name == "null":
             return None if value is None else real(name, value)
         if name == "address_reward":
             return real(name, value, low=0)
-        if name == "episodes":
-            if not isinstance(value, str) or value not in Recall.EPISODES:
-                raise ValueError(f"episodes is one of {Recall.EPISODES}")
-            return value
-        if name == "key":
-            if not isinstance(value, str) or value not in Recall.KEYS:
-                raise ValueError(f"key is one of {Recall.KEYS}")
-            return value
         if name == "window":
             if (
                 isinstance(value, (bool, np.bool_))
@@ -645,7 +551,7 @@ class Recall:
             raise ValueError("inputs must be a nonnegative integer; 0 reads the source range")
         self.inputs = int(self.inputs)
         self.key_width = self.inputs or len(self.observed)
-        self.value_width = self.key_width if self.value == "event" else len(self.association)
+        self.value_width = self.key_width  # the values are the events
         if len(self.recall_neurons) != self.value_width or (
             self.next and len(self.next_neurons) != self.value_width
         ):
@@ -653,14 +559,8 @@ class Recall:
                 f"the {self.target} and next regions need one neuron per value coordinate "
                 f"({self.value_width})"
             )
-        # the predecessor key adds the previous moment's event and the last command
-        predecessor = self.key == "predecessor"
-        if predecessor and "motor" not in populations:
-            raise ValueError("the predecessor key needs a population named 'motor'")
-        self.commands = len(populations["motor"]) if predecessor else 0
         width = self.key_width
-        # the window's k events, then the predecessor's previous event and last command
-        self.address_width = self.window * width + (width + self.commands if predecessor else 0)
+        self.address_width = self.window * width  # the window's k events
         self.w_x = np.zeros((width, self.address_width))
         self.w_c = np.zeros((len(self.association), self.address_width))
         self.b = np.zeros(self.address_width)
@@ -694,18 +594,6 @@ class Recall:
         """Moments since each slot was written: ``slots - 1`` for the oldest, 0 the latest."""
         return np.arange(self.slots - 1, -1, -1, dtype=float)
 
-    def charges(self) -> np.ndarray:
-        """The logit each slot's age costs it, oldest first: ``recency * age``, or with
-        ``recency=None`` the power-law charge ``r * log(1 + age)``, ``r = heard^2 /
-        temperature / log(1 + capacity)``. Under that charge the weight of an unmatched old
-        slot falls as a power of its age, ``(1 + age)^-r``, two equal matches of ages 1 and 3
-        keep weights in the ratio ``2^r``, and a full match of a unit-length key outweighs the
-        age of every slot the capacity holds."""
-        if self.recency is None:
-            exponent = self.heard**2 / self.temperature / np.log1p(self.capacity)
-            return np.asarray(exponent * np.log1p(self.ages()))
-        return np.asarray(self.recency * self.ages())
-
     @property
     def attended(self) -> np.ndarray | None:
         """The attention ``p`` the latest read gave each stream's slots, ``(streams, slots)``,
@@ -719,12 +607,8 @@ class Recall:
         self.nexts = np.zeros((batch, 0, self.value_width))
         self.held = np.zeros((batch, 0), dtype=bool)
         self.previous = np.zeros((batch, len(self.association)))
-        self.history = np.zeros((0, self.key_width))
         # per stream: its latest slot closed an episode (``end``) and learns no successor
         self.ended = np.zeros(batch, dtype=bool)
-        # the predecessor key's previous event and last command, per stream; none: zeros
-        self.before = np.zeros((0, self.key_width))
-        self.command = np.zeros((0, self.commands))
         # the window's previous events per stream, the latest first; none: zeros
         self.past = np.zeros((0, self.window - 1, self.key_width))
         self.last = None
@@ -732,8 +616,8 @@ class Recall:
 
     def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
         """Empty every stream, or the streams of ``rows`` only (streams that begin again): their
-        slots, the cortex of the moment before, the history and the predecessor key's event
-        and command. The address map is learned and stays."""
+        slots, the cortex of the moment before and the window's events. The address map is
+        learned and stays."""
         if rows is None or self.streams != batch:
             self._empty(batch)
             return
@@ -763,22 +647,17 @@ class Recall:
 
     def _fresh(self, keep: np.ndarray) -> None:
         """The moment before begins afresh for the streams ``keep`` does not mark: the cortex
-        of the moment before, the history, the predecessor key's event and command and the
-        window's events."""
+        of the moment before and the window's events."""
         batch = len(keep)
         self.previous = np.where(keep[:, None], self.previous, 0.0)
-        for name in ("history", "before", "command"):
-            value = getattr(self, name)
-            if len(value) == batch:
-                setattr(self, name, np.where(keep[:, None], value, 0.0))
         if len(self.past) == batch:
             self.past = np.where(keep[:, None, None], self.past, 0.0)
 
     def end(self, batch: int, rows: np.ndarray | None = None) -> None:
         """The streams of ``rows`` (every stream without) end an episode and keep their
         slots: the latest slot of each learns no successor from the stream's next written
-        moment, and the moment before (the cortex of the moment before, the history, the
-        predecessor key's event and command and the window's events) begins afresh. The
+        moment, and the moment before (the cortex of the moment before and the window's
+        events) begins afresh. The
         address map is learned and stays. Another batch size empties the streams, as
         ``reset`` does."""
         if self.streams != batch:
@@ -800,9 +679,8 @@ class Recall:
             a[rows] for a in (self.keys, self.values, self.nexts, self.held)
         )
         self.previous = self.previous[rows]
-        for name in ("history", "before", "command", "past"):
-            if len(getattr(self, name)):
-                setattr(self, name, getattr(self, name)[rows])
+        if len(self.past):
+            self.past = self.past[rows]
         self.ended = self.ended[rows]
         self.last = None
         self._attended = None
@@ -812,10 +690,7 @@ class Recall:
         these arrays rather than changing them."""
         return {
             name: getattr(self, name)
-            for name in (
-                "keys", "values", "nexts", "held", "previous", "history", "ended", "before",
-                "command", "past",
-            )
+            for name in ("keys", "values", "nexts", "held", "previous", "ended", "past")
         }
 
     def restore(self, snapshot: dict[str, Any]) -> None:
@@ -839,13 +714,42 @@ class Recall:
         the read's eligibility and ``attended`` describes it."""
         self.last, self._attended = reading
 
+    # -- the memory contract (``cadence.memories``)
+
+    def stimulus(self, drive: np.ndarray, moment: Any) -> np.ndarray:
+        """The moment's address read into a drive copy (``stimulate`` with its code)."""
+        return self.stimulate(drive, moment.code)
+
+    def branch(self) -> Recall:
+        """A private copy for an imagined branch (``imagined``)."""
+        return self.imagined()
+
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh: with ``keep`` each ends an episode and its slots stay
+        (``end``), else the slots are emptied; the address map is learned and stays."""
+        if keep:
+            self.end(self.streams)
+        else:
+            self.reset(0)
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps: the slots, the address map, the streams whose latest
+        slot closed an episode (while one does) and the window's previous events."""
+        out = {
+            name: getattr(self, name)
+            for name in ("keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b")
+        }
+        if self.ended.any():
+            out["ended"] = self.ended
+        if self.window > 1:
+            out["past"] = self.past
+        return out
+
     def imagined(self) -> Recall:
         """A private copy for an imagined branch: it reads the live slots and writes none; the
-        cortex of the moment before and the history follow the branch."""
+        cortex of the moment before and the window's events follow the branch."""
         branch = copy(self)
         branch.previous = self.previous.copy()
-        branch.history = self.history.copy()
-        branch.before, branch.command = self.before.copy(), self.command.copy()
         branch.past = self.past.copy()
         branch.last = None
         branch._attended = None
@@ -864,7 +768,7 @@ class Recall:
 
     def _moment(self, event: np.ndarray) -> _Moment:
         """The address of the present moment of each stream, from the cortex of the moment
-        before and, with ``context``, the history of the events before it."""
+        before."""
         x = np.asarray(event, dtype=float)
         n = len(x)
         c = (
@@ -873,9 +777,6 @@ class Recall:
             else np.zeros((n, len(self.association)))
         )
         key = self.heard * x
-        if self.context:
-            h = self.history if len(self.history) == n else np.zeros_like(x)
-            key = key + self.context * h
         if self.window > 1:
             # the stream's previous events in order, each on coordinates of its own
             past = (
@@ -885,23 +786,17 @@ class Recall:
             )
             scale = self.heard * self.window_decay ** np.arange(1, self.window)
             key = np.concatenate([key, (scale[None, :, None] * past).reshape(n, -1)], axis=1)
-        if self.key == "predecessor":
-            # the previous moment's event and the last command, zeros where there is none
-            before = self.before if len(self.before) == n else np.zeros_like(x)
-            command = self.command if len(self.command) == n else np.zeros((n, self.commands))
-            key = np.concatenate([key, self.heard * before, self.heard * command], axis=1)
         q = key + x @ self.w_x + c @ self.w_c + self.b
         return _Moment(x, c, q, key)
 
     def _attention(
         self, address: np.ndarray, keys: np.ndarray, held: np.ndarray | None
     ) -> np.ndarray:
-        """The logits of the attention over slots: ``address . key / temperature`` less the
-        charge of each slot's age (``charges``), ``-inf`` at a slot its stream does not
-        hold."""
+        """The logits of the attention over slots: ``address . key / temperature`` less
+        ``recency`` times each slot's age, ``-inf`` at a slot its stream does not hold."""
         logits = np.einsum("bk,bmk->bm", address, keys) / self.temperature
-        if self.recency is None or self.recency:
-            logits = logits - self.charges()[None, :]
+        if self.recency:
+            logits = logits - np.asarray(self.recency * self.ages())[None, :]
         return logits if held is None else np.where(held, logits, -np.inf)
 
     def weights(self, address: np.ndarray) -> np.ndarray | None:
@@ -971,33 +866,13 @@ class Recall:
         settled = np.atleast_2d(np.asarray(state.activation, dtype=float))
         return np.asarray(settled[:, cols], dtype=float).copy()
 
-    def witness(
-        self,
-        observations: np.ndarray,
-        state: BrainState,
-        *,
-        aroused: bool | np.ndarray = True,
-        command: np.ndarray | None = None,
-    ) -> None:
+    def witness(self, observations: np.ndarray, state: BrainState) -> None:
         """After the settle: the ``(batch, inputs)`` observations the streams acted on join
         their slots under the moment's key, the slot before learns them as its next, and the
-        settled cortex of ``state`` and the history move on to this moment. ``aroused`` marks
-        the streams that chose the moment aroused, one flag or one per stream: with
-        ``write="aroused"`` only those streams write it, and a moment no stream writes leaves
-        the slots as they were. ``command``, the ``(batch, motor)`` one-hot of the command each
-        stream issued at this moment, is what the predecessor key reads at the next moment;
-        without one (a moment ``wait`` senses) the last command stays. Another batch size
-        begins the streams with empty memories first. An imagined branch moves the cortex and
-        the history only."""
+        settled cortex of ``state`` and the window move on to this moment. Another batch
+        size begins the streams with empty memories first. An imagined branch moves the
+        cortex and the window only."""
         x = self._port(observations)
-        flags = np.asarray(aroused)
-        if flags.dtype != np.bool_ or flags.shape not in ((), (len(x),)):
-            raise ValueError("aroused marks the streams that chose the moment aroused")
-        issued = None
-        if command is not None and self.key == "predecessor":
-            issued = np.asarray(command, dtype=float)
-            if issued.shape != (len(x), self.commands) or not np.isfinite(issued).all():
-                raise ValueError(f"command is a finite (batch, {self.commands}) one-hot")
         moment = self.last
         if moment is None or moment.event.shape != x.shape or not np.array_equal(moment.event, x):
             moment = self._moment(x)
@@ -1005,20 +880,9 @@ class Recall:
         if len(cortex) != len(x):
             raise ValueError("the settled state needs one row per stream")
         if not self._private:
-            value = moment.event if self.value == "event" else cortex
-            if self.write == "always" or flags.all():
-                self._observe(moment.key, value)
-                self.writes += len(x)
-            elif flags.any():
-                written = np.broadcast_to(flags, (len(x),)).copy()
-                self._observe(moment.key, value, written)
-                self.writes += int(written.sum())
-            elif len(x) != self.streams:
-                self._empty(len(x))  # another batch begins with empty memories, as a write would
+            self._observe(moment.key, moment.event)
+            self.writes += len(x)
         self.previous = cortex
-        if self.context:
-            h = self.history if len(self.history) == len(x) else np.zeros_like(moment.event)
-            self.history = self.context_decay * h + moment.event
         if self.window > 1:  # this moment enters the window, the oldest leaves it
             past = (
                 self.past
@@ -1026,47 +890,32 @@ class Recall:
                 else np.zeros((len(x), self.window - 1, self.key_width))
             )
             self.past = np.concatenate([moment.event[:, None, :], past[:, :-1]], axis=1)
-        if self.key == "predecessor":
-            # this moment is the next one's predecessor; the last command stays without one
-            self.before = moment.event.copy()
-            if issued is not None:
-                self.command = issued.copy()
-            elif len(self.command) != len(x):
-                self.command = np.zeros((len(x), self.commands))
         self.last = None
 
-    def _observe(
-        self, key: np.ndarray, value: np.ndarray, written: np.ndarray | None = None
-    ) -> None:
+    def _observe(self, key: np.ndarray, value: np.ndarray) -> None:
         """Write one moment per stream: the latest slot learns what followed it, a new slot
-        holds this moment; beyond ``capacity`` the oldest slot is dropped. With ``written``,
-        one flag per stream, the new slot is a column every stream has and the written
-        streams alone hold (the others keep zeros there), and each written stream's latest
-        held slot, wherever it lies, learns this moment as its next. A stream whose latest
-        slot closed an episode (``end``) teaches it nothing, and its new slot is open again."""
+        holds this moment; beyond ``capacity`` the oldest slot is dropped. A stream that began
+        since the others (``reset`` of its rows) holds fewer slots: its latest held slot,
+        wherever it lies, learns this moment as its next. A stream whose latest slot closed
+        an episode (``end``) teaches it nothing, and its new slot is open again."""
         if len(key) != self.streams:
             self._empty(len(key))
         nexts = self.nexts
         if self.slots:
             nexts = nexts.copy()
-            if written is None and self.held.all() and not self.ended.any():
+            if self.held.all() and not self.ended.any():
                 nexts[:, -1] = value
             else:
-                # each written stream's latest held slot learns what followed it, unless it
-                # closed an episode
+                # each stream's latest held slot learns what followed it, unless it closed an
+                # episode
                 held = self.held
                 rows = held.any(axis=1) & ~self.ended
-                if written is not None:
-                    rows &= written
                 latest = held.shape[1] - 1 - np.argmax(held[:, ::-1], axis=1)
                 index = np.flatnonzero(rows)
                 nexts[index, latest[index]] = value[index]
         fresh = np.ones((len(key), 1), dtype=bool)
-        if written is not None:
-            fresh = written[:, None].copy()
-            key, value = np.where(fresh, key, 0.0), np.where(fresh, value, 0.0)
-        if self.ended.any():  # a written stream's new slot is open to its successor
-            self.ended = self.ended & ~fresh[:, 0]
+        if self.ended.any():  # every stream's new slot is open to its successor
+            self.ended = np.zeros(len(key), dtype=bool)
         keys = np.concatenate([self.keys, key[:, None, :]], axis=1)
         values = np.concatenate([self.values, value[:, None, :]], axis=1)
         nexts = np.concatenate([nexts, np.zeros_like(value)[:, None, :]], axis=1)
@@ -1295,6 +1144,8 @@ class Recall:
         self.w_x, self.w_c, self.b = proposal[0], proposal[1], proposal[2]
 
     def to_dict(self) -> dict[str, Any]:
+        """The memory's settings and counts: the founders, the ports, and each option where it
+        differs from its founder."""
         out = {
             **{name: getattr(self, name) for name in (*self.RUNTIME, *self.CONSTRUCTION)},
             "source": self.source,
@@ -1347,8 +1198,8 @@ class PatternSeparator:
 
     The projection is drawn once from the seed and never learns. A brain's ``code=units``
     observation code and its episodic ``memory_expansion`` separators (sparse when
-    ``memory_fan_in`` is set) are such fixed random codes. A learned code is work in progress in
-    https://github.com/muellerberndt/cadence/issues/211.
+    ``memory_fan_in`` is set) are such fixed random codes; a brain's learned code is the
+    region ``learned_code=units`` adds (``cadence.code.LearnedCode``).
     """
 
     inputs: int
@@ -1723,6 +1574,32 @@ class FastSynapses:
         key, for a memory keyed on a code of the observation rather than on neurons."""
         out = drive if inplace else np.array(drive, dtype=float)
         out[:, self._post_columns] += self.read(out) if key is None else self.recall(key)
+        return out
+
+    # -- the memory contract (``cadence.memories``)
+
+    def stimulus(self, drive: np.ndarray, moment: Any) -> np.ndarray:
+        """The read added to a drive copy: under the moment's ``place`` key, or of the drive
+        itself without one; nothing where the stores do not read into the drive."""
+        if not moment.stores:
+            return drive
+        if moment.place is None:  # an instrument may wrap the drive's own read
+            return self.stimulate(drive)
+        return self.stimulate(drive, key=moment.place)
+
+    def branch(self) -> FastSynapses:
+        """An imagined branch reads the records and writes none: the memory itself."""
+        return self
+
+    def begin(self, keep: bool = False) -> None:
+        """The streams begin afresh; the records stay."""
+
+    def arrays(self) -> dict[str, np.ndarray]:
+        """The arrays a checkpoint keeps: the ports, strengths, masses and the separator's
+        tables."""
+        out = {name: getattr(self, name) for name in ("pre", "post", "strength", "mass")}
+        if self.separator is not None:
+            out.update({"separator/" + k: v for k, v in self.separator.arrays().items()})
         return out
 
     def update(

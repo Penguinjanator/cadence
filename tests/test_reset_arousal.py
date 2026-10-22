@@ -1,10 +1,11 @@
-"""``Brain.reset(keep_arousal=True)``: a reset that keeps what an adult brain was used to.
+"""``Brain.reset(keep=("arousal",))``: a reset that keeps what an adult brain was used to.
 
 The arousal state carries into the new stream as it is (its level, the counts, the recent and
 long-run reward, the usual errors, the reward scale, the age and the work counts), as when the
-state saved before the reset is restored after it. At the default, ``keep_arousal=False``,
-every brain resets, acts and saves as in 0.84.3: the founders, their checkpoints and the
-composed lives pinned below were recorded on 0.84.3.
+state saved before the reset is restored after it. At the default, ``keep=()``,
+every brain resets and acts as in 0.84.3 and saves what 0.84.3 saved but the record channel
+it no longer has: the founders, their checkpoints and the composed lives pinned below were
+recorded on 0.84.3.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from typing import Any
 
 import numpy as np
 import pytest
+from checkpoints import metadata
 
 import cadence as cd
 from cadence import brain as cadence_brain
@@ -37,17 +39,14 @@ FACT = np.array([[1.0, 0.0, 0.0, 1.0]])
 NAME = np.array([[1.0, 0.0, 0.0, 0.0]])
 STREAM = (CUE, GO, FACT, NAME)
 # What the default reset forgets beside the level: the counts and the running statistics.
-STATISTICS = (
-    "outcomes", "rewards", "spreads", "records",
-    "square", "recent", "longrun", "usual", "usual_record",
-)
+STATISTICS = ("outcomes", "rewards", "spreads", "square", "recent", "longrun", "usual")
 
 
 def saved(path: Path) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
     """A checkpoint's metadata without the library version that wrote it, and its arrays."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
-        arrays = {name: data[name].copy() for name in data.files if name != "generic"}
+        meta = metadata(data)
+        arrays = {name: data[name].copy() for name in data.files if name not in ("generic", "brain")}
     meta.pop("version", None)
     return meta, arrays
 
@@ -99,13 +98,13 @@ Moment = tuple[int, bool, bool, int]
 
 def stream_life(path: Path, issued: tuple[int, bool], arm: str, stream: str) -> list[Moment]:
     """120 moments of a new stream for the saved adult: living on from the action it issued
-    (``none``), after a default reset (``reset``) or after ``reset(keep_arousal=True)``
+    (``none``), after a default reset (``reset``) or after ``reset(keep=("arousal",))``
     (``keep``). A reset stream starts with ``live(OBS)``, which takes no outcome."""
     pays = PAYS[stream]
     brain = cd.Brain.load(path)
     action, aroused = issued
     if arm != "none":
-        brain.reset(keep_arousal=arm == "keep")
+        brain.reset(keep=("arousal",) if arm == "keep" else ())
         action = int(brain.live(OBS)[0])
         aroused = reading(brain)["mode"] == "aroused"
     moments: list[Moment] = []
@@ -133,7 +132,7 @@ def bandit(tmp_path_factory: pytest.TempPathFactory) -> dict[tuple[str, str, int
     return lives
 
 
-# -- Brain.reset(keep_arousal=True)
+# -- Brain.reset(keep=("arousal",))
 
 
 def woken_adult() -> cd.Brain:
@@ -150,17 +149,19 @@ def woken_adult() -> cd.Brain:
     return brain
 
 
-def test_keep_arousal_keeps_the_whole_arousal_state_level_included(tmp_path: Path) -> None:
-    """The arousal is the only thing ``keep_arousal`` keeps, and it keeps all of it: an adult
+def test_keeping_the_arousal_keeps_the_whole_arousal_state_level_included(
+    tmp_path: Path,
+) -> None:
+    """The arousal is the only thing ``keep=("arousal",)`` keeps, and it keeps all of it: an adult
     aroused when it is reset begins the new stream aroused. The rest of the brain resets as
-    the default reset resets it."""
+    ``keep=()`` resets it."""
     brain = woken_adult()
     arousal = brain.arousal
     assert arousal is not None
     before = arousal.to_dict()
     default = twin(brain, tmp_path / "twin")
-    brain.reset(keep_arousal=True)
-    default.reset()
+    brain.reset(keep=("arousal",))
+    default.reset(keep=())
     kept = brain.arousal
     assert kept is not None and kept.to_dict() == before
     assert kept.mode == "aroused" and not brain.pending_feedback
@@ -173,15 +174,15 @@ def test_keep_arousal_keeps_the_whole_arousal_state_level_included(tmp_path: Pat
     )
 
 
-def test_keep_arousal_continues_as_the_documented_restore(tmp_path: Path) -> None:
-    """A reset with ``keep_arousal=True`` continues as a default reset after which the arousal
+def test_keeping_the_arousal_continues_as_the_documented_restore(tmp_path: Path) -> None:
+    """A reset with ``keep=("arousal",)`` continues as a default reset after which the arousal
     state saved before it is restored: the same acts, readings and checkpoint, here for an
     adult aroused when it is reset."""
     brain = woken_adult()
     restored = twin(brain, tmp_path / "restored")
     assert restored.arousal is not None
     state = restored.arousal.to_dict()
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     restored.reset()
     restored.arousal = cd.Arousal.from_dict(state)
     lives = []
@@ -197,11 +198,11 @@ def test_keep_arousal_continues_as_the_documented_restore(tmp_path: Path) -> Non
     assert_same_checkpoint(brain.save(tmp_path / "a"), restored.save(tmp_path / "b"))
 
 
-def test_keep_arousal_false_is_the_default_reset(tmp_path: Path) -> None:
+def test_keeping_the_arousal_is_the_default_reset(tmp_path: Path) -> None:
     brain = bandit_adult(seed=2, moments=120)
     other = twin(brain, tmp_path / "other")
-    brain.reset()
-    other.reset(keep_arousal=False)
+    brain.reset(keep=("arousal",))
+    other.reset()
     for b in (brain, other):
         b.live(OBS)
         for _ in range(5):
@@ -214,7 +215,7 @@ def test_a_brain_without_arousal_resets_as_without_the_keyword(tmp_path: Path) -
     brain.step(CUE)
     brain.step(GO, reward=[1.0])
     other = twin(brain, tmp_path / "other")
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     other.reset()
     assert brain.arousal is None
     for b in (brain, other):
@@ -223,9 +224,9 @@ def test_a_brain_without_arousal_resets_as_without_the_keyword(tmp_path: Path) -
     assert_same_checkpoint(brain.save(tmp_path / "a"), other.save(tmp_path / "b"))
 
 
-def test_keep_arousal_with_keep_memory_keeps_both(tmp_path: Path) -> None:
-    """Together the keywords keep the recall memory's slots and the arousal state; the brain
-    then continues as one reset with ``keep_memory=True`` whose arousal state, saved before
+def test_keeping_the_slots_and_the_arousal_keeps_both(tmp_path: Path) -> None:
+    """Together the two names keep the recall memory's slots and the arousal state; the brain
+    then continues as one reset with ``keep=("slots",)`` whose arousal state, saved before
     the reset, is restored after it."""
     brain = cd.Brain.compose(4, 2, modules=(8,), seed=5, recall=True,
                              arousal=cd.ArousalConfig(youth=6))
@@ -237,10 +238,10 @@ def test_keep_arousal_with_keep_memory_keeps_both(tmp_path: Path) -> None:
     state = brain.arousal.to_dict()
     restored = twin(brain, tmp_path / "restored")
     forgotten = twin(brain, tmp_path / "forgotten")
-    brain.reset(keep_memory=True, keep_arousal=True)
-    restored.reset(keep_memory=True)
+    brain.reset(keep=("slots", "arousal"))
+    restored.reset(keep=("slots",))
     restored.arousal = cd.Arousal.from_dict(state)
-    forgotten.reset(keep_memory=True)
+    forgotten.reset(keep=("slots",))
     np.testing.assert_array_equal(brain.recall.keys, keys)
     assert brain.recall.ended.all()
     assert brain.arousal.to_dict() == state
@@ -259,9 +260,11 @@ def test_keep_arousal_with_keep_memory_keeps_both(tmp_path: Path) -> None:
     assert_same_checkpoint(brain.save(tmp_path / "a"), restored.save(tmp_path / "b"))
 
 
-def test_a_checkpoint_after_a_keep_arousal_reset_continues_as_the_brain(tmp_path: Path) -> None:
+def test_a_checkpoint_after_a_reset_keeping_the_arousal_continues_as_the_brain(
+    tmp_path: Path,
+) -> None:
     brain = bandit_adult(seed=3, moments=130)
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     copy = twin(brain, tmp_path / "reset")
     assert copy.arousal is not None and brain.arousal is not None
     assert copy.arousal.to_dict() == brain.arousal.to_dict()
@@ -279,16 +282,17 @@ def test_a_checkpoint_after_a_keep_arousal_reset_continues_as_the_brain(tmp_path
     assert_same_checkpoint(end, mid.save(tmp_path / "mid-end"))
 
 
-@pytest.mark.parametrize("value", [1, 0, "yes", None, np.bool_(True)])
-def test_keep_arousal_must_be_boolean_and_a_refused_reset_changes_nothing(
+@pytest.mark.parametrize("value", [1, True, "yes", ("arousal", "level"), None, (None,)])
+def test_keep_names_slots_and_arousal_and_a_refused_reset_changes_nothing(
     tmp_path: Path, value: Any
 ) -> None:
     brain = bandit_adult(seed=4, moments=110)
     before = brain.save(tmp_path / "before")
-    with pytest.raises(ValueError, match="keep_arousal"):
-        brain.reset(keep_arousal=value)
-    with pytest.raises(ValueError, match="keep_memory"):
-        brain.reset(keep_memory=value, keep_arousal=True)
+    with pytest.raises(ValueError, match="'slots' and 'arousal'"):
+        brain.reset(keep=value)
+    for name in ("keep_arousal", "keep_memory"):  # the keywords of 0.84.3, renamed
+        with pytest.raises(TypeError, match=name):
+            brain.reset(**{name: True})
     assert brain.pending_feedback
     assert_same_checkpoint(before, brain.save(tmp_path / "after"))
 
@@ -302,7 +306,7 @@ def test_a_reset_adult_learns_the_moved_arm_when_it_keeps_what_it_was_used_to(
 ) -> None:
     """An adult reset by default has no income or error references: it is never roused and
     chooses the newly paying arm (arm 1) at none of 120 moments. Reset with
-    ``keep_arousal=True`` it falls short of the income it is used to, wakes and learns the new
+    ``keep=("arousal",)`` it falls short of the income it is used to, wakes and learns the new
     arm."""
     default, kept = bandit[("moved", "reset", seed)], bandit[("moved", "keep", seed)]
     assert [sum(m[i] for m in default) for i in range(3)] == [0, 0, 0]
@@ -312,7 +316,7 @@ def test_a_reset_adult_learns_the_moved_arm_when_it_keeps_what_it_was_used_to(
 
 @pytest.mark.skipif(not NUMPY_SOLVER, reason=BYTES_REASON)
 def test_the_documented_bandit_counts(bandit: dict[tuple[str, str, int], list[Moment]]) -> None:
-    """The counts ``docs/continuous.md#reset-and-save`` gives for seeds 0 to 4."""
+    """The counts ``docs/start.md#reset-and-save`` gives for seeds 0 to 4."""
 
     def counts(stream: str, arm: str, field: int, last: int = 120) -> list[int]:
         return [sum(m[field] for m in bandit[(stream, arm, seed)][-last:]) for seed in range(5)]
@@ -327,21 +331,21 @@ def test_the_documented_bandit_counts(bandit: dict[tuple[str, str, int], list[Mo
     assert counts("moved", "keep", 0, last=40) == [40] * 5
     # the same arm pays as before: kept at every moment, calm at every moment
     assert all(m[:2] == (0, False) for seed in range(5) for m in bandit[("same", "keep", seed)])
-    # after either reset the first 6 to 14 moments settle from rest at 32 sweeps each; the
+    # after either reset the first 5 to 12 moments settle from rest at 32 sweeps each; the
     # brain living on needs no sweep
     for arm in ("reset", "keep"):
-        for seed, lead in enumerate((6, 6, 14, 8, 6)):
+        for seed, lead in enumerate((5, 5, 12, 10, 5)):
             sweeps = [m[3] for m in bandit[("same", arm, seed)]]
             assert sweeps[:lead] == [32] * lead and not any(sweeps[lead:])
     assert not any(m[3] for seed in range(5) for m in bandit[("same", "none", seed)])
     # the arm pays 2.0: aroused at 9 of 600 decisions after a kept reset and at 6 of 600
     # without a reset, at none of the last 40 of any seed
-    assert counts("more", "keep", 1) == [7, 2, 0, 0, 0]
+    assert counts("more", "keep", 1) == [7, 0, 2, 0, 0]
     assert counts("more", "none", 1) == [6, 0, 0, 0, 0]
     assert counts("more", "keep", 1, last=40) == [0] * 5
 
 
-# -- at the default every brain is the brain of 0.84.3
+# -- the founders' lives with the default reset, which keeps the arousal
 
 
 def _checkpoint_digest(path: Path) -> str:
@@ -352,7 +356,7 @@ def _checkpoint_digest(path: Path) -> str:
         for name in sorted(data.files):
             value = data[name]
             h.update(name.encode())
-            if name in ("meta", "generic"):
+            if name in ("meta", "generic", "brain"):
                 meta = json.loads(str(value))
                 meta.pop("version", None)
                 h.update(json.dumps(meta, sort_keys=True).encode())
@@ -377,7 +381,7 @@ def _digest(brain: cd.Brain) -> str:
 def _names(path: Path) -> tuple[str, str]:
     """The checkpoint's format and a digest of its metadata keys and member names."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         names = json.dumps([sorted(meta), sorted(data.files)])
     return str(meta["format"]), hashlib.sha256(names.encode()).hexdigest()
 
@@ -405,7 +409,7 @@ def _streams(brain: cd.Brain) -> tuple[str, list[dict[str, Any]]]:
         if start == 14:
             brain.reset()
         elif start == 22:
-            brain.reset(keep_memory=True)
+            brain.reset(keep=("slots",))
         if start and brain.arousal is not None:
             left.append(brain.arousal.to_dict())
         for t in range(start, start + length):
@@ -455,60 +459,65 @@ def _compact(state: dict[str, Any]) -> list[float]:
 # Recorded on 0.84.3 (8dc92d8): each founder's connectome and parameters, the acts of its
 # life and what each reset left its arousal, and the format, the member and metadata names
 # (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
+# Where the library later removed a setting that was inert at its founder, the names and
+# checkpoint digests were re-recorded after every other value matched the recording.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220), which every founder here meets,
+# and at the founder need scale 0.1 (issue 198) where a founder has arousal.
+# Re-recorded with the default reset keeping the arousal (issue 213).
 FOUNDERS: dict[str, dict[str, Any]] = {
     "adult": {
         "build": (1, 2, {"modules": (16,), "seed": 0, "arousal": True}),
         "life": _adult,
-        "digest": "fcc22dba7289f686fead06ebd6dca9d5b67d4b3550377f20821edf51f3ac1857",
+        "digest": "32f58e96ba5ed96a5b25207c07f1c01618c02af6b80c7cbf915f8c9b16e35a9f",
         "acts": (
             "10000000000000000000000000110000000000000000000000000000000000000000000000000100"
             "00000000000100110100000000000000000000000000000000000000000000000000000000000000"
-            "0000000000000000000000"
+            "1011010111010111101100"
         ),
         "left": [
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 151, 46, 105, 128, 3328, 547],
+            [0.0034539743906799613, 142, 150, 106, 0.028762852226372478, 0.9859539727985247, 0.5020542546498477, 0.29108554865201863, 151, 46, 105, 128, 3296, 544],
         ],
-        "format": "cadence-generic/3",
-        "names": "a2556d56acd5de594cda87ec20272b09e5c26e3e8dc6370b6e39eae567c53f4e",
-        "checkpoint": "ff751eaf314e2b92957cacf1a150e7a69cb6545436497d3d94f83d76ea7b8445",
+        "format": "cadence-brain/1",
+        "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
+        "checkpoint": "efae085bd5d1c6288381463d39627b10ef57e3e65a5520304b40c65fcf6df35b",
     },
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
                          "recall": True, "history_decays": (0.2, 0.9),
                          "efference_amplitude": 1.0}),
         "life": _streams,
-        "digest": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
-        "acts": "111101100100011000000000000000000",
+        "digest": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
+        "acts": "111101100100011101101111111001011",
         "left": [
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 288, 151],
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 22, 8, 14, 256, 288, 151],
+            [1.0124686448349702, 9, 13, 13, 0.011089548956681777, 0.15307902426660647, 0.019458901389501283, 0.016780853750205795, 14, 0, 14, 0, 256, 140],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 448, 206],
         ],
-        "format": "cadence-generic/8",
-        "names": "f68680bd8a9b32b381bdd3620503110329f7b2ebec08401a86188c413a7f49e0",
-        "checkpoint": "9c54fb001f45561b8c08b921fdf7de34e93982c6e3c454eeed1e72399b8679ae",
+        "format": "cadence-brain/1",
+        "names": "e78b45e964572a6df43fb29ef5d436b89ce341e486e4f55a1708b355cacefd00",
+        "checkpoint": "f2fdcd9ab7b3985fea0495bd3025f3ae9d23247b5741284a78a126cc3a70eedc",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
         "life": _streams,
-        "digest": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
+        "digest": "dcbc0983cda21c93c39ec2e5f75b9deebe3af815e53bdd9e9af7befbc7afac53",
         "acts": "111111011111111111111111111111111",
         "left": [
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 14, 0, 14, 0, 320, 203],
-            [0.0, 0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 544, 301],
+            [0.2489490507255386, 10, 13, 13, 0.011089548956681777, 0.15307902426660647, 0.019458901389501283, 0.016346162123862428, 14, 0, 14, 0, 256, 196],
+            [0.0, 0, 0, 0, 0.0, 0.0, 0.0, 0.0, 22, 0, 22, 0, 480, 294],
         ],
-        "format": "cadence-generic/6",
-        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "77580a29f3eb5fef73b9e0da08bf6eac55df4c29cee5c3c901194bb44ee3cd93",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "905782491bb02f68bf3956d935623ba5e53e9ec7389921cfa7682c185f9dcb58",
     },
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3}),
         "life": _stepped,
-        "digest": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
+        "digest": "8d42b245bdc9b36499675f913258d4ca9e532a91ad39a0bda82b666e4a441837",
         "acts": "0011010000000111111101000",
         "left": [],
-        "format": "cadence-generic/2",
-        "names": "5a728760433a9dea87769077dd838133cd49a8637125759627166a31d5cf16a8",
-        "checkpoint": "301f7f4aaca6de114ef8f3fb07553b8dadb67f1dd4c40c9ef8ae091055d3e3ee",
+        "format": "cadence-brain/1",
+        "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
+        "checkpoint": "9c82f870c93d816e173d4ab03e59005439d347068f2f0337b273f3a9049f9f4a",
     },
 }
 
@@ -519,7 +528,7 @@ def _build(spec: dict[str, Any]) -> cd.Brain:
 
 
 @pytest.mark.parametrize("name", sorted(FOUNDERS))
-def test_the_default_reset_lives_as_in_0_84_3(tmp_path: Path, name: str) -> None:
+def test_the_default_reset_lives_as_recorded(tmp_path: Path, name: str) -> None:
     """On every backend: the founder's connectome and parameters, and the checkpoint's
     format, members and metadata keys after its life."""
     spec = FOUNDERS[name]
@@ -557,12 +566,12 @@ def _filled(brain: cd.Brain) -> None:
             brain.wait(GO)
 
 
-@pytest.mark.parametrize("keep_memory", [False, True])
+@pytest.mark.parametrize("slots", [False, True])
 @pytest.mark.parametrize("name", ["composed", "episodic"])
-def test_keep_arousal_resets_every_other_store_as_the_default_reset(
-    tmp_path: Path, name: str, keep_memory: bool
+def test_keeping_the_arousal_resets_every_other_store_as_the_default_reset(
+    tmp_path: Path, name: str, slots: bool
 ) -> None:
-    """The recall slots (emptied, or kept with ``keep_memory``), the heard history, the
+    """The recall slots (emptied, or kept with ``"slots"``), the heard history, the
     efference copy and the episodic context and path: a reset that keeps the arousal resets
     each of them as the default reset does."""
     brain = _build(FOUNDERS[name])
@@ -573,19 +582,19 @@ def test_keep_arousal_resets_every_other_store_as_the_default_reset(
         assert brain.efference is not None and brain.efference.trace.any()
     else:
         held = set(saved(brain.save(tmp_path / "held"))[1])
-        assert {"episode/context", "episode/decision", "episode/path/lengths"} <= held
+        assert {f"memories/episodic/{name}" for name in ("context", "decision", "path/lengths")} <= held
     default = twin(brain, tmp_path / "default")
-    brain.reset(keep_memory=keep_memory, keep_arousal=True)
-    default.reset(keep_memory=keep_memory)
+    brain.reset(keep=("slots", "arousal") if slots else ("arousal",))
+    default.reset(keep=("slots",) if slots else ())
     assert_same_checkpoint(
         brain.save(tmp_path / "kept"), default.save(tmp_path / "reset"), but=("arousal",)
     )
     if brain.recall is not None:
-        assert (brain.recall.slots > 0) == keep_memory
+        assert (brain.recall.slots > 0) == slots
 
 
 @pytest.mark.parametrize("name", ["composed", "episodic"])
-def test_keep_arousal_continues_as_the_documented_restore_with_every_store(
+def test_keeping_the_arousal_continues_as_the_documented_restore_with_every_store(
     tmp_path: Path, name: str
 ) -> None:
     """With recall, heard history and efference copy, or with the episodic memory, a reset
@@ -596,7 +605,7 @@ def test_keep_arousal_continues_as_the_documented_restore_with_every_store(
     restored = twin(brain, tmp_path / "restored")
     assert restored.arousal is not None
     state = restored.arousal.to_dict()
-    brain.reset(keep_arousal=True)
+    brain.reset(keep=("arousal",))
     restored.reset()
     restored.arousal = cd.Arousal.from_dict(state)
     lives = []

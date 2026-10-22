@@ -18,7 +18,7 @@ step sweeps also include feedback, teaching and reward eligibility, but exclude
 residual checks, memory work and optimizer work. They are not joules or total
 computation. Recording itself adds overhead and uses the inspectable CPU path.
 Outcome counts describe this short run, not demonstrated acquisition, recovery,
-or long-term retention. See docs/world-model.md for the integration boundaries.
+or long-term retention. See docs/start.md#one-continuing-equilibrium-brain for the integration boundaries.
 """
 
 from __future__ import annotations

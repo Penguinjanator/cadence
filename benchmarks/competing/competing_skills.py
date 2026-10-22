@@ -182,13 +182,15 @@ def make_brain(point: dict[str, Any], seed: int) -> cd.Brain:
         INPUTS,
         ACTIONS,
         modules=tuple(int(w) for w in point["modules"]),
-        sensory_scale=float(point["sensory_scale"]),
+        # frozen protocols ran the composition of releases before 0.82.0: the carried
+        # interpretation read back at scale 12
+        scales={
+            "sensory": float(point["sensory_scale"]),
+            "trace": float(point.get("trace_scale", 12.0)),
+        },
         temperature=float(point["temperature"]),
         working_memory_amplitude=float(point["trace_amplitude"]),
         working_memory_decay=float(point["trace_decay"]),
-        # frozen protocols ran the composition of releases before 0.82.0: the carried
-        # interpretation read back at scale 12
-        working_memory_scale=float(point.get("trace_scale", 12.0)),
         consolidation=float(point["consolidation"]),
         episodic=bool(point.get("episodic", True)),
         memory_rate=float(point.get("memory_rate", 1.0)),
@@ -209,7 +211,10 @@ def enter_ring(brain: cd.Brain, arm: str, stages: dict[str, Any]) -> None:
         return
     genes = dict(stages[arm])
     reset = bool(genes.pop("reset_arousal", False))
-    brain.retune(reset_arousal=reset, **genes)
+    brain.retune(**genes)
+    if reset:  # the arousal's reset, which retune took as reset_arousal up to 0.84.3
+        assert brain.arousal is not None
+        brain.arousal.reset()
 
 
 REGIONS = ("sensory", "module_0", "association", "prefrontal", "motor")
@@ -515,9 +520,10 @@ def run_life(
     groups = synapse_groups(brain)
     enter_ring(brain, arm, protocol["stages"])
     row["door"] = {
-        "actor": brain.describe()["actor"],
-        "arousal": brain.describe()["arousal"],
-        "learning": brain.describe()["learning"],
+        # the configurations as the receipt has always held them
+        "actor": brain.basal_ganglia.config.to_dict(),
+        "arousal": None if brain.arousal is None else brain.arousal.config.to_dict(),
+        "learning": brain.learner.config.to_dict(),
         "owed": owed,
     }
     reference = (brain.brain.efficacy.copy(), brain.brain.bias.copy())
@@ -884,7 +890,7 @@ def main(argv: list[str] | None = None) -> int:
         nargs="*",
         default=[],
         metavar="FIELD=VALUE",
-        help="override LearnerConfig fields of the brain, e.g. decay=0.01",
+        help="override LearnerConfig fields of the brain, e.g. scale_cap=4.0",
     )
     parser.add_argument(
         "--contingency",

@@ -117,9 +117,24 @@ def save(learner: Learner, path: str | Path, *, compressed: bool = True) -> Path
     return _write(_learner_data(learner), path, compressed=compressed)
 
 
+# Settings of 0.84.3 that this version removed, with the value at which a saved config's law
+# is the law of this version: the contrast of +beta against -beta, and no leak.
+_REMOVED = {"centered": True, "decay": 0.0}
+
+
 def _known_config(saved: dict[str, Any]) -> dict[str, Any]:
     """The saved config's fields that ``LearnerConfig`` has; any other saved field is dropped
-    silently, so a checkpoint carrying settings this version lacks loads without them."""
+    silently, so a checkpoint carrying settings this version lacks loads without them. A
+    setting of 0.84.3 that this version removed loads at the value its law has here and is
+    refused otherwise, with a message naming 0.84.3."""
+    for name, kept in _REMOVED.items():
+        if name in saved:
+            value = saved[name]
+            if isinstance(value, bool) != isinstance(kept, bool) or value != kept:
+                raise ValueError(
+                    f"this checkpoint was saved with the learner's {name}={value!r}, which "
+                    "this version removed; load it with cadence-net 0.84.3"
+                )
     fields = {f.name for f in dataclasses.fields(LearnerConfig)}
     return {k: v for k, v in saved.items() if k in fields}
 

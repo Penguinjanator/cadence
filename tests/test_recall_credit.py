@@ -1,9 +1,10 @@
-"""The recall memory's read at an episode's end. A calm ``live`` moment that ends the episode
-forecasts the next moment on the stream as the end leaves it, and the act taken on that
-forecast, sampled by a brain the outcome woke or issued greedily by one it left calm, keeps
-the forecast's read: its address eligibility is the read's and ``attended`` describes it, as
-a fresh read of the same stream would give them. ``recall_address_reward=0`` is the founder
-and control: no eligibility, and the checkpoint as before."""
+"""The recall memory's read at a forecast. A calm ``live`` moment forecasts the next moment
+on the stream, and the act taken on that forecast, sampled by a brain the outcome woke or
+issued greedily by one it left calm, keeps the forecast's read: its address eligibility is
+the read's and ``attended`` describes it, as a fresh read of the same stream would give them.
+An episode's end empties the stream's slots, so a forecast at an end reads an emptied store.
+``recall_address_reward=0`` is the founder and control: no eligibility, and the checkpoint as
+before."""
 
 from dataclasses import replace
 from types import MethodType
@@ -14,15 +15,14 @@ import pytest
 import cadence as cd
 
 EYE = np.eye(3)
-ARRAYS = ("keys", "values", "nexts", "held", "previous", "history", "ended", "w_x", "w_c", "b")
+ARRAYS = ("keys", "values", "nexts", "held", "previous", "ended", "w_x", "w_c", "b")
 
 
 def composed(seed=1, **options):
-    """The episodic vote, the recall memory with kept episodes and a reward-trained address
-    map, calm from birth; ``options`` vary one of them."""
+    """The episodic vote, the recall memory and a reward-trained address map, calm from
+    birth; ``options`` vary one of them."""
     settings = dict(
-        memory_choice=True, recall=True, recall_episodes="keep", recall_address_reward=1.0,
-        arousal={"youth": 0},
+        memory_choice=True, recall=True, recall_address_reward=1.0, arousal={"youth": 0},
     )
     settings.update(options)
     return cd.Brain.compose(3, 2, modules=(8,), seed=seed, **settings)
@@ -91,18 +91,16 @@ def test_a_reading_is_held_through_a_restore_and_an_end():
 
 
 def test_a_woken_brains_first_act_keeps_the_forecasts_read(tmp_path):
-    """The defect of 0.84.1: the forecast's read was cleared with the forecast's restore, so
-    the sampled act's address eligibility was zero and ``attended`` None, though the act was
-    decided on the forecast. A nonterminal forecast kept its read."""
+    """A woken brain's first act is decided on the forecast: its address eligibility is the
+    forecast's read and ``attended`` describes it, as the reference, which reads the stream
+    again before the act, gives them."""
     checkpoint = routine(composed()).save(tmp_path / "routine")
     readings = {}
-    for name, done, reread in (
-        ("nonterminal", False, False), ("terminal", True, False), ("reference", True, True)
-    ):
+    for name, reread in (("held", False), ("reference", True)):
         brain = cd.Brain.load(checkpoint)
         if reread:
             rereading(brain)
-        action = brain.live(EYE[[1]], reward=[1.0], done=[done])
+        action = brain.live(EYE[[1]], reward=[1.0], done=[False])
         assert brain.last_arousal["mode"] == "aroused" and brain.recall.slots == 7
         attended = brain.recall.attended
         assert attended is not None and attended.shape == (1, 6)  # the six slots the act read
@@ -115,46 +113,40 @@ def test_a_woken_brains_first_act_keeps_the_forecasts_read(tmp_path):
             action, brain.basal_ganglia.state.activation.copy(), attended, pending,
             np.array(report["address_reward_step"]), brain.recall.w_x.copy(),
         )
-    for held, reread in zip(readings["terminal"], readings["reference"], strict=True):
+    for held, reread in zip(readings["held"], readings["reference"], strict=True):
         np.testing.assert_array_equal(held, reread)
 
 
-@pytest.mark.parametrize("episodes", ["keep", "forget"])
-def test_the_read_is_of_the_stream_as_the_end_leaves_it(tmp_path, episodes):
-    """With kept slots the forecast read them and the act's eligibility is that read's. With
-    forgotten slots the forecast read an emptied store: no attention and no eligibility, as a
-    fresh read of the emptied store gives, and the moment is the new episode's first slot."""
-    checkpoint = routine(composed(recall_episodes=episodes)).save(tmp_path / "routine")
+def test_the_read_is_of_the_stream_as_the_end_leaves_it(tmp_path):
+    """An episode's end empties the stream's slots, so the forecast at the end read an
+    emptied store: no attention and no eligibility, as a fresh read of the emptied store
+    gives, and the moment is the new episode's first slot."""
+    checkpoint = routine(composed()).save(tmp_path / "routine")
     brain, reference = cd.Brain.load(checkpoint), rereading(cd.Brain.load(checkpoint))
     for subject in (brain, reference):
         subject.live(EYE[[1]], reward=[1.0], done=[True])
         assert subject.last_arousal["mode"] == "aroused"
-    assert brain.recall.slots == reference.recall.slots == (7 if episodes == "keep" else 1)
+    assert brain.recall.slots == reference.recall.slots == 1
     held, reread = eligibility(brain), eligibility(reference)
     np.testing.assert_array_equal(held, reread)
-    assert held.any() == (episodes == "keep")
-    if episodes == "keep":
-        assert brain.recall.attended is not None
-        np.testing.assert_array_equal(brain.recall.attended, reference.recall.attended)
-    else:
-        assert brain.recall.attended is None and reference.recall.attended is None
+    assert not held.any()
+    assert brain.recall.attended is None and reference.recall.attended is None
     assert_same_memory(brain.recall, reference.recall)
     assert_same_checkpoint(brain.save(tmp_path / "held"), reference.save(tmp_path / "reread"))
 
 
 def test_a_calm_terminal_moment_witnesses_the_forecasts_read_without_eligibility(tmp_path):
     """An outcome the brain is used to leaves it calm: its greedy act keeps no eligibility,
-    the moment is written under the forecast's read and ``attended`` describes that read; the
-    checkpoint is the one a fresh read of the same stream gives."""
+    the moment is written as the new episode's first slot under the forecast's read of the
+    emptied store, and the checkpoint is the one a fresh read of the same stream gives."""
     checkpoint = routine(composed()).save(tmp_path / "routine")
     brain, reference = cd.Brain.load(checkpoint), rereading(cd.Brain.load(checkpoint))
     for subject in (brain, reference):
         subject.live(EYE[[1]], reward=[0.0], done=[True])
         assert subject.last_arousal["mode"] == "routine"
         assert subject.basal_ganglia._pending is None and eligibility(subject) is None
-        assert subject.recall.last is None and subject.recall.slots == 7
-    assert brain.recall.attended is not None
-    np.testing.assert_array_equal(brain.recall.attended, reference.recall.attended)
+        assert subject.recall.last is None and subject.recall.slots == 1
+    assert brain.recall.attended is None and reference.recall.attended is None
     assert_same_memory(brain.recall, reference.recall)
     assert_same_checkpoint(brain.save(tmp_path / "held"), reference.save(tmp_path / "reread"))
 
@@ -167,14 +159,15 @@ def test_a_calm_terminal_moment_witnesses_the_forecasts_read_without_eligibility
 def test_the_first_sampled_act_is_credited_whatever_the_associative_memory(tmp_path, memory):
     """With the episodic vote, and without an associative memory, the woken brain samples on
     the forecast and keeps its read. With an associative memory in the drive the record the
-    outcome wrote changes the drive, and the brain settles and reads again. Seed 2: at seed 1
-    the association of the brain with the associative drive does not move between a sampled
-    act's nudged phases, on a terminal or a nonterminal forecast, so no slot is scored."""
-    checkpoint = routine(composed(seed=2, **memory)).save(tmp_path / "routine")
+    outcome wrote changes the drive, and the brain settles and reads again. Seed 3: at seeds
+    1 and 2 the association of one of the three brains does not move between the sampled
+    act's nudged phases, so no slot is scored. The forecast is nonterminal: an ended
+    episode's slots are emptied, and its forecast reads nothing."""
+    checkpoint = routine(composed(seed=3, **memory)).save(tmp_path / "routine")
     brain, reference = cd.Brain.load(checkpoint), rereading(cd.Brain.load(checkpoint))
     actions = []
     for subject in (brain, reference):
-        actions.append(subject.live(EYE[[1]], reward=[1.0], done=[True]))
+        actions.append(subject.live(EYE[[1]], reward=[1.0], done=[False]))
         assert subject.last_arousal["mode"] == "aroused"
     np.testing.assert_array_equal(actions[0], actions[1])
     held, reread = eligibility(brain), eligibility(reference)
@@ -195,7 +188,7 @@ def test_without_an_address_rate_the_read_is_held_and_no_eligibility_is_kept(tmp
     checkpoint = routine(composed(recall_address_reward=0.0)).save(tmp_path / "routine")
     brain, reference = cd.Brain.load(checkpoint), rereading(cd.Brain.load(checkpoint))
     for subject in (brain, reference):
-        subject.live(EYE[[1]], reward=[1.0], done=[True])
+        subject.live(EYE[[1]], reward=[1.0], done=[False])
         assert subject.last_arousal["mode"] == "aroused"
         assert subject.basal_ganglia._pending is not None and eligibility(subject) is None
     assert brain.recall.attended is not None
@@ -208,18 +201,18 @@ def test_without_an_address_rate_the_read_is_held_and_no_eligibility_is_kept(tmp
 
 
 def test_the_held_reads_eligibility_survives_a_checkpoint_while_its_outcome_is_pending(tmp_path):
-    """Saved after the terminal moment, before the sampled act's outcome, the loaded brain
-    holds the same pending eligibility and its next outcome steps the map by the same amount;
-    saved before the terminal moment, the loaded brain takes it to the same read and credit."""
+    """Saved after the woken moment, before the sampled act's outcome, the loaded brain holds
+    the same pending eligibility and its next outcome steps the map by the same amount; saved
+    before the woken moment, the loaded brain takes it to the same read and credit."""
     checkpoint = routine(composed()).save(tmp_path / "routine")
     brain = cd.Brain.load(checkpoint)
-    brain.live(EYE[[1]], reward=[1.0], done=[True])
+    brain.live(EYE[[1]], reward=[1.0], done=[False])
     pending = eligibility(brain)
     assert pending.any()
     resumed = cd.Brain.load(brain.save(tmp_path / "pending"))
     np.testing.assert_array_equal(eligibility(resumed), pending)
     twin = cd.Brain.load(checkpoint)
-    twin.live(EYE[[1]], reward=[1.0], done=[True])
+    twin.live(EYE[[1]], reward=[1.0], done=[False])
     np.testing.assert_array_equal(eligibility(twin), pending)
     np.testing.assert_array_equal(twin.recall.attended, brain.recall.attended)
     steps = [
@@ -232,12 +225,12 @@ def test_the_held_reads_eligibility_survives_a_checkpoint_while_its_outcome_is_p
 
 
 @pytest.mark.parametrize("refusal", ["forecast", "arousal"])
-def test_a_refused_terminal_moment_keeps_the_outcome_and_the_retry_credits_the_act(
+def test_a_refused_terminal_moment_keeps_the_outcome_and_the_retry_takes_it_once(
     tmp_path, monkeypatch, refusal
 ):
     """A forecast that does not settle, or an arousal update that refuses after it settled,
-    changes nothing durable and keeps the outcome pending; the same call then takes it once
-    and credits the act as an uninterrupted moment does."""
+    changes nothing durable and keeps the outcome pending; the same call then takes it once,
+    as an uninterrupted moment does, and the ended episode's slots are emptied."""
     checkpoint = routine(composed()).save(tmp_path / "routine")
     brain = cd.Brain.load(checkpoint)
     before, lived, config = brain.save(tmp_path / "before"), brain._lived, brain.learner.config
@@ -262,10 +255,7 @@ def test_a_refused_terminal_moment_keeps_the_outcome_and_the_retry_credits_the_a
         brain.live(EYE[[1]], reward=[1.0], done=[True]),
         twin.live(EYE[[1]], reward=[1.0], done=[True]),
     )
-    assert brain.last_arousal["mode"] == "aroused" and brain.recall.slots == 7
-    pending = eligibility(brain)
-    assert pending.any()
-    np.testing.assert_array_equal(pending, eligibility(twin))
-    assert brain.recall.attended is not None
-    np.testing.assert_array_equal(brain.recall.attended, twin.recall.attended)
+    assert brain.last_arousal["mode"] == "aroused" and brain.recall.slots == 1
+    np.testing.assert_array_equal(eligibility(brain), eligibility(twin))
+    assert brain.recall.attended is None and twin.recall.attended is None
     assert_same_checkpoint(brain.save(tmp_path / "retried"), twin.save(tmp_path / "twin"))

@@ -28,10 +28,88 @@ _KINDS = {
     "arousal": ArousalConfig,
 }
 _FIELDS = {prefix: {field.name for field in fields(kind)} for prefix, kind in _KINDS.items()}
-_BOOLEAN = {"centered", "qualified", "surprise", "center_scale", "critic_normalize"}
+_BOOLEAN = {"qualified", "surprise"}
 _INTEGER = {"free_steps", "nudged_steps", "damping", "eligibility_steps", "youth"}
-_STRING = {"nudge", "critic_signal"}
+_STRING = {"nudge"}
 _OPTIONAL = {"eta_bias", "tolerance", "eligibility_steps"}
+# Settings of 0.84.3 that this version removed, refused by name with a message naming that
+# release, at ``compose`` and ``retune`` and in an arousal mapping.
+_REMOVED = {
+    "arousal_record_surprise",
+    "actor_dopamine_center",
+    "actor_dopamine_floor",
+    "actor_center_scale",
+    "actor_critic_signal",
+    "actor_critic_normalize",
+    "actor_normalize",
+    "actor_momentum",
+    "learning_centered",
+    "learning_decay",
+    "learning_nudge",
+    "working_memory_focus",
+    "resting_bias",
+}
+# Learning settings the teaching point sets (``teaching=``); ``learning=LearnerConfig(...)``
+# sets them as an expert.
+_TAUGHT = {"learning_eta", "learning_eta_bias", "learning_normalize", "learning_normalize_floor"}
+
+
+# The teaching points ``teaching=`` names: the steps and the normalization of the lesson's
+# learner, every other learning setting at its founder. ``"normalized"`` is the point for many
+# lessons, as in imitation.
+TEACHING: dict[str, dict[str, float]] = {
+    "founder": {"eta": 0.5, "eta_bias": 0.05, "normalize": 0.0, "normalize_floor": 1e-3},
+    "normalized": {"eta": 0.003, "eta_bias": 0.0003, "normalize": 0.99, "normalize_floor": 1e-4},
+}
+# The projection scales ``scales=`` names, with the argument of 0.84.3 each replaces and its
+# founder.
+SCALES: dict[str, tuple[str, float]] = {
+    "sensory": ("sensory_scale", 1.0),
+    "trace": ("working_memory_scale", 1.2),
+    "history": ("history_scale", 1.2),
+    "recall": ("recall_scale", 1.2),
+}
+
+
+def removed(name: str) -> str:
+    """The refusal of a setting this version removed."""
+    return f"{name} was removed in this version; cadence-net 0.84.3 takes it"
+
+
+def taught(point: Any, base: LearnerConfig) -> LearnerConfig:
+    """``base`` at a teaching point: its steps and normalization replaced."""
+    if not isinstance(point, str) or point not in TEACHING:
+        raise ValueError("teaching must be 'founder' or 'normalized'")
+    steps = TEACHING[point]
+    return replace(
+        base, eta=steps["eta"], eta_bias=steps["eta_bias"], normalize=steps["normalize"],
+        normalize_floor=steps["normalize_floor"],
+    )
+
+
+def rescaled(name: str) -> str | None:
+    """The refusal of a projection scale argument of 0.84.3, or None for any other name."""
+    for key, (old, _) in SCALES.items():
+        if name == old:
+            return f"{old} is scales={{'{key}': ...}} in this version, a construction setting"
+    return None
+
+
+def scales_of(value: Any) -> dict[str, float]:
+    """The projection scales: the founders with ``value`` (a mapping of names) laid over."""
+    if value is None:
+        value = {}
+    if not isinstance(value, Mapping):
+        raise ValueError("scales must be a mapping of 'sensory', 'trace', 'history', 'recall'")
+    unknown = sorted(set(value) - set(SCALES))
+    if unknown:
+        raise ValueError(
+            f"unknown scale {unknown[0]!r}: scales name 'sensory', 'trace', 'history', 'recall'"
+        )
+    return {
+        key: real(f"scales[{key!r}]", value.get(key, founder), low=0)
+        for key, (_, founder) in SCALES.items()
+    }
 
 
 def real(name: str, value: Any, *, low: float = -np.inf, high: float = np.inf) -> float:
@@ -60,6 +138,13 @@ def split_genes(genes: Mapping[str, Any]) -> tuple[dict[str, Any], ...]:
     for name, value in values.items():
         if name in ("eta", "eta_bias"):
             raise TypeError(f"{name} is ambiguous; use actor_{name} or learning_{name}")
+        if name in _REMOVED:
+            raise ValueError(removed(name))
+        if name in _TAUGHT:
+            raise ValueError(
+                f"{name} is set by teaching ('founder' or 'normalized'); "
+                "learning=LearnerConfig(...) sets it as an expert"
+            )
         prefix, _, field = name.partition("_")
         if prefix not in _FIELDS or field not in _FIELDS[prefix]:
             raise TypeError(f"unknown brain setting: {name!r}")
@@ -74,6 +159,9 @@ def configured(base: Config, changes: Mapping[str, Any], prefix: str) -> Config:
         raise ValueError(f"{prefix} configuration must be {expected.__name__}")
     updates = dict(changes)
     unknown = set(updates) - _FIELDS[prefix]
+    for name in sorted(unknown):
+        if f"{prefix}_{name}" in _REMOVED:
+            raise ValueError(removed(f"{prefix}_{name}"))
     if unknown:
         raise TypeError(f"unknown {prefix} setting: {sorted(unknown)[0]!r}")
     # Config constructors validate ranges and relationships. Validate scalar kinds
@@ -99,9 +187,15 @@ def configured(base: Config, changes: Mapping[str, Any], prefix: str) -> Config:
             if name in updates:
                 updates[name] = number
     try:
-        return replace(base, **updates) if updates else base
+        result = replace(base, **updates) if updates else base
     except (ValueError, TypeError) as exc:
         raise ValueError(f"invalid {prefix} configuration: {exc}") from exc
+    if isinstance(result, LearnerConfig) and result.nudge != "cross_entropy":
+        raise ValueError(
+            "a composed brain learns with the cross-entropy nudge; the quadratic nudge is a "
+            "standalone Learner's (cadence-net 0.84.3 composes it)"
+        )
+    return result
 
 
 def arousal_config(

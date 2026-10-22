@@ -48,7 +48,6 @@ AROUSAL = {
     "heat": 2.0,
     "youth": 100,
     "value_surprise": 1.0,
-    "record_surprise": 0.0,
     "need": 0.5,
 }
 

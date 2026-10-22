@@ -4,7 +4,7 @@ This bounded instrument asks whether a continuing `Brain.compose` can answer fro
 an earlier cue when all current probe inputs are identical. It tests one declared
 neural-graph/trace recipe; it does not establish general recall, choose defaults,
 or complete [the recall contract](https://github.com/muellerberndt/cadence/issues/84).
-Read the [world-model guide](../../docs/world-model.md) and
+Read the [world-model guide](../../docs/start.md#one-continuing-equilibrium-brain) and
 [numerical contracts](../../docs/contracts.md) before interpreting results.
 
 ## What runs
@@ -587,7 +587,7 @@ intact brain recalls, and the shuffled forks follow the transplanted trace.
 **The operating-point screens behind the recipe (development founders 304, 305, 306 and 1,
 32 training and 8 evaluation repeats; the selected recipe's receipt is
 `results/development-finite-5-scale2-eta0.2-2026-10-10.json.gz`, the other screens' receipts,
-2.7 MB each, are retained in the lane's evidence bundle outside the repository).** The
+2.7 MB each, are retained in the evidence outside the repository).** The
 association layer of the composed brain is near silent: under the recipe its activations
 have an RMS of 0.05 (0.09, 0.15 and 0.26 at sensory scale 2, 4 and 8), and the paired trace
 distance at QUERY grows with the scale (0.005 to 0.028) while its ratio to the trace's RMS

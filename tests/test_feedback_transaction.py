@@ -22,8 +22,7 @@ def test_invalid_eligibility_budget_is_rejected(steps):
 
 
 @pytest.mark.parametrize("steps", [None, 0, 3, np.int64(5)])
-@pytest.mark.parametrize("bins", [False, True])
-def test_standalone_reward_eligibility_has_a_finite_independent_budget(steps, bins, monkeypatch):
+def test_standalone_reward_eligibility_has_a_finite_independent_budget(steps, monkeypatch):
     graph = cd.layered(2, 4, 2, density=1, seed=3)
     learner = cd.Learner(
         cd.NeuralGraph(graph, cd.learning_neuron_model(dt=1)),
@@ -31,10 +30,7 @@ def test_standalone_reward_eligibility_has_a_finite_independent_budget(steps, bi
         cd.LearnerConfig(free_steps=64, nudged_steps=7, tolerance=None),
     )
     config = cd.ActorCriticConfig(eligibility_steps=steps)
-    agent = cd.ActorCritic(
-        learner, graph.populations["hidden"], config,
-        population=cd.Bins(1, 2) if bins else None,
-    )
+    agent = cd.ActorCritic(learner, graph.populations["hidden"], config)
     requested = []
     original = cd.NeuralGraph.settle_batch
 
@@ -105,9 +101,8 @@ def test_qualified_supervision_does_not_expand_default_brain_reward_eligibility(
 
 @pytest.mark.parametrize("kind", ["consolidating", "fast"])
 @pytest.mark.parametrize("backend", ["cpu", "torch"])
-@pytest.mark.parametrize("optimizer", ["plain", "adaptive"])
 def test_refused_reward_preserves_both_memories_and_retries_exactly_once(
-    tmp_path, kind, backend, optimizer,
+    tmp_path, kind, backend,
 ):
     if backend == "torch":
         pytest.importorskip("torch")
@@ -117,12 +112,7 @@ def test_refused_reward_preserves_both_memories_and_retries_exactly_once(
         learning=cd.LearnerConfig(
             qualified=True, damping=3, free_steps=1024, nudged_steps=128, tolerance=3e-3,
         ),
-        reward=cd.ActorCriticConfig(
-            eta=0.1, eta_bias=0.01,
-            momentum=0.5 if optimizer == "adaptive" else 0,
-            normalize=0.9 if optimizer == "adaptive" else 0,
-            dopamine_center=0.5, eligibility_steps=12,
-        ),
+        reward=cd.ActorCriticConfig(eta=0.1, eta_bias=0.01, eligibility_steps=12),
     )
     separator = cd.PatternSeparator(2, 8, 3, seed=7, center=0.3 if kind == "fast" else 0)
     memory_class = cd.SynapticMemory if kind == "consolidating" else cd.FastSynapses
@@ -135,7 +125,7 @@ def test_refused_reward_preserves_both_memories_and_retries_exactly_once(
     brain.learn(np.array([0.1, 0.2]), np.array([False, False]), x)
     brain.act(x)
     agent = brain.basal_ganglia
-    if backend == "torch" and optimizer == "plain":
+    if backend == "torch":
         assert agent._trace_device is not None and agent._trace_device[0].abs().max() > 0
     else:
         assert agent.trace is not None and np.any(agent.trace)

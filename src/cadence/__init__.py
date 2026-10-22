@@ -2,18 +2,16 @@
 
 Use ``Brain.compose`` for the default System 1 brain, adding ``observers`` for
 optional System 2 feedback in the same neural graph. ``NeuralGraph`` exposes
-lower-level neuronal dynamics. Record, belief and temporal models provide
-specialized memory, inference and planning operations with their own contracts.
-See ``docs/contracts.md`` for their numerical and learning boundaries.
+lower-level neuronal dynamics. See ``docs/contracts.md`` for the numerical and
+learning boundaries.
 """
 
 from __future__ import annotations
 
 from . import regions
 from .arousal import Arousal, ArousalConfig
-from .belief import BeliefObservation, BeliefPatch, BeliefPath, BeliefReadback
 from .brain import Brain as NeuralGraph
-from .brain import BrainState, Equilibrium, Nudge, RefinementReport, available_backends
+from .brain import BrainState, Equilibrium, Nudge, available_backends
 from .certificate import (
     Certificate,
     EPStructure,
@@ -23,10 +21,10 @@ from .certificate import (
     row_mass,
 )
 from .checkpoint import load, save
+from .code import LearnedCode
 from .connectome import Connectome
 from .generic import Brain
 from .genome import Genome, Projection, develop, evolve, genes
-from .instruments import dishabituation, orienting
 from .learning import (
     GraphHolder,
     Learner,
@@ -40,101 +38,25 @@ from .learning import (
     preflight,
     seam_report,
 )
-from .life import (
-    AlwaysAwake,
-    Decision,
-    Governor,
-    Life,
-    LifeConfig,
-    NeverWakes,
-    PatchGovernor,
-    Signals,
-    ThresholdGovernor,
-)
 from .memory import SynapticMemory
 from .neuron import Adaptation, NeuronModel
-from .patch import PatchNet, PatchObservation
-from .planning import TemporalPlan
-from .plasticity import (
-    ActorCritic,
-    ActorCriticConfig,
-    Bins,
-    Valence,
-)
-from .ports import DenseBlock, MapBlock, StructuredPort
-from .protocol import Protocol, Row, evaluate_predicate, select_gain, shuffled
+from .plasticity import ActorCritic, ActorCriticConfig
 from .receipts import Receipt, canonical_json
-from .record_patch import (
-    RecordContrast,
-    RecordObservation,
-    RecordPatchNet,
-    RecordPath,
-    RecordReadback,
-)
-from .record_ports import JointObservation, JointRecordPatches, Port
-from .record_stack import RecordPatchStack, StackObservation
 from .recording import SettlementRecord, record_settlements
-from .records import Mulberry32, Records
 from .reference import conformance
 from .regions import Region
-from .steering import Boundary, Gaze, Rule, Softmax, Steered, SteeredPath
 from .stream import (
-    Afterglow,
-    Echo,
     Efference,
     FastSynapses,
     History,
     PatternSeparator,
     Recall,
     Trace,
-    stateful,
 )
-from .temporal import TemporalObservation, TemporalPatchNet, TemporalPhase, TemporalReadback
-from .temporal_memory import ConstraintReport, TemporalMemory
 
 __all__ = [
     "Arousal",
     "ArousalConfig",
-    "BeliefObservation",
-    "BeliefPatch",
-    "BeliefPath",
-    "BeliefReadback",
-    "Steered",
-    "SteeredPath",
-    "Life",
-    "LifeConfig",
-    "Decision",
-    "Signals",
-    "Governor",
-    "PatchGovernor",
-    "ThresholdGovernor",
-    "AlwaysAwake",
-    "NeverWakes",
-    "orienting",
-    "dishabituation",
-    "Boundary",
-    "Softmax",
-    "Gaze",
-    "Rule",
-    "DenseBlock",
-    "MapBlock",
-    "StructuredPort",
-    "ConstraintReport",
-    "TemporalMemory",
-    "TemporalPlan",
-    "RecordPatchNet",
-    "RecordPatchStack",
-    "StackObservation",
-    "RecordPath",
-    "RecordObservation",
-    "RecordContrast",
-    "RecordReadback",
-    "TemporalPatchNet",
-    "TemporalPhase",
-    "TemporalObservation",
-    "TemporalReadback",
-    "PatchNet",
-    "PatchObservation",
     "Certificate",
     "EPStructure",
     "certificate",
@@ -142,24 +64,19 @@ __all__ = [
     "lipschitz_constant",
     "row_mass",
     "PatternSeparator",
-    "Records",
-    "Mulberry32",
     "ActorCritic",
     "ActorCriticConfig",
-    "Valence",
-    "Bins",
     "Adaptation",
     "Region",
     "Brain",
     "regions",
     "Projection",
     "Genome",
-    "Echo",
-    "Afterglow",
     "Trace",
     "Efference",
     "History",
     "Recall",
+    "LearnedCode",
     "FastSynapses",
     "SynapticMemory",
     "NeuronModel",
@@ -168,18 +85,12 @@ __all__ = [
     "LearnerConfig",
     "LearningPhaseError",
     "Nudge",
-    "Protocol",
     "Receipt",
     "SettlementRecord",
     "record_settlements",
-    "JointRecordPatches",
-    "JointObservation",
-    "Port",
-    "Row",
     "NeuralGraph",
     "BrainState",
     "Equilibrium",
-    "RefinementReport",
     "Connectome",
     "available_backends",
     "canonical_json",
@@ -188,7 +99,6 @@ __all__ = [
     "develop",
     "evolve",
     "genes",
-    "evaluate_predicate",
     "layered",
     "learning_neuron_model",
     "calibrate_bias",
@@ -197,9 +107,6 @@ __all__ = [
     "seam_report",
     "load",
     "save",
-    "select_gain",
-    "shuffled",
-    "stateful",
 ]
 
-__version__ = "0.84.3"
+__version__ = "0.85.0"

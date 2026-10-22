@@ -6,15 +6,16 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
 
 def test_the_composed_brain_holds_its_last_interpretation_clearly_and_reads_it_quietly():
     brain = cd.Brain.compose(inputs=3, actions=2, seed=1, arousal=True)
-    memory = brain.describe()["working_memory"]
+    memory = brain.describe()["memories"].get("working_memory")
     assert memory["amplitude"] == 3.0 and memory["decay"] == 0.0
-    assert brain.describe()["initialization"]["composition"]["working_memory_scale"] == 1.2
+    assert brain.describe()["layout"]["composition"]["working_memory_scale"] == 1.2
 
 
 def test_the_default_trace_is_exactly_the_last_interpretation():
@@ -29,7 +30,7 @@ def test_the_default_trace_is_exactly_the_last_interpretation():
 
 
 def test_the_scale_changes_only_the_projection_that_reads_the_carried_interpretation():
-    control = cd.Brain.compose(3, 2, modules=(9, 6), seed=11, working_memory_scale=12.0)
+    control = cd.Brain.compose(3, 2, modules=(9, 6), seed=11, scales={"trace": 12.0})
     quiet = cd.Brain.compose(3, 2, modules=(9, 6), seed=11)
     first, second = control.connectome, quiet.connectome
     for field in ("pre", "post", "count"):
@@ -41,9 +42,11 @@ def test_the_scale_changes_only_the_projection_that_reads_the_carried_interpreta
     np.testing.assert_array_equal(second.sign[~reading], first.sign[~reading])
     np.testing.assert_array_equal(control.brain.bias, quiet.brain.bias)
     with pytest.raises(ValueError, match="construction setting"):
-        quiet.retune(working_memory_scale=12.0)
+        quiet.retune(scales={"trace": 12.0})
+    with pytest.raises(ValueError, match="scales"):  # the argument of 0.84.3, renamed
+        cd.Brain.compose(3, 2, working_memory_scale=12.0)
     with pytest.raises(ValueError):
-        cd.Brain.compose(3, 2, working_memory_scale=-1.0)
+        cd.Brain.compose(3, 2, scales={"trace": -1.0})
 
 
 def test_a_newborn_reads_its_context_as_the_earlier_quiet_operating_point_did():
@@ -52,7 +55,7 @@ def test_a_newborn_reads_its_context_as_the_earlier_quiet_operating_point_did():
     # is ten times clearer, so learning can strengthen the influence where it pays.
     cue, go = np.array([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0]]), np.array([[0.0, 0.0, 1.0]] * 2)
     states = []
-    for options in ({}, {"working_memory_amplitude": 0.3, "working_memory_scale": 12.0}):
+    for options in ({}, {"working_memory_amplitude": 0.3, "scales": {"trace": 12.0}}):
         brain = cd.Brain.compose(3, 2, seed=8, **options)
         brain.act(cue, greedy=True)
         _, free = brain._settled(go)
@@ -121,7 +124,7 @@ def test_a_continuing_brain_can_learn_to_ignore_a_history_that_does_not_matter()
     actor = {"actor_gamma": 0.0, "actor_lam": 0.0}
     assert contextual_bandit(cd.Brain.compose(4, 4, seed=1, **actor), 1) >= 0.9
     earlier = cd.Brain.compose(
-        4, 4, seed=1, working_memory_decay=0.2, working_memory_scale=12.0, **actor
+        4, 4, seed=1, working_memory_decay=0.2, scales={"trace": 12.0}, **actor
     )
     assert contextual_bandit(earlier, 1) < 0.5
 
@@ -129,29 +132,29 @@ def test_a_continuing_brain_can_learn_to_ignore_a_history_that_does_not_matter()
 def test_a_saved_brain_keeps_the_trace_it_was_built_with(tmp_path):
     earlier = cd.Brain.compose(
         inputs=3, actions=2, seed=2, working_memory_amplitude=0.3, working_memory_decay=0.2,
-        working_memory_scale=12.0,
+        scales={"trace": 12.0},
     )
     x = np.array([[1.0, 0.0, 0.5]])
     earlier.act(x)
     path = earlier.save(tmp_path / "earlier.npz")
     again = cd.Brain.load(path)
     assert again.working_memory.amplitude == 0.3 and again.working_memory.decay == 0.2
-    assert again.describe()["initialization"]["composition"]["working_memory_scale"] == 12.0
+    assert again.describe()["layout"]["composition"]["working_memory_scale"] == 12.0
     assert np.array_equal(again.working_memory.trace, earlier.working_memory.trace)
 
 
 def test_provenance_saved_before_0_82_reads_as_the_fixed_scale_12(tmp_path):
-    brain = cd.Brain.compose(inputs=3, actions=2, seed=7, working_memory_scale=12.0)
+    brain = cd.Brain.compose(inputs=3, actions=2, seed=7, scales={"trace": 12.0})
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name] for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name] for name in data.files})
+    meta = metadata(arrays)
     del meta["composition"]["working_memory_scale"]
     arrays["generic"] = np.array(json.dumps(meta))
     older = tmp_path / "older.npz"
     np.savez(older, **arrays)
     loaded = cd.Brain.load(older)
-    assert loaded.describe()["initialization"]["composition"]["working_memory_scale"] == 12.0
+    assert loaded.describe()["layout"]["composition"]["working_memory_scale"] == 12.0
     meta["composition"]["working_memory_scale"] = -1.0
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(older, **arrays)
@@ -177,7 +180,7 @@ def test_the_readout_homeostasis_gene_is_gone():
     with pytest.raises((TypeError, ValueError)):
         cd.Brain.compose(inputs=3, actions=2, learning_homeostasis_rate=0.1)
     report = cd.Brain.compose(inputs=3, actions=2, seed=4)
-    assert "homeostasis_rate" not in report.describe()["learning"]
+    assert "learning_homeostasis_rate" not in report.describe()["genes"]
 
 
 def test_a_checkpoint_saved_at_the_genes_founder_still_loads(tmp_path):
@@ -186,7 +189,7 @@ def test_a_checkpoint_saved_at_the_genes_founder_still_loads(tmp_path):
     brain.act(np.array([[1.0, 0.0, 0.0]]))
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name] for name in data.files}
+        arrays = earlier({name: data[name] for name in data.files})
     written = 0
     for name in [n for n in arrays if n.endswith("meta") and arrays[n].dtype.kind == "U"]:
         meta = json.loads(str(arrays[name]))
@@ -206,7 +209,7 @@ def test_a_checkpoint_saved_with_the_gene_on_is_refused(tmp_path):
     brain = cd.Brain.compose(inputs=3, actions=2, seed=5)
     path = brain.save(tmp_path / "brain.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name] for name in data.files}
+        arrays = earlier({name: data[name] for name in data.files})
     meta_names = [name for name in arrays if name.endswith("meta") and arrays[name].dtype.kind == "U"]
     assert meta_names, "the checkpoint stores its learner metadata as a JSON string"
     for name in meta_names:

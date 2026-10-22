@@ -57,7 +57,8 @@ def test_the_protocol_is_the_frozen_one(protocol, protocol_1):
         protocol["recurrent"]
     )
     founders = cd.ArousalConfig()
-    assert cd.ArousalConfig(**protocol["arousal"]) == replace(founders, need=0.03)
+    genes = keydoor.arousal_genes(protocol["arousal"])
+    assert cd.ArousalConfig(**genes) == replace(founders, need=0.03)
     point = {k: v for k, v in protocol["operating_point"].items() if k != "note"}
     assert point == protocol_1["operating_point"]  # the simplest existing System 1 stays
     copy = {k: v for k, v in protocol["copy"].items() if k != "note"}
@@ -140,7 +141,8 @@ def test_the_operating_point_reaches_the_brain(protocol):
         assert actor.eta_bias == point["eta"] / 10
     for name, value in point.get("learner", {}).items():
         assert getattr(learner, name) == value, name
-    assert life.brain.arousal.config == cd.ArousalConfig(**protocol["arousal"])
+    founders = cd.ArousalConfig(**keydoor.arousal_genes(protocol["arousal"]))
+    assert life.brain.arousal.config == founders
     genes = protocol["arousal"]
     assert keydoor.make_life("blind", protocol, 0, genes).pouch is False
     assert keydoor.make_life("lambda-zero", protocol, 0, genes).brain.basal_ganglia.config.lam == 0

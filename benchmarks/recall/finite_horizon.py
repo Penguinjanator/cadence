@@ -151,15 +151,17 @@ def make_brain(
         working_memory_decay=decay,
         working_memory_amplitude=amplitude,
         # frozen protocols ran the composition of releases before 0.82.0 (scale 12)
-        working_memory_scale=float(genes.get("trace_scale", 12.0)),
-        sensory_scale=float(genes.get("sensory_scale", 1.0)),
+        scales={
+            "trace": float(genes.get("trace_scale", 12.0)),
+            "sensory": float(genes.get("sensory_scale", 1.0)),
+            **({} if history is None else {"history": float(history["scale"])}),
+        },
         **(
             {}
             if history is None
             else {
                 "history_decays": tuple(float(d) for d in history["decays"]),
                 "history_amplitude": float(history["amplitude"]),
-                "history_scale": float(history["scale"]),
             }
         ),
     )

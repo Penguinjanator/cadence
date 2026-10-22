@@ -5,6 +5,7 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 from cadence.genome import Genome, Projection, develop
@@ -21,7 +22,7 @@ def composed(seed=3, decays=(0.2, 0.8), **options):
 
 def saved_arrays(path):
     with np.load(path, allow_pickle=False) as data:
-        return {name: data[name].copy() for name in data.files}
+        return earlier({name: data[name].copy() for name in data.files})
 
 
 def assert_same_checkpoint(first, second):
@@ -61,11 +62,11 @@ def test_the_founder_builds_the_composition_without_a_history_byte_identically(t
         brain.act(CUE, greedy=True)
     assert_same_checkpoint(control.save(tmp_path / "control"), founder.save(tmp_path / "founder"))
     with np.load(tmp_path / "founder.npz", allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] != "cadence-generic/7" and "history" not in meta
     assert "history_scale" not in meta["composition"]
     described = founder.describe()
-    assert described["history"] is None and "history_decays" not in described["genes"]
+    assert "history" not in described["memories"] and "history_decays" not in described["genes"]
     assert described == control.describe()
 
 
@@ -91,14 +92,14 @@ def test_the_history_adds_only_its_blocks_and_their_projection():
 
 
 def test_the_projection_starts_at_its_scale_like_the_working_trace():
-    quiet = composed(decays=(0.5,), history_scale=1.2)
-    loud = composed(decays=(0.5,), history_scale=12.0)
+    quiet = composed(decays=(0.5,), scales={"history": 1.2})
+    loud = composed(decays=(0.5,), scales={"history": 12.0})
     history = np.asarray(quiet.connectome.populations["history"])
     rows = np.isin(np.asarray(quiet.connectome.pre), history)
     np.testing.assert_allclose(
         np.asarray(loud.connectome.sign)[rows], 10.0 * np.asarray(quiet.connectome.sign)[rows]
     )
-    assert quiet.describe()["initialization"]["composition"]["history_scale"] == 1.2
+    assert quiet.describe()["layout"]["composition"]["history_scale"] == 1.2
 
 
 @pytest.mark.parametrize("greedy", [True, False])
@@ -217,11 +218,11 @@ def test_a_saved_history_continues_identically_and_marks_its_format(tmp_path, ep
         brain.live(CUE if t % 2 else GO, reward=None if t == 0 else [float(t % 3 == 0)])
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
         assert meta["format"] == "cadence-generic/7"
         assert meta["history"] == brain.history.to_dict()
         assert ("episodic" in meta) == episodic and "efference" in meta and "arousal" in meta
-        assert "history/trace" in data.files
+        assert "memories/history/trace" in data.files
     twin = cd.Brain.load(path)
     assert isinstance(twin.history, cd.History)
     assert twin.describe() == brain.describe()
@@ -248,7 +249,7 @@ def test_corrupt_saved_histories_are_refused(tmp_path, tamper):
     brain = composed(decays=(0.2, 0.8))
     brain.act(CUE, greedy=True)
     arrays = saved_arrays(brain.save(tmp_path / "history"))
-    meta = json.loads(str(arrays["generic"]))
+    meta = metadata(arrays)
     if tamper == "format_without_history":
         del meta["history"]
     elif tamper == "history_without_format":
@@ -274,7 +275,7 @@ def test_the_amplitude_retunes_and_the_blocks_are_construction_settings():
     brain.live(CUE)
     brain.retune(history_amplitude=1.5)
     assert brain.history.amplitude == 1.5 and brain.describe()["genes"]["history_amplitude"] == 1.5
-    for name, value in (("history_decays", (0.1,)), ("history_scale", 2.0)):
+    for name, value in (("history_decays", (0.1,)), ("scales", {"history": 2.0})):
         with pytest.raises(ValueError, match="construction setting"):
             brain.retune(**{name: value})
     with pytest.raises(ValueError):
@@ -321,13 +322,6 @@ def test_a_custom_connectome_needs_one_block_of_sensory_width_per_decay():
         composed(decays=None).__class__(
             composed(decays=None).connectome, episodic=False, history_decays=(0.5,)
         )
-
-
-def test_the_resting_bias_leaves_the_history_neurons_at_rest():
-    brain = composed(decays=(0.5,), resting_bias=0.5)
-    history = np.asarray(brain.connectome.populations["history"])
-    assert not np.asarray(brain.brain.bias)[history].any()
-    assert np.asarray(brain.brain.bias)[brain.association_index].min() == 0.5
 
 
 def test_a_surprise_lesson_reads_the_history_its_act_reads_and_the_act_then_hears():

@@ -326,3 +326,18 @@ applies to each window arm against the `index` arm on the same founders; `chain`
 reported. Declared expectation: both window arms keep every gate the `index` arm passes; `chain`
 stays below the gate. The window's main readings are outside this instrument (a music row loop and
 a word stream) and are declared with their own instruments.
+
+## Note, 21 October 2026: options the library removed
+
+The library removed settings of its recall memory whose readings were negative or never
+confirmed; release 0.84.3 of `cadence-net` is where they live on. This instrument keeps every
+arm and probe above, with their receipts, as the record of those readings:
+
+- `write="aroused"` (the `repeat` probe's arm; the library's `recall_write="aroused"`):
+  neutral on every binding chamber.
+- `recency=None` (the `horizon` and `improved` arms; the library's `recall_recency=None`):
+  the power-law charge failed its confirmation on the camera task's founders.
+- `value="cortex"` (the library's `recall_value="cortex"`): cortex values failed all four
+  binding tasks (token .06, succession .07, fresh bindings .55, camera .00).
+- `context`, `context_decay` (the library's `recall_context`, `recall_context_decay`): never
+  read above zero in a chamber.

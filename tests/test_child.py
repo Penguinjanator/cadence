@@ -2,13 +2,11 @@
 
 A child learning games keeps a permanent world model (the synapses), sees one frame and keeps
 each moment reverberating for seconds before it vanishes (the settled state and its
-afterglow), and changes the world model only when a moment carried a positive or negative
-signal, in proportion (the eligibility trace times a dopamine that is quiet otherwise).
+afterglow), and changes the world model when a moment carried a positive or negative signal,
+in proportion (the eligibility trace times the dopamine).
 These tests are the small experiments for each capability."""
 
 from __future__ import annotations
-
-import dataclasses
 
 import numpy as np
 
@@ -50,7 +48,6 @@ def test_the_trace_credits_an_action_paid_three_moments_later() -> None:
             lam=lam,
             eta=1.0,
             eta_critic=0.0,
-            dopamine_center=0.0,
             dopamine_cap=0.0,
         )
         batch = 32
@@ -75,154 +72,10 @@ def test_the_trace_credits_an_action_paid_three_moments_later() -> None:
     assert without <= 0.65
 
 
-def test_the_dopamine_is_quiet_for_the_usual_and_speaks_for_more_or_less() -> None:
-    """The child's rule: no critic, the reward in its own units less the usual level, nothing
-    within the usual; a reward that is what it always was moves no synapse, one that is missing
-    or larger does, in proportion."""
-    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
-    ac, learner = _actor(
-        connectome,
-        gamma=0.0,
-        lam=0.0,
-        eta=0.5,
-        eta_critic=0.0,
-        dopamine_center=0.5,
-        center_scale=False,
-        dopamine_floor=1.0,
-        dopamine_cap=10.0,
-    )
-    rng = np.random.default_rng(3)
-    drive, _ = _bandit_drive(rng, 8, connectome, learner)
-    ones = np.ones(8)
-    for _ in range(30):  # the usual: a reward of one every moment
-        ac.act(drive)
-        ac.learn(ones, np.zeros(8, dtype=bool), drive)
-
-    def change(reward: float) -> float:
-        before = learner.brain.weights.copy()
-        ac.act(drive)
-        ac.learn(np.full(8, reward), np.zeros(8, dtype=bool), drive)
-        return float(np.abs(learner.brain.weights - before).sum())
-
-    usual, missing, bigger = change(1.0), change(0.0), change(11.0)
-    print(
-        f"synapse change for the usual {usual:.4f}, a missing reward {missing:.4f}, a reward ten larger {bigger:.4f}"
-    )
-    assert usual == 0.0
-    assert missing > 0.0
-    assert bigger > missing
-
-
-def _one_moment_ago(
-    rng: np.random.Generator,
-    connectome: cd.Connectome,
-    glow: cd.Afterglow,
-    tie: np.ndarray | None,
-    v: int,
-    background: int,
-) -> float:
-    """Predict the symbol seen one moment ago from one moment's input, ``background`` neurons always on."""
-    streams, length = 64, 60
-    seq = rng.integers(0, v, (streams, length))
-    cfg = cd.LearnerConfig(
-        eta=2.0, beta=0.1, temperature=0.1, tolerance=3e-3, nudged_steps=12, free_steps=60
-    )
-    learner = cd.Learner(
-        cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0)),
-        connectome.populations["output"],
-        cfg,
-        tie_groups=tie,
-    )
-
-    def run(learn: bool) -> float:
-        glow.reset(streams)
-        hits = total = 0
-        for t in range(1, length):
-            drive = np.zeros((streams, connectome.n))
-            drive[np.arange(streams), seq[:, t]] = 1.0
-            drive[:, v : v + background] = 1.0  # the background, the same every moment
-            target = seq[:, t - 1]
-            drive = glow.stimulate(drive)
-            if learn:
-                learned, _ = learner.step(drive, target)
-                free = learned.free
-            else:
-                free = learner.free(drive)
-            if t > 5:
-                hits += int(
-                    (free.activation[:, learner.output_index].argmax(axis=1) == target).sum()
-                )
-                total += streams
-            glow.update(free)
-        return hits / total
-
-    for epoch in range(6):
-        learner.config = dataclasses.replace(cfg, eta=2.0 * 0.8**epoch)
-        run(learn=True)
-    learner.config = dataclasses.replace(cfg, tolerance=1e-4)
-    return run(learn=False)
-
-
-def test_the_afterglow_remembers_a_cue_against_a_static_background() -> None:
-    """Predict the symbol seen one moment ago, from one moment's input, while twelve neurons of
-    background are always on. The echo of the interpretation keeps everything and the
-    background swamps the cue; the afterglow keeps what changed. Two afterglows: of the
-    interpretation (the hidden neurons) and of the picture itself (an afterimage of the
-    input neurons, a fading picture of what changed on the retina)."""
-    v, background = 4, 12
-    scores = {}
-    for name, focus in (
-        ("echo", 0.0),
-        ("afterglow of the interpretation", 1.0),
-        ("afterglow of the interpretation, focus 2", 2.0),
-    ):
-        w, tie = cd.stateful(v + background, 1, 4, 24, v, seed=0)
-        w = w.with_populations(afterglow=w.populations["context"])
-        scores[name] = _one_moment_ago(
-            np.random.default_rng(0), w, cd.Afterglow(w, decay=0.5, focus=focus), tie, v, background
-        )
-    n = v + background
-    picture = cd.Genome(
-        regions=(
-            cd.Region("input", n),
-            cd.Region("afterglow", n),
-            cd.Region("hidden", 24),
-            cd.Region("output", v),
-        ),
-        projections=(
-            cd.Projection("input", "hidden", density=1.0, sign=0.0, scale=1.0, reciprocal=False),
-            cd.Projection(
-                "afterglow", "hidden", density=1.0, sign=0.0, scale=1.0, reciprocal=False
-            ),
-            cd.Projection("hidden", "output", density=1.0, sign=0.0, scale=1.0),
-        ),
-        label="afterimage",
-    )
-    for name, focus in (
-        ("afterimage of the picture, no focus", 0.0),
-        ("afterimage of the picture", 1.0),
-    ):
-        w = cd.develop(picture, seed=0)
-        scores[name] = _one_moment_ago(
-            np.random.default_rng(0),
-            w,
-            cd.Afterglow(w, decay=0.5, focus=focus, source="input"),
-            None,
-            v,
-            background,
-        )
-    print(
-        "one moment ago against a static background (chance 0.25): "
-        + ", ".join(f"{k} {s:.2f}" for k, s in scores.items())
-    )
-    assert max(scores.values()) > 0.5
-    assert scores["afterimage of the picture"] >= scores["echo"]
-
-
 def test_a_capped_activity_change_carries_the_moment_before_and_a_full_one_forgets_it() -> None:
     """Settling as the memory: settled for a few steps from the previous equilibrium, the
     state still holds the moment before; settled to convergence, it does not."""
-    w, _ = cd.stateful(4, 1, 4, 24, 4, seed=0)
+    w, _ = cd.embedded(4, 1, 4, 24, 4, seed=0)
     brain = cd.NeuralGraph(w, cd.learning_neuron_model(dt=1.0))
     hidden = list(w.populations["hidden"])
     a = np.zeros((1, w.n))
@@ -246,10 +99,11 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
     twelve neurons of background always on: the synapses out of the background carry eligibility
     at every moment, the synapses out of the context only at the one that mattered. With the
     eligibility weighted by the afterimage (what is still ringing is what gets written) the
-    signal lands on the context's synapses. Both learn it here: the background's eligibility is
-    noise that averages out over rounds, and the weighting is a faster start on some seeds
-    (1.00 against 0.57 at fifty rounds on one, no difference on another), not a gain the
-    small experiment can promise."""
+    signal lands on the context's synapses. The plain trace learns it here: the background's
+    eligibility is noise that averages out over rounds. The weighting is reported and not
+    asserted. With the trace's focus removed in 0.85 the afterimage is a plain decaying copy of
+    the input, and the weighted run learns the cue on some seeds and platforms and stays at
+    chance on others (seed 0 reads 1.00 with Accelerate and .48 with OpenBLAS)."""
     v, background, hidden, batch, rounds = 4, 12, 8, 32, 100
     n_in = v + background
     genome = cd.Genome(
@@ -286,12 +140,11 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
                 eta=1.0,
                 eta_bias=0.05,  # the historical recipe of this measurement (issue 143)
                 eta_critic=0.0,
-                dopamine_center=0.0,
                 dopamine_cap=0.0,
             ),
             seed=0,
         )
-        glow = cd.Afterglow(connectome, decay=0.7, focus=1.0, source="input")
+        glow = cd.Trace(connectome, decay=0.7, source="input", target="afterglow")
         glow.reset(batch)
 
         def raw(context: np.ndarray | None) -> np.ndarray:
@@ -338,21 +191,4 @@ def test_the_eligibility_weighted_by_the_afterimage_credits_the_cue_not_the_back
     print(
         f"a cue paid three moments later against twelve neurons of background: hit rate {plain:.2f} with the plain trace, {weighted:.2f} weighted by the afterimage"
     )
-    assert weighted > 0.9
     assert plain > 0.9
-
-
-def test_the_valence_is_one_element() -> None:
-    """The Valence alone: level, units, floor, cap; and the agent's dopamine is the same object."""
-    v = cd.Valence(level=0.5, floor=1.0, cap=10.0, units=True)
-    for _ in range(30):
-        v(np.array([1.0, 1.0]))
-    assert np.array_equal(v(np.array([1.0, 1.0])), [0.0, 0.0])  # the usual: quiet
-    missing, bigger = v(np.array([0.0, 0.0])), v(np.array([11.0, 11.0]))
-    assert missing[0] < 0 < bigger[0] and abs(bigger[0]) > abs(missing[0])
-    assert v(np.array([1000.0, 1000.0]))[0] == 10.0  # the cap
-    connectome = cd.layered(4, 8, 2, density=1.0, seed=0)
-    ac, _ = _actor(
-        connectome, dopamine_center=0.5, dopamine_floor=1.0, dopamine_cap=10.0, center_scale=False
-    )
-    assert isinstance(ac.valence, cd.Valence) and ac.valence.floor == 1.0 and ac.valence.units

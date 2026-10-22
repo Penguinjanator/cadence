@@ -5,7 +5,7 @@ These are the design points every change to this library answers to.
 Every change must meet these bars. [Contributing](CONTRIBUTING.md) gives the
 required review and evidence checks; keep these two documents in sync whenever
 a requirement changes. The goals below do not imply that every capability is
-already implemented; the [world-model guide](docs/world-model.md) names current limits.
+already implemented; the [world-model guide](docs/start.md#one-continuing-equilibrium-brain) names current limits.
 
 **The goal.** One continuing brain with the functional capabilities of an animal and a
 human-like learner, built as a patch-net equilibrium that is more scalable, more capable
@@ -21,9 +21,7 @@ answers with a settled state of that one rule. There is no separate answer head.
 Here agreement means satisfying the declared coupled relations, not identical
 neural states or guaranteed correctness about the world. A fixed-input settle
 holds its parameters and memory readback fixed; the continuing brain encounters
-new observations, carries context and learns across such solves. Neural equation
-residuals and the experimental population model's stationarity residual have
-different contracts; stationarity can retain nonzero prediction error.
+new observations, carries context and learns across such solves.
 
 **Simple first; evolved brains are the reference.** Start from the simplest existing
 System 1 and check state, memory, experience and available information before adding a
@@ -46,17 +44,21 @@ representations of meaning. Raw observations are its input; the code it learns f
 what the cortex settles on and what the memories store and address, so a memory finds moments
 that mean alike even when their raw inputs share little. The code is learned by the same local
 repair inside the settle, slowly enough that stored keys stay readable; a backpropagated
-embedding table is a control. The released memories key on the observation or on a fixed
-random code of it; the learned code is work in progress in
-[#211](https://github.com/muellerberndt/cadence/issues/211).
+embedding table is a control. The memories key on the observation, on a fixed random code of
+it, or, opt-in, on the code a region of the brain's own neurons learns while it lives
+(`learned_code=units`; [the learned code](docs/senses.md#the-learned-code) states its costs
+and limits). The camera chamber measures a separate prototype with imprinted columns and
+nursery experience; integrated camera behavior remains to be measured
+([#211](https://github.com/muellerberndt/cadence/issues/211)).
 
-**The transformer's parts, settled.** Everything that makes a transformer effective has its
-version here as settling and local repair: the embedding is a learned code of meaning, the
-residual stream is the settling cortex, attention is a recall memory over the brain's own
-moments with a learned address and keys that stay current, and the logits are the motor
-population inside the settle. What was tested and did not work is removed or folded into what
-did. The documentation says which part to use in which situation, and the interface stays as
-simple as possible for the people who use it.
+**The transformer's parts, as design comparisons.** Compare useful capabilities with their
+proposed settlement roles: embeddings with learned codes, a residual stream with the settling
+cortex, attention with learned memory retrieval, and logits with the motor population.
+The current recall memory addresses a moment before the neural settle and holds that read
+fixed through it; selection that revises with the present interpretation remains a goal.
+Each comparison needs its own behavioral and work measurements. What was tested and did not
+work is removed or folded into what did. The documentation says which part to use in which
+situation, and the interface stays as simple as possible for the people who use it.
 
 **System 1 is the default; System 2 is optional.** System 1 is acquired competence in the
 reciprocal graph with memory, plasticity, private imagination and action. System 2 is
@@ -101,4 +103,4 @@ coupled equilibrium, preserves demonstrated recall, associations, context, actio
 ownership, private imagination and saved continuation, and passes the
 [preservation review](CONTRIBUTING.md#preserve-the-capable-foundation). Every constant
 that would be a designed number of the brain is a gene with the composed default as the
-founder and the control. Read [the world-model guide](docs/world-model.md) before building.
+founder and the control. Read [the world-model guide](docs/start.md#one-continuing-equilibrium-brain) before building.

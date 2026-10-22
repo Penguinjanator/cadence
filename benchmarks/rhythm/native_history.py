@@ -78,12 +78,15 @@ def make_brain(seed, source="sensory", protocol=None):
         connectome,
         episodic=False,
         seed=seed,
-        resting_bias=original.resting_bias,
         learning=original.learner.config,
         reward=original.basal_ganglia.config,
         working_memory_amplitude=protocol["recipe"]["trace_amplitude"],
         working_memory_decay=protocol["recipe"]["trace_decay"],
         slots=original.learner.slot_sizes.tolist(),
+    )
+    # the initial biases of the recipe's resting bias
+    brain.learner.brain = brain.learner.brain.with_parameters(
+        bias=np.asarray(original.brain.bias, dtype=float).copy()
     )
     for key, value in initial_arrays(original).items():
         np.testing.assert_array_equal(value, initial_arrays(brain)[key])
@@ -648,10 +651,15 @@ def _verified_preservation(directory, row, protocol):
     unchanged = equal("before-imagine.npz", "after-imagine.npz")
     continued = equal("continued.npz", "restored.npz")
     with np.load(directory / "pending.npz", allow_pickle=False) as saved:
-        meta = json.loads(str(saved["generic"]))
+        if "brain" in saved.files:  # one group per memory, the format since 0.85
+            meta = json.loads(str(saved["brain"]))
+            working = meta["memories"]["working_memory"]
+        else:
+            meta = json.loads(str(saved["generic"]))
+            working = meta["working_memory"]
         assert meta["pending"] is True
-        assert meta["working_memory"]["source"] == protocol["history"]["source"]
-        assert meta["working_memory"]["target"] == protocol["history"]["target"]
+        assert working["source"] == protocol["history"]["source"]
+        assert working["target"] == protocol["history"]["target"]
     assert proof["imagination_unchanged"] == unchanged
     assert proof["pending_arrays_equal"] == continued
     assert len(proof["choices"]) == len(proof["twin_choices"]) == 4

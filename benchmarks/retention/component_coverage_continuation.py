@@ -287,7 +287,8 @@ def prepare(root, reference):
     for condition, exposure in inputs.SPECIMENS:
         name = f"{condition}-{exposure}"
         brain = chamber.Brain.load(root / f"reference/seed-0/{name}/restored.npz")
-        if brain.learner.config.decay != 0 or brain._moment is not None:
+        # the learner has no leak (a leak was removed from the library after 0.84.3)
+        if brain._moment is not None:
             raise ValueError("reference final specimen is not the accepted decay0 life")
         models[name] = chamber.model_identity(brain)
     protocol = {
@@ -445,7 +446,7 @@ def preflight(root, *, worker=True, work=None):
         raise ValueError("reference newborn model differs")
     for specimen, expected in protocol["initial_models"].items():
         brain = load_model(root / f"reference/seed-0/{specimen}/restored.npz")
-        if chamber.model_identity(brain) != expected or brain.learner.config.decay != 0:
+        if chamber.model_identity(brain) != expected:
             raise ValueError("complete acquired specimen model differs")
     if chamber.tree_bytes(root) >= OUTPUT_MIB * 1024**2 - RESERVE_BYTES:
         raise ValueError("prepared continuation has no output reserve")

@@ -10,17 +10,22 @@ the decisions taken since that outcome.
 
 from __future__ import annotations
 
-import json
+from dataclasses import replace
 
 import numpy as np
 import pytest
+from checkpoints import metadata
 
 import cadence as cd
 
 
-def episodic(*args, **options) -> cd.Brain:
-    """``Brain.compose`` with the episodic memory."""
-    return cd.Brain.compose(*args, **{"memory_choice": True, **options})
+def episodic(*args, frozen: bool = False, **options) -> cd.Brain:
+    """``Brain.compose`` with the episodic memory; ``frozen``: the cortex learns nothing from
+    lessons (the composed teaching founders at step zero)."""
+    brain = cd.Brain.compose(*args, **{"memory_choice": True, **options})
+    if frozen:
+        brain.retune(learning=replace(brain.learner.config, eta=0.0, eta_bias=0.0))
+    return brain
 
 
 def one_hot(index: int, width: int) -> np.ndarray:
@@ -39,14 +44,13 @@ def assert_same_checkpoint(first, second):
 def path(brain: cd.Brain) -> list[tuple[int, float, bool]]:
     """The stream's replay path: each decision's observation, its outcome and whether the
     outcome was received."""
-    return [(int(np.argmax(entry[2])), entry[3], entry[4]) for entry in brain._paths[0]]
+    return [(int(np.argmax(entry[2])), entry[3], entry[4]) for entry in brain.memories["episodic"].paths[0]]
 
 
 def cued(seed: int, **options) -> tuple[cd.Brain, dict[int, np.ndarray], np.ndarray]:
     """A brain shown each cue's answer once at the go moment after it. Its cortex learns
-    nothing from the lessons (``learning_eta=0``): the records alone carry them."""
-    brain = episodic(3, 2, modules=(8,), seed=seed, learning_eta=0, learning_eta_bias=0,
-                     **options)
+    nothing from the lessons (``frozen``): the records alone carry them."""
+    brain = episodic(3, 2, modules=(8,), seed=seed, frozen=True, **options)
     cues, go = {0: one_hot(0, 3), 1: one_hot(1, 3)}, one_hot(2, 3)
     for cue, shown in cues.items():
         brain.reset()
@@ -60,8 +64,7 @@ def misled() -> tuple[cd.Brain, np.ndarray, int]:
     """A brain whose memory turns its cortex's answer into the other act: one demonstration of
     the other action is recorded, and the cortex learns nothing from it."""
     x = one_hot(0, 3)
-    brain = episodic(3, 2, modules=(8,), seed=3, learning_surprise=True, learning_eta=0,
-                     learning_eta_bias=0)
+    brain = episodic(3, 2, modules=(8,), seed=3, learning_surprise=True, frozen=True)
     cortical = int(brain.act(x, greedy=True)[0])
     brain.reset()
     brain.step(x, teacher=[1 - cortical])
@@ -122,7 +125,7 @@ def test_a_surprise_lesson_corrects_an_act_the_memory_made_wrong(tmp_path):
 def test_an_act_the_memory_makes_right_is_no_surprise_and_gets_no_lesson():
     brain, x, cortical = misled()
     shown = 1 - cortical  # what the brain does, by its memory against its cortex
-    brain.retune(learning_eta=0.5, learning_eta_bias=0.05)  # the cortex could learn again
+    brain.retune(teaching="founder")  # the cortex could learn again
     graph = brain.brain
     parameters = [np.array(getattr(graph, name), copy=True) for name in ("efficacy", "bias")]
     writes = brain.hippocampus.writes, brain.context_memory.writes
@@ -166,7 +169,7 @@ def test_a_greedy_act_the_vote_decided_is_owned_and_its_outcome_can_surprise(tmp
     assert brain._lived[5]
     saved = brain.save(tmp_path / "issued.npz")
     with np.load(saved, allow_pickle=False) as data:
-        assert json.loads(str(data["generic"]))["lived"]["own"] is True
+        assert metadata(data)["lived"]["own"] is True
     copy = cd.Brain.load(saved)
     assert copy._lived[5]
     writes = brain.hippocampus.writes
@@ -174,7 +177,7 @@ def test_a_greedy_act_the_vote_decided_is_owned_and_its_outcome_can_surprise(tmp
         for reward in [0.0] * 5 + [1.0]:  # as forecast five times, then far beyond it
             assert subject._lived[5]
             subject.live(x, reward=[reward])
-        assert subject.arousal.outcomes == subject.arousal.records == 6
+        assert subject.arousal.outcomes == 6
         reading = subject.last_arousal
         assert reading["mode"] == "aroused" and reading["surprise"] > 0 and reading["recorded"]
         assert subject.hippocampus.writes == writes + 1  # the outcome that woke it
@@ -187,8 +190,7 @@ def test_an_aroused_brain_owns_the_samples_of_its_complete_greedy_choice():
     x = one_hot(0, 2)
     # place records alone, and nothing learned or written while it lives: the vote stays
     brain = episodic(2, 2, modules=(8,), seed=0, memory_context=0.0, arousal={"youth": 1000},
-                     learning_eta=0, learning_eta_bias=0, actor_eta=0, actor_eta_bias=0,
-                     actor_eta_critic=0)
+                     frozen=True, actor_eta=0, actor_eta_bias=0, actor_eta_critic=0)
     cortical = int(brain.act(x, greedy=True)[0])
     brain.reset()
     brain.step(x, teacher=[1 - cortical])
@@ -200,7 +202,7 @@ def test_an_aroused_brain_owns_the_samples_of_its_complete_greedy_choice():
         assert brain.last_arousal["mode"] == "aroused"
         state = brain.basal_ganglia.state
         # the most probable action of the readout with the place records' vote
-        greedy = int(np.argmax(brain.basal_ganglia.probabilities(state, bias=brain._vote(x, None))))
+        greedy = int(np.argmax(brain.basal_ganglia.probabilities(state, bias=brain.memories["episodic"].vote(x, None))))
         overruled += greedy != int(brain._choices(state)[0])
         assert brain._lived[5] == (action == greedy)
         assert int(brain._greedy(state, x, None)[0]) == greedy
@@ -244,32 +246,6 @@ def test_an_imagined_branch_issues_the_act_the_brain_would_issue(tmp_path, monke
     assert_same_checkpoint(before, brain.save(tmp_path / "after.npz"))  # nothing real changed
 
 
-def test_an_imagined_branch_gives_the_predecessor_key_the_act_the_brain_would_issue(
-    tmp_path, monkeypatch
-):
-    brain, cues, _ = cued(0, recall=True, recall_key="predecessor")
-    commands = []
-    release = cd.Recall.witness
-
-    def witness(self, observations, state, *, aroused=True, command=None):
-        if self._private:
-            commands.append(int(np.argmax(command[0])))
-        release(self, observations, state, aroused=aroused, command=command)
-
-    monkeypatch.setattr(cd.Recall, "witness", witness)
-    before = brain.save(tmp_path / "before.npz")
-    decided = 0
-    for shown in cues.values():
-        commands.clear()
-        phase = brain.imagine([shown])[0]
-        live = cd.Brain.load(before)
-        act = int(live.act(shown, greedy=True)[0])
-        assert commands == [act]
-        decided += act != int(np.argmax(phase.state.activation[0, brain.motor_index]))
-    assert decided
-    assert_same_checkpoint(before, brain.save(tmp_path / "after.npz"))
-
-
 # -- a known outcome bounds the replay, whatever follows it in the same situation
 
 
@@ -282,7 +258,7 @@ def test_an_outcome_at_an_unchanged_observation_bounds_the_next_replay(outcome, 
     brain.step(x[[1]], reward=[outcome])  # the outcome at 1, and the next decision at 1 again
     assert path(brain) == [(0, 0.0, True), (1, outcome, True), (1, 0.0, False)]
     brain.step(x[[2]], reward=[0.0])
-    keys = [entry[0].copy() for entry in brain._paths[0]]
+    keys = [entry[0].copy() for entry in brain.memories["episodic"].paths[0]]
     written = []
     observe = brain.context_memory.observe
 

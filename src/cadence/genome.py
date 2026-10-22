@@ -1,6 +1,6 @@
 """Where a connectome comes from: a genome, developed into a brain, selected over generations.
 
-The connectomes in this library are designed (``layered``, ``embedded``, ``stateful``) or read
+The connectomes in this library are designed (``layered``, ``embedded``) or read
 from a measured animal connectome. An animal's specialised parts are
 a mix: the genome lays down which regions exist, how large they are, which project to
 which and with what sign and density; learning and development do the rest. This module is
@@ -69,6 +69,40 @@ class Genome:
                     raise ValueError(f"unknown projection region: {name!r}")
                 region = self.region(name)
                 region.neurons(population or getattr(region, side))
+
+    @classmethod
+    def composed(cls, inputs: Any, actions: int, **settings: Any) -> Genome:
+        """The layout ``Brain.compose(inputs, actions, **settings)`` develops: the sensory
+        region (an image's visual cortex), the code region with ``learned_code``, the modules
+        ending in the association region, the prefrontal region of the working trace, the
+        motor region, the observers, and the efference, history, recall and next regions its
+        memory settings add, with their projections. Settings that do not shape the layout
+        change nothing here. Mutate it with the sensory region fixed and the prefrontal region
+        tied to the association region, then wrap it with
+        ``Brain.compose(inputs, actions, connectome=develop(genome, seed=seed), seed=seed)``."""
+        from .generic import _layout
+
+        keywords = (
+            "modules", "observers", "lateral", "scales", "features", "field", "code",
+            "learned_code", "seed", "slots",
+        )
+        layout = {name: settings.pop(name) for name in keywords if name in settings}
+        return _layout(inputs, actions, settings, **layout)[0]
+
+    @staticmethod
+    def observation_width(
+        inputs: Any, code: int | None = None, learned_code: int | None = None
+    ) -> int:
+        """The width of the observation code of a brain with these ``inputs`` (a vector
+        length or an image shape), this ``code`` and this ``learned_code`` (as
+        ``Brain.compose`` takes them), before the brain is built: with ``recall=True`` a
+        custom anatomy's ``recall`` and ``next`` regions hold that many neurons. A learned
+        code's key is its units and the inputs, the code joined to the observation's
+        identity, for an observation no wider than the code; a wider one is keyed on the
+        code alone, its units."""
+        from .generic import _observation_width
+
+        return _observation_width(inputs, code, learned_code)
 
     def region(self, name: str) -> Region:
         for r in self.regions:
@@ -258,7 +292,7 @@ def genes(
     ``("linear", step, low, high)`` adds ``normal(0, step)`` and clips; ``("int", low, high)``
     moves by one, up or down, within the bounds; ``("choice", option, ...)`` redraws among the
     options. Each gene mutates independently with probability ``rate``; genes of the genome that
-    ``space`` does not name are copied. A governor's threshold, an imagination budget, a port's
+    ``space`` does not name are copied. An arousal threshold, an imagination budget, a port's
     width or a cortex size can all be genes this way, with the hand-set value as the control.
     """
     kinds = {}
@@ -329,7 +363,7 @@ def evolve(
     compute.
 
     A ``Genome`` grows into a connectome by ``develop`` and mutates by ``mutate`` of this module,
-    whose keyword arguments arrive through ``mutation``. Any other genome, a dict of a governor's
+    whose keyword arguments arrive through ``mutation``. Any other genome, a dict of
     thresholds, a port topology, a patch's sizes, needs its own ``mutate(genome, rng)`` (``genes``
     supplies one over a declared space) and is passed to the fitness as it is unless ``grow``
     says how to build from it. ``mapper`` runs a generation's lives: ``map`` one after another, a

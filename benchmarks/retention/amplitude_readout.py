@@ -80,11 +80,12 @@ def only_amplitude_changed(original, changed, amplitude):
         if set(left.files) != set(right.files):
             return False
         for name in left.files:
-            if name == "generic":
+            if name in ("generic", "brain"):  # "brain" groups the memories, the format since 0.85
                 before, after = json.loads(left[name].item()), json.loads(right[name].item())
-                if before["hippocampus"]["amplitude"] != 1:
+                store = before["memories"] if name == "brain" else before
+                if store["hippocampus"]["amplitude"] != 1:
                     return False
-                before["hippocampus"]["amplitude"] = amplitude
+                store["hippocampus"]["amplitude"] = amplitude
                 if before != after:
                     return False
             elif not np.array_equal(left[name], right[name]):

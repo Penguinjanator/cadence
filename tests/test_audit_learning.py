@@ -118,11 +118,11 @@ def test_bias_correction_continues_after_a_checkpoint_and_ignores_external_updat
     assert np.array_equal(steady.second_moment_bias, resumed.second_moment_bias)
 
 
-def test_cap_and_decay_never_touch_a_frozen_synapse_on_host_or_device() -> None:
+def test_the_cap_never_touches_a_frozen_synapse_on_host_or_device() -> None:
     torch = pytest.importorskip("torch")
     c, tie = _net()
     rng = np.random.default_rng(2)
-    config = cd.LearnerConfig(eta=50.0, eta_bias=5.0, decay=0.05, tolerance=1e-6)
+    config = cd.LearnerConfig(eta=50.0, eta_bias=5.0, tolerance=1e-6)
     frozen = np.zeros(c.synapses, dtype=bool)
     frozen[::4] = True
     frozen_neurons = np.zeros(c.n, dtype=bool)
@@ -152,7 +152,7 @@ def test_cap_and_decay_never_touch_a_frozen_synapse_on_host_or_device() -> None:
         for backend, learner in learners.items():
             learner.step(d, labels)
             efficacy = learner.brain.efficacy
-            assert np.array_equal(efficacy[frozen], start[frozen]), backend  # no clip, no decay
+            assert np.array_equal(efficacy[frozen], start[frozen]), backend  # no clip
             assert np.abs(efficacy[~frozen]).max() <= SCALE_CAP, backend
             capped[backend] |= bool((np.abs(efficacy[~frozen]) == SCALE_CAP).any())
             assert not learner.brain.bias[frozen_neurons].any(), backend
@@ -168,11 +168,12 @@ def test_host_apply_keeps_the_torch_kernel_and_the_settled_states_on_it() -> Non
     rng = np.random.default_rng(0)
     brain = cd.NeuralGraph(c, cd.learning_neuron_model(dt=1.0), backend="torch", device="cpu")
     learner = cd.Learner(brain, c.populations["output"], cd.LearnerConfig(tolerance=1e-5), tie_groups=tie)
-    agent = cd.ActorCritic(learner, c.populations["hidden"], cd.ActorCriticConfig(normalize=0.9))
+    agent = cd.ActorCritic(learner, c.populations["hidden"], cd.ActorCriticConfig())
     kernel = brain._torch
     d, _ = _drive(c, rng, 4)
     agent.act(d)
-    agent.learn(np.ones(4), np.zeros(4, dtype=bool), d)  # normalize > 0: the host path
+    learner._device_kernel = lambda plus, minus: None  # the update takes the host path
+    agent.learn(np.ones(4), np.zeros(4, dtype=bool), d)
     assert learner.brain._torch is kernel  # not rebuilt
     assert agent.state is not None and agent.state.device is not None
     assert agent.state.device["holder"] is kernel  # the next free phase still rests there

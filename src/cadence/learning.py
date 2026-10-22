@@ -13,10 +13,10 @@ on the difference between what its two endpoints did in the two phases:
 
 That is a contrastive Hebbian rule. It reads two numbers per synapse and
 one per neuron, so it is as local as settling itself; and the goal
-enters through exactly one door, the nudge of the second phase. With
-``centered`` set the learner runs the nudge both ways, ``+beta`` and
-``-beta``, from the same free state and contrasts those two; that cancels
-the leading error of a one-sided nudge on a smooth equilibrium branch.
+enters through exactly one door, the nudge of the second phase. The learner
+runs the nudge both ways, ``+beta`` and ``-beta``, from the same free state
+and contrasts those two; that cancels the leading error of a one-sided nudge
+on a smooth equilibrium branch.
 
 For the rule to reach hidden neurons the connectome needs feedback: a synapse
 from the output neurons back toward the hidden ones. ``layered`` builds such
@@ -28,7 +28,7 @@ The rule is exact in a limit. With symmetric effective recurrent weights and a
 smooth stable equilibrium branch, converged phases give a gradient in the
 small-nudge limit. The raw contrast concerns effective weights; efficacy
 derivatives also need the contact/gain factor. The cross-entropy nudge uses T
-times that loss. See docs/learning.md for the parameter convention and
+times that loss. See docs/settling.md#learning-the-freenudged-rule for the parameter convention and
 finite-step limits. Two things break that in practice, and
 ``learning_neuron_model`` is chosen to avoid them: a neuron below rest with a
 hard rectifier publishes nothing and cannot be moved (hence a small ``leak``),
@@ -77,7 +77,6 @@ class LearnerConfig:
     beta: float = 0.1  # nudge strength
     eta: float = 0.2  # synapse learning rate, divided by beta in the update
     eta_bias: float | None = None  # bias learning rate; None derives eta / 10 at construction
-    centered: bool = True  # contrast +beta against -beta rather than against the free state
     free_steps: int = 100  # most steps the free phase may take
     nudged_steps: int = 50  # most steps a nudged phase may take
     tolerance: float | None = 1e-4  # finite movement tolerance; qualified equation residual
@@ -88,7 +87,6 @@ class LearnerConfig:
     normalize: float = 0.0
     normalize_floor: float = 1e-3  # added to the RMS so a quiet synapse does not blow up
     momentum: float = 0.0  # >0: each synapse steps on a running average of its own contrast
-    decay: float = 0.0  # >0: every update shrinks each trainable synapse and bias by this fraction
     # the magnitude a plastic synapse's efficacy may not exceed; a smaller cap keeps a readout
     # neuron out of saturation, where a nudge has no slope and nothing can move again
     scale_cap: float = SCALE_CAP
@@ -133,16 +131,12 @@ class LearnerConfig:
             raise ValueError("normalize is a forgetting factor in [0, 1)")
         if not 0 <= self.momentum < 1:
             raise ValueError("momentum lies in [0, 1)")
-        if not 0 <= self.decay < 1:
-            raise ValueError("decay is a fraction in [0, 1)")
         if not np.isfinite(self.temperature) or self.temperature <= 0:
             raise ValueError("temperature must be finite and positive")
         if not np.isfinite(self.normalize_floor) or self.normalize_floor <= 0:
             raise ValueError("normalize_floor must be finite and positive")
         if self.tolerance is not None and (not np.isfinite(self.tolerance) or self.tolerance < 0):
             raise ValueError("tolerance must be finite and nonnegative, or None")
-        if not isinstance(self.centered, bool):
-            raise ValueError("centered must be boolean")
         if not isinstance(self.qualified, bool):
             raise ValueError("qualified must be boolean")
         if self.qualified and self.tolerance is None:
@@ -162,7 +156,7 @@ class LearnerConfig:
                 "LearnerConfig with normalize > 0 and eta or eta_bias above 0.05: "
                 "RMS normalization can make parameter steps much larger than raw contrasts "
                 "suggest and may saturate the readout. Consider smaller rates; "
-                "see docs/learning.md#rates-under-normalization.",
+                "see docs/teach.md#rates-under-normalization.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -172,7 +166,7 @@ class LearnerConfig:
                 "the bias step dominates the synapse step. The default couples "
                 "eta_bias to eta / 10; when lowering eta through dataclasses.replace, "
                 "set eta_bias too, or pass eta_bias=None to re-derive it. "
-                "See docs/learning.md#7-every-knob.",
+                "See docs/settling.md#7-every-knob.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -183,7 +177,7 @@ class LearnerConfig:
                 "phase against the full equations within its budget, and a nudged budget "
                 "sized for finite teaching refuses lessons the free budget would settle. "
                 "Set nudged_steps comparable to free_steps; "
-                "see docs/learning.md#qualified-teaching-budgets.",
+                "see docs/settling.md#qualified-teaching-budgets.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -196,7 +190,7 @@ class LearnerConfig:
 class LearnedState:
     free: BrainState | None
     nudged: BrainState | None
-    opposite: BrainState | None = None  # the -beta phase, when centered
+    opposite: BrainState | None = None  # the -beta phase
     # per offered row, True where the nudged phases ran, under ``surprise`` only; the three
     # states then hold those rows. A batch without a disagreeing row has ``free`` as ``nudged``
     # when the free phase judged it, and no state at all when the caller's answer did.
@@ -542,7 +536,7 @@ class Learner:
         return (
             f"the nudged budget ({cfg.nudged_steps}) is below the free budget "
             f"({cfg.free_steps}); qualified nudged phases settle to the same tolerance, "
-            "see docs/learning.md#qualified-teaching-budgets"
+            "see docs/settling.md#qualified-teaching-budgets"
         )
 
     def _qualified_phase(
@@ -701,9 +695,6 @@ class Learner:
         assert self.plastic_neurons is not None
         delta_bias = np.where(self.plastic_neurons, delta_bias, 0.0)
         bias = self.brain.bias + delta_bias
-        if cfg.decay > 0:  # a leak on the synapses: what is not relearned fades away
-            scale = np.where(self.plastic_synapses, scale * (1.0 - cfg.decay), scale)
-            bias = np.where(self.plastic_neurons, bias * (1.0 - cfg.decay), bias)
         cap = cfg.scale_cap
         scale = np.where(self.plastic_synapses, np.clip(scale, -cap, cap), scale)
         kernel = self.brain._torch
@@ -869,14 +860,6 @@ class Learner:
         scale = kernel.scale + d
         db = delta_bias if ix["neurons"] is None else delta_bias * ix["neurons"]
         bias = kernel.bias_param + db
-        if cfg.decay > 0:  # a leak on the synapses: what is not relearned fades away
-            keep_scale = (
-                1.0 - cfg.decay if ix["synapses"] is None else 1.0 - cfg.decay * ix["synapses"]
-            )
-            plastic = ix["neurons"]
-            keep_bias = 1.0 - cfg.decay if plastic is None else 1.0 - cfg.decay * plastic
-            scale = scale * keep_scale
-            bias = bias * keep_bias
         bounded = torch.clamp(scale, -cfg.scale_cap, cfg.scale_cap)
         scale = (
             bounded
@@ -1002,8 +985,6 @@ class Learner:
                 drive, target, weight = self._lesson(taught, drive, target, weight)
                 free = _restrict(free, taught)
             for name, sign in (("nudged", 1.0), ("opposite", -1.0)):
-                if name == "opposite" and not cfg.centered:
-                    break
                 phases[name] = self._qualified_phase(
                     drive, free, cfg.nudged_steps,
                     self.nudge_for(target, sign * cfg.beta, weight),
@@ -1011,8 +992,7 @@ class Learner:
                 if not np.all(phases[name].qualified):
                     raise LearningPhaseError(name, phases, self._nudged_budget_hint())
             nudged = replace(phases["nudged"].state, steps=phases["nudged"].steps)
-            opposite = (replace(phases["opposite"].state, steps=phases["opposite"].steps)
-                        if "opposite" in phases else None)
+            opposite = replace(phases["opposite"].state, steps=phases["opposite"].steps)
             report = self.update(free, nudged, opposite)
             report.update(_phase_report(phases, accepted=True, qualified=True))
             report.update(_taught_report(taught, batch))
@@ -1040,24 +1020,19 @@ class Learner:
             drive, target, weight = self._lesson(taught, drive, target, weight)
             free = _restrict(free, taught)
         nudged = self.nudged(drive, free, target, weight=weight)
-        opposite = (
-            self.nudged(drive, free, target, sign=-1.0, weight=weight)
-            if self.config.centered
-            else None
-        )
+        opposite = self.nudged(drive, free, target, sign=-1.0, weight=weight)
         phases["nudged"] = Equilibrium(
             nudged, self.brain.residual(drive, nudged,
                 nudge=self.nudge_for(target, cfg.beta, weight)),
             nudged.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
             residual_checks=1,
         )
-        if opposite is not None:
-            phases["opposite"] = Equilibrium(
-                opposite, self.brain.residual(drive, opposite,
-                    nudge=self.nudge_for(target, -cfg.beta, weight)),
-                opposite.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
-                residual_checks=1,
-            )
+        phases["opposite"] = Equilibrium(
+            opposite, self.brain.residual(drive, opposite,
+                nudge=self.nudge_for(target, -cfg.beta, weight)),
+            opposite.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
+            residual_checks=1,
+        )
         report = self.update(free, nudged, opposite)
         report.update(_phase_report(phases, accepted=True, qualified=False))
         report.update(_taught_report(taught, batch))
@@ -1100,8 +1075,7 @@ class Learner:
             "qualification_required": float(cfg.qualified),
             "attempted_presentations": float(len(taught)),
         }
-        names = ("free", "nudged", "opposite")[: 3 if cfg.centered else 2]
-        for name in names:
+        for name in ("free", "nudged", "opposite"):
             for key in _PHASE_KEYS:
                 report[f"{name}_{key}"] = 0.0
         for key in ("steps", "residual_checks", "stagnation_checks", "row_sweeps",
@@ -1119,7 +1093,7 @@ class Learner:
         no nudged phase, no update; the phases that did not run count zero work."""
         cfg = self.config
         report = _phase_report(phases, accepted=True, qualified=cfg.qualified)
-        for name in ("nudged", "opposite")[: 2 if cfg.centered else 1]:
+        for name in ("nudged", "opposite"):
             for key in _PHASE_KEYS:
                 report[f"{name}_{key}"] = 0.0
         report.update(_taught_report(taught, len(taught)))
@@ -1134,7 +1108,7 @@ class Learner:
                 "(free_residual in the report holds the equation residual). Raise "
                 "free_steps, lower the gain, or opt into qualified=True to refuse "
                 "such lessons; "
-                "see docs/learning.md#finite-free-phases-that-run-out-of-budget.",
+                "see docs/settling.md#finite-free-phases-that-run-out-of-budget.",
                 RuntimeWarning,
                 stacklevel=3,
             )

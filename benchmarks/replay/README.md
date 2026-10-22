@@ -9,7 +9,7 @@ equal-experience comparison of awake use against replay that
 one composed brain on one synthetic world; it does not choose defaults, establish a
 consolidation mechanism or complete either contract. Read the
 [reward guide](../../docs/reward.md#replaying-a-life-through-step) and the
-[world-model guide](../../docs/world-model.md) before interpreting results.
+[world-model guide](../../docs/start.md#one-continuing-equilibrium-brain) before interpreting results.
 
 ## What runs
 
@@ -51,8 +51,9 @@ name: `trace-1-0.8` sets `working_memory_amplitude=1.0, working_memory_decay=0.8
 `trace-off` sets the amplitude to zero, `actor-0.1` and `actor-0.03` set the actor's
 `eta` with `eta_bias` a tenth of it, `no-memory` passes `episodic=False`,
 `frozen-actor` zeroes the actor and critic rates, `no-cost` removes the cost of a
-move, `reward/5` divides every reward by five and `centered` sets
-`dopamine_center=0.9`.
+move and `reward/5` divides every reward by five. The `centered` rows of the tables set
+`dopamine_center=0.9`, the centred dopamine that the library removed after 0.84.3; the
+arm runs on releases up to 0.84.3, and its readings stay as recorded.
 
 ```bash
 python benchmarks/replay/night_replay.py --seeds 5 --days 40 --rounds 3 --workers 4 --out night.json
@@ -179,7 +180,7 @@ The chamber's second instrument is the contextual bandit of
 `tests/test_generic.py` (four one-hot contexts, the matching action pays one) run as
 one continuing life: one stream, no resets, 600 decisions through `step` with
 `gamma=0, lam=0`, the greedy hit rate on 200 fresh contexts read from a frozen
-copy afterwards (chance 0.25). `Brain.build(4, 4)`, which has no working trace,
+copy afterwards (chance 0.25). `Brain.build(4, 4)` of release 0.84.3, which has no working trace,
 reached 0.94, 1.00 and 1.00 over three seeds; `Brain.compose(4, 4)` at its defaults
 0.33, 0.21 and 0.29. The grid below varies the composed trace and the actor rate.
 
@@ -196,7 +197,7 @@ reached 0.94, 1.00 and 1.00 over three seeds; `Brain.compose(4, 4)` at its defau
 Where the previous moment carries nothing the decision needs, the trace of the
 association cortex, at amplitude 3.0 into the prefrontal projection of scale 12, holds
 that cortex on its own history, and the actor at rate 1.0 cannot learn it away. The
-same brain with `gamma=0.9, lam=0.8` gives the same picture (`Brain.build` 1.00, 0.90,
+same brain with `gamma=0.9, lam=0.8` gives the same picture (that build 1.00, 0.90,
 1.00; the composed defaults 0.23, 0.28, 0.21; the trace off 1.00, 0.90, 1.00). This is
 one task; the [vanished-cue chamber](../recall/README.md) needs the trace the bandit
 does not, and neither selects a default.

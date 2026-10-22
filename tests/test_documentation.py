@@ -13,7 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 NOT_RUN = "<!-- not-run"
 BLOCK = re.compile(r"(<!-- not-run[^\n]*-->\n)?```python\n(.*?)```", re.S)
 # pages whose blocks need an optional dependency
-REQUIRES = {"docs/backends.md": "torch", "docs/population.md": "torch"}
+REQUIRES = {"docs/backends.md": "torch"}
+# pages whose blocks import a benchmark instrument, a module of a source checkout
+INSTRUMENTS = {"benchmarks/instruments/README.md", "docs/anatomy.md"}
 
 
 def snippets(page: str) -> list[str]:
@@ -65,36 +67,18 @@ def test_continuing_brain_example():
 
 PAGES = [
     "README.md",
-    "docs/world-model.md",
-    "docs/patchnet.md",
-    "docs/temporal.md",
-    "docs/temporal-memory.md",
-    "docs/quickstart.md",
-    "docs/concepts.md",
-    "docs/memory.md",
-    "docs/continuous.md",
+    "docs/start.md",
+    "docs/teach.md",
     "docs/reward.md",
-    "docs/certificate.md",
-    "docs/cortex.md",
-    "docs/connectomes.md",
-    "docs/brain.md",
-    "docs/episodic.md",
-    "docs/recall.md",
-    "docs/records.md",
-    "docs/evolution.md",
-    "docs/build.md",
-    "docs/belief.md",
-    "docs/steering.md",
-    "docs/recursive-settlement.md",
+    "docs/memory.md",
+    "docs/senses.md",
+    "docs/tune.md",
+    "docs/evaluate.md",
+    "docs/anatomy.md",
+    "docs/settling.md",
     "docs/api.md",
     "docs/backends.md",
-    "docs/learning.md",
-    "docs/partitioned.md",
-    "docs/planning.md",
-    "docs/population.md",
-    "docs/protocols.md",
-    "docs/receipts.md",
-    "docs/record-patch.md",
+    "benchmarks/instruments/README.md",
 ]
 
 
@@ -103,6 +87,8 @@ def test_introductory_python_snippets(page, tmp_path, monkeypatch):
     if page in REQUIRES:
         pytest.importorskip(REQUIRES[page])
     monkeypatch.chdir(tmp_path)
+    if page in INSTRUMENTS:
+        monkeypatch.syspath_prepend(str(ROOT / "benchmarks/instruments"))
     blocks = snippets(page)
     assert blocks, f"{page} has no runnable python block; drop it from PAGES"
     # a reader runs the page as a script of their own; ``__file__`` names it
@@ -111,22 +97,13 @@ def test_introductory_python_snippets(page, tmp_path, monkeypatch):
     namespace = {"__name__": "documentation_example", "__file__": str(script)}
     for index, code in enumerate(blocks):
         exec(compile(code, f"{page}:python-block-{index + 1}", "exec"), namespace)
-    if page in {"README.md", "docs/quickstart.md", "docs/world-model.md", "docs/brain.md"}:
+    if page == "README.md":
         assert namespace["brain"].last_arousal is not None
-    if page == "docs/quickstart.md":
-        assert namespace["brain"].learner.updates > 0
-        assert len(namespace["phases"]) == 2
-        assert (namespace["continued"] == namespace["replayed"]).all()
-        assert namespace["brain"].arousal.to_dict() == namespace["resumed"].arousal.to_dict()
-        assert namespace["brain"].last_arousal == namespace["resumed"].last_arousal
 
 
 def test_every_python_block_is_run_or_marked_illustrative():
     """A new page with python blocks must join PAGES, or mark each block ``<!-- not-run -->``."""
-    # The preserved engine has its own executable-documentation parametrization.
-    # Read that owner's actual inventory so adding an untested page still fails.
-    experimental = runpy.run_path(str(ROOT / "tests/equilibrium/test_documentation.py"))
-    covered = set(PAGES) | {path.relative_to(ROOT).as_posix() for path in experimental["DOCUMENTS"]}
+    covered = set(PAGES)
     unrun = [
         page.relative_to(ROOT).as_posix()
         for page in sorted((ROOT / "docs").rglob("*.md"))

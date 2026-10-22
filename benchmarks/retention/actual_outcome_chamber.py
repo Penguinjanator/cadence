@@ -40,10 +40,9 @@ THREADS = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
 PRODUCERS = ("actual_outcome_chamber.py", "chamber_inputs.py", "FIXED_CAPACITY_PROTOCOL.md")
 FORMAL = ("MemoryBoundary.lean", "ProtectedTemporalPath.lean", "ReadableTrace.lean",
           "TemporalOverlap.lean", "StructuralMemory.lean")
-BRIDGES = ("docs/continuous.md", "docs/memory.md", "docs/temporal-memory.md",
+BRIDGES = ("docs/start.md", "docs/memory.md",
            "tests/test_continuous.py", "tests/test_actual_outcome_association.py",
-           "tests/test_feedback_transaction.py", "tests/test_generic_memory_checkpoint.py",
-           "tests/test_temporal_memory.py", "tests/test_temporal_memory_metric.py")
+           "tests/test_feedback_transaction.py", "tests/test_generic_memory_checkpoint.py")
 GATES = {"variants_correct": 9, "variants_planned": 10, "prototype_correct": 1,
          "rare_max_drop": 1, "obsolete_max": 1, "cohort_gap": 0.20}
 REQUIRED_EXPOSURES = (0, 128)
@@ -88,17 +87,15 @@ def runtime():
 
 def make_brain(seed):
     return Brain.compose(
-        8, 2, modules=(32,), lateral=-0.5, seed=seed, resting_bias=0, backend="cpu",
+        8, 2, modules=(32,), lateral=-0.5, seed=seed, backend="cpu",
         learning=LearnerConfig(eta=0.5, eta_bias=0.05, beta=0.1, temperature=0.2,
                                free_steps=1024, nudged_steps=12, tolerance=0.003,
                                momentum=0.9, normalize=0, qualified=False, damping=3),
         reward=ActorCriticConfig(gamma=0.9, lam=0.8, eta=1, eta_bias=0.05,
-                                 eta_critic=0.3, eligibility_steps=12, normalize=0,
-                                 momentum=0, dopamine_cap=1, dopamine_center=0,
-                                 dopamine_floor=0, critic_normalize=True, critic_signal="auto"),
+                                 eta_critic=0.3, eligibility_steps=12, dopamine_cap=1),
         consolidation=0.05, episodic=True, working_memory_decay=0.2,
         working_memory_amplitude=3,
-        working_memory_scale=12.0,  # the composition of releases before 0.82.0
+        scales={"trace": 12.0},  # the composition of releases before 0.82.0
     )
 
 
@@ -113,7 +110,6 @@ def model_identity(brain):
             "populations": {name: array_hash(value)
                             for name, value in brain.connectome.populations.items()},
             "learner": learner.config.to_dict(), "actor": brain.basal_ganglia.config.to_dict(),
-            "critic_target": brain.basal_ganglia.config.critic_target,
             "neuron": graph.neuron_model.to_dict(), "trace": brain.working_memory.to_dict(),
             "hippocampus": brain.hippocampus.to_dict(), "layout": graph.layout.to_dict(),
             "backend": graph.backend, "precision": graph.precision,
@@ -728,9 +724,6 @@ def capacity(brain):
             "working_capacity_bytes": 8 * 32 * 8 * 2 + 8,
             "actor_trace_capacity_bytes": 8 * (brain.connectome.synapses + brain.connectome.n
                                                 + 33) * 8,
-            "actor_optimizer_bytes": sum(getattr(actor, name).nbytes for name in
-                                         ("velocity", "velocity_bias", "second_moment",
-                                          "second_moment_bias")),
             "learner_optimizer_bytes": sum(getattr(brain.learner, name).nbytes for name in
                                            ("velocity", "velocity_bias", "second_moment",
                                             "second_moment_bias")),

@@ -75,7 +75,6 @@ SETTINGS: dict[str, dict[str, Any]] = {
     "frozen-actor": {"frozen_actor": True},
     "no-cost": {"cost": 0.0},
     "reward/5": {"scale": 0.2},
-    "centered": {"dopamine_center": 0.9},
 }
 
 
@@ -134,7 +133,7 @@ def make_brain(setting: dict[str, Any], seed: int) -> cd.Brain:
         changes.update(eta=0.0, eta_bias=0.0, eta_critic=0.0)
     if "actor_eta" in setting:
         changes.update(eta=setting["actor_eta"], eta_bias=setting["actor_eta"] / 10)
-    for name in ("dopamine_cap", "dopamine_center", "gamma", "lam", "eta_critic"):
+    for name in ("dopamine_cap", "gamma", "lam", "eta_critic"):
         if name in setting:
             changes[name] = setting[name]
     if changes:

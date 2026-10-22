@@ -9,11 +9,11 @@ lesson, a ``step`` whose act refused after its lesson and a surprise lesson that
 nothing leave the stream in the same state. A sampled action awaiting its outcome still
 needs the drive it was chosen on."""
 
-import json
 import warnings
 
 import numpy as np
 import pytest
+from checkpoints import metadata
 
 import cadence as cd
 
@@ -44,7 +44,7 @@ def saved_arrays(path):
 
 def saved_meta(path):
     with np.load(path, allow_pickle=False) as data:
-        return json.loads(str(data["generic"]))
+        return metadata(data)
 
 
 def assert_same_checkpoint(first, second):

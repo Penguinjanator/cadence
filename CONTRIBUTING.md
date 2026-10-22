@@ -42,10 +42,10 @@ A replacement must preserve demonstrated behavior and saved continuation before
 removing its predecessor. Keep source-bound evidence, original application
 checkpoints and failed comparisons. Smaller code or a newer solver is not a
 capability-preservation test. State the actual learning rule and the scope of
-its equilibrium guarantee; record scans, temporal repair and graph settlement
-must not inherit one another's claims.
+its equilibrium guarantee; one model's settlement must not inherit another's
+claims.
 
-Use [one continuing equilibrium brain](docs/world-model.md) as the application
+Use [one continuing equilibrium brain](docs/start.md#one-continuing-equilibrium-brain) as the application
 and tutorial frame: bootstrap useful relations and memory, operate with them,
 repair witnessed failures, then resume the same acquired brain. Parameters and
 memory support a family of equilibria under changing evidence. Deep reciprocal
@@ -141,25 +141,23 @@ pytest -q
 The test suite includes `tests/test_documentation.py`, which executes every Python block
 of the listed guides in order and checks that every local link and anchor in `README.md`,
 `MANIFESTO.md`, `CONTRIBUTING.md`, `AGENTS.md` and `docs/` resolves. Default pytest
-collection also includes the acquisition, recall, rhythm, reversal
-and key-door instruments, including their provenance, refusal, source-admission,
-archive and confirmation-audit tests.
+collection (`testpaths` in `pyproject.toml`) also includes the chambers under
+`benchmarks/`: `acquisition`, `rhythm`, `reversal`, `keydoor`, `recall`, `competing`,
+`chain`, `stream_words`, `binding` and `learned_code`, including their provenance, refusal,
+source-admission, archive and confirmation-audit tests, and the protocol and timing
+instruments of `benchmarks/instruments`.
 A change to a guide's code is a change to a test. The
 [minimal-install job](https://github.com/muellerberndt/cadence/blob/main/.github/workflows/ci.yml)
 builds the wheel with NumPy alone
-and runs 19 pages without optional backends: `README.md` and, under `docs/`,
-`world-model.md`, `patchnet.md`, `quickstart.md`, `temporal.md`,
-`temporal-memory.md`, `memory.md`, `recall.md`, `planning.md`,
-`partitioned.md`, `record-patch.md`, `build.md`, `belief.md`, `steering.md`,
-`recursive-settlement.md`, `api.md`, `learning.md`,
-`protocols.md` and `receipts.md`. It also executes
-`examples/continuing_brain.py`, `examples/memory_imagination.py` and
-`examples/equilibrium/layout_learning.py`. For changes to these guides or
-examples, run `python -m pytest -q tests/test_documentation.py` and
-`ruff check examples/continuing_brain.py tests/test_documentation.py`.
+and runs 10 pages without optional backends: `README.md` and, under `docs/`, `start.md`,
+`teach.md`, `reward.md`, `memory.md`, `senses.md`, `tune.md`, `evaluate.md`, `settling.md`
+and `api.md` (`anatomy.md` imports the benchmark instruments of a source checkout, and
+`backends.md` needs PyTorch). It also executes `examples/continuing_brain.py`. For
+changes to these guides or examples, run `python -m pytest -q tests/test_documentation.py`
+and `ruff check examples/continuing_brain.py tests/test_documentation.py`.
 
 Mathematical claims must state their assumptions and connect them to the
-executed numerical model. The [settling certificates](docs/certificate.md) explain
+executed numerical model. The [settling certificates](docs/settling.md#the-settling-certificate) explain
 the supported contraction checks and their limits; the
 [trace recurrence checks](tests/test_trace_bridge.py) state their reference
 equations inline. These numerical checks are not formal verification of Python.
@@ -181,12 +179,10 @@ For gain selection, bias calibration, backend continuation and motor wiring:
 python -m pytest -q tests/test_learner_calibration.py tests/test_calibration_backends.py tests/test_bias_qualification.py tests/test_composed_lateral.py
 ```
 
-Run the default foundation and preserved population solver separately to locate
-slow cases. These two commands together retain the complete test inventory:
+To locate slow cases, run the complete test inventory with durations:
 
 ```bash
-python -m pytest -q --ignore=tests/equilibrium --durations=10
-python -m pytest -q tests/equilibrium --durations=10
+python -m pytest -q --durations=10
 ```
 
 A fresh NumPy-only environment avoids optional accelerator startup and runs
@@ -197,7 +193,7 @@ The environment below is inside the ignored `.venv/` directory:
 ```bash
 python -m venv .venv/numpy-only
 .venv/numpy-only/bin/python -m pip install -e . pytest
-.venv/numpy-only/bin/python -m pytest -q tests --ignore=tests/equilibrium -rs --durations=10
+.venv/numpy-only/bin/python -m pytest -q tests -rs --durations=10
 ```
 
 Focused runs and a NumPy-only run provide partial coverage. Report optional
@@ -208,8 +204,8 @@ environments. Run one substantial local QA process at a time on a busy machine.
 ## What a change needs
 
 - **A test.** A new operation gets a test of its contract, and a numerical claim gets a
-  finite-difference or reference check where one exists (`tests/test_equilibrium.py`,
-  `tests/test_belief.py` are the pattern).
+  finite-difference or reference check where one exists (`tests/test_equilibrium.py` is
+  the pattern).
 - **A line in `CHANGELOG.md`** under `Unreleased`, saying what changed and why.
 - **A guide.** A public name is described in `docs/api.md`, and a new capability gets a
   section with a runnable snippet in the guide that owns it; add that guide to
@@ -218,8 +214,8 @@ environments. Run one substantial local QA process at a time on a busy machine.
   cost counters may count attempted computation. Invalid calls and failed
   transactions cannot partially install parameters or records. Qualification,
   continuation and device portability follow the owning API's
-  [contract](docs/contracts.md); do not transfer a graph guarantee to a finite
-  repair or temporal model. The audit tests (`tests/test_audit_*.py`) check
+  [contract](docs/contracts.md); do not transfer a graph guarantee to the memory
+  stores, which are read and written outside the equations. The audit tests (`tests/test_audit_*.py`) check
   specific cases and backends.
 - **Plain prose.** State what an operation does and what it does not establish, in the
   register of the existing guides.
@@ -228,7 +224,7 @@ environments. Run one substantial local QA process at a time on a busy machine.
 
 | Path | What lives there |
 | --- | --- |
-| `src/cadence/` | the numerical library: `brain.py`, `learning.py`, `genome.py`, `regions.py` (the settling brain); `temporal.py`, `planning.py`, `temporal_memory.py`; `record_patch.py`, `records.py`, `record_stack.py`, `record_ports.py`, `ports.py`; `belief.py`, `belief_torch.py`; `steering.py`, `life.py`, `instruments.py` (composition) |
+| `src/cadence/` | the numerical library: `brain.py`, `learning.py`, `genome.py`, `regions.py` (the settling brain) |
 | `tests/` | unit, numerical, integration and documentation contract tests |
 | `docs/` | the guides; `docs/README.md` is the map |
 
@@ -249,15 +245,8 @@ library pins; use those when reproducing archived results.
 
 The primary local entry is [the continuing brain](examples/continuing_brain.py):
 one brain, actual feedback through changed conditions, and saved continuation.
-The [memory/planning example](examples/memory_imagination.py) separately exercises
-`TemporalPatchNet` and finite response protection. Do not present those distinct
-model equations as an already integrated `Brain.compose` world model.
-
-The preserved population solver lives in `cadence.experimental.equilibrium`,
-with guides in `docs/equilibrium`, examples in `examples/equilibrium` and tests
-in `tests/equilibrium`. Test it separately from the default foundation when
-changing either API or numerical rule. The default runtime requires NumPy;
-optional backends do not make it dependency-free.
+The default runtime requires NumPy; optional backends do not make it
+dependency-free.
 
 Keep [GPL-3.0](LICENSE) as the current package license and preserve historical
 attribution and license notices with their source.

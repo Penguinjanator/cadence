@@ -6,7 +6,7 @@ Every graph brain runs on the `"cpu"` backend in NumPy float64 unless you pick a
 from the NumPy-only [installation](../README.md#get-started) and add an extra:
 
 ```bash
-python -m pip install "cadence-net[fast]==0.84.3"
+python -m pip install "cadence-net[fast]==0.85.0"
 ```
 
 `[fast]` installs Numba and SciPy, `[accel]` PyTorch and `[apple]` MLX; from a checkout, use
@@ -38,26 +38,23 @@ and a float32 backend refuses a neuron rule whose constants float32 cannot repre
 ## What runs where
 
 `backend=` (default `"cpu"`) and `device=` (default `None`, the best device) are construction
-arguments of `NeuralGraph`, `Brain.compose`, `PatchNet.create` and `PatchNet.recursive`;
-`Brain.retune` refuses them. `precision=` (`"float64"` or `"float32"`, read by torch, default
-by device) is an argument of `NeuralGraph`, `Brain.load`, `Learner.load` and `PatchNet.load`
-only, so a composed brain runs at its device's default precision until it is saved and loaded
-with another. Loads default to the saved precision; `Brain.load` and `PatchNet.load` default to
-`backend="cpu"`, `Learner.load` to the saved backend. `Learner.load(path, backend="cpu")`
-brings a checkpoint learned on any device back to the float64 receipt backend.
+arguments of `NeuralGraph` and `Brain.compose`; `Brain.retune` refuses them. `precision=`
+(`"float64"` or `"float32"`, read by torch, default by device) is an argument of
+`NeuralGraph`, `Brain.load` and `Learner.load` only, so a composed brain runs at its device's
+default precision until it is saved and loaded with another. Loads default to the saved
+precision; `Brain.load` defaults to `backend="cpu"`, `Learner.load` to the saved backend.
+`Learner.load(path, backend="cpu")` brings a checkpoint learned on any device back to the
+float64 receipt backend.
 
-`TemporalPatchNet`, `TemporalPlan`, `TemporalMemory`, `RecordPatchNet` and `Records` run in
-NumPy on every install, and records are read on the host inside a device brain too. The torch
-path for record patches is `PopulationPatch` ([Population](population.md)); `BeliefPatch`
-trains on torch through `TorchBelief` ([belief patch](belief.md)).
+The composed brain's memory stores are read on the host inside a device brain too.
 
 On a device backend `settle_batch` returns a state that stays resident (`BrainState.device`;
 `None` on the CPU and from the one-stimulus `settle`), so a continuing phase starts there.
 Blocked graphs compute the learning contrast there too (`NeuralGraph.contrast_on_device`,
 `None` unless both states are resident). Blocked torch `Learner` updates, momentum and RMS
 normalization stay on the device; MLX hands the contrast to a host optimizer, and sparse
-contrasts use bounded host chunks. `ActorCritic` updates on the device only with its own
-`momentum` and `normalize` both zero; its critic and dopamine use host arrays. Reading
+contrasts use bounded host chunks. `ActorCritic` updates on the device when both of its
+phases settled there; its critic and dopamine use host arrays. Reading
 parameters or saving a checkpoint copies arrays back. Parameter edits and the `learner.brain`
 rule are in [contracts](contracts.md).
 
@@ -146,30 +143,3 @@ elementwise neuron update, the softmax over the nudged group, an equality check 
 ranges and the largest movement for the tolerance. Check a new one against the
 neuron-by-neuron reference through `conformance`; `tests/test_brain.py` holds the tests every
 kernel passes.
-
-## Timing a decision
-
-`cadence.timing.latency(decide, repeats=1000, warmup=20)` runs `decide()` `warmup` times, then
-times `repeats` calls (an integer of at least 1; `warmup` at least 0) and returns `repeats`,
-`p50_us`, `p90_us`, `p99_us`, `max_us`, `mean_us`, `jitter` (`(p99 - p50) / p50`),
-`voluntary_switches` and `involuntary_switches` from `getrusage`, and `environment`.
-`cadence.timing.environment()` records machine, system, cores, Python version, BLAS thread
-limits, CPU affinity on Linux, load average and the NumPy, Numba and torch versions. On
-Windows the load and switch counts are `None`.
-
-```python
-from cadence.timing import latency
-graph = cd.NeuralGraph(connectome, neuron_model)
-inputs = [{int(i): 1.0} for i in connectome.populations["input"]]
-life = {"t": 0, "state": None}
-def decide():  # a new input each call, continuing from the previous state
-    life["t"] += 1
-    life["state"] = graph.settle(inputs[life["t"] % len(inputs)], steps=30, state=life["state"])
-    return life["state"].activation
-report = latency(decide, repeats=50, warmup=5)
-print(round(report["p50_us"]), report["environment"]["cores"])
-```
-
-`decide()` must advance a changing input and carry or reset state as the deployment would
-(one unchanged warm input times a stable-state fast path) and synchronize accelerator work.
-Report cold and warm results, output quality and residuals with the time.

@@ -92,35 +92,6 @@ def test_torch_backend_agrees_with_cpu_within_its_precision() -> None:
     assert np.abs(cpu.trajectory - acc.trajectory).max() < tolerance
 
 
-def test_protocol_scores_and_shuffle_keeps_counts() -> None:
-    w = ring(8)
-    protocol = cd.Protocol(
-        stimuli={"baseline": (), "poke": ("head",)},
-        training=[("poke", "tail", "active")],
-        rows=[
-            cd.Row("R1", "baseline", "tail", "inactive", "nothing in, nothing out"),
-            cd.Row("R2", "poke", "tail", "reduced", "cutting the ring", ablate=("head",)),
-        ],
-        steps=80,
-    )
-    brain = cd.NeuralGraph(w, cd.NeuronModel(gain=0.03))
-    report = protocol.score(brain)
-    assert report["training_passed"] == 1 and report["passed"] == 2
-    control = cd.shuffled(w, seed=0)
-    assert (
-        control.count.sum() == w.count.sum()
-        and control.out_degree().tolist() == w.out_degree().tolist()
-    )
-    assert control.populations == w.populations
-    gain, table = cd.select_gain(
-        lambda g: cd.NeuralGraph(w, cd.NeuronModel(gain=g)),
-        protocol,
-        (0.005, 0.03, 0.2),
-        sparsity_cap=None,  # a toy ring lights entirely; the cap is for large nets
-    )
-    assert gain == 0.03 and [row["admissible"] for row in table] == [True, True, True]
-
-
 def test_receipt_round_trip_and_tamper_detection(tmp_path: Path) -> None:
     src = tmp_path / "code.py"
     src.write_text("print('hi')\n")

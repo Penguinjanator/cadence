@@ -168,3 +168,30 @@ def test_learning_surprise_judges_from_the_brains_own_answer(monkeypatch) -> Non
     assert brain.last_learning["demonstration_free_row_sweeps"] == (
         brain.last_learning["demonstration_free_steps"]
     )
+
+
+def test_compose_wraps_a_custom_anatomy_with_the_composed_founders():
+    """``Genome.composed`` is the layout ``compose`` develops; ``compose(connectome=...)``
+    gives a developed anatomy the composed founders, the episodic founders filled in, and
+    refuses layout settings and populations that do not fit the inputs and actions."""
+    from cadence import Genome, develop
+
+    options = dict(memory_choice=True, recall=True, seed=3)
+    composed = Brain.compose(6, 3, modules=(8,), **options)
+    genome = Genome.composed(6, 3, modules=(8,), **options)
+    wrapped = Brain.compose(6, 3, connectome=develop(genome, seed=3), **options)
+    np.testing.assert_array_equal(wrapped.brain.efficacy, composed.brain.efficacy)
+    np.testing.assert_array_equal(wrapped.brain.bias, composed.brain.bias)
+    assert wrapped.describe()["memories"].get("episodic") == composed.describe()["memories"].get("episodic")
+    plain = Brain(develop(genome, seed=3), memory_choice=True, recall=True, seed=3)
+    assert plain.memory_context == 0.0 < wrapped.memory_context  # only compose fills them in
+    x = np.eye(6)[[1]]
+    for _ in range(3):
+        np.testing.assert_array_equal(wrapped.step(x), composed.step(x))
+    assert wrapped.describe()["layout"]["composition"] is None  # its own anatomy
+    with pytest.raises(ValueError, match="own layout"):
+        Brain.compose(6, 3, connectome=develop(genome, seed=3), modules=(8,))
+    with pytest.raises(ValueError, match="sensory and motor"):
+        Brain.compose(7, 3, connectome=develop(genome, seed=3))
+    assert Genome.observation_width(6) == 6 and Genome.observation_width(2048, 1024) == 1024
+    assert not hasattr(Brain, "build") and not hasattr(Brain, "genome")

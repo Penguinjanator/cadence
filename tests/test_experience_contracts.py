@@ -4,6 +4,7 @@ import json
 
 import numpy as np
 import pytest
+from checkpoints import earlier, metadata
 
 import cadence as cd
 
@@ -12,10 +13,10 @@ import cadence as cd
 def test_next_decision_refreshes_activity_after_a_reward_update(backend):
     if backend == "torch":
         pytest.importorskip("torch")
-    brain = cd.Brain.build(
+    brain = cd.Brain.compose(
         3,
         2,
-        hidden=8,
+        modules=(8,),
         episodic=False,
         backend=backend,
         device="cpu" if backend == "torch" else None,
@@ -32,7 +33,7 @@ def test_next_decision_refreshes_activity_after_a_reward_update(backend):
 
 
 def test_actor_cache_detects_an_update_from_another_learning_head():
-    brain = cd.Brain.build(2, 2, hidden=6, episodic=False)
+    brain = cd.Brain.compose(2, 2, modules=(6,), episodic=False)
     actor = brain.basal_ganglia
     drive = brain.stimulus(np.eye(2))
     actor.act(drive)
@@ -45,7 +46,7 @@ def test_actor_cache_detects_an_update_from_another_learning_head():
 
 
 def test_resume_between_learning_and_next_action_refreshes_the_same_way(tmp_path):
-    brain = cd.Brain.build(2, 2, hidden=8, working_memory=True)
+    brain = cd.Brain.compose(2, 2, modules=(8,))
     brain.act(np.eye(2))
     brain.learn(np.ones(2), np.zeros(2, bool), np.eye(2))
     restored = cd.Brain.load(brain.save(tmp_path / "life"))
@@ -74,7 +75,7 @@ def test_hypothetical_query_batch_cannot_erase_live_memories(memory_class):
 
 
 def test_hypothetical_stimulus_cannot_erase_carried_context():
-    brain = cd.Brain.build(2, 2, hidden=8, working_memory=True)
+    brain = cd.Brain.compose(2, 2, modules=(8,))
     brain.act(np.eye(2))
     memory = brain.working_memory
     before = [memory.trace.copy(), memory.last.copy(), memory.cold.copy()]
@@ -83,13 +84,13 @@ def test_hypothetical_stimulus_cannot_erase_carried_context():
         np.testing.assert_array_equal(current, saved)
 
 
-@pytest.mark.parametrize("array_name", ["free/v", "pending/value", "working/trace", "valence/var"])
+@pytest.mark.parametrize("array_name", ["free/v", "pending/value", "working/trace"])
 def test_invalid_lifetime_arrays_are_rejected_at_load(tmp_path, array_name):
-    brain = cd.Brain.build(2, 2, hidden=6, working_memory=True)
+    brain = cd.Brain.compose(2, 2, modules=(6,))
     brain.step(np.eye(2))
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as saved:
-        data = {name: saved[name].copy() for name in saved.files}
+        data = earlier({name: saved[name].copy() for name in saved.files})
     data[array_name] = np.full_like(data[array_name], np.nan, dtype=float)
     np.savez(path, **data)
     with pytest.raises(ValueError, match="saved|checkpoint"):
@@ -141,18 +142,17 @@ def test_separator_can_average_large_representable_keys():
         "cold-dtype",
         "negative-updates",
         "fractional-steps",
-        "negative-variance",
         "critic-shape",
         "missing-metadata",
     ],
 )
 def test_invalid_continuation_structure_is_rejected(tmp_path, corruption):
-    brain = cd.Brain.build(2, 2, hidden=6, working_memory=True)
+    brain = cd.Brain.compose(2, 2, modules=(6,))
     brain.step(np.eye(2))
     path = brain.save(tmp_path / "life")
     with np.load(path, allow_pickle=False) as saved:
-        data = {name: saved[name].copy() for name in saved.files}
-    meta = json.loads(str(data["generic"]))
+        data = earlier({name: saved[name].copy() for name in saved.files})
+    meta = metadata(data)
     if corruption == "free-shape":
         data["free/activation"] = data["free/activation"][:1]
     elif corruption == "value-shape":
@@ -165,8 +165,6 @@ def test_invalid_continuation_structure_is_rejected(tmp_path, corruption):
         meta["updates"] = -1
     elif corruption == "fractional-steps":
         meta["pending_plus_steps"] = 0.5
-    elif corruption == "negative-variance":
-        data["valence/var"] = np.full_like(data["valence/var"], -1.0)
     elif corruption == "critic-shape":
         meta["b_critic"] = [0.0]
     elif corruption == "missing-metadata":

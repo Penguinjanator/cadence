@@ -93,34 +93,3 @@ def test_temperatures_must_be_representable_before_action_mutation(vector):
             brain.act(x, temperature=temperature)
         assert agent.rng.bit_generator.state == before
         assert agent._pending is pending
-
-
-def test_population_code_samples_and_credits_per_dimension_temperatures(monkeypatch):
-    bins = cd.Bins(dims=2, size=3)
-    connectome = cd.layered(2, 4, 6, density=1.0, seed=0)
-    graph = cd.NeuralGraph(connectome, cd.learning_neuron_model(dt=1.0))
-    learner = cd.Learner(graph, connectome.populations["output"])
-    agent = cd.ActorCritic(learner, connectome.populations["hidden"], population=bins)
-    drive = graph.stimulus_levels(np.full((1, connectome.n), 0.25))
-    agent.act(drive, greedy=True)
-    temperatures = np.array([0.2, 0.8])
-    probabilities = agent.probabilities(agent.state, temperatures)
-    for slot, value in enumerate(temperatures):
-        np.testing.assert_array_equal(
-            probabilities[:, slot], agent.probabilities(agent.state, value)[:, slot]
-        )
-    nudges = []
-    settle = graph.settle_batch
-
-    def witness(*args, **kwargs):
-        if kwargs.get("nudge") is not None:
-            nudges.append(kwargs["nudge"])
-        return settle(*args, **kwargs)
-
-    monkeypatch.setattr(graph, "settle_batch", witness)
-    action = agent.act(drive, temperature=temperatures)
-    assert action.shape == (1, 2) and len(nudges) == 2
-    for nudge in nudges:
-        np.testing.assert_array_equal(
-            nudge.softmax_temperature[learner.output_index], np.repeat(temperatures, 3)
-        )

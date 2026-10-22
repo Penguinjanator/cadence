@@ -109,13 +109,17 @@ def make_brain(seed: int, protocol: dict, arm: str) -> Brain:
         "working_memory_amplitude": point["trace_amplitude"],
         "working_memory_decay": point["trace_decay"],
         # the composition of releases before 0.82.0 read the trace back at scale 12
-        "working_memory_scale": point.get("trace_scale", 12.0),
+        "scales": {"trace": point.get("trace_scale", 12.0)},
     }
     if arm != "nocopy":
         options["efference_amplitude"] = point["efference_amplitude"]
         options["efference_decay"] = point["efference_decay"]
     if arm not in ("step", "frozen"):
+        # the frozen protocols name the record channel's weight at its founder zero, the law
+        # without the channel, which the library removed after 0.84.3
         genes = {k: v for k, v in protocol["arousal"].items() if k != "note"}
+        if genes.pop("record_surprise", 0.0) != 0.0:
+            raise ValueError("record_surprise above zero needs cadence-net 0.84.3")
         options["arousal"] = cd.ArousalConfig(**genes)
     brain = Brain.compose(
         inputs.INPUTS, inputs.ACTIONS, modules=tuple(point["modules"]), seed=seed, **options

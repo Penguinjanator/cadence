@@ -15,12 +15,9 @@ There is no buffer and no epoch. The contrast is the difference between the
 two nudged phases (at +beta and -beta), per row, with the nudge's target the
 action that was taken, so the eligibility is the score of that
 action and the goal enters only through the nudge. The critic is a linear
-reading of the neurons named for it, trained by its own trace and the
-prediction error selected by ``critic_signal``. Use ``"td"`` to fit return in
-reward units; ``"modulated"`` trains the critic on the actor's dopamine, capped at
-``dopamine_cap`` and centred when ``dopamine_center`` is set.
-``normalize`` divides each synapse's step by the running RMS of its own
-steps, the local counterpart of an adaptive optimiser. A ``memory`` with learned
+reading of the neurons named for it, trained by its own trace, divided by the
+trace's energy, on the actor's dopamine: the prediction error capped at
+``dopamine_cap``. A ``memory`` with learned
 parameters of its own (``contrast_rows``, ``propose`` and ``accept``, as ``Recall`` has)
 keeps their eligibility in a trace of its own, ``trace_memory``: each sampled act's
 per-row contrast joins it, it decays as every synapse's trace does, and the same dopamine
@@ -32,7 +29,7 @@ from __future__ import annotations
 import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import numpy as np
 
@@ -43,7 +40,6 @@ from .learning import Learner
 __all__ = [
     "ActorCritic",
     "ActorCriticConfig",
-    "Bins",
 ]
 
 
@@ -53,109 +49,6 @@ def _batch_of(state: BrainState) -> int:
     if handle is not None and "s" in handle and state.__dict__.get("v") is None:
         return int(handle["s"].shape[0])
     return int(np.atleast_2d(state.v).shape[0])
-
-
-@dataclass(frozen=True)
-class Bins:
-    """A continuous action as one softmax choice per dimension over ``size`` levels.
-
-    Each dimension owns ``size`` output neurons standing for levels in ``[-1, 1]``; an
-    action is a draw from the softmax over each dimension's neurons (a discrete choice
-    per dimension), and learning is the cross-entropy nudge of that group toward the
-    level taken, the same rule that learns a discrete action. Discretised actions match
-    Gaussian ones on continuous control (Tang and Agrawal 2020); here they let one rule
-    serve every kind of action.
-    """
-
-    dims: int
-    size: int = 9
-
-    def __post_init__(self) -> None:
-        for name, minimum in (("dims", 1), ("size", 2)):
-            value = getattr(self, name)
-            if (
-                isinstance(value, bool)
-                or not isinstance(value, (int, np.integer))
-                or value < minimum
-            ):
-                raise ValueError(f"{name} must be an integer >= {minimum}")
-
-    @property
-    def centres(self) -> np.ndarray:
-        return np.linspace(-1.0, 1.0, self.size)
-
-    def groups(self, output_index: np.ndarray, n: int) -> np.ndarray:
-        gid = np.full(n, -1, dtype=np.int64)
-        gid[output_index] = np.repeat(np.arange(self.dims), self.size)
-        return gid
-
-    def read(self, activation: np.ndarray, temperature: float) -> np.ndarray:
-        """The most likely level per dimension: ``(batch, dims)`` values in ``[-1, 1]``."""
-        s = activation.reshape(len(activation), self.dims, self.size)
-        return np.asarray(self.centres[np.argmax(s, axis=2)])
-
-
-@dataclass
-class Valence:
-    """The reward less its expectation, made into the signal that moves the synapses: the dopamine.
-
-    ``delta`` is what came less what was expected (a critic's prediction error, or the
-    reward alone). The valence takes it less its running level per stream (``level`` is the
-    forgetting factor of that level, 0 for no centring), in the reward's own units
-    (``units``) or over its running scale; nothing within ``floor`` scales of the level
-    (quiet while the reward is what it usually is); capped at ``cap`` (0 for no cap).
-    """
-
-    level: float = 0.0
-    floor: float = 0.0
-    cap: float = 1.0
-    units: bool = True
-    per_stream: bool = True
-    mean: Any = 0.0
-    var: Any = 1.0
-
-    def __post_init__(self) -> None:
-        if not 0 <= self.level < 1:
-            raise ValueError("level must lie in [0, 1)")
-        if not np.isfinite([self.floor, self.cap]).all() or min(self.floor, self.cap) < 0:
-            raise ValueError("floor and cap must be finite and nonnegative")
-
-    def __call__(self, delta: np.ndarray, *, observed: np.ndarray | None = None) -> np.ndarray:
-        delta = np.asarray(delta, dtype=float)
-        if delta.ndim != 1 or not delta.size or not np.isfinite(delta).all():
-            raise ValueError("delta must be a nonempty finite vector, one value per stream")
-        known = np.ones(len(delta), dtype=bool) if observed is None else np.asarray(observed)
-        if known.shape != delta.shape or known.dtype != np.bool_:
-            raise ValueError("observed must be a boolean vector matching delta")
-        if not known.any():
-            return np.zeros_like(delta)
-        if self.level > 0:
-            rho = self.level
-            mean, var = self.mean, self.var
-            if self.per_stream:
-                if not isinstance(mean, np.ndarray) or len(mean) != len(delta):
-                    mean, var = np.zeros(len(delta)), np.zeros(len(delta))
-                mean = np.where(known, rho * mean + (1 - rho) * delta, mean)
-                var = np.where(known, rho * var + (1 - rho) * (delta - mean) ** 2, var)
-            else:
-                mean = rho * mean + (1 - rho) * float(delta[known].mean())
-                var = rho * var + (1 - rho) * float(((delta[known] - mean) ** 2).mean())
-            if not np.isfinite(mean).all() or not np.isfinite(var).all():
-                raise ValueError("valence moments must remain finite")
-            self.mean, self.var = mean, var
-            scale = np.sqrt(self.var) + 1e-6
-            centred = delta - self.mean if self.units else (delta - self.mean) / scale
-            if self.floor > 0:
-                within = np.abs(centred) < self.floor * (scale if self.units else 1.0)
-                centred = np.where(within, 0.0, centred)
-            delta = centred
-        if self.cap > 0:
-            delta = np.clip(delta, -self.cap, self.cap)
-        out: np.ndarray = np.asarray(np.where(known, delta, 0.0), dtype=float)
-        return out
-
-    def reset(self) -> None:
-        self.mean, self.var = 0.0, 1.0
 
 
 SATURATION_BAND = 0.02  # an output within this of 0 or 1 has no slope left for a nudge
@@ -168,43 +61,12 @@ class ActorCriticConfig:
     eta: float = 0.5  # actor step per unit dopamine per unit trace
     eta_bias: float | None = None  # bias step; None derives eta / 10 at construction
     eta_critic: float = 0.05
-    normalize: float = 0.0  # >0: forgetting factor of the per-synapse RMS that divides its step
-    # >0: each synapse steps on a running average of its own steps, so sign noise cancels before
-    # the RMS divides it
-    momentum: float = 0.0
     dopamine_cap: float = 1.0  # actor modulation saturates here (0: no cap)
-    # >0: forgetting factor of a running mean and scale of delta; the phasic signal is the
-    # deviation from the tonic level
-    dopamine_center: float = 0.0
-    # >0: the centred signal within this many scales of its mean is nothing; the dopamine is
-    # quiet while the reward is what it usually is and speaks only for a surprise
-    dopamine_floor: float = 0.0
-    # True: the centred signal is divided by its running scale (a unit signal whatever the
-    # reward's size); False: it stays in the reward's own units
-    center_scale: bool = True
-    critic_normalize: bool = (
-        True  # the critic's step is divided by its trace's energy, so its step size is scale-free
-    )
-
-    # "modulated" (the actor's bounded dopamine) can stabilize control but in general does not
-    # fit mean return. "auto": the raw error ("td") whenever the dopamine is centred, the
-    # modulated one otherwise; a critic fed the centred signal chases a moving target and its
-    # value runs away.
-    critic_signal: Literal["modulated", "td", "auto"] = "auto"
     # settle steps of the two nudged phases that score a sampled action; None uses the
     # learner's nudged_steps
     eligibility_steps: int | None = None
 
-    @property
-    def critic_target(self) -> str:
-        """The signal the critic learns from: ``"td"`` or ``"modulated"``, ``"auto"`` resolved."""
-        if self.critic_signal == "auto":
-            return "td" if self.dopamine_center > 0 else "modulated"
-        return self.critic_signal
-
     def __post_init__(self) -> None:
-        if self.critic_signal not in ("modulated", "td", "auto"):
-            raise ValueError("critic_signal must be modulated, td or auto")
         # Use the same scalar arithmetic before and after JSON checkpointing.
         for name in self.__slots__:
             value = getattr(self, name)
@@ -219,8 +81,7 @@ class ActorCriticConfig:
         ):
             raise ValueError("eligibility_steps must be a nonnegative integer, or None")
         if self.eta_bias is None:
-            # The bias rate follows the synapse rate unless chosen. Under RMS normalization
-            # both are absolute steps.
+            # The bias rate follows the synapse rate unless chosen.
             if not np.isfinite(self.eta) or self.eta < 0:
                 raise ValueError("eta must be finite and nonnegative")
             object.__setattr__(self, "eta_bias", self.eta / 10.0)
@@ -229,29 +90,17 @@ class ActorCriticConfig:
         for name in ("gamma", "lam"):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f"{name} must lie in [0, 1]")
-        for name in ("normalize", "momentum", "dopamine_center"):
-            if not 0 <= getattr(self, name) < 1:
-                raise ValueError(f"{name} must lie in [0, 1)")
-        for name in ("eta", "eta_bias", "eta_critic", "dopamine_cap", "dopamine_floor"):
+        for name in ("eta", "eta_bias", "eta_critic", "dopamine_cap"):
             value = getattr(self, name)
             if not np.isfinite(value) or value < 0:
                 raise ValueError(f"{name} must be finite and nonnegative")
-        if self.normalize > 0 and max(self.eta, eta_bias) > 0.05:
-            warnings.warn(
-                "ActorCriticConfig with normalize > 0 and eta or eta_bias above 0.05: "
-                "RMS normalization can make parameter steps much larger than raw contrasts "
-                "suggest and may saturate the policy. Consider smaller actor rates; "
-                "see docs/reward.md#rates-under-normalization.",
-                RuntimeWarning,
-                stacklevel=3,
-            )
         if self.eta > 0 and eta_bias > self.eta:
             warnings.warn(
                 f"ActorCriticConfig with eta_bias ({eta_bias:g}) above eta ({self.eta:g}): "
                 "the actor's bias step dominates its synapse step and the greedy policy tends "
                 "to one action whatever the observation. The default couples eta_bias to "
                 "eta / 10; when lowering eta through dataclasses.replace, set eta_bias too, or "
-                "pass eta_bias=None to re-derive it. See docs/reward.md#rates-under-normalization.",
+                "pass eta_bias=None to re-derive it. See docs/reward.md#actor-rates.",
                 RuntimeWarning,
                 stacklevel=3,
             )
@@ -283,22 +132,10 @@ class ActorCritic:
         critic: Sequence[int],
         config: ActorCriticConfig | None = None,
         seed: int = 0,
-        population: Bins | None = None,
     ) -> None:
         self.learner = learner
         self.config = config or ActorCriticConfig()
-        if (
-            population is not None
-            and len(learner.output_index) != population.dims * population.size
-        ):
-            raise ValueError("the output set must hold dims * size neurons for a population code")
-        self.bins = population
-        if self.bins is not None:
-            self.group_id: np.ndarray | None = self.bins.groups(
-                learner.output_index, learner.brain.connectome.n
-            )
-        else:
-            self.group_id = learner.output_groups
+        self.group_id: np.ndarray | None = learner.output_groups
         index = np.asarray(list(critic))
         if (
             index.ndim != 1
@@ -328,11 +165,6 @@ class ActorCritic:
         self._pending_memory: np.ndarray | None = None
         # one stream's traces on the torch device, when it settles there
         self._trace_device: Any = None
-        self.second_moment = np.zeros(self.synapses)
-        self.second_moment_bias = np.zeros(self.n)
-        self.velocity = np.zeros(self.synapses)
-        self.velocity_bias = np.zeros(self.n)
-        self._valence: Valence | None = None
         # (batch, neurons): when set before ``learn``, each synapse's eligibility is weighted by
         # its pre neuron's salience (a ``Trace.ringing``: what is still ringing gets written)
         self.salience: np.ndarray | None = None
@@ -363,27 +195,21 @@ class ActorCritic:
         """Action probabilities, normalized separately for each motor slot.
 
         Multiple categorical slots return ``(batch, slots, max_size)`` with
-        zero padding for shorter slots. Bins keeps its uniform population shape.
+        zero padding for shorter slots.
         ``temperature`` reads the same settled outputs at another softmax
         temperature, or one temperature per motor slot; left unset it is the learner's.
         ``bias`` adds a ``(batch, motor)`` value per motor neuron to the settled outputs
         before each slot's softmax: a vote from outside the readout, such as the records
-        of an episodic memory. Bins take none.
+        of an episodic memory.
         """
         temperature = self._temperature(temperature)
         s = state.activation[:, self.learner.output_index]
         if bias is not None:
             bias = np.asarray(bias, dtype=float)
-            if self.bins is not None:
-                raise ValueError("a population code takes no choice bias")
             if bias.shape != s.shape or not np.isfinite(bias).all():
                 raise ValueError("bias must be a finite (batch, motor) array")
             s = s + bias
-        if self.bins is not None:
-            s = s.reshape(len(s), self.bins.dims, self.bins.size)
-            if isinstance(temperature, np.ndarray):
-                temperature = temperature[None, :, None]
-        elif self.learner.slot_count > 1:
+        if self.learner.slot_count > 1:
             p = np.zeros((len(s), self.learner.slot_count, int(self.learner.slot_sizes.max())))
             for j, (start, size) in enumerate(
                 zip(self.learner.slot_offsets, self.learner.slot_sizes, strict=True)
@@ -420,7 +246,7 @@ class ActorCritic:
             return float(self.learner.config.temperature)
         if isinstance(temperature, (Sequence, np.ndarray)) and not isinstance(temperature, str):
             values = np.asarray(temperature)
-            slots = self.bins.dims if self.bins is not None else self.learner.slot_count
+            slots = self.learner.slot_count
             if values.shape != (slots,) or values.dtype.kind not in "iuf":
                 raise ValueError("temperature must be finite and positive, one per motor slot")
             with np.errstate(over="ignore", under="ignore"):
@@ -476,7 +302,6 @@ class ActorCritic:
         """Settle (or reuse the cached free phase), sample an action per row, keep its eligibility.
 
         Discrete: an action index per row, or one index per categorical motor slot.
-        With ``Bins``: one softmax draw per dimension of a population code.
         ``temperature`` samples the same settled outputs at another softmax
         temperature, or one per motor slot. Eligibility uses those same temperatures
         for the sampled action's policy score. A greedy read ignores them.
@@ -491,8 +316,6 @@ class ActorCritic:
             temperature = self._temperature(temperature)  # before any state changes
         if bias is not None:
             bias = np.asarray(bias, dtype=float)
-            if self.bins is not None:
-                raise ValueError("a population code takes no choice bias")
             if bias.shape != (len(drive), len(self.learner.output_index)) or not np.isfinite(
                 bias
             ).all():
@@ -507,8 +330,6 @@ class ActorCritic:
         )
         self._pending = None  # eligibility always belongs to this decision, including greedy reads
         self._pending_memory = None
-        if self.bins is not None:
-            return self._act_bins(drive, free, greedy, temperature)
         p = self.probabilities(free, None if greedy else temperature, bias=bias)
         if greedy:
             action = np.argmax(p, axis=-1)
@@ -528,38 +349,6 @@ class ActorCritic:
             self._pending = ("states", plus, minus, self.value(free))
             self._pending_memory = self._memory_contrast(plus, minus)
         return np.asarray(action, dtype=np.int64)
-
-    def _act_bins(
-        self,
-        drive: np.ndarray,
-        free: BrainState,
-        greedy: bool,
-        temperature: float | Sequence[float] | np.ndarray | None = None,
-    ) -> np.ndarray:
-        """One softmax draw per dimension; the taken levels' one-hots are the nudge's target,
-        per group."""
-        bins = self.bins
-        assert bins is not None
-        cfg = self.learner.config
-        batch = len(drive)
-        p = self.probabilities(free, None if greedy else temperature)
-        if greedy:
-            choice = np.argmax(p, axis=2)
-        else:
-            u = self.rng.random((batch, bins.dims))
-            choice = np.minimum((p.cumsum(axis=2) < u[:, :, None]).sum(axis=2), bins.size - 1)
-        action = bins.centres[choice]
-        if not greedy:
-            onehot = np.zeros((batch, bins.dims, bins.size))
-            np.put_along_axis(onehot, choice[:, :, None], 1.0, axis=2)
-            target = np.zeros((batch, self.n))
-            target[:, self.learner.output_index] = onehot.reshape(batch, -1)
-            plus = self._nudged_groups(drive, free, target, cfg.beta, temperature)
-            minus = self._nudged_groups(drive, free, target, -cfg.beta, temperature)
-            self._pending = ("states", plus, minus, self.value(free))
-            self._pending_memory = self._memory_contrast(plus, minus)
-        out: np.ndarray = np.asarray(action, dtype=float)
-        return out
 
     def _memory_contrast(self, plus: BrainState, minus: BrainState) -> np.ndarray | None:
         """The per-row contrast of the memory's learned parameters between a sampled act's
@@ -610,11 +399,7 @@ class ActorCritic:
         # policy retains its existing unit mask and learning rate.
         scale = min(float(cfg.temperature), float(np.min(actual)))
         if isinstance(actual, np.ndarray):
-            sizes = (
-                self.learner.slot_sizes
-                if self.bins is None
-                else np.full(self.bins.dims, self.bins.size)
-            )
+            sizes = self.learner.slot_sizes
             expanded = np.full(self.n, cfg.temperature)
             expanded[self.learner.output_index] = np.repeat(actual, sizes)
             actual = expanded
@@ -636,41 +421,6 @@ class ActorCritic:
             nudge=nudge,
             tolerance=cfg.tolerance,
         )
-
-    @property
-    def valence(self) -> Valence:
-        """The dopamine as a Valence built from the config; its running level is the agent's."""
-        v = self._valence
-        if v is None:
-            cfg = self.config
-            v = self._valence = Valence(
-                level=cfg.dopamine_center,
-                floor=cfg.dopamine_floor,
-                cap=0.0,  # the cap is applied by learn, after the centring
-                units=not cfg.center_scale,
-                per_stream=True,
-            )
-        return v
-
-    @property
-    def delta_mean(self) -> Any:
-        return self.valence.mean
-
-    @delta_mean.setter
-    def delta_mean(self, value: Any) -> None:
-        self.valence.mean = value
-
-    @property
-    def delta_var(self) -> Any:
-        return self.valence.var
-
-    @delta_var.setter
-    def delta_var(self, value: Any) -> None:
-        self.valence.var = value
-
-    def _centre(self, delta: np.ndarray, observed: np.ndarray | None = None) -> np.ndarray:
-        """The phasic signal through the Valence (the cap is learn's, applied after)."""
-        return self.valence(delta, observed=observed)
 
     def learn(
         self,
@@ -705,25 +455,13 @@ class ActorCritic:
         saved.update(
             {
                 name: getattr(self, name)
-                for name in (
-                    "_trace_device",
-                    "velocity",
-                    "velocity_bias",
-                    "second_moment",
-                    "second_moment_bias",
-                    "updates",
-                    "_valence",
-                )
+                for name in ("_trace_device", "updates")
             }
         )
-        valence = None if self._valence is None else (self._valence.mean, self._valence.var)
         try:
             return self._learn(reward, done, next_drive, bootstrap, observed=observed, warm=warm)
         except Exception:
             self.__dict__.update(saved)
-            if valence is not None:
-                assert self._valence is not None
-                self._valence.mean, self._valence.var = valence
             raise
 
     def _learn(
@@ -754,8 +492,7 @@ class ActorCritic:
         decay = cfg.gamma * cfg.lam
         device_kernel = None
         if kind == "states":  # the two phases as states: on the device when they settled there
-            if cfg.momentum == 0 and cfg.normalize == 0:
-                device_kernel = self.learner._device_kernel(first, second)
+            device_kernel = self.learner._device_kernel(first, second)
             if device_kernel is None:
                 first, second = first.activation, second.activation
                 kind = "phases"
@@ -819,8 +556,6 @@ class ActorCritic:
         if not np.isfinite(td_error).all():
             raise ValueError("TD errors must remain finite")
         delta = td_error
-        if cfg.dopamine_center > 0:
-            delta = self._centre(delta, observed)
         capped = self._capped(delta, observed)
         if cfg.dopamine_cap > 0:
             delta = np.clip(delta, -cfg.dopamine_cap, cfg.dopamine_cap)
@@ -845,31 +580,9 @@ class ActorCritic:
             step_scale = (delta[:, None] * self.trace).mean(axis=0)
             step_bias = (delta[:, None] * self.trace_bias).mean(axis=0)
         self.updates += 1
-        raw_scale, raw_bias = step_scale, step_bias
-        if (
-            cfg.momentum > 0
-        ):  # a running average of each synapse's own steps, corrected for its short history
-            self.velocity = cfg.momentum * self.velocity + (1 - cfg.momentum) * step_scale
-            self.velocity_bias = cfg.momentum * self.velocity_bias + (1 - cfg.momentum) * step_bias
-            correction = 1.0 - cfg.momentum**self.updates
-            step_scale, step_bias = self.velocity / correction, self.velocity_bias / correction
-        if (
-            cfg.normalize > 0
-        ):  # divided by the running RMS of each synapse's own raw steps, corrected likewise
-            rho = cfg.normalize
-            self.second_moment = rho * self.second_moment + (1 - rho) * raw_scale**2
-            self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_bias**2
-            correction = 1.0 - rho**self.updates
-            step_scale = step_scale / (np.sqrt(self.second_moment / correction) + 1e-3)
-            step_bias = step_bias / (np.sqrt(self.second_moment_bias / correction) + 1e-3)
         step_scale = cfg.eta * step_scale
         step_bias = cfg.eta_bias * step_bias
-        if not all(
-            np.isfinite(getattr(self, name)).all()
-            for name in ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
-        ):
-            raise ValueError("optimizer moments must remain finite")
-        critic_weights, critic_bias = self._critic_candidate(td_error, delta, observed)
+        critic_weights, critic_bias = self._critic_candidate(delta)
         # the memory's parameters step on their trace by the same dopamine, checked before
         # anything is installed
         proposal = self._memory_proposal(delta)
@@ -904,22 +617,15 @@ class ActorCritic:
         report["trace"] = float(np.abs(traces).mean())
         return report
 
-    def _critic_candidate(
-        self, td_error: np.ndarray, delta: np.ndarray, observed: np.ndarray
-    ) -> tuple[np.ndarray, float]:
+    def _critic_candidate(self, delta: np.ndarray) -> tuple[np.ndarray, float]:
         cfg = self.config
         critic_trace = self.trace_critic
         assert critic_trace is not None
-        if cfg.critic_normalize:
-            critic_trace = critic_trace / (1.0 + (critic_trace**2).sum(axis=1, keepdims=True))
-        # "td" keeps reward units; "modulated" uses the same bounded signal as the
-        # actor, which can change the critic's fixed point.
-        critic_delta = (
-            np.where(observed, td_error / observed.mean(), 0.0)
-            if cfg.critic_target == "td"
-            else delta
-        )
-        critic_step = cfg.eta_critic * (critic_delta[:, None] * critic_trace).mean(axis=0)
+        # the step is divided by the trace's energy, so its size is free of the activity's scale
+        critic_trace = critic_trace / (1.0 + (critic_trace**2).sum(axis=1, keepdims=True))
+        # the critic learns from the actor's bounded dopamine, which stabilizes control and
+        # need not fit the mean return in reward units
+        critic_step = cfg.eta_critic * (delta[:, None] * critic_trace).mean(axis=0)
         weights = self.w_critic + critic_step[:-1]
         bias = self.b_critic + float(critic_step[-1])
         if not np.isfinite(weights).all() or not np.isfinite(bias):
@@ -1055,14 +761,12 @@ class ActorCritic:
         if not np.isfinite(td_error).all():
             raise ValueError("TD errors must remain finite")
         delta = td_error
-        if cfg.dopamine_center > 0:
-            delta = self._centre(delta, observed)
         capped = self._capped(delta, observed)
         if cfg.dopamine_cap > 0:
             delta = np.clip(delta, -cfg.dopamine_cap, cfg.dopamine_cap)
         delta = np.where(observed, delta / observed.mean(), 0.0)
         self.updates += 1
-        critic_weights, critic_bias = self._critic_candidate(td_error, delta, observed)
+        critic_weights, critic_bias = self._critic_candidate(delta)
         d = torch.as_tensor(np.asarray(delta, dtype=float), dtype=trace.dtype, device=trace.device)
         d = d[:, None]
         proposal = self._memory_proposal(delta)  # checked before anything is installed
@@ -1113,8 +817,7 @@ class ActorCritic:
         Every eligibility trace decays by ``gamma * lam``, the step ``learn`` applies
         between two sampled actions, so the credit of earlier actions keeps fading with
         time while nothing is learned; a memory's trace decays with them. ``done`` rows
-        forget their traces, as in ``learn``. Parameters, the critic and optimizer
-        history are unchanged.
+        forget their traces, as in ``learn``. Parameters and the critic are unchanged.
         """
         decay = self.config.gamma * self.config.lam
         ended = None if done is None else np.asarray(done)
@@ -1143,7 +846,7 @@ class ActorCritic:
                 value[ended] = 0.0
 
     def reset(self) -> None:
-        """Clear stream state and eligibility; keep learned parameters and optimizer history."""
+        """Clear stream state and eligibility; keep learned parameters."""
         self._free = None
         self._free_brain = None
         self._drive = None
@@ -1153,8 +856,6 @@ class ActorCritic:
         self.trace_memory = None
         self._trace_device = None
         self.salience = None
-        if self._valence is not None:
-            self._valence.reset()
 
     def parameters(self) -> int:
         return self.learner.parameters() + len(self.w_critic) + 1

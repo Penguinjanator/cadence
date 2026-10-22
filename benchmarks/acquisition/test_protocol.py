@@ -79,7 +79,8 @@ def test_independent_residual_matches_original_nudge_and_detects_false_cache():
 
 
 def test_candidate_arguments_cannot_silently_change_finite_baseline():
-    args = SimpleNamespace(rate=0.01, free_steps=17, nudged_steps=19, nudge="quadratic", damping=2)
+    args = SimpleNamespace(rate=0.01, free_steps=17, nudged_steps=19, nudge="cross_entropy",
+                           damping=2)
     finite = run.make_brain("finite", 0, args)
     cfg = finite.learner.config
     assert (cfg.free_steps, cfg.nudged_steps, cfg.eta, cfg.nudge) == (
@@ -94,7 +95,7 @@ def test_candidate_arguments_cannot_silently_change_finite_baseline():
         17,
         19,
         0.01,
-        "quadratic",
+        "cross_entropy",
         True,
     )
 

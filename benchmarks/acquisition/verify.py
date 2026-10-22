@@ -102,9 +102,7 @@ def verify(folder, *, allow_source_drift=False):
                     ):
                         raise ValueError("accepted qualified phase fails original equations")
             if record["report"].get("accepted", 1):
-                expected = {"free", "nudged"}
-                if brain.learner.config.centered:
-                    expected.add("opposite")
+                expected = {"free", "nudged", "opposite"}  # the lesson's three phases
                 if set(phases) != expected:
                     raise ValueError("accepted lesson phase census differs")
                 brain.learner.update(phases["free"], phases["nudged"], phases.get("opposite"))

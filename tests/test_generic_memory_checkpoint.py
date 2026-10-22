@@ -2,19 +2,20 @@
 
 import json
 
+import checkpoints
 import numpy as np
 import pytest
+from checkpoints import earlier
 
 import cadence as cd
 
 
 def separated_brain(kind="consolidating", backend="cpu"):
-    brain = cd.Brain.build(
+    brain = cd.Brain.compose(
         3,
         3,
-        hidden=5,
+        modules=(5,),
         episodic=True,
-        working_memory=False,
         seed=9,
         backend=backend,
         device="cpu" if backend == "torch" else None,
@@ -87,8 +88,8 @@ def test_expanded_memory_resumes_pending_action_and_future_learning(tmp_path, ki
 
 def rewrite_checkpoint(path, mutate):
     with np.load(path, allow_pickle=False) as saved:
-        arrays = {key: saved[key].copy() for key in saved}
-    metadata = json.loads(str(arrays["generic"]))
+        arrays = earlier({key: saved[key].copy() for key in saved})
+    metadata = checkpoints.metadata(arrays)
     mutate(metadata, arrays)
     arrays["generic"] = np.array(json.dumps(metadata))
     np.savez(path, **arrays)
@@ -97,7 +98,7 @@ def rewrite_checkpoint(path, mutate):
 @pytest.mark.parametrize("version", [1, 2])
 @pytest.mark.parametrize("kind", ["consolidating", "fast", "none"])
 def test_legacy_unseparated_memory_keeps_its_original_rule(tmp_path, version, kind):
-    original = cd.Brain.build(3, 3, hidden=5, working_memory=False)
+    original = cd.Brain.compose(3, 3, modules=(5,))
     if kind == "fast":
         original.hippocampus = cd.FastSynapses(original.sensory_index, original.motor_index)
     elif kind == "none":
@@ -220,3 +221,108 @@ def test_malformed_memory_rejected_before_resumed_composition_is_constructed(
     with pytest.raises(ValueError):
         cd.Brain.load(path)
     assert path.read_bytes() == before
+
+
+def test_the_memories_are_one_ordered_family_under_one_contract():
+    """``brain.memories`` names the present memories in the order the brain reads them; each
+    member is the brain's own attribute and keeps the contract of ``cadence.memories``."""
+    from cadence.memories import Memories, Moment
+
+    brain = cd.Brain.compose(4, 2, modules=(8,), seed=3, recall=True, efference_amplitude=1.0,
+                             history_decays=(0.2, 0.8))
+    memories = brain.memories
+    assert isinstance(memories, Memories)
+    assert list(memories) == ["working_memory", "efference", "history", "recall", "hippocampus"]
+    for name, memory in memories.items():
+        assert memory is getattr(brain, name)
+        for method in ("stimulus", "branch", "begin", "reset", "keep", "to_dict", "arrays"):
+            assert callable(getattr(memory, method)), (name, method)
+    assert list(cd.Brain.compose(4, 2, modules=(8,), episodic=False).memories) == [
+        "working_memory"
+    ]
+    x = np.eye(4)[[0]]
+    brain.act(x, greedy=True)
+    drive = np.zeros((1, brain.connectome.n))
+    moment = Moment(x, x, None, True)
+    read = memories.stimulus(drive, moment)
+    for memory in memories.values():
+        drive = memory.stimulus(drive, moment)
+    np.testing.assert_array_equal(read, drive)  # the family reads as its members in order
+    branch = memories["working_memory"].branch()
+    branch.trace[:] = 7.0
+    assert not np.any(brain.working_memory.trace == 7.0)  # a branch's state is its own
+    brain.memories["recall"].reset(1)
+    assert brain.recall.slots == 0
+    with pytest.raises(ValueError, match="unknown memory"):
+        Memories({"cortex": brain.working_memory})
+
+
+def test_the_episodic_records_are_the_last_member_and_save_as_their_group(tmp_path):
+    """With ``memory_choice`` the episodic records are the member ``episodic``: they read the
+    associative store and keep the context records, add nothing to the drive (their vote
+    joins after the settle), give a branch its own temporal context, and save as the group
+    ``memories/episodic/`` from their own settings and arrays."""
+    import json
+
+    from cadence.memories import EpisodicRecords, Moment
+
+    brain = cd.Brain.compose(4, 2, modules=(8,), seed=3, memory_choice=True)
+    records = brain.memories["episodic"]
+    assert isinstance(records, EpisodicRecords) and list(brain.memories)[-1] == "episodic"
+    assert records.place is brain.hippocampus and records.temporal is brain.context_memory
+    assert (brain.memory_context, brain.memory_replay, brain.memory_demonstrations) == (
+        records.share, records.steps, records.demonstrations
+    )
+    assert "episodic" not in cd.Brain.compose(4, 2, modules=(8,), seed=3).memories
+    x = np.eye(4)[[0]]
+    brain.step(x)
+    for reward in (0.0, 1.0):
+        brain.step(np.eye(4)[[int(reward) + 1]], reward=np.array([reward]))
+    drive = np.ones((1, brain.connectome.n))
+    assert records.stimulus(drive, Moment(x, x, None, False)) is drive
+    branch = records.branch()
+    assert branch.place is records.place and branch.temporal is records.temporal
+    branch.move(branch.key(x), np.array([1]))
+    assert not np.array_equal(branch.context, records.context)  # the branch's own context
+    saved = np.load(brain.save(tmp_path / "brain.npz"))
+    meta = json.loads(str(saved["brain"]))
+    assert meta["memories"]["episodic"] == records.to_dict()
+    group = {k[len("memories/episodic/"):] for k in saved.files if k.startswith("memories/episodic/")}
+    assert group == set(records.arrays())
+    loaded = cd.Brain.load(tmp_path / "brain.npz").memories["episodic"]
+    np.testing.assert_array_equal(loaded.context, records.context)
+    assert len(loaded.paths[0]) == len(records.paths[0])
+    brain.reset()
+    assert records.context is None and records.decision is None and records.paths == []
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+@pytest.mark.parametrize("keep", ["slots", ("slots", "arousal")])
+def test_retained_recall_slots_resume_when_saved_immediately_after_reset(tmp_path, legacy, keep):
+    """A reset can keep the old streams' recall slots before the next streams act. Saving
+    at that boundary preserves the slots and the following acquired life in either format."""
+    original = cd.Brain.compose(4, 2, modules=(5,), seed=9, recall=True, arousal=True)
+    observations = np.eye(4)
+    original.step(observations[[0, 1]])
+    original.step(observations[[1, 2]], reward=[1.0, -0.5])
+    original.reset(keep=keep)
+    assert original.basal_ganglia.state is None and original.recall.slots == 2
+    path = original.save(tmp_path / "between-streams.npz")
+    if legacy:
+        with np.load(path, allow_pickle=False) as saved:
+            arrays = earlier({name: saved[name].copy() for name in saved.files})
+        np.savez(path, **arrays)
+    restored = cd.Brain.load(path)
+    for name, value in original.recall.arrays().items():
+        np.testing.assert_array_equal(value, restored.recall.arrays()[name], err_msg=name)
+    for index in range(3):
+        x = observations[[index, (index + 1) % 4]]
+        feedback = {} if index == 0 else {"reward": [0.5, -0.25]}
+        np.testing.assert_array_equal(original.step(x, **feedback), restored.step(x, **feedback))
+        np.testing.assert_array_equal(original.brain.efficacy, restored.brain.efficacy)
+        np.testing.assert_array_equal(original.brain.bias, restored.brain.bias)
+        np.testing.assert_array_equal(
+            original.basal_ganglia.state.activation, restored.basal_ganglia.state.activation
+        )
+        for name, value in original.recall.arrays().items():
+            np.testing.assert_array_equal(value, restored.recall.arrays()[name], err_msg=name)

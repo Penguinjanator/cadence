@@ -104,7 +104,7 @@ def test_dopamine_report_preserves_the_sign(backend, reward):
     actor = cd.ActorCritic(
         learner,
         graph.populations["hidden"],
-        cd.ActorCriticConfig(eta=0, eta_bias=0, eta_critic=0, dopamine_center=0),
+        cd.ActorCriticConfig(eta=0, eta_bias=0, eta_critic=0),
     )
     actor.w_critic[:] = 0
     actor.b_critic = 0

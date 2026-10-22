@@ -253,7 +253,7 @@ def test_verifier_rejects_resealed_but_inconsistent_evidence(tiny_receipt, tmp_p
         path = target / "development-0/after-imagine.npz"
         with np.load(path, allow_pickle=False) as saved:
             changed = {k: saved[k].copy() for k in saved.files}
-        changed["working/trace"] += 0.1
+        changed["memories/working_memory/trace"] += 0.1
         np.savez(path, **changed)
         rewrite_receipt(
             target,

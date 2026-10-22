@@ -9,6 +9,8 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from anatomy import single_region
+from checkpoints import earlier, metadata
 
 import cadence as cd
 from cadence import brain as cadence_brain
@@ -44,7 +46,7 @@ def checkpoint_digest(path: Path) -> str:
         for name in sorted(data.files):
             value = data[name]
             h.update(name.encode())
-            if name in ("meta", "generic"):
+            if name in ("meta", "generic", "brain"):
                 meta = json.loads(str(value))
                 meta.pop("version", None)
                 h.update(json.dumps(meta, sort_keys=True).encode())
@@ -57,7 +59,7 @@ def checkpoint_digest(path: Path) -> str:
 def names_digest(path: Path) -> str:
     """The checkpoint's metadata keys and member names, which no backend changes."""
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         names = json.dumps([sorted(meta), sorted(data.files)])
     return hashlib.sha256(names.encode()).hexdigest()
 
@@ -115,35 +117,39 @@ def lived(brain: cd.Brain) -> list[int]:
 # (``names``) and the contents of every array (``checkpoint``) of the checkpoint it saves.
 # The recall memory's checkpoint metadata changed since, so a brain with it has its
 # checkpoint contents compared with those of the same life lived again instead.
+# Where the library later removed a setting that was inert at its founder, the description
+# and checkpoint digests were re-recorded after every other value matched the recording.
+# Re-recorded with the unset motor lateral at 0.0 (issue 220) where a founder has at most
+# 8 motor neurons in a slot, and at the founder need scale 0.1 (issue 198) where it has arousal.
 FOUNDERS: dict[str, dict] = {
     "stepped": {
         "build": (4, 2, {"modules": (8,), "seed": 3, "recall": False}),
         "life": stepped,
-        "parameters": "b81d75ef9bab5751c83c93bf64eb78e37b8eba039698948453ddc90b8bb4bee4",
+        "parameters": "8d42b245bdc9b36499675f913258d4ca9e532a91ad39a0bda82b666e4a441837",
         "acts": [0, 0, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 1],
-        "format": "cadence-generic/2",
-        "names": "5a728760433a9dea87769077dd838133cd49a8637125759627166a31d5cf16a8",
-        "checkpoint": "03067e0fea6cf3e6a70d853e26355f17469035d66c097f42f1286b411a4ea5aa",
+        "format": "cadence-brain/1",
+        "names": "cf4f510fd7745ee140166219a1a6e0af36750c92b9eb41a38f9262d2272f7dda",
+        "checkpoint": "995ca55ca539707fc98e5d17c3132b091dcbdc070adeb5dbff229981072998fc",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "memory_choice": True, "arousal": True,
                          "recall": False}),
         "life": lived,
-        "parameters": "aad357f3afceae3cfd5528b2a12c02ee7405eedd5ada8922cd1785cf66189164",
+        "parameters": "dcbc0983cda21c93c39ec2e5f75b9deebe3af815e53bdd9e9af7befbc7afac53",
         "acts": [1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-        "format": "cadence-generic/6",
-        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "2a2bdcd2f204f66b80c2c67d1af5d1c84dad39220a13caefc2a08bdc42986ac0",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "819a806d35bf843679477ab0595e97fe8140ca880de3dc0791800e4c6befe72a",
     },
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
                          "history_decays": (0.2, 0.9), "efference_amplitude": 1.0,
                          "memory_choice": True}),
         "life": lived,
-        "parameters": "7ccd7c7855a971743e898c29204bc3050d63d6ce0cde809cdca7fd7cadca5c4f",
+        "parameters": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
-        "format": "cadence-generic/8",
-        "names": "17b2b7a61fa822e150659b765cef59befb6219db6791a720d7ff79b32498636c",
+        "format": "cadence-brain/1",
+        "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
         "checkpoint": None,
     },
     "boundary": {
@@ -152,10 +158,10 @@ FOUNDERS: dict[str, dict] = {
         "build": (256, 3, {"modules": (16,), "seed": 9, "memory_choice": True, "recall": True,
                            "arousal": True}),
         "life": lived,
-        "parameters": "938905bbc2dc39c354f2f53443948e0bc4b5f06dfe132306fa4d31062ada966a",
+        "parameters": "2682044117eb96655f6d3e084c547a516c88d0987409bde96cf07d7074f5c49f",
         "acts": [2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-        "format": "cadence-generic/8",
-        "names": "d8e0435357330cc7f0deadff49bf70738665fd3a042b9d82969d7945a3094bc0",
+        "format": "cadence-brain/1",
+        "names": "8fc6ffe8ac86a1d325e454c2f5b06d31316374fd1b83a5c3ee68e0cbefd5c1c2",
         "checkpoint": None,
     },
     "wide": {
@@ -164,34 +170,39 @@ FOUNDERS: dict[str, dict] = {
         "build": (2_000, 3, {"modules": (8,), "seed": 13, "memory_choice": True,
                              "arousal": True, "recall": False}),
         "life": lived,
-        "parameters": "63de06ff41d1403e4e706fbf3095c48d555682191afc24b659c5e7e90d28acf3",
+        "parameters": "1eac71c04400948031c90dc1b00bd09f3cc5068037a88e69e6d3af225e0b89ae",
         "acts": [2, 2, 2, 2, 2, 2, 2, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2],
-        "format": "cadence-generic/6",
-        "names": "2d5620ee6ddfa07ee9bdfbb174903829313bc90cb9ff24c09e9e530f7e2dd4be",
-        "checkpoint": "7b8bf9c566606464d87941f321b4aac2421a7c07b882959ae3bc160512efa90e",
+        "format": "cadence-brain/1",
+        "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
+        "checkpoint": "d26023c492f2b68d4117f558bb347716da946a4b3aaed192b56e865b2001fd29",
     },
     "image": {
-        # an image shape through Brain.build: the hippocampus of earlier releases keyed on
-        # the 1,600 pixels
+        # the single-region image brain of earlier releases, wired by hand: the hippocampus
+        # keyed on the 1,600 pixels
         "build": ((40, 40), 2, {"hidden": 8, "seed": 14}),
-        "builder": "build",
+        "builder": "single",
         "life": stepped,
         "parameters": "aecb598d8fbf5218c210bd2ad264206e9aae0e706105a6e1255a5c44316abe54",
         "acts": [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1],
-        "format": "cadence-generic/2",
-        "names": "40c128b7c0aa3d9ca90623833c68cb73986f93215449e1c55a380fdbb7996665",
-        "checkpoint": "67e3b55da910940341f121de5333d74efc9acf135ae4db11e1e5d1e0802b91f8",
+        "format": "cadence-brain/1",
+        "names": "5f1e68f8add8efd7df5ddde72592d0f57cc6dd16035815256ce47ee57a92ca83",
+        "checkpoint": "5d34dd5b915cfcc8e4161a951cfaad2a75eeff5fd6e6dcb890c04d8ae6773db8",
     },
 }
+
+
+def make_founder(spec: dict) -> cd.Brain:
+    inputs, actions, options = spec["build"]
+    if spec.get("builder") == "single":
+        return single_region(inputs, actions, **options)
+    return cd.Brain.compose(inputs, actions, **options)
 
 
 def founder_record(tmp_path: Path) -> dict[str, dict]:
     """What the founder test checks, as recorded on the parent composition."""
     out = {}
     for name, spec in FOUNDERS.items():
-        inputs, actions, options = spec["build"]
-        builder = cd.Brain.build if spec.get("builder") == "build" else cd.Brain.compose
-        brain = builder(inputs, actions, **options)
+        brain = make_founder(spec)
         parameters = parameter_digest(brain)
         acts = spec["life"](brain)
         path = brain.save(tmp_path / f"{name}.npz")
@@ -202,9 +213,7 @@ def founder_record(tmp_path: Path) -> dict[str, dict]:
 
 
 def founder(spec: dict) -> tuple[cd.Brain, int]:
-    inputs, actions, options = spec["build"]
-    builder = cd.Brain.build if spec.get("builder") == "build" else cd.Brain.compose
-    return builder(inputs, actions, **options), int(np.prod(inputs))
+    return make_founder(spec), int(np.prod(spec["build"][0]))
 
 
 @pytest.mark.parametrize("name", sorted(FOUNDERS))
@@ -224,10 +233,10 @@ def test_a_vector_or_image_brain_is_the_composition_before_the_observation_code(
     path = brain.save(tmp_path / "founder.npz")
     assert names_digest(path) == spec["names"]
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = json.loads(str(data["brain"]))
         assert not any(name.startswith("code/") for name in data.files)
     assert meta["format"] == spec["format"] and "code" not in meta
-    described = brain.describe()["observation_code"]
+    described = brain.describe()["layout"]["code"]
     assert described == {
         "kind": "observation", "inputs": inputs, "width": inputs, "units": 0, "fan_in": 0,
         "winners": 0, "cortex": "observation",
@@ -247,15 +256,19 @@ def test_the_founders_acts_and_checkpoint_bytes_are_the_recorded_ones(tmp_path, 
 
 
 def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
-    """The fixture, the recall founder after its life at the final format: it loads and saves
-    again with the same arrays and metadata, continues, and the continued life's checkpoint
-    reloads and saves the same; on the NumPy solver the continuation is the recorded one and
-    the same life lived again saves the fixture's bytes."""
+    """The fixture, the recall founder after its life saved by 0.84.3: it loads, and saved
+    again in this version's format it reloads and saves the same; it continues, and the
+    continued life's checkpoint reloads and saves the same; on the NumPy solver the
+    continuation is the recorded one and the same life lived again saves what the loaded
+    fixture saves."""
     fixture = FIXTURES / "recalled.npz"
     provenance = json.loads((FIXTURES / "provenance.json").read_text())
     brain = cd.Brain.load(fixture)
     assert brain.sparse_code is None and brain.recall is not None and brain.memory_choice
-    assert checkpoint_digest(brain.save(tmp_path / "again.npz")) == checkpoint_digest(fixture)
+    again = brain.save(tmp_path / "again.npz")
+    assert checkpoint_digest(cd.Brain.load(again).save(tmp_path / "twice.npz")) == (
+        checkpoint_digest(again)
+    )
     acts = [int(np.asarray(brain.live(STREAM[(t + 1) % 4], reward=[float(t % 2)]))[0])
             for t in range(6)]
     continued = brain.save(tmp_path / "continued.npz")
@@ -265,17 +278,18 @@ def test_the_saved_recall_brain_loads_continues_and_saves_the_same(tmp_path):
     if NUMPY_SOLVER:
         assert acts == provenance["continuation"]["recalled"]["acts"]
         inputs, actions, options = FOUNDERS["recalled"]["build"]
-        relived = cd.Brain.compose(inputs, actions, **options)
+        # the fixture's genes: a save of 0.84.3 carries the need scale of zero
+        relived = cd.Brain.compose(inputs, actions, **options, arousal_need_scale=0.0)
         FOUNDERS["recalled"]["life"](relived)
         assert checkpoint_digest(relived.save(tmp_path / "relived.npz")) == (
-            checkpoint_digest(fixture)
+            checkpoint_digest(again)
         )
     with np.load(fixture, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert "seed" not in meta["recall"] and "address_prior" not in meta["recall"]
     meta["recall"]["address_prior"] = 1.0  # a retired gene is refused
     with np.load(fixture, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     arrays["generic"] = np.array(json.dumps(meta))
     np.savez(tmp_path / "prior.npz", **arrays)
     with pytest.raises(ValueError, match="invalid saved recall ports"):
@@ -293,7 +307,7 @@ def test_the_code_and_the_sparse_separation_are_opt_in():
     def keyed(inputs, **options):
         brain = cd.Brain.compose(inputs, 2, modules=(8,), memory_choice=True, recall=True,
                                  **options)
-        described = brain.describe()["observation_code"]
+        described = brain.describe()["layout"]["code"]
         return (described["kind"], described["width"], described["cortex"],
                 described["separator"], brain.hippocampus.separator is not None
                 and brain.hippocampus.separator.fan_in, len(brain.connectome.populations["recall"]))
@@ -306,9 +320,9 @@ def test_the_code_and_the_sparse_separation_are_opt_in():
     assert keyed(1025, memory_fan_in=32) == ("observation", 1025, "observation", "sparse", 32, 1025)
     assert keyed(1025, code=1024) == ("code", 1024, "code", None, False, 1024)
     assert keyed(300, code=64) == ("code", 64, "code", None, False, 64)
-    assert cd.Brain.observation_width(12_824) == 12_824
-    assert cd.Brain.observation_width(300) == 300 and cd.Brain.observation_width(300, 64) == 64
-    assert cd.Brain.observation_width((40, 40)) == 1600 and cd.Brain.observation_width((8, 8), 256) == 256
+    assert cd.Genome.observation_width(12_824) == 12_824
+    assert cd.Genome.observation_width(300) == 300 and cd.Genome.observation_width(300, 64) == 64
+    assert cd.Genome.observation_width((40, 40)) == 1600 and cd.Genome.observation_width((8, 8), 256) == 256
     # a coded brain's memories key on the code as it is: a separation of their own is refused
     with pytest.raises(ValueError, match="memory_expansion and memory_fan_in need"):
         cd.Brain.compose(300, 2, modules=(8,), memory_choice=True, code=64, memory_expansion=512)
@@ -480,7 +494,7 @@ def test_compose_can_make_the_sensory_region_the_code():
     assert raw.inputs == coded.inputs == 12_824
     assert len(raw.sensory_index) == 12_824 and len(coded.sensory_index) == 1024
     assert raw.sparse_code is None and not raw.coded_cortex  # the founder keys on the observation
-    assert coded.coded_cortex and coded.describe()["observation_code"]["cortex"] == "code"
+    assert coded.coded_cortex and coded.describe()["layout"]["code"]["cortex"] == "code"
 
     def sensory_synapses(brain):
         pre = np.asarray(brain.connectome.pre)
@@ -499,8 +513,8 @@ def test_compose_can_make_the_sensory_region_the_code():
     )
     assert coded.act(x, greedy=True).shape == (2,)
     assert coded.describe()["layout"]["inputs"] == 12_824
-    assert coded.describe()["initialization"]["composition"]["code"] == 1024
-    assert "code" not in raw.describe()["initialization"]["composition"]
+    assert coded.describe()["layout"]["composition"]["code"] == 1024
+    assert "code" not in raw.describe()["layout"]["composition"]
     with pytest.raises(ValueError, match="need 12824 values"):
         coded.act(np.zeros((1, 1024)))
     heard = cd.Brain.compose(12_824, 3, modules=(8,), seed=1, code=256, history_decays=(0.5,),
@@ -529,19 +543,19 @@ def test_the_memories_key_on_the_code_as_it_is():
     for memory in (brain.hippocampus, brain.context_memory):
         assert memory.separator is None and memory.strength.shape[1] == len(memory.pre)
     assert brain.coded_cortex and brain.recall.inputs == 0  # the sensory range is the code
-    assert brain.recall.key_width == 1024 and "inputs" not in brain.describe()["recall"]
+    assert brain.recall.key_width == 1024 and "inputs" not in brain.describe()["memories"].get("recall")
     x = frames(2_000, 1, 4, density=0.1)
     code = brain.observation_code(x)
-    key = brain._episode_key(code)
+    key = brain.memories["episodic"].key(code)
     assert key.shape == (1, 1027)
     np.testing.assert_array_equal(key[0, :1024], 0.5 * code[0])
     brain.step(x, teacher=[1])  # shown once, under the code
-    assert brain._context.shape == (1, 1027) and brain._paths[0][-1][2].shape == (1024,)
+    assert brain.memories["episodic"].context.shape == (1, 1027) and brain.memories["episodic"].paths[0][-1][2].shape == (1024,)
     assert brain.recall.keys.shape == (1, 1, 1024)
     np.testing.assert_array_equal(brain.recall.keys[0, 0], code[0])
     alike = x.copy()
     alike[0, :100] = 0.0
-    votes = brain._vote(brain.observation_code(alike), brain._episode_key(brain.observation_code(alike)))
+    votes = brain.memories["episodic"].vote(brain.observation_code(alike), brain.memories["episodic"].key(brain.observation_code(alike)))
     assert votes[0, 1] > 0 and votes[0, 1] > votes[0, 0]  # found again under an observation alike
     brain.step(x, reward=[1.0])
     assert brain.hippocampus.writes >= 1
@@ -574,7 +588,7 @@ def test_a_custom_anatomy_takes_the_code_and_keeps_recall_off_unless_asked(tmp_p
     assert plain.recall is None and plain.sparse_code is None and plain.code_width == 3_230
     assert not plain.coded_cortex and plain.inputs == 3_230
     # the memories' code with the cortex on the observation: the regions sized by the code
-    assert cd.Brain.observation_width(3_230, 1024) == 1024
+    assert cd.Genome.observation_width(3_230, 1024) == 1024
     brain = cd.Brain(anatomy(3_230, 16, 1024), code=1024, recall=True, memory_choice=True,
                      memory_context=0.5, memory_replay=8, memory_demonstrations=1.0,
                      arousal=True)
@@ -587,9 +601,8 @@ def test_a_custom_anatomy_takes_the_code_and_keeps_recall_off_unless_asked(tmp_p
     assert twin.describe() == brain.describe()
     np.testing.assert_array_equal(twin.live(x, reward=[0.0]), brain.live(x, reward=[0.0]))
     # the sensory region as the code: the observation width named beside it
-    coded = cd.Brain(anatomy(256, 16, 16), inputs=3_230, code=256, recall=True,
-                     recall_value="cortex")
-    assert coded.coded_cortex and coded.inputs == 3_230 and coded.recall.value_width == 16
+    coded = cd.Brain(anatomy(256, 16, 256), inputs=3_230, code=256, recall=True)
+    assert coded.coded_cortex and coded.inputs == 3_230 and coded.recall.value_width == 256
     assert coded.act(x, greedy=True).shape == (1,)
     assert coded.recall.inputs == 0  # the sensory range is the code
     with pytest.raises(ValueError, match="with inputs the sensory region is the code"):
@@ -598,8 +611,6 @@ def test_a_custom_anatomy_takes_the_code_and_keeps_recall_off_unless_asked(tmp_p
         cd.Brain(anatomy(256, 16, None), inputs=3_230)  # no code: the region is not one
     with pytest.raises(ValueError, match=r"one neuron per value coordinate \(1024\)"):
         cd.Brain(anatomy(3_230, 16, 512), code=1024, recall=True)
-    cortex = cd.Brain(anatomy(3_230, 16, 16), recall=True, recall_value="cortex")
-    assert cortex.recall is not None
     with pytest.raises(ValueError, match="inputs must be an integer of at least 1"):
         cd.Brain(anatomy(256, 16, None), inputs=0, code=256)
 
@@ -646,8 +657,8 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
         brain.live(x[t % 3], reward=None if t == 0 else [float(t % 2)])
     path = brain.save(tmp_path / "coded.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name].copy() for name in data.files})
+    meta = metadata(arrays)
     assert meta["format"] == "cadence-generic/9"
     assert meta["code"] == {**brain.sparse_code.to_dict(), "cortex": True}
     assert arrays["code/index"].shape == arrays["code/weight"].shape == (1024, 32)
@@ -666,7 +677,7 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
     coded.live(x[0])
     coded.live(x[1], reward=[1.0])
     with np.load(coded.save(tmp_path / "cortex.npz"), allow_pickle=False) as data:
-        cortex_meta = json.loads(str(data["generic"]))
+        cortex_meta = metadata(data)
     assert cortex_meta["code"]["cortex"] is True and cortex_meta["composition"]["code"] == 256
     cortex_twin = cd.Brain.load(tmp_path / "cortex.npz")
     assert cortex_twin.coded_cortex and cortex_twin.inputs == 2_000
@@ -674,7 +685,7 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
 
     def tampered(name: str, mutate) -> Path:
         copy = {k: v.copy() for k, v in arrays.items()}
-        meta = json.loads(str(copy["generic"]))
+        meta = metadata(copy)
         mutate(meta, copy)
         copy["generic"] = np.array(json.dumps(meta))
         np.savez(tmp_path / f"{name}.npz", **copy)
@@ -764,26 +775,22 @@ def test_a_coded_checkpoint_carries_its_code_and_a_mismatch_is_refused(tmp_path)
             cd.Brain.load(tampered(name, mutate))
 
 
-def wider_than_the_graph(recall: bool = False, **options) -> cd.Brain:
+def wider_than_the_graph(**options) -> cd.Brain:
     """A custom anatomy whose code is wider than its whole graph: 32 sensory, 8 association
-    and 2 motor neurons and a code of 128 units, with the default episodic memory; with
-    ``recall`` 8 recall and 8 next neurons for a memory of cortex values."""
+    and 2 motor neurons and a code of 128 units, with the default episodic memory. (A recall
+    memory's regions hold one neuron per code unit, so a graph with one is never narrower
+    than its code.)"""
     regions = [Region("sensory", 32), Region("association", 8), Region("motor", 2)]
     projections = [Projection("sensory", "association", reciprocal=False),
                    Projection("association", "motor")]
-    if recall:
-        regions += [Region("recall", 8), Region("next", 8)]
-        projections += [Projection(name, "association", reciprocal=False)
-                        for name in ("recall", "next")]
-        options = {"recall": True, "recall_value": "cortex", **options}
     connectome = develop(Genome(tuple(regions), tuple(projections)), seed=3)
     return cd.Brain(connectome, code=128, seed=3, **options)
 
 
 @pytest.mark.parametrize(
     "variant",
-    [{}, {"recall": True}, {"memory_choice": True, "memory_context": 0.5, "arousal": True}],
-    ids=["episodic", "recall", "context"],
+    [{}, {"memory_choice": True, "memory_context": 0.5, "arousal": True}],
+    ids=["episodic", "context"],
 )
 def test_a_code_wider_than_the_graph_saves_and_continues_from_a_pending_action(
     tmp_path, variant
@@ -807,9 +814,6 @@ def test_a_code_wider_than_the_graph_saves_and_continues_from_a_pending_action(
     np.testing.assert_array_equal(twin.hippocampus.strength, brain.hippocampus.strength)
     if brain.context_memory is not None:
         np.testing.assert_array_equal(twin.context_memory.pre, np.arange(128 + 2))
-    if brain.recall is not None:
-        assert brain.recall.key_width == 128 and brain.recall.value_width == 8
-        np.testing.assert_array_equal(twin.recall.keys, brain.recall.keys)
     for t in (4, 5):
         np.testing.assert_array_equal(
             brain.step(x[t:t + 1], reward=[float(t % 2)]),
@@ -825,7 +829,7 @@ def test_the_loader_bounds_the_keys_by_the_code_and_the_outputs_by_the_graph(tmp
     brain.step(frames(32, 1, 9, density=0.3))
     path = brain.save(tmp_path / "wide.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     n = brain.connectome.n
 
     def refused(name, mutate, message):
@@ -856,7 +860,7 @@ def test_the_loader_bounds_the_keys_by_the_code_and_the_outputs_by_the_graph(tmp
 def parsed(path: Path) -> tuple[dict, dict]:
     """A checkpoint's metadata entries, parsed, and its other arrays by name."""
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
+        arrays = earlier({name: data[name].copy() for name in data.files})
     meta = {name: json.loads(str(arrays.pop(name))) for name in ("generic", "meta")
             if name in arrays}
     return meta, arrays
@@ -901,8 +905,8 @@ def test_place_records_of_another_width_are_refused_by_the_loader(tmp_path):
     brain.step(x, reward=[1.0])
     path = brain.save(tmp_path / "coded.npz")
     with np.load(path, allow_pickle=False) as data:
-        arrays = {name: data[name].copy() for name in data.files}
-    meta = json.loads(str(arrays["generic"]))
+        arrays = earlier({name: data[name].copy() for name in data.files})
+    meta = metadata(arrays)
     meta["hippocampus"]["pre"] = 512
     meta["hippocampus"]["persistent_parameters"] = 512 * 3
     arrays["episodic/pre"] = np.arange(512)
@@ -924,7 +928,7 @@ def test_a_wide_brain_keyed_on_its_observation_saves_and_loads_as_before(tmp_pat
     brain.step(x, reward=[1.0])
     path = brain.save(tmp_path / "raw.npz")
     with np.load(path, allow_pickle=False) as data:
-        meta = json.loads(str(data["generic"]))
+        meta = metadata(data)
     assert meta["format"] == "cadence-generic/8" and "code" not in meta
     assert meta["hippocampus"]["pre"] == 1_500
     twin = cd.Brain.load(path)
@@ -943,8 +947,8 @@ def test_compose_takes_an_image_shape_like_genome():
     assert forward.sum() == 128 * 8 and np.isin(pre[forward], populations["visual/output"]).all()
     assert not (np.isin(pre, populations["visual/input"]) & ~np.isin(post, populations["visual"])).any()
     assert brain.describe()["layout"]["inputs"] == 36
-    assert brain.describe()["initialization"]["composition"]["image"] == [6, 6, 1]
-    assert brain.describe()["initialization"]["composition"]["inputs"] == 36
+    assert brain.describe()["layout"]["composition"]["image"] == [6, 6, 1]
+    assert brain.describe()["layout"]["composition"]["inputs"] == 36
     assert brain.sparse_code is None  # 36 pixels: the memories key on the pixels themselves
     assert len(cd.Brain.compose((6, 6), 2, modules=(8,), features=2, field=2).connectome.populations["visual/output"]) == 2 * 25
     colour = cd.Brain.compose((4, 4, 3), 2, modules=(8,), seed=2)
