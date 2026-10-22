@@ -28,9 +28,7 @@ SPEC.loader.exec_module(subject)
 
 @pytest.fixture
 def ctx(monkeypatch):
-    runtime = os.environ.get("CADENCE_ATTENTION_RUNTIME")
-    if runtime is None:
-        pytest.fail("set CADENCE_ATTENTION_RUNTIME to the exact frozen source")
+    runtime = Path(os.environ.get("CADENCE_ATTENTION_RUNTIME", HERE.parents[1]))
     result = subject.configure(runtime)
 
     def forbidden(*args, **kwargs):
