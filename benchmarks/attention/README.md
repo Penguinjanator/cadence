@@ -48,8 +48,10 @@ all eight pairs without refusals. They follow both actual donor facts and
 fail appropriately under record erasure, but changing the neutral record
 changes 4/8 and 2/8 answers. Both also fail the predeclared named-record
 specialization gate. The full primary gate remains negative; retention and
-resource comparisons stay closed. Learned coupled H1 relevance still needs
-a direct single-question test before any longer-world attention claim.
+resource comparisons stay closed. The separate [direct single-head test](SINGLE_RELEVANCE.md)
+checks both questions on copies of the same witnessed history, with new matched
+capacity and causal selection gates. It must establish learned coupled H1
+relevance before any longer-world attention claim.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier
