@@ -17,7 +17,10 @@ founders, a local budget and unused confirmation founders before behavioral
 results. It keeps the original named-fact instrument and its acquisition floor
 unchanged. If supplying both facts still fails to teach the query relation,
 behavioral attention comparisons stop: that failure has not been localized to
-memory. Numerical checks alone cannot admit a library option.
+memory. The original admissions below failed; the separately declared
+[teaching-policy repair](repair-protocol.json) now passes on both development
+and all twenty fresh confirmation founders. Numerical checks and that acquisition
+control alone cannot admit a library attention option.
 
 ## Equations and boundaries
 
@@ -87,7 +90,7 @@ seconds and solver work are not physical energy. A budget-truncated run is a
 failure to establish acquisition, not evidence that the learner cannot acquire
 the task with more work. Confirmation seeds stay unused on admission failure.
 
-## 22 October 2026: admission remains open
+## Earlier 22 October 2026 admissions: retained failures
 
 Both recipes used the same normalized teaching, development seeds and task;
 only the free/nudged sweep caps rose from 256 to 1,024 in the declared
@@ -121,10 +124,91 @@ that enabling that existing fallback at these boundaries does not close this
 admission. The local Jacobian is measured at an **unqualified attempted state**,
 not at an equilibrium, and is not a stability theorem.
 
-The next behavioral delivery is an admitted acquisition/content-use chamber
-under a separately declared recipe, preserving these failures and the 0.95
-floor. Then compare held LMS and `toward` before the two bounded coupled
-candidates, keeping information and teacher budget matched. The tiny equation
-and local-credit probe is complete; learned causal relevance and lifecycle
-integration are pending. This experiment must not be merged as completed
-attention or used to close a relevance capability issue.
+These failures establish no retrieval deficit. The separately declared repair
+below addresses exposed-fact acquisition, preserving these results and the 0.95
+floor. Supplied-content use, held LMS versus `toward`, causal learned relevance
+and lifecycle integration remain separate gates. This experiment must not be
+merged as completed attention or used to close a relevance capability issue.
+
+## Acquisition repair: the existing wrong-answer teaching control
+
+The failed admission omitted an existing successful control in
+[`acquisition_controls.py`](../relevance/acquisition_controls.py): teach only
+incorrect answers from the **complete pre-query stimulus**. The new
+[protocol](repair-protocol.json) fixes the task, two development founders,
+twenty unused confirmation founders, a 600-host-second total budget and the
+original 0.95 acquisition floor before running. It keeps the same 32-unit
+reciprocal System 1, lateral 0, normalized teaching, `dt=0.1` and qualified
+1,024-sweep free/nudged phases. Both matched arms now act before teaching;
+one teaches every row, the other only wrong rows. The old admission's different
+teach-before-act schedule remains explicit in its retained receipts.
+
+Capture the complete drive before the query act advances the working trace,
+then restrict that saved drive to the rows actually answered incorrectly.
+Rebuilding it from a smaller observation batch would lose the original context;
+rebuilding after acting would teach from the query-advanced trace. Teachers
+still supply only final answers, with no slot index or relevance mask. An
+all-correct round performs no lesson. Every phase of each accepted lesson
+must qualify under the existing full-equation rule.
+
+| Policy | Development founder | Completed rounds / 512 | Final overall accuracy | Lessons / taught rows | Training refusals |
+| --- | --- | --- | --- | --- | --- |
+| Every row | 0 | 67 | 37.5% | 67 / 1,072 | 1 query |
+| Every row | 1 | 72 | 50% | 72 / 1,152 | 1 query |
+| Wrong rows | 0 | 512 | 100% | 36 / 157 | 0 |
+| Wrong rows | 1 | 512 | 100% | 31 / 103 | 0 |
+
+Both wrong-row founders also reach 100% on unequal facts and each query. The
+first development run was retained, then repeated after tightening only the
+verifier. The replay reproduces **every complete per-run record**, including
+parameter/checkpoint digests, decisions and work counts. The first passing
+recipe was frozen before opening confirmation; the historical finite-teaching
+fallback with lateral -0.5 was never run or restored as a default.
+
+**Confirmation: all 20 fresh founders, seeds 100–119, pass.** Each completes
+512 rounds and reaches 100% overall, unequal-fact and both-query accuracy,
+with zero teaching or action refusals. Final acquired readings are used,
+without selecting the best checkpoint along training. Initial mean accuracy
+is 51.25%, final accuracy 100%, and the separate uniform-random control averages
+50%. Confirmation uses 564 lessons on 2,579 taught rows. The original
+development, verifier-only replay and confirmation take 29.47, 21.76 and
+180.33 host seconds respectively, all charged within the declared 600-second
+budget. Each evaluation forks saved state and checks that the acquired brain
+is unchanged. Checkpoint contents are hashed in the receipts; binary checkpoints
+remain local. This is not an efficiency comparison: the failed every-row arms
+stop early and therefore do less work.
+
+This repairs the acquisition **instrument's teaching recipe**, not a runtime
+gradient or retrieval defect. Continuing to teach an already correct decision
+can still move its parameters; wrong-row teaching removes that pressure. The
+matched comparison measures this policy's effect here; it does not identify
+the precise dynamical cause of the every-row refusals or propose a new default.
+
+All sixteen fact/order/query cases are taught, using raw input coordinates as
+an explicit control. Fresh founders do not establish unseen-binding or semantic
+generalization. Trace-erased queries also qualify, but their mean accuracy is
+77.5%; the intact acquisition result uses the continuing trial's prefix context.
+This is not yet a test that the cortex can use content delivered through the
+recall ports. The coupled reader still needs that content-use check, correct
+partial-row memory snapshots, learned causal relevance, abstention, retention
+and lifecycle integration. No behavioral coupled candidate was run. Seeds
+100–119 are now opened for acquisition and must not be described as untouched
+confirmation seeds for a later relevance candidate.
+
+Run or verify the repair from the repository root:
+
+```sh
+PYTHONPATH=src python benchmarks/attention/repair_admission.py --stage development \
+  --checkpoints /tmp/attention-dev-checkpoints --out /tmp/attention-development.json
+PYTHONPATH=src python benchmarks/attention/repair_admission.py --stage confirmation \
+  --development /tmp/attention-development.json --checkpoints /tmp/attention-confirm-checkpoints \
+  --out /tmp/attention-confirmation.json
+PYTHONPATH=src python benchmarks/attention/verify.py benchmarks/attention/results/repair-development.json
+PYTHONPATH=src python benchmarks/attention/verify.py benchmarks/attention/results/repair-confirmation.json
+```
+
+The verifier binds the frozen protocol, complete ordered founder/arm sets,
+matched development settings and schedules, actual answered cases, and original
+checkpoint preservation. Optimistic flags cannot hide refused or unrun queries.
+The earlier development source is retained by content hash alongside its first
+receipt; a stricter verifier does not silently rewrite historical evidence.

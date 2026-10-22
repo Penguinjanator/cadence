@@ -64,7 +64,16 @@ def verify(path: Path) -> tuple[bool, str]:
         snapshot = HERE / "results" / "sources" / (digest + ".txt")
         source = snapshot if snapshot.exists() else ROOT / relative
         sources.append((str(relative), source))
-    return Receipt.verify(path, sources=sources, check=check)
+    arithmetic = check
+    if receipt.kind == "cadence-attention-acquisition-repair/1":
+        spec = importlib.util.spec_from_file_location(
+            "attention_repair_verifier", HERE / "repair_admission.py")
+        assert spec is not None and spec.loader is not None
+        repair = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = repair
+        spec.loader.exec_module(repair)
+        arithmetic = repair.check
+    return Receipt.verify(path, sources=sources, check=arithmetic)
 
 
 if __name__ == "__main__":

@@ -16,3 +16,19 @@ Do not restore them over the current experiment or alter a receipt to match it.
 
 Source/digest/arithmetic verification checks custody and reported decisions;
 it does not establish behavioral reproduction, stability or useful relevance.
+
+## Acquisition repair
+
+`repair-development-precheck.json` retains the first matched-policy development
+run and its exact original runner under `sources/001bbc37*.txt`.
+`repair-development.json` repeats it after tightening only `gate()` and `check()`;
+every per-run reading, parameter/checkpoint digest and work counter is identical.
+`repair-confirmation.json` binds that strict development receipt and records all
+twenty previously unused founders under the selected, unchanged recipe.
+
+Both development wrong-row lives and all 20 confirmation lives reach 100% on
+overall, unequal-fact and each-query accuracy with complete training and no
+refusals. The every-row controls still fail and remain in the development
+receipts. This passes the declared exposed acquisition control; it does not
+establish recalled-content use, learned selection or semantic generalization.
+See the [repair protocol](../repair-protocol.json) and [results](../README.md#acquisition-repair-the-existing-wrong-answer-teaching-control).

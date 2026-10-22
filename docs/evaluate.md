@@ -55,9 +55,10 @@ tabular and recurrent arms beside the brain). A copied target, a new decoder,
 an added intention input or a larger action vocabulary makes a different task.
 
 The [coupled-memory experiment](../benchmarks/attention/README.md) separates
-joint-equation and local-credit checks from learned relevance. Its exposed-fact
-admission control currently fails the declared acquisition/completion gate;
-the retained failures do not diagnose a retrieval deficit. The prototype adds
+joint-equation and local-credit checks from learned relevance. Its first exposed-fact
+admissions fail, while a separately declared wrong-answer teaching control passes
+the unchanged acquisition gate on all 20 fresh confirmation founders. The retained
+failures do not diagnose a retrieval deficit. The prototype adds
 no supported `Brain.compose` mode. Causal relevance, semantic addressing,
 retention and continuing-life integration still require their own evidence.
 
