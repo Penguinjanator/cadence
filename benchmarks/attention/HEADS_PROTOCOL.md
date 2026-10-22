@@ -206,3 +206,29 @@ candidate equations and gates stay fixed. The previous 128.228748 host seconds
 and conservative 30.519933-second diagnostic charge consume 158.748681 of the
 same 600-second budget. Another failure stops this numerical retry; it does
 not authorize another sweep-cap search. No confirmation founder is opened.
+
+## Held-address agreement capacity control
+
+The 2,048-sweep retry also fails: supplied-read founders stop on a prefix after
+83/42 completed rounds, despite both exposed controls acquiring all trained
+pairs. Keep the [failed retry](results/heads-capacity-longer.json); do not raise
+the sweep cap again. No behavioral selector comparison follows from it.
+
+The [fixed-read declaration](heads-fixed-read-protocol.json) changes the
+**oracle capacity control only**. The external `3*fact` source with memory
+energy disabled omits the candidate's restoring term. Instead hold its two
+oracle addresses on the latest actually witnessed A/B facts, independent of
+query order, and use `sum alpha_h/2 * |r_h - V_named|² * held.any`. Its query
+derivative is zero and its read derivative is `alpha_h*(V_named-r_h)*held.any`.
+An absent name in a nonempty bank restores toward zero; an entirely empty bank
+has zero force. No future fact is supplied, and no external read drive is added.
+
+Per-head coupling stays 1.5, total coupling 3, with the same ordinary reciprocal
+seams, 2,048 sweep caps, step, tolerance and final-answer-only teacher. Fixed
+name assignments are explicitly an oracle, never learned-head evidence or
+candidate address lessons. This isolates downstream content use under the
+same restoring law. The learned candidates remain the original agreement and
+linear equations; this control is not a third candidate equation. Its single
+declared revision shares the remaining 348.877009 host seconds after the
+251.122991 seconds already charged. Earlier failures and confirmation holds
+remain intact.

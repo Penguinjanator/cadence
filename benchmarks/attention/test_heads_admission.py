@@ -295,3 +295,94 @@ def test_retry_charges_the_complete_prior_chain_and_declared_diagnostics(tmp_pat
     with pytest.raises(ValueError, match="one numerical retry"):
         admission.run(Path("retained-prior.json"))
 
+
+def fixed_protocol():
+    data = json.loads(admission.protocol_path("heads-fixed-read-protocol.json").read_text())
+    data["brain"]["modules"] = [4]
+    return data
+
+
+def test_anchored_control_keeps_candidate_anatomy_and_read_force_without_external_answers():
+    data = fixed_protocol()
+    supplied = admission.make_brain("supplied_reads", 0, data)
+    candidate = admission.make_brain("h2", 0, data)
+    assert isinstance(supplied, admission.FixedReadBrain)
+    assert not isinstance(candidate, admission.FixedReadBrain)
+    assert not hasattr(supplied, "_supplied_content_amplitude")
+    for key in ("pre", "post", "count", "sign"):
+        np.testing.assert_array_equal(getattr(supplied.connectome, key),
+                                      getattr(candidate.connectome, key))
+    np.testing.assert_array_equal(supplied.brain.efficacy, candidate.brain.efficacy)
+    rows = np.array([[0, 3, 0, 0], [2, 1, 1, 1]])
+    work = admission.sr.Work()
+    for event in admission.task.events(rows)[0]:
+        assert work.act(supplied, event) is not None
+        assert supplied.brain.memory.fixed_selector
+        assert [member.amplitude for member in supplied.brain.memory.memories] == [1.5, 1.5]
+    query, drive, snapshot = admission.prepare(supplied, rows, "supplied_reads")
+    assert snapshot.fixed_selector and snapshot.mode == "held"
+    assert not query[:, 5:].any()
+    for name, member in enumerate(snapshot.memories):
+        assert not drive[:, member.read].any()
+        expected = np.zeros((len(rows), task.INPUTS))
+        expected[:, 0] = expected[:, 5 + name] = 1.0
+        expected[np.arange(len(rows)), 7 + rows[:, name]] = 1.0
+        np.testing.assert_array_equal(snapshot.targets[name], expected)
+
+
+def test_fixed_capacity_row_teaching_and_lesions_keep_the_held_boundary_and_cost_scope():
+    brain = admission.make_brain("supplied_reads", 1, fixed_protocol())
+    rows = np.array([[0, 3, 0, 0], [2, 1, 1, 1]])
+    for event in admission.task.events(rows)[0]:
+        brain.act(event)
+    query, drive, snapshot = admission.prepare(brain, rows, "supplied_reads")
+    cost = {name: 0 for name in ("cortical_synapse_transports", "memory_scan_macs",
+                                "softmax_elements", "memory_drive_evaluations")}
+    work = admission.sr.Work()
+    with admission.metered(cost):
+        assert admission.act_drive(brain, query, drive, work) is not None
+        admission.teach(brain, drive, task.targets(rows), np.array([False, True]), snapshot, work)
+    assert brain.brain.memory is snapshot and snapshot.streams == 2
+    assert cost["fixed_read_coordinate_updates"] > 0
+    assert cost["memory_scan_macs"] == cost["softmax_elements"] == 0
+    assert cost["memory_drive_evaluations"] > 0
+    assert work.accepted_presentations == 1 and work.lesson_refusals == 0
+    _, _, erased = admission.prepare(brain, rows, "supplied_reads", "erased")
+    assert erased.fixed_selector and not erased.held.any() and not erased.targets.any()
+    _, _, lesioned = admission.prepare(brain, rows, "supplied_reads", "head_0")
+    assert [member.amplitude for member in lesioned.memories] == [0.0, 1.5]
+
+
+def test_fixed_variant_sources_and_prior_preserve_both_earlier_protocols(monkeypatch):
+    fixed = admission.protocol_path("heads-fixed-read-protocol.json")
+    monkeypatch.setattr(admission, "PROTOCOL", fixed)
+    paths = dict(admission.sources())
+    for name in ("heads-protocol.json", "heads-longer-protocol.json",
+                 "heads-fixed-read-protocol.json", "fixed_read.py"):
+        assert paths["benchmarks/attention/" + name] == admission.HERE / name
+    prior = admission.verify_prior(admission.HERE / "results" / "heads-capacity-longer.json")
+    assert prior.body["protocol_file"] == "heads-longer-protocol.json"
+    assert not prior.body["capacity_admitted"]
+
+
+def test_one_anchored_revision_requires_and_charges_the_failed_longer_run(tmp_path, monkeypatch):
+    data = fixed_protocol()
+    data["task"]["rounds"] = 3
+    frozen = tmp_path / "heads-fixed-read-protocol.json"
+    frozen.write_text(json.dumps(data))
+    monkeypatch.setattr(admission, "PROTOCOL", frozen)
+    prior = SimpleNamespace(body={"protocol_file": "heads-longer-protocol.json",
+                                  "elapsed_host_seconds": 10.0, "previous_host_seconds": 20.0},
+                            digest="d" * 64)
+    monkeypatch.setattr(admission, "verify_prior", lambda path: prior)
+    monkeypatch.setattr(admission, "trial", lambda arm, seed, protocol, deadline:
+                        failed_result(arm, seed, protocol))
+    result = admission.run(Path("failed-longer.json"))
+    assert result.body["previous_host_seconds"] == 30.0
+    assert result.body["protocol_file"] == "heads-fixed-read-protocol.json"
+    with pytest.raises(ValueError, match="requires"):
+        admission.run()
+    prior.body["protocol_file"] = "heads-fixed-read-protocol.json"
+    with pytest.raises(ValueError, match="one anchored control revision"):
+        admission.run(Path("failed-fixed.json"))
+

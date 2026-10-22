@@ -26,11 +26,12 @@ from cadence.receipts import Receipt, canonical_sha256, source_manifest
 
 HERE = Path(__file__).resolve().parent
 PROTOCOL = HERE / "heads-protocol.json"
-PROTOCOL_NAMES = ("heads-protocol.json", "heads-longer-protocol.json")
+PROTOCOL_NAMES = ("heads-protocol.json", "heads-longer-protocol.json",
+                  "heads-fixed-read-protocol.json")
 
 
 def protocol_path(name: str) -> Path:
-    """Only the two declared, repository-owned recipes may select a run."""
+    """Only declared, repository-owned recipes may select a run."""
     if name not in PROTOCOL_NAMES:
         raise ValueError("choose a declared heads protocol")
     return HERE / name
@@ -50,6 +51,28 @@ heads = load("heads_instrument", HERE / "heads.py")
 repair = load("heads_acquisition_repair", HERE / "repair_admission.py")
 binding = load("heads_binding_forks", HERE.parent / "binding" / "token_binding.py")
 sr = repair.sr
+_fixed_module = None
+
+
+class FixedReadBrain(heads.MultiHeadBrain):
+    """Capacity-only fixed addresses with the candidate's read agreement term."""
+
+    _fixed_read_capacity = True
+
+    def stimulus(self, observations, *, memory=True):
+        global _fixed_module
+        drive = super().stimulus(observations, memory=memory)
+        if self.brain.memory is not None:
+            if _fixed_module is None:
+                _fixed_module = load("heads_fixed_read_capacity", HERE / "fixed_read.py")
+            self.brain.memory = _fixed_module.FrozenRead(self.brain.memory)
+        return drive
+
+
+def replace_members(memory, members):
+    if getattr(memory, "fixed_selector", False):
+        return type(memory)(replace(memory.bank, memories=tuple(members)))
+    return replace(memory, memories=tuple(members))
 
 
 def sources(protocol: Path | None = None) -> list[tuple[str, Path]]:
@@ -58,6 +81,8 @@ def sources(protocol: Path | None = None) -> list[tuple[str, Path]]:
     names = ["heads_admission.py", active.name]
     if active.name != "heads-protocol.json":
         names.append("heads-protocol.json")
+    if active.name == "heads-fixed-read-protocol.json":
+        names += ["heads-longer-protocol.json", "fixed_read.py"]
     names += ["dual_binding.py", "heads.py", "coupled.py", "repair_admission.py",
               "repair-protocol.json"]
     paths = [("benchmarks/attention/" + name, active if name == active.name else HERE / name)
@@ -86,9 +111,13 @@ def metered(work: dict[str, int]):
             for member in members:
                 batch, slots, key = member.keys.shape
                 value = member.values.shape[-1]
-                work["memory_scan_macs"] += 2 * batch * slots * (key + value)
-                if member.mode != "linear":
-                    work["softmax_elements"] += batch * (slots + 1)
+                if getattr(memory, "fixed_selector", False):
+                    work.setdefault("fixed_read_coordinate_updates", 0)
+                    work["fixed_read_coordinate_updates"] += batch * value
+                else:
+                    work["memory_scan_macs"] += 2 * batch * slots * (key + value)
+                    if member.mode != "linear":
+                        work["softmax_elements"] += batch * (slots + 1)
                 work["memory_drive_evaluations"] += 1
         return original(graph, state, blocks)
 
@@ -124,13 +153,16 @@ def make_brain(arm: str, seed: int, protocol: dict[str, Any], mode="agreement") 
         options["learning_nudged_steps"] *= 2
     options.update(recall_next=False)
     content_amplitude = options["recall_amplitude"]
-    if arm == "supplied_reads":
+    fixed_capacity = (arm == "supplied_reads"
+                      and protocol.get("capacity_control") == "held-address-agreement")
+    if arm == "supplied_reads" and not fixed_capacity:
         options["recall_amplitude"] = 0.0  # Disable coupling in the PREFIX as well as the query.
-    brain = heads.MultiHeadBrain.compose(
+    brain_type = FixedReadBrain if fixed_capacity else heads.MultiHeadBrain
+    brain = brain_type.compose(
         task.INPUTS, task.VALUES * task.SLOTS, seed=seed, dt=protocol["dt"], mode=mode,
         heads=2 if arm in ("h2", "supplied_reads") else 1,
         port_copies=2 if arm == "h1_wide_ports" else 1, **options)
-    if arm == "supplied_reads":
+    if arm == "supplied_reads" and not fixed_capacity:
         brain._supplied_content_amplitude = content_amplitude
     return brain
 
@@ -141,7 +173,7 @@ def prepare(brain: Brain, rows: np.ndarray, arm: str, condition="intact"):
     boundary(brain, len(rows))
     drive = np.array(brain.stimulus(query), copy=True)
     memory = brain.brain.memory
-    if arm == "supplied_reads":
+    if arm == "supplied_reads" and not getattr(brain, "_fixed_read_capacity", False):
         # An explicit capacity control: expose BOTH complete unselected facts in
         # separate read ports. No selector is taught or claimed by this arm.
         prefix, _ = task.events(rows)
@@ -151,11 +183,11 @@ def prepare(brain: Brain, rows: np.ndarray, arm: str, condition="intact"):
         memory = replace(memory, memories=tuple(replace(m, amplitude=0.0)
                                                 for m in memory.memories))
     if condition == "erased" and memory is not None:
-        memory = replace(memory, memories=tuple(
+        memory = replace_members(memory, (
             replace(m, held=np.zeros_like(m.held)) for m in memory.memories))
     if condition.startswith("head_") and memory is not None:
         removed = int(condition.split("_")[1])
-        memory = replace(memory, memories=tuple(
+        memory = replace_members(memory, (
             replace(m, amplitude=0.0) if i == removed else m
             for i, m in enumerate(memory.memories)))
     brain.brain.memory = memory
@@ -285,7 +317,8 @@ def trial(arm, seed, protocol, deadline, mode="agreement"):
     brain = make_brain(arm, seed, protocol, mode)
     initial = sr.parameter_digest(brain)
     cost = {k: 0 for k in ("cortical_synapse_transports", "memory_scan_macs",
-                           "softmax_elements", "memory_drive_evaluations")}
+                           "softmax_elements", "memory_drive_evaluations",
+                           "fixed_read_coordinate_updates")}
     schedule = task.draw(seed, protocol["task"]["rounds"], protocol["task"]["batch"])
     with metered(cost):
         frozen = evaluate(brain, arm, task.panel("all"))
@@ -412,12 +445,18 @@ def run(prior: Path | None = None):
     previous, reference = 0.0, None
     if PROTOCOL.name == "heads-longer-protocol.json" and prior is None:
         raise ValueError("the numerical retry requires its retained failed base admission")
+    if PROTOCOL.name == "heads-fixed-read-protocol.json" and prior is None:
+        raise ValueError("the anchored control revision requires its failed longer admission")
     if prior is not None:
         receipt = verify_prior(prior)
         if (PROTOCOL.name == "heads-longer-protocol.json"
                 and receipt.body.get("protocol_file", "heads-protocol.json")
                 != "heads-protocol.json"):
             raise ValueError("the one numerical retry must follow the base protocol")
+        if (PROTOCOL.name == "heads-fixed-read-protocol.json"
+                and receipt.body.get("protocol_file", "heads-protocol.json")
+                != "heads-longer-protocol.json"):
+            raise ValueError("the one anchored control revision must follow the longer protocol")
         previous = (receipt.body["elapsed_host_seconds"]
                     + receipt.body.get("previous_host_seconds", 0.0))
         reference = receipt.digest
