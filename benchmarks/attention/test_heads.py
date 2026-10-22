@@ -169,14 +169,15 @@ def test_default_one_head_preserves_anatomy_actions_saved_teaching_and_parameter
                                       getattr(candidate.connectome, name))
     for observation in (np.array([[1, 0, 0], [0, 1, 0]]),
                         np.array([[0, 1, 0], [1, 0, 0]])):
-        np.testing.assert_array_equal(original.act(observation), candidate.act(observation))
+        np.testing.assert_array_equal(original.act(observation, greedy=True),
+                                      candidate.act(observation, greedy=True))
         np.testing.assert_array_equal(original.basal_ganglia.state.v,
                                       candidate.basal_ganglia.state.v)
     query = np.array([[0, 0, 1], [0, 0, 1]])
     drives = [brain.stimulus(query).copy() for brain in (original, candidate)]
     memories = [brain.brain.memory for brain in (original, candidate)]
     np.testing.assert_array_equal(drives[0], drives[1])
-    actions = [brain.act(query) for brain in (original, candidate)]
+    actions = [brain.act(query, greedy=True) for brain in (original, candidate)]
     np.testing.assert_array_equal(*actions)
     targets = 1 - actions[0]
     lessons = [
@@ -196,8 +197,8 @@ def test_head_anatomy_qualifies_joint_state_and_keeps_total_coupling(heads_count
     brain = MultiHeadBrain.compose(
         3, 2, heads=heads_count, port_copies=copies, seed=3, **brain_options(),
     )
-    brain.act([[1, 0, 0]])
-    brain.act([[0, 1, 0]])
+    brain.act([[1, 0, 0]], greedy=True)
+    brain.act([[0, 1, 0]], greedy=True)
     memory = brain.brain.memory
     assert memory.heads == heads_count and memory.streams == 1
     assert sum(member.amplitude for member in memory.memories) == pytest.approx(3.0)
@@ -218,7 +219,7 @@ def test_more_heads_and_wider_single_head_match_live_coordinate_budget() -> None
     assert sum(map(len, two.head_queries)) == sum(map(len, wide.head_queries)) == 6
     assert sum(map(len, two.head_reads)) == sum(map(len, wide.head_reads)) == 6
     for brain in (two, wide):
-        brain.act([[1, 0, 0]])
+        brain.act([[1, 0, 0]], greedy=True)
         brain.stimulus([[0, 1, 0]])
     np.testing.assert_allclose(np.linalg.norm(two.brain.memory.keys, axis=2),
                                np.linalg.norm(wide.brain.memory.keys, axis=2))
@@ -236,7 +237,7 @@ def test_saved_wrong_row_lesson_qualifies_all_heads_and_restores_full_boundary(
     brain = MultiHeadBrain.compose(
         3, 2, heads=heads_count, port_copies=copies, seed=3, **brain_options(),
     )
-    brain.act([[1, 0, 0], [0, 1, 0]])
+    brain.act([[1, 0, 0], [0, 1, 0]], greedy=True)
     drive = brain.stimulus([[0, 0, 1], [0, 0, 1]]).copy()
     original_graph = brain.brain
     snapshot = original_graph.memory

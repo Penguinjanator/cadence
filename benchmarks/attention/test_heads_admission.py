@@ -165,7 +165,7 @@ def test_meter_charges_residual_checks_and_saved_teaching_and_restores_patch() -
     brain = admission.make_brain("supplied_reads", 3, protocol())
     rows = np.array([[0, 3, 0, 0]])
     # These are numerical one-row phase checks, not a learning campaign.
-    brain.act(task.events(rows)[0][0])
+    brain.act(task.events(rows)[0][0], greedy=True)
     query, drive, saved = admission.prepare(brain, rows, "supplied_reads")
     cost = {name: 0 for name in ("cortical_synapse_transports", "memory_scan_macs",
                                 "softmax_elements", "memory_drive_evaluations")}
@@ -334,7 +334,7 @@ def test_fixed_capacity_row_teaching_and_lesions_keep_the_held_boundary_and_cost
     brain = admission.make_brain("supplied_reads", 1, fixed_protocol())
     rows = np.array([[0, 3, 0, 0], [2, 1, 1, 1]])
     for event in admission.task.events(rows)[0]:
-        brain.act(event)
+        brain.act(event, greedy=True)
     query, drive, snapshot = admission.prepare(brain, rows, "supplied_reads")
     cost = {name: 0 for name in ("cortical_synapse_transports", "memory_scan_macs",
                                 "softmax_elements", "memory_drive_evaluations")}

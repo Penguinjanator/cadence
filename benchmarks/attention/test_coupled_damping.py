@@ -259,7 +259,7 @@ def test_composed_brains_accept_existing_damping_gene_and_saved_row_teaching(cou
         learning_free_steps=256, learning_nudged_steps=256)
     assert brain.learner.config.damping == brain.describe()["genes"]["learning_damping"] == 3
     assert brain.brain.neuron_model.dt == 1.0
-    brain.act([[1, 0, 0], [0, 1, 0]])
+    brain.act([[1, 0, 0], [0, 1, 0]], greedy=True)
     drive = brain.stimulus([[0, 0, 1], [0, 0, 1]]).copy()
     memory, original = brain.brain.memory, brain.brain
     _, report = brain.teach_saved(drive, np.array([0, 1]), [1], memory)

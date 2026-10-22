@@ -8,6 +8,7 @@ It verifies custody and arithmetic; it does not rerun behavioral acquisition.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import sys
 from pathlib import Path, PurePosixPath
@@ -52,18 +53,74 @@ def check(body: dict[str, Any]) -> str | None:
     return None
 
 
-def verify(path: Path) -> tuple[bool, str]:
-    receipt = Receipt.read(path)
+def _resolved_sources(receipt: Receipt) -> list[tuple[str, Path]]:
+    """Resolve retained bytes without treating them as the currently installed model."""
     sources = []
     for entry in receipt.source["files"]:
         relative = PurePosixPath(entry["path"])
         digest = entry["sha256"]
-        if (relative.is_absolute() or ".." in relative.parts or len(digest) != 64
+        if (relative.is_absolute() or ".." in relative.parts
+                or not isinstance(digest, str) or len(digest) != 64
                 or any(c not in "0123456789abcdef" for c in digest)):
-            return False, "invalid source manifest path or digest"
+            raise ValueError("invalid source manifest path or digest")
         snapshot = HERE / "results" / "sources" / (digest + ".txt")
         source = snapshot if snapshot.exists() else ROOT / relative
         sources.append((str(relative), source))
+    return sources
+
+
+def _historical_capacity(checker: Any, parent: Receipt):
+    """Resolve only the positive prerequisite that this retained relevance receipt binds.
+
+    The runtime checker still requires current source bytes. This dependency is
+    injected only into one private offline checker, and its source hashes must
+    be the same hashes recorded by the parent experiment itself.
+    """
+    parent_sources = {entry["path"]: entry["sha256"] for entry in parent.source["files"]}
+
+    def verified(path: Path) -> Receipt:
+        relative = str(path.resolve().relative_to(ROOT.resolve()))
+        if parent_sources.get(relative) != hashlib.sha256(path.read_bytes()).hexdigest():
+            raise ValueError("historical capacity file is not bound by its relevance receipt")
+        capacity = Receipt.read(path)
+        selector = capacity.body.get("protocol_file", "heads-protocol.json")
+        if (capacity.kind != "cadence-attention-heads-admission/1"
+                or selector != parent.body.get("protocol_file")
+                or capacity.digest != parent.body["capacity_reference"]):
+            raise ValueError("historical capacity identity or protocol differs")
+        checker.admission.PROTOCOL = checker.admission.protocol_path(selector)
+        expected = [name for name, _ in checker.admission.sources()]
+        if [entry["path"] for entry in capacity.source["files"]] != expected:
+            raise ValueError("historical capacity source inventory differs")
+        if any(parent_sources.get(entry["path"]) != entry["sha256"]
+               for entry in capacity.source["files"]):
+            raise ValueError("historical capacity dependencies differ from its relevance receipt")
+        valid, message = Receipt.verify(
+            path, sources=_resolved_sources(capacity), check=checker.capacity_check)
+        if not valid:
+            raise ValueError("historical capacity prerequisite: " + message)
+        return capacity
+
+    return verified
+
+
+def _historical_relevance_check(checker: Any, parent: Receipt):
+    def arithmetic(body):
+        current = checker.verify_capacity
+        checker.verify_capacity = _historical_capacity(checker, parent)
+        try:
+            return checker.check(body)
+        finally:
+            checker.verify_capacity = current
+    return arithmetic
+
+
+def verify(path: Path) -> tuple[bool, str]:
+    receipt = Receipt.read(path)
+    try:
+        sources = _resolved_sources(receipt)
+    except ValueError as error:
+        return False, str(error)
     arithmetic = check
     modules = {"cadence-attention-acquisition-repair/1": "repair_admission.py",
                "cadence-attention-content-control/1": "content_control.py",
@@ -101,6 +158,9 @@ def verify(path: Path) -> tuple[bool, str]:
                                if protocol_file == "heads-anchored-protocol.json" else
                                "founder control source manifest paths differ")
         arithmetic = repair.check
+        if (receipt.kind == "cadence-attention-heads-relevance/1"
+                and protocol_file in owner.FOUNDER_PROTOCOLS):
+            arithmetic = _historical_relevance_check(repair, receipt)
     return Receipt.verify(path, sources=sources, check=arithmetic)
 
 
