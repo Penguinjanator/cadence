@@ -304,7 +304,7 @@ outcome. The [first steps](#observe-act-and-learn) above are the first run, and
 
 ### Routine and repair: `live`
 
-`live(observations, *, reward=None, done=None, decision_id=None)` follows one stream
+`live(observations, *, reward=None, done=None, salience=None, decision_id=None)` follows one stream
 of a brain composed with `arousal=True`. A calm brain answers with the greedy choice
 of one qualified settle and learns nothing: no eligibility phases, no parameter
 change, no associative write; earlier eligibility fades one step. Two things rouse it:
@@ -324,6 +324,16 @@ writes the outcome that woke it to memory. Want heats one uniformly chosen motor
 to `learning.temperature * (1 + heat * want)`. Every actual reward updates the income
 averages, so a brain habituates to a poorer life unless a positive `need` keeps it
 wanting.
+
+Optional `salience=[importance]` marks the preceding action's actual outcome, as in `step`:
+one finite nonnegative value. When that outcome is learned, a positive mark makes a zero
+outcome known to the episodic records, without changing its reward or stopping replay.
+It also sets consolidation's importance for the outcome that wakes a calm brain. A mark
+does not itself wake the brain or permit a calm write; it requires an awaited action,
+including after `wait` or a saved continuation. After an accepted outcome whose next answer
+refuses, retry `live(observations)` without reward, done or salience. This is an explicitly
+supplied outcome mark, not automatic extinction: indiscriminate marking can harm a reward
+chain ([episodic limits](memory.md#episodic-limits)).
 
 ```python
 import numpy as np

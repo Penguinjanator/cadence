@@ -2,6 +2,13 @@
 
 ## 0.85.1 — 2026-10-22
 
+- `live(..., salience=[...])` accepts the explicit outcome importance already supported by
+  `step`. A positive mark lets an aroused episodic brain record a known zero-valued outcome
+  while leaving its actual reward at zero for replay; it also controls consolidation on a
+  waking write. A mark alone does not wake a calm brain or make it learn. Validation and
+  decision ownership are checked before feedback changes state. This supplies the missing
+  `live` control from [#210](https://github.com/muellerberndt/cadence/issues/210), not automatic
+  extinction or a general remedy for reward-only chains; the reported residual harm remains.
 - A pending-action checkpoint must carry its decision-time observation, action and learned
   code where applicable. Missing records now raise on load rather than silently losing the
   action's associative-memory write. Composed checkpoints also validate that learner outputs

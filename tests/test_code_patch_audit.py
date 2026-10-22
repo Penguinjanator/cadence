@@ -66,6 +66,8 @@ def test_finite_large_dictionary_proposals_keep_unit_columns_and_checkpoint_vali
 
 def test_exactly_cancelled_column_keeps_its_existing_unit_direction():
     code = region()
+    code.dictionary[:, 0] = np.array([1.0, 0.0, 0.0, 0.0])
+    code.install()
     before = code.dictionary.copy()
     activation = np.zeros((8, 8))
     activation[:, 0] = 1.0

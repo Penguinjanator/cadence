@@ -477,16 +477,20 @@ for every memory.
   halve the context records' share of the vote.
 - Records are in reward units: rewards of a very different size weigh the vote more or less
   against the readout. `memory_amplitude` scales the read.
-- A record that paid is not extinguished by failures that pay nothing: a zero outcome in the
-  middle of an attempt writes nothing, and replay only adds credit. In a continuing life where
+- A record that paid is not automatically extinguished by failures that pay nothing: while
+  already aroused, an unmarked intermediate zero outcome writes nothing, and replay only adds
+  credit. In a continuing life where
   a once-paid action stops paying and its failures pay 0, its record keeps voting for it and
   the new action is often not learned: in a two-armed bandit through `live` whose paying arm
   moved, 4 of 12 lives learned the new arm, against 12 of 12 when failures cost 1. That
   one-step result does not establish a remedy for chains learned from reward alone: any
   nonzero intermediate reward stops replay at that decision, and even tiny miss penalties
   harmed acquisition in the [reported chain comparison](https://github.com/muellerberndt/cadence/issues/210#issuecomment-6300283848).
-  `step(..., salience=...)` can mark an actual zero outcome as known so the records write it,
-  while leaving its reward at zero for replay; `live()` has no `salience` argument. In the
+  `step(..., salience=...)` and `live(..., salience=...)` can mark an actual zero outcome as
+  known so the records write it, while leaving its reward at zero for replay. `live` keeps
+  its arousal gate: a mark alone does not wake it or permit a calm write. The mark belongs
+  to the preceding action's actual outcome, including after `wait`; it is checked before
+  feedback changes anything. In the `step`-based
   [follow-up comparison](https://github.com/muellerberndt/cadence/issues/210#issuecomment-6320661291),
   marking misses recovered much of the penalty's harm but still lost against unmarked
   zero outcomes. Compare with `memory_choice=False` on the same task. Automatic extinction
