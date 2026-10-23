@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.86.0 — 2026-10-23
+
 - Correct normalized learned-code input using the same effective weights as neural
   transport, including contact counts, model gain and presynaptic gains.
 - Sum parallel code-to-cortex synapses in that correction, matching neural transport
@@ -11,7 +13,9 @@
   initial numerical step sizes within the existing shared budget, preserves the
   live model and original-equation qualification, and reports initial, absolute
   final and relative halving indices. The default zero keeps the existing schedule.
-  Non-default numerical policies use a checked learner checkpoint format that
+  Different numerical starts can select another attracting basin; check preserved
+  answers and measured work on the target task. Non-default numerical policies use
+  a checked learner checkpoint format that
   older loaders refuse; ordinary checkpoints keep their format and omit the neutral
   setting and redundant zero-start diagnostics to preserve their previous metadata.
   Public reports regain the derived indices on load. This introduces no memory law,
