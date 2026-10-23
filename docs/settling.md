@@ -69,13 +69,22 @@ after every step. It can be a transient, a fixed point or part of an oscillation
 `residual(drive, state)` returns the largest fixed-point equation error per row. Small
 movement does not imply a small residual: a saturated neuron moves little while its
 equation is far from satisfied. `equilibrate(drive, *, budget=512, chunk=32,
-tolerance=1e-5, state=None, mask=None, nudge=None, damping=0)` continues until every row's
+tolerance=1e-5, state=None, mask=None, nudge=None, damping=0, initial_damping=0)` continues until every row's
 residual is below `tolerance` or the budget is spent, at one extra transport per chunk.
 All rows advance together. It returns an `Equilibrium` with `state`, per-row `residual`,
 `steps` (sweeps in this call) and `converged` (residual within tolerance), which
 `qualified` repeats. `damping=k` splits the budget over up to `k + 1`
 attempts, each at half the previous `dt`, all checked against the original equations. A
 spent budget is a result to report and act on.
+
+The optional `initial_damping` index skips earlier numerical attempts without changing
+the live neuron model. It is an integer in `0..damping`; a nonzero index currently
+requires CPU float64. For example, model `dt=1`, `damping=3`, `initial_damping=2`
+uses `.25` and `.125` within the same budget. Every result is checked against the
+original equations, with the same tolerance. `damping_halvings` is the absolute final
+index; `initial_damping` and `relative_damping_halvings` distinguish the starting index
+from further halvings. This numerical choice can select another attracting basin;
+compare acquired answers and states before using it on a new workload.
 
 Regions that share one connectome settle toward one joint fixed point under the current
 drive; independent solves merged afterwards do not couple them. An equilibrium need not be
@@ -345,10 +354,20 @@ composed rates:
 ```python
 checked = cd.Brain.compose(
     inputs=4, actions=2, seed=7, learning_qualified=True, learning_nudged_steps=1024,
+    learning_initial_damping=2,
 )
 qualified_lesson = checked.lesson(cue, np.array([0]))
 print(qualified_lesson["qualified"], qualified_lesson["total_steps"])
 ```
+
+`learning_initial_damping=2` optionally starts only the qualified teaching phases at
+the quarter step of the unchanged model. It requires `learning_qualified=True` and
+an index no larger than `learning_damping`; ordinary acts, evaluation and reward
+eligibility keep their existing numerical routes. The default index zero skips
+nothing. This is a solver setting, not a different neuron model or learning rule.
+Non-default policies use learner checkpoint format `cadence-checkpoint/4`, also
+inside complete `Brain.save` archives; older loaders refuse that format instead of
+silently dropping the policy. Ordinary archives retain their existing format.
 
 Qualification certifies the equations at those states; the gradient reading also needs the
 assumptions above. `contrast`, `update` and `apply` act on supplied states, and reward
@@ -366,7 +385,8 @@ Raise `free_steps`, lower the gain, or select `qualified=True` to refuse such le
 A lesson report holds `attempted_presentations`, `accepted_presentations`, `accepted`,
 `qualified`, `qualification_required`, the mean absolute steps `scale_step` and `bias_step`,
 and per phase (`free`, `nudged`, `opposite`) `_steps`, `_residual`, `_residual_checks`,
-`_damping_halvings`, `_stagnation_checks` (complete-state comparisons that let a stalled
+`_damping_halvings`, `_initial_damping`, `_relative_damping_halvings`,
+`_stagnation_checks` (complete-state comparisons that let a stalled
 halving pass its unused sweeps on), `_row_sweeps` and `_row_residual_checks`, with `total_*`
 sums. A refused lesson's work is in the error's `report`.
 
@@ -513,6 +533,7 @@ unless set again or passed as `None`. Select rates on development data and freez
 | `normalize`, `normalize_floor` | `LearnerConfig` | forgetting factor in `[0, 1)` of a running RMS that divides each step, plus a floor ([below](teach.md#rates-under-normalization)) | 0.0 (off), 1e-3 |
 | `scale_cap` | `LearnerConfig` | largest plastic efficacy magnitude; smaller keeps readouts out of saturation | 8.0 |
 | `qualified`, `damping` | `LearnerConfig` | require full-equation phases; most `dt` halvings per phase | `False`, 3 |
+| `initial_damping` | `LearnerConfig` | first numerical halving index, in `0..damping`; nonzero requires qualified teaching on CPU float64 | 0 |
 | `surprise` | `LearnerConfig` | [teach only differing rows](teach.md#lessons-only-where-the-answer-differs) | `False` |
 | `outputs`, `config` | `Learner` | output neuron indices; the `LearnerConfig` | required, `LearnerConfig()` |
 | `plastic_synapses`, `plastic_neurons` | `Learner` | bool masks of moving efficacies and biases | all |

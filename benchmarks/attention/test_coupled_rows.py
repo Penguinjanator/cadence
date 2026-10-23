@@ -65,12 +65,13 @@ def captured_brain():
     brain = coupled.AttentionBrain.compose(
         3, 2, modules=(4,), episodic=False, seed=2,
         learning_free_steps=256, learning_nudged_steps=256)
-    brain.act(np.eye(3))
+    brain.act(np.eye(3), greedy=True)
     query = np.roll(np.eye(3), 1, axis=1)
     drive = brain.stimulus(query).copy()
     memory = brain.brain.memory
     assert memory is not None
-    brain.act(query)  # the query joins live slots; the captured boundary must stay earlier
+    # The query joins live slots; the captured boundary must stay earlier.
+    brain.act(query, greedy=True)
     assert brain.recall.slots == memory.keys.shape[1] + 1
     return brain, drive, memory
 

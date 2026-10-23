@@ -202,7 +202,8 @@ def test_one_head_remains_exactly_the_single_head_prototype_with_the_same_flag()
     original = coupled.AttentionBrain.compose(3, 2, seed=2, **options)
     candidate = heads.MultiHeadBrain.compose(3, 2, seed=2, **options)
     for observation in ([[1, 0, 0]], [[0, 1, 0]]):
-        np.testing.assert_array_equal(original.act(observation), candidate.act(observation))
+        np.testing.assert_array_equal(original.act(observation, greedy=True),
+                                      candidate.act(observation, greedy=True))
         np.testing.assert_array_equal(original.basal_ganglia.state.v,
                                       candidate.basal_ganglia.state.v)
         assert original.brain.memory.empty_anchor and candidate.brain.memory.empty_anchor
@@ -212,8 +213,8 @@ def test_one_head_remains_exactly_the_single_head_prototype_with_the_same_flag()
 def test_reset_discards_the_previous_trial_memory_before_first_action_refusal(flag):
     brain = heads.MultiHeadBrain.compose(
         3, 2, heads=2, modules=(4,), episodic=False, empty_anchor=flag)
-    brain.act([[1, 0, 0]])
-    brain.act([[0, 1, 0]])
+    brain.act([[1, 0, 0]], greedy=True)
+    brain.act([[0, 1, 0]], greedy=True)
     graph = brain.brain
     assert graph.memory is not None and graph.memory.held.any()
     assert brain.head_attended is not None
@@ -223,7 +224,7 @@ def test_reset_discards_the_previous_trial_memory_before_first_action_refusal(fl
     assert brain.recall.slots == 0 and brain.basal_ganglia.state is None
     brain.learner.config = replace(brain.learner.config, free_steps=0, tolerance=1e-12)
     with pytest.raises(RuntimeError, match="settle"):
-        brain.act([[0, 0, 1]])
+        brain.act([[0, 0, 1]], greedy=True)
     assert graph.memory is None
     assert brain.head_attended is None
     assert brain.recall.slots == 0 and brain.basal_ganglia.state is None
@@ -233,8 +234,8 @@ def test_reset_discards_the_previous_trial_memory_before_first_action_refusal(fl
 def test_refused_action_and_invalid_reset_preserve_the_current_boundary_and_life():
     brain = heads.MultiHeadBrain.compose(
         3, 2, heads=2, modules=(4,), episodic=False, empty_anchor=True)
-    brain.act([[1, 0, 0]])
-    brain.act([[0, 1, 0]])
+    brain.act([[1, 0, 0]], greedy=True)
+    brain.act([[0, 1, 0]], greedy=True)
     graph, memory, attended = brain.brain, brain.brain.memory, brain.head_attended
     free = brain.basal_ganglia.state
     trace = brain.working_memory.trace.copy()
@@ -245,7 +246,7 @@ def test_refused_action_and_invalid_reset_preserve_the_current_boundary_and_life
     assert graph.memory is memory and brain.head_attended is attended
     brain.learner.config = replace(brain.learner.config, free_steps=0, tolerance=1e-12)
     with pytest.raises(RuntimeError, match="settle"):
-        brain.act([[0, 0, 1]])
+        brain.act([[0, 0, 1]], greedy=True)
     assert graph.memory is memory and brain.head_attended is attended
     assert brain.basal_ganglia.state is free
     assert brain.recall.reading()[0] is reading[0] and brain.recall.reading()[1] is reading[1]
@@ -261,7 +262,7 @@ def test_saved_teaching_retains_anchoring_through_row_take_and_parameter_replace
     brain = heads.MultiHeadBrain.compose(
         3, 2, heads=2, modules=(4,), episodic=False, recall_next=False,
         empty_anchor=True, learning_free_steps=256, learning_nudged_steps=256)
-    brain.act([[1, 0, 0], [0, 1, 0]])
+    brain.act([[1, 0, 0], [0, 1, 0]], greedy=True)
     drive = brain.stimulus([[0, 0, 1], [0, 0, 1]]).copy()
     graph, memory = brain.brain, brain.brain.memory
     phases = []

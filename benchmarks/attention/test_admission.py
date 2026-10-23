@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from copy import deepcopy
 from pathlib import Path
@@ -45,8 +46,7 @@ def test_recomputed_gates_reject_optimistic_flags_and_altered_answers() -> None:
 def test_damping_readback_source_custody_and_qualification_flags() -> None:
     path = HERE / "results" / "damping-readback.json"
     receipt = Receipt.read(path)
-    root = HERE.parents[1]
-    sources = [(entry["path"], root / entry["path"]) for entry in receipt.source["files"]]
+    sources = verifier._resolved_sources(receipt)
     ok, message = Receipt.verify(path, sources=sources)
     assert ok, message
     for founder in receipt.body["founders"]:
@@ -55,3 +55,83 @@ def test_damping_readback_source_custody_and_qualification_flags() -> None:
         assert not qualified
         assert founder["damped_steps"] <= 1024
     assert not receipt.body["all_damped_boundaries_qualified"]
+
+
+@pytest.mark.parametrize("retained", [None, 0])
+def test_historical_numerical_records_accept_only_the_additive_zero(retained, historical) -> None:
+    admission = historical
+    body = Receipt.read(HERE / "results" / "founder-capacity-development.json").body
+    result = deepcopy(body["runs"][0])
+    assert "initial_damping" not in result["learning_config"]
+    assert "learning_initial_damping" not in result["resolved"]["genes"]
+    if retained is not None:
+        result["learning_config"]["initial_damping"] = retained
+        result["resolved"]["genes"]["learning_initial_damping"] = retained
+    assert admission.numerical_check(result, body["protocol"], historical=True) is None
+    if retained is None:
+        assert admission.numerical_check(result, body["protocol"]) is not None
+
+
+@pytest.mark.parametrize("section,key", [
+    ("learning_config", "initial_damping"), ("genes", "learning_initial_damping")])
+@pytest.mark.parametrize("value", [1, False, 0.0, None])
+def test_historical_numerical_records_reject_nonzero_or_invalid_policy(
+    section, key, value, historical,
+):
+    admission = historical
+    body = Receipt.read(HERE / "results" / "founder-capacity-development.json").body
+    result = deepcopy(body["runs"][0])
+    record = result["resolved"]["genes"] if section == "genes" else result[section]
+    record[key] = value
+    assert admission.numerical_check(result, body["protocol"], historical=True) is not None
+
+
+def test_historical_numerical_records_reject_other_missing_or_new_fields(historical) -> None:
+    admission = historical
+    body = Receipt.read(HERE / "results" / "founder-capacity-development.json").body
+    for section in ("learning_config", "genes"):
+        for mutate in (lambda record: record.pop(next(iter(record))),
+                       lambda record: record.update(unknown_numerical_policy=0)):
+            result = deepcopy(body["runs"][0])
+            record = result["resolved"]["genes"] if section == "genes" else result[section]
+            mutate(record)
+            assert admission.numerical_check(result, body["protocol"], historical=True) is not None
+
+
+@pytest.fixture(scope="module")
+def historical():
+    spec = importlib.util.spec_from_file_location(
+        "historical_heads_admission", HERE / "heads_admission.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("damage", ["altered", "missing"])
+def test_historical_source_resolution_requires_actual_bound_bytes(tmp_path, monkeypatch, damage):
+    root, attention = tmp_path / "project", tmp_path / "attention"
+    root.mkdir()
+    current = root / "source.py"
+    current.write_text("original = True\n")
+    receipt = Receipt.build("historical-source-test/1", {}, [("source.py", current)])
+    digest = receipt.source["files"][0]["sha256"]
+    snapshot = attention / "results" / "sources" / (digest + ".txt")
+    snapshot.parent.mkdir(parents=True)
+    snapshot.write_bytes(current.read_bytes())
+    current.write_text("original = False\n")
+    monkeypatch.setattr(verifier, "HERE", attention)
+    monkeypatch.setattr(verifier, "ROOT", root)
+    assert verifier._resolved_sources(receipt) == [("source.py", snapshot)]
+    path = tmp_path / "receipt.json"
+    receipt.write(path)
+    assert Receipt.verify(path, sources=verifier._resolved_sources(receipt))[0]
+    if damage == "altered":
+        snapshot.write_text("changed archive\n")
+    else:
+        snapshot.unlink()
+        current.unlink()
+    with pytest.raises(ValueError, match="historical source"):
+        verifier._resolved_sources(receipt)
+    assert json.loads(path.read_text())["digest"] == receipt.digest

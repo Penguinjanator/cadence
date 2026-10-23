@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- Correct normalized learned-code input using the same effective weights as neural
+  transport, including contact counts, model gain and presynaptic gains.
+- Sum parallel code-to-cortex synapses in that correction, matching neural transport
+  for custom connectomes with multiple synapses at the same endpoints.
+
+- Add optional `initial_damping` for qualified CPU float64 teaching. It skips
+  initial numerical step sizes within the existing shared budget, preserves the
+  live model and original-equation qualification, and reports initial, absolute
+  final and relative halving indices. The default zero keeps the existing schedule.
+  Non-default numerical policies use a checked learner checkpoint format that
+  older loaders refuse; ordinary checkpoints keep their format and omit the neutral
+  setting and redundant zero-start diagnostics to preserve their previous metadata.
+  Public reports regain the derived indices on load. This introduces no memory law,
+  retrieval default or general performance claim.
+
 - Add a coupled-memory component experiment under `benchmarks/attention`: live
   query/read equations, independent derivative and local-credit checks, and retained
   exposed-fact admission failures. A separately declared acquisition repair restores

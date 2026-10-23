@@ -41,6 +41,9 @@ and source identity stay attached to the action that was actually executed.
 - `LearnerConfig` teaches with finite phases by default. `qualified=True` is the opt-in that
   gates each phase on the full equations, with at most `damping=3` dt halvings by default. Give it a
   `nudged_steps` budget comparable to `free_steps` ([qualified teaching budgets](settling.md#qualified-teaching-budgets)).
+  Optional `initial_damping` skips earlier teaching attempts on CPU float64 while preserving
+  the live model and original-equation tolerance. It does not change acts, evaluation or
+  reward eligibility; the default index zero retains the existing schedule.
 - RMS-normalized rates are covered in [rates under normalization](teach.md#rates-under-normalization).
 
 ## State and production integration

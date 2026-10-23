@@ -157,13 +157,15 @@ class MultiHeadBrain(AttentionBrain):
     head_queries: tuple[np.ndarray, ...]
     head_reads: tuple[np.ndarray, ...]
     head_attended: np.ndarray | None = None
+    _multi_memory_type = MultiMemory
 
     @classmethod
     def compose(
         cls, inputs: int, actions: int, *, heads: int = 1, port_copies: int = 1,
-        mode: str = "agreement", dt: float = 0.1, seed: int = 0,
+        mode: str = "agreement", dt: float | None = None, seed: int = 0,
         empty_anchor: bool = False, **options: Any,
     ) -> MultiHeadBrain:
+        dt = coupled.settlement_dt(dt, options)
         heads = positive_count("heads", heads)
         port_copies = positive_count("port_copies", port_copies)
         empty_anchor = coupled.anchor_setting(empty_anchor, mode)
@@ -182,10 +184,12 @@ class MultiHeadBrain(AttentionBrain):
             raise ValueError("attention instrument supports CPU float64 only")
         if options.get("learning_surprise", False) or options.get("recall_window", 1) != 1:
             raise ValueError("heads require saved-row teaching and one-event keys")
+        if options.get("recall_address_reward", 0.0):
+            raise ValueError("coupled queries have no separate reward address rule")
         if mode not in ("agreement", "linear", "competitive"):
             raise ValueError("unknown memory equation")
         options.update(recall=True, recall_address=0.0, recall_null=0.0, learning_qualified=True)
-        options.setdefault("learning_damping", 0)
+        options.setdefault("learning_damping", 3 if options.get("learned_code") else 0)
         options.setdefault("learning_nudged_steps", options.get("learning_free_steps", 1024))
         genome = Genome.composed(inputs, actions, seed=seed, **options)
         width = Genome.observation_width(inputs, options.get("code"), options.get("learned_code"))
@@ -231,50 +235,15 @@ class MultiHeadBrain(AttentionBrain):
         brain.head_reads = tuple(coupled.frozen(port, np.int64) for port in reads)
         return brain
 
-    def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
-        if self.heads == self.port_copies == 1:
-            drive = super().stimulus(observations, memory=memory)
-            if self.brain.memory is not None:
-                self.brain.memory = MultiMemory((self.brain.memory,))
-            return drive
-        cfg = self.learner.config
-        if not cfg.qualified or cfg.surprise:
-            raise ValueError("heads require qualified saved-row teaching and surprise=0")
-        recall = self.recall
-        if recall is None or recall.address != 0 or recall.window != 1:
-            raise ValueError("heads require one-event keys and no address lesson")
-        drive = Brain.stimulus(self, observations, memory=memory)
-        self.brain.memory = None
-        if not memory:
-            return drive
-        assert recall.last is not None
-        copies = self.port_copies
-        cue = np.tile(recall.last.key, (1, copies)) / np.sqrt(copies)
-        batch = len(drive)
-        if recall.streams == batch:
-            keys = np.tile(recall.keys, (1, 1, copies)) / np.sqrt(copies)
-            content = (np.concatenate((recall.values, recall.nexts), axis=2)
-                       if recall.next else recall.values)
-            values = np.tile(content, (1, 1, copies)) / np.sqrt(copies)
-            held, ages = recall.held, recall.ages()
-        else:
-            keys = np.zeros((batch, 0, len(self.head_queries[0])))
-            values = np.zeros((batch, 0, len(self.head_reads[0])))
-            held, ages = np.zeros((batch, 0), dtype=bool), np.zeros(0)
-        members = []
-        for query, read in zip(self.head_queries, self.head_reads, strict=True):
-            drive[:, query] = cue
-            drive[:, read] = 0.0
-            members.append(Memory(
-                query, read, keys, values, held, ages,
-                amplitude=recall.amplitude / self.heads, temperature=recall.temperature,
-                recency=recall.recency, mode=self.mode, empty_anchor=self.empty_anchor,
-            ))
-        recall._attended = None
-        self.brain.memory = MultiMemory(tuple(members))
-        return drive
+    def _memory_ports(self):
+        return self.head_queries, self.head_reads
 
-    def _choose(self, x: np.ndarray, drive: np.ndarray, free: Any, **options: Any) -> np.ndarray:
+    def _memory_from_recall(self, recall):
+        return MultiMemory(coupled.build_memories(
+            recall, self.head_queries, self.head_reads, mode=self.mode,
+            empty_anchor=self.empty_anchor, port_copies=self.port_copies))
+
+    def _attend(self, free: Any) -> None:
         memory = self.brain.memory
         if memory is not None and self.recall is not None:
             attended = None if memory.mode == "linear" else memory.weights(
@@ -285,4 +254,3 @@ class MultiHeadBrain(AttentionBrain):
             self.recall._attended = (
                 None if attended is None else coupled.frozen(attended[0])
             )
-        return Brain._choose(self, x, drive, free, **options)

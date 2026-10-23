@@ -5,11 +5,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import sys
+from copy import deepcopy
 from pathlib import Path
 
 import pytest
 
-from cadence.receipts import Receipt
+from cadence import NeuralGraph
+from cadence.receipts import Receipt, canonical_json, canonical_sha256
 
 HERE = Path(__file__).resolve().parent
 RESULTS = HERE / "results"
@@ -112,6 +114,63 @@ def test_positive_capacity_and_negative_learned_readers_preserve_their_separate_
     assert body["candidate_rounds_used"] == 1 and body["confirmation_seeds_used"] == []
     assert body["cumulative_host_seconds"] == (
         capacity["body"]["cumulative_host_seconds"] + body["elapsed_host_seconds"])
+
+
+def test_offline_history_does_not_relax_the_current_source_prerequisite(tmp_path, monkeypatch):
+    spec = importlib.util.spec_from_file_location(
+        "current_relevance_gate", HERE / "heads_relevance.py")
+    assert spec is not None and spec.loader is not None
+    runtime = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = runtime
+    spec.loader.exec_module(runtime)
+    declared = runtime.admission.protocol_path("heads-founder-extended-protocol.json")
+    installed = runtime.admission.sources(declared)
+    changed = tmp_path / "changed-heads.py"
+    changed.write_bytes((HERE / "heads.py").read_bytes() + b"\n# another installed source\n")
+    monkeypatch.setattr(runtime.admission, "sources", lambda: [
+        (name, changed if name == "benchmarks/attention/heads.py" else path)
+        for name, path in installed])
+
+    def no_neural_phase(*args, **kwargs):
+        pytest.fail("offline evidence verification attempted a neural phase")
+
+    monkeypatch.setattr(NeuralGraph, "settle_batch", no_neural_phase)
+    monkeypatch.setattr(NeuralGraph, "_equilibrate_local", no_neural_phase)
+    capacity = RESULTS / "founder-capacity-extended.json"
+    with pytest.raises(ValueError, match="source manifest differs"):
+        runtime.verify_capacity(capacity)
+    valid, message = verifier.verify(RESULTS / "heads-relevance-founder-extended.json")
+    assert valid, message
+    with pytest.raises(ValueError, match="source manifest differs"):
+        runtime.verify_capacity(capacity)
+
+
+def test_historical_parent_capacity_still_requires_its_actual_archived_bytes(tmp_path, monkeypatch):
+    capacity = Receipt.read(RESULTS / "founder-capacity-extended.json")
+    resolve = verifier._resolved_sources
+    changed = tmp_path / "corrupt-snapshot.txt"
+    changed.write_text("corrupt retained dependency\n")
+
+    def corrupted(receipt):
+        paths = resolve(receipt)
+        if receipt.digest == capacity.digest:
+            return [(name, changed if name == "benchmarks/attention/heads.py" else path)
+                    for name, path in paths]
+        return paths
+
+    monkeypatch.setattr(verifier, "_resolved_sources", corrupted)
+    valid, _ = verifier.verify(RESULTS / "heads-relevance-founder-extended.json")
+    assert not valid
+
+
+def test_a_redigested_relevance_receipt_cannot_substitute_another_capacity_reference(tmp_path):
+    raw = deepcopy(receipt("heads-relevance-founder-extended.json"))
+    raw["body"]["capacity_reference"] = "f" * 64
+    raw["digest"] = canonical_sha256({name: raw[name] for name in ("kind", "body", "source")})
+    changed = tmp_path / "rebound.json"
+    changed.write_text(canonical_json(raw) + "\n")
+    valid, _ = verifier.verify(changed)
+    assert not valid
 
 
 def test_prior_chain_charges_all_failed_controls_and_the_diagnostic_once() -> None:

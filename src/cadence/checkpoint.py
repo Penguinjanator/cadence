@@ -33,6 +33,9 @@ FIRST_FORMAT = "cadence-checkpoint/1"
 # A learner saved with the readout's intrinsic plasticity on (homeostasis_rate above 0).
 # This version has no such setting, so such a file is refused instead of loaded without it.
 HOMEOSTASIS_FORMAT = "cadence-checkpoint/3"
+# Non-default numerical policy; older loaders must refuse instead of dropping it.
+INITIAL_DAMPING_FORMAT = "cadence-checkpoint/4"
+_INITIAL_DAMPING_POLICY = "initial-damping/1"
 
 __all__ = ["FORMAT", "load", "save"]
 
@@ -50,15 +53,23 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
     from . import __version__
 
     brain = learner.brain
+    if learner.config.initial_damping and (
+        brain.backend != "cpu" or brain.precision not in (None, "float64")
+    ):
+        raise ValueError("nonzero initial_damping requires CPU float64")
+    config = learner.config.to_dict()
+    if not learner.config.initial_damping:
+        # A neutral new setting must not change ordinary checkpoint metadata.
+        config.pop("initial_damping")
     c = brain.connectome
     meta = {
-        "format": FORMAT,
+        "format": INITIAL_DAMPING_FORMAT if learner.config.initial_damping else FORMAT,
         "version": __version__,
         "n": int(c.n),
         "label": c.label,
         "populations": {k: [int(i) for i in v] for k, v in c.populations.items()},
         "neuron_model": brain.neuron_model.to_dict(),
-        "config": learner.config.to_dict(),
+        "config": config,
         "reciprocal": bool(learner.reciprocal),
         "slots": [int(k) for k in learner.slot_sizes],
         "updates": int(learner.updates),
@@ -67,6 +78,11 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
         "precision": brain.precision,
         "dense_limit": int(brain.dense_limit),
     }
+    if learner.config.initial_damping:
+        meta["numerical_policy"] = {
+            "kind": _INITIAL_DAMPING_POLICY,
+            "initial_damping": learner.config.initial_damping,
+        }
     assert learner.plastic_synapses is not None and learner.plastic_neurons is not None
     return dict(
         meta=np.array(canonical_json(meta)),
@@ -160,8 +176,29 @@ def load(
                 "this checkpoint was saved by cadence-net 0.81 with the readout's intrinsic "
                 "plasticity (homeostasis_rate above 0), which 0.82.0 removed; load it with 0.81"
             )
-        if not first and meta.get("format") != FORMAT:
+        initial_policy = meta.get("format") == INITIAL_DAMPING_FORMAT
+        if not first and meta.get("format") not in (FORMAT, INITIAL_DAMPING_FORMAT):
             raise ValueError(f"not a cadence checkpoint: {meta.get('format')!r}")
+        if initial_policy:
+            saved_config = LearnerConfig(**_known_config(meta["config"]))
+            if not saved_config.initial_damping or meta.get("numerical_policy") != {
+                "kind": _INITIAL_DAMPING_POLICY,
+                "initial_damping": saved_config.initial_damping,
+            }:
+                raise ValueError("invalid initial-damping checkpoint policy")
+        elif meta["config"].get("initial_damping", 0) != 0 or "numerical_policy" in meta:
+            raise ValueError("initial_damping requires checkpoint format cadence-checkpoint/4")
+        else:
+            # An ordinary checkpoint keeps the documented complete-config override,
+            # including when the saved config contains unsupported old settings.
+            saved_config = config or LearnerConfig(**_known_config(meta["config"]))
+        effective_config = config or saved_config
+        target_backend = backend or meta["backend"]
+        target_precision = precision if precision is not None else meta.get("precision")
+        if effective_config.initial_damping and (
+            target_backend != "cpu" or target_precision not in (None, "float64")
+        ):
+            raise ValueError("nonzero initial_damping requires CPU float64")
 
         def entry(name: str) -> Any:
             return meta[_FIRST_META[name] if first else name]
@@ -187,20 +224,20 @@ def load(
         brain = Brain(
             connectome,
             neuron_model,
-            backend=backend or meta["backend"],
+            backend=target_backend,
             efficacy=array("efficacy"),
             log_gain=data["log_gain"],
             bias=data["bias"],
             device=device,
             dense_limit=int(meta["dense_limit"]),
-            precision=precision if precision is not None else meta.get("precision"),
+            precision=target_precision,
         )
         tie = data["tie_groups"]
         rate = data["synapse_rate"] if "synapse_rate" in data.files else np.zeros(0)
         learner = Learner(
             brain,
             data["outputs"].tolist(),
-            config or LearnerConfig(**_known_config(meta["config"])),
+            effective_config,
             plastic_synapses=array("plastic_synapses"),
             plastic_neurons=array("plastic_neurons"),
             reciprocal=bool(entry("reciprocal")),

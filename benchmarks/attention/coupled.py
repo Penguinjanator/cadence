@@ -20,7 +20,11 @@ bypasses compiled kernels; it is not a new library option.
 
 from __future__ import annotations
 
+import importlib.util
+import sys
+from copy import deepcopy
 from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -28,6 +32,7 @@ import numpy as np
 from cadence import Brain, NeuralGraph
 from cadence.brain import BrainState, Equilibrium, Nudge
 from cadence.genome import Genome, Projection, develop
+from cadence.memories import Memories
 from cadence.regions import Region
 
 
@@ -218,6 +223,63 @@ def anchor_setting(value: Any, mode: str) -> bool:
     return bool(value)
 
 
+def settlement_dt(dt: float | None, options: dict[str, Any]) -> float:
+    """Keep the raw prototype step and the foundation's held-code model distinct."""
+    learned = bool(options.get("learned_code"))
+    if dt is None:
+        return 1.0 if learned else 0.1
+    if learned and dt != 1.0:
+        raise ValueError("the held learned code requires the composed outer dt=1.0")
+    return dt
+
+
+def build_memories(recall: Any, queries: tuple[np.ndarray, ...],
+                   reads: tuple[np.ndarray, ...], *, mode: str, empty_anchor: bool,
+                   port_copies: int = 1) -> tuple[Memory, ...]:
+    """One immutable witnessed bank for live reads and private branch reads alike.
+
+    The caller has read this Recall's moment before building the boundary. Heads
+    share its witnessed records; none receives a role, label or separate write.
+    """
+    if recall.last is None or not queries or len(queries) != len(reads):
+        raise ValueError("a memory boundary needs the addressed moment and all head ports")
+    if (isinstance(port_copies, (bool, np.bool_))
+            or not isinstance(port_copies, (int, np.integer)) or port_copies < 1):
+        raise ValueError("port_copies must be a positive integer")
+    batch = len(recall.last.key)
+    copies = port_copies
+    if recall.streams == batch:
+        keys = np.tile(recall.keys, (1, 1, copies)) / np.sqrt(copies)
+        content = (np.concatenate((recall.values, recall.nexts), axis=2)
+                   if recall.next else recall.values)
+        values = np.tile(content, (1, 1, copies)) / np.sqrt(copies)
+        held, ages = recall.held, recall.ages()
+    else:
+        keys = np.zeros((batch, 0, len(queries[0])))
+        values = np.zeros((batch, 0, len(reads[0])))
+        held, ages = np.zeros((batch, 0), dtype=bool), np.zeros(0)
+    return tuple(Memory(query, read, keys, values, held, ages,
+                        amplitude=recall.amplitude / len(queries),
+                        temperature=recall.temperature, recency=recall.recency,
+                        mode=mode, empty_anchor=empty_anchor)
+                 for query, read in zip(queries, reads, strict=True))
+
+
+_checkpoint = None
+
+
+def checkpoint_module():
+    global _checkpoint
+    if _checkpoint is None:
+        spec = importlib.util.spec_from_file_location(
+            "attention_lifecycle_checkpoint", Path(__file__).with_name("attention_checkpoint.py"))
+        assert spec is not None and spec.loader is not None
+        _checkpoint = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = _checkpoint
+        spec.loader.exec_module(_checkpoint)
+    return _checkpoint
+
+
 class Graph(NeuralGraph):
     """CPU reference that includes memory in every transport AND residual check.
 
@@ -267,6 +329,7 @@ class Graph(NeuralGraph):
         self, drive: np.ndarray, *, budget: int = 512, chunk: int = 32,
         tolerance: float = 1e-5, state: BrainState | None = None,
         mask: np.ndarray | None = None, nudge: Nudge | None = None, damping: int = 0,
+        initial_damping: int = 0,
     ) -> Equilibrium:
         """The library's bounded halving schedule with memory in every candidate.
 
@@ -274,81 +337,48 @@ class Graph(NeuralGraph):
         the original complete equations. Numerical damping changes no memory,
         parameters or teaching nudge.
         """
-        for name, value, minimum in (
-            ("budget", budget, 0), ("chunk", chunk, 1), ("damping", damping, 0),
-        ):
-            if (isinstance(value, bool) or not isinstance(value, (int, np.integer))
-                    or value < minimum):
-                raise ValueError(f"{name} must be an integer >= {minimum}")
-        if not np.isfinite(tolerance) or tolerance < 0:
-            raise ValueError("tolerance must be finite and nonnegative")
-        if not damping:
-            return super().equilibrate(
-                drive, budget=budget, chunk=chunk, tolerance=tolerance,
-                state=state, mask=mask, nudge=nudge, damping=0,
-            )
-        attempts = min(damping + 1, max(1, budget))
-        minimum_rule = self.neuron_model.replace(
-            dt=float(np.ldexp(self.neuron_model.dt, -(attempts - 1))))
-        minimum_rule._validate_precision("float64")  # this reference graph is CPU float64
-        used = checks = stagnation_checks = 0
-        current_state = state
-        for halving in range(attempts):
-            portion = (budget - used + attempts - halving - 1) // (attempts - halving)
-            candidate = self if halving == 0 else self._with_dt(
-                float(np.ldexp(self.neuron_model.dt, -halving)))
-            phase = candidate._equilibrate_local(
-                drive, state=current_state, budget=portion, chunk=chunk,
-                tolerance=tolerance, mask=mask, nudge=nudge,
-                stop_if_stalled=halving < attempts - 1,
-            )
-            used += phase.steps
-            checks += phase.residual_checks
-            stagnation_checks += phase.stagnation_checks
-            error = phase.residual
-            if halving:
-                error = self.residual(drive, phase.state, mask=mask, nudge=nudge)
-                checks += 1
-            result = Equilibrium(
-                phase.state, error, used, tolerance, residual_checks=checks,
-                damping_halvings=halving, stagnation_checks=stagnation_checks,
-            )
-            if np.all(result.qualified) or used >= budget:
-                return result
-            if not all(np.isfinite(value).all() for value in (
-                phase.state.v, phase.state.activation, phase.state.adaptation,
-            )):
-                return result
-            current_state = phase.state
-        return result
+        return super().equilibrate(
+            drive, budget=budget, chunk=chunk, tolerance=tolerance,
+            state=state, mask=mask, nudge=nudge, damping=damping,
+            initial_damping=initial_damping,
+        )
 
 
 class AttentionBrain(Brain):
-    """Teacher-only experimental composition; raw/fixed/learned codes are controls.
+    """Experimental lifecycle composition; raw/fixed/learned codes are controls.
 
-    This is not a supported continuing-life API. Reward credit, private
-    imagination and saved pending continuation must be integrated and tested
-    before promotion. No inherited convenience method establishes those claims.
+    This benchmark prototype is not a supported library API or a behavioral
+    promotion. Reward, private branches and pending continuation reuse the
+    foundation's laws, with explicit coupled-boundary custody. Their mechanical
+    checks do not establish usefulness of an experimental memory equation.
     """
 
     mode: str = "agreement"
     empty_anchor: bool = False
+    _graph_type = Graph
+    _memory_type = Memory
+    _pending_boundary: Any = None
+    _action_boundary: Any = None
+    _forecast_boundary: Any = None
 
     @classmethod
     def compose(cls, inputs: int, actions: int, *, mode: str = "agreement",
-                dt: float = 0.1, seed: int = 0, empty_anchor: bool = False,
+                dt: float | None = None, seed: int = 0, empty_anchor: bool = False,
                 **options: Any) -> AttentionBrain:
+        dt = settlement_dt(dt, options)
         if options.get("backend", "cpu") != "cpu":
             raise ValueError("attention instrument supports CPU float64 only")
         if options.get("learning_surprise", False):
             raise ValueError("partial-row teaching is not implemented in this instrument")
         if options.get("recall_window", 1) != 1:
             raise ValueError("attention instrument requires a one-event key")
+        if options.get("recall_address_reward", 0.0):
+            raise ValueError("coupled queries have no separate reward address rule")
         if mode not in ("agreement", "linear", "competitive"):
             raise ValueError("unknown memory equation")
         empty_anchor = anchor_setting(empty_anchor, mode)
         options.update(recall=True, recall_address=0.0, recall_null=0.0, learning_qualified=True)
-        options.setdefault("learning_damping", 0)
+        options.setdefault("learning_damping", 3 if options.get("learned_code") else 0)
         options.setdefault("learning_nudged_steps", options.get("learning_free_steps", 1024))
         genome = Genome.composed(inputs, actions, seed=seed, **options)
         width = Genome.observation_width(inputs, options.get("code"), options.get("learned_code"))
@@ -371,15 +401,36 @@ class AttentionBrain(Brain):
                                     log_gain=original.log_gain)
         return brain
 
-    def act(self, observations: Any, *, greedy: bool = True, **options: Any) -> np.ndarray:
-        if not greedy:
-            raise NotImplementedError("reward eligibility is not integrated in this instrument")
-        return super().act(observations, greedy=True, **options)
+    def _boundary_state(self) -> tuple[Any, ...]:
+        return (self.brain, self.brain.memory,
+                None if self.recall is None else self.recall.reading(),
+                getattr(self, "head_attended", None), self._pending_boundary,
+                self._action_boundary, self._forecast_boundary)
+
+    def _restore_boundary(self, saved: tuple[Any, ...]) -> None:
+        graph, memory, reading, attended, pending, action, forecast = saved
+        graph.memory = self.brain.memory = memory
+        if self.recall is not None and reading is not None:
+            self.recall.hold(reading)
+        if hasattr(self, "head_attended"):
+            self.head_attended = attended
+        self._pending_boundary, self._action_boundary, self._forecast_boundary = (
+            pending, action, forecast)
+
+    def act(self, observations: Any, *, greedy: bool = False, **options: Any) -> np.ndarray:
+        """The ordinary issued-action contract, on the coupled memory equations."""
+        saved = self._boundary_state()
+        try:
+            return Brain.act(self, observations, greedy=greedy, **options)
+        except BaseException:
+            self._restore_boundary(saved)
+            raise
 
     def reset(self, *, keep: Any = ("arousal",), **renamed: Any) -> None:
         """Begin a stream without retaining the previous solve's boundary cache."""
         super().reset(keep=keep, **renamed)
         self.brain.memory = None
+        self._pending_boundary = self._action_boundary = self._forecast_boundary = None
         if hasattr(self, "head_attended"):
             self.head_attended = None
 
@@ -394,6 +445,8 @@ class AttentionBrain(Brain):
         address lesson runs. Returns ``Learner.step``'s pair, or None without selected rows.
         """
         cfg = self.learner.config
+        if self.basal_ganglia._pending is not None:
+            raise RuntimeError("report the issued action's outcome before teaching")
         if not cfg.qualified or cfg.surprise:
             raise ValueError("saved attention lessons need qualified phases and surprise=0")
         graph = self.brain
@@ -419,34 +472,187 @@ class AttentionBrain(Brain):
             graph.memory = memory_snapshot
             self.brain.memory = memory_snapshot
 
-    def imagine(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("private imagination is not integrated in this instrument")
-
     def learn(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("actual-outcome credit is not integrated in this instrument")
+        saved = self._boundary_state()
+        if self.basal_ganglia._pending is not None and self._pending_boundary is None:
+            raise RuntimeError("feedback needs the boundary of the issued coupled action")
+        try:
+            report = Brain.learn(self, *args, **kwargs)
+        except BaseException:
+            self._restore_boundary(saved)
+            raise
+        self._pending_boundary = None
+        self._action_boundary = None
+        return report
 
     def step(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("use lesson and greedy act in this component instrument")
+        # Accepted feedback remains accepted if the subsequent action refuses.
+        return Brain.step(self, *args, **kwargs)
 
     def live(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("routine and reward credit are not integrated in this instrument")
+        saved = self._boundary_state()
+        pending, lived = self.basal_ganglia._pending, self._lived
+        try:
+            return Brain.live(self, *args, **kwargs)
+        except BaseException:
+            accepted = ((pending is not None and self.basal_ganglia._pending is not pending)
+                        or (lived is not None and self._lived is not lived))
+            if not accepted:
+                self._restore_boundary(saved)
+            elif self.basal_ganglia._pending is None and self._lived is None:
+                self._pending_boundary = self._action_boundary = None
+            raise
 
     def wait(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("waiting is not integrated in this instrument")
+        saved = self._boundary_state()
+        try:
+            return Brain.wait(self, *args, **kwargs)
+        except BaseException:
+            self._restore_boundary(saved)
+            raise
 
-    def save(self, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("coupled continuation is not checkpointed by this instrument")
+    def _forecast(self, x: np.ndarray, ended: bool) -> Any:
+        saved = self._boundary_state()
+        try:
+            answer = Brain._forecast(self, x, ended)
+        except BaseException:
+            self._restore_boundary(saved)
+            raise
+        self._forecast_boundary = self.brain.memory
+        return answer
+
+    def lesson(self, *args: Any, **kwargs: Any) -> Any:
+        saved = self._boundary_state()
+        try:
+            return Brain.lesson(self, *args, **kwargs)
+        except BaseException:
+            self._restore_boundary(saved)
+            raise
+
+    def predict(self, observations: Any) -> np.ndarray:
+        saved, code = self._boundary_state(), self._private_code_state()
+        try:
+            return Brain.predict(self, observations)
+        finally:
+            self._restore_boundary(saved)
+            self._restore_private_code(code)
+
+    def _private_code_state(self) -> tuple[Any, ...]:
+        region = self.learned_code
+        held = None if region is None else (
+            region.halvings, region.graph, region.last, dict(region.work))
+        return self._coded_moment, self._code_settlement, held
+
+    def _restore_private_code(self, saved: tuple[Any, ...]) -> None:
+        self._coded_moment, self._code_settlement, held = saved
+        if self.learned_code is not None and held is not None:
+            region = self.learned_code
+            region.halvings, region.graph, region.last, work = held
+            region.work.clear()
+            region.work.update(work)
+
+    def imagine(self, observations: Any, *, budget: int = 1024,
+                tolerance: float = 1e-6) -> tuple[Equilibrium, ...]:
+        """The existing private branch, using the same coupled bank builder.
+
+        Traces/context follow the branch; witnessed slots are read without new
+        records. The branch graph owns its boundary, never the live actor's.
+        """
+        from cadence.brain import _copy_state
+
+        if (isinstance(budget, (bool, np.bool_))
+                or not isinstance(budget, (int, np.integer)) or budget < 0):
+            raise ValueError("budget must be a nonnegative integer")
+        if (isinstance(tolerance, (bool, np.bool_))
+                or not isinstance(tolerance, (int, float, np.integer, np.floating))
+                or not np.isfinite(tolerance) or tolerance < 0):
+            raise ValueError("tolerance must be finite and nonnegative")
+        sequence = tuple(self._observations(value) for value in observations)
+        if not sequence:
+            return ()
+        batch = len(sequence[0])
+        if any(len(value) != batch for value in sequence):
+            raise ValueError("imagined observations must preserve stream identities")
+        current = _copy_state(self._activity())
+        if current is not None and len(np.atleast_2d(current.v)) != batch:
+            raise ValueError("imagined batch must match the live streams")
+        branch = Memories({name: memory.branch() for name, memory in self.memories.items()})
+        trace, echo = branch.get("working_memory"), branch.get("efference")
+        heard, recall = branch.get("history"), branch.get("recall")
+        episodic = branch.get("episodic")
+        original, code = self.brain, self._private_code_state()
+        boundary = self._boundary_state()
+        self.learner.brain = original._with_dt(original.neuron_model.dt)
+        phases = []
+        try:
+            for value in sequence:
+                self._prepare(value, trace=trace)
+                drive = self.stimulus(value, memory=False)
+                coded, place = self._coded(value), self._placed(value)
+                drive = branch.stimulus(drive, self._read_moment(value, coded, place))
+                assert recall is not None
+                drive = self._install_memory(drive, recall)
+                phase = self._equilibrate(drive, current, budget=budget, tolerance=tolerance)
+                phases.append(phase)
+                if not np.all(phase.qualified):
+                    break
+                current = _copy_state(phase.state)
+                if trace is not None:
+                    trace.update(phase.state)
+                if echo is not None:
+                    key = None if episodic is None else episodic.key(coded)
+                    if episodic is None:
+                        choice = self._choices(phase.state)
+                    else:
+                        probability = self.basal_ganglia.probabilities(
+                            phase.state, bias=episodic.vote(place, key))
+                        choice = np.asarray(np.argmax(probability, axis=-1), dtype=np.int64)
+                    if episodic is not None and key is not None:
+                        episodic.move(key, choice)
+                    echo.issue(self._command(choice))
+                if heard is not None:
+                    heard.hear(self._heard(value, coded))
+                recall.witness(coded, phase.state)
+        finally:
+            self.learner.brain = original
+            self._restore_boundary(boundary)
+            self._restore_private_code(code)
+        return tuple(phases)
+
+    def save(self, path: Any) -> Any:
+        return checkpoint_module().save(self, path)
 
     @classmethod
-    def load(cls, *args: Any, **kwargs: Any) -> Any:
-        raise NotImplementedError("coupled continuation is not checkpointed by this instrument")
+    def load(cls, path: Any, **kwargs: Any) -> Any:
+        return checkpoint_module().load(path, cls=cls, **kwargs)
+
+    def _memory_ports(self) -> tuple[tuple[np.ndarray, ...], tuple[np.ndarray, ...]]:
+        assert self.recall is not None
+        return ((np.asarray(self.connectome.populations["query"]),),
+                (np.concatenate((self.recall.recall_neurons, self.recall.next_neurons)),))
+
+    def _memory_from_recall(self, recall: Any) -> Any:
+        queries, reads = self._memory_ports()
+        return build_memories(recall, queries, reads, mode=self.mode,
+                              empty_anchor=self.empty_anchor)[0]
+
+    def _install_memory(self, drive: np.ndarray, recall: Any) -> np.ndarray:
+        queries, reads = self._memory_ports()
+        copies = getattr(self, "port_copies", 1)
+        cue = np.tile(recall.last.key, (1, copies)) / np.sqrt(copies)
+        for query, read in zip(queries, reads, strict=True):
+            drive[:, query], drive[:, read] = cue, 0.0
+        self.brain.memory = self._memory_from_recall(recall)
+        recall._attended = None
+        return drive
 
     def stimulus(self, observations: Any, *, memory: bool = True) -> np.ndarray:
         cfg = self.learner.config
         if not cfg.qualified or cfg.surprise:
             raise ValueError(
                 "attention instrument needs qualified full-row teaching and surprise=0")
-        if self.recall is None or self.recall.address != 0 or self.recall.window != 1:
+        if (self.recall is None or self.recall.address != 0 or self.recall.window != 1
+                or self.recall.address_reward != 0):
             raise ValueError("attention instrument requires one-event keys and no address lesson")
         drive = super().stimulus(observations, memory=memory)
         graph = self.brain
@@ -456,45 +662,40 @@ class AttentionBrain(Brain):
             return drive
         recall = self.recall
         assert recall is not None and recall.last is not None
-        query = np.asarray(self.connectome.populations["query"], dtype=np.int64)
-        read = np.concatenate((recall.recall_neurons, recall.next_neurons))
-        drive[:, read] = 0.0  # replace the held read, not an extra drive beside it
-        drive[:, query] = recall.last.key
-        recall._attended = None  # the held read's weights do not describe this live solve
-        batch = len(drive)
-        matching = recall.streams == batch
-        content = (np.concatenate((recall.values, recall.nexts), axis=2)
-                   if recall.next else recall.values)
-        graph.memory = Memory(
-            query, read,
-            recall.keys if matching else np.zeros((batch, 0, len(query))),
-            content if matching else np.zeros((batch, 0, len(read))),
-            recall.held if matching else np.zeros((batch, 0), dtype=bool),
-            recall.ages() if matching else np.zeros(0),
-            amplitude=recall.amplitude, temperature=recall.temperature,
-            recency=recall.recency, mode=self.mode, empty_anchor=self.empty_anchor,
-        )
-        return drive
+        return self._install_memory(drive, recall)
 
     def _settled(self, x: np.ndarray) -> Any:
-        graph = self.brain
-        assert isinstance(graph, Graph)
-        previous = graph.memory
-        recall = self.recall
-        assert recall is not None
-        reading = recall.reading()
+        saved = self._boundary_state()
         try:
             return super()._settled(x)
         except BaseException:
-            graph.memory = previous
-            recall.hold(reading)
+            self._restore_boundary(saved)
             raise
 
-    def _choose(self, x: np.ndarray, drive: np.ndarray, free: Any, **kwargs: Any) -> np.ndarray:
+    def _attend(self, free: Any) -> None:
         graph = self.brain
         assert isinstance(graph, Graph)
         if graph.memory is not None and self.recall is not None:
             self.recall._attended = (
                 None if graph.memory.mode == "linear"
                 else frozen(graph.memory.weights(np.atleast_2d(free.activation))))
-        return super()._choose(x, drive, free, **kwargs)
+
+    def _choose(self, x: np.ndarray, drive: np.ndarray, free: Any, **kwargs: Any) -> np.ndarray:
+        boundary, saved = self.brain.memory, self._boundary_state()
+        agent = self.basal_ganglia
+        fields = ("_free", "_free_brain", "_drive", "_pending", "_pending_memory")
+        cached = {name: getattr(agent, name) for name in fields}
+        rng = deepcopy(agent.rng.bit_generator.state)
+        prepared, awaited = self._prepared, self._awaiting
+        try:
+            self._attend(free)
+            action = Brain._choose(self, x, drive, free, **kwargs)
+        except BaseException:
+            agent.__dict__.update(cached)
+            agent.rng.bit_generator.state = rng
+            self._prepared, self._awaiting = prepared, awaited
+            self._restore_boundary(saved)
+            raise
+        self._action_boundary = boundary
+        self._pending_boundary = boundary if agent._pending is not None else None
+        return action

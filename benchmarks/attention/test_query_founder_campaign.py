@@ -283,6 +283,17 @@ def test_capacity_controller_to_typed_receipt_uses_real_q1_constructors_without_
 ):
     """Synthetic trial answers isolate controller plumbing, not scientific acquisition."""
     ctx = subject.context()
+    historical = subject.load("query_tests_historical_verifier", HERE / "verify.py")
+    parent_path = (HERE / "results" / "heads-continuation-development.json").resolve()
+    original_verify = ctx.owner.verify
+
+    def verify_archived_parent(path):
+        return (historical.verify(path) if Path(path).resolve() == parent_path
+                else original_verify(path))
+
+    # This synthetic controller test uses a verified historical prerequisite;
+    # the production runtime's current-source prerequisite remains unchanged.
+    monkeypatch.setattr(ctx.owner, "verify", verify_archived_parent)
     # Source archives need not contain Git. This synthetic instrument test
     # supplies its own revision while production execution keeps its guard.
     monkeypatch.setattr(ctx.sr, "revision", lambda: "a" * 40)
@@ -356,7 +367,10 @@ def test_capacity_controller_to_typed_receipt_uses_real_q1_constructors_without_
         Receipt.build(receipt.kind, corrupt, subject.sources("capacity")).write(changed)
         assert not subject.verify(changed)[0]
     # The actual legacy gate is evaluated after the injected namespace is gone.
-    old = ctx.relevance.verify_capacity(HERE / "results/founder-capacity-extended.json")
+    old_path = HERE / "results/founder-capacity-extended.json"
+    valid, message = historical.verify(old_path)
+    assert valid, message
+    old = subject.Receipt.read(old_path)
     assert old.kind == "cadence-attention-heads-admission/1" and old.body["capacity_admitted"]
 
 

@@ -201,13 +201,29 @@ def numerical_settings(brain: Brain) -> dict[str, Any]:
             "empty_anchor": bool(getattr(brain, "empty_anchor", False))}
 
 
-def numerical_check(result: dict[str, Any], protocol: dict[str, Any]) -> str | None:
+def _numerical_record_matches(record, expected, key, *, historical):
+    if not historical:
+        return record == expected
+    # Old receipts predate this neutral numerical option. No other absent,
+    # changed or future option is equivalent to the originally recorded policy.
+    if (type(expected.get(key)) is not int or expected[key] != 0
+            or (key in record and (type(record[key]) is not int or record[key] != 0))):
+        return False
+    return {**record, key: 0} == expected
+
+
+def numerical_check(result: dict[str, Any], protocol: dict[str, Any], *,
+                    historical: bool = False) -> str | None:
     """Bind actual settings on the new control; historical receipts stay unchanged."""
     expected = make_brain(result["arm"], result["seed"], protocol, result["mode"])
     if (result["numerical_policy"] != numerical_settings(expected)
             or result["neuron_model"] != expected.brain.neuron_model.to_dict()
-            or result["learning_config"] != expected.learner.config.to_dict()
-            or result["resolved"]["genes"] != expected.describe()["genes"]
+            or not _numerical_record_matches(
+                result["learning_config"], expected.learner.config.to_dict(),
+                "initial_damping", historical=historical)
+            or not _numerical_record_matches(
+                result["resolved"]["genes"], expected.describe()["genes"],
+                "learning_initial_damping", historical=historical)
             or result["neurons"] != expected.connectome.n
             or result["synapses"] != expected.connectome.synapses
             or result["mode"] != "agreement"):

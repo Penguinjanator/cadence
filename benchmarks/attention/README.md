@@ -141,8 +141,17 @@ The prototype uses the CPU float64 reference path. Its bounded step-halving
 fallback now retains the same immutable memory boundary in every numerical
 candidate and checks the original full equations. Historical recipes retain
 damping zero; the [founder numerical control](heads-founder-protocol.json)
-tests the composed brain's existing step and damping policy. It has no supported
-reward, private imagination or pending-checkpoint continuation contract yet.
+tests the composed brain's existing step and damping policy.
+The lifecycle prototype now reuses the existing reward/eligibility law with
+immutable action boundaries, private coupled imagination, and an explicit
+attention checkpoint format. Its mechanical custody and continuation tests
+do not establish a useful reader or a supported library attention option.
+The retained behavioral receipts below precede this lifecycle prototype;
+their archived source hashes identify the measured implementation. They do
+not measure acquisition or preservation under the modified lifecycle code.
+Raw controls retain their historical `.1` step and disabled damping unless
+overridden; learned-code compositions retain the native outer step `1.0` and
+default damping `3`, including the native checkpoint validation.
 Saved-drive teaching now takes corresponding rows of the immutable memory
 snapshot through all phases, restoring the complete boundary on success or
 refusal. These lifecycle gates, backend conformance, causal

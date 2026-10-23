@@ -1425,6 +1425,34 @@ def _layout(
     }
 
 
+def _checkpoint_learning_report(
+    report: Mapping[str, float], *, restore: bool = False
+) -> dict[str, float]:
+    """Omit only redundant zero-start diagnostics; restore their public report view."""
+    result = dict(report)
+    for prefix in ("", "demonstration_"):
+        for phase in ("free", "nudged", "opposite"):
+            name = prefix + phase
+            absolute = result.get(name + "_damping_halvings")
+            if isinstance(absolute, bool) or not isinstance(absolute, (int, float)):
+                continue
+            try:
+                if not np.isfinite(float(absolute)) or absolute < 0:
+                    continue
+            except OverflowError:
+                continue
+            initial, relative = name + "_initial_damping", name + "_relative_damping_halvings"
+            if restore:
+                if initial not in result and relative not in result:
+                    result[initial], result[relative] = 0.0, absolute
+            elif (type(result.get(initial)) in (int, float) and result[initial] == 0
+                  and type(result.get(relative)) in (int, float)
+                  and result[relative] == absolute):
+                result.pop(initial)
+                result.pop(relative)
+    return result
+
+
 class Brain:
     """Senses, an association cortex, a motor cortex, basal ganglia and consolidating memory.
 
@@ -1576,6 +1604,8 @@ class Brain:
         learning_genes, actor_genes, arousal_genes = split_genes(genes)
         learning = configured(_learning() if learning is None else learning, learning_genes,
                               "learning")
+        if learning.initial_damping and backend != "cpu":
+            raise ValueError("nonzero initial_damping requires CPU float64")
         reward = configured(_reward() if reward is None else reward, actor_genes, "actor")
         arousal = arousal_config(arousal, arousal_genes)
         if not isinstance(episodic, bool):
@@ -2019,7 +2049,7 @@ class Brain:
         unit = code.code_of(s)
         synapses, j, m = self._code_forward
         weights = np.zeros((len(self.association_index), code.units))
-        weights[m, j] = self.brain.efficacy[synapses]
+        np.add.at(weights, (m, j), self.brain.weights[synapses])
         out[:, self.association_index] += (unit - s) @ weights.T
         return out
 
@@ -2461,6 +2491,10 @@ class Brain:
 
         learning_genes, actor_genes, arousal_genes = split_genes(options)
         learning = configured(learning, learning_genes, "learning")
+        if learning.initial_damping and (
+            self.brain.backend != "cpu" or self.brain.precision not in (None, "float64")
+        ):
+            raise ValueError("nonzero initial_damping requires CPU float64")
         reward = configured(reward, actor_genes, "actor")
         arousal = arousal_config(
             arousal, arousal_genes, current=current_arousal, retuning=True
@@ -4043,7 +4077,10 @@ class Brain:
             "free_steps": None if agent.state is None else agent.state.steps,
             "free_current": agent._free_brain is self.brain,
             "pending": agent._pending is not None,
-            "last_learning": self.last_learning,
+            "last_learning": (
+                self.last_learning if self.learner.config.initial_damping
+                else _checkpoint_learning_report(self.last_learning)
+            ),
             "memories": memories,
         }
         if self._composition is not None:
@@ -4332,6 +4369,10 @@ class Brain:
                 agent._free_brain = learner.brain if meta.get("free_current", False) else None
             result._prepared = data["prepared"].copy() if "prepared" in data else None
             result.last_learning = meta.get("last_learning", {})
+            if not learner.config.initial_damping:
+                result.last_learning = _checkpoint_learning_report(
+                    result.last_learning, restore=True
+                )
             if meta.get("pending", False):
                 phases = []
                 for name in ("plus", "minus"):

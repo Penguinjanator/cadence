@@ -180,8 +180,8 @@ def test_experimental_brain_reads_witnessed_events_and_qualifies_joint_state(
 
 def test_linear_control_does_not_report_an_unused_softmax_as_its_selection() -> None:
     brain = AttentionBrain.compose(3, 2, mode="linear", modules=(4,), episodic=False)
-    brain.act([[1, 0, 0]])
-    brain.act([[0, 1, 0]])
+    brain.act([[1, 0, 0]], greedy=True)
+    brain.act([[0, 1, 0]], greedy=True)
     assert brain.recall is not None and brain.recall.attended is None
 
 
@@ -227,24 +227,24 @@ def test_abstention_and_duplicate_invariance_are_not_established_by_agreement() 
 
 
 @pytest.mark.parametrize("operation", ["imagine", "save", "learn", "live", "step", "wait"])
-def test_unintegrated_lifecycle_operations_refuse_before_advancing_memory(operation: str) -> None:
+def test_lifecycle_calls_require_complete_arguments_before_advancing_memory(operation: str) -> None:
     brain = AttentionBrain.compose(3, 2, modules=(4,), episodic=False)
     assert brain.recall is not None and brain.recall.slots == 0
-    with pytest.raises(NotImplementedError):
+    with pytest.raises(TypeError):
         getattr(brain, operation)()
     assert brain.recall.slots == 0 and brain.basal_ganglia.state is None
 
 
 def test_refused_action_restores_the_previous_memory_boundary_and_read() -> None:
     brain = AttentionBrain.compose(3, 2, modules=(4,), episodic=False)
-    brain.act([[1, 0, 0]])
+    brain.act([[1, 0, 0]], greedy=True)
     recall, graph = brain.recall, brain.brain
     assert recall is not None and isinstance(graph, Graph)
     reading, previous = recall.reading(), graph.memory
     keys = recall.keys.copy()
     brain.learner.config = replace(brain.learner.config, free_steps=1, tolerance=1e-12)
     with pytest.raises(RuntimeError, match="settle"):
-        brain.act([[0, 1, 0]])
+        brain.act([[0, 1, 0]], greedy=True)
     assert graph.memory is previous
     assert recall.reading()[0] is reading[0] and recall.reading()[1] is reading[1]
     np.testing.assert_array_equal(recall.keys, keys)

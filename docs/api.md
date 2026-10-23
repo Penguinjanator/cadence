@@ -381,7 +381,7 @@ settings the readings retired with what the region does instead. Guide:
 LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, free_steps=100, nudged_steps=50,
               tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0,
               normalize_floor=1e-3, momentum=0.0, scale_cap=8.0, qualified=False,
-              damping=3, surprise=False)
+              damping=3, surprise=False, initial_damping=0)
 Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None,
         plastic_neurons=None, reciprocal=True, tie_groups=None,
         synapse_rate=None, slots=1, updates=0, contrast_updates=0)
@@ -393,6 +393,9 @@ when `normalize > 0` with a rate above 0.05
 ([rates under normalization](teach.md#rates-under-normalization)), and when
 `qualified=True` with `nudged_steps < free_steps`
 ([qualified budgets](settling.md#qualified-teaching-budgets)).
+`initial_damping` is an integer in `0..damping`; nonzero requires qualified learning
+on CPU float64 and affects only its qualified phases. It skips initial integration
+steps without changing the live model or the full-equation residual tolerance.
 
 | `Learner` member | Behaviour |
 | --- | --- |
@@ -435,8 +438,12 @@ biases, neuron model, configuration, outputs and slots, plasticity masks, ties, 
 optimizer state and update counts, replaced atomically. `config` replaces the saved
 configuration; `backend`, `device` and `precision` may differ from the saved ones. Separate
 `FastSynapses`, `Trace` and `ActorCritic` objects are not saved; use `Brain.save` for a
-composed brain. The format is `cadence-checkpoint/2`; `/1` loads, and a `cadence-checkpoint/3`
+composed brain. The ordinary format is `cadence-checkpoint/2`; `/1` loads, and a `cadence-checkpoint/3`
 file is refused with a message naming the release that reads it.
+Nonzero `initial_damping` writes `cadence-checkpoint/4` with a checked numerical-policy
+identity, including inside `Brain.save`. Older loaders refuse this format. A saved
+non-default policy is validated before any explicit config override; an effective
+non-default policy refuses a non-CPU or non-float64 destination before backend creation.
 
 ## The agent (`cadence.plasticity`)
 
@@ -481,7 +488,7 @@ before any change.
 | --- | --- |
 | `settle(stimulus=None, *, steps=60, state=None, mask=None, trajectory=False, nudge=None, tolerance=None) -> BrainState` | A list of neurons at full amplitude, a `{neuron: level}` map or a dense drive vector. A positive `tolerance` stops once no activation moves more. |
 | `settle_batch(drive, ...) -> BrainState` | The same for `(batch, n)` drives. `mask` is `(n,)`, `(1, n)` or `(batch, n)` in `[0, 1]`. |
-| `equilibrate(drive, *, budget=512, chunk=32, tolerance=1e-5, state=None, mask=None, nudge=None, damping=0) -> Equilibrium` | Settles until the equation residual is below `tolerance`, checked per chunk; `damping` halvings share the budget. |
+| `equilibrate(drive, *, budget=512, chunk=32, tolerance=1e-5, state=None, mask=None, nudge=None, damping=0, initial_damping=0) -> Equilibrium` | Settles until the equation residual is below `tolerance`, checked per chunk; the remaining halvings from `initial_damping` to `damping` share the budget. Nonzero starts currently require CPU float64. |
 | `residual(drive, state, *, nudge=None, mask=None, on_device=True) -> ndarray` | Per-row fixed-point discrepancy; no state change. |
 | `stimulus_vector(stimulus)`, `stimulus_levels(levels)`, `readings(state, names, i=0, level=0.5)` | Drive construction ([pattern targets](settling.md#pattern-targets)); population readings. |
 | `with_parameters(*, efficacy=None, log_gain=None, bias=None)`, `weights`, `dense()`, `to_dict()` | A new graph; effective drive per synapse; the `W[pre, post]` matrix. |
@@ -494,7 +501,7 @@ stability, uniqueness or task quality ([the certificate](settling.md#the-settlin
 | Type | Fields |
 | --- | --- |
 | `BrainState(v, activation, adaptation, steps, trajectory=None, activity_change=None, device=None)` | `(n,)` or `(batch, n)` arrays; `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`. |
-| `Equilibrium(state, residual, steps, tolerance, residual_checks=0, damping_halvings=0, stagnation_checks=0)` | Per-row `converged` and `qualified` (the residual within `tolerance`); `steps` counts local sweeps. |
+| `Equilibrium(state, residual, steps, tolerance, residual_checks=0, damping_halvings=0, stagnation_checks=0, initial_damping=0)` | Per-row `converged` and `qualified` (the residual within `tolerance`); `steps` counts local sweeps. `damping_halvings` is the absolute final index, and `relative_damping_halvings` counts further halvings after `initial_damping`. |
 | `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None, anchor=None, anchor_gain=None)` | Extra drive `beta * mask * (target - s)`, or against `softmax(s / T)` per group; `weight` scales rows. `anchor` and `anchor_gain` (supplied together, finite, gain nonnegative per neuron) add `anchor_gain * (anchor - s)`, unscaled by `beta`, mask or weight. `drive(s)`. |
 
 `available_backends() -> dict` names what is installed, such as
