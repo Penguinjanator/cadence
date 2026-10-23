@@ -4,6 +4,8 @@
 
 - Correct normalized learned-code input using the same effective weights as neural
   transport, including contact counts, model gain and presynaptic gains.
+- Sum parallel code-to-cortex synapses in that correction, matching neural transport
+  for custom connectomes with multiple synapses at the same endpoints.
 
 - Add optional `initial_damping` for qualified CPU float64 teaching. It skips
   initial numerical step sizes within the existing shared budget, preserves the

@@ -1144,6 +1144,63 @@ def test_the_unit_code_read_uses_effective_forward_weights(contacts, log_gains, 
     np.testing.assert_allclose(actual, expected, rtol=1e-13, atol=1e-14)
 
 
+def test_the_unit_code_read_sums_parallel_effective_weights(monkeypatch):
+    """A custom raw connectome retains parallel rows; their actual transport sums
+    both signed efficacies before the source's unit-code correction."""
+    founder = cd.Brain.compose(8, 2, modules=(6,), learned_code=4, seed=6)
+    original = founder.connectome
+    source, target = founder.code_index[1], founder.association_index[0]
+    edge = np.flatnonzero((original.pre == source) & (original.post == target))
+    assert len(edge) == 1
+    # The direct constructor retains these rows, unlike from_synapses, which merges them.
+    connectome = cd.Connectome(
+        original.n, np.append(original.pre, source), np.append(original.post, target),
+        np.append(original.count, 2.25), np.append(original.sign, -1.0),
+        original.populations, original.label,
+    )
+    parallel = np.flatnonzero((connectome.pre == source) & (connectome.post == target))
+    assert len(parallel) == 2 and connectome.synapses == original.synapses + 1
+    counts = connectome.count.copy()
+    counts[parallel] = [1.75, 2.25]
+    connectome = replace(connectome, count=counts)
+    brain = cd.Brain.compose(8, 2, connectome=connectome, learned_code=4, seed=6)
+    graph = brain.brain
+    assert graph.layout.parallel_synapses
+    efficacy, log_gain = graph.efficacy.copy(), graph.log_gain.copy()
+    efficacy[parallel] = [0.31, -0.17]
+    log_gain[brain.code_index] = np.log([1.2, 1.5, 1.8, 2.1])
+    graph = graph.with_parameters(efficacy=efficacy, log_gain=log_gain)
+    brain.learner.brain = graph
+    brain.learned_code.dictionary[:] = np.eye(8, 4)
+    brain.learned_code.install()
+    observations = np.eye(8)[[1, 4]]
+    brain._prepare(observations, context=False)
+    activity = np.atleast_2d(brain._coded_moment[2].activation)
+    assert brain._code_settlement["code_residual"] <= brain.learner.config.tolerance
+    code = brain.learned_code.code_of(activity)
+    assert activity[0, 1] > 0 and (activity[0] < 0).any()
+    assert (activity[1] < 0).all() and not code[1].any()
+    np.testing.assert_allclose(np.linalg.norm(code[0]), 1.0, rtol=0, atol=1e-14)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("the parallel-source regression attempted an extra code solve")
+
+    monkeypatch.setattr(brain, "_settle_code", forbidden)
+    drive = np.random.default_rng(44).normal(size=(2, connectome.n))
+    corrected = brain._unit_read(observations, drive, memory=False)
+    weights = graph.neuron_model.gain * connectome.count * np.exp(log_gain)[connectome.pre]
+    weights *= efficacy
+    assert weights[parallel[0]] > 0 > weights[parallel[1]]
+    dense = np.zeros((connectome.n, connectome.n))
+    np.add.at(dense, (connectome.pre, connectome.post), weights)
+    assert dense[source, target] == np.sum(weights[parallel])
+    raw_source = np.zeros_like(drive)
+    raw_source[:, brain.code_index] = activity
+    actual = (raw_source @ dense + corrected-drive)[:, brain.association_index]
+    expected = code @ dense[np.ix_(brain.code_index, brain.association_index)]
+    np.testing.assert_allclose(actual, expected, rtol=1e-13, atol=1e-14)
+
+
 def test_the_key_takes_the_observations_norm():
     """The memories' key is the joined key times the observation's norm, the norm the
     observation would have as a key: a two-hot observation's key has norm sqrt(2), a
