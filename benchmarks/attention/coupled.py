@@ -329,6 +329,7 @@ class Graph(NeuralGraph):
         self, drive: np.ndarray, *, budget: int = 512, chunk: int = 32,
         tolerance: float = 1e-5, state: BrainState | None = None,
         mask: np.ndarray | None = None, nudge: Nudge | None = None, damping: int = 0,
+        initial_damping: int = 0,
     ) -> Equilibrium:
         """The library's bounded halving schedule with memory in every candidate.
 
@@ -336,53 +337,11 @@ class Graph(NeuralGraph):
         the original complete equations. Numerical damping changes no memory,
         parameters or teaching nudge.
         """
-        for name, value, minimum in (
-            ("budget", budget, 0), ("chunk", chunk, 1), ("damping", damping, 0),
-        ):
-            if (isinstance(value, bool) or not isinstance(value, (int, np.integer))
-                    or value < minimum):
-                raise ValueError(f"{name} must be an integer >= {minimum}")
-        if not np.isfinite(tolerance) or tolerance < 0:
-            raise ValueError("tolerance must be finite and nonnegative")
-        if not damping:
-            return super().equilibrate(
-                drive, budget=budget, chunk=chunk, tolerance=tolerance,
-                state=state, mask=mask, nudge=nudge, damping=0,
-            )
-        attempts = min(damping + 1, max(1, budget))
-        minimum_rule = self.neuron_model.replace(
-            dt=float(np.ldexp(self.neuron_model.dt, -(attempts - 1))))
-        minimum_rule._validate_precision("float64")  # this reference graph is CPU float64
-        used = checks = stagnation_checks = 0
-        current_state = state
-        for halving in range(attempts):
-            portion = (budget - used + attempts - halving - 1) // (attempts - halving)
-            candidate = self if halving == 0 else self._with_dt(
-                float(np.ldexp(self.neuron_model.dt, -halving)))
-            phase = candidate._equilibrate_local(
-                drive, state=current_state, budget=portion, chunk=chunk,
-                tolerance=tolerance, mask=mask, nudge=nudge,
-                stop_if_stalled=halving < attempts - 1,
-            )
-            used += phase.steps
-            checks += phase.residual_checks
-            stagnation_checks += phase.stagnation_checks
-            error = phase.residual
-            if halving:
-                error = self.residual(drive, phase.state, mask=mask, nudge=nudge)
-                checks += 1
-            result = Equilibrium(
-                phase.state, error, used, tolerance, residual_checks=checks,
-                damping_halvings=halving, stagnation_checks=stagnation_checks,
-            )
-            if np.all(result.qualified) or used >= budget:
-                return result
-            if not all(np.isfinite(value).all() for value in (
-                phase.state.v, phase.state.activation, phase.state.adaptation,
-            )):
-                return result
-            current_state = phase.state
-        return result
+        return super().equilibrate(
+            drive, budget=budget, chunk=chunk, tolerance=tolerance,
+            state=state, mask=mask, nudge=nudge, damping=damping,
+            initial_damping=initial_damping,
+        )
 
 
 class AttentionBrain(Brain):

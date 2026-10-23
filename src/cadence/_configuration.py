@@ -29,7 +29,9 @@ _KINDS = {
 }
 _FIELDS = {prefix: {field.name for field in fields(kind)} for prefix, kind in _KINDS.items()}
 _BOOLEAN = {"qualified", "surprise"}
-_INTEGER = {"free_steps", "nudged_steps", "damping", "eligibility_steps", "youth"}
+_INTEGER = {
+    "free_steps", "nudged_steps", "damping", "initial_damping", "eligibility_steps", "youth",
+}
 _STRING = {"nudge"}
 _OPTIONAL = {"eta_bias", "tolerance", "eligibility_steps"}
 # Settings of 0.84.3 that this version removed, refused by name with a message naming that

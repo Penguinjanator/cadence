@@ -65,6 +65,12 @@ def _resolved_sources(receipt: Receipt) -> list[tuple[str, Path]]:
             raise ValueError("invalid source manifest path or digest")
         snapshot = HERE / "results" / "sources" / (digest + ".txt")
         source = snapshot if snapshot.exists() else ROOT / relative
+        try:
+            actual = hashlib.sha256(source.read_bytes()).hexdigest()
+        except OSError as error:
+            raise ValueError(f"historical source bytes unavailable: {relative}") from error
+        if actual != digest:
+            raise ValueError(f"historical source digest differs: {relative}")
         sources.append((str(relative), source))
     return sources
 
@@ -115,6 +121,23 @@ def _historical_relevance_check(checker: Any, parent: Receipt):
     return arithmetic
 
 
+def _historical_numerical_check(owner: Any, arithmetic: Any):
+    """Allow only the additive zero default in an offline historical reader."""
+    def checked(body):
+        current = owner.numerical_check
+
+        def numerical(result, protocol):
+            return current(result, protocol, historical=True)
+
+        owner.numerical_check = numerical
+        try:
+            return arithmetic(body)
+        finally:
+            owner.numerical_check = current
+
+    return checked
+
+
 def verify(path: Path) -> tuple[bool, str]:
     receipt = Receipt.read(path)
     try:
@@ -161,6 +184,10 @@ def verify(path: Path) -> tuple[bool, str]:
         if (receipt.kind == "cadence-attention-heads-relevance/1"
                 and protocol_file in owner.FOUNDER_PROTOCOLS):
             arithmetic = _historical_relevance_check(repair, receipt)
+        if (receipt.kind in ("cadence-attention-heads-admission/1",
+                             "cadence-attention-heads-relevance/1")
+                and protocol_file in owner.FOUNDER_PROTOCOLS):
+            arithmetic = _historical_numerical_check(owner, arithmetic)
     return Receipt.verify(path, sources=sources, check=arithmetic)
 
 

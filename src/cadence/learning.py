@@ -95,6 +95,8 @@ class LearnerConfig:
     # opt-in: a lesson teaches only the rows whose free answer differs from the label; a row the
     # net already answers as shown gets no nudged phase and no update: the lesson is the surprise
     surprise: bool = False
+    # qualified phases only: start at this index of the existing dt-halving schedule
+    initial_damping: int = 0
 
     def __post_init__(self) -> None:
         # Config fields have host scalar semantics, including before a save/load.
@@ -147,6 +149,12 @@ class LearnerConfig:
             or self.damping < 0
         ):
             raise ValueError("damping must be a nonnegative integer")
+        if (isinstance(self.initial_damping, bool)
+                or not isinstance(self.initial_damping, (int, np.integer))
+                or not 0 <= self.initial_damping <= self.damping):
+            raise ValueError("initial_damping must be an integer in 0..damping")
+        if self.initial_damping and not self.qualified:
+            raise ValueError("nonzero initial_damping requires qualified learning")
         for name in ("free_steps", "nudged_steps"):
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, (int, np.integer)) or value < 0:
@@ -199,7 +207,7 @@ class LearnedState:
 
 _PHASE_KEYS = (
     "steps", "residual", "residual_checks", "damping_halvings", "stagnation_checks",
-    "row_sweeps", "row_residual_checks",
+    "row_sweeps", "row_residual_checks", "initial_damping", "relative_damping_halvings",
 )
 
 
@@ -244,6 +252,8 @@ def _phase_report(
         report[f"{name}_residual"] = float(np.max(phase.residual))
         report[f"{name}_residual_checks"] = float(phase.residual_checks)
         report[f"{name}_damping_halvings"] = float(phase.damping_halvings)
+        report[f"{name}_initial_damping"] = float(phase.initial_damping)
+        report[f"{name}_relative_damping_halvings"] = float(phase.relative_damping_halvings)
         report[f"{name}_stagnation_checks"] = float(phase.stagnation_checks)
         report[f"{name}_row_sweeps"] = float(rows * phase.steps)
         report[f"{name}_row_residual_checks"] = float(rows * phase.residual_checks)
@@ -334,6 +344,10 @@ class Learner:
     last_calibration: dict[str, Any] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
+        if self.config.initial_damping and (
+            self.brain.backend != "cpu" or self.brain.precision not in (None, "float64")
+        ):
+            raise ValueError("nonzero initial_damping requires CPU float64")
         outputs = np.asarray(list(self.outputs))
         if outputs.ndim != 1 or outputs.size == 0:
             raise ValueError("outputs must contain at least one neuron index")
@@ -546,6 +560,11 @@ class Learner:
         cfg = self.config
         if cfg.tolerance is None:
             raise ValueError("qualified learning requires a finite residual tolerance")
+        if cfg.initial_damping:
+            return self.brain.equilibrate(
+                drive, state=state, budget=budget, tolerance=cfg.tolerance,
+                nudge=nudge, damping=cfg.damping, initial_damping=cfg.initial_damping,
+            )
         return self.brain.equilibrate(
             drive, state=state, budget=budget, tolerance=cfg.tolerance,
             nudge=nudge, damping=cfg.damping,

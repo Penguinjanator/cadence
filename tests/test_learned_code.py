@@ -76,7 +76,11 @@ def parameter_digest(brain: cd.Brain) -> str:
 
 
 def describe_digest(brain: cd.Brain) -> str:
-    return hashlib.sha256(json.dumps(brain.describe(), sort_keys=True).encode()).hexdigest()
+    description = brain.describe()
+    # These historical founders predate this optional numerical gene. Require
+    # its unchanged schedule and compare every previously recorded field.
+    assert description["genes"].pop("learning_initial_damping") == 0
+    return hashlib.sha256(json.dumps(description, sort_keys=True).encode()).hexdigest()
 
 
 def stepped(brain: cd.Brain) -> list[int]:
