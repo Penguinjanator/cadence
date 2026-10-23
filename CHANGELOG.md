@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+- Add a coupled-memory component experiment under `benchmarks/attention`: live
+  query/read equations, independent derivative and local-credit checks, and retained
+  exposed-fact admission failures. A separately declared acquisition repair restores
+  the existing wrong-answer teaching control, using saved pre-query context. Both
+  development founders and all 20 fresh confirmation founders acquire all cases at
+  100% under qualified teaching. A separate supplied-content control passes both
+  development founders through recall ports, including erasure and donor checks.
+  Add immutable saved-row teaching, experimental multiple heads and a minimal
+  two-binding protocol with matched resource controls and a diagnostic contextual
+  representation probe. Original failures and the 95% gate remain intact;
+  learned relevance and useful head specialization still need behavioral evidence.
+  This adds no supported attention mode to `Brain.compose` and changes no retrieval defaults.
+- Preserve the experimental memory boundary through qualified step-halving attempts
+  and clear stale boundary caches on trial reset. Add a matched empty-read
+  agreement control and retain its failed acquisition result; numerical work
+  and the original 95% floor remain explicit.
+
 ## 0.85.1 — 2026-10-22
 
 - `live(..., salience=[...])` accepts the explicit outcome importance already supported by
