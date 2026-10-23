@@ -37,6 +37,21 @@ def ctx(monkeypatch):
     return result
 
 
+@pytest.fixture
+def archived_prior(ctx, monkeypatch):
+    """Isolate the retained prerequisite from this controller's current-source checks."""
+    verifier = subject.load("minimal_tests_historical_verifier", HERE / "verify.py")
+    expected = (ctx.runtime / "benchmarks/attention/results"
+                / subject.declared()["prior"]["file"]).resolve()
+    original = ctx.campaign.verify
+
+    def verify(path):
+        return verifier.verify(path) if Path(path).resolve() == expected else original(path)
+
+    monkeypatch.setattr(ctx.campaign, "verify", verify)
+    return ctx
+
+
 def phase_work(ctx, actions=1, rows=8):
     work = ctx.sr.Work()
     work.actions, work.action_rows = actions, actions * rows
@@ -97,7 +112,8 @@ def fake_train(brain, arm, schedule, deadline):
 
 
 @pytest.fixture
-def synthetic(ctx, monkeypatch):
+def synthetic(archived_prior, monkeypatch):
+    ctx = archived_prior
     monkeypatch.setattr(subject, "evaluate", fake_evaluate)
     monkeypatch.setattr(ctx.admission, "train", fake_train)
     return ctx
@@ -349,8 +365,9 @@ def test_prior_verification_cache_invalidates_on_exact_dependency_change(
 
 
 def test_exception_keeps_actual_work_inherited_charge_and_full_source_snapshot(
-    ctx, tmp_path, monkeypatch
+    archived_prior, tmp_path, monkeypatch
 ):
+    ctx = archived_prior
     monkeypatch.setattr(subject, "evaluate", fake_evaluate)
 
     def fail(brain, arm, schedule, deadline):

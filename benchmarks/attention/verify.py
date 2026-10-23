@@ -138,12 +138,43 @@ def _historical_numerical_check(owner: Any, arithmetic: Any):
     return checked
 
 
+def historical_checker(filename: str, *, reference: Path):
+    """Return an isolated offline checker; never substitute a live prerequisite."""
+    allowed = {"heads_continuation.py", "query_founder_campaign.py", "minimal_binding_campaign.py",
+               "single_relevance_campaign.py", "neutral_variation_campaign.py"}
+    if filename not in allowed:
+        raise ValueError("choose a declared historical attention checker")
+    spec = importlib.util.spec_from_file_location(
+        "attention_historical_readers", HERE / "historical.py")
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module.Session(ROOT, _resolved_sources, reference).load(filename)
+
+
 def verify(path: Path) -> tuple[bool, str]:
     receipt = Receipt.read(path)
     try:
         sources = _resolved_sources(receipt)
     except ValueError as error:
         return False, str(error)
+    campaigns = {
+        "cadence-attention-heads-continuation/1": "heads_continuation.py",
+        **{f"cadence-attention-query-founder-{stage}/1": "query_founder_campaign.py"
+           for stage in ("capacity", "h2", "comparators")},
+        **{f"cadence-attention-minimal-binding-{stage}/1": "minimal_binding_campaign.py"
+           for stage in ("capacity", "h2")},
+        **{f"cadence-attention-single-relevance-{stage}/1": "single_relevance_campaign.py"
+           for stage in ("capacity", "h1")},
+        **{f"cadence-attention-neutral-variation-{stage}/1": "neutral_variation_campaign.py"
+           for stage in ("capacity", "h2")},
+    }
+    if receipt.kind in campaigns:
+        try:
+            return historical_checker(campaigns[receipt.kind], reference=path).verify(path)
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            return False, str(error)
     arithmetic = check
     modules = {"cadence-attention-acquisition-repair/1": "repair_admission.py",
                "cadence-attention-content-control/1": "content_control.py",

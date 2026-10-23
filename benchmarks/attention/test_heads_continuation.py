@@ -22,6 +22,17 @@ sys.modules[SPEC.name] = subject
 SPEC.loader.exec_module(subject)
 
 
+@pytest.fixture
+def archived_subject():
+    """Use an isolated offline checker for the retained source-bound experiment."""
+    verifier = subject.admission.load("continuation_tests_historical_verifier",
+                                      Path(__file__).with_name("verify.py"))
+    return verifier.historical_checker(
+        "heads_continuation.py",
+        reference=subject.HERE / "results" / "heads-continuation-development.json",
+    )
+
+
 def capture(brain):
     arrays = {name: getattr(brain.brain, name).copy() for name in subject.PARAMETERS}
     arrays.update({"optimizer_" + name: getattr(brain.learner, name).copy()
@@ -87,14 +98,14 @@ def test_research_restore_rejects_a_life_that_has_unrestored_durable_or_code_sta
         subject.restore_arrays(b, arrays, metadata)
 
 
-def test_original_relevance_and_capacity_receipts_are_verified_without_new_dispatcher():
-    parent = subject.parents()
-    assert parent.digest == subject.declared()["parent_relevance_digest"]
+def test_retained_relevance_and_capacity_receipts_use_the_offline_checker(archived_subject):
+    parent = archived_subject.parents()
+    assert parent.digest == archived_subject.declared()["parent_relevance_digest"]
     assert not parent.body["passed"] and len(parent.body["runs"]) == 10
-    spec = subject.declared()
+    spec = archived_subject.declared()
     assert spec["parent_relevance_host_seconds"] == parent.body["cumulative_host_seconds"]
     assert spec["previous_host_seconds"] == 2338.0763868783333
-    diagnostic = subject.diagnostic(parent)
+    diagnostic = archived_subject.diagnostic(parent)
     assert spec["previous_host_seconds"] == (parent.body["cumulative_host_seconds"]
                                              + diagnostic.body["elapsed_host_seconds"])
 
@@ -111,15 +122,15 @@ def test_protocol_preserves_exact_suffixes_and_declares_only_additional_host_wor
     assert "benchmarks/attention/results/heads-h1-boundary-diagnostic.json" in dict(paths)
 
 
-def skeleton():
-    parent = subject.parents()
+def skeleton(owner):
+    parent = owner.parents()
     points = []
-    for declaration in subject.declared()["points"]:
-        old = subject.parent_point(parent, declaration["seed"])
+    for declaration in owner.declared()["points"]:
+        old = owner.parent_point(parent, declaration["seed"])
         suffix = {"completed": False, "rounds": 0, "wrong_counts": [], "stop": "wall_budget",
-                  "work": subject.admission.asdict(subject.sr.Work())}
+                  "work": owner.admission.asdict(owner.sr.Work())}
         result = deepcopy(old)
-        result["training"] = subject.joined_training(old["training"], suffix, 512)
+        result["training"] = owner.joined_training(old["training"], suffix, 512)
         # The point remains the same negative measured panel; this fixture tests
         # source/cost/completion validation rather than inventing a positive score.
         metadata = {"schema": "fixture", "source": parent.source,
@@ -131,43 +142,44 @@ def skeleton():
                    "restored_parameters": old["final_parameters"],
                    "restored_state_sha256": declaration["restored_state_sha256"]}
         points.append({"seed": old["seed"], "suffix_training": suffix,
-            "suffix_schedule_sha256": canonical_sha256(subject.task.draw(old["seed"], 512, 16)[
+            "suffix_schedule_sha256": canonical_sha256(owner.task.draw(old["seed"], 512, 16)[
                 declaration["completed_rounds"]:]), "restoration": custody,
             "elapsed_host_seconds": 0.0, "additional_work": {k: 0 for k in old["work"]},
             "result": result})
-    body = {"protocol": subject.declared(), "parent_reference": parent.digest,
-            "diagnostic_reference": subject.declared()["intervening_diagnostic"]["digest"],
-            "previous_host_seconds": subject.declared()["previous_host_seconds"],
+    body = {"protocol": owner.declared(), "parent_reference": parent.digest,
+            "diagnostic_reference": owner.declared()["intervening_diagnostic"]["digest"],
+            "previous_host_seconds": owner.declared()["previous_host_seconds"],
             "elapsed_host_seconds": 0.0,
-            "cumulative_host_seconds": subject.declared()["previous_host_seconds"],
+            "cumulative_host_seconds": owner.declared()["previous_host_seconds"],
             "new_candidate_rounds_used": 0, "confirmation_seeds_used": [],
             "head_advantage_claimed": False, "points": points, "passed": False,
-            "combined_relevance": subject.combined(parent, points, 0.0)}
+            "combined_relevance": owner.combined(parent, points, 0.0)}
     # This synthetic metadata cannot impersonate the frozen NPZ's metadata hash.
     return body
 
 
-def test_invented_restoration_metadata_cannot_pass_a_rehashed_receipt():
-    assert subject.check(skeleton()) == "restoration custody differs"
+def test_invented_restoration_metadata_cannot_pass_a_rehashed_receipt(archived_subject):
+    assert archived_subject.check(skeleton(archived_subject)) == "restoration custody differs"
 
 
 @pytest.fixture
-def checked_negative(monkeypatch):
-    body = skeleton()
+def checked_negative(archived_subject, monkeypatch):
+    body = skeleton(archived_subject)
     spec = deepcopy(body["protocol"])
     for declaration, point in zip(spec["points"], body["points"], strict=True):
         declaration["metadata_sha256"] = canonical_sha256(point["restoration"]["metadata"])
     body["protocol"] = spec
-    monkeypatch.setattr(subject, "declared", lambda: spec)
-    assert subject.check(body) is None
-    return body
+    monkeypatch.setattr(archived_subject, "declared", lambda: spec)
+    assert archived_subject.check(body) is None
+    return archived_subject, body
 
 
 @pytest.mark.parametrize("change", ["score", "pass", "refusal", "suffix", "order", "prior_cost",
                                     "elapsed", "point_cost", "diagnostic", "comparators",
                                     "advantage", "candidate", "fresh"])
 def test_strict_check_rejects_forged_gates_costs_or_comparators(checked_negative, change):
-    body = deepcopy(checked_negative)
+    owner, checked = checked_negative
+    body = deepcopy(checked)
     if change == "score":
         body["points"][0]["result"]["metrics"]["primary_passed"] = True
     elif change == "pass":
@@ -195,20 +207,20 @@ def test_strict_check_rejects_forged_gates_costs_or_comparators(checked_negative
         body["new_candidate_rounds_used"] = 1
     else:
         body["confirmation_seeds_used"] = [200]
-    assert subject.check(body) is not None
+    assert owner.check(body) is not None
 
 
-def test_original_failed_comparators_are_preserved_by_combining_only_h2():
-    parent = subject.parents()
-    points = [{"seed": seed, "result": deepcopy(subject.parent_point(parent, seed))}
+def test_original_failed_comparators_are_preserved_by_combining_only_h2(archived_subject):
+    parent = archived_subject.parents()
+    points = [{"seed": seed, "result": deepcopy(archived_subject.parent_point(parent, seed))}
               for seed in (0, 1)]
-    combined = subject.combined(parent, points, 0.25)
+    combined = archived_subject.combined(parent, points, 0.25)
     assert [r for r in combined["runs"] if r["arm"] != "h2"] == [
         r for r in parent.body["runs"] if r["arm"] != "h2"]
     assert combined["candidate_rounds_used"] == 1 and not combined["passed"]
     assert combined["confirmation_seeds_used"] == []
     assert combined["elapsed_host_seconds"] == (parent.body["elapsed_host_seconds"]
-        + subject.declared()["intervening_diagnostic"]["elapsed_host_seconds"] + 0.25)
+        + archived_subject.declared()["intervening_diagnostic"]["elapsed_host_seconds"] + 0.25)
 
 
 def test_work_join_counts_every_attempt_and_takes_residual_maximum():
@@ -233,9 +245,11 @@ def test_standalone_verifier_rejects_another_receipt_kind(tmp_path):
     assert subject.verify(path) == (False, "not an attention continuation receipt")
 
 
-def test_retained_completed_recipe_does_not_turn_into_an_acquisition_or_head_claim():
+def test_retained_completed_recipe_does_not_turn_into_an_acquisition_or_head_claim(
+    archived_subject,
+):
     path = subject.HERE / "results" / "heads-continuation-development.json"
-    valid, message = subject.verify(path)
+    valid, message = archived_subject.verify(path)
     assert valid, message
     receipt = subject.Receipt.read(path)
     assert receipt.digest == "12c384dae5992e3675baf2d74ec38d680fc90ada107ae99598036d146d065a40"

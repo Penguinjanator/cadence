@@ -36,6 +36,21 @@ def ctx(monkeypatch):
     return ctx
 
 
+@pytest.fixture
+def archived_prior(ctx, monkeypatch):
+    """Verify only the declared historical boundary with the offline reader."""
+    verifier = ctx.base.load("single_tests_historical_verifier", HERE / "verify.py")
+    expected = (ctx.runtime / "benchmarks/attention/results"
+                / subject.declared()["prior"]["file"]).resolve()
+    original = ctx.base.verify
+
+    def verify(path):
+        return verifier.verify(path) if Path(path).resolve() == expected else original(path)
+
+    monkeypatch.setattr(ctx.base, "verify", verify)
+    return ctx
+
+
 def work(actions=1, rows=8):
     w = subject.context().sr.Work()
     w.actions, w.action_rows = actions, actions * rows
@@ -234,7 +249,10 @@ def test_saved_complete_drive_teaches_only_postact_wrong_rows(ctx, monkeypatch):
     assert brain.learner.updates == updates
 
 
-def test_real_controller_synthetic_capacity_then_h1_and_retention(ctx, monkeypatch, tmp_path):
+def test_real_controller_synthetic_capacity_then_h1_and_retention(
+    archived_prior, monkeypatch, tmp_path
+):
+    ctx = archived_prior
     monkeypatch.setattr(subject, "evaluate", fake_evaluate)
     monkeypatch.setattr(subject, "train", fake_train)
     out, parameters = tmp_path / "capacity.json", tmp_path / "parameters"
@@ -271,7 +289,9 @@ def test_real_controller_synthetic_capacity_then_h1_and_retention(ctx, monkeypat
         assert subject.check(body) is not None
 
 
-def test_stage_prerequisite_rejects_original_or_negative_capacity(ctx, monkeypatch, tmp_path):
+def test_stage_prerequisite_rejects_original_or_negative_capacity(
+    archived_prior, monkeypatch, tmp_path
+):
     out = tmp_path / "old-kind.json"
     subject.Receipt.build("cadence-attention-heads-admission/1", {}, []).write(out)
     subject._CAPACITY = out
@@ -279,7 +299,10 @@ def test_stage_prerequisite_rejects_original_or_negative_capacity(ctx, monkeypat
         subject.prerequisites("learned_h1")
 
 
-def test_interrupted_cell_preserves_charge_sources_and_full_arrays(ctx, monkeypatch, tmp_path):
+def test_interrupted_cell_preserves_charge_sources_and_full_arrays(
+    archived_prior, monkeypatch, tmp_path
+):
+    ctx = archived_prior
     def fail(arm, seed, stage, deadline, directory, captures):
         captures["brain"] = subject.make_brain(arm, seed)
         captures["actual_transport_work"] = dict.fromkeys(ctx.base.COST_KEYS, 7)

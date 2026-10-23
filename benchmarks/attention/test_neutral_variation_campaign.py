@@ -38,7 +38,24 @@ def ctx(monkeypatch):
     return result
 
 
-def test_only_data_change_preserves_every_original_gate_order_and_budget(ctx):
+@pytest.fixture
+def archived_priors(ctx, monkeypatch):
+    """Read both retained prerequisites without changing live admission policy."""
+    verifier = ctx.base.load("neutral_tests_historical_verifier", HERE / "verify.py")
+    for owner, spec in ((ctx.base, subject.declared()["retained_negative"]),
+                        (subject.h1_verifier(), subject.finished_prior_spec())):
+        expected = (ctx.runtime / "benchmarks/attention/results" / spec["file"]).resolve()
+        original = owner.verify
+
+        def verify(path, *, expected=expected, original=original):
+            return verifier.verify(path) if Path(path).resolve() == expected else original(path)
+
+        monkeypatch.setattr(owner, "verify", verify)
+    return ctx
+
+
+def test_only_data_change_preserves_every_original_gate_order_and_budget(archived_priors):
+    ctx = archived_priors
     p, old = subject.declared(), ctx.base.declared()
     for key in ("brain", "dt", "task", "gates", "retention", "causal_controls"):
         assert p[key] == old[key]
