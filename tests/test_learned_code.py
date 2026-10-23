@@ -7,6 +7,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -1087,6 +1088,60 @@ def test_the_module_reads_the_code_at_unit_length():
     read = s @ weights.T + terms[0]  # the code's synaptic input plus the term
     expected = brain.learned_code.code_of(phase) @ weights.T
     np.testing.assert_allclose(read, expected, atol=1e-3)
+
+
+@pytest.mark.parametrize("contacts, log_gains", [
+    (False, False), (True, False), (False, True), (True, True),
+], ids=["unit", "contacts", "log_gain", "combined"])
+def test_the_unit_code_read_uses_effective_forward_weights(contacts, log_gains, monkeypatch):
+    """Source activity plus the drive correction reads unit code through the actual
+    transport weights, including contact counts and presynaptic gains."""
+    brain = cd.Brain.compose(8, 2, modules=(6,), learned_code=4, seed=6)
+    original = brain.brain
+    synapses, _, _ = brain._code_forward
+    counts = original.connectome.count.copy()
+    if contacts:
+        counts[synapses] = np.linspace(1.25, 2.5, len(synapses))
+    connectome = replace(original.connectome, count=counts)
+    np.testing.assert_array_equal(connectome.pre, original.connectome.pre)
+    np.testing.assert_array_equal(connectome.post, original.connectome.post)
+    efficacy, log_gain = original.efficacy.copy(), original.log_gain.copy()
+    efficacy[synapses] = np.linspace(-0.4, 0.6, len(synapses))
+    if log_gains:
+        log_gain[brain.code_index] = np.log([1.2, 1.5, 1.8, 2.1])
+    graph = cd.NeuralGraph(
+        connectome, original.neuron_model, efficacy=efficacy,
+        bias=original.bias, log_gain=log_gain,
+    )
+    brain.learner.brain = graph
+    brain.learned_code.dictionary[:] = np.eye(8, 4)
+    brain.learned_code.install()
+    observations = np.eye(8)[[1, 4]]
+    brain._prepare(observations, context=False)
+    phase = brain._coded_moment[2]
+    activity = np.atleast_2d(phase.activation)
+    assert brain._code_settlement["code_residual"] <= brain.learner.config.tolerance
+    code = brain.learned_code.code_of(activity)
+    assert (activity[0] > 0).any() and (activity[0] < 0).any()
+    assert (activity[1] < 0).all() and not code[1].any()
+    np.testing.assert_allclose(np.linalg.norm(code[0]), 1.0, rtol=0, atol=1e-14)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("the source-read regression attempted an extra code solve")
+
+    monkeypatch.setattr(brain, "_settle_code", forbidden)
+    drive = np.random.default_rng(43).normal(size=(2, connectome.n))
+    corrected = brain._unit_read(observations, drive, memory=False)
+    weights = graph.neuron_model.gain * connectome.count * np.exp(log_gain)[connectome.pre]
+    weights *= efficacy
+    np.testing.assert_allclose(graph.weights, weights, rtol=1e-15, atol=0)
+    dense = np.zeros((connectome.n, connectome.n))
+    np.add.at(dense, (connectome.pre, connectome.post), weights)
+    source = np.zeros_like(drive)
+    source[:, brain.code_index] = activity
+    actual = (source @ dense + corrected-drive)[:, brain.association_index]
+    expected = code @ dense[np.ix_(brain.code_index, brain.association_index)]
+    np.testing.assert_allclose(actual, expected, rtol=1e-13, atol=1e-14)
 
 
 def test_the_key_takes_the_observations_norm():

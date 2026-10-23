@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Correct normalized learned-code input using the same effective weights as neural
+  transport, including contact counts, model gain and presynaptic gains.
+
 - Add optional `initial_damping` for qualified CPU float64 teaching. It skips
   initial numerical step sizes within the existing shared budget, preserves the
   live model and original-equation qualification, and reports initial, absolute

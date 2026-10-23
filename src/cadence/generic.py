@@ -2049,7 +2049,7 @@ class Brain:
         unit = code.code_of(s)
         synapses, j, m = self._code_forward
         weights = np.zeros((len(self.association_index), code.units))
-        weights[m, j] = self.brain.efficacy[synapses]
+        weights[m, j] = self.brain.weights[synapses]
         out[:, self.association_index] += (unit - s) @ weights.T
         return out
 
