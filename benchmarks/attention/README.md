@@ -11,9 +11,67 @@ The [extended capacity control](results/founder-capacity-extended.json) now
 passes acquisition on both exposed and both supplied-read founders. The first
 [learned-reader comparison](results/heads-relevance-founder-extended.json)
 fails all ten declared cells: H2 hits its training time limit; the one-head
-variants refuse a numerical solve. Useful parallel heads remain unproved.
+variants refuse a numerical solve. A separately declared
+[exact H2 continuation](results/heads-continuation-development.json) finishes
+both original 512-round schedules with no refusals, but each founder ends at
+8/48 trained pairs and 0/16 held-out pairs correct. Extra training does not
+repair this acquisition failure. Useful parallel heads remain unproved.
 See the [parallel-head assessment](PARALLEL_HEADS_ASSESSMENT.md) for the
 predeclared distinction between retrieval success and a useful second head.
+The [ordinary-query initialization control](QUERY_FOUNDER.md) tests one
+different starting condition for the same live query connections. Its staged
+runner requires new matched capacity before H2, and both H2 founders before
+matched one-head/resource comparisons. The old positive capacity receipt is
+baseline evidence for the original initializer.
+
+That [matched capacity run](results/query-founder-capacity.json) passes all
+four 512-round acquisition controls without refusals. The changed
+[learned-reader run](results/query-founder-h2.json) nevertheless fails: its
+two founders stop on query refusals after 297/182 rounds. Trained and all-case
+query panels refuse; held-out queries complete but score 0/16 in both founders.
+Ordinary query initialization is not an established repair. Retention,
+resource comparisons, fresh confirmation and longer-world evaluation remain
+closed for this point.
+
+The separate [minimal two-binding prerequisite](MINIMAL_BINDING.md) keeps the
+same reader and local learner, but uses two active values and a fixed A/B
+answer order. All eight cases are trained and evaluated, with no held-out
+claim. Its [staged protocol](minimal-binding-protocol.json) requires new matched
+exposed/held-read capacity before either learned H2 founder. Actual one-fact
+donor swaps, erasures, shams and head lesions distinguish content use from
+useful parallel selection. It cannot pass or explain the original task, and
+opens no longer-world comparison by itself.
+
+The [minimal capacity controls](results/minimal-binding-capacity.json) now
+pass, and both [learned H2 founders](results/minimal-binding-h2.json) acquire
+all eight pairs without refusals. They follow both actual donor facts and
+fail appropriately under record erasure, but changing the neutral record
+changes 4/8 and 2/8 answers. Both also fail the predeclared named-record
+specialization gate. The full primary gate remains negative; retention and
+resource comparisons stay closed. The separate [direct single-head test](SINGLE_RELEVANCE.md)
+checks both questions on copies of the same witnessed history, with new matched
+capacity and causal selection gates. Its four capacity controls pass, and both
+learned founders answer all 16 questions correctly. Both nevertheless depend
+on irrelevant context and fail question-specific record selection. The
+[retained H1 result](results/single-relevance-h1.json) does not admit learned
+relevance or longer-world attention claims.
+
+The separately declared [neutral-variation control](NEUTRAL_VARIATION.md) changes
+only the actually witnessed neutral strength during training. It preserves
+these failures and all original minimal-task criteria, and requires fresh
+matched capacity before either learned H2 founder. Those controls pass, and both
+[learned founders](results/neutral-variation-h2.json) now pass content use,
+neutral-context robustness and 256-round same-task continuation. Both still
+fail distinct-head specialization; no matched H1 resource comparison has run.
+
+The new [continuous-payload single-head component](CONTINUOUS_RELEVANCE.md)
+tests both questions with fresh scalar values in a shared payload coordinate.
+It requires its own exposed and supplied-address capacity controls before
+learned H1 evaluation. All four controls pass at 100% on fresh values, but the
+two learned H1 founders reach only 69.5% and 66.6% and fail causal relevance.
+The [aggregate result](results/continuous-relevance-h1-summary.json) preserves
+that negative outcome. This reset-round component establishes no learned
+meaning codes, continuing-life preservation or Stone Age advantage.
 
 The demonstrated limitation of held-query retrieval is that the current
 interpretation cannot revise its selection during a settle. The earlier

@@ -335,3 +335,117 @@ to 2,337.216734 seconds. No parallel-head advantage, continuing-life or
 Stone Age result follows. Further repair must first distinguish numerical
 refusal from capped acquisition; a generic negative pass flag does not
 localize a head-count defect.
+
+## Exact boundary diagnostic and H2 recipe completion
+
+The [H1 boundary diagnostic](results/heads-h1-boundary-diagnostic.json)
+reconstructs only the two original first refusals, retaining the actual field
+before action rollback. Parameters and maximum residuals match the original
+failures exactly. Each endpoint has a locally stable continuous linearization
+and a locally stable final `.125` Euler step. This is pointwise evidence;
+it proves neither global convergence nor that another schedule would rescue
+the original 2,048-sweep run. No alternative step, teacher or training run was
+tried. Its measured cost is 0.859652 host seconds.
+
+The separately frozen [continuation protocol](heads-continuation-protocol.json)
+finishes only H2's missing 191/223 draws from its original schedules. It restores
+all three parameter arrays, all four optimizer arrays and both update counters
+from source-bound research snapshots. A 2+2-round identity check compares this
+restoration with uninterrupted training. This is valid at the declared reset
+round boundary; it is not a saved continuing-life checkpoint. Equations, local
+teacher, rates, qualified-sweep caps, task and gates remain unchanged. The
+original negative ten-cell receipt and all eight failed comparators remain
+immutable; the new receipt explicitly identifies its derived combined reading.
+
+**Result:** both H2 founders complete 512 rounds with zero training action or
+lesson refusals. Each ends at 8/48 trained exact pairs and 0/16 held-out pairs
+correct, below its earlier capped trained score of 16/48 or 26/48. All intact
+panels are answered. Neither acquisition nor causal relevance passes; retention,
+representation and confirmation remain unopened. No failed H1 comparator grants
+a head advantage. This stage costs 396.728604 host seconds and brings retained
+work, including the H1 diagnostic once, to 2,734.804991 seconds.
+
+The [new receipt](results/heads-continuation-development.json) has its own strict
+offline verifier, leaving historical execution dependencies unchanged:
+
+```sh
+PYTHONPATH=src python benchmarks/attention/heads_continuation.py \
+  --verify benchmarks/attention/results/heads-continuation-development.json
+```
+
+The completed failure distinguishes limited training time from this recipe's
+acquisition problem. Check actual local lesson directions on the same captured
+memory boundary before changing the learning rule or anatomy. This result does
+not open a longer-world comparison or establish useful parallel attention.
+
+## Lesson checks and an ordinary query initializer control
+
+The [prior-work ledger](results/query-founder-prior.json) retains three further
+bounded diagnostic records and their exact charges. An initial work-counter
+failure returns no phase; its corrected one-case lesson audit qualifies every
+phase. On that trained unequal case, both original and refined local contrasts
+point toward lower loss in both answer slots. The actual momentum/RMS update
+reduces total loss and corrects one slot. This identifies no simple update-sign
+or precision repair.
+
+A separate full-panel endpoint check supplies one lesson on the 40 wrong rows
+and evaluates all 48 trained rows. Both the native and zero-momentum proposals
+reduce mean cross-entropy but lose the same two previously correct pairs:
+8/48 becomes 6/48, with no new correct pairs. All three paired precision
+references qualify and preserve these decisions. This synthetic aggregate
+lesson is not an original sixteen-row minibatch or evidence of a training
+remedy. The JSON ledger verifies retained records and accounting; it does not
+independently replay binary phase states. Cumulative model work is
+2,748.518539 host seconds, including the failed instrument attempt once.
+
+The [new initializer declaration](query-founder-protocol.json) tests one
+ordinary reciprocal projection draw on each existing query/cortex interface,
+once before a fresh brain's first event. The [construction guide](QUERY_FOUNDER.md)
+states its independent seed streams and limits. No runtime equation, neuron,
+contact, teacher or head role changes. Fresh matched exposed/supplied-read
+capacity must pass before both H2 founders run; the eight matched one-head and
+resource comparisons open only if both H2 primary and retention gates pass.
+Original failed results and all behavioral floors remain in force.
+
+### Ordinary-query result
+
+The [new matched capacity receipt](results/query-founder-capacity.json)
+passes all four cells: 512 rounds, zero action/lesson refusals and 100% trained
+exact pairs. Held-out scores are 0/16, 0/16, 0/16 and 4/16 for exposed0/1 and
+supplied-read0/1; capacity imposes no held-out accuracy floor. This stage uses
+305.571460 host seconds.
+
+The [learned H2 receipt](results/query-founder-h2.json) is negative in both
+founders. Query refusals stop training at 297/182 rounds, with no teaching
+refusals. Trained and all-case panels also refuse their query after successful
+prefixes; their unanswered scores are not accuracy measurements of qualified
+answers. Both held-out panels complete and answer 0/16 pairs correctly.
+The changed initialization has not repaired acquisition or numerical
+qualification. No retention, representation probe, matched resource control,
+fresh confirmation or longer-world run opens. Its 464.384521 host seconds bring
+cumulative retained model work to 3,518.474520 seconds. The original q0 results
+and all acceptance floors remain unchanged.
+
+```sh
+PYTHONPATH=src python benchmarks/attention/query_founder_campaign.py \
+  --verify benchmarks/attention/results/query-founder-capacity.json
+PYTHONPATH=src python benchmarks/attention/query_founder_campaign.py \
+  --verify benchmarks/attention/results/query-founder-h2.json
+```
+
+## Smaller simultaneous-binding prerequisite
+
+The separately declared [eight-case chamber](MINIMAL_BINDING.md) removes
+requested output permutation, two values and held-pair transfer. It changes
+no reader equation or learner. New matched capacity passes in all four cells.
+Both learned H2 founders then complete 512 rounds, answer 8/8 pairs and
+qualify every causal panel. Donor changes are followed perfectly; erasing
+either actual fact loses .50 corresponding-slot accuracy.
+
+Both primary gates nevertheless fail: half-amplitude neutral key/value
+changes alter 4/8 and 2/8 answers. Both fail the existing majority/margin
+specialization requirement. Retention, resource comparisons and larger-world
+runs remain closed; this is not a pass or diagnosis of the original task.
+The two stages add 195.990749 and 438.514331 host seconds, respectively,
+bringing retained model work to 4,152.979600 seconds. The exact typed receipts
+and all prior negatives remain unchanged.
