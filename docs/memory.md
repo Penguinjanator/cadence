@@ -696,6 +696,14 @@ erase a copy's slots with `brain.recall.reset(batch)` before the query
 - The slots are a record within one stream. Nothing consolidates across streams except
   through the plastic synapses that read them.
 
+The benchmark-only [direct-route attention candidate](../benchmarks/attention/DIRECT_ROUTE.md)
+tests the first limitation without changing this supported recall API. One live route reads
+from the already learned meaning, and one locally learned map turns that route into a new
+query inside the same equilibrium. Its development founder passes acquisition and causal
+record-use checks with 64 route coordinates, but it is not yet a `Brain.compose` option or
+default: independent founders, lifecycle preservation and continuing-world comparisons are
+still required.
+
 ## Standalone memory stores
 
 These stores work next to a `NeuralGraph` without `Brain.compose`: `cd.FastSynapses` with

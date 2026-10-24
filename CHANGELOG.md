@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.86.0 — 2026-10-24
+
 - Correct normalized learned-code input using the same effective weights as neural
   transport, including contact counts, model gain and presynaptic gains.
 - Sum parallel code-to-cortex synapses in that correction, matching neural transport
@@ -11,7 +13,9 @@
   initial numerical step sizes within the existing shared budget, preserves the
   live model and original-equation qualification, and reports initial, absolute
   final and relative halving indices. The default zero keeps the existing schedule.
-  Non-default numerical policies use a checked learner checkpoint format that
+  Different numerical starts can select another attracting basin; check preserved
+  answers and measured work on the target task. Non-default numerical policies use
+  a checked learner checkpoint format that
   older loaders refuse; ordinary checkpoints keep their format and omit the neutral
   setting and redundant zero-start diagnostics to preserve their previous metadata.
   Public reports regain the derived indices on load. This introduces no memory law,
@@ -27,8 +31,16 @@
   Add immutable saved-row teaching, experimental multiple heads and a minimal
   two-binding protocol with matched resource controls and a diagnostic contextual
   representation probe. Original failures and the 95% gate remain intact;
-  learned relevance and useful head specialization still need behavioral evidence.
+  those live-query candidates and useful head specialization still need behavioral evidence.
   This adds no supported attention mode to `Brain.compose` and changes no retrieval defaults.
+- Add the simpler direct-route attention component: one live 64-coordinate route and
+  one born-zero locally learned map, without a separate query state or anchor. Its retained
+  development founder reaches 100% allowed and held answers after 64 lessons, 100% causal
+  answer/top-1 selection and 98.44% material target mass; `W=0`, relation and relevant-record
+  erasures fail while unrelated erasure and payload controls pass. Regression tests retain
+  the single-energy derivatives, exact gate-off control, nonzero birth gradient and result
+  gates. This is positive single-head component evidence, not a supported compose option,
+  recall default, multi-head result or continuing-world claim.
 - Preserve the experimental memory boundary through qualified step-halving attempts
   and clear stale boundary caches on trial reset. Add a matched empty-read
   agreement control and retain its failed acquisition result; numerical work
