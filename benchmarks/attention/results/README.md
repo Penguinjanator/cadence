@@ -20,6 +20,16 @@ receipt to match it.
 Source/digest/arithmetic verification checks custody and reported decisions;
 it does not establish behavioral reproduction, stability or useful relevance.
 
+## Direct-route development candidate
+
+[direct-route-development.json](direct-route-development.json) retains the
+positive single-head component result described in
+[DIRECT_ROUTE.md](../DIRECT_ROUTE.md): one development founder, 64 local map
+lessons, 100% allowed and held answers, and passing causal record-use gates.
+It is deliberately narrower than a promotion receipt: no independent founder,
+continuing lifecycle, default change, multi-head benefit or larger-world claim.
+The regression suite checks its equations and declared aggregate gates.
+
 ## Acquisition repair
 
 `repair-development-precheck.json` retains the first matched-policy development

@@ -1,5 +1,16 @@
 # Coupled memory relevance: admission before integration
 
+The new [direct-route candidate](DIRECT_ROUTE.md) is the first single-head
+component here to pass acquisition and causal relevance together. It uses one
+live 64-coordinate route and one locally learned map; there is no separate
+query state or anchor. Its retained development founder reaches 100% allowed
+and held accuracy and passes `W=0`, relation/relevant erasure, unrelated
+erasure, payload-donor and material-selection checks. This is positive
+component evidence, not yet a supported `Brain.compose` option or default;
+independent founders, lifecycle preservation and larger continuing worlds are
+still required. The negative experiments below remain controls and are not
+rewritten by this result.
+
 This is a **component experiment**, on branch `coupled-memory-attention` from
 v0.85.1. It does not change `Brain.compose` or the existing held-query reader.
 The original query selects both an event and its witnessed successor; these
