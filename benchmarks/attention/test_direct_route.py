@@ -2,15 +2,14 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import importlib.util
 import json
-from pathlib import Path
 import sys
+from dataclasses import replace
+from pathlib import Path
 
 import numpy as np
 import pytest
-
 
 HERE = Path(__file__).resolve().parent
 SPEC = importlib.util.spec_from_file_location(
@@ -40,16 +39,20 @@ def numerical_force(memory: DirectRoute, answer: np.ndarray, state: np.ndarray,
                     kind: str, index: tuple[int, ...], epsilon: float = 1e-6) -> float:
     def changed(sign: float) -> tuple[DirectRoute, np.ndarray, np.ndarray]:
         if kind == "answer":
-            value = answer.copy(); value[index] += sign * epsilon
+            value = answer.copy()
+            value[index] += sign * epsilon
             return memory, value, state
         if kind == "route":
-            value = state.copy(); value[index] += sign * epsilon
+            value = state.copy()
+            value[index] += sign * epsilon
             return memory, answer, value
         if kind == "meaning":
-            value = memory.meaning.copy(); value[index] += sign * epsilon
+            value = memory.meaning.copy()
+            value[index] += sign * epsilon
             return replace(memory, meaning=value), answer, state
         if kind == "weight":
-            value = memory.weight.copy(); value[index] += sign * epsilon
+            value = memory.weight.copy()
+            value[index] += sign * epsilon
             return replace(memory, weight=value), answer, state
         raise AssertionError(kind)
 
