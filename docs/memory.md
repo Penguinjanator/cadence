@@ -1,13 +1,54 @@
 # Memory
 
-A memory is state that outlives one settle and changes a later answer. Everything else a
-brain computes is settled afresh at each moment from the observation and its memories.
+A memory is anything the brain keeps from an earlier moment and can use in a later answer.
+Everything else is computed again from the current observation.
 
-Each memory reaches the answer through the settle. The working trace, efference copy, heard
-history and recall memory drive regions of their own that the association region reads
-through plastic synapses; the associative store drives the motor neurons; the episodic memory
-adds a vote to the motor readout. The answer is one settle, which has to
-[qualify](start.md#qualification-and-refusal).
+## Start with the need
+
+Most applications need only one of these choices:
+
+| The task needs | Start with |
+| --- | --- |
+| The interpretation from the previous moment | Nothing extra. The working trace is already on. |
+| A remembered action and its measured outcome in the same situation | Nothing extra. The associative store is already on. |
+| One-shot situations, demonstrations or reward replay | `memory_choice=True` |
+| A relevant recent event and what followed it | `learned_code=units, attention=True` |
+| Both episodic voting and contextual retrieval | Use `memory_choice=True` and `attention=True` together. |
+
+If the present observation already contains everything needed for the action, keep the
+opt-in memories off. Add one mechanism at a time and compare it with the same mechanism
+silenced or erased.
+
+The two opt-in choices are independent:
+
+```python
+from cadence import Brain
+
+attention = Brain.compose(
+    inputs=12, actions=2, learned_code=8, attention=True, seed=0,
+)
+episodic = Brain.compose(inputs=12, actions=2, memory_choice=True, seed=0)
+both = Brain.compose(
+    inputs=12, actions=2, learned_code=8,
+    attention=True, memory_choice=True, seed=0,
+)
+
+assert attention.recall is not None
+assert episodic.context_memory is not None
+assert both.recall is not None and both.context_memory is not None
+```
+
+`attention=True` is not another name for episodic memory. It configures Recall: the learned
+code supplies a compact, meaning-sensitive part of the key, Recall selects a weighted past
+event and successor, and the neural equilibrium interprets that read. Episodic memory keeps
+action values for places and temporal contexts and adds their vote to the action choice. Use
+both when the task needs both kinds of evidence; compare each one alone to learn which memory
+did the work.
+
+Every memory ultimately changes the answer through the same composed brain. The working
+trace, efference copy, heard history and Recall drive neural regions read by the association
+region. The associative store drives motor neurons. Episodic memory adds a vote to the motor
+readout. The resulting answer still has to [qualify](start.md#qualification-and-refusal).
 
 Memories have three lifetimes. Per stream, cleared by `reset()` and by an ended episode: the
 working trace, efference copy, heard history, recall slots and actor eligibility. Across
@@ -19,7 +60,9 @@ arousal state as it is, the income and error references that decide when a `live
 wakes among it, and `reset(keep=())` clears them
 ([reset and save](start.md#reset-and-save)).
 
-## Memory in the composed brain
+<a id="memory-in-the-composed-brain"></a>
+
+## Complete memory inventory
 
 <a id="three-kinds-of-memory-in-brain"></a>
 
@@ -72,7 +115,8 @@ point where it differs from the founders.
 | Credit an action paid a few moments later | actor eligibility (on) | [key-door](../benchmarks/keydoor/README.md), `modules=(32,)` at the same operating point (scale 12.0, decay 0.2): fed 0.92 at delays 2 and 5; `actor_lam=0` falls to 0.53 at delay 5 | delay 10: 0.49 against a tabular learner's 0.83 to 0.90 |
 | Learn a multi-step chain whose stage is observed | the founder (weights and store together) | [chain](../benchmarks/chain/README.md), pay at each correct step: 204 greedy completions per thousand moments against tabular 250; pay at the end only: 42, uniform random's rate | slow one-stream reward learning, see reversal |
 | A state the observation does not show | no memory; supply the state as an observation | [chain](../benchmarks/chain/README.md) hidden: no arm beats the memoryless 62 | see [what breaks a chain](reward.md#what-breaks-a-chain) |
-| A moment heard once, the past at several timescales, what happened here before | recall memory, heard history, episodic memory | contract tests only: [recall](../tests/test_recall_memory.py), [history](../tests/test_heard_history.py), [episodic](../tests/test_episodic_memory.py) | no benchmark measurement in this repository |
+| Select the relevant two-moment context when the present question is identical | learned-code attention | [contextual choice](../benchmarks/attention/contextual_choice.py): four founders answer 128/128 intact queries; present-only, memory-off and uniform random score 50% | one held read; no within-settle query revision, multiple heads or continuing-world result |
+| A moment heard once, the past at several timescales, what happened here before | recall memory, heard history, episodic memory | contract tests: [recall](../tests/test_recall_memory.py), [history](../tests/test_heard_history.py), [episodic](../tests/test_episodic_memory.py) | no general recall-horizon claim |
 
 ## Working trace
 
@@ -232,13 +276,16 @@ assert chooser.act(place, greedy=True)[0] == 1    # the records vote for the act
 
 <a id="recall-the-streams-own-moments"></a>
 
-`recall=True` keeps each stream's recent moments as slots of key (the event heard), value (the
-event) and next (the moment that followed). Before each settle an address, the key plus a
-learned map that teacher lessons move, weighs the slots by a softmax, and the recalled value
-and next drive a `recall` and a `next` region through the settle. `reset(keep=("slots",))`
-keeps the slots. Every `recall_*` setting, the cost and the limits are in
-[the recall memory in full](#the-recall-memory-in-full), with the settings of 0.84.3 that left in this version and their
-readings ([removed in this version](#removed-in-this-version)).
+`recall=True` gives each stream a bounded list of recent moments. Every slot contains a key,
+the event, and the event that followed it. Before a settle, Recall compares the current key
+with the stored keys, makes one weighted read and drives `recall` and `next` regions with the
+result. A learned address map can shift the query when it is enabled. The simpler
+`attention=True` recipe leaves that map off and relies on the learned-code key itself.
+
+`reset()` empties the slots and keeps the learned address map;
+`reset(keep=("slots",))` keeps both. Every `recall_*` setting, its cost and its limits are in
+[the recall memory in full](#the-recall-memory-in-full). Settings removed after 0.84.3 and
+their replacements are listed under [removed in this version](#removed-in-this-version).
 
 ```python
 brain = Brain.compose(inputs=4, actions=2, modules=(16,), seed=1, recall=True)
@@ -254,11 +301,20 @@ assert brain.recall.slots == 0 and brain.recall.w_x.any()
 
 ## Single-head learned-code attention (opt-in)
 
-`attention=True` is a small construction recipe over mechanisms already in the composed
-brain: the learned observation code supplies compressed meanings, and Recall compares an
-ordered two-moment query with stored keys and returns the selected event and its successor.
-The read drives its own regions through the same neural settle as the sensory input. It is
-strictly opt-in:
+`attention=True` is the shortest supported path from learned meanings to contextual recall.
+It combines two existing mechanisms rather than adding a separate attention network:
+
+```text
+observation -> learned meaning code -> two-moment Recall lookup
+                                          |
+                                          v
+                         held event and successor -> neural settle -> action
+```
+
+The learned code compresses the observation using experience. Recall joins the current and
+previous code into an ordered query, compares it with stored two-moment keys and returns a
+weighted event and successor. That read drives its own regions while the rest of the brain
+settles. Turn it on explicitly:
 
 ```python
 attention_brain = Brain.compose(
@@ -277,6 +333,11 @@ the window must be at least two and the successor read must stay enabled. The le
 width remains explicit: eight is the capacity tested by the small benchmark, not a general
 default for other observations or worlds.
 
+The zero address gain is deliberate. The **meaning code is learned**, but the extra map that
+would transform the Recall query is not used by this recipe. Selection comes from similarity
+between learned-code windows. This is the smallest mechanism that passed the contextual
+choice controls.
+
 In the [contextual-choice benchmark](../benchmarks/attention/contextual_choice.py), every
 final observation is the same literal ASK. Two stored episodes differ only in their earlier
 context and successor. Four founders each answer 32/32 intact queries; present-only and
@@ -286,11 +347,12 @@ The assay disables `episodic` to isolate this reader. Applications may keep the 
 associative store or combine it with `memory_choice=True`; `attention` itself does not enable
 or disable either one.
 
-This is one held-read head. It selects once from the learned codes before the neural settle,
-then the shared equilibrium interprets that read; the query cannot change in response to
-the current settle. The benchmark establishes contextual selection on a bounded component,
-not an advantage from within-settle query revision, multiple heads, Stone Age or another
-continuing world. It is therefore not the default.
+This is one held-read head. It selects once before the neural settle, then the shared
+equilibrium interprets the read. The current interpretation cannot revise the query while
+that settle forms. The benchmark therefore establishes a bounded contextual lookup, not
+within-settle relevance, multiple heads, a Stone Age advantage or a general continuing-world
+benefit. Keep it opt-in and compare it with attention off, episodic memory alone and uniform
+random on the task being claimed.
 
 ## Learned weights and eligibility
 
