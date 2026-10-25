@@ -57,6 +57,68 @@ def test_plain_compose_keeps_the_released_founders():
     assert brain.describe()["layout"]["composition"]["working_memory_scale"] == 1.2
 
 
+def test_attention_is_an_explicit_learned_code_recall_recipe(tmp_path):
+    brain = cd.Brain.compose(12, 2, modules=(24,), learned_code=8, attention=True, seed=3)
+    assert brain.attention is True
+    assert brain.learned_code is not None and brain.learned_code.units == 8
+    assert brain.recall is not None
+    assert brain.recall.window == 2
+    assert brain.recall.next is True
+    assert brain.recall.address == 0.0
+    assert brain.recall.recency == 0.0
+    assert brain.recall.temperature == 0.1
+    assert brain.memory_choice is False
+    description = brain.describe()
+    assert description["genes"]["attention"] is True
+    assert description["layout"]["composition"]["attention"] is True
+
+    restored = cd.Brain.load(brain.save(tmp_path / "attention"))
+    assert restored.attention is True
+    assert restored.describe() == description
+
+
+@pytest.mark.parametrize(
+    "options",
+    [
+        {"attention": 1, "learned_code": 8},
+        {"attention": True},
+        {"attention": True, "learned_code": 8, "recall": False},
+        {"attention": True, "learned_code": 8, "recall_window": 1},
+        {"attention": True, "learned_code": 8, "recall_next": False},
+    ],
+)
+def test_attention_refuses_incomplete_or_conflicting_recipes(options):
+    with pytest.raises(ValueError):
+        cd.Brain.compose(12, 2, modules=(24,), **options)
+
+
+def test_attention_allows_expert_recall_tuning_without_changing_plain_defaults():
+    tuned = cd.Brain.compose(
+        12,
+        2,
+        modules=(24,),
+        learned_code=8,
+        attention=True,
+        recall_window=3,
+        recall_temperature=0.2,
+        recall_recency=0.1,
+    )
+    assert tuned.recall is not None
+    assert tuned.recall.window == 3
+    assert tuned.recall.temperature == 0.2
+    assert tuned.recall.recency == 0.1
+
+    plain = cd.Brain.compose(12, 2, modules=(24,), learned_code=8)
+    assert plain.attention is False and plain.recall is None
+    assert "attention" not in plain.describe()["genes"]
+
+    combined = cd.Brain.compose(
+        12, 2, modules=(24,), learned_code=8, attention=True, memory_choice=True
+    )
+    assert combined.recall is not None
+    assert combined.hippocampus is not None and combined._episodic is not None
+
+
 @pytest.mark.parametrize("arousal", [True, {}, {"need": 2.0}])
 def test_arousal_shorthand_uses_semantic_limits_not_mutation_search_bounds(arousal):
     brain = small(arousal=arousal)

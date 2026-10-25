@@ -95,6 +95,7 @@ or `retune`, as before.
 | `lateral`, `slots` | `0.0`, `1` | construction | [motor competition](#operating-point-and-motor-competition) |
 | `scales`: `"sensory"`, `"trace"`, `"history"`, `"recall"` | `1.0`, `1.2`, `1.2`, `1.2` | construction | [image inputs](senses.md#image-inputs), [memory](memory.md#working-trace) |
 | `features`, `field`, `seed` | `8`, `3`, `0` | construction | [image inputs](senses.md#image-inputs) |
+| `attention` | `False`; `True` requires `learned_code=units` and supplies the contextual Recall recipe | construction | [single-head learned-code attention](memory.md#single-head-learned-code-attention-opt-in) |
 | `teaching` | `"founder"`: steps 0.5 and 0.05 on the raw contrast; `"normalized"`: 0.003 and 0.0003 under a running RMS (0.99, floor 1e-4) | retune | [learning](teach.md#many-lessons-the-normalized-point-for-imitation) |
 | `learning_beta`, `temperature` | `0.1`, `0.2` | retune | [learning](settling.md#7-every-knob) |
 | `learning_free_steps`, `learning_nudged_steps`, `learning_tolerance`, `learning_qualified`, `learning_damping` | `1024`, `12`, `0.003`, `False`, `3` | retune | [learning](settling.md#qualified-teaching-budgets) |

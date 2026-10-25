@@ -30,7 +30,7 @@ wakes among it, and `reset(keep=())` clears them
 | Heard history | no | `history_decays=(0.2, 0.8)` | the observations as heard, one fading block per decay | none | after each act and each moment `wait` senses | no | [below](#heard-history) |
 | Associative store | yes | `episodic=False` removes it | one value per action per situation, in reward units | observation code | each outcome of the chosen action | yes | [below](#associative-store-the-hippocampus) |
 | Episodic memory | no | `memory_choice=True` | place and context records that vote in the choice | observation code, and code with the temporal context | known outcomes, demonstrations, replay of the path to a reward | records yes, context no | [below](#episodic-memory-what-happened-in-this-situation-before) |
-| Recall memory | no | `recall=True` | the stream's recent moments as slots, and a learned address map | observation code | a slot per moment; the map at lessons | map yes, slots no | [below](#the-recall-memory-in-full) |
+| Recall memory | no | `recall=True`; `attention=True` selects its learned-code contextual recipe | the stream's recent moments as slots, and a learned address map | observation code | a slot per moment; the map at lessons | map yes, slots no | [below](#the-recall-memory-in-full) |
 | Learned code | no | `learned_code=units` | a dictionary, a predictor and thresholds: the code region's synapses and biases | none | every accepted moment, by local rules | yes | [the learned code](senses.md#the-learned-code) |
 | Learned weights | yes | learning rates of zero freeze them | synapse scales and biases, actor and critic | none | lessons, and outcomes (aroused ones under `live`) | yes | [the free/nudged rule](settling.md#learning-the-freenudged-rule) |
 | Actor eligibility | yes | `actor_lam=0.0` credits the last action only | each synapse's credit for recent sampled acts | none | each sampled act | no | [reward.md](reward.md#eligibility-traces-and-dopamine) |
@@ -251,6 +251,46 @@ assert brain.lesson(name, [1])["address_rows"] == 1.0   # the lesson steps the a
 brain.reset()                                     # slots emptied, the address map kept
 assert brain.recall.slots == 0 and brain.recall.w_x.any()
 ```
+
+## Single-head learned-code attention (opt-in)
+
+`attention=True` is a small construction recipe over mechanisms already in the composed
+brain: the learned observation code supplies compressed meanings, and Recall compares an
+ordered two-moment query with stored keys and returns the selected event and its successor.
+The read drives its own regions through the same neural settle as the sensory input. It is
+strictly opt-in:
+
+```python
+attention_brain = Brain.compose(
+    inputs=12, actions=2, modules=(24,), learned_code=8, attention=True, seed=0,
+)
+assert attention_brain.attention
+assert attention_brain.recall.window == 2
+assert attention_brain.recall.next
+assert attention_brain.describe()["layout"]["composition"]["attention"]
+```
+
+The preset supplies `recall=True`, `recall_window=2`, `recall_next=True`,
+`recall_address=0.0`, `recall_recency=0.0` and `recall_temperature=0.1` only where they were
+not explicit. A wider window and other `recall_*` genes remain available to experiments;
+the window must be at least two and the successor read must stay enabled. The learned-code
+width remains explicit: eight is the capacity tested by the small benchmark, not a general
+default for other observations or worlds.
+
+In the [contextual-choice benchmark](../benchmarks/attention/contextual_choice.py), every
+final observation is the same literal ASK. Two stored episodes differ only in their earlier
+context and successor. Four founders each answer 32/32 intact queries; present-only and
+memory-off controls answer 16/32, as does uniform random. Erasing the relevant ASK record
+breaks the answer, while erasing the other record leaves 32/32 correct, with no refusals.
+The assay disables `episodic` to isolate this reader. Applications may keep the default
+associative store or combine it with `memory_choice=True`; `attention` itself does not enable
+or disable either one.
+
+This is one held-read head. It selects once from the learned codes before the neural settle,
+then the shared equilibrium interprets that read; the query cannot change in response to
+the current settle. The benchmark establishes contextual selection on a bounded component,
+not an advantage from within-settle query revision, multiple heads, Stone Age or another
+continuing world. It is therefore not the default.
 
 ## Learned weights and eligibility
 

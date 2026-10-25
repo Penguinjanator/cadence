@@ -64,11 +64,11 @@ a small fixed-label task is a control.
 ## Start with System 1
 
 Python 3.11+ and NumPy are required. Install the published release, whose
-[released documentation](https://github.com/muellerberndt/cadence/blob/v0.86.0/docs/README.md)
+[released documentation](https://github.com/muellerberndt/cadence/blob/v0.87.0/docs/README.md)
 describes the APIs in that package:
 
 ```sh
-python -m pip install cadence-net==0.86.0
+python -m pip install cadence-net==0.87.0
 ```
 
 ```python
@@ -176,6 +176,10 @@ or, opt-in, on a code the brain learns while it lives (`learned_code=units`,
 [the learned code](https://github.com/muellerberndt/cadence/blob/main/docs/senses.md#the-learned-code)),
 both described under *Code* in the glossary. `evolve` mutates and selects genomes across lives
 ([evolution](https://github.com/muellerberndt/cadence/blob/main/docs/anatomy.md#evolve-a-brain)).
+The opt-in `Brain.compose(..., learned_code=units, attention=True)` recipe uses that learned
+code as a two-moment Recall address and holds one selected memory read through the shared
+settle. It remains single-headed and does not revise the query during that settle
+([memory guide](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md#single-head-learned-code-attention-opt-in)).
 
 ### Where the learning signal comes from
 
