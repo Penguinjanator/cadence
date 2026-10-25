@@ -14,6 +14,12 @@
   uniform random 3%) or combined into one action (one head 59 to 76%, uniform random 10%); the
   one-action answer reaches 96 to 98% on value pairs never taught, the reporting slots 77 to
   98%. Bounded component evidence; the receipt is recomputed by the regression suite.
+- Read multi-head attention on the Stone Age sequence instrument (five founders; visible,
+  alternating, consecutive and invisible chains; teacher, graded and reward arms). Episodic
+  memory with two heads beat the default brain on most arms, mostly through the episodic
+  memory; two heads did not beat one head, or episodic memory alone, consistently. Under
+  reward alone the heads' addresses do not learn at the founder `recall_address_reward=0`.
+  The option therefore stays opt-in and the defaults are unchanged.
 - Make the memory guide start from common user needs before the full reference. Clarify
   the difference between episodic voting and learned-code Recall, show that both can be used
   together, update the contextual-choice evidence, and state the single held-read boundary in

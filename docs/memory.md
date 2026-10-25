@@ -392,12 +392,17 @@ attends most to a different fact; one head that learns its address the same way 
 24% of the taught pairs, uniform random 3%. Combined into one action (go to the food unless the predator stands at an odd position,
 then to the position five steps from it; ten positions), two heads answer every taught pair
 and 96 to 98% of the food and predator pairs they were never taught; one head answers 59 to
-76% of the taught pairs, uniform random 10%. The two reporting slots answer 77 to 98% of the pairs never taught:
-on a combination the shared association never met, a slot can give the other asked value.
+76% of the taught pairs, uniform random 10%. The two reporting slots answer 77 to 98% of the pairs never taught;
+every wrong slot on those pairs gave the other asked value, a binding the shared association
+never met.
 The [receipt](../benchmarks/attention/results/held-heads.json) is recomputed by the
 regression suite. This is component evidence for reading several facts in one settle; a
 decision in which one fact matters only together with another is not covered, and nothing here
 is a continuing-world result.
+
+The heads' addresses learn from teaching steps; reward trains them only at
+`recall_address_reward` above zero. In a life of rewards alone, with the founder 0, every head
+keeps reading what head 0 reads.
 
 Use several heads when one answer needs several witnessed facts at once, and compare them with
 one head and with the facts asked one per moment (one head reads one fact per moment through

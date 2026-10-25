@@ -17,7 +17,8 @@ orders of some value pairs never taught. Its four-founder
 The heads attend different records on every trial, with no refusal. One head learns its
 address at the same settings. Lessons switch to the brain's wrong rows once its running share
 of wrong answers falls below 0.02 (lesson 176 to 415). Misses of the reporting slots on
-untaught pairs give the other asked value; a single action generalizes. The result is
+untaught pairs all give the other asked value (`other_asked_value` equals `wrong_slots`); a
+single action generalizes. The result is
 recomputed by `test_held_heads.py`.
 
 ```sh
