@@ -411,6 +411,17 @@ class Recall:
     rate ``min(address, 1 / |z|^2)``: at ``address_reward=1`` a unit of dopamine moves the
     map by one lesson's step, and ``address=0`` leaves the map as it is under reward too.
 
+    With ``heads`` H above 1 (a construction setting) the memory reads its one bank through
+    H heads. Head h has a read port of its own, the regions ``recall_h`` and ``next_h``
+    (``recall`` and ``next`` for head 0), wired one way into the association as the first,
+    and an address map of its own, ``q_h = heard * x + x W_x^h + c W_c^h + b^h``, starting
+    at zero: the heads differ at birth only in their ports' synapses, and no head is
+    assigned what to read. Each head weighs the slots with its own address, and its port
+    holds its own mixture through the settle. The address lesson steps each head's map
+    through that head's own synapses, and reward eligibility (``contrast_rows``) keeps one
+    block of columns per head. One bank is written per moment, whatever the heads. With the
+    address map frozen (``address=0``) every head reads what head 0 reads.
+
     The settings of 0.84.3 that this version removed (``RETIRED``, and ``recency=None``) are
     refused with a message naming that release; a checkpoint of 0.84.3 carries the keys its
     format always wrote for three of them, which load at their one value (``FORMAT``).
@@ -431,6 +442,7 @@ class Recall:
     address_reward: float = 0.0
     window: int = 1
     window_decay: float = 1.0
+    heads: int = 1
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
     # the width of the observations the memory is given, when it is not the source range's: a
@@ -453,8 +465,8 @@ class Recall:
     # options beside the founder memory: a memory describes and saves an option only where it
     # differs from its founder, and a saved memory without one takes its founder; each is
     # runtime except the window, which shapes the memory
-    OPTIONS = ("address_step", "null", "address_reward", "window", "window_decay")
-    CONSTRUCTION_OPTIONS = ("window", "window_decay")
+    OPTIONS = ("address_step", "null", "address_reward", "window", "window_decay", "heads")
+    CONSTRUCTION_OPTIONS = ("window", "window_decay", "heads")
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
     RETIRED = ("write", "key", "episodes", "value", "context", "context_decay")
     # the keys the checkpoint format of 0.84.3 (``cadence-generic/8`` and ``/9``) always wrote
@@ -535,7 +547,24 @@ class Recall:
             if not 0 < number <= 1:
                 raise ValueError("window_decay must lie in (0, 1]")
             return number
+        if name == "heads":
+            if (
+                isinstance(value, (bool, np.bool_))
+                or not isinstance(value, (int, np.integer))
+                or value < 1
+            ):
+                raise ValueError("heads must be an integer of at least 1")
+            return int(value)
         raise TypeError(f"unknown recall setting: {name!r}")
+
+    @staticmethod
+    def ports(heads: int, next: bool = True) -> tuple[tuple[str, ...], ...]:
+        """The regions of each head's read port: ``("recall", "next")`` for head 0 and
+        ``("recall_h", "next_h")`` for head h (without ``next``, the recall region alone)."""
+        names = ("recall", "next") if next else ("recall",)
+        return tuple(
+            names if h == 0 else tuple(f"{name}_{h}" for name in names) for h in range(heads)
+        )
 
     @staticmethod
     def null_logit(null: float | None, temperature: float) -> float | None:
@@ -553,7 +582,12 @@ class Recall:
             setattr(self, name, self.setting(name, getattr(self, name)))
         self.null_logit(self.null, self.temperature)
         populations = self.connectome.populations
-        regions = (self.source, "association", self.target, *(("next",) if self.next else ()))
+        if self.target != "recall" and self.heads > 1:
+            raise ValueError("a recall memory of several heads reads into the recall regions")
+        regions = (
+            self.source, "association", self.target, *(("next",) if self.next else ()),
+            *(name for port in self.ports(self.heads, self.next)[1:] for name in port),
+        )
         for name in regions:
             if name not in populations:
                 raise ValueError(f"a recall memory needs a population named {name!r}")
@@ -589,8 +623,38 @@ class Recall:
         self._association_columns = columns(self.association)
         self._recall_synapses = self._synapses(self.recall_neurons)
         self._next_synapses = self._synapses(self.next_neurons)
+        # every head's port: its recall and next neurons, their columns and their synapses into
+        # the association; head 0's are the ones above
+        self._heads: list[tuple[np.ndarray, np.ndarray]] = [
+            (self.recall_neurons, self.next_neurons)
+        ]
+        for port in self.ports(self.heads, self.next)[1:]:
+            recall = np.asarray(populations[port[0]], dtype=np.int64)
+            following = (
+                np.asarray(populations[port[1]], dtype=np.int64)
+                if self.next else np.zeros(0, np.int64)
+            )
+            if len(recall) != self.value_width or (
+                self.next and len(following) != self.value_width
+            ):
+                raise ValueError(
+                    f"each head's recall and next regions need one neuron per value coordinate "
+                    f"({self.value_width})"
+                )
+            self._heads.append((recall, following))
+        self._head_columns = [(columns(r), columns(n)) for r, n in self._heads]
+        self._head_synapses = [(self._synapses(r), self._synapses(n)) for r, n in self._heads]
+        # the address maps of heads 1 and up, each ``(w_x, w_c, b)``; head 0's is ``w_x``,
+        # ``w_c`` and ``b``
+        self.head_maps: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = [
+            (np.zeros_like(self.w_x), np.zeros_like(self.w_c), np.zeros_like(self.b))
+            for _ in range(self.heads - 1)
+        ]
         self.last: _Moment | None = None
         self._attended: np.ndarray | None = None  # the attention of the latest read
+        # every head's address and attention of the latest read (head 0's are ``last.address``
+        # and ``attended``)
+        self._head_reads: tuple[tuple[np.ndarray, ...], tuple[np.ndarray | None, ...]] | None = None
         self._private = False  # an imagined branch reads the slots and writes none
         self.reset(0)
 
@@ -598,8 +662,9 @@ class Recall:
 
     @property
     def neurons(self) -> int:
-        """The neurons the memory drives: the recall region, and the next region with ``next``."""
-        return int(len(self.recall_neurons) + len(self.next_neurons))
+        """The neurons the memory drives: every head's recall region, and next region with
+        ``next``."""
+        return int(sum(len(r) + len(n) for r, n in self._heads))
 
     @property
     def streams(self) -> int:
@@ -621,6 +686,28 @@ class Recall:
         None before a read, when the read found no slots, and once the streams changed."""
         return self._attended
 
+    @property
+    def attended_heads(self) -> tuple[np.ndarray | None, ...] | None:
+        """Every head's attention of the latest read, head 0's first (``attended``); None
+        when ``attended`` is."""
+        if self._attended is None or self._head_reads is None:
+            return None if self._attended is None else (self._attended,)
+        return self._head_reads[1]
+
+    def head_map(self, head: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Head ``head``'s address map ``(w_x, w_c, b)``."""
+        if not 0 <= head < self.heads:
+            raise ValueError(f"head must lie in [0, {self.heads})")
+        return (self.w_x, self.w_c, self.b) if head == 0 else self.head_maps[head - 1]
+
+    def _set_map(self, head: int, w_x: np.ndarray, w_c: np.ndarray, b: np.ndarray) -> None:
+        if head == 0:
+            self.w_x, self.w_c, self.b = w_x, w_c, b
+        else:
+            self.head_maps = [
+                (w_x, w_c, b) if h == head - 1 else maps for h, maps in enumerate(self.head_maps)
+            ]
+
     def _empty(self, batch: int) -> None:
         self.keys = np.zeros((batch, 0, self.address_width))
         self.values = np.zeros((batch, 0, self.value_width))
@@ -633,6 +720,7 @@ class Recall:
         self.past = np.zeros((0, self.window - 1, self.key_width))
         self.last = None
         self._attended = None
+        self._head_reads = None
 
     def reset(self, batch: int, rows: np.ndarray | None = None) -> None:
         """Empty every stream, or the streams of ``rows`` only (streams that begin again): their
@@ -666,6 +754,7 @@ class Recall:
         self.ended = self.ended & keep
         self.last = None
         self._attended = None
+        self._head_reads = None
 
     def _fresh(self, keep: np.ndarray) -> None:
         """The moment before begins afresh for the streams ``keep`` does not mark: the cortex
@@ -696,6 +785,7 @@ class Recall:
         self._fresh(~chosen)
         self.last = None
         self._attended = None
+        self._head_reads = None
 
     def keep(self, rows: np.ndarray) -> None:
         """Keep the memories of ``rows`` only (streams that ended are dropped)."""
@@ -709,6 +799,7 @@ class Recall:
         self.ended = self.ended[rows]
         self.last = None
         self._attended = None
+        self._head_reads = None
 
     def snapshot(self) -> dict[str, Any]:
         """The per-stream state, to restore after a refused operation; every write replaces
@@ -724,20 +815,25 @@ class Recall:
             setattr(self, name, value)
         self.last = None
         self._attended = None
+        self._head_reads = None
 
-    def reading(self) -> tuple[_Moment | None, np.ndarray | None]:
+    def reading(self) -> tuple[Any, ...]:
         """The latest read as ``witness``, ``learn`` and ``contrast_rows`` take it: the moment
         it addressed (``last``, None once the moment is written) and the attention it gave the
         slots (``attended``). ``restore``, ``end`` and ``reset`` address the next moment
-        afresh; a read taken on the state they leave is held through them with ``hold``."""
+        afresh; a read taken on the state they leave is held through them with ``hold``. With
+        several heads every head's address and attention follow."""
+        if self.heads > 1:
+            return self.last, self._attended, self._head_reads
         return self.last, self._attended
 
-    def hold(self, reading: tuple[_Moment | None, np.ndarray | None]) -> None:
+    def hold(self, reading: tuple[Any, ...]) -> None:
         """Hold a ``reading`` as the latest read: one taken on the state the streams are in.
         A forecast at an episode's end reads the streams as the end leaves them before the
         end is committed; once it is, that read is the moment's, so the act it decides keeps
         the read's eligibility and ``attended`` describes it."""
-        self.last, self._attended = reading
+        self.last, self._attended = reading[0], reading[1]
+        self._head_reads = reading[2] if len(reading) > 2 else None
 
     # -- the memory contract (``cadence.memories``)
 
@@ -768,6 +864,8 @@ class Recall:
             out["ended"] = self.ended
         if self.window > 1:
             out["past"] = self.past
+        for h, (w_x, w_c, b) in enumerate(self.head_maps, start=1):
+            out.update({f"w_x_{h}": w_x, f"w_c_{h}": w_c, f"b_{h}": b})
         return out
 
     def imagined(self) -> Recall:
@@ -778,6 +876,7 @@ class Recall:
         branch.past = self.past.copy()
         branch.last = None
         branch._attended = None
+        branch._head_reads = None
         branch._private = True
         return branch
 
@@ -855,21 +954,46 @@ class Recall:
         ``amplitude * sum_i p_i V_i`` on the recall region and, with ``next``,
         ``amplitude * sum_i p_i N_i`` on the next region. ``observations`` are ``(batch,
         inputs)``. Streams without slots, or of another batch, read silence. The moment is
-        kept for its write and its lesson, and the attention the read used as ``attended``."""
+        kept for its write and its lesson, and the attention the read used as ``attended``.
+        With several heads each head reads the slots with its own address into its own port."""
         moment = self._moment(self._port(observations))
         self.last = moment
         out = np.array(drive, dtype=float)
-        p = self.weights(moment.address)
-        if p is not None:
-            p.flags.writeable = False
-        self._attended = p  # the attention this read uses, kept past the moment's write
-        if p is not None:
-            out[:, self._recall_columns] = self.amplitude * np.einsum("bm,bmc->bc", p, self.values)
-            if self.next:
-                out[:, self._next_columns] = self.amplitude * np.einsum(
-                    "bm,bmc->bc", p, self.nexts
-                )
+        addresses = [moment.address] + [
+            self._address(moment, h) for h in range(1, self.heads)
+        ]
+        attended: list[np.ndarray | None] = []
+        for h, address in enumerate(addresses):
+            p = self.weights(address)
+            if p is not None:
+                p.flags.writeable = False
+            attended.append(p)
+            if p is not None:
+                recall_columns, next_columns = self._head_columns[h]
+                out[:, recall_columns] = self.amplitude * np.einsum("bm,bmc->bc", p, self.values)
+                if self.next:
+                    out[:, next_columns] = self.amplitude * np.einsum(
+                        "bm,bmc->bc", p, self.nexts
+                    )
+        self._attended = attended[0]  # the attention this read uses, kept past the write
+        self._head_reads = (tuple(addresses), tuple(attended)) if self.heads > 1 else None
         return out
+
+    def _address(self, moment: _Moment, head: int) -> np.ndarray:
+        """Head ``head``'s address of a moment: its key and head 0's inputs through the head's
+        own map."""
+        if head == 0:
+            return moment.address
+        w_x, w_c, b = self.head_maps[head - 1]
+        return np.asarray(moment.key + moment.event @ w_x + moment.cortex @ w_c + b)
+
+    def _head_address(self, moment: _Moment, head: int) -> np.ndarray:
+        """Head ``head``'s address of the moment the latest read addressed: the one it read
+        with (kept by ``stimulate``), or computed from its map."""
+        reads = self._head_reads
+        if head and reads is not None and len(reads[0]) == self.heads:
+            return reads[0][head]
+        return self._address(moment, head)
 
     # -- the write after the settle
 
@@ -964,12 +1088,16 @@ class Recall:
         synapses = np.flatnonzero((local_source[pre] >= 0) & (local_cortex[post] >= 0))
         return synapses, local_source[pre[synapses]], local_cortex[post[synapses]]
 
-    def readback(self, graph: NeuralGraph, region: str, movement: np.ndarray) -> np.ndarray:
+    def readback(
+        self, graph: NeuralGraph, region: str, movement: np.ndarray, head: int = 0
+    ) -> np.ndarray:
         """``movement @ W.T`` for the one-way synapses of the ``"recall"`` or ``"next"``
-        region into the association region: per source neuron, the sum over its synapses of
-        effective weight times the movement of its association neuron."""
-        synapses, rows, cols = self._recall_synapses if region == "recall" else self._next_synapses
-        width = len(self.recall_neurons) if region == "recall" else len(self.next_neurons)
+        region of head ``head``'s port into the association region: per source neuron, the
+        sum over its synapses of effective weight times the movement of its association
+        neuron."""
+        recall_synapses, next_synapses = self._head_synapses[head]
+        synapses, rows, cols = recall_synapses if region == "recall" else next_synapses
+        width = len(self._heads[head][0 if region == "recall" else 1])
         w = np.zeros((width, len(self.association)))
         np.add.at(w, (rows, cols), graph._gain_pre[synapses] * graph.efficacy[synapses])
         return np.asarray(movement @ w.T)
@@ -1005,12 +1133,31 @@ class Recall:
             learned.free.activation if learned.opposite is None else learned.opposite.activation
         )
         movement = (plus - minus)[:, self.association]
-        d_value = self.readback(graph, "recall", movement)
-        d_next = self.readback(graph, "next", movement) if self.next else None
-        return self._step(moment, rows, d_value, d_next)
+        reports = []
+        for h in range(self.heads):
+            d_value = self.readback(graph, "recall", movement, h)
+            d_next = self.readback(graph, "next", movement, h) if self.next else None
+            if h == 0:  # head 0 steps ``w_x``, ``w_c`` and ``b`` as a memory of one head does
+                reports.append(self._step(moment, rows, d_value, d_next))
+                continue
+            head_moment = moment._replace(address=self._head_address(moment, h))
+            reports.append(self._step(head_moment, rows, d_value, d_next, head=h))
+        if len(reports) == 1:
+            return reports[0]
+        # every head's rows and refusals, and the heads' mean error
+        return {
+            "address_rows": float(sum(r["address_rows"] for r in reports)),
+            "address_error": float(np.mean([r["address_error"] for r in reports])),
+            "address_refused": float(sum(r["address_refused"] for r in reports)),
+        }
 
     def _step(
-        self, moment: _Moment, rows: np.ndarray, d_value: np.ndarray, d_next: np.ndarray | None
+        self,
+        moment: _Moment,
+        rows: np.ndarray,
+        d_value: np.ndarray,
+        d_next: np.ndarray | None,
+        head: int = 0,
     ) -> dict[str, float]:
         """The least-mean-squares step of the address map toward the keys of the slots the
         scores name, on each row's inputs ``z = [x, c, 1]``. A row's rate is ``address``
@@ -1024,7 +1171,8 @@ class Recall:
         the step is kept; one that is not finite refuses the step, the map stays as it was
         and the report counts the refused rows. With ``address_step="toward"`` each row's
         error, the one ``address_error`` reports, is its target less the keys' mixture its
-        address attended to."""
+        address attended to. ``head`` names the map that steps (``moment.address`` is that
+        head's address)."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         found = self._row_steps(moment, rows, d_value, d_next)
         if found is None:
@@ -1032,18 +1180,19 @@ class Recall:
         _, x, c, key, error, step = found
         n = len(x)
         rate = self.address
+        old_x, old_c, old_b = self.head_map(head)
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             w_x = rate * x.T @ step
             w_x /= n
-            w_x += self.w_x
+            w_x += old_x
             w_c = rate * c.T @ step
             w_c /= n
-            w_c += self.w_c
-            b = self.b + rate * step.mean(axis=0)
+            w_c += old_c
+            b = old_b + rate * step.mean(axis=0)
             address = key + x @ w_x + c @ w_c + b
         if not all(np.isfinite(a).all() for a in (w_x, w_c, b, address)):
             return {**quiet, "address_refused": float(n)}
-        self.w_x, self.w_c, self.b = w_x, w_c, b
+        self._set_map(head, w_x, w_c, b)
         return {
             "address_rows": float(n),
             "address_error": float(np.abs(error).mean()),
@@ -1112,7 +1261,8 @@ class Recall:
         self, graph: NeuralGraph, plus: BrainState, minus: BrainState
     ) -> np.ndarray | None:
         """The address map's eligibility from a sampled act, one ``(inputs + association + 1,
-        inputs)`` array per row (the rows of ``w_x``, ``w_c`` and ``b`` in that order), or
+        address)`` array per row (the rows of ``w_x``, ``w_c`` and ``b`` in that order; with
+        several heads one block of ``address`` columns per head, head 0's first), or
         None at ``address_reward=0``: the step the address lesson would take at each row,
         were the act's action a lesson's label, before the average over rows. The
         association's movement between the act's two nudged phases, ``plus`` less ``minus``,
@@ -1124,49 +1274,65 @@ class Recall:
         if not self.address_reward:
             return None
         movement = self.activity(plus) - self.activity(minus)
-        batch, width = len(movement), self.key_width
-        out = np.zeros((batch, width + len(self.association) + 1, self.address_width))
+        batch, width, columns_ = len(movement), self.key_width, self.address_width
+        out = np.zeros((batch, width + len(self.association) + 1, self.heads * columns_))
         moment = self.last
         if moment is None or not self.slots or self.streams != batch or len(moment.key) != batch:
             return out
-        d_value = self.readback(graph, "recall", movement)
-        d_next = self.readback(graph, "next", movement) if self.next else None
-        found = self._row_steps(moment, np.arange(batch), d_value, d_next)
-        if found is None:
-            return out
-        moving, x, c, _, _, step = found
-        z = np.concatenate([x, c, np.ones((len(x), 1))], axis=1)
-        with np.errstate(over="ignore", invalid="ignore"):
-            rows = self.address * np.einsum("bi,bk->bik", z, step)
-        kept = np.isfinite(rows).all(axis=(1, 2))
-        out[np.flatnonzero(moving)[kept]] = rows[kept]
+        for h in range(self.heads):
+            d_value = self.readback(graph, "recall", movement, h)
+            d_next = self.readback(graph, "next", movement, h) if self.next else None
+            head_moment = moment._replace(address=self._head_address(moment, h))
+            found = self._row_steps(head_moment, np.arange(batch), d_value, d_next)
+            if found is None:
+                continue
+            moving, x, c, _, _, step = found
+            z = np.concatenate([x, c, np.ones((len(x), 1))], axis=1)
+            with np.errstate(over="ignore", invalid="ignore"):
+                rows = self.address * np.einsum("bi,bk->bik", z, step)
+            kept = np.isfinite(rows).all(axis=(1, 2))
+            out[np.flatnonzero(moving)[kept], :, h * columns_:(h + 1) * columns_] = rows[kept]
         return out
 
-    def propose(
-        self, step: np.ndarray
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, float] | None:
+    def propose(self, step: np.ndarray) -> tuple[Any, Any, Any, float] | None:
         """The address map after a reward's step, not installed: ``step`` is the rows'
         eligibility weighted by the dopamine and averaged (``contrast_rows``' shape), taken at
-        ``address_reward``. Returns ``w_x``, ``w_c``, ``b`` and the norm of the step, or None
+        ``address_reward``. Returns ``w_x``, ``w_c``, ``b`` and the norm of the step (with
+        several heads, each of the three a tuple of every head's, head 0's first), or None
         at ``address_reward=0``, which takes none; a step whose map is not finite is refused
         (``ValueError``)."""
         if not self.address_reward:
             return None
         step = np.asarray(step, dtype=float)
-        width = self.key_width
-        shape = (width + len(self.association) + 1, self.address_width)
+        width, columns_ = self.key_width, self.address_width
+        shape = (width + len(self.association) + 1, self.heads * columns_)
         if step.shape != shape:
             raise ValueError(f"an address map's step is a {shape} array")
         with np.errstate(over="ignore", invalid="ignore"):
             moved = self.address_reward * step
-            w_x, w_c, b = self.w_x + moved[:width], self.w_c + moved[width:-1], self.b + moved[-1]
-        if not all(np.isfinite(a).all() for a in (moved, w_x, w_c, b)):
+            maps = []
+            for h in range(self.heads):
+                block = moved[:, h * columns_:(h + 1) * columns_]
+                w_x, w_c, b = self.head_map(h)
+                maps.append((w_x + block[:width], w_c + block[width:-1], b + block[-1]))
+        if not np.isfinite(moved).all() or not all(
+            np.isfinite(a).all() for head in maps for a in head
+        ):
             raise ValueError("the address map's reward step must be finite")
-        return w_x, w_c, b, float(np.linalg.norm(moved))
+        norm = float(np.linalg.norm(moved))
+        if self.heads == 1:
+            return maps[0][0], maps[0][1], maps[0][2], norm
+        return (
+            tuple(m[0] for m in maps), tuple(m[1] for m in maps), tuple(m[2] for m in maps), norm
+        )
 
-    def accept(self, proposal: tuple[np.ndarray, np.ndarray, np.ndarray, float]) -> None:
+    def accept(self, proposal: tuple[Any, Any, Any, float]) -> None:
         """Install a step ``propose`` made."""
-        self.w_x, self.w_c, self.b = proposal[0], proposal[1], proposal[2]
+        if self.heads == 1:
+            self.w_x, self.w_c, self.b = proposal[0], proposal[1], proposal[2]
+            return
+        for h in range(self.heads):
+            self._set_map(h, proposal[0][h], proposal[1][h], proposal[2][h])
 
     def to_dict(self) -> dict[str, Any]:
         """The memory's settings and counts: the founders, the ports, and each option where it

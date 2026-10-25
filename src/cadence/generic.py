@@ -985,7 +985,8 @@ def _validate_recall_state(
     # the window's k events in order
     window = settings.get("window", 1)
     address = window * key
-    regions = ("recall", "next") if settings["next"] else ("recall",)
+    heads = settings.get("heads", 1)
+    regions = tuple(name for port in Recall.ports(heads, settings["next"]) for name in port)
     if (
         any(len(populations.get(name, ())) != value for name in regions)
         or recalled["neurons"] != value * len(regions)
@@ -1023,14 +1024,16 @@ def _validate_recall_state(
     history = data.get("recall/history")
     if history is not None:
         array("history", (0 if not len(history) else batch, key))
-    array("w_x", (key, address))
-    array("w_c", (association, address))
-    array("b", (address,))
+    maps = {"w_x": (key, address), "w_c": (association, address), "b": (address,)}
+    for h in range(1, heads):  # every further head's address map
+        maps.update({f"{name}_{h}": shape for name, shape in list(maps.items())[:3]})
+    for name, shape in maps.items():
+        array(name, shape)
     if window > 1:  # the window's previous events per stream: a window of another length
         past = data.get("recall/past")  # is refused by the shape
         array("past", (0 if past is None or not len(past) else batch, window - 1, key))
     # the actor's eligibility of the address map, and the contrast of a pending action
-    eligibility = (batch, key + association + 1, address)
+    eligibility = (batch, key + association + 1, heads * address)
     if "recall/trace" in data:
         array("trace", eligibility)
     if "recall/pending" in data:
@@ -1040,7 +1043,7 @@ def _validate_recall_state(
     # the streams whose latest slot closed an episode, saved while one does
     if "recall/ended" in data and array("ended", (batch,)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: ended")
-    expected = {"keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b"}
+    expected = {"keys", "values", "nexts", "held", "previous", *maps}
     if history is not None:
         expected |= {"history"}
     if window > 1:
@@ -1411,6 +1414,14 @@ def _layout(
             projections.append(
                 Projection(name, "association", scale=recall_scale, reciprocal=False)
             )
+        # every further head's read port, wired as the first and appended last: the brain of
+        # H heads is the brain of H - 1 heads plus one port and its projections
+        for port in Recall.ports(recalled.get("heads", 1), recalled["next"])[1:]:
+            for name in port:
+                regions.append(Region(name, code_width))
+                projections.append(
+                    Projection(name, "association", scale=recall_scale, reciprocal=False)
+                )
     genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
     return genome, {
         "inputs": inputs,
@@ -1744,11 +1755,12 @@ class Brain:
         # without ``recall=True`` are ordinary ones: an instrument may name and drive its own.
         self.recall: Recall | None = None
         if recalled:
-            for name in ("recall", "next") if recalled["next"] else ("recall",):
-                if name not in populations:
-                    raise ValueError(
-                        f"recall=True needs a {name!r} population; Brain.compose adds it"
-                    )
+            for port in Recall.ports(recalled.get("heads", 1), recalled["next"]):
+                for name in port:
+                    if name not in populations:
+                        raise ValueError(
+                            f"recall=True needs a {name!r} population; Brain.compose adds it"
+                        )
             # a memory on a code of the observation is given the code, not the observation;
             # with a coded cortex the sensory range is the code
             coded_memory = (self.sparse_code is not None and not self.coded_cortex) or bool(
@@ -2316,9 +2328,12 @@ class Brain:
             options.setdefault("recall", True)
             options.setdefault("recall_window", 2)
             options.setdefault("recall_next", True)
-            options.setdefault("recall_address", 0.0)
+            # one head reads with its key alone; several heads learn their addresses, at a
+            # temperature at which the address lesson does not lock onto a first selection
+            single = options.get("recall_heads", 1) == 1
+            options.setdefault("recall_address", 0.0 if single else 0.01)
             options.setdefault("recall_recency", 0.0)
-            options.setdefault("recall_temperature", 0.1)
+            options.setdefault("recall_temperature", 0.1 if single else 0.25)
 
         genome, layout = _layout(
             inputs, actions, options, modules=modules, observers=observers, lateral=lateral,
@@ -4091,7 +4106,10 @@ class Brain:
                 else 0
             )
             + (0 if self.context_memory is None else self.context_memory.consolidated.size)
-            + (0 if recall is None else recall.w_x.size + recall.w_c.size + recall.b.size)
+            + (
+                0 if recall is None
+                else sum(sum(a.size for a in recall.head_map(h)) for h in range(recall.heads))
+            )
             + (0 if self.learned_code is None else self.learned_code.parameters())
         )
 
@@ -4399,6 +4417,10 @@ class Brain:
                 assert recall is not None  # validated above: the populations are there
                 for name in ("keys", "values", "nexts", "previous", "w_x", "w_c", "b"):
                     setattr(recall, name, data["recall/" + name].astype(float))
+                recall.head_maps = [  # validated above: one map per further head
+                    tuple(data[f"recall/{name}_{h}"].astype(float) for name in ("w_x", "w_c", "b"))
+                    for h in range(1, recall.heads)
+                ]
                 recall.held = data["recall/held"].astype(bool)
                 recall.ended = (
                     data["recall/ended"].astype(bool)
