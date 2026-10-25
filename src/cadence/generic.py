@@ -418,9 +418,11 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
         # provenance without a working_memory_scale was composed at the fixed scale 12
         value = {**value, "working_memory_scale": 12.0}
     if not isinstance(value, dict) or set(value) - {
-        "history_scale", "recall_scale", "image", "code", "learned_code"
+        "history_scale", "recall_scale", "image", "code", "learned_code", "attention"
     } != (expected | {"working_memory_scale"}):
         raise ValueError("invalid saved composition provenance")
+    if "attention" in value and value["attention"] is not True:
+        raise ValueError("invalid saved composition attention")
     for name in ("inputs", "actions", "seed"):
         number = value[name]
         if isinstance(number, bool) or not isinstance(number, int) or number < (name != "seed"):
@@ -481,6 +483,10 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
             or "code" in value
         ):
             raise ValueError("invalid saved composition learned_code")
+    if "attention" in value and (
+        "learned_code" not in value or "recall" not in populations or "next" not in populations
+    ):
+        raise ValueError("saved attention needs a learned code and recall/next populations")
     modules = _region_widths(populations, "module_") + [len(populations.get("association", ()))]
     observers = _region_widths(populations, "observer_")
     if (
@@ -1655,6 +1661,10 @@ class Brain:
             connectome, learning_neuron_model(dt=1.0), backend=backend, device=device
         )
         self._composition: dict[str, Any] | None = None  # construction provenance, not parameters
+        # ``attention`` is a compose-only recipe marker. Its behavior is fully represented by
+        # the learned-code and Recall settings, but the marker keeps the user's construction
+        # choice inspectable and round-trippable.
+        self.attention = False
         # The learned code's tables are the brain's synapses and biases: the dictionary from
         # the sensory neurons, the lateral weights among the code units and the predictor
         # from the prefrontal region, with the thresholds as the units' biases. The region
@@ -2110,6 +2120,7 @@ class Brain:
         field: int = 3,
         code: int | None = None,
         learned_code: int | None = None,
+        attention: bool = False,
         seed: int = 0,
         slots: int | Sequence[int] = 1,
         **options: Any,
@@ -2143,6 +2154,15 @@ class Brain:
         joined to the observation's own identity. ``learned_code_fields`` declares the
         observation's fields; every other part of the region is a constant of it; the
         founder ``learned_code=None`` builds the brain without the region.
+
+        ``attention=True`` is the opt-in single-head contextual-memory recipe for a learned
+        code. It requires ``learned_code=units`` and enables Recall with a two-moment ordered
+        key, successor values, no age preference and temperature 0.1. The resulting address
+        is selected from learned meaning codes before the neural settle and its recalled
+        value is held as a source through that same settle. Explicit ``recall_*`` settings
+        may tune the recipe, but its window must remain at least two and its successor read
+        must remain enabled. This option does not enable episodic action voting and does not
+        change the default brain.
 
         ``modules`` specifies a chain of reciprocally connected processing
         regions. The final region is the association cortex. ``observers``
@@ -2286,12 +2306,32 @@ class Brain:
         ``Genome``, ``Region`` and ``Projection`` give custom ports, sparsity and named wiring.
         """
 
+        if not isinstance(attention, bool):
+            raise ValueError("attention must be boolean")
+        if attention:
+            if not _learned_code_units(learned_code):
+                raise ValueError("attention=True needs learned_code=units")
+            if options.get("recall", True) is not True:
+                raise ValueError("attention=True needs recall enabled")
+            options.setdefault("recall", True)
+            options.setdefault("recall_window", 2)
+            options.setdefault("recall_next", True)
+            options.setdefault("recall_address", 0.0)
+            options.setdefault("recall_recency", 0.0)
+            options.setdefault("recall_temperature", 0.1)
+
         genome, layout = _layout(
             inputs, actions, options, modules=modules, observers=observers, lateral=lateral,
             scales=scales, features=features, field=field, code=code,
             learned_code=learned_code, seed=seed, slots=slots,
         )
         units, learned = layout["units"], layout["learned"]
+        if attention and (
+            layout["recalled"]["window"] < 2 or not layout["recalled"]["next"]
+        ):
+            raise ValueError(
+                "attention=True needs recall_window at least 2 and recall_next=True"
+            )
         if teaching is not None:
             if "learning" in options:
                 raise ValueError(
@@ -2337,6 +2377,7 @@ class Brain:
             inputs=layout["inputs"] if layout["coded_cortex"] else None,
             learned_code=learned or None, **options,
         )
+        result.attention = attention
         if custom:
             return result  # a custom anatomy records no composition
         result._composition = {
@@ -2360,6 +2401,8 @@ class Brain:
             result._composition["code"] = units
         if learned:
             result._composition["learned_code"] = learned
+        if attention:
+            result._composition["attention"] = True
         return result
 
     def retune(self, **genes: Any) -> Brain:
@@ -2399,6 +2442,7 @@ class Brain:
             *_EPISODIC_SETTINGS, "recall", *(f"recall_{name}" for name in Recall.CONSTRUCTION),
             *(f"recall_{name}" for name in Recall.CONSTRUCTION_OPTIONS), "code",
             "learned_code", *(f"learned_code_{name}" for name in LearnedCode.CONSTRUCTION),
+            "attention",
         }
         for name in options:
             refusal = rescaled(name)
@@ -2602,6 +2646,8 @@ class Brain:
         learned = self.learned_code
         if learned is not None:
             genes.update({f"learned_code_{name}": value for name, value in learned.genes().items()})
+        if self.attention:
+            genes["attention"] = True
         populations = self.connectome.populations
         result = {
             "layout": {
@@ -4085,6 +4131,8 @@ class Brain:
         }
         if self._composition is not None:
             metadata["composition"] = plain(self._composition)
+        if self.attention:
+            metadata["attention"] = True
         if self.arousal is not None:
             metadata["arousal"] = self.arousal.to_dict()
             lived = self._lived
@@ -4263,6 +4311,20 @@ class Brain:
             memory = _load_memory(meta["hippocampus"], data, neurons, keys=coded)
             heard = meta.get("history")
             recalled = meta.get("recall")
+            attention = meta.get("attention", False)
+            if not isinstance(attention, bool):
+                raise ValueError("invalid saved attention marker")
+            if attention and (
+                not learned
+                or recalled is None
+                or recalled.get("window", Recall.options()["window"]) < 2
+                or not recalled.get("next", Recall.founders()["next"])
+            ):
+                raise ValueError(
+                    "saved attention needs a learned code and contextual successor recall"
+                )
+            if composition is not None and attention != bool(composition.get("attention", False)):
+                raise ValueError("saved attention disagrees with composition provenance")
             result = cls(
                 learner.brain.connectome,
                 episodic=False,
@@ -4348,6 +4410,7 @@ class Brain:
                 recall.writes = int(recalled["writes"])
             result.learner = learner
             result._composition = composition
+            result.attention = attention
             agent = result.basal_ganglia
             agent.learner = learner
             for name in _REWARD_ARRAYS:

@@ -1,4 +1,23 @@
-# Coupled memory relevance: admission before integration
+# Memory relevance and attention
+
+## Public single-head contextual recipe (0.87.0)
+
+`Brain.compose(..., learned_code=units, attention=True)` now exposes the simplest positive
+result here: the existing held Recall reader with a two-moment ordered learned-code key,
+successor evidence, zero recency bias and a sharp read. The
+[contextual-choice assay](contextual_choice.py) keeps the final ASK observation identical,
+cold-clears other context routes and disables episodic memory. Its retained four-founder
+[receipt](results/contextual-choice-v0870.json) records 100% intact accuracy, 50%
+present-only and memory-off controls, relevant and irrelevant record erasures, explicit
+uniform-random comparison and zero refusals. The source-bound result is recomputed by
+`test_contextual_choice.py` in the regression suite.
+
+This establishes bounded, action-relevant selection by one learned-code head. It does not
+show an advantage from revising a query during its settle, a continuing-world advantage or
+useful multiple heads. The option is therefore not a default. The code width of eight is the
+assay's measured capacity and remains explicit in user compositions.
+
+## Coupled memory relevance: admission before integration
 
 The new [direct-route candidate](DIRECT_ROUTE.md) is the first single-head
 component here to pass acquisition and causal relevance together. It uses one
@@ -11,8 +30,9 @@ independent founders, lifecycle preservation and larger continuing worlds are
 still required. The negative experiments below remain controls and are not
 rewritten by this result.
 
-This is a **component experiment**, on branch `coupled-memory-attention` from
-v0.85.1. It does not change `Brain.compose` or the existing held-query reader.
+The coupled-query and direct-route mechanisms below are **component experiments**. They do
+not implement the supported `attention=True` option, which deliberately uses the simpler
+existing held-query reader described above.
 The original query selects both an event and its witnessed successor; these
 are not two attention heads. A benchmark-only [multi-head instrument](heads.py)
 now supplies independent live query/read ports over the same witnessed bank.

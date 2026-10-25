@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.87.0 — 2026-10-25
+
+- Add `Brain.compose(..., learned_code=units, attention=True)`, an opt-in single-head
+  contextual-memory recipe built from the existing learned code and Recall path. It resolves
+  to a two-moment ordered key, successor read, zero recency bias, frozen address map and 0.1
+  temperature; explicit `recall_*` genes may tune it while retaining a contextual window and
+  successor read. The selection is made before the neural settle and held through it. It does
+  not change the default brain, enable episodic action voting, revise its query during that
+  settle or add multiple heads. The construction marker is reported by `describe()` and
+  survives checkpoints.
+- Add the public contextual-choice regression benchmark. Across four founders its tested
+  8-unit learned code selects action-relevant evidence and reaches 100% on 32 identical-ASK
+  queries per founder, against 50% with present-only input, memory disabled or uniform random;
+  relevant-record erasure breaks the answer and irrelevant-record erasure preserves 100%,
+  with no refusals. This is bounded component evidence, not a continuing-world or default
+  claim; eight code units are the benchmark's measured capacity, not a new library default.
+
 ## 0.86.0 — 2026-10-24
 
 - Correct normalized learned-code input using the same effective weights as neural
