@@ -1845,7 +1845,7 @@ class Brain:
         # stream has sensed since; any operation that replaces that action's state ends it
         self._awaiting: tuple[BrainState, BrainState] | None = None
         # a terminal forecast's read of the recall memory, held once its end is committed
-        self._forecast_read: tuple[Any, Any] | None = None
+        self._forecast_read: tuple[Any, ...] | None = None
 
     @property
     def brain(self) -> NeuralGraph:

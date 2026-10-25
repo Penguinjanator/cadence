@@ -13,6 +13,7 @@ Most applications need only one of these choices:
 | A remembered action and its measured outcome in the same situation | Nothing extra. The associative store is already on. |
 | One-shot situations, demonstrations or reward replay | `memory_choice=True` |
 | A relevant recent event and what followed it | `learned_code=units, attention=True` |
+| Several witnessed facts in one answer | `learned_code=units, attention=True, recall_heads=k` |
 | Both episodic voting and contextual retrieval | Use `memory_choice=True` and `attention=True` together. |
 
 If the present observation already contains everything needed for the action, keep the
@@ -350,9 +351,59 @@ or disable either one.
 This is one held-read head. It selects once before the neural settle, then the shared
 equilibrium interprets the read. The current interpretation cannot revise the query while
 that settle forms. The benchmark therefore establishes a bounded contextual lookup, not
-within-settle relevance, multiple heads, a Stone Age advantage or a general continuing-world
-benefit. Keep it opt-in and compare it with attention off, episodic memory alone and uniform
-random on the task being claimed.
+within-settle relevance, a Stone Age advantage or a general continuing-world benefit. Keep it
+opt-in and compare it with attention off, episodic memory alone and uniform random on the task
+being claimed. Several facts in one answer take [several heads](#several-heads-opt-in).
+
+## Several heads (opt-in)
+
+One held read delivers one record cleanly, or a weighted mixture of several whose bindings the
+cortex has to untangle. `recall_heads=k` reads the same bank through k heads in one moment:
+
+```python
+heads_brain = Brain.compose(
+    inputs=12, actions=4, modules=(24,), learned_code=8, attention=True, recall_heads=2,
+    seed=0,
+)
+assert heads_brain.recall.heads == 2
+assert heads_brain.recall.ports(2) == (("recall", "next"), ("recall_1", "next_1"))
+assert heads_brain.recall.address == 0.01 and heads_brain.recall.temperature == 0.25
+heads_brain.act(np.eye(12)[[3]], greedy=True)
+heads_brain.act(np.eye(12)[[5]], greedy=True)
+assert len(heads_brain.recall.attended_heads) == 2
+```
+
+Each head is a copy of the held read: a read port of its own (the regions `recall_h` and
+`next_h`, wired into the association like the first) and an address map of its own, which
+starts at zero. The heads differ at birth only in their ports' synapses; nothing assigns a
+head what to read. The address lesson after a teaching step reads the association's movement
+back through each head's own synapses, so each head's map moves toward the records whose
+values would have helped through that head; reward eligibility at `recall_address_reward > 0`
+keeps one block per head. One bank is written per moment, and the heads read it before the
+settle and hold their reads through it, as one head does. With several heads the recipe
+learns the addresses (`recall_address=0.01`) at `recall_temperature=0.25`: at the single
+head's 0.1 the address lesson locks every head onto the record it reads first.
+
+In the [held-heads benchmark](../benchmarks/attention/held_heads.py) each trial witnesses
+four facts `role -> value` with values drawn fresh, and one question asks for two of them in
+one settle; both orders of some value pairs are never taught. Reported in two motor slots (six
+values), two heads answer every taught pair on four founders and attend different records on
+every trial; one head that learns its address the same way answers 21 to 24%, uniform random
+3%. Combined into one action (go to the food unless the predator stands at an odd position,
+then to the position five steps from it; ten positions), two heads answer every taught pair
+and 96 to 98% of the food and predator pairs they were never taught; one head answers 59 to
+76%, uniform random 10%. The two reporting slots answer 77 to 98% of the pairs never taught:
+on a combination the shared association never met, a slot can give the other asked value.
+The [receipt](../benchmarks/attention/results/held-heads.json) is recomputed by the
+regression suite. This is component evidence for reading several facts in one settle; a
+decision in which one fact matters only together with another is not covered, and nothing here
+is a continuing-world result.
+
+Use several heads when one answer needs several witnessed facts at once, and compare them with
+one head and with the facts asked one per moment (one head reads one fact per moment through
+the working trace). Long lesson curricula overfit the shared readout once the answers are
+right: switch to `learning_surprise=True` once the brain answers its lessons (or use `live`,
+whose arousal does it), as the benchmark does.
 
 ## Learned weights and eligibility
 
@@ -720,6 +771,7 @@ map.
 | `recall_null` | `None` | retune | A number adds a null slot; a non-finite logit is refused |
 | `recall_address_reward` | `0.0` | retune | Rate at which reward trains the address map |
 | `recall_window`, `recall_window_decay` | `1`, `1.0` | construction | Window of the last k events, decay in (0, 1] |
+| `recall_heads` | `1` | construction | Heads reading the one bank, each with its own port and address map ([several heads](#several-heads-opt-in)) |
 
 The [API reference](api.md#recall-memory-genes) gives the `Recall` class signature.
 
@@ -772,7 +824,8 @@ checkpoint of this version carries them.
 ### Recall cost
 
 The two regions add one neuron per value coordinate each: `compose(250, 2)` grows from 380 to
-880 neurons and from 20,354 to 52,354 synapses. The address map is `code` by `address_width`
+880 neurons and from 20,354 to 52,354 synapses. Each further head adds its two regions, their
+projections and one more address map. The address map is `code` by `address_width`
 plus the association width by `address_width`; with compose's 64 association neurons it is
 0.66 MB at 256 inputs, 1,322 MB at 12,824 inputs on the uncoded observation and 8.9 MB with
 `code=1024`. One stream's slots hold `capacity` keys, values and nexts, 0.39 MB at 256
@@ -783,7 +836,8 @@ changing the code makes the stored keys inconsistent with new addresses.
 
 `Brain(connectome, recall=True, ...)` needs a `recall` and a `next` region (or `recall` alone
 with `recall_next=False`), each with one neuron per value coordinate,
-`Genome.observation_width(inputs, code)`. Without `recall=True` populations of those names
+`Genome.observation_width(inputs, code)`, and with `recall_heads=k` the regions `recall_h`
+and `next_h` for h from 1 to k - 1 (`Recall.ports(k)` names them). Without `recall=True` populations of those names
 are ordinary ones.
 `tests/test_recall_memory.py` checks that the library reproduces the reference memory
 `benchmarks/binding/index_read.py` moment for moment. To check that the memory does the work,

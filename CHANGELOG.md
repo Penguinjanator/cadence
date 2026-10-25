@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- Add several held memory-read heads: `recall_heads=k` reads one Recall bank through k
+  copies of the held read, each with its own read port (`recall_h`, `next_h`) and its own
+  learned address map, stepped by the address lesson through that head's own synapses; reward
+  eligibility keeps one block per head and checkpoints keep every map. With
+  `attention=True` and `recall_heads` above one the recipe learns the addresses
+  (`recall_address=0.01`, `recall_temperature=0.25`). One head is the released memory.
+- Add the held-heads benchmark. On four founders two heads answer every taught pair when two
+  of four witnessed facts are asked in one settle, reported in two slots (one head 21 to 24%,
+  uniform random 3%) or combined into one action (one head 59 to 76%, uniform random 10%); the
+  one-action answer reaches 96 to 98% on value pairs never taught, the reporting slots 77 to
+  98%. Bounded component evidence; the receipt is recomputed by the regression suite.
 - Make the memory guide start from common user needs before the full reference. Clarify
   the difference between episodic voting and learned-code Recall, show that both can be used
   together, update the contextual-choice evidence, and state the single held-read boundary in
