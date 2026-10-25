@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Make the memory guide start from common user needs before the full reference. Clarify
+  the difference between episodic voting and learned-code Recall, show that both can be used
+  together, update the contextual-choice evidence, and state the single held-read boundary in
+  plain language. This changes documentation only, not memory behavior or defaults.
+
 ## 0.87.0 — 2026-10-25
 
 - Add `Brain.compose(..., learned_code=units, attention=True)`, an opt-in single-head

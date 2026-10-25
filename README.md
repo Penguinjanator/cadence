@@ -103,9 +103,11 @@ lower-level `step` loop, which works with or without `arousal=True`; its
 runs that loop through changed conditions and saved continuation.
 
 A teacher label changes graph parameters. The default associative memory
-ignores labels; the opt-in episodic memory (`memory_choice=True`) records them.
-[Memory](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md)
-lists every memory of the composed brain and which one suits which task.
+ignores labels. Add `memory_choice=True` when remembered demonstrations and outcomes should
+vote in the choice. Add `learned_code=units, attention=True` when the brain should retrieve a
+relevant recent context and its successor. The options can be used together.
+[Choose a memory](https://github.com/muellerberndt/cadence/blob/main/docs/memory.md#start-with-the-need)
+starts with these common cases before giving the complete reference.
 
 ```python
 phases = brain.imagine([observation, next_observation])

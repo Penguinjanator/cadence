@@ -25,7 +25,7 @@ is pinned to the release tag.
 | A creature in a body that lives, acts and learns | `Brain.compose(inputs, actions, arousal=True)`, `live`, `wait`, `reset`, `save`, `Brain.load` | [Start a continuing brain](start.md) |
 | To teach by demonstration | `lesson`, `step(teacher=)`, `teaching=` | [Teach by demonstration](teach.md) |
 | The world to pay for good acts | `step`, `act` and `learn`, delayed pay, chains | [Learning from reward](reward.md) |
-| The brain to remember | `brain.memories`, the episodic and recall memories | [Memory](memory.md) |
+| The brain to remember | Start with the default trace/store; add `memory_choice=True` for episodic voting or `learned_code=units, attention=True` for contextual retrieval | [Choose a memory](memory.md#start-with-the-need) |
 | Wide inputs: images, codes | image `inputs`, `code=units`, `learned_code=units` | [Wide inputs](senses.md) |
 | To read or change a living brain | `describe`, `retune`, `last_settlement`, the founders | [Tune and read](tune.md) |
 | To show a result | baselines, controls, `fit` as a control, receipts | [Evaluate a brain](evaluate.md) |

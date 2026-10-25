@@ -5,7 +5,9 @@ shape as `inputs` and the sensory region is a visual cortex ([image inputs](#ima
 Pass `code=units` and a fixed sparse code of the observation is what the cortex and the
 memories read ([the observation code](#the-observation-code)). Pass `learned_code=units`
 (opt-in) and a code region of the brain's own neurons learns that code while the brain lives
-([the learned code](#the-learned-code)).
+([the learned code](#the-learned-code)). Add `attention=True` when Recall should use an
+ordered pair of those learned codes to select a recent event and its successor
+([single-head attention](memory.md#single-head-learned-code-attention-opt-in)).
 
 ```python
 import numpy as np
