@@ -1,5 +1,30 @@
 # Memory relevance and attention
 
+## Several facts in one settle: held heads (`recall_heads`)
+
+`Brain.compose(..., learned_code=units, attention=True, recall_heads=k)` reads one witnessed
+bank through k copies of the held read, each with its own port and learned address. The
+[held-heads benchmark](held_heads.py) asks for two of four witnessed facts in one settle,
+reported in two slots (six values) or combined into one action (ten positions), with both
+orders of some value pairs never taught. Its four-founder
+[receipt](results/held-heads.json):
+
+| Task | Two heads, taught pairs | Two heads, untaught pairs | One head, taught pairs | Uniform random |
+| --- | --- | --- | --- | --- |
+| Report two facts | 1.00 on every founder | 0.79, 0.77, 0.98, 0.82 | 0.21 to 0.24 | 0.03 |
+| One action from two facts | 1.00 on every founder | 0.96, 0.96, 0.97, 0.98 | 0.59 to 0.76 | 0.10 |
+
+The heads attend different records on every trial, with no refusal. One head learns its
+address at the same settings. Lessons switch to the brain's wrong rows once its running share
+of wrong answers falls below 0.02 (lesson 176 to 415). Misses of the reporting slots on
+untaught pairs all give the other asked value (`other_asked_value` equals `wrong_slots`); a
+single action generalizes. The result is
+recomputed by `test_held_heads.py`.
+
+```sh
+PYTHONPATH=src python benchmarks/attention/held_heads.py --out /tmp/held-heads.json
+```
+
 ## Public single-head contextual recipe (0.87.0)
 
 `Brain.compose(..., learned_code=units, attention=True)` now exposes the simplest positive

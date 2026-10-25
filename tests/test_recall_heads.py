@@ -1,0 +1,197 @@
+"""Several held heads over one recall bank (``recall_heads``): ports, addresses, lessons,
+reward eligibility, checkpoints and the attention recipe."""
+
+from __future__ import annotations
+
+import numpy as np
+import pytest
+
+import cadence as cd
+
+STREAM = [np.eye(4)[[i]] for i in (2, 0, 3, 1)]
+
+
+def composed(seed=3, heads=2, **options):
+    """A small brain with the recall memory and ``heads`` heads learning their addresses."""
+    options.setdefault("recall_address", 0.01)
+    return cd.Brain.compose(
+        4, 2, modules=(8,), seed=seed, episodic=False, recall=True, recall_heads=heads, **options
+    )
+
+
+def witnessed(brain, moments=STREAM):
+    for x in moments:
+        brain.act(x, greedy=True)
+    return brain
+
+
+def synapse_rows(connectome):
+    return {
+        (int(p), int(q), int(c), float(s))
+        for p, q, c, s in zip(
+            np.asarray(connectome.pre), np.asarray(connectome.post),
+            np.asarray(connectome.count), np.asarray(connectome.sign), strict=True,
+        )
+    }
+
+
+def port_synapses(brain, name):
+    populations = brain.connectome.populations
+    pre = np.isin(np.asarray(brain.connectome.pre), populations[name])
+    post = np.isin(np.asarray(brain.connectome.post), populations["association"])
+    return np.flatnonzero(pre & post)
+
+
+def test_each_head_adds_one_port_and_keeps_the_brain_of_fewer_heads():
+    one, three = composed(heads=1), composed(heads=3)
+    populations = three.connectome.populations
+    for name in ("recall", "next", "recall_1", "next_1", "recall_2", "next_2"):
+        assert len(populations[name]) == len(populations["recall"])
+    assert three.recall.ports(3) == (
+        ("recall", "next"), ("recall_1", "next_1"), ("recall_2", "next_2")
+    )
+    # the further ports are appended last: the brain of one head is the first part of three's
+    assert synapse_rows(one.connectome) <= synapse_rows(three.connectome)
+    counts = {len(port_synapses(three, name)) for name in ("recall", "recall_1", "recall_2")}
+    assert len(counts) == 1
+    assert three.recall.neurons == 3 * one.recall.neurons
+    assert three.recall.to_dict()["heads"] == 3 and "heads" not in one.recall.to_dict()
+
+
+def test_heads_must_be_a_positive_integer_and_a_construction_setting():
+    for bad in (0, -1, 1.5, True):
+        with pytest.raises(ValueError, match="heads"):
+            composed(heads=bad)
+    brain = composed(heads=2)
+    with pytest.raises(ValueError, match="construction"):
+        brain.retune(recall_heads=3)
+    assert brain.describe()["genes"]["recall_heads"] == 2
+
+
+def test_the_attention_recipe_learns_addresses_with_several_heads():
+    one = cd.Brain.compose(4, 2, learned_code=4, attention=True, seed=1)
+    two = cd.Brain.compose(4, 2, learned_code=4, attention=True, recall_heads=2, seed=1)
+    assert (one.recall.heads, one.recall.address, one.recall.temperature) == (1, 0.0, 0.1)
+    assert (two.recall.heads, two.recall.address, two.recall.temperature) == (2, 0.01, 0.25)
+    chosen = cd.Brain.compose(
+        4, 2, learned_code=4, attention=True, recall_heads=2, recall_temperature=0.5,
+        recall_address=0.02, seed=1,
+    )
+    assert (chosen.recall.temperature, chosen.recall.address) == (0.5, 0.02)
+
+
+def test_heads_read_alike_until_their_addresses_differ():
+    brain = witnessed(composed(heads=2))
+    recall = brain.recall
+    drive = recall.stimulate(np.zeros((1, brain.connectome.n)), STREAM[0])
+    (r0, n0), (r1, n1) = recall._head_columns  # noqa: SLF001
+    np.testing.assert_allclose(drive[:, r0], drive[:, r1])
+    np.testing.assert_allclose(drive[:, n0], drive[:, n1])
+    first, second = recall.attended_heads
+    np.testing.assert_allclose(first, second)
+    head0 = drive[:, r0].copy()
+    # head 1's address pointed at the oldest slot's key reads that slot; head 0 reads as before
+    w_x, w_c, b = recall.head_map(1)
+    recall._set_map(1, w_x, w_c, b + 20.0 * recall.keys[0, 0])  # noqa: SLF001
+    drive = recall.stimulate(np.zeros((1, brain.connectome.n)), STREAM[0])
+    unchanged, second = recall.attended_heads
+    np.testing.assert_allclose(unchanged, first)
+    np.testing.assert_allclose(drive[:, r0], head0)
+    assert np.argmax(second[0]) == 0 and second[0, 0] > 0.99
+    np.testing.assert_allclose(drive[:, r1], recall.amplitude * recall.values[0, 0][None, :],
+                               atol=0.05 * recall.amplitude)
+    assert not np.allclose(drive[:, r0], drive[:, r1])
+
+
+def test_the_address_lesson_reads_each_head_back_through_its_own_synapses():
+    brain = witnessed(composed(heads=2, seed=4))
+    recall, graph = brain.recall, brain.learner.brain
+    movement = np.random.default_rng(0).normal(size=(1, len(recall.association)))
+    efficacy = np.asarray(graph.efficacy) * np.asarray(graph._gain_pre)  # noqa: SLF001
+    populations = brain.connectome.populations
+    local = {int(n): i for i, n in enumerate(populations["association"])}
+    readbacks = []
+    for h, (rname, nname) in enumerate(recall.ports(2)):
+        for region, name in (("recall", rname), ("next", nname)):
+            expected = np.zeros((1, len(populations[name])))
+            source = {int(n): i for i, n in enumerate(populations[name])}
+            for s in port_synapses(brain, name):
+                pre, post = int(brain.connectome.pre[s]), int(brain.connectome.post[s])
+                expected[0, source[pre]] += efficacy[s] * movement[0, local[post]]
+            got = recall.readback(graph, region, movement, h)
+            np.testing.assert_allclose(got, expected, atol=1e-12)
+            readbacks.append(got)
+    assert not np.allclose(readbacks[0], readbacks[2])  # the two heads' recall ports differ
+    before = [tuple(a.copy() for a in recall.head_map(h)) for h in range(2)]
+    report = brain.lesson(STREAM[2], np.array([1]))
+    assert report["address_rows"] == 2.0  # one row per head
+    for h in range(2):
+        assert any(
+            not np.array_equal(a, b) for a, b in zip(before[h], recall.head_map(h), strict=True)
+        )
+
+
+def test_heads_learn_different_maps_from_the_same_lesson():
+    brain = witnessed(composed(heads=2, seed=5))
+    for x, label in zip(STREAM * 3, [0, 1, 1, 0] * 3, strict=True):
+        brain.lesson(x, np.array([label]))
+        brain.act(x, greedy=True)
+    maps = [brain.recall.head_map(h) for h in range(2)]
+    assert any(np.abs(a).sum() > 0 for a in maps[1])
+    assert not all(np.allclose(a, b) for a, b in zip(maps[0], maps[1], strict=True))
+
+
+def test_a_saved_brain_of_several_heads_continues_the_same_life(tmp_path):
+    brain = witnessed(composed(heads=3, seed=6))
+    for x, label in zip(STREAM, [0, 1, 0, 1], strict=True):
+        brain.lesson(x, np.array([label]))
+        brain.act(x, greedy=True)
+    path = brain.save(tmp_path / "heads")
+    loaded = cd.Brain.load(path)
+    assert loaded.recall.heads == 3
+    for h in range(3):
+        for a, b in zip(brain.recall.head_map(h), loaded.recall.head_map(h), strict=True):
+            np.testing.assert_array_equal(a, b)
+    for x in STREAM:
+        np.testing.assert_array_equal(brain.act(x, greedy=True), loaded.act(x, greedy=True))
+    # a file that lost a head's map is refused
+    with np.load(path, allow_pickle=False) as data:
+        arrays = {
+            name: data[name] for name in data.files if name != "memories/recall/w_x_2"
+        }
+    broken = tmp_path / "broken.npz"
+    np.savez(broken, **arrays)
+    with pytest.raises(ValueError):
+        cd.Brain.load(broken)
+
+
+def test_reward_keeps_one_block_of_eligibility_per_head():
+    brain = composed(heads=2, seed=7, recall_address_reward=0.5, arousal=True)
+    witnessed(brain)
+    recall = brain.recall
+    before = [tuple(a.copy() for a in recall.head_map(h)) for h in range(2)]
+    moved, pending = False, False
+    for x in STREAM * 4:
+        brain.step(x, reward=np.array([1.0]) if pending else None)
+        pending = True
+        moved = moved or any(
+            not np.array_equal(a, b)
+            for h in range(2) for a, b in zip(before[h], recall.head_map(h), strict=True)
+        )
+    trace = brain.basal_ganglia.trace_memory
+    assert trace is not None
+    width = recall.key_width + len(recall.association) + 1
+    assert trace.shape[1:] == (width, 2 * recall.address_width)
+    assert moved
+
+
+def test_an_imagined_branch_reads_every_head_and_writes_nothing():
+    brain = witnessed(composed(heads=2, seed=8))
+    recall = brain.recall
+    maps = [tuple(a.copy() for a in recall.head_map(h)) for h in range(2)]
+    keys = recall.keys.copy()
+    brain.imagine([STREAM[0], STREAM[1]])
+    np.testing.assert_array_equal(recall.keys, keys)
+    for h in range(2):
+        for a, b in zip(maps[h], recall.head_map(h), strict=True):
+            np.testing.assert_array_equal(a, b)

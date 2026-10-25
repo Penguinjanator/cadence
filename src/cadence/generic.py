@@ -15,7 +15,8 @@
 * optionally a ``history`` region driven by a ``History`` of the observations as heard, at
   one or more timescales;
 * optionally ``recall`` and ``next`` regions driven by a ``Recall``, the index memory of the
-  stream's own recent moments, each moment addressed before its settle;
+  stream's own recent moments, each moment addressed before its settle (with several heads,
+  one pair of regions per head);
 * a default hippocampal-memory analogue, ``SynapticMemory`` from sensory to motor
   neurons, recording outcomes quickly and consolidating them through repetition/salience.
   With ``memory_choice=True`` (opt-in) it is an episodic memory: its
@@ -985,7 +986,8 @@ def _validate_recall_state(
     # the window's k events in order
     window = settings.get("window", 1)
     address = window * key
-    regions = ("recall", "next") if settings["next"] else ("recall",)
+    heads = settings.get("heads", 1)
+    regions = tuple(name for port in Recall.ports(heads, settings["next"]) for name in port)
     if (
         any(len(populations.get(name, ())) != value for name in regions)
         or recalled["neurons"] != value * len(regions)
@@ -1023,14 +1025,17 @@ def _validate_recall_state(
     history = data.get("recall/history")
     if history is not None:
         array("history", (0 if not len(history) else batch, key))
-    array("w_x", (key, address))
-    array("w_c", (association, address))
-    array("b", (address,))
+    shapes = {"w_x": (key, address), "w_c": (association, address), "b": (address,)}
+    maps = dict(shapes)
+    for h in range(1, heads):  # every further head's address map
+        maps.update({f"{name}_{h}": shape for name, shape in shapes.items()})
+    for name, shape in maps.items():
+        array(name, shape)
     if window > 1:  # the window's previous events per stream: a window of another length
         past = data.get("recall/past")  # is refused by the shape
         array("past", (0 if past is None or not len(past) else batch, window - 1, key))
     # the actor's eligibility of the address map, and the contrast of a pending action
-    eligibility = (batch, key + association + 1, address)
+    eligibility = (batch, key + association + 1, heads * address)
     if "recall/trace" in data:
         array("trace", eligibility)
     if "recall/pending" in data:
@@ -1040,7 +1045,7 @@ def _validate_recall_state(
     # the streams whose latest slot closed an episode, saved while one does
     if "recall/ended" in data and array("ended", (batch,)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: ended")
-    expected = {"keys", "values", "nexts", "held", "previous", "w_x", "w_c", "b"}
+    expected = {"keys", "values", "nexts", "held", "previous", *maps}
     if history is not None:
         expected |= {"history"}
     if window > 1:
@@ -1411,6 +1416,14 @@ def _layout(
             projections.append(
                 Projection(name, "association", scale=recall_scale, reciprocal=False)
             )
+        # every further head's read port, wired as the first and appended last: the brain of
+        # H heads is the brain of H - 1 heads plus one port and its projections
+        for port in Recall.ports(recalled.get("heads", 1), recalled["next"])[1:]:
+            for name in port:
+                regions.append(Region(name, code_width))
+                projections.append(
+                    Projection(name, "association", scale=recall_scale, reciprocal=False)
+                )
     genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
     return genome, {
         "inputs": inputs,
@@ -1467,7 +1480,8 @@ class Brain:
     (one neuron per motor neuron) for a copy of the issued command, ``history`` (one
     block of sensory width per entry of ``history_decays``) for the observations as heard
     and, with ``recall=True``, ``recall`` and ``next`` (one neuron per value coordinate each)
-    for the index memory of the stream's moments; ``Genome.composed`` lays one out. Without
+    for the index memory of the stream's moments, and with ``recall_heads=k`` also
+    ``recall_h`` and ``next_h`` for each further head; ``Genome.composed`` lays one out. Without
     ``recall=True`` populations of those names are ordinary ones. ``Brain.compose`` builds
     the default brain with working memory, and with ``connectome`` gives a custom anatomy
     its founders.
@@ -1744,11 +1758,12 @@ class Brain:
         # without ``recall=True`` are ordinary ones: an instrument may name and drive its own.
         self.recall: Recall | None = None
         if recalled:
-            for name in ("recall", "next") if recalled["next"] else ("recall",):
-                if name not in populations:
-                    raise ValueError(
-                        f"recall=True needs a {name!r} population; Brain.compose adds it"
-                    )
+            for port in Recall.ports(recalled.get("heads", 1), recalled["next"]):
+                for name in port:
+                    if name not in populations:
+                        raise ValueError(
+                            f"recall=True needs a {name!r} population; Brain.compose adds it"
+                        )
             # a memory on a code of the observation is given the code, not the observation;
             # with a coded cortex the sensory range is the code
             coded_memory = (self.sparse_code is not None and not self.coded_cortex) or bool(
@@ -1833,7 +1848,7 @@ class Brain:
         # stream has sensed since; any operation that replaces that action's state ends it
         self._awaiting: tuple[BrainState, BrainState] | None = None
         # a terminal forecast's read of the recall memory, held once its end is committed
-        self._forecast_read: tuple[Any, Any] | None = None
+        self._forecast_read: tuple[Any, ...] | None = None
 
     @property
     def brain(self) -> NeuralGraph:
@@ -2256,13 +2271,14 @@ class Brain:
         its own, zeros before a stream's first moment and after an episode ends: a key of
         ``k * code`` values, the address and the map's outputs as wide.
         The founder ``recall=False`` builds the brain without it.
-        ``recall_capacity``, ``recall_next``, ``recall_window`` and
-        ``recall_window_decay`` are construction settings; the keys, the values and the
-        address map follow the observation code's width, a brain's ``code`` among the ways
-        to bound it. The settings of 0.84.3 that this version removed (``recall_write``,
-        ``recall_key``, ``recall_episodes``, ``recall_value``, ``recall_context``,
-        ``recall_context_decay`` and ``recall_recency=None``) are refused by name; the
-        CHANGELOG gives each one's reading.
+        ``recall_capacity``, ``recall_next``, ``recall_window``,
+        ``recall_window_decay`` and ``recall_heads`` (several held heads over the one bank,
+        each with its own port and address map) are construction settings; the keys, the
+        values and the address map follow the observation code's width, a brain's ``code``
+        among the ways to bound it. The settings of 0.84.3 that this version removed
+        (``recall_write``, ``recall_key``, ``recall_episodes``, ``recall_value``,
+        ``recall_context``, ``recall_context_decay`` and ``recall_recency=None``) are refused
+        by name; the CHANGELOG gives each one's reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -2316,9 +2332,12 @@ class Brain:
             options.setdefault("recall", True)
             options.setdefault("recall_window", 2)
             options.setdefault("recall_next", True)
-            options.setdefault("recall_address", 0.0)
+            # one head reads with its key alone; several heads learn their addresses, at a
+            # temperature at which the address lesson does not lock onto a first selection
+            single = options.get("recall_heads", 1) == 1
+            options.setdefault("recall_address", 0.0 if single else 0.01)
             options.setdefault("recall_recency", 0.0)
-            options.setdefault("recall_temperature", 0.1)
+            options.setdefault("recall_temperature", 0.1 if single else 0.25)
 
         genome, layout = _layout(
             inputs, actions, options, modules=modules, observers=observers, lateral=lateral,
@@ -3188,7 +3207,8 @@ class Brain:
         supports is another objective than teaching by surprise, and a lesson-only curriculum
         leaves the cortex untaught on those rows. An episodic memory that remembers
         demonstrations records the taught rows. Returns the teaching report (with a
-        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too), which
+        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too; with
+        several heads the rows and refusals are summed over them), which
         ``last_learning`` holds with the ``demonstration_`` prefix; a refused phase raises
         ``LearningPhaseError`` and leaves the parameters and memories as they were. The next
         ``act`` settles afresh under the changed parameters and writes the moment. The streams
@@ -4091,7 +4111,10 @@ class Brain:
                 else 0
             )
             + (0 if self.context_memory is None else self.context_memory.consolidated.size)
-            + (0 if recall is None else recall.w_x.size + recall.w_c.size + recall.b.size)
+            + (
+                0 if recall is None
+                else sum(sum(a.size for a in recall.head_map(h)) for h in range(recall.heads))
+            )
             + (0 if self.learned_code is None else self.learned_code.parameters())
         )
 
@@ -4399,6 +4422,10 @@ class Brain:
                 assert recall is not None  # validated above: the populations are there
                 for name in ("keys", "values", "nexts", "previous", "w_x", "w_c", "b"):
                     setattr(recall, name, data["recall/" + name].astype(float))
+                recall.head_maps = [  # validated above: one map per further head
+                    tuple(data[f"recall/{name}_{h}"].astype(float) for name in ("w_x", "w_c", "b"))
+                    for h in range(1, recall.heads)
+                ]
                 recall.held = data["recall/held"].astype(bool)
                 recall.ended = (
                     data["recall/ended"].astype(bool)
