@@ -181,14 +181,20 @@ def train(
 def evaluate(
     task: Task, brain: cd.Brain, banks: dict[Any, Any], *, held_out: bool, n: int = 96
 ) -> dict[str, Any]:
-    """All-slot accuracy on fresh trials, and which record each head attends most."""
+    """All-slot accuracy on fresh trials, the wrong slot answers that give another asked
+    role's value, and which role record each head attends most."""
     trial = deepcopy(brain)
     patterns = task.sample(np.random.default_rng(99), n, held_out)
     try:
         choice = task.answer(trial, banks, patterns)
     except RuntimeError as error:
         return {"refused": str(error)[:80]}
-    correct = (choice == task.labels(patterns).reshape(n, -1)).all(axis=1)
+    labels = task.labels(patterns).reshape(n, -1)
+    correct = (choice == labels).all(axis=1)
+    wrong = choice != labels
+    other = np.zeros_like(wrong)
+    if task.slots == 2:  # a wrong slot that answers the other asked role's value
+        other = wrong & (choice == labels[:, ::-1])
     recall = trial.recall
     assert recall is not None
     heads = recall.attended_heads or ()
@@ -200,6 +206,8 @@ def evaluate(
     )
     return {
         "accuracy": float(correct.mean()),
+        "wrong_slots": int(wrong.sum()),
+        "other_asked_value": int(other.sum()),
         "refusals": 0,
         "head_top_role": [int(np.bincount(t, minlength=ROLES).argmax()) for t in tops],
         "distinct_top": distinct,
@@ -244,6 +252,9 @@ def check(body: dict[str, Any]) -> str | None:
         if body["schema"] != "cadence-held-heads/1" or len(body["founders"]) < 2:
             return "wrong schema or too few founders"
         for founder in body["founders"]:
+            task = Task(founder["rule"])
+            if founder["uniform_random_baseline_accuracy"] != 1.0 / task.values ** task.slots:
+                return f"founder {founder['seed']} ({founder['rule']}) has a wrong baseline"
             two, one = founder["arms"]["heads_2"], founder["arms"]["heads_1"]
             accuracy = two["trained"].get("accuracy", 0.0)
             expected = {
@@ -277,6 +288,8 @@ def main() -> None:
     if args.merge:
         founders = [json.loads(path.read_text()) for path in args.merge]
     else:
+        if args.founder_out is not None and len(args.seeds) * len(args.rules) != 1:
+            raise SystemExit("--founder-out writes one founder: pass one seed and one rule")
         founders = [run_founder(s, r, lessons=args.lessons) for r in args.rules for s in args.seeds]
         if args.founder_out is not None:
             args.founder_out.write_text(json.dumps(founders[0], sort_keys=True, indent=2) + "\n")

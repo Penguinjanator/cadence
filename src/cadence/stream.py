@@ -1109,7 +1109,9 @@ class Recall:
         moved, the mean absolute error the step corrects before it (``address_error``: the
         addresses' error ``K* - q`` under ``address_step="lms"``, the attended mixture's
         ``K* - sum_i p_i K_i`` under ``"toward"``), and how many rows a refused step left as
-        they were (``address_refused``)."""
+        they were (``address_refused``). With several heads each head steps its own map; the
+        rows and refusals are summed over the heads (a row counts once per head that moved
+        it) and the error is the mean over the heads that moved."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
         moment = self.last
         if (
@@ -1144,10 +1146,11 @@ class Recall:
             reports.append(self._step(head_moment, rows, d_value, d_next, head=h))
         if len(reports) == 1:
             return reports[0]
-        # every head's rows and refusals, and the heads' mean error
+        # every head's rows and refusals summed, the error averaged over the heads that moved
+        moved = [r["address_error"] for r in reports if r["address_rows"]]
         return {
             "address_rows": float(sum(r["address_rows"] for r in reports)),
-            "address_error": float(np.mean([r["address_error"] for r in reports])),
+            "address_error": float(np.mean(moved)) if moved else 0.0,
             "address_refused": float(sum(r["address_refused"] for r in reports)),
         }
 

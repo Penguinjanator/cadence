@@ -381,18 +381,18 @@ back through each head's own synapses, so each head's map moves toward the recor
 values would have helped through that head; reward eligibility at `recall_address_reward > 0`
 keeps one block per head. One bank is written per moment, and the heads read it before the
 settle and hold their reads through it, as one head does. With several heads the recipe
-learns the addresses (`recall_address=0.01`) at `recall_temperature=0.25`: at the single
-head's 0.1 the address lesson locks every head onto the record it reads first.
+learns the addresses (`recall_address=0.01`) at the Recall founder's
+`recall_temperature=0.25`.
 
 In the [held-heads benchmark](../benchmarks/attention/held_heads.py) each trial witnesses
 four facts `role -> value` with values drawn fresh, and one question asks for two of them in
 one settle; both orders of some value pairs are never taught. Reported in two motor slots (six
-values), two heads answer every taught pair on four founders and attend different records on
-every trial; one head that learns its address the same way answers 21 to 24%, uniform random
-3%. Combined into one action (go to the food unless the predator stands at an odd position,
+values), two heads answer every taught pair on four founders, and on every trial each head
+attends most to a different fact; one head that learns its address the same way answers 21 to
+24% of the taught pairs, uniform random 3%. Combined into one action (go to the food unless the predator stands at an odd position,
 then to the position five steps from it; ten positions), two heads answer every taught pair
 and 96 to 98% of the food and predator pairs they were never taught; one head answers 59 to
-76%, uniform random 10%. The two reporting slots answer 77 to 98% of the pairs never taught:
+76% of the taught pairs, uniform random 10%. The two reporting slots answer 77 to 98% of the pairs never taught:
 on a combination the shared association never met, a slot can give the other asked value.
 The [receipt](../benchmarks/attention/results/held-heads.json) is recomputed by the
 regression suite. This is component evidence for reading several facts in one settle; a

@@ -15,7 +15,8 @@
 * optionally a ``history`` region driven by a ``History`` of the observations as heard, at
   one or more timescales;
 * optionally ``recall`` and ``next`` regions driven by a ``Recall``, the index memory of the
-  stream's own recent moments, each moment addressed before its settle;
+  stream's own recent moments, each moment addressed before its settle (with several heads,
+  one pair of regions per head);
 * a default hippocampal-memory analogue, ``SynapticMemory`` from sensory to motor
   neurons, recording outcomes quickly and consolidating them through repetition/salience.
   With ``memory_choice=True`` (opt-in) it is an episodic memory: its
@@ -1024,9 +1025,10 @@ def _validate_recall_state(
     history = data.get("recall/history")
     if history is not None:
         array("history", (0 if not len(history) else batch, key))
-    maps = {"w_x": (key, address), "w_c": (association, address), "b": (address,)}
+    shapes = {"w_x": (key, address), "w_c": (association, address), "b": (address,)}
+    maps = dict(shapes)
     for h in range(1, heads):  # every further head's address map
-        maps.update({f"{name}_{h}": shape for name, shape in list(maps.items())[:3]})
+        maps.update({f"{name}_{h}": shape for name, shape in shapes.items()})
     for name, shape in maps.items():
         array(name, shape)
     if window > 1:  # the window's previous events per stream: a window of another length
@@ -1478,7 +1480,8 @@ class Brain:
     (one neuron per motor neuron) for a copy of the issued command, ``history`` (one
     block of sensory width per entry of ``history_decays``) for the observations as heard
     and, with ``recall=True``, ``recall`` and ``next`` (one neuron per value coordinate each)
-    for the index memory of the stream's moments; ``Genome.composed`` lays one out. Without
+    for the index memory of the stream's moments, and with ``recall_heads=k`` also
+    ``recall_h`` and ``next_h`` for each further head; ``Genome.composed`` lays one out. Without
     ``recall=True`` populations of those names are ordinary ones. ``Brain.compose`` builds
     the default brain with working memory, and with ``connectome`` gives a custom anatomy
     its founders.
@@ -2268,13 +2271,14 @@ class Brain:
         its own, zeros before a stream's first moment and after an episode ends: a key of
         ``k * code`` values, the address and the map's outputs as wide.
         The founder ``recall=False`` builds the brain without it.
-        ``recall_capacity``, ``recall_next``, ``recall_window`` and
-        ``recall_window_decay`` are construction settings; the keys, the values and the
-        address map follow the observation code's width, a brain's ``code`` among the ways
-        to bound it. The settings of 0.84.3 that this version removed (``recall_write``,
-        ``recall_key``, ``recall_episodes``, ``recall_value``, ``recall_context``,
-        ``recall_context_decay`` and ``recall_recency=None``) are refused by name; the
-        CHANGELOG gives each one's reading.
+        ``recall_capacity``, ``recall_next``, ``recall_window``,
+        ``recall_window_decay`` and ``recall_heads`` (several held heads over the one bank,
+        each with its own port and address map) are construction settings; the keys, the
+        values and the address map follow the observation code's width, a brain's ``code``
+        among the ways to bound it. The settings of 0.84.3 that this version removed
+        (``recall_write``, ``recall_key``, ``recall_episodes``, ``recall_value``,
+        ``recall_context``, ``recall_context_decay`` and ``recall_recency=None``) are refused
+        by name; the CHANGELOG gives each one's reading.
         ``memory_choice=True`` makes the hippocampus an episodic memory: its records vote
         in every choice, greedy or sampled, added to the motor readout before the softmax.
         Each record is kept twice: keyed by the observation (place), and keyed by the
@@ -3203,7 +3207,8 @@ class Brain:
         supports is another objective than teaching by surprise, and a lesson-only curriculum
         leaves the cortex untaught on those rows. An episodic memory that remembers
         demonstrations records the taught rows. Returns the teaching report (with a
-        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too), which
+        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too; with
+        several heads the rows and refusals are summed over them), which
         ``last_learning`` holds with the ``demonstration_`` prefix; a refused phase raises
         ``LearningPhaseError`` and leaves the parameters and memories as they were. The next
         ``act`` settles afresh under the changed parameters and writes the moment. The streams
