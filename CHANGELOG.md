@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.88.0 — 2026-10-25
+
 - Add several held memory-read heads: `recall_heads=k` reads one Recall bank through k
   copies of the held read, each with its own read port (`recall_h`, `next_h`) and its own
   learned address map, stepped by the address lesson through that head's own synapses; reward
