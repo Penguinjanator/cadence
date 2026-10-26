@@ -2,6 +2,26 @@
 
 ## Unreleased
 
+## 0.89.0 — 2026-10-26
+
+- Give the recall memory a position term, on by default. A key said what a moment was and
+  nothing said when, so two slots with the same key were indistinguishable to a read and order
+  questions ("at the beginning", "now") could not be answered from the memory. Every head now
+  adds to each slot's logit a term for the slot's age bucket, read from the moment as the
+  address is (`a = x P_x + c P_c + p`, one map per head), so what a moment hears can choose how
+  far back its head looks. Ages below `recall_position` (founder 32) have a bucket each, older
+  ones one per doubling up to the capacity. The maps start at zero: a new brain reads exactly
+  as one without them until a lesson moves them. Each lesson steps them toward the address
+  lesson's target, the slots its movement names, at `recall_position_rate` (founder 0.1,
+  retune), whatever `recall_address` is; rewards do not train them. `recall_position=0` builds
+  none. See [position](docs/memory.md#position-how-long-ago-a-moment-happened).
+- Checkpoints: a brain with the term saves its maps (`recall/position_x`, `position_c`,
+  `position_b`, one set per head). A checkpoint saved before 0.89.0 names no position option and
+  holds no maps; it loads without the term and reads as it did. Brains built with recall now
+  differ from 0.88.1's after their first lesson; brains without recall, Stone Age's included,
+  are unchanged. The regression records of composed recall founders now state
+  `recall_position=0` and keep their acts; their descriptions and checkpoints name the option.
+
 ## 0.88.1 — 2026-10-26
 
 - Add `arousal_hindsight` (opt-in, founder 0): the outcome that wakes a calm `live` brain

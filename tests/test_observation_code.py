@@ -141,10 +141,10 @@ FOUNDERS: dict[str, dict] = {
         "names": "1c418d7da8207299c6e8058e90cd3f627a6c3119a3287e65090a2cbd06ed603a",
         "checkpoint": "819a806d35bf843679477ab0595e97fe8140ca880de3dc0791800e4c6befe72a",
     },
-    "recalled": {
+    "recalled": {  # recall without the position term of 0.89.0: these records predate it
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
-                         "history_decays": (0.2, 0.9), "efference_amplitude": 1.0,
-                         "memory_choice": True}),
+                         "recall_position": 0, "history_decays": (0.2, 0.9),
+                         "efference_amplitude": 1.0, "memory_choice": True}),
         "life": lived,
         "parameters": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
@@ -156,7 +156,7 @@ FOUNDERS: dict[str, dict] = {
         # 256 inputs: a key width at which the dense separators are the recommended setting
         # as well; the recall memory keyed on the observation itself
         "build": (256, 3, {"modules": (16,), "seed": 9, "memory_choice": True, "recall": True,
-                           "arousal": True}),
+                           "recall_position": 0, "arousal": True}),
         "life": lived,
         "parameters": "2682044117eb96655f6d3e084c547a516c88d0987409bde96cf07d7074f5c49f",
         "acts": [2, 1, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2],

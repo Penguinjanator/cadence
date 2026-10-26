@@ -88,10 +88,11 @@ class Task:
         return out
 
     def compose(self, seed: int, heads: int) -> cd.Brain:
-        """The opt-in recipe; one head learns its address at the heads' settings."""
+        """The opt-in recipe; one head learns its address at the heads' settings. The protocol
+        predates the recall position term (0.89.0), which it leaves out."""
         return cd.Brain.compose(
             INPUTS, self.actions, learned_code=CODE, attention=True, recall_heads=heads,
-            recall_address=0.01, recall_temperature=0.25, modules=(MODULE,),
+            recall_address=0.01, recall_temperature=0.25, recall_position=0, modules=(MODULE,),
             slots=self.slots, seed=seed, episodic=False, teaching="normalized",
             learning_qualified=True, learning_damping=3, learning_free_steps=1024,
             learning_nudged_steps=1024, learning_tolerance=0.003,
@@ -300,7 +301,7 @@ def main() -> None:
         "configuration": {
             "inputs": INPUTS, "learned_code": CODE, "modules": [MODULE], "lessons": args.lessons,
             "recall_heads": 2, "recall_window": 2, "recall_temperature": 0.25,
-            "recall_address": 0.01, "recall_recency": 0.0, "calm_below": CALM,
+            "recall_address": 0.01, "recall_recency": 0.0, "recall_position": 0, "calm_below": CALM,
             "values": VALUES,
         },
         "founders": founders,

@@ -481,9 +481,11 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         "names": "51719b2e743a574301384fd5a9fd16fd200f979ba8585760a6db73faaaa43233",
         "checkpoint": "efae085bd5d1c6288381463d39627b10ef57e3e65a5520304b40c65fcf6df35b",
     },
+    # recall without the position term of 0.89.0: the acts predate it; the checkpoint names
+    # recall_position=0, which differs from its founder
     "composed": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": cd.ArousalConfig(youth=10),
-                         "recall": True, "history_decays": (0.2, 0.9),
+                         "recall": True, "recall_position": 0, "history_decays": (0.2, 0.9),
                          "efference_amplitude": 1.0}),
         "life": _streams,
         "digest": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
@@ -494,7 +496,7 @@ FOUNDERS: dict[str, dict[str, Any]] = {
         ],
         "format": "cadence-brain/1",
         "names": "e78b45e964572a6df43fb29ef5d436b89ce341e486e4f55a1708b355cacefd00",
-        "checkpoint": "f2fdcd9ab7b3985fea0495bd3025f3ae9d23247b5741284a78a126cc3a70eedc",
+        "checkpoint": "43ee564c91f2e3a077647bc3f57fa8ef105713e10b5516b0fe292f7d425a8f58",
     },
     "episodic": {
         "build": (4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),

@@ -283,6 +283,12 @@ with the stored keys, makes one weighted read and drives `recall` and `next` reg
 result. A learned address map can shift the query when it is enabled. The simpler
 `attention=True` recipe leaves that map off and relies on the learned-code key itself.
 
+Every head also reads how long ago each slot was written. This position term is on by default:
+it starts at zero, so a new brain reads exactly as it would without it, and lessons teach each
+head how far back to look, depending on what the moment hears. "Where was Bob at the beginning?"
+and "where is Bob now?" can then read different slots of the same wording. See
+[position](#position-how-long-ago-a-moment-happened); `recall_position=0` turns it off.
+
 `reset()` empties the slots and keeps the learned address map;
 `reset(keep=("slots",))` keeps both. Every `recall_*` setting, its cost and its limits are in
 [the recall memory in full](#the-recall-memory-in-full). Settings removed after 0.84.3 and
@@ -732,6 +738,46 @@ as the map's eligibility. The actor holds it in a trace of its own (decaying by
 `retune` refuses a change of `recall_address_step`, `recall_address` or
 `recall_address_reward` while a sampled action's address contrast is pending.
 
+### Position: how long ago a moment happened
+
+A key says what a moment was; nothing in it says when. Two moments with the same event and
+the same key are indistinguishable to a read, so a question that depends on order ("at the
+beginning", "now", "the same beat one bar back") cannot be answered from keys alone. A
+transformer gives its keys a position for this reason. Here every head reads each slot's age,
+the moments since the slot was written, and adds a term to that slot's logit:
+
+```text
+logit_i = q . K_i / temperature - recency * age_i + a(x, c)[bucket(age_i)]
+a(x, c) = x P_x + c P_c + p        (one map per head)
+```
+
+- **Buckets.** Ages below `recall_position` P (founder 32) have a bucket each; older ones share
+  one bucket per doubling (`[P, 2P)`, `[2P, 4P)`, ...) up to the capacity.
+  `Recall.position_count(P, capacity)` gives their number.
+- **Read from the moment.** The term comes from the event heard `x` and the cortex of the
+  moment before `c`, the same inputs the address map reads. A question word can therefore
+  choose how far back its head looks: one head can look back to the oldest record of a name
+  when it hears "beginning" and to the newest when it hears "now". A fixed preference per head
+  could not serve both.
+- **Zero at birth.** The maps start at zero. Until a lesson moves them, a brain reads exactly as
+  one built with `recall_position=0`.
+- **Taught by lessons.** After each lesson the address lesson's target, the slots whose stored
+  events the lesson's movement names, gives each taught row the gradient of its terms toward
+  that target, and each head's maps take a bounded least-mean-squares step at
+  `recall_position_rate`. This happens whatever `recall_address` is: a frozen address map does
+  not freeze the position term. Rewards do not train it.
+
+```python
+brain = Brain.compose(inputs=8, actions=3, modules=(16,), recall=True, seed=0)
+assert brain.recall.position == 32                       # on by default
+assert not any(m.any() for maps in brain.recall.position_maps for m in maps)
+plain = Brain.compose(inputs=8, actions=3, modules=(16,), recall=True, seed=0,
+                      recall_position=0)                 # the memory without it
+```
+
+A checkpoint saved before 0.89.0 has no position term and loads without one, so a continuing
+brain keeps reading as it did. The maps are saved with the brain when the term is on.
+
 ### Episodes, keys and windows
 
 Each stream has its own slots. A plain `reset()` empties them and keeps the address map. When
@@ -779,6 +825,8 @@ map.
 | `recall_address_reward` | `0.0` | retune | Rate at which reward trains the address map |
 | `recall_window`, `recall_window_decay` | `1`, `1.0` | construction | Window of the last k events, decay in (0, 1] |
 | `recall_heads` | `1` | construction | Heads reading the one bank, each with its own port and address map ([several heads](#several-heads-opt-in)) |
+| `recall_position` | `32` | construction | Ages below it get a bucket each, older ones one per doubling; every head learns a term per bucket ([position](#position-how-long-ago-a-moment-happened)); `0` builds none |
+| `recall_position_rate` | `0.1` | retune | Rate of the position term's lesson step; `0.0` freezes it |
 
 The [API reference](api.md#recall-memory-genes) gives the `Recall` class signature.
 
@@ -858,6 +906,10 @@ erase a copy's slots with `brain.recall.reset(batch)` before the query
   reaches the linear map only through conjunctions held in the cortex of the moment before.
 - The slots are a record within one stream. Nothing consolidates across streams except
   through the plastic synapses that read them.
+- The position term is learned. Its preferences are as general as the lessons that shaped them:
+  a brain taught only on stories of one length can learn "about twenty moments back" where
+  "the oldest record" was meant. Vary the lengths when order matters. Ages are counted in
+  moments of the stream, so a term learned at one moment rate does not transfer to another.
 
 The benchmark-only [direct-route attention candidate](../benchmarks/attention/DIRECT_ROUTE.md)
 tests the first limitation without changing this supported recall API. One live route reads

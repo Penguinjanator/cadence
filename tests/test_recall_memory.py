@@ -395,9 +395,10 @@ def test_the_memory_is_the_instrument_index_memory_moment_for_moment(
     tb = ir.tb
     read = dict(_declared(ir), **extra)
     inst = ir.IndexBrain.build(seed, read=read, learning_surprise=True)
-    lib = cd.Brain.compose(
+    lib = cd.Brain.compose(  # the instrument reads no position term (``recall_position=0``)
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
-        learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
+        learning_surprise=True, recall=True, recall_position=0,
+        **{f"recall_{k}": v for k, v in extra.items()},
     )
     for name in ("pre", "post", "count", "sign"):
         np.testing.assert_array_equal(
@@ -1169,7 +1170,7 @@ def test_the_options_at_their_founders_build_the_founder_memory(tmp_path):
     checkpoint bytes and the same description, which leaves the options out."""
     assert cd.Recall.options() == {
         "address_step": "lms", "null": None, "address_reward": 0.0, "window": 1,
-        "window_decay": 1.0, "heads": 1,
+        "window_decay": 1.0, "heads": 1, "position": 32, "position_rate": 0.1,
     }
     founder = composed(seed=5, arousal=True, learning_surprise=True)
     explicit = composed(
@@ -1191,9 +1192,10 @@ def _option_lives(extra, seed=2, rounds=8):
     ir = instrument("index_read")
     tb = ir.tb
     inst = ir.IndexBrain.build(seed, read=dict(_declared(ir), **extra), learning_surprise=True)
-    lib = cd.Brain.compose(
+    lib = cd.Brain.compose(  # the instrument reads no position term (``recall_position=0``)
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
-        learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
+        learning_surprise=True, recall=True, recall_position=0,
+        **{f"recall_{k}": v for k, v in extra.items()},
     )
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))

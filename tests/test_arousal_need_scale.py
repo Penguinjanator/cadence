@@ -528,9 +528,12 @@ LIVES: dict[str, tuple[tuple[int, int, dict[str, Any]], Life]] = {
     "adult": ((1, 2, {"modules": (16,), "seed": 0, "arousal": True}), bandit),
     "needy": ((1, 2, {"modules": (16,), "seed": 2, "arousal": cd.ArousalConfig(need=0.05)}),
               bandit),
+    # recall without the position term of 0.89.0: the acts and states predate it; the
+    # checkpoint names recall_position=0, which differs from its founder
     "composed": ((4, 2, {"modules": (8,), "seed": 5,
                          "arousal": cd.ArousalConfig(youth=10, need=0.02), "recall": True,
-                         "history_decays": (0.2, 0.9), "efference_amplitude": 1.0}), streams),
+                         "recall_position": 0, "history_decays": (0.2, 0.9),
+                         "efference_amplitude": 1.0}), streams),
     "episodic": ((4, 2, {"modules": (8,), "seed": 7, "arousal": True, "memory_choice": True}),
                  streams),
 }
@@ -572,7 +575,7 @@ PINS: dict[str, dict[str, str]] = {
         "acts": "11110110010001110110111110111111111110",
         "format": "cadence-brain/1",
         "names": "e78b45e964572a6df43fb29ef5d436b89ce341e486e4f55a1708b355cacefd00",
-        "checkpoint": "08d591c45e3c00a3e1e73600cb86d086e00ce7a05387d6533607ed3e4eff4278",
+        "checkpoint": "047da8a67a633b139ce79601b76559dc41ec8ea6015fdfde697ba873daf4caca",
         "left": "4111a55fd31b33dcd98d117cb9dd7054943833aaa07a1be5f5e317e353e6eb5c",
         "arousal": "0c85926f0929b8310648d68b84e0e231f5d6d859de2406d83a047684944f2ba5",
     },
