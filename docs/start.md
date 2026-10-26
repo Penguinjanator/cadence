@@ -401,10 +401,12 @@ outside their ranges, a negative `need` or `need_scale` and `fast < slow`.
 | `value_surprise` | 1.0 | weight of surprise at the critic's forecast |
 | `need` | 0.0 | reward per moment the body requires; 0 removes the need's want |
 | `need_scale` | 0.1 | the need as a share of the reward scale, `need_scale * scale`, after youth; 0 removes it |
+| `hindsight` | 0 | calm moments an outcome that wakes the brain credits; 0 credits none ([hindsight](#calm-moments-in-hindsight)) |
 
 `brain.last_arousal` snapshots the latest moment: `mode`, `level`, `error`,
 `surprise`, `want`, `temperature`, per-slot `temperatures`, `heated_slot`, `learned`,
-`recorded`, `sweeps` and `learning_sweeps`; it is `None`
+`recorded`, `credited` (calm moments credited in hindsight), `sweeps` and `learning_sweeps`;
+it is `None`
 after construction, reset or load. `brain.arousal` counts `moments` and `sweeps` per
 mode, `learning_sweeps` and `age` ([class methods](api.md#arousal-cadencearousal)).
 An action that `step` or `act` sampled is adopted, so a bootstrapped brain continues
@@ -437,6 +439,25 @@ at every moment. With pay at the end of the chain, 5 of 6 lives stayed aroused f
 .67 of the life on an income of .017 to .022 per moment, the sixth, earning .15 per moment,
 for .06, and the founder's 6 lives, all collapsed, for .02. Through `step` the gene is
 inert.
+
+<a id="calm-moments-in-hindsight"></a>
+
+A calm moment keeps no eligibility, so at `hindsight=0` the outcome that wakes the brain
+reaches its arousal and its associative store but no synapse: the routine actions that led
+to it are not credited. `hindsight=k` (opt-in, founder 0) holds the stream's last `k` calm
+transitions, each its drive, free state, greedy action and reward. When an outcome wakes the
+brain, `live` scores each held action's eligibility as it scores a sampled action's and steps
+the actor and critic through them in order, as temporal-difference steps with their own
+rewards, the waking outcome last; `last_arousal["credited"]` counts them. Calm moments change
+no parameter, so the first held action is scored under the parameters it was issued with and
+each later one after the credited steps before it, as online learning would. The held
+moments' recall reads are gone, so a learned recall address map is not credited. Routine
+work is unchanged; a waking moment pays two nudged settles and one forecast per credited
+moment. Held moments end with the stream (`done`, `reset`, an aroused moment, or another
+operation acting in between) and are not saved in checkpoints: a loaded brain credits only the
+calm moments it lives after loading. The gene is experimental: on a delayed-harm task it fired
+rarely, because the brain was seldom calm before the harm, and no gain over `hindsight=0` has
+been measured yet.
 
 <a id="observations-actions-and-reward"></a>
 

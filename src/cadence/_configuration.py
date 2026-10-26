@@ -31,6 +31,7 @@ _FIELDS = {prefix: {field.name for field in fields(kind)} for prefix, kind in _K
 _BOOLEAN = {"qualified", "surprise"}
 _INTEGER = {
     "free_steps", "nudged_steps", "damping", "initial_damping", "eligibility_steps", "youth",
+    "hindsight",
 }
 _STRING = {"nudge"}
 _OPTIONAL = {"eta_bias", "tolerance", "eligibility_steps"}

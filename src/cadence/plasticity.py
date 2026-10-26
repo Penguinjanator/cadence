@@ -845,6 +845,25 @@ class ActorCritic:
             if ended is not None and ended.any():
                 value[ended] = 0.0
 
+    def unfade(self, moments: int) -> None:
+        """Undo ``moments`` fades: every eligibility trace grows by ``(gamma * lam) **
+        -moments``. ``Brain.live`` credits calm moments in hindsight by stepping through them
+        with ``learn``, which applies the decay those moments' fades already applied; undoing
+        the fades first leaves earlier credit decayed once per moment. A decay of zero left
+        no trace to restore."""
+        decay = self.config.gamma * self.config.lam
+        if moments <= 0 or decay <= 0.0:
+            return
+        factor = decay ** -float(moments)
+        if not np.isfinite(factor):
+            raise ValueError("the traces cannot be restored over this many moments")
+        if self._trace_device is not None:
+            self._trace_device = tuple(factor * tensor for tensor in self._trace_device)
+        for name in ("trace", "trace_bias", "trace_critic", "trace_memory"):
+            value = getattr(self, name)
+            if value is not None:
+                value *= factor
+
     def reset(self) -> None:
         """Clear stream state and eligibility; keep learned parameters."""
         self._free = None

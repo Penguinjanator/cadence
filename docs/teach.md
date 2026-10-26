@@ -55,7 +55,10 @@ replace the issued action with a greedy `act`, which learns nothing from it, and
 the shown action with `lesson(observations, labels)`; the next `step` takes no reward.
 A reward reported for the shown action would credit an action that did not run.
 `lesson` reads every memory the act reads, keeps its report in `last_learning` under
-`demonstration_*` keys and refuses while a sampled action awaits its outcome.
+`demonstration_*` keys and refuses while a sampled action awaits its outcome. In a brain with
+a recall memory an act writes the moment to it, so a lesson after an act on the same
+observations reads the moment itself, its successor still empty, and warns: teach first,
+then act, where the order is yours to choose.
 
 ## A supervised-only stream
 
