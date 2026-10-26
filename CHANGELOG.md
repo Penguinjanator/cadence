@@ -12,6 +12,14 @@
   saves, so every founder brain and checkpoint is byte-identical to 0.88.0; a positive value
   saves as `cadence-arousal/5`, which 0.88.0 refuses. Experimental: no gain over the founder
   has been measured yet.
+- Correct the teaching guides for long curricula under the normalized teaching point: teach with
+  `learning_surprise=True` from the first lesson. Normalized steps do not shrink as answers
+  become right, so every-row lessons drive the readout until the nudge no longer moves it and the
+  answers collapse onto one action. The several-heads guide advised switching to surprise once
+  the brain answers, which leaves a brain that never reaches the threshold on every-row lessons.
+  On the V0.5B two-fact conjunction task (Will Glynn, EXP-72), surprise from the first lesson
+  kept 5 of 5 founders at every taught pair and .85 of held-out pairs, against .53 and three
+  founders collapsed under the switch. Documentation only; the defaults are unchanged.
 - Warn (`RuntimeWarning`) when, in a brain with a recall memory, `lesson` follows an act on
   the same observations. The act has already written the moment to the recall memory, so the
   lesson reads the moment itself, a slot whose successor is still empty. `step(...,

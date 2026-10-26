@@ -94,6 +94,22 @@ shown row by row for many passes. The founder is `False`;
 [benchmarks/stream_words](../benchmarks/stream_words/README.md) uses it with every-row lessons as
 the control.
 
+Under the [normalized point](#many-lessons-the-normalized-point-for-imitation) select it from the
+first lesson of a long curriculum. Normalized steps do not shrink as an answer becomes right, so
+lessons on rows the brain already answers keep driving the readout until the nudge no longer
+moves it; a lapse then leaves the answers on one action with no contrast left to undo it, and the
+reports show `scale_step` falling toward zero while answers stay wrong. On the two-fact
+conjunction task of the Stone Age attention series (V0.5B: two heads, lessons of 16 rows, every
+row taught until the running wrong share falls below .02, then only the wrong rows, as the
+[several-heads guide](memory.md#several-heads-opt-in) advised), 3 of 5 founders answered most
+taught pairs and then collapsed onto one action within 4,096 lessons, two of them without ever
+reaching the switch; on one founder the nudge's movement of the motor population fell a
+hundredfold. With surprise from the first lesson all five answered every taught pair from about
+1,024 lessons on and .72 to .96 of the held-out pairs (mean .85 against .53), and erasing either
+relevant fact still dropped the held-out answers to chance
+([EXP-72](https://github.com/WGlynn/cadence-teachers/blob/main/experiments/EXP-72.md), Will
+Glynn). Founder 59201 reads 1.00 / .88 against .39 / .31 on the series' runner.
+
 ## Acquisition, working memory and durable retention
 
 Acquisition, working-memory recall and durable retention are separate measurements: `predict`
@@ -151,7 +167,9 @@ At 720,000 samples backpropagation reached 0.900 / 0.903 on all moves and the no
 0.886. Training agreement equalled held-out agreement in every arm. With lessons of 8 rows the
 rate 0.001 reached the same agreement; normalization at `eta=0.01` overshot.
 
-The point is a recommendation for that regime and the composed founder keeps its rates. With few
+The point is a recommendation for that regime and the composed founder keeps its rates. Past the
+point where the answers are right, teach it with `learning_surprise=True`
+([lessons only where the answer differs](#lessons-only-where-the-answer-differs)). With few
 lessons the founder's larger steps acquire faster: in an instrument that teaches a chain of steps
 from a few hundred corrections, the normalized point lowered the taught chain's success, and in
 the token-binding chamber it lowered the held-out answers of the content-memory arms at long

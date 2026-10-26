@@ -406,9 +406,11 @@ keeps reading what head 0 reads.
 
 Use several heads when one answer needs several witnessed facts at once, and compare them with
 one head and with the facts asked one per moment (one head reads one fact per moment through
-the working trace). Long lesson curricula overfit the shared readout once the answers are
-right: switch to `learning_surprise=True` once the brain answers its lessons (or use `live`,
-whose arousal does it), as the benchmark does.
+the working trace). Long lesson curricula drive the shared readout into saturation once the
+answers are right: teach with `learning_surprise=True` from the first lesson (or use `live`, whose
+arousal does it). The benchmark switches to it at a running wrong share of .02, which serves its
+1,024 lessons; over 4,096 lessons founders that never reached the threshold collapsed onto one
+action ([lessons only where the answer differs](teach.md#lessons-only-where-the-answer-differs)).
 
 ## Learned weights and eligibility
 
