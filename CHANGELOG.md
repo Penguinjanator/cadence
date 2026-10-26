@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.88.1 — 2026-10-26
+
 - Add `arousal_hindsight` (opt-in, founder 0): the outcome that wakes a calm `live` brain
   credits the stream's last `k` calm moments. The actor and critic step through the held
   transitions in order, the waking outcome last, each held greedy action's eligibility scored
