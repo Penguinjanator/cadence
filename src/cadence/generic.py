@@ -972,6 +972,7 @@ def _validate_recall_state(
     # an option is saved where it differs from its founder, and takes its founder where absent
     settings.update({name: Recall.setting(name, recalled[name]) for name in Recall.OPTIONS
                      if name in recalled})
+    settings["position"] = _saved_position(recalled, data)
     writes = recalled["writes"]
     if isinstance(writes, bool) or not isinstance(writes, int) or writes < 0:
         raise ValueError("invalid saved recall write count")
@@ -1030,6 +1031,10 @@ def _validate_recall_state(
     maps = dict(shapes)
     for h in range(1, heads):  # every further head's address map
         maps.update({f"{name}_{h}": shape for name, shape in shapes.items()})
+    count = Recall.position_count(settings.get("position", 0), settings["capacity"])
+    for h in range(heads if count else 0):  # every head's position maps, with a position term
+        shapes_h = ((key, count), (association, count), (count,))
+        maps.update(dict(zip(Recall.position_names(h), shapes_h, strict=True)))
     for name, shape in maps.items():
         array(name, shape)
     if window > 1:  # the window's previous events per stream: a window of another length
@@ -1055,6 +1060,17 @@ def _validate_recall_state(
         "trace", "pending", "ended"
     } != expected:
         raise ValueError("unexpected saved recall arrays")
+
+
+def _saved_position(recalled: dict[str, Any], data: Any) -> int:
+    """A saved memory's position term: the option as saved, else its founder where the file
+    holds the maps (the option left out at its founder); a file saved before the position term
+    holds neither and loads without one."""
+    if "position" in recalled:
+        return int(Recall.setting("position", recalled["position"]))
+    if any(name.startswith("recall/position_") for name in data):
+        return int(Recall.options()["position"])
+    return 0
 
 
 def _removed_recall(name: str, value: Any) -> str:
@@ -2279,9 +2295,17 @@ class Brain:
         its own, zeros before a stream's first moment and after an episode ends: a key of
         ``k * code`` values, the address and the map's outputs as wide.
         The founder ``recall=False`` builds the brain without it.
+        Every head of a composed recall memory also reads each slot's age: ``recall_position``
+        P (founder 32, construction) gives ages below P a bucket each and older ones one
+        bucket per doubling, and each head adds a term per bucket read from the moment as its
+        address is, so what a moment hears can choose how far back the head looks. The terms
+        start at zero and lessons teach them at ``recall_position_rate`` (runtime, founder
+        0.1), whatever ``recall_address`` is; ``recall_position=0`` builds none. A brain
+        saved without a position term loads without one.
         ``recall_capacity``, ``recall_next``, ``recall_window``,
-        ``recall_window_decay`` and ``recall_heads`` (several held heads over the one bank,
-        each with its own port and address map) are construction settings; the keys, the
+        ``recall_window_decay``, ``recall_heads`` (several held heads over the one bank,
+        each with its own port and address map) and ``recall_position`` are construction
+        settings; the keys, the
         values and the address map follow the observation code's width, a brain's ``code``
         among the ways to bound it. The settings of 0.84.3 that this version removed
         (``recall_write``, ``recall_key``, ``recall_episodes``, ``recall_value``,
@@ -3218,8 +3242,9 @@ class Brain:
         supports is another objective than teaching by surprise, and a lesson-only curriculum
         leaves the cortex untaught on those rows. An episodic memory that remembers
         demonstrations records the taught rows. Returns the teaching report (with a
-        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too; with
-        several heads the rows and refusals are summed over them), which
+        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too, and
+        with its position term ``position_rows`` and ``position_refused``; with several heads
+        the rows and refusals are summed over them), which
         ``last_learning`` holds with the ``demonstration_`` prefix; a refused phase raises
         ``LearningPhaseError`` and leaves the parameters and memories as they were. The next
         ``act`` settles afresh under the changed parameters and writes the moment. The streams
@@ -4204,8 +4229,8 @@ class Brain:
             self.arousal.reset()
 
     def parameters(self) -> int:
-        """Actor/critic and consolidated weights, the recall memory's address map and a learned
-        code's tables; per-stream transient storage is additional."""
+        """Actor/critic and consolidated weights, the recall memory's address and position
+        maps and a learned code's tables; per-stream transient storage is additional."""
         recall = self.recall
         return (
             self.basal_ganglia.parameters()
@@ -4218,6 +4243,7 @@ class Brain:
             + (
                 0 if recall is None
                 else sum(sum(a.size for a in recall.head_map(h)) for h in range(recall.heads))
+                + sum(a.size for maps in recall.position_maps for a in maps)
             )
             + (0 if self.learned_code is None else self.learned_code.parameters())
         )
@@ -4486,6 +4512,7 @@ class Brain:
                             for name in (*Recall.RUNTIME, *Recall.CONSTRUCTION, *Recall.OPTIONS)
                             if name in recalled
                         },
+                        "recall_position": _saved_position(recalled, data),
                     }
                 ),
             )
@@ -4529,6 +4556,10 @@ class Brain:
                 recall.head_maps = [  # validated above: one map per further head
                     tuple(data[f"recall/{name}_{h}"].astype(float) for name in ("w_x", "w_c", "b"))
                     for h in range(1, recall.heads)
+                ]
+                recall.position_maps = [  # validated above: saved with a position term
+                    tuple(data["recall/" + name].astype(float) for name in Recall.position_names(h))
+                    for h in range(recall.heads if recall.position_maps else 0)
                 ]
                 recall.held = data["recall/held"].astype(bool)
                 recall.ended = (

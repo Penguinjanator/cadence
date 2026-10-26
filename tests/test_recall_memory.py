@@ -395,9 +395,10 @@ def test_the_memory_is_the_instrument_index_memory_moment_for_moment(
     tb = ir.tb
     read = dict(_declared(ir), **extra)
     inst = ir.IndexBrain.build(seed, read=read, learning_surprise=True)
-    lib = cd.Brain.compose(
+    lib = cd.Brain.compose(  # the instrument reads no position term (``recall_position=0``)
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
-        learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
+        learning_surprise=True, recall=True, recall_position=0,
+        **{f"recall_{k}": v for k, v in extra.items()},
     )
     for name in ("pre", "post", "count", "sign"):
         np.testing.assert_array_equal(
@@ -835,9 +836,9 @@ def test_the_bound_leaves_the_token_task_as_it_was(monkeypatch):
     gains = []
     original = cd.Recall._step
 
-    def recorded(self, moment, rows, d_value, d_next):
+    def recorded(self, moment, rows, d_value, d_next, **reading):
         gains.extend(_gain(self, moment, rows).tolist())
-        return original(self, moment, rows, d_value, d_next)
+        return original(self, moment, rows, d_value, d_next, **reading)
 
     monkeypatch.setattr(cd.Recall, "_step", recorded)
     held = tb.holdout(0)
@@ -1133,10 +1134,13 @@ def test_an_unknown_recall_gene_is_refused_as_a_typo():
         composed(recall_capcity=8)
 
 
-def test_describe_reports_the_memory_and_parameters_count_its_address_map():
+def test_describe_reports_the_memory_and_parameters_count_its_address_and_position_maps():
     brain = composed()
     assert brain.describe()["memories"].get("recall") == brain.recall.to_dict()
-    assert brain.parameters() == brain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4
+    # the address map (4 + 8 + 1 rows of 4) and the position maps (4 + 8 + 1 rows of 33 buckets)
+    assert brain.parameters() == brain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4 + 13 * 33
+    plain = composed(recall_position=0)
+    assert plain.parameters() == plain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4
 
 
 # -- options beside the founder memory
@@ -1169,7 +1173,7 @@ def test_the_options_at_their_founders_build_the_founder_memory(tmp_path):
     checkpoint bytes and the same description, which leaves the options out."""
     assert cd.Recall.options() == {
         "address_step": "lms", "null": None, "address_reward": 0.0, "window": 1,
-        "window_decay": 1.0, "heads": 1,
+        "window_decay": 1.0, "heads": 1, "position": 32, "position_rate": 0.1,
     }
     founder = composed(seed=5, arousal=True, learning_surprise=True)
     explicit = composed(
@@ -1191,9 +1195,10 @@ def _option_lives(extra, seed=2, rounds=8):
     ir = instrument("index_read")
     tb = ir.tb
     inst = ir.IndexBrain.build(seed, read=dict(_declared(ir), **extra), learning_surprise=True)
-    lib = cd.Brain.compose(
+    lib = cd.Brain.compose(  # the instrument reads no position term (``recall_position=0``)
         tb.INPUTS, tb.VALUES, modules=(tb.WIDTH,), lateral=tb.LATERAL, seed=seed,
-        learning_surprise=True, recall=True, **{f"recall_{k}": v for k, v in extra.items()},
+        learning_surprise=True, recall=True, recall_position=0,
+        **{f"recall_{k}": v for k, v in extra.items()},
     )
     held = tb.holdout(seed)
     rng = np.random.default_rng(np.random.SeedSequence([tb.SCHEDULE_SEED, seed]))

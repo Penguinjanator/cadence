@@ -87,12 +87,14 @@ class ContextChoiceBrain(cd.Brain):
 
 
 def compose(seed: int, *, solve: int = 1024, module: int = 24) -> ContextChoiceBrain:
-    """One opt-in attention brain with no hippocampus or episodic action vote."""
+    """One opt-in attention brain with no hippocampus or episodic action vote; the protocol
+    predates the recall position term (0.89.0), which it leaves out."""
     brain = ContextChoiceBrain.compose(
         INPUTS,
         ACTIONS,
         learned_code=CODE,
         attention=True,
+        recall_position=0,
         modules=(module,),
         episodic=False,
         memory_choice=False,
@@ -436,6 +438,7 @@ def main() -> None:
             "recall_temperature": 0.1,
             "recall_recency": 0.0,
             "recall_address": 0.0,
+            "recall_position": 0,
         },
         "founders": founders,
         "passed": len(founders) >= 2 and all(founder["passed"] for founder in founders),

@@ -164,28 +164,30 @@ FOUNDERS: dict[str, dict] = {
         "checkpoint": "819a806d35bf843679477ab0595e97fe8140ca880de3dc0791800e4c6befe72a",
         "describe": "d7ea6c6f8e4d0e8373b0edc05145c309f019ada55fdae730e2f8657591a9424c",
     },
+    # recall without the position term of 0.89.0: the acts and parameters predate it; the
+    # description and the checkpoint name recall_position=0, which differs from its founder
     "recalled": {
         "build": (4, 2, {"modules": (8,), "seed": 5, "arousal": True, "recall": True,
-                         "history_decays": (0.2, 0.9), "efference_amplitude": 1.0,
-                         "memory_choice": True}),
+                         "recall_position": 0, "history_decays": (0.2, 0.9),
+                         "efference_amplitude": 1.0, "memory_choice": True}),
         "life": lived,
         "parameters": "bf4d075047bb0d0713d3ab20312bd17853820de818de29e228b2edaf5bcdd26c",
         "acts": [1, 1, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 1],
         "format": "cadence-brain/1",
         "names": "272cd7aa87c6eb361ba04b442ba83f88b5d63f2acfdf46de8aecf36e40ac76bd",
-        "checkpoint": "9f62fbed4bf76c42ce80c77112ac988d1d50d356558262c3c1ca612bf05ed68d",
-        "describe": "9e323e24457ee1674d4252cc6b94f5f05d6a6de78a4dd2d6f8aad789b406207b",
+        "checkpoint": "8508c80b74047c133e5e18f4cb11d40e36cc517fa9eed748f44cb6057b9d9bae",
+        "describe": "ca65c4a09a951886ad3401385f70aa953a0f8fcca023d4f67be4085212644187",
     },
     "taught": {
         "build": (16, 8, {"modules": (64,), "lateral": 0.0, "seed": 1,
-                          "learning_surprise": True, "recall": True}),
+                          "learning_surprise": True, "recall": True, "recall_position": 0}),
         "life": taught,
         "parameters": "1b72292d2b15754485932c2527b342353a6934c638e8e25f3da7d05e6b1e45ce",
         "acts": [4, 7, 1, 0, 0, 4, 4, 4, 0, 4, 4, 4, 0, 0, 7, 3, 0, 0, 7, 4, 0, 0, 7, 4, 1, 0, 0, 4, 3, 0, 0, 1, 0, 6, 0, 7, 0, 0, 0, 1],
         "format": "cadence-brain/1",
         "names": "0aab0d179b44428d742d358f48b22b0571e9fd78c4cefa76ad52551d9920c16e",
-        "checkpoint": "02581d0933e39c23ef22db165c6d03196a0da00ddbd33b44ba35aa4bb7d42358",
-        "describe": "9bab0cf60ca52c678d63272c176b76dcd12ef5c46c090be01b308b8335b6bd3f",
+        "checkpoint": "67f8a80c4c28c099ea268a7b8c0fc6d607f1c7dc46ea96e1eed2690fc730e2d3",
+        "describe": "9c8cd5a3e9440ccd3be18329b6947870d00801cfdc0c0308379799d2206d50d8",
     },
     "wide": {
         "build": (2_000, 3, {"modules": (8,), "seed": 13, "memory_choice": True,
@@ -260,7 +262,8 @@ def region_digest(brain: cd.Brain, acts: list[int], path: Path) -> str:
 # reproduced the earlier digests exactly.
 REGION_FOUNDERS: dict[str, dict] = {
     "region": {
-        "build": (16, 8, {"modules": (24,), "seed": 5, "learned_code": 16, "recall": True}),
+        "build": (16, 8, {"modules": (24,), "seed": 5, "learned_code": 16, "recall": True,
+                          "recall_position": 0}),  # recorded before the position term
         "life": taught,
         "digest": "8ef21e03bb9d987b50ee7ada774f3b391a75ea47e7c8b76599b3b48504b8fbae",
     },

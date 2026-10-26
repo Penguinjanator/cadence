@@ -299,7 +299,7 @@ Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25,
        address_temperature=0.1,
        address_step="lms", null=None, address_reward=0.0,
        window=1, window_decay=1.0, heads=1,
-       source="sensory", target="recall", inputs=0, writes=0)
+       source="sensory", target="recall", inputs=0, writes=0, position=32, position_rate=0.1)
 ```
 
 The held-input index memory of each stream's recent moments. Each constructor argument is the
@@ -314,13 +314,13 @@ settings of 0.84.3 that left in this version, each with its reading, are
 | --- | --- |
 | `stimulate(drive, observations)` | Addresses the moment, fixes the softmax over the slots (`attended`) and writes the read into `recall` and, with `next`, `next`; with `heads` above one each head reads with its own address into its own port. |
 | `witness(observations, state)` | Writes the moment as a slot after its settle. |
-| `learn(graph, learned) -> dict` | The address lesson after a teaching step; returns `address_rows`, `address_error`, `address_refused`. A nonfinite step is refused per row. With several heads each head steps its own map: rows and refusals are summed over the heads, the error averaged over the heads that moved. |
+| `learn(graph, learned) -> dict` | The address lesson after a teaching step; returns `address_rows`, `address_error`, `address_refused`, and with a position term `position_rows` and `position_refused` (zero when nothing moved). A nonfinite step is refused per row (per head for the position maps). With several heads each head steps its own maps: rows and refusals are summed over the heads, the error averaged over the heads that moved. The position term learns whatever `address` is. |
 | `contrast_rows(graph, plus, minus)`, `propose(step)`, `accept(proposal)` | Reward training of the address map at `address_reward > 0`; `ActorCritic` calls them. `contrast_rows` is `None` at 0. |
 | `end(batch, rows=None)` | Ends episodes and keeps the slots, as `Brain.reset(keep=("slots",))` does; the latest slot learns no successor. |
-| `weights(address)`, `ages()`, `readback(graph, region, movement, head=0)`, `activity(state)` | The read's slot shares, slot ages, and the association movement read back through one head's recall synapses. |
+| `weights(address, position=None)`, `position_term(head, event, cortex)`, `ages()`, `buckets()`, `readback(graph, region, movement, head=0)`, `activity(state)` | The read's slot shares (with a head's position term from `position_term`, the shares the read used; without it the content's and recency's alone), one head's position term at every slot, slot ages and their position buckets, and the association movement read back through one head's recall synapses. |
 | `reset(batch, rows=None)`, `keep(rows)`, `snapshot()`, `restore(snapshot)`, `reading()`, `hold(reading)`, `imagined()` | Stream bookkeeping; `imagined()` is a copy that reads the live slots and writes none. |
-| `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)`, `Recall.removed(name)`, `Recall.ports(heads, next=True)` | The always-described genes, the six options saved only where they differ, validation of one gene, the null slot's logit, the refusal of a removed setting, the regions of each head's port. |
-| `attended_heads`, `head_map(head)` | Every head's attention of the latest read (head 0's is `attended`), and one head's address map `(w_x, w_c, b)`; head 0's map is `w_x`, `w_c`, `b`. |
+| `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)`, `Recall.removed(name)`, `Recall.ports(heads, next=True)`, `Recall.position_count(position, capacity)`, `Recall.position_names(head)` | The always-described genes, the eight options saved only where they differ, validation of one gene, the null slot's logit, the refusal of a removed setting, the regions of each head's port, the number of age buckets, and the checkpoint names of one head's position maps. |
+| `attended_heads`, `head_map(head)`, `position_map(head)`, `position_maps`, `position_buckets` | Every head's attention of the latest read (head 0's is `attended`), one head's address map `(w_x, w_c, b)` (head 0's map is `w_x`, `w_c`, `b`), one head's position maps `(P_x, P_c, p)` (head 0's are `position_x`, `position_c`, `position_b`; refused at `position=0`), every head's (empty at `position=0`), and their number of age buckets. |
 | `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `RETIRED`, `FORMAT`, `STEPS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, the settings this version removed, the keys the 0.84.3 format wrote for three of them with the one value at which such a file loads, and the allowed values of `address_step`. |
 | `keys`, `values`, `nexts`, `held`, `previous`, `ended`, `past`, `w_x`, `w_c`, `b`, `heads`, `head_maps`, `address_width`, `neurons`, `streams`, `slots`, `attended`, `to_dict()` | State arrays and sizes; `head_maps` holds the address maps of heads 1 and up. |
 

@@ -420,7 +420,26 @@ class Recall:
     holds its own mixture through the settle. The address lesson steps each head's map
     through that head's own synapses, and reward eligibility (``contrast_rows``) keeps one
     block of columns per head. One bank is written per moment, whatever the heads. With the
-    address map frozen (``address=0``) every head reads what head 0 reads.
+    address map frozen (``address=0``) and no position term (``position=0``) every head reads
+    what head 0 reads; the position term is taught whatever ``address`` is, so with it the
+    heads can come to read differently.
+
+    With ``position`` P above 0 (a construction setting, founder 32; 0 builds none) every head also
+    reads each slot's age,
+    the moments since it was written: the logit of slot ``i`` gains ``a_h(x, c)[bucket(age_i)]``,
+    a term per age bucket read from the moment as the address is, ``a_h = x P_x^h + c P_c^h +
+    p^h``, so what a moment hears can choose how far back its head looks ("at the beginning"
+    against "now", "one bar back"). Ages below P have a bucket each, older ones one bucket per
+    doubling up to ``capacity`` (``position_buckets``). The maps start at zero, so the memory reads
+    as one without them until a lesson moves them. ``learn`` steps them after each lesson, whatever
+    ``address`` is: the slots the lesson's movement names, ``p*`` (as the address lesson takes it,
+    position included in the prior ``p``), give each taught row the cross-entropy gradient
+    ``g_b = sum_{i in b} (p*_i - p_i)`` of its terms, and each head's maps take the
+    least-mean-squares step on ``z = [x, c, 1]`` at the rate ``position_rate``, each row's rate
+    bounded by its own energy as the address map's is; a step that is not finite is refused.
+    Reward trains the address map only (``address_reward``), not the position maps.
+    ``position_map(h)`` gives head h's maps and ``position_term(h, x, c)`` its term at every
+    slot; ``weights(address, position)`` with that term gives the attention the read used.
 
     The settings of 0.84.3 that this version removed (``RETIRED``, and ``recency=None``) are
     refused with a message naming that release; a checkpoint of 0.84.3 carries the keys its
@@ -449,6 +468,8 @@ class Recall:
     # brain whose memories key on a code of the observation passes the code
     inputs: int = 0
     writes: int = 0  # slots written over the memory's life, one per stream and moment
+    position: int = 32
+    position_rate: float = 0.1
     keys: np.ndarray = field(init=False, repr=False)
     values: np.ndarray = field(init=False, repr=False)
     nexts: np.ndarray = field(init=False, repr=False)
@@ -464,9 +485,12 @@ class Recall:
     CONSTRUCTION = ("capacity", "next")
     # options beside the founder memory: a memory describes and saves an option only where it
     # differs from its founder, and a saved memory without one takes its founder; each is
-    # runtime except the window, which shapes the memory
-    OPTIONS = ("address_step", "null", "address_reward", "window", "window_decay", "heads")
-    CONSTRUCTION_OPTIONS = ("window", "window_decay", "heads")
+    # runtime except the window, the heads and the position term, which shape the memory
+    OPTIONS = (
+        "address_step", "null", "address_reward", "window", "window_decay", "heads", "position",
+        "position_rate",
+    )
+    CONSTRUCTION_OPTIONS = ("window", "window_decay", "heads", "position")
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
     RETIRED = ("write", "key", "episodes", "value", "context", "context_decay")
     # the keys the checkpoint format of 0.84.3 (``cadence-generic/8`` and ``/9``) always wrote
@@ -555,7 +579,30 @@ class Recall:
             ):
                 raise ValueError("heads must be an integer of at least 1")
             return int(value)
+        if name == "position":
+            if (
+                isinstance(value, (bool, np.bool_))
+                or not isinstance(value, (int, np.integer))
+                or value < 0
+            ):
+                raise ValueError(
+                    "position must be a nonnegative integer: the ages with a bucket each, 0 for "
+                    "no position term"
+                )
+            return int(value)
+        if name == "position_rate":
+            return real(name, value, low=0)
         raise TypeError(f"unknown recall setting: {name!r}")
+
+    @staticmethod
+    def position_count(position: int, capacity: int) -> int:
+        """The age buckets of a position term: one per age below ``position``, then one per
+        doubling up to ``capacity``; 0 without a position term."""
+        if not position:
+            return 0
+        if capacity <= position:
+            return int(capacity)
+        return int(position + np.floor(np.log2((capacity - 1) / position)) + 1)
 
     @staticmethod
     def ports(heads: int, next: bool = True) -> tuple[tuple[str, ...], ...]:
@@ -650,6 +697,12 @@ class Recall:
             (np.zeros_like(self.w_x), np.zeros_like(self.w_c), np.zeros_like(self.b))
             for _ in range(self.heads - 1)
         ]
+        # every head's position maps ``(P_x, P_c, p)``, head 0's first; none without ``position``
+        count = self.position_buckets
+        self.position_maps: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = [
+            (np.zeros((width, count)), np.zeros((len(self.association), count)), np.zeros(count))
+            for _ in range(self.heads if count else 0)
+        ]
         self.last: _Moment | None = None
         self._attended: np.ndarray | None = None  # the attention of the latest read
         # every head's address and attention of the latest read (head 0's are ``last.address``
@@ -678,6 +731,54 @@ class Recall:
     def ages(self) -> np.ndarray:
         """Moments since each slot was written: ``slots - 1`` for the oldest, 0 the latest."""
         return np.arange(self.slots - 1, -1, -1, dtype=float)
+
+    def position_map(self, head: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Head ``head``'s position maps ``(P_x, P_c, p)``; refused without a position term."""
+        if not self.position_maps:
+            raise ValueError("this memory has no position term (position=0)")
+        if not 0 <= head < self.heads:
+            raise ValueError(f"head must lie in [0, {self.heads})")
+        return self.position_maps[head]
+
+    # head 0's position maps under their checkpoint names, as ``w_x``, ``w_c`` and ``b`` are
+    # head 0's address map; refused without a position term
+    @property
+    def position_x(self) -> np.ndarray:
+        return self.position_map(0)[0]
+
+    @property
+    def position_c(self) -> np.ndarray:
+        return self.position_map(0)[1]
+
+    @property
+    def position_b(self) -> np.ndarray:
+        return self.position_map(0)[2]
+
+    @property
+    def position_buckets(self) -> int:
+        """The age buckets of the position term (``position_count``); 0 without one."""
+        return self.position_count(self.position, self.capacity)
+
+    def buckets(self) -> np.ndarray:
+        """Each slot's age bucket: its age below ``position``, then ``position`` plus the
+        doublings of its age over ``position``, the last bucket holding every older age."""
+        ages = self.ages()
+        if not self.position:
+            return np.zeros(len(ages), dtype=np.int64)
+        exact = float(self.position)
+        out = np.where(ages < exact, ages, exact + np.floor(np.log2(np.maximum(ages, 1.0) / exact)))
+        return np.minimum(out, self.position_buckets - 1).astype(np.int64)
+
+    def position_term(
+        self, head: int, event: np.ndarray, cortex: np.ndarray
+    ) -> np.ndarray | None:
+        """Head ``head``'s position term at every slot for the moments ``event`` (the event
+        heard) and ``cortex`` (the association of the moment before), ``(rows, slots)``; None
+        without a position term or without slots."""
+        if not self.position_maps or not self.slots:
+            return None
+        p_x, p_c, p = self.position_maps[head]
+        return np.asarray((event @ p_x + cortex @ p_c + p)[:, self.buckets()])
 
     @property
     def attended(self) -> np.ndarray | None:
@@ -866,7 +967,15 @@ class Recall:
             out["past"] = self.past
         for h, (w_x, w_c, b) in enumerate(self.head_maps, start=1):
             out.update({f"w_x_{h}": w_x, f"w_c_{h}": w_c, f"b_{h}": b})
+        for h, maps in enumerate(self.position_maps):  # saved only with a position term
+            out.update(dict(zip(self.position_names(h), maps, strict=True)))
         return out
+
+    @staticmethod
+    def position_names(head: int) -> tuple[str, str, str]:
+        """The checkpoint names of head ``head``'s position maps ``(P_x, P_c, p)``."""
+        suffix = "" if head == 0 else f"_{head}"
+        return f"position_x{suffix}", f"position_c{suffix}", f"position_b{suffix}"
 
     def imagined(self) -> Recall:
         """A private copy for an imagined branch: it reads the live slots and writes none; the
@@ -914,35 +1023,46 @@ class Recall:
         return _Moment(x, c, q, key)
 
     def _attention(
-        self, address: np.ndarray, keys: np.ndarray, held: np.ndarray | None
+        self,
+        address: np.ndarray,
+        keys: np.ndarray,
+        held: np.ndarray | None,
+        position: np.ndarray | None = None,
     ) -> np.ndarray:
         """The logits of the attention over slots: ``address . key / temperature`` less
-        ``recency`` times each slot's age, ``-inf`` at a slot its stream does not hold."""
+        ``recency`` times each slot's age, plus a head's ``position`` term (``(rows, slots)``,
+        ``_position``), ``-inf`` at a slot its stream does not hold."""
         logits = np.einsum("bk,bmk->bm", address, keys) / self.temperature
         if self.recency:
             logits = logits - np.asarray(self.recency * self.ages())[None, :]
+        if position is not None:
+            logits = logits + position
         return logits if held is None else np.where(held, logits, -np.inf)
 
-    def weights(self, address: np.ndarray) -> np.ndarray | None:
+    def weights(self, address: np.ndarray, position: np.ndarray | None = None) -> np.ndarray | None:
         """``p`` over each stream's slots for the ``(batch, key)`` addresses, or None when the
-        streams hold no slot or are another batch. With a ``null`` slot, whose logit
-        ``null / temperature`` joins the softmax and which reads nothing, the slots' shares
-        sum to one less the null slot's."""
+        streams hold no slot or are another batch. ``position`` is a head's position term at
+        every slot (``position_term``); without it the attention is the content's and the
+        recency's alone, which is what the read used only where the memory has no position
+        term. With a ``null`` slot, whose logit ``null / temperature`` joins the softmax and
+        which reads nothing, the slots' shares sum to one less the null slot's."""
         if not self.slots or self.streams != len(address):
             return None
         if self.null is not None:
-            logits = self._attention(address, self.keys, None if self.held.all() else self.held)
+            logits = self._attention(
+                address, self.keys, None if self.held.all() else self.held, position
+            )
             null = self.null / self.temperature
             top = np.maximum(logits.max(axis=1), null)  # a stream that holds no slot: the null
             p = np.exp(logits - top[:, None])
             total = p.sum(axis=1) + np.exp(null - top)
             return np.asarray(p / total[:, None])
         if self.held.all():
-            logits = self._attention(address, self.keys, None)
+            logits = self._attention(address, self.keys, None, position)
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
             return np.asarray(p / p.sum(axis=1, keepdims=True))
         # a stream that began since holds fewer slots; one that holds none reads silence
-        logits = self._attention(address, self.keys, self.held)
+        logits = self._attention(address, self.keys, self.held, position)
         empty = ~self.held.any(axis=1)
         top = np.where(empty, 0.0, logits.max(axis=1))
         p = np.exp(logits - top[:, None])
@@ -964,7 +1084,7 @@ class Recall:
         ]
         attended: list[np.ndarray | None] = []
         for h, address in enumerate(addresses):
-            p = self.weights(address)
+            p = self.weights(address, self.position_term(h, moment.event, moment.cortex))
             if p is not None:
                 p.flags.writeable = False
             attended.append(p)
@@ -1111,11 +1231,17 @@ class Recall:
         ``K* - sum_i p_i K_i`` under ``"toward"``), and how many rows a refused step left as
         they were (``address_refused``). With several heads each head steps its own map; the
         rows and refusals are summed over the heads (a row counts once per head that moved
-        it) and the error is the mean over the heads that moved."""
+        it) and the error is the mean over the heads that moved. With a position term the
+        report also counts the rows whose position maps moved (``position_rows``) and those a
+        refused position step left as they were (``position_refused``), summed over the
+        heads."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
+        if self.position_maps:
+            quiet.update(position_rows=0.0, position_refused=0.0)
         moment = self.last
+        positions = bool(self.position_maps) and self.position_rate > 0
         if (
-            not self.address
+            not (self.address or positions)
             or moment is None
             or learned.free is None
             or learned.nudged is None
@@ -1136,23 +1262,88 @@ class Recall:
         )
         movement = (plus - minus)[:, self.association]
         reports = []
+        moved_positions = refused_positions = 0
         for h in range(self.heads):
             d_value = self.readback(graph, "recall", movement, h)
             d_next = self.readback(graph, "next", movement, h) if self.next else None
-            if h == 0:  # head 0 steps ``w_x``, ``w_c`` and ``b`` as a memory of one head does
-                reports.append(self._step(moment, rows, d_value, d_next))
-                continue
-            head_moment = moment._replace(address=self._head_address(moment, h))
-            reports.append(self._step(head_moment, rows, d_value, d_next, head=h))
-        if len(reports) == 1:
-            return reports[0]
-        # every head's rows and refusals summed, the error averaged over the heads that moved
-        moved = [r["address_error"] for r in reports if r["address_rows"]]
-        return {
-            "address_rows": float(sum(r["address_rows"] for r in reports)),
-            "address_error": float(np.mean(moved)) if moved else 0.0,
-            "address_refused": float(sum(r["address_refused"] for r in reports)),
-        }
+            # head 0 steps ``w_x``, ``w_c`` and ``b`` as a memory of one head does
+            head_moment = (
+                moment if h == 0 else moment._replace(address=self._head_address(moment, h))
+            )
+            # one reading of the rows for both steps: the address step changes neither the
+            # address the read used nor this head's position term
+            found = self._row_steps(head_moment, rows, d_value, d_next, h)
+            if self.address:
+                reports.append(
+                    self._step(moment, rows, d_value, d_next, found=found) if h == 0
+                    else self._step(head_moment, rows, d_value, d_next, head=h, found=found)
+                )
+            if positions:
+                rows_moved, rows_refused = self._position_step(
+                    head_moment, rows, d_value, d_next, h, found
+                )
+                moved_positions += rows_moved
+                refused_positions += rows_refused
+        if not reports:
+            report = dict(quiet)
+        elif len(reports) == 1:
+            report = reports[0]
+        else:
+            # every head's rows and refusals summed, the error averaged over the heads that moved
+            moved = [r["address_error"] for r in reports if r["address_rows"]]
+            report = {
+                "address_rows": float(sum(r["address_rows"] for r in reports)),
+                "address_error": float(np.mean(moved)) if moved else 0.0,
+                "address_refused": float(sum(r["address_refused"] for r in reports)),
+            }
+        if self.position_maps:
+            report["position_rows"] = float(moved_positions)
+            report["position_refused"] = float(refused_positions)
+        return report
+
+    def _position_step(
+        self,
+        moment: _Moment,
+        rows: np.ndarray,
+        d_value: np.ndarray,
+        d_next: np.ndarray | None,
+        head: int,
+        found: tuple[np.ndarray, ...] | None = None,
+    ) -> tuple[int, int]:
+        """The step of head ``head``'s position maps toward the slots the lesson's movement
+        names (``p*`` of the address lesson): each moving row's terms take the cross-entropy
+        gradient ``g_b = sum_{i in b} (p*_i - p_i)``, and the maps the least-mean-squares step on
+        ``z = [x, c, 1]`` at ``position_rate``, each row's rate bounded by its own energy.
+        ``found`` is the rows' reading (``_row_steps``) when the caller has it. Returns the rows
+        that moved and the rows a refused step left as they were: a step that is not finite is
+        refused and moves none."""
+        if found is None:
+            found = self._row_steps(moment, rows, d_value, d_next, head)
+        if found is None:
+            return 0, 0
+        _, x, c, _, _, _, target, prior = found
+        rate = self.position_rate
+        count = self.position_buckets
+        p_x, p_c, p = self.position_maps[head]
+        with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
+            # a slot its stream does not hold has neither attention nor a target
+            gradient = np.where(np.isfinite(prior), target - np.exp(prior), 0.0)
+            terms = np.zeros((len(gradient), count))
+            np.add.at(terms, (np.arange(len(gradient))[:, None], self.buckets()[None, :]), gradient)
+            energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
+            step = terms * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
+            maps = (
+                p_x + rate * x.T @ step / len(x),
+                p_c + rate * c.T @ step / len(x),
+                p + rate * step.mean(axis=0),
+            )
+        if not all(np.isfinite(a).all() for a in maps):
+            return 0, int(len(x))
+        # new arrays, never written in place: an imagined branch may hold the old ones
+        self.position_maps = [
+            maps if h == head else kept for h, kept in enumerate(self.position_maps)
+        ]
+        return int(len(x)), 0
 
     def _step(
         self,
@@ -1161,6 +1352,7 @@ class Recall:
         d_value: np.ndarray,
         d_next: np.ndarray | None,
         head: int = 0,
+        found: tuple[np.ndarray, ...] | None = None,
     ) -> dict[str, float]:
         """The least-mean-squares step of the address map toward the keys of the slots the
         scores name, on each row's inputs ``z = [x, c, 1]``. A row's rate is ``address``
@@ -1175,12 +1367,14 @@ class Recall:
         and the report counts the refused rows. With ``address_step="toward"`` each row's
         error, the one ``address_error`` reports, is its target less the keys' mixture its
         address attended to. ``head`` names the map that steps (``moment.address`` is that
-        head's address)."""
+        head's address); ``found`` is the rows' reading (``_row_steps``) when the caller has
+        it."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
-        found = self._row_steps(moment, rows, d_value, d_next)
+        if found is None:
+            found = self._row_steps(moment, rows, d_value, d_next, head)
         if found is None:
             return quiet
-        _, x, c, key, error, step = found
+        _, x, c, key, error, step, _, _ = found
         n = len(x)
         rate = self.address
         old_x, old_c, old_b = self.head_map(head)
@@ -1203,13 +1397,20 @@ class Recall:
         }
 
     def _row_steps(
-        self, moment: _Moment, rows: np.ndarray, d_value: np.ndarray, d_next: np.ndarray | None
-    ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
+        self,
+        moment: _Moment,
+        rows: np.ndarray,
+        d_value: np.ndarray,
+        d_next: np.ndarray | None,
+        head: int = 0,
+    ) -> tuple[np.ndarray, ...] | None:
         """Each row's step of the address lesson before the average over rows: the rows of
         ``rows`` that move (a movement and a held slot), and at those rows the event ``x``,
-        the cortex ``c``, the key, the error toward the named keys and the error bounded by
-        the row's own energy, ``error * min(1, 1 / (address |z|^2))``. None when no row
-        moves. The arithmetic is unchecked: a caller checks what it keeps."""
+        the cortex ``c``, the key, the error toward the named keys, the error bounded by
+        the row's own energy, ``error * min(1, 1 / (address |z|^2))``, the attention ``p*``
+        the lesson names and the log of the prior attention the address gave (head ``head``'s
+        position term in it). None when no row moves. The arithmetic is unchecked: a caller
+        checks what it keeps."""
         values, nexts, keys = self.values[rows], self.nexts[rows], self.keys[rows]
         held = self.held[rows]
         masked = not held.all()
@@ -1235,7 +1436,9 @@ class Recall:
             if masked:
                 logits = np.where(held[moving], logits, -np.inf)
             # among the moments the address attended to: the attention is the prior
-            attention = self._attention(q, keys[moving], held[moving] if masked else None)
+            attention = self._attention(
+                q, keys[moving], held[moving] if masked else None, self.position_term(head, x, c)
+            )
             attention -= attention.max(axis=1, keepdims=True)
             attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
             logits = logits + attention
@@ -1256,7 +1459,7 @@ class Recall:
             # gains), so sum_i D_i |e_i|^2 does not grow, though one row can pass its target.
             energy = np.einsum("bi,bi->b", x, x) + np.einsum("bi,bi->b", c, c) + 1.0
             step = error * np.minimum(1.0, 1.0 / (rate * energy))[:, None]
-        return moving, x, c, key, error, step
+        return moving, x, c, key, error, step, p, attention
 
     # -- reward trains the address map
 
@@ -1286,10 +1489,10 @@ class Recall:
             d_value = self.readback(graph, "recall", movement, h)
             d_next = self.readback(graph, "next", movement, h) if self.next else None
             head_moment = moment._replace(address=self._head_address(moment, h))
-            found = self._row_steps(head_moment, np.arange(batch), d_value, d_next)
+            found = self._row_steps(head_moment, np.arange(batch), d_value, d_next, h)
             if found is None:
                 continue
-            moving, x, c, _, _, step = found
+            moving, x, c, _, _, step, _, _ = found
             z = np.concatenate([x, c, np.ones((len(x), 1))], axis=1)
             with np.errstate(over="ignore", invalid="ignore"):
                 rows = self.address * np.einsum("bi,bk->bik", z, step)
