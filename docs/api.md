@@ -123,7 +123,7 @@ trace's (`scales["trace"]`) founder is 1.2. The arguments of 0.84.3 `sensory_sca
 | `live(observations, *, reward=None, done=None, salience=None, decision_id=None) -> actions` | One moment of one stream; needs `arousal`. Calm: one greedy qualified settle, no learning. Aroused: samples, learns from the outcome, writes memory. Omitted `reward` with a pending action is a zero outcome. Optional `salience` is one finite nonnegative importance for that outcome; it preserves reward and the arousal gate. A wrong `decision_id` or invalid salience raises before any change; a mark without an awaited action raises `RuntimeError`. | [routine and repair](start.md#routine-and-repair-live) |
 | `wait(observations) -> None` | Senses a moment while a `live` action awaits its outcome: settles, advances the traces, writes the recall slot; issues nothing and learns nothing. Raises `ValueError` without arousal or with several streams, `RuntimeError` without an awaited action or when the settle cannot qualify. | [outcomes that arrive later](start.md#outcomes-that-arrive-later-wait) |
 | `step(observations, *, reward=None, done=None, teacher=None, salience=None, bootstrap=None) -> actions` | Learns from the preceding outcome, teaches `teacher` labels of the present observation, samples the next action. Omitted `reward` is a real zero. | [explicit learning](teach.md#explicit-learning-with-step) |
-| `lesson(observations, labels) -> dict` | The teaching part of `step` without the act; records the demonstration in an episodic memory and runs the recall address lesson. Refused with `RuntimeError` while a sampled action awaits its outcome; a refused phase raises `LearningPhaseError` and changes nothing. | [explicit learning](teach.md#explicit-learning-with-step) |
+| `lesson(observations, labels) -> dict` | The teaching part of `step` without the act; records the demonstration in an episodic memory and runs the recall address lesson. With a recall memory, teach a moment before acting on it, as `step` does: a lesson on the observations the brain just acted on reads the recall memory as that act left it (the moment itself, its successor still empty) and warns with `RuntimeWarning`. Refused with `RuntimeError` while a sampled action awaits its outcome; a refused phase raises `LearningPhaseError` and changes nothing. | [explicit learning](teach.md#explicit-learning-with-step) |
 | `act(observations, *, greedy=False, temperature=None) -> actions` | One qualified free settle and a sampled (or greedy) choice, one index per slot; advances the working trace. `temperature` is one value or one per slot. Exhaustion raises `RuntimeError` before any change. | [one experience step by hand](tune.md#one-experience-step-by-hand) |
 | `learn(reward, done, next_observations, *, bootstrap=None, salience=None) -> dict` | Feedback for the pending sampled action: hippocampal record, actor and critic update; `done` rows reset their traces. A refused feedback solve rolls everything back and keeps the action pending. | [reward](reward.md#decision-and-reset-contract) |
 | `imagine(observations, *, budget=1024, tolerance=1e-6) -> tuple[Equilibrium, ...]` | A private branch over a sequence of batches: memories read, nothing written, live state unchanged. A refused phase ends the branch and is the last entry. | [private imagination](start.md#private-imagination) |
@@ -196,16 +196,17 @@ match the motor population, so action indices keep their meaning after loading.
 ```text
 ArousalConfig(threshold=0.2, decay=0.9, tolerance=2.0, floor=0.1, fast=0.05,
               slow=0.005, heat=2.0, youth=100, value_surprise=1.0, need=0.0,
-              need_scale=0.1)
+              need_scale=0.1, hindsight=0)
 Arousal(config=None)
 ```
 
 `ArousalConfig` holds the genes of the law; `to_dict()` returns them and
 `ArousalConfig.space()` declares their mutation space for [`genes`](anatomy.md#any-genome),
-without `need_scale`, which a space of your own can add
-(`{**ArousalConfig.space(), "need_scale": ("linear", 0.02, 0.0, 1.0)}`).
-Construction refuses negative values, `decay` outside `[0, 1)`, `fast` or `slow` outside
-`(0, 1]`, `fast < slow` and a `youth` that is not a nonnegative integer. The law and the
+without `need_scale` and `hindsight`, which a space of your own can add
+(`{**ArousalConfig.space(), "need_scale": ("linear", 0.02, 0.0, 1.0)}`, `"hindsight": ("int",
+0, 32)`). `to_dict()` leaves out the founder `hindsight=0`. Construction refuses negative
+values, `decay` outside `[0, 1)`, `fast` or `slow` outside `(0, 1]`, `fast < slow` and a
+`youth` or `hindsight` that is not a nonnegative integer. The law and the
 meaning of each gene are in [routine and repair](start.md#routine-and-repair-live).
 
 `Arousal` is one stream's state; `Brain.live` runs it, and it can be used alone.
@@ -215,11 +216,12 @@ meaning of each gene are in [routine and repair](start.md#routine-and-repair-liv
 | `outcome(error, reward, *, own=True, learned=True) -> (surprise, want)` | Applies one outcome. Only `own` outcomes can surprise and enter `usual`; every outcome moves `recent` and `longrun`; `learned` outcomes, and any in youth or that leave the stream aroused, enter `scale`. An outcome whose statistics cannot stay finite raises `ValueError` and changes nothing. |
 | `lived(sweeps, learning_sweeps=0)` | Counts one moment in `moments`, `sweeps` (per mode), `learning_sweeps` and `age`. |
 | `reset()` | Begins another stream calm; clears the averages and their counts, the reward scale among them (so a scaled need is zero until outcomes enter it again), keeps `age` and the work counts. `Brain.reset()` leaves the state as it is; `Brain.reset(keep=())` calls this. |
-| `to_dict()`, `Arousal.from_dict(values)` | The complete state with every gene, marked `cadence-arousal/4`. |
+| `to_dict()`, `Arousal.from_dict(values)` | The complete state with every gene, marked `cadence-arousal/4`; the founder `hindsight=0` is left out, and a positive `hindsight` is carried under `cadence-arousal/5`. |
 | `level`, `age`, `moments`, `sweeps`, `learning_sweeps`, `outcomes`, `rewards`, `spreads`, `config` | State and counters: `outcomes` counts own outcomes, `rewards` all outcomes. |
 | `aroused`, `mode`, `want`, `heat`, `usual`, `recent`, `longrun`, `scale` | Read-only: `aroused` while `level >= threshold` or within `youth`; `heat` is `1 + config.heat * want`. |
 
-`from_dict` reads `cadence-arousal/4` and the states of 0.84.3: `cadence-arousal/3`,
+`from_dict` reads `cadence-arousal/5` (a positive `hindsight`; refused without one),
+`cadence-arousal/4` (`hindsight=0`; refused with the gene written) and the states of 0.84.3: `cadence-arousal/3`,
 `cadence-arousal/2`, `cadence-arousal/1` and unversioned states. It requires every gene and
 continuation field, except that an unversioned state with the gene set before `need` loads
 with `need=0` and a state under a format before `cadence-arousal/3` loads with

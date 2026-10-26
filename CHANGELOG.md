@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.88.1 — 2026-10-26
+
+- Add `arousal_hindsight` (opt-in, founder 0): the outcome that wakes a calm `live` brain
+  credits the stream's last `k` calm moments. The actor and critic step through the held
+  transitions in order, the waking outcome last, each held greedy action's eligibility scored
+  as a sampled action's (a learned recall address map is not credited); `last_arousal["credited"]` counts them.
+  Routine moments still change nothing. The founder is left out of genes, descriptions and
+  saves, so every founder brain and checkpoint is byte-identical to 0.88.0; a positive value
+  saves as `cadence-arousal/5`, which 0.88.0 refuses. Experimental: no gain over the founder
+  has been measured yet.
+- Warn (`RuntimeWarning`) when, in a brain with a recall memory, `lesson` follows an act on
+  the same observations. The act has already written the moment to the recall memory, so the
+  lesson reads the moment itself, a slot whose successor is still empty. `step(...,
+  teacher=labels)` already teaches first; the greedy act that replaces a pending sampled
+  action before a lesson, and the act-then-lesson DAgger recipe, are unchanged for brains
+  without one.
+
 ## 0.88.0 — 2026-10-25
 
 - Add several held memory-read heads: `recall_heads=k` reads one Recall bank through k

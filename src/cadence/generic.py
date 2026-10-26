@@ -36,6 +36,7 @@ designed region can replace any of them.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
 from pathlib import Path
@@ -1844,6 +1845,13 @@ class Brain:
             | None
         ) = None
         self._last_arousal: Mapping[str, Any] | None = None
+        # ``live`` with ``hindsight``: the calm transitions of the stream an outcome that wakes
+        # the brain credits (drive, free state, action, reward), and the calm action issued
+        # last (drive, free state, action) until its outcome arrives
+        self._calm: list[tuple[np.ndarray, BrainState, np.ndarray, float]] = []
+        # ``act``: its observations and the stream state it left, for the lesson-order warning
+        self._acted: tuple[np.ndarray, BrainState | None] | None = None
+        self._calm_issued: tuple[np.ndarray, BrainState, np.ndarray] | None = None
         # ``wait``: the free state of the action whose outcome is awaited, and the state the
         # stream has sensed since; any operation that replaces that action's state ends it
         self._awaiting: tuple[BrainState, BrainState] | None = None
@@ -2585,6 +2593,9 @@ class Brain:
         agent.config = reward
         if self.arousal is not None:
             assert arousal is not None
+            if arousal.hindsight != self.arousal.config.hindsight:
+                # held calm moments belong to the hindsight they were held under
+                self._calm, self._calm_issued = [], None
             self.arousal.config = arousal
         for component, field, value in memory_changes:
             setattr(component, field, value)
@@ -3227,6 +3238,21 @@ class Brain:
             raise RuntimeError(
                 "a sampled action awaits its outcome; report it with step or learn first"
             )
+        acted = self._acted
+        if (
+            self.recall is not None
+            and acted is not None
+            and acted[1] is current
+            and np.array_equal(acted[0], x)
+        ):
+            warnings.warn(
+                "lesson on the observations the brain just acted on: the act already wrote "
+                "this moment to the recall memory, so the lesson reads the moment itself, its "
+                "successor still empty. Teach before acting, as step(..., teacher=labels) "
+                "orders them.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
         self.last_learning = {}
         return dict(self._lesson(x, labels))
 
@@ -3364,6 +3390,10 @@ class Brain:
         error = surprise = want = 0.0
         sweeps = learning_sweeps = 0
         learned = recorded = False
+        credited = 0
+        replay = False
+        if not routine:
+            self._calm = []  # held calm moments belong to an unbroken run of routine outcomes
         if sampled:
             report = self.learn(r, ended, x, salience=importance)
             self._lived = None  # accepted feedback must never become pending again
@@ -3394,6 +3424,13 @@ class Brain:
                 raise
             self._lived = None  # this outcome is taken, exactly once
             self._awaiting = None  # and the stream continues from where it settled
+            issued, self._calm_issued = self._calm_issued, None
+            if routine and arousal.config.hindsight:
+                assert lived is not None
+                if issued is not None and issued[1] is lived[4]:
+                    self._calm.append((*issued, float(r[0])))
+                    del self._calm[: -arousal.config.hindsight]
+                replay = arousal.aroused and bool(self._calm)
             if routine:
                 if ended[0] and self.working_memory is not None:
                     self.working_memory.reset(1, rows=np.array([0]))
@@ -3409,8 +3446,9 @@ class Brain:
                         self.recall.hold(self._forecast_read)
                 self._forecast_read = None
                 # a moment without eligibility has passed: the credit of earlier sampled
-                # actions fades as it does between two outcomes that are learned from
-                agent.fade(ended)
+                # actions fades as it does between two outcomes that are learned from; an end
+                # credited in hindsight clears the traces at its replayed step instead
+                agent.fade(None if replay else ended)
             if routine and arousal.aroused and self.hippocampus is not None:
                 assert lived is not None
                 if not self.memory_choice:
@@ -3437,6 +3475,18 @@ class Brain:
                         answer[1], self.brain, answer[0]
                     )
                     answer = None
+            if replay:
+                now_drive, now_state = answer if answer is not None else (agent._drive, agent._free)
+                assert now_drive is not None and now_state is not None
+                held = len(self._calm)
+                credited, work = self._credit_calm(now_drive, now_state, bool(ended[0]))
+                learning_sweeps += work
+                learned = learned or credited > 0
+                if ended[0] and credited < held:
+                    agent.fade(ended)  # the end's own step was not taken: its traces end here
+                answer = None  # the parameters may have moved: settle this moment again
+            if routine and (arousal.aroused or ended[0]):
+                self._calm = []
             episodic = self._episodic
             if routine and episodic is not None:
                 episodic.received(r)  # a calm outcome joins the path; replay may value it later
@@ -3476,6 +3526,11 @@ class Brain:
         if agent._pending is not None:
             learning_sweeps += int(agent._pending[1].steps) + int(agent._pending[2].steps)
         chosen = [int(choice) for choice in np.atleast_1d(action[0])]
+        self._calm_issued = (
+            (answer[0].copy(), state, np.asarray(action).copy())
+            if not aroused and arousal.config.hindsight
+            else None
+        )
         self._lived = (
             x.copy(),
             action.copy(),
@@ -3502,12 +3557,57 @@ class Brain:
                 "heated_slot": heated_slot,
                 "learned": learned,
                 "recorded": recorded,
+                "credited": credited,
                 "sweeps": int(sweeps),
                 "learning_sweeps": int(learning_sweeps),
             }
         )
         arousal.lived(sweeps, learning_sweeps)
         return action
+
+    def _credit_calm(
+        self, drive: np.ndarray, state: BrainState, ended: bool
+    ) -> tuple[int, int]:
+        """Credit the held calm transitions to the outcome that woke the brain: score each
+        greedy action's eligibility, as a sampled action's, and step the actor and critic
+        through them in order with their own rewards, the waking outcome last, its next
+        moment ``drive`` and ``state``. Returns the moments credited and the settle steps.
+        A refused step ends the credit; the steps taken stay learned."""
+        agent = self.basal_ganglia
+        moments, self._calm = self._calm, []
+        try:
+            agent.unfade(len(moments))
+        except ValueError:
+            return 0, 0  # the traces cannot be restored over this many moments: credit none
+        beta = self.learner.config.beta
+        credited = work = 0
+        try:
+            for i, (moment_drive, moment_state, action, reward) in enumerate(moments):
+                last = i == len(moments) - 1
+                next_drive, warm = (drive, state) if last else moments[i + 1][:2]
+                target = self.learner.targets(action)
+                plus = agent._nudged_groups(moment_drive, moment_state, target, beta)
+                minus = agent._nudged_groups(moment_drive, moment_state, target, -beta)
+                agent._free, agent._free_brain = moment_state, self.learner.brain
+                agent._drive = moment_drive
+                agent._pending = ("states", plus, minus, agent.value(moment_state))
+                # the recall read of a held moment is gone: its address map is not credited
+                agent._pending_memory = None
+                done = np.array([ended and last])
+                report = agent.learn(
+                    np.array([reward]), done, next_drive, warm=None if done[0] else warm
+                )
+                credited += 1
+                work += int(plus.steps) + int(minus.steps) + int(report["free_steps"])
+                self.last_learning = report
+        except BaseException as exc:
+            # a refused step ends the credit, and the steps taken stay learned; the stream
+            # continues from the waking moment, with no held action pending
+            agent._pending = agent._pending_memory = None
+            agent._free, agent._free_brain, agent._drive = state, self.learner.brain, drive
+            if not isinstance(exc, RuntimeError):
+                raise
+        return credited, work
 
     def wait(self, observations: Any) -> None:
         """One moment of the stream while its issued action's outcome is still to come.
@@ -3789,7 +3889,9 @@ class Brain:
         if temperature is not None:
             temperature = self.basal_ganglia._temperature(temperature)
         drive, free = self._settled(x)
-        return self._choose(x, drive, free, greedy=greedy, temperature=temperature)
+        action = self._choose(x, drive, free, greedy=greedy, temperature=temperature)
+        self._acted = (x.copy(), self.basal_ganglia.state)
+        return action
 
     def _settled(self, x: np.ndarray) -> tuple[np.ndarray, BrainState]:
         """The drive of validated observations and its qualified free state, warm from the
@@ -4095,6 +4197,8 @@ class Brain:
         self._last_settlement = None
         self._lived = None
         self._last_arousal = None
+        self._calm, self._calm_issued = [], None
+        self._acted = None
         self._awaiting = None
         if self.arousal is not None and "arousal" not in kept:
             self.arousal.reset()
