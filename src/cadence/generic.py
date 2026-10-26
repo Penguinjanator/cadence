@@ -3476,10 +3476,10 @@ class Brain:
                     )
                     answer = None
             if replay:
-                now = answer if answer is not None else (agent._drive, agent._free)
-                assert now[0] is not None and now[1] is not None
+                now_drive, now_state = answer if answer is not None else (agent._drive, agent._free)
+                assert now_drive is not None and now_state is not None
                 held = len(self._calm)
-                credited, work = self._credit_calm(*now, bool(ended[0]))
+                credited, work = self._credit_calm(now_drive, now_state, bool(ended[0]))
                 learning_sweeps += work
                 learned = learned or credited > 0
                 if ended[0] and credited < held:
