@@ -3242,8 +3242,9 @@ class Brain:
         supports is another objective than teaching by surprise, and a lesson-only curriculum
         leaves the cortex untaught on those rows. An episodic memory that remembers
         demonstrations records the taught rows. Returns the teaching report (with a
-        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too; with
-        several heads the rows and refusals are summed over them), which
+        recall memory, ``address_rows``, ``address_error`` and ``address_refused`` too, and
+        with its position term ``position_rows`` and ``position_refused``; with several heads
+        the rows and refusals are summed over them), which
         ``last_learning`` holds with the ``demonstration_`` prefix; a refused phase raises
         ``LearningPhaseError`` and leaves the parameters and memories as they were. The next
         ``act`` settles afresh under the changed parameters and writes the moment. The streams
@@ -4228,8 +4229,8 @@ class Brain:
             self.arousal.reset()
 
     def parameters(self) -> int:
-        """Actor/critic and consolidated weights, the recall memory's address map and a learned
-        code's tables; per-stream transient storage is additional."""
+        """Actor/critic and consolidated weights, the recall memory's address and position
+        maps and a learned code's tables; per-stream transient storage is additional."""
         recall = self.recall
         return (
             self.basal_ganglia.parameters()
@@ -4242,6 +4243,7 @@ class Brain:
             + (
                 0 if recall is None
                 else sum(sum(a.size for a in recall.head_map(h)) for h in range(recall.heads))
+                + sum(a.size for maps in recall.position_maps for a in maps)
             )
             + (0 if self.learned_code is None else self.learned_code.parameters())
         )

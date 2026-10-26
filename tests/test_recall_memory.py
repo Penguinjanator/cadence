@@ -836,9 +836,9 @@ def test_the_bound_leaves_the_token_task_as_it_was(monkeypatch):
     gains = []
     original = cd.Recall._step
 
-    def recorded(self, moment, rows, d_value, d_next):
+    def recorded(self, moment, rows, d_value, d_next, **reading):
         gains.extend(_gain(self, moment, rows).tolist())
-        return original(self, moment, rows, d_value, d_next)
+        return original(self, moment, rows, d_value, d_next, **reading)
 
     monkeypatch.setattr(cd.Recall, "_step", recorded)
     held = tb.holdout(0)
@@ -1134,10 +1134,13 @@ def test_an_unknown_recall_gene_is_refused_as_a_typo():
         composed(recall_capcity=8)
 
 
-def test_describe_reports_the_memory_and_parameters_count_its_address_map():
+def test_describe_reports_the_memory_and_parameters_count_its_address_and_position_maps():
     brain = composed()
     assert brain.describe()["memories"].get("recall") == brain.recall.to_dict()
-    assert brain.parameters() == brain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4
+    # the address map (4 + 8 + 1 rows of 4) and the position maps (4 + 8 + 1 rows of 33 buckets)
+    assert brain.parameters() == brain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4 + 13 * 33
+    plain = composed(recall_position=0)
+    assert plain.parameters() == plain.basal_ganglia.parameters() + 4 * 4 + 8 * 4 + 4
 
 
 # -- options beside the founder memory

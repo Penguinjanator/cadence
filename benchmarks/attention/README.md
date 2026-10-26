@@ -1,5 +1,28 @@
 # Memory relevance and attention
 
+## Looking back by position (`recall_position`, 0.89.0)
+
+The [look-back benchmark](look_back.py) streams five random symbols, then a cue, `first` or
+`last`, and asks for the symbol at the cued place. The cue matches no stored key and recency
+is off, so only the position term can tell the slots apart. Only the cue moment is taught,
+1200 episodes per founder at `teaching="normalized"`; 160 test episodes follow without
+lessons. Its four-founder [receipt](results/look-back.json):
+
+| Founder | With the term: `first`, `last` | Without it: `first`, `last` | Uniform random |
+| --- | --- | --- | --- |
+| 0 | 1.00, 1.00 | 0.42, 0.63 | 0.25 |
+| 1 | 1.00, 1.00 | 0.51, 0.70 | 0.25 |
+| 2 | 1.00, 1.00 | 0.46, 0.81 | 0.25 |
+| 3 | 0.83, 1.00 | 0.31, 0.73 | 0.25 |
+
+Founder 3 misses the declared gate of 0.9 on both cues, so the receipt's decision is not
+passed; every founder's term beats the memory without it by at least 0.29. The result is
+recomputed by `test_look_back.py`.
+
+```sh
+PYTHONPATH=src python benchmarks/attention/look_back.py --out /tmp/look-back.json
+```
+
 ## Several facts in one settle: held heads (`recall_heads`)
 
 `Brain.compose(..., learned_code=units, attention=True, recall_heads=k)` reads one witnessed

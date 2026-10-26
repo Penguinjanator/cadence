@@ -343,7 +343,11 @@ default for other observations or worlds.
 The zero address gain is deliberate. The **meaning code is learned**, but the extra map that
 would transform the Recall query is not used by this recipe. Selection comes from similarity
 between learned-code windows. This is the smallest mechanism that passed the contextual
-choice controls.
+choice controls. The [position term](#position-how-long-ago-a-moment-happened) is built here as
+everywhere and learns whatever the address gain is, so after the first lesson the read also
+weighs each slot's age. The contextual-choice and held-heads receipts were measured with
+`recall_position=0`; at the founder position the same protocols passed every gate on the
+founders run (contextual choice: 0 and 1; held heads: report 0 and 2, flee 0 and 1).
 
 In the [contextual-choice benchmark](../benchmarks/attention/contextual_choice.py), every
 final observation is the same literal ASK. Two stored episodes differ only in their earlier
@@ -698,13 +702,15 @@ Before each settle the present moment computes its address
 
 ```text
 q = heard * x + x W_x + c W_c + b
-p = softmax(q . K / temperature - recency * age)
+p = softmax(q . K / temperature - recency * age + a(x, c)[bucket(age)])
 ```
 
 `x` is the observation as the memory hears it, `c` the settled association activity of
 the moment before, `K` the stored keys, and `W_x`,
 `W_c`, `b` a learned map that starts at zero, so before any lesson the address is the key
-and a name finds the moment it was stated in. `p` is kept in `brain.recall.attended`. The
+and a name finds the moment it was stated in. `a` is the
+[position term](#position-how-long-ago-a-moment-happened), also zero until a lesson moves it.
+`p` is kept in `brain.recall.attended`. The
 `recall` region is driven at
 `amplitude * sum p V` and the `next` region at `amplitude * sum p N`, held through the settle as a sensory drive is: the settle answers
 on the mixture the address chose and cannot revise the choice. Both regions reach the
@@ -725,7 +731,8 @@ through the recall and next synapses, scores each slot's value and next against 
 the scores by `softmax(score / address_temperature + log p)` and steps the map toward the
 keys so weighted (`K*`) at the taught rows, each at the rate `min(recall_address, 1 / |z|^2)`
 on `z = [x, c, 1]`. The report gives `address_rows`, `address_error` and `address_refused`
-(rows whose non-finite step was refused). The founder step `"lms"` takes the error `K* - q`;
+(rows whose non-finite step was refused), and with the position term `position_rows` and
+`position_refused`. The founder step `"lms"` takes the error `K* - q`;
 `recall_address_step="toward"` takes `K* - sum p K`, raising the named slots against the
 attended ones whatever the keys' norms.
 
@@ -741,8 +748,9 @@ as the map's eligibility. The actor holds it in a trace of its own (decaying by
 ### Position: how long ago a moment happened
 
 A key says what a moment was; nothing in it says when. Two moments with the same event and
-the same key are indistinguishable to a read, so a question that depends on order ("at the
-beginning", "now", "the same beat one bar back") cannot be answered from keys alone. A
+the same key differ to a read only by the recency charge, which always prefers the newer one,
+so a question that depends on order ("at the beginning", "now", "the same beat one bar back")
+cannot be answered from keys alone. A
 transformer gives its keys a position for this reason. Here every head reads each slot's age,
 the moments since the slot was written, and adds a term to that slot's logit:
 
@@ -777,6 +785,13 @@ plain = Brain.compose(inputs=8, actions=3, modules=(16,), recall=True, seed=0,
 
 A checkpoint saved before 0.89.0 has no position term and loads without one, so a continuing
 brain keeps reading as it did. The maps are saved with the brain when the term is on.
+
+In the [look-back benchmark](../benchmarks/attention/look_back.py) a stream of five random
+symbols is followed by a cue, `first` or `last`, and the answer is the symbol at the cued place.
+Taught on the cue moment alone, the term learns to look back to the oldest slot on `first` and to
+the newest on `last`: three of four founders answer both cues at 1.00, the fourth 0.83 and 1.00,
+against 0.31 to 0.81 per cue without the term and 0.25 for uniform random
+([receipt](../benchmarks/attention/results/look-back.json)).
 
 ### Episodes, keys and windows
 
@@ -894,8 +909,9 @@ with `recall_next=False`), each with one neuron per value coordinate,
 `Genome.observation_width(inputs, code)`, and with `recall_heads=k` the regions `recall_h`
 and `next_h` for h from 1 to k - 1 (`Recall.ports(k)` names them). Without `recall=True` populations of those names
 are ordinary ones.
-`tests/test_recall_memory.py` checks that the library reproduces the reference memory
-`benchmarks/binding/index_read.py` moment for moment. To check that the memory does the work,
+`tests/test_recall_memory.py` checks that the library with `recall_position=0` reproduces the
+reference memory `benchmarks/binding/index_read.py`, which has no position term, moment for
+moment. To check that the memory does the work,
 erase a copy's slots with `brain.recall.reset(batch)` before the query
 ([ablation](#check-that-a-memory-does-the-work)).
 

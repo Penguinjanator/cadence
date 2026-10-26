@@ -17,10 +17,23 @@
   none. See [position](docs/memory.md#position-how-long-ago-a-moment-happened).
 - Checkpoints: a brain with the term saves its maps (`recall/position_x`, `position_c`,
   `position_b`, one set per head). A checkpoint saved before 0.89.0 names no position option and
-  holds no maps; it loads without the term and reads as it did. Brains built with recall now
-  differ from 0.88.1's after their first lesson; brains without recall, Stone Age's included,
-  are unchanged. The regression records of composed recall founders now state
-  `recall_position=0` and keep their acts; their descriptions and checkpoints name the option.
+  holds no maps; it loads without the term and reads as it did. 0.88.1 and earlier refuse every
+  recall checkpoint of 0.89.0, with or without the term. Brains built with recall now differ
+  from 0.88.1's after their first lesson; brains without recall are unchanged, and the Stone Age
+  V5 script and P1 sequence instrument, which compose none, read identically. The regression
+  records of composed recall founders now state `recall_position=0` and keep their acts; their
+  descriptions and checkpoints name the option.
+- Add the look-back benchmark (`benchmarks/attention/look_back.py`): five random symbols, then
+  a cue, `first` or `last`, answered by the symbol at the cued place, with recency off and only
+  the cue moment taught. With the term three of four founders answer both cues at 1.00 and the
+  fourth at 0.83 and 1.00; without it 0.31 to 0.81 per cue; uniform random 0.25. The fourth
+  founder misses the declared 0.9 gate on both cues, so the receipt's decision is not passed.
+- The lesson report of a memory with the term always carries `position_rows` and
+  `position_refused` (zero when nothing moved), `Brain.parameters()` counts the position maps,
+  and `Recall.position_map(head)` and `Recall.position_term(head, event, cortex)` give one
+  head's maps and its term at every slot (`weights(address, position)` with that term gives the
+  attention the read used). The constructor's two new arguments follow `writes`, so positional
+  calls of earlier versions keep their meaning.
 
 ## 0.88.1 — 2026-10-26
 

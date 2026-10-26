@@ -173,3 +173,51 @@ def test_a_refused_step_leaves_the_maps_as_they_were():
         for a, b in zip(kept, old, strict=True):
             assert np.isfinite(a).all()
             np.testing.assert_array_equal(a, b)
+
+
+@pytest.mark.filterwarnings("ignore:lesson on the observations")
+def test_every_lesson_reports_the_position_keys_and_parameters_count_the_maps():
+    """The report's keys do not depend on whether the memory held slots: a lesson on an empty
+    memory reports the position rows as zero, as later lessons report them."""
+    brain = composed()
+    first = brain.lesson(np.eye(8)[[1]], np.array([1]))
+    assert first["position_rows"] == 0.0 and first["position_refused"] == 0.0
+    brain.act(np.eye(8)[[1]], greedy=True)
+    later = brain.lesson(np.eye(8)[[2]], np.array([2]))
+    assert set(first) == set(later)
+    off = composed(recall_position=0)
+    assert "position_rows" not in off.lesson(np.eye(8)[[1]], np.array([1]))
+    sizes = sum(a.size for maps in brain.recall.position_maps for a in maps)
+    assert brain.parameters() - off.parameters() == sizes > 0
+
+
+@pytest.mark.filterwarnings("ignore:lesson on the observations")
+def test_the_term_and_the_weights_give_the_attention_the_read_used():
+    brain = composed(recall_heads=2)
+    xs = stream(30, seed=6)
+    for k, x in enumerate(xs[:24]):
+        brain.lesson(x, np.array([k % 3]))
+        brain.act(x, greedy=True)
+    recall = brain.recall
+    assert any(np.abs(m).sum() > 0 for maps in recall.position_maps for m in maps)
+    brain.stimulus(xs[24])  # the read addresses the moment and keeps its attention
+    moment, attended = recall.last, recall.attended_heads
+    for h in range(recall.heads):
+        address = moment.address if h == 0 else recall._head_address(moment, h)
+        term = recall.position_term(h, moment.event, moment.cortex)
+        np.testing.assert_allclose(recall.weights(address, term), attended[h])
+        assert recall.position_map(h) is recall.position_maps[h]
+    with pytest.raises(ValueError):
+        recall.position_map(2)
+    with pytest.raises(ValueError):
+        composed(recall_position=0).recall.position_map(0)
+
+
+def test_head_zeros_maps_go_by_their_checkpoint_names():
+    recall = composed().recall
+    assert recall.position_x is recall.position_maps[0][0]
+    assert recall.position_c is recall.position_maps[0][1]
+    assert recall.position_b is recall.position_maps[0][2]
+    assert set(cd.Recall.position_names(0)) <= set(recall.arrays())
+    with pytest.raises(ValueError):
+        _ = composed(recall_position=0).recall.position_x

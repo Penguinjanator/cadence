@@ -420,7 +420,9 @@ class Recall:
     holds its own mixture through the settle. The address lesson steps each head's map
     through that head's own synapses, and reward eligibility (``contrast_rows``) keeps one
     block of columns per head. One bank is written per moment, whatever the heads. With the
-    address map frozen (``address=0``) every head reads what head 0 reads.
+    address map frozen (``address=0``) and no position term (``position=0``) every head reads
+    what head 0 reads; the position term is taught whatever ``address`` is, so with it the
+    heads can come to read differently.
 
     With ``position`` P above 0 (a construction setting, founder 32; 0 builds none) every head also
     reads each slot's age,
@@ -436,6 +438,8 @@ class Recall:
     least-mean-squares step on ``z = [x, c, 1]`` at the rate ``position_rate``, each row's rate
     bounded by its own energy as the address map's is; a step that is not finite is refused.
     Reward trains the address map only (``address_reward``), not the position maps.
+    ``position_map(h)`` gives head h's maps and ``position_term(h, x, c)`` its term at every
+    slot; ``weights(address, position)`` with that term gives the attention the read used.
 
     The settings of 0.84.3 that this version removed (``RETIRED``, and ``recency=None``) are
     refused with a message naming that release; a checkpoint of 0.84.3 carries the keys its
@@ -458,14 +462,14 @@ class Recall:
     window: int = 1
     window_decay: float = 1.0
     heads: int = 1
-    position: int = 32
-    position_rate: float = 0.1
     source: str = "sensory"  # the observations' range
     target: str = "recall"  # the recall region; the next region is ``next``
     # the width of the observations the memory is given, when it is not the source range's: a
     # brain whose memories key on a code of the observation passes the code
     inputs: int = 0
     writes: int = 0  # slots written over the memory's life, one per stream and moment
+    position: int = 32
+    position_rate: float = 0.1
     keys: np.ndarray = field(init=False, repr=False)
     values: np.ndarray = field(init=False, repr=False)
     nexts: np.ndarray = field(init=False, repr=False)
@@ -728,21 +732,27 @@ class Recall:
         """Moments since each slot was written: ``slots - 1`` for the oldest, 0 the latest."""
         return np.arange(self.slots - 1, -1, -1, dtype=float)
 
+    def position_map(self, head: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """Head ``head``'s position maps ``(P_x, P_c, p)``; refused without a position term."""
+        if not self.position_maps:
+            raise ValueError("this memory has no position term (position=0)")
+        if not 0 <= head < self.heads:
+            raise ValueError(f"head must lie in [0, {self.heads})")
+        return self.position_maps[head]
+
+    # head 0's position maps under their checkpoint names, as ``w_x``, ``w_c`` and ``b`` are
+    # head 0's address map; refused without a position term
     @property
     def position_x(self) -> np.ndarray:
-        """Head 0's position map from the event heard, ``P_x`` (``position_maps`` holds every
-        head's); as ``w_x`` is head 0's address map."""
-        return self.position_maps[0][0]
+        return self.position_map(0)[0]
 
     @property
     def position_c(self) -> np.ndarray:
-        """Head 0's position map from the cortex of the moment before, ``P_c``."""
-        return self.position_maps[0][1]
+        return self.position_map(0)[1]
 
     @property
     def position_b(self) -> np.ndarray:
-        """Head 0's position term's offset per bucket, ``p``."""
-        return self.position_maps[0][2]
+        return self.position_map(0)[2]
 
     @property
     def position_buckets(self) -> int:
@@ -759,9 +769,12 @@ class Recall:
         out = np.where(ages < exact, ages, exact + np.floor(np.log2(np.maximum(ages, 1.0) / exact)))
         return np.minimum(out, self.position_buckets - 1).astype(np.int64)
 
-    def _position(self, head: int, event: np.ndarray, cortex: np.ndarray) -> np.ndarray | None:
-        """Head ``head``'s position term at every slot for the moments ``event`` and ``cortex``,
-        ``(rows, slots)``; None without a position term or without slots."""
+    def position_term(
+        self, head: int, event: np.ndarray, cortex: np.ndarray
+    ) -> np.ndarray | None:
+        """Head ``head``'s position term at every slot for the moments ``event`` (the event
+        heard) and ``cortex`` (the association of the moment before), ``(rows, slots)``; None
+        without a position term or without slots."""
         if not self.position_maps or not self.slots:
             return None
         p_x, p_c, p = self.position_maps[head]
@@ -1028,9 +1041,11 @@ class Recall:
 
     def weights(self, address: np.ndarray, position: np.ndarray | None = None) -> np.ndarray | None:
         """``p`` over each stream's slots for the ``(batch, key)`` addresses, or None when the
-        streams hold no slot or are another batch. With a ``null`` slot, whose logit
-        ``null / temperature`` joins the softmax and which reads nothing, the slots' shares
-        sum to one less the null slot's."""
+        streams hold no slot or are another batch. ``position`` is a head's position term at
+        every slot (``position_term``); without it the attention is the content's and the
+        recency's alone, which is what the read used only where the memory has no position
+        term. With a ``null`` slot, whose logit ``null / temperature`` joins the softmax and
+        which reads nothing, the slots' shares sum to one less the null slot's."""
         if not self.slots or self.streams != len(address):
             return None
         if self.null is not None:
@@ -1069,7 +1084,7 @@ class Recall:
         ]
         attended: list[np.ndarray | None] = []
         for h, address in enumerate(addresses):
-            p = self.weights(address, self._position(h, moment.event, moment.cortex))
+            p = self.weights(address, self.position_term(h, moment.event, moment.cortex))
             if p is not None:
                 p.flags.writeable = False
             attended.append(p)
@@ -1216,8 +1231,13 @@ class Recall:
         ``K* - sum_i p_i K_i`` under ``"toward"``), and how many rows a refused step left as
         they were (``address_refused``). With several heads each head steps its own map; the
         rows and refusals are summed over the heads (a row counts once per head that moved
-        it) and the error is the mean over the heads that moved."""
+        it) and the error is the mean over the heads that moved. With a position term the
+        report also counts the rows whose position maps moved (``position_rows``) and those a
+        refused position step left as they were (``position_refused``), summed over the
+        heads."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
+        if self.position_maps:
+            quiet.update(position_rows=0.0, position_refused=0.0)
         moment = self.last
         positions = bool(self.position_maps) and self.position_rate > 0
         if (
@@ -1242,7 +1262,7 @@ class Recall:
         )
         movement = (plus - minus)[:, self.association]
         reports = []
-        moved_positions = 0
+        moved_positions = refused_positions = 0
         for h in range(self.heads):
             d_value = self.readback(graph, "recall", movement, h)
             d_next = self.readback(graph, "next", movement, h) if self.next else None
@@ -1250,13 +1270,20 @@ class Recall:
             head_moment = (
                 moment if h == 0 else moment._replace(address=self._head_address(moment, h))
             )
+            # one reading of the rows for both steps: the address step changes neither the
+            # address the read used nor this head's position term
+            found = self._row_steps(head_moment, rows, d_value, d_next, h)
             if self.address:
                 reports.append(
-                    self._step(moment, rows, d_value, d_next) if h == 0
-                    else self._step(head_moment, rows, d_value, d_next, head=h)
+                    self._step(moment, rows, d_value, d_next, found=found) if h == 0
+                    else self._step(head_moment, rows, d_value, d_next, head=h, found=found)
                 )
-            if positions:  # after the address step, whose prior holds the terms the read used
-                moved_positions += self._position_step(head_moment, rows, d_value, d_next, h)
+            if positions:
+                rows_moved, rows_refused = self._position_step(
+                    head_moment, rows, d_value, d_next, h, found
+                )
+                moved_positions += rows_moved
+                refused_positions += rows_refused
         if not reports:
             report = dict(quiet)
         elif len(reports) == 1:
@@ -1269,8 +1296,9 @@ class Recall:
                 "address_error": float(np.mean(moved)) if moved else 0.0,
                 "address_refused": float(sum(r["address_refused"] for r in reports)),
             }
-        if positions:
+        if self.position_maps:
             report["position_rows"] = float(moved_positions)
+            report["position_refused"] = float(refused_positions)
         return report
 
     def _position_step(
@@ -1280,15 +1308,19 @@ class Recall:
         d_value: np.ndarray,
         d_next: np.ndarray | None,
         head: int,
-    ) -> int:
+        found: tuple[np.ndarray, ...] | None = None,
+    ) -> tuple[int, int]:
         """The step of head ``head``'s position maps toward the slots the lesson's movement
         names (``p*`` of the address lesson): each moving row's terms take the cross-entropy
         gradient ``g_b = sum_{i in b} (p*_i - p_i)``, and the maps the least-mean-squares step on
         ``z = [x, c, 1]`` at ``position_rate``, each row's rate bounded by its own energy.
-        Returns the rows that moved; a step that is not finite is refused and moves none."""
-        found = self._row_steps(moment, rows, d_value, d_next, head)
+        ``found`` is the rows' reading (``_row_steps``) when the caller has it. Returns the rows
+        that moved and the rows a refused step left as they were: a step that is not finite is
+        refused and moves none."""
         if found is None:
-            return 0
+            found = self._row_steps(moment, rows, d_value, d_next, head)
+        if found is None:
+            return 0, 0
         _, x, c, _, _, _, target, prior = found
         rate = self.position_rate
         count = self.position_buckets
@@ -1306,12 +1338,12 @@ class Recall:
                 p + rate * step.mean(axis=0),
             )
         if not all(np.isfinite(a).all() for a in maps):
-            return 0
+            return 0, int(len(x))
         # new arrays, never written in place: an imagined branch may hold the old ones
         self.position_maps = [
             maps if h == head else kept for h, kept in enumerate(self.position_maps)
         ]
-        return int(len(x))
+        return int(len(x)), 0
 
     def _step(
         self,
@@ -1320,6 +1352,7 @@ class Recall:
         d_value: np.ndarray,
         d_next: np.ndarray | None,
         head: int = 0,
+        found: tuple[np.ndarray, ...] | None = None,
     ) -> dict[str, float]:
         """The least-mean-squares step of the address map toward the keys of the slots the
         scores name, on each row's inputs ``z = [x, c, 1]``. A row's rate is ``address``
@@ -1334,9 +1367,11 @@ class Recall:
         and the report counts the refused rows. With ``address_step="toward"`` each row's
         error, the one ``address_error`` reports, is its target less the keys' mixture its
         address attended to. ``head`` names the map that steps (``moment.address`` is that
-        head's address)."""
+        head's address); ``found`` is the rows' reading (``_row_steps``) when the caller has
+        it."""
         quiet = {"address_rows": 0.0, "address_error": 0.0, "address_refused": 0.0}
-        found = self._row_steps(moment, rows, d_value, d_next, head)
+        if found is None:
+            found = self._row_steps(moment, rows, d_value, d_next, head)
         if found is None:
             return quiet
         _, x, c, key, error, step, _, _ = found
@@ -1402,7 +1437,7 @@ class Recall:
                 logits = np.where(held[moving], logits, -np.inf)
             # among the moments the address attended to: the attention is the prior
             attention = self._attention(
-                q, keys[moving], held[moving] if masked else None, self._position(head, x, c)
+                q, keys[moving], held[moving] if masked else None, self.position_term(head, x, c)
             )
             attention -= attention.max(axis=1, keepdims=True)
             attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
