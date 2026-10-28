@@ -1,0 +1,259 @@
+"""The apical compartment and the projection-relative normalization floor."""
+
+from dataclasses import replace
+
+import numpy as np
+import pytest
+
+from cadence import Brain, Learner
+from cadence.apical import Apical
+from cadence.brain import Brain as Graph
+from cadence.genome import Genome, Projection, Region, develop
+from cadence.learning import LearnerConfig
+
+
+def region_names(connectome):
+    """The region (a population named without a slash) of every neuron."""
+    names = np.empty(connectome.n, dtype=object)
+    for name, members in connectome.populations.items():
+        if "/" not in name:
+            names[list(members)] = name
+    return names
+
+
+def apical_brain(**options):
+    options = {"modules": (6, 5), "seed": 2, "apical": 0.25, **options}
+    return Brain.compose(4, 3, **options)
+
+
+def test_compose_lands_the_top_down_half_of_every_reciprocal_pair_apically():
+    brain = apical_brain(observers=(3,))
+    graph, connectome = brain.brain, brain.connectome
+    names = region_names(connectome)
+    pre, post = connectome.pre, connectome.post
+    mask = graph.apical.synapses
+    apical = {(names[a], names[b]) for a, b in zip(pre[mask], post[mask], strict=True)}
+    assert apical == {
+        ("association", "module_0"), ("motor", "association"),
+        ("observer_0", "module_0"), ("observer_0", "association"), ("observer_0", "motor"),
+    }
+    basal = {(names[a], names[b]) for a, b in zip(pre[~mask], post[~mask], strict=True)}
+    for pair in [("sensory", "module_0"), ("module_0", "association"), ("association", "motor"),
+                 ("prefrontal", "association"), ("module_0", "observer_0")]:
+        assert pair in basal
+    assert not apical & basal  # a projection lands in one compartment
+    # each region that hears the regions above it is one pool
+    pools = {names[np.arange(connectome.n)[members]][0] for members in graph.apical.members}
+    assert pools == {"module_0", "association", "motor"}
+    assert graph.neuron_model.dt == 0.5 and graph.apical.fraction == 0.25
+
+
+def test_apical_zero_is_the_founder_brain():
+    founder = Brain.compose(4, 3, modules=(6, 5), seed=2)
+    zero = Brain.compose(4, 3, modules=(6, 5), seed=2, apical=0.0)
+    assert founder.brain.apical is None and zero.brain.apical is None
+    assert founder.describe() == zero.describe()
+    assert "apical" not in founder.describe()["genes"]
+    assert "apical" not in founder.describe()["layout"]["composition"]
+    x = np.random.default_rng(0).normal(size=(5, 4))
+    np.testing.assert_array_equal(founder.act(x), zero.act(x))
+
+
+def test_apical_is_a_construction_setting_with_reciprocal_pairs_and_no_mlx():
+    brain = apical_brain()
+    assert brain.describe()["genes"]["apical"] == 0.25
+    assert brain.describe()["layout"]["composition"]["apical"] == 0.25
+    with pytest.raises(ValueError, match="construction setting"):
+        brain.retune(apical=0.5)
+    with pytest.raises(ValueError, match="apical"):
+        apical_brain(apical=-0.1)
+    with pytest.raises(ValueError, match="mlx"):
+        Graph(brain.connectome, brain.brain.neuron_model, backend="mlx", apical=brain.brain.apical)
+    one_way = Genome(
+        (Region("sensory", 4), Region("association", 5), Region("motor", 3)),
+        (Projection("sensory", "association", reciprocal=False),
+         Projection("association", "motor", reciprocal=False)),
+    )
+    with pytest.raises(ValueError, match="reciprocal pairs"):
+        Brain(develop(one_way, seed=0), apical=0.25)
+
+
+def test_the_spec_is_validated():
+    with pytest.raises(ValueError):
+        Apical(np.zeros(3), np.zeros(4, dtype=int), 0.25)  # not boolean
+    with pytest.raises(ValueError):
+        Apical(np.zeros(3, bool), np.full(4, -2), 0.25)
+    with pytest.raises(ValueError):
+        Apical(np.zeros(3, bool), np.zeros(4, dtype=int), 0.0)
+    with pytest.raises(ValueError):
+        Apical(np.zeros(3, bool), np.zeros(4, dtype=int), 0.25, floor=-1.0)
+    brain = apical_brain()
+    spec = brain.brain.apical
+    groups = spec.groups.copy()
+    groups[groups >= 0] = -1  # apical synapses landing on no pool
+    with pytest.raises(ValueError, match="pool"):
+        Graph(brain.connectome, brain.brain.neuron_model,
+              apical=Apical(spec.synapses, groups, 0.25))
+
+
+def test_the_drive_keeps_the_direction_and_is_bounded_by_the_basal_input():
+    rng = np.random.default_rng(1)
+    spec = Apical(np.zeros(0, bool), np.array([0, 0, 0, -1]), 0.25)
+    basal, raw = rng.normal(size=(5, 4)), rng.normal(size=(5, 4))
+    members = slice(0, 3)
+    weak = spec.drive(basal, 1e-6 * raw)  # a weak top-down input passes at fraction / floor
+    np.testing.assert_allclose(weak[:, members], 0.25e-6 * raw[:, members], rtol=1e-6)
+    strong = spec.drive(basal, 1e6 * raw)  # a strong one saturates at fraction * rms(basal)
+    rms = lambda a: np.sqrt(np.mean(a[:, members] ** 2, axis=1))  # noqa: E731
+    np.testing.assert_allclose(rms(strong), 0.25 * rms(basal), rtol=1e-6)
+    cosine = (strong[:, members] * raw[:, members]).sum(1) / (
+        np.linalg.norm(strong[:, members], axis=1) * np.linalg.norm(raw[:, members], axis=1))
+    np.testing.assert_allclose(cosine, 1.0)
+    assert not weak[:, 3].any() and not strong[:, 3].any()  # no pool, no apical drive
+    assert not spec.drive(np.zeros((2, 4)), raw[:2]).any()  # no basal drive, no apical drive
+
+
+def test_strong_top_down_weights_never_take_a_region_over():
+    brain = apical_brain(seed=4)
+    graph = brain.brain
+    efficacy = graph.efficacy.copy()
+    efficacy[graph.apical.synapses] *= 50.0  # top-down halves far stronger than bottom-up
+    graph = graph.with_parameters(efficacy=efficacy)
+    drive = brain.stimulus(np.random.default_rng(3).normal(size=(8, 4)))
+    state = graph.settle_batch(drive, steps=20_000, tolerance=1e-12)
+    assert graph.residual(drive, state).max() < 1e-8
+    basal, raw = graph._split_input(state.activation, *graph._apical_transports())
+    basal = basal + drive + graph.bias
+    top_down = graph.apical.drive(basal, raw)
+    for members in graph.apical.members:
+        drive_rms = np.sqrt(np.mean(top_down[:, members] ** 2, axis=1))
+        basal_rms = np.sqrt(np.mean(basal[:, members] ** 2, axis=1))
+        assert np.all(drive_rms <= 0.25 * basal_rms + 1e-12)
+    np.testing.assert_allclose(state.v, basal + top_down, atol=1e-8)  # its fixed point
+
+
+def test_blocked_and_segmented_settles_agree():
+    brain = apical_brain(seed=5)
+    graph = brain.brain
+    segmented = Graph(brain.connectome, graph.neuron_model, efficacy=graph.efficacy,
+                      bias=graph.bias, dense_limit=1, apical=graph.apical)
+    assert graph._blocked and not segmented._blocked
+    drive = brain.stimulus(np.random.default_rng(6).normal(size=(4, 4)))
+    a = graph.settle_batch(drive, steps=200)
+    b = segmented.settle_batch(drive, steps=200)
+    np.testing.assert_allclose(a.activation, b.activation, atol=1e-13)
+    np.testing.assert_allclose(graph.residual(drive, a), segmented.residual(drive, b), atol=1e-13)
+
+
+def test_torch_settles_and_learns_as_the_host():
+    pytest.importorskip("torch")
+    options = {"teaching": "normalized", "learning_normalize_relative": 0.1, "episodic": False}
+    host = apical_brain(seed=7, **options)
+    device = apical_brain(seed=7, backend="torch", device="cpu", **options)
+    x = np.random.default_rng(8).normal(size=(6, 4))
+    labels = np.array([0, 1, 2, 0, 1, 2])
+    drive = host.stimulus(x)
+    a = host.brain.settle_batch(drive, steps=100)
+    b = device.brain.settle_batch(drive, steps=100)
+    np.testing.assert_allclose(a.activation, b.activation, atol=1e-12)
+    np.testing.assert_allclose(host.brain.residual(drive, a), device.brain.residual(drive, b),
+                               atol=1e-12)
+    for _ in range(3):
+        host.lesson(x, labels)
+        device.lesson(x, labels)
+    np.testing.assert_allclose(host.brain.efficacy, device.brain.efficacy, atol=1e-11)
+    np.testing.assert_allclose(host.brain.bias, device.brain.bias, atol=1e-11)
+
+
+def test_checkpoints_keep_the_compartment_in_a_format_of_their_own(tmp_path):
+    brain = apical_brain(teaching="normalized", learning_normalize_relative=0.1)
+    rng = np.random.default_rng(9)
+    for _ in range(3):
+        brain.lesson(rng.normal(size=(4, 4)), rng.integers(0, 3, 4))
+    path = brain.learner.save(tmp_path / "learner.npz")
+    with np.load(path, allow_pickle=False) as data:
+        import json
+
+        meta = json.loads(str(data["meta"]))
+        assert meta["format"] == "cadence-checkpoint/5"
+        assert meta["apical"] == {"fraction": 0.25, "floor": 1.0}
+        assert meta["config"]["normalize_relative"] == 0.1
+        arrays = {name: data[name] for name in data.files}
+    learner = Learner.load(path)
+    np.testing.assert_array_equal(learner.brain.apical.synapses, brain.brain.apical.synapses)
+    np.testing.assert_array_equal(learner.brain.apical.groups, brain.brain.apical.groups)
+    assert learner.config == brain.learner.config
+    # a file claiming the format without its compartment is refused
+    broken = dict(arrays)
+    del broken["apical_synapses"]
+    np.savez(tmp_path / "broken.npz", **broken)
+    with pytest.raises(ValueError, match="cadence-checkpoint/5"):
+        Learner.load(tmp_path / "broken.npz")
+    # the whole brain round-trips, and a founder learner keeps the ordinary format
+    whole = brain.save(tmp_path / "brain.npz")
+    loaded = Brain.load(whole)
+    assert loaded.describe() == brain.describe()
+    x = rng.normal(size=(3, 4))
+    np.testing.assert_array_equal(loaded.act(x), brain.act(x))
+    founder = Brain.compose(4, 3, modules=(6, 5), seed=2).learner.save(tmp_path / "founder.npz")
+    with np.load(founder, allow_pickle=False) as data:
+        assert "apical_synapses" not in data.files
+        assert json.loads(str(data["meta"]))["format"] == "cadence-checkpoint/2"
+
+
+def test_a_learned_code_keeps_its_full_step_beside_the_compartment(tmp_path):
+    brain = Brain.compose(6, 3, modules=(8, 5), learned_code=8, seed=1, apical=0.25)
+    assert brain.brain.neuron_model.dt == 0.5
+    assert brain.learned_code.model.dt == 1.0
+    x = np.random.default_rng(2).normal(size=(2, 6))
+    first = brain.act(x)
+    loaded = Brain.load(brain.save(tmp_path / "coded.npz"))
+    assert loaded.brain.apical is not None and loaded.learned_code.model.dt == 1.0
+    np.testing.assert_array_equal(loaded.act(x), brain.act(x))
+    assert first.shape == (2,)
+
+
+# -- the relative floor
+
+
+def test_the_relative_floor_is_validated_and_neutral_when_off():
+    base = LearnerConfig(normalize=0.99, eta=0.003, eta_bias=0.0003)
+    assert "normalize_relative" not in base.to_dict()
+    assert LearnerConfig(**base.to_dict()) == base
+    on = replace(base, normalize_relative=0.1)
+    assert on.to_dict()["normalize_relative"] == 0.1
+    assert LearnerConfig(**on.to_dict()) == on
+    with pytest.raises(ValueError, match="normalize_relative"):
+        replace(base, normalize_relative=-0.1)
+    with pytest.raises(ValueError, match="normalize above zero"):
+        LearnerConfig(normalize_relative=0.1)
+    founder = Brain.compose(4, 3, modules=(6, 5), seed=2, teaching="normalized")
+    assert "learning_normalize_relative" not in founder.describe()["genes"]
+    relative = Brain.compose(4, 3, modules=(6, 5), seed=2, teaching="normalized",
+                             learning_normalize_relative=0.1)
+    assert relative.describe()["genes"]["learning_normalize_relative"] == 0.1
+
+
+def test_each_step_is_divided_by_its_projection_scale():
+    brain = Brain.compose(4, 3, modules=(6, 5), seed=3, teaching="normalized",
+                          learning_normalize_relative=0.1, episodic=False)
+    learner = brain.learner
+    rng = np.random.default_rng(4)
+    rms = rng.uniform(0.0, 1.0, learner.brain.connectome.synapses)
+    block = learner.brain.layout.block_of_edge
+    rms[block == block[0]] *= 1e-6  # one faint projection
+    rms_bias = rng.uniform(0.0, 1.0, learner.brain.connectome.n)
+    divisor, divisor_bias = learner._relative_rms(rms, rms_bias)
+    for k in np.unique(block):
+        members = block == k
+        expected = rms[members] + 0.1 * np.sqrt(np.mean(rms[members] ** 2)) + 1e-12
+        np.testing.assert_allclose(divisor[members], expected, rtol=1e-12)
+    # the faint projection's steps are as large, relative to their own scale, as any other's
+    faint = block == block[0]
+    ratio = rms[faint] / divisor[faint]
+    assert ratio.max() > 0.5
+    starts = learner.brain.layout.starts
+    for r in range(len(starts) - 1):
+        members = slice(starts[r], starts[r + 1])
+        expected = rms_bias[members] + 0.1 * np.sqrt(np.mean(rms_bias[members] ** 2)) + 1e-12
+        np.testing.assert_allclose(divisor_bias[members], expected, rtol=1e-12)

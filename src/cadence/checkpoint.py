@@ -22,6 +22,7 @@ from typing import Any
 
 import numpy as np
 
+from .apical import Apical
 from .brain import Backend, Brain
 from .connectome import Connectome
 from .learning import Learner, LearnerConfig
@@ -36,6 +37,9 @@ HOMEOSTASIS_FORMAT = "cadence-checkpoint/3"
 # Non-default numerical policy; older loaders must refuse instead of dropping it.
 INITIAL_DAMPING_FORMAT = "cadence-checkpoint/4"
 _INITIAL_DAMPING_POLICY = "initial-damping/1"
+# A graph with an apical compartment: older loaders must refuse it instead of settling the
+# brain without the compartment. Carries the initial-damping policy too when it has one.
+APICAL_FORMAT = "cadence-checkpoint/5"
 
 __all__ = ["FORMAT", "load", "save"]
 
@@ -83,8 +87,17 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
             "kind": _INITIAL_DAMPING_POLICY,
             "initial_damping": learner.config.initial_damping,
         }
+    compartment: dict[str, np.ndarray] = {}
+    if brain.apical is not None:
+        meta["format"] = APICAL_FORMAT
+        meta["apical"] = {"fraction": brain.apical.fraction, "floor": brain.apical.floor}
+        compartment = {
+            "apical_synapses": brain.apical.synapses,
+            "apical_groups": brain.apical.groups,
+        }
     assert learner.plastic_synapses is not None and learner.plastic_neurons is not None
     return dict(
+        **compartment,
         meta=np.array(canonical_json(meta)),
         pre=c.pre,
         post=c.post,
@@ -176,9 +189,19 @@ def load(
                 "this checkpoint was saved by cadence-net 0.81 with the readout's intrinsic "
                 "plasticity (homeostasis_rate above 0), which 0.82.0 removed; load it with 0.81"
             )
-        initial_policy = meta.get("format") == INITIAL_DAMPING_FORMAT
-        if not first and meta.get("format") not in (FORMAT, INITIAL_DAMPING_FORMAT):
+        apical_format = meta.get("format") == APICAL_FORMAT
+        initial_policy = meta.get("format") == INITIAL_DAMPING_FORMAT or (
+            apical_format and "numerical_policy" in meta
+        )
+        known = (FORMAT, INITIAL_DAMPING_FORMAT, APICAL_FORMAT)
+        if not first and meta.get("format") not in known:
             raise ValueError(f"not a cadence checkpoint: {meta.get('format')!r}")
+        if apical_format != ("apical" in meta) or apical_format != (
+            "apical_synapses" in data.files
+        ):
+            raise ValueError(
+                "an apical compartment belongs to checkpoint format cadence-checkpoint/5"
+            )
         if initial_policy:
             saved_config = LearnerConfig(**_known_config(meta["config"]))
             if not saved_config.initial_damping or meta.get("numerical_policy") != {
@@ -221,6 +244,17 @@ def load(
         neuron_model = NeuronModel(
             **model, adaptation=Adaptation(**adaptation) if adaptation else None
         )
+        apical = None
+        if apical_format:
+            spec = meta["apical"]
+            if not isinstance(spec, dict) or set(spec) != {"fraction", "floor"}:
+                raise ValueError("invalid checkpoint apical compartment")
+            apical = Apical(
+                np.asarray(data["apical_synapses"]).astype(bool),
+                np.asarray(data["apical_groups"]).astype(np.int64),
+                float(spec["fraction"]),
+                float(spec["floor"]),
+            )
         brain = Brain(
             connectome,
             neuron_model,
@@ -231,6 +265,7 @@ def load(
             device=device,
             dense_limit=int(meta["dense_limit"]),
             precision=target_precision,
+            apical=apical,
         )
         tie = data["tie_groups"]
         rate = data["synapse_rate"] if "synapse_rate" in data.files else np.zeros(0)

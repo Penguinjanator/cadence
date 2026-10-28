@@ -22,6 +22,7 @@ Gram product per block instead of one over the whole net.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from functools import cached_property
 
@@ -73,6 +74,11 @@ class Layout:
         else:
             out[self.edge_index] = weights
         return out
+
+    @cached_property
+    def block_of_edge(self) -> np.ndarray:
+        """The block each synapse's entry lies in, one index per synapse; made once per layout."""
+        return np.asarray(np.searchsorted(self.offset, self.edge_index, side="right") - 1)
 
     @cached_property
     def parallel_synapses(self) -> bool:
@@ -142,9 +148,14 @@ class BlockTransport:
     recomputed on every call.
     """
 
-    def __init__(self, layout: Layout, flat: np.ndarray) -> None:
+    def __init__(
+        self, layout: Layout, flat: np.ndarray, pairs: Sequence[int] | None = None
+    ) -> None:
         self.layout = layout
         self.blocks = layout.blocks(flat)
+        # the blocks this transport sums, every block by default: a brain with an apical
+        # compartment sums its basal and its apical blocks apart
+        self.pairs = range(layout.pairs) if pairs is None else [int(k) for k in pairs]
         self.previous: np.ndarray | None = None
         self.cache: list[np.ndarray | None] = [None] * layout.pairs
         self.still = layout.sources()  # only a range that hears nothing is worth checking
@@ -157,7 +168,7 @@ class BlockTransport:
             for r in self.still:
                 a0, a1 = int(lay.starts[r]), int(lay.starts[r + 1])
                 moved[r] = not np.array_equal(s[:, a0:a1], self.previous[:, a0:a1])
-        for k in range(lay.pairs):
+        for k in self.pairs:
             a0, a1, b0, b1 = lay.bounds(k)
             cached = self.cache[k]
             if cached is None or moved[int(lay.pair_pre[k])]:

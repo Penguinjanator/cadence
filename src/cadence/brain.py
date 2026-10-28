@@ -39,10 +39,11 @@ from __future__ import annotations
 import copy
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 import numpy as np
 
+from .apical import Apical
 from .blocks import BlockTransport, Layout
 from .blocks import layout as make_layout
 from .connectome import Connectome, _neuron_indices
@@ -374,10 +375,20 @@ class Brain:
         dense_limit: int = 2048,
         layout: Layout | None = None,
         precision: str | None = None,
+        apical: Apical | None = None,
     ) -> None:
         self.connectome = connectome
         self.neuron_model = neuron_model
         self.backend: Backend = backend
+        # the synapses that land on an apical compartment, normalized per pool (``Apical``);
+        # None sums every synapse alike
+        if apical is not None:
+            if not isinstance(apical, Apical):
+                raise ValueError("apical must be an Apical or None")
+            apical.check(connectome.synapses, connectome.n, connectome.post)
+            if backend == "mlx":
+                raise ValueError("the mlx backend does not settle an apical compartment")
+        self.apical = apical
         self.dense_limit = dense_limit
         self.precision = precision  # torch only: "float64" or "float32"; default by device
         self.layout: Layout = make_layout(connectome) if layout is None else layout
@@ -435,6 +446,7 @@ class Brain:
                 device,
                 self.layout if blocked else None,
                 precision,
+                apical,
             )
         elif backend == "mlx":
             if not blocked:
@@ -564,6 +576,7 @@ class Brain:
             dense_limit=self.dense_limit,
             layout=self.layout,
             precision=self.precision,
+            apical=self.apical,
         )
 
     @property
@@ -675,6 +688,7 @@ class Brain:
             efficacy=self.efficacy, log_gain=self.log_gain, bias=self.bias,
             device=str(self._torch.device) if self._torch is not None else None,
             dense_limit=self.dense_limit, layout=self.layout, precision=self.precision,
+            apical=self.apical,
         )
 
     def equilibrate(
@@ -946,7 +960,13 @@ class Brain:
             v, a, s, traj, taken, activity_change, handle = kernel.run(
                 v, a, drive, keep, steps, trajectory, nudge, tolerance, state, capture
             )
-        elif self._blocks is not None and not trajectory and capture is None and _FUSED:
+        elif (
+            self._blocks is not None
+            and not trajectory
+            and capture is None
+            and _FUSED
+            and self.apical is None
+        ):
             from .fused import fused_settle
 
             s, taken, activity_change = fused_settle(
@@ -1049,7 +1069,7 @@ class Brain:
         a = np.atleast_2d(state.adaptation)
         if v.shape != d.shape or a.shape != d.shape:
             raise ValueError("state batch does not match the drive batch")
-        if self._blocks is not None and _FUSED:
+        if self._blocks is not None and _FUSED and self.apical is None:
             # the same equations in one compiled pass: a checked settle on the CPU then
             # costs one transport per chunk, not one NumPy operation per term
             from .fused import fused_residual
@@ -1058,13 +1078,24 @@ class Brain:
                 v, a, d, self.bias, self.layout, self._blocks, keep, self.neuron_model, nudge
             )
         s = self.neuron_model.activation(v) * keep
-        blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
-        error = self._synaptic_input(s, blocks) + d + self.bias - v
         adapt = self.neuron_model.adaptation
-        if adapt is not None:
-            error -= adapt.strength * a
-        if nudge is not None:
-            error += nudge.drive(s)
+        if self.apical is None:
+            blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
+            error = self._synaptic_input(s, blocks) + d + self.bias - v
+            if adapt is not None:
+                error -= adapt.strength * a
+            if nudge is not None:
+                error += nudge.drive(s)
+        else:
+            basal_blocks, apical_blocks = self._apical_transports()
+            error, raw = self._split_input(s, basal_blocks, apical_blocks)
+            error += d + self.bias
+            if adapt is not None:
+                error -= adapt.strength * a
+            if nudge is not None:
+                error += nudge.drive(s)
+            error += self.apical.drive(error, raw)
+            error -= v
         # (projected_next_v - v) / dt, written without cancellation for keep=1.
         error = keep * error + (keep - 1.0) * v / self.neuron_model.dt
         result = np.max(np.abs(error), axis=1, initial=0.0)
@@ -1092,6 +1123,62 @@ class Brain:
             )
         return synaptic_input
 
+    def _apical_parts(self) -> tuple[Any, ...]:
+        """The basal and the apical weights apart, as blocks when the connectome is blocked:
+        ``(weights, basal flat, apical flat, basal blocks, apical blocks, basal weights,
+        apical weights)``, made once per set of weights."""
+        apical = self.apical
+        assert apical is not None
+        weights = self._weights
+        parts = self.__dict__.get("_apical_cache")
+        if parts is not None and parts[0] is weights:
+            return cast(tuple[Any, ...], parts)
+        mask = apical.synapses
+        basal_weights = np.where(mask, 0.0, weights)
+        apical_weights = np.where(mask, weights, 0.0)
+        flat_basal = flat_apical = None
+        basal_pairs: list[int] = []
+        apical_pairs: list[int] = []
+        if self._blocked:
+            lay = self.layout
+            flat_basal = lay.flat(basal_weights)
+            flat_apical = lay.flat(apical_weights)
+            block = lay.block_of_edge
+            basal_pairs = sorted(int(k) for k in np.unique(block[~mask]))
+            apical_pairs = sorted(int(k) for k in np.unique(block[mask]))
+        parts = (weights, flat_basal, flat_apical, basal_pairs, apical_pairs,
+                 basal_weights, apical_weights)
+        self.__dict__["_apical_cache"] = parts
+        return parts
+
+    def _apical_transports(self) -> tuple[BlockTransport | None, BlockTransport | None]:
+        """One settle's transports of the basal and the apical blocks; None when segmented."""
+        _, flat_basal, flat_apical, basal_pairs, apical_pairs, _, _ = self._apical_parts()
+        if flat_basal is None:
+            return None, None
+        return (
+            BlockTransport(self.layout, flat_basal, basal_pairs),
+            BlockTransport(self.layout, flat_apical, apical_pairs),
+        )
+
+    def _split_input(
+        self,
+        s: np.ndarray,
+        basal_blocks: BlockTransport | None,
+        apical_blocks: BlockTransport | None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """The synaptic input of the basal synapses and of the apical synapses, apart."""
+        if basal_blocks is not None and apical_blocks is not None:
+            return basal_blocks.synaptic_input(s), apical_blocks.synaptic_input(s)
+        _, _, _, _, _, basal_weights, apical_weights = self._apical_parts()
+        basal, raw = np.zeros_like(s), np.zeros_like(s)
+        if self.connectome.synapses:
+            messages = s[:, self.connectome.pre]
+            target = self._neurons_with_synaptic_input
+            basal[:, target] = np.add.reduceat(messages * basal_weights, self._starts, axis=1)
+            raw[:, target] = np.add.reduceat(messages * apical_weights, self._starts, axis=1)
+        return basal, raw
+
     def _run_numpy(
         self,
         v: np.ndarray,
@@ -1109,7 +1196,12 @@ class Brain:
         traj = np.zeros((steps, *v.shape)) if want else None
         masked = bool((keep != 1.0).any())
         standing = drive + self.bias  # the part of every neuron's drive that does not move
-        blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
+        apical = self.apical
+        blocks = basal_blocks = apical_blocks = None
+        if apical is None:
+            blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
+        else:
+            basal_blocks, apical_blocks = self._apical_transports()
         s = neuron_model.activation(v)
         if masked:
             s *= keep
@@ -1118,12 +1210,19 @@ class Brain:
         taken = 0
         activity_change = np.zeros(len(v))
         for t in range(steps):
-            total = self._synaptic_input(s, blocks)
+            raw = None
+            if apical is None:
+                total = self._synaptic_input(s, blocks)
+            else:
+                total, raw = self._split_input(s, basal_blocks, apical_blocks)
             total += standing
             if adapt is not None:
                 total -= adapt.strength * a
             if nudge is not None:
                 total += nudge.drive(s)
+            if raw is not None:  # the apical compartment, normalized to the basal input
+                assert apical is not None
+                total += apical.drive(total, raw)
             total -= v
             total *= neuron_model.dt
             v += total  # neuron-local update: v <- v + dt (-v + total)
@@ -1177,6 +1276,7 @@ class Brain:
                 else "numpy_segmented"
             ),
             "layout": self.layout.to_dict(),
+            **({} if self.apical is None else {"apical": self.apical.to_dict()}),
             "efficacy_changed": int((self.efficacy != self.connectome.sign).sum()),
             "log_gain_nonzero": int((self.log_gain != 0).sum()),
             "bias_nonzero": int((self.bias != 0).sum()),
@@ -1199,6 +1299,7 @@ class _TorchKernel:
         device: str | None,
         layout: Layout | None = None,
         precision: str | None = None,
+        apical: Apical | None = None,
     ) -> None:
         import torch
 
@@ -1239,6 +1340,27 @@ class _TorchKernel:
         self._row_index: Any = None
         self.blocks: list[Any] = []
         self.index: Any = None  # the layout's edge index on the device, shared across rebuilds
+        # the apical compartment: its synapses summed apart from the basal ones, in blocks of
+        # their own (the basal blocks then carry zeros there), normalized per pool
+        self.apical = apical
+        self.apical_mask: Any = None
+        self.apical_blocks: list[Any] = []
+        self.basal_pairs: Sequence[int] = range(0 if layout is None else layout.pairs)
+        self.apical_pairs: list[int] = []
+        self.pools: list[Any] = []
+        if apical is not None:
+            self.apical_mask = torch.from_numpy(apical.synapses.astype(np.float64)).to(
+                self.device, self.param_dtype
+            )
+            self.pools = [
+                members if isinstance(members, slice)
+                else torch.from_numpy(np.asarray(members)).to(self.device)
+                for members in apical.members
+            ]
+            if layout is not None:
+                of_edge = layout.block_of_edge
+                self.basal_pairs = sorted(int(k) for k in np.unique(of_edge[~apical.synapses]))
+                self.apical_pairs = sorted(int(k) for k in np.unique(of_edge[apical.synapses]))
         if layout is not None:  # block products per step instead of a gather and a scatter
             self.index = self._device_index(layout)
             self.flat = torch.zeros(layout.size, dtype=self.dtype, device=self.device)
@@ -1247,6 +1369,12 @@ class _TorchKernel:
                 a0, a1, b0, b1 = layout.bounds(k)
                 block = self.flat[int(layout.offset[k]) : int(layout.offset[k + 1])]
                 self.blocks.append(block.view(a1 - a0, b1 - b0))
+            if apical is not None:
+                self.flat_apical = torch.zeros(layout.size, dtype=self.dtype, device=self.device)
+                for k in range(layout.pairs):
+                    a0, a1, b0, b1 = layout.bounds(k)
+                    block = self.flat_apical[int(layout.offset[k]) : int(layout.offset[k + 1])]
+                    self.apical_blocks.append(block.view(a1 - a0, b1 - b0))
         else:  # per-synapse arrays serve only the gather-scatter path
             self.pre = torch.from_numpy(connectome.pre.copy()).to(self.device)
             self.post = torch.from_numpy(connectome.post.copy()).to(self.device)
@@ -1268,11 +1396,21 @@ class _TorchKernel:
             raise ValueError(
                 "device parameters and effective weights must be finite at runtime precision"
             )
-        flat = None
+        apical_weights = None
+        if self.apical_mask is not None:  # the basal and the apical synapses apart
+            mask = self.apical_mask.to(self.dtype)
+            apical_weights = weights * mask
+            weights = weights * (1.0 - mask)
+        flat = flat_apical = None
         if self.layout is not None and self.layout.parallel_synapses:
             flat = torch.zeros_like(self.flat)
             flat.index_add_(0, self.index, weights)
-            if not bool(torch.isfinite(flat).all()):
+            if apical_weights is not None:
+                flat_apical = torch.zeros_like(self.flat)
+                flat_apical.index_add_(0, self.index, apical_weights)
+            if not bool(torch.isfinite(flat).all()) or (
+                flat_apical is not None and not bool(torch.isfinite(flat_apical).all())
+            ):
                 raise ValueError("summed effective synaptic weights must be finite")
         # Validation precedes every write to the shared live kernel and blocks.
         self.scale = scale
@@ -1282,8 +1420,13 @@ class _TorchKernel:
                 self.flat.copy_(flat)
             else:
                 self.flat[self.index] = weights
+            if flat_apical is not None:
+                self.flat_apical.copy_(flat_apical)
+            elif apical_weights is not None:
+                self.flat_apical[self.index] = apical_weights
         else:
             self.w = weights
+            self.w_apical = apical_weights
         self.bias = live_bias
 
     def host_scale(self) -> np.ndarray:
@@ -1313,7 +1456,7 @@ class _TorchKernel:
             for r in self.sources:
                 a0, a1 = int(lay.starts[r]), int(lay.starts[r + 1])
                 moved[r] = not torch.equal(s[:, a0:a1], previous[:, a0:a1])
-        for k in range(lay.pairs):
+        for k in self.basal_pairs:
             a0, a1, b0, b1 = lay.bounds(k)
             if self.device.type == "cuda":
                 # Accumulate directly: avoid a temporary product and a separate
@@ -1323,6 +1466,34 @@ class _TorchKernel:
             if cache[k] is None or moved[int(lay.pair_pre[k])]:
                 cache[k] = s[:, a0:a1] @ self.blocks[k]
             out[:, b0:b1] += cache[k]
+        return out
+
+    def _apical_input(self, s: Any) -> Any:
+        """The summed input of the apical synapses alone: their blocks, or a gather-scatter."""
+        torch = self.torch
+        if self.layout is None:
+            zeros = torch.zeros_like(s)
+            return zeros.index_add_(1, self.post, s[:, self.pre] * self.w_apical)
+        out = torch.zeros_like(s)
+        for k in self.apical_pairs:
+            a0, a1, b0, b1 = self.layout.bounds(k)
+            out[:, b0:b1].addmm_(s[:, a0:a1], self.apical_blocks[k])
+        return out
+
+    def _apical_drive(self, basal: Any, raw: Any) -> Any:
+        """``Apical.drive`` on the device."""
+        torch = self.torch
+        apical = self.apical
+        assert apical is not None
+        out = torch.zeros_like(raw)
+        floor2 = apical.floor * apical.floor
+        for members in self.pools:
+            b = basal[:, members]
+            u = raw[:, members]
+            basal2 = (b * b).mean(dim=1, keepdim=True)
+            raw2 = (u * u).mean(dim=1, keepdim=True)
+            gain = apical.fraction * basal2.sqrt() / (raw2 + floor2 * basal2 + 1e-24).sqrt()
+            out[:, members] = gain * u
         return out
 
     def _activation(self, v: Any) -> Any:
@@ -1425,14 +1596,24 @@ class _TorchKernel:
             else:
                 zeros = torch.zeros(batch, self.n, dtype=self.dtype, device=self.device)
                 synaptic_input = zeros.index_add_(1, self.post, s[:, self.pre] * self.w)
-            error = synaptic_input + d + self.bias - v
             adapt = neuron_model.adaptation
-            if adapt is not None:
-                error = error - adapt.strength * a
-            if nudge is not None:
-                error = error + self._push(
-                    s, nudge, target, mask, groups, weight, anchor, anchor_gain
-                )
+            if self.apical is None:
+                error = synaptic_input + d + self.bias - v
+                if adapt is not None:
+                    error = error - adapt.strength * a
+                if nudge is not None:
+                    error = error + self._push(
+                        s, nudge, target, mask, groups, weight, anchor, anchor_gain
+                    )
+            else:
+                error = synaptic_input + d + self.bias
+                if adapt is not None:
+                    error = error - adapt.strength * a
+                if nudge is not None:
+                    error = error + self._push(
+                        s, nudge, target, mask, groups, weight, anchor, anchor_gain
+                    )
+                error = error + self._apical_drive(error, self._apical_input(s)) - v
             error = k * error + (k - 1.0) * v / neuron_model.dt
             result = error.abs().amax(dim=1)
             if adapt is not None:
@@ -1549,6 +1730,8 @@ class _TorchKernel:
                     total -= adapt.strength * a
                 if nudge is not None:
                     total += self._push(s, nudge, target, mask, groups, weight, anchor, anchor_gain)
+                if self.apical is not None:  # the apical compartment, normalized to the basal
+                    total += self._apical_drive(total, self._apical_input(s))
                 v = (v + neuron_model.dt * (-v + total)) * k
                 previous = s
                 s = self._activation(v) * k
