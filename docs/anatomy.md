@@ -152,17 +152,21 @@ fraction * rms(b) * u / sqrt(rms(u)^2 + rms(b)^2)
 
 of its apical input `u`, the root mean squares taken over the region, row by row. The top-down
 direction is kept and its magnitude never exceeds `fraction` times the region's bottom-up drive,
-however large the weights grow. The fixed point carries every lesson's contrast as before: a
-nudge at the motor region moves the regions above each pool, and the pool's apical input follows.
-A brain with the compartment settles at half the founder's step, which damps the loop's fast mode
-and moves no fixed point. `NeuralGraph(..., apical=Apical(synapses, groups, fraction))` gives any
+however large the weights grow. A nudged settle holds the gain each pool had at the free phase's
+state, one per row and pool (`Brain.apical_gain`, carried as `Nudge.apical_gain`): where the drive
+sits at its bound the per-sweep normalization keeps only the direction of `u`, and would suppress a
+nudge's change along it, so the change arrives at the free phase's gain instead, undistorted. The
+free phase and its fixed point are the normalized ones. A brain with the compartment settles at
+half the founder's step, which damps the loop's fast mode and moves no fixed point. `NeuralGraph(..., apical=Apical(synapses, groups, fraction))` gives any
 graph the compartment: `synapses` a bool per synapse, `groups` a pool per neuron.
 
 Credit that reaches a region k levels below the motor region shrinks by about the fraction per
 level, below a coarse settle's error. A brain with the compartment therefore learns with the
 [projection-relative floor](teach.md#rates-under-normalization) and settled phases: the founder of
 `benchmarks/depth` composes `apical=0.25` with `teaching="normalized"`,
-`learning_normalize_relative=0.1`, `learning_tolerance=1e-5` and `learning_nudged_steps=32`.
+`learning_normalize_relative=0.1`, `learning_nudged_steps=32` and `learning_nudged_fixed=True`
+(nudged phases of a whole 32 sweeps from a free phase at the founder's tolerance; the opposite
+phases' common drift cancels in the contrast).
 There, on a task that takes two layers of thresholds, one, two and three processing regions
 order by depth; see the [depth benchmark](../benchmarks/depth/README.md).
 

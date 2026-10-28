@@ -10,7 +10,10 @@
   between two regions lands on an apical compartment: in every sweep each region that hears a
   region above it adds `fraction * rms(b) * u / sqrt(rms(u)^2 + rms(b)^2)` to its members' basal
   input `b`, `u` their apical input, the root mean squares over the region. The direction is kept
-  and the magnitude never exceeds `fraction` times the bottom-up drive. It runs inside the settle
+  and the magnitude never exceeds `fraction` times the bottom-up drive. A nudged settle holds the
+  gain each pool had at the free phase's state (`Brain.apical_gain`, `Nudge.apical_gain`), so a
+  nudge's change of the top-down input passes undistorted where the drive sits at its bound. It
+  runs inside the settle
   on the host (blocked and segmented transport) and on torch (blocks and gather-scatter), and in
   the residual; the numba kernel is skipped for such a graph and the mlx backend refuses it.
   Apical brains settle at half the founder's step. `NeuralGraph(..., apical=Apical(...))` gives any
