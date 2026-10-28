@@ -45,8 +45,12 @@ The first run of this receipt declared a gate that the founder's read of the unt
 0.80 or better on every founder; founder 2 read them at 0.32, and the gate was replaced by its
 production alone (0.00 on every founder), with the reads reported beside it.
 
+The receipt was recorded on the NumPy solver (`CADENCE_FUSED=0`); the compiled dense kernel gave
+the same answers, with the reported gains differing in their last digits.
+
 ```sh
-PYTHONPATH=src python benchmarks/attention/copy_tokens.py --workers 4 --out /tmp/copy-tokens.json
+CADENCE_FUSED=0 PYTHONPATH=src python benchmarks/attention/copy_tokens.py --workers 4 \
+  --out /tmp/copy-tokens.json
 ```
 
 ## Its own actions in the slots (`recall_action`)
@@ -72,7 +76,8 @@ the simpler mechanism where only the last commands matter. Every declared gate p
 is recomputed by `test_own_action.py`.
 
 ```sh
-PYTHONPATH=src python benchmarks/attention/own_action.py --workers 3 --out /tmp/own-action.json
+CADENCE_FUSED=0 PYTHONPATH=src python benchmarks/attention/own_action.py --workers 3 \
+  --out /tmp/own-action.json
 ```
 
 ## Looking back by position (`recall_position`, 0.89.0)
