@@ -1570,3 +1570,142 @@ def relative_floor(
     kernel = _divisor_parallel if _elements_in_parallel(len(values)) else _divisor
     kernel(values, group, root, float(share), float(tiny), out)
     return out
+
+
+# -- the optimizer step of a lesson: moments, normalization and the tied, bounded step
+
+if njit is not None:
+
+    def _moment_entries(
+        raw: np.ndarray,
+        velocity: np.ndarray,
+        second: np.ndarray,
+        momentum: float,
+        momentum_rest: float,
+        momentum_correction: float,
+        rho: float,
+        rho_rest: float,
+        rho_correction: float,
+        has_momentum: bool,
+        has_normalize: bool,
+        new_velocity: np.ndarray,
+        new_second: np.ndarray,
+        term: np.ndarray,
+        root: np.ndarray,
+    ) -> None:
+        for e in prange(raw.shape[0]):
+            x = raw[e]
+            t = x
+            if has_momentum:
+                moving = momentum * velocity[e] + momentum_rest * x
+                new_velocity[e] = moving
+                t = moving / momentum_correction
+            if has_normalize:
+                held = rho * second[e] + rho_rest * (x * x)
+                new_second[e] = held
+                root[e] = np.sqrt(held / rho_correction)
+            term[e] = t
+
+    _moments, _moments_parallel = _rows_builds(_moment_entries)
+
+    def _step_entries(
+        term: np.ndarray,
+        root: np.ndarray,
+        group: np.ndarray,
+        group_root: np.ndarray,
+        eta: float,
+        mode: int,
+        floor: float,
+        share: float,
+        tiny: float,
+        out: np.ndarray,
+    ) -> None:
+        for e in prange(term.shape[0]):
+            if mode == 0:  # no normalization
+                out[e] = eta * term[e]
+            elif mode == 1:  # the absolute floor
+                out[e] = eta * (term[e] / (root[e] + floor))
+            else:  # the projection-relative floor
+                out[e] = eta * (term[e] / (root[e] + share * group_root[group[e]] + tiny))
+
+    _step, _step_parallel = _rows_builds(_step_entries)
+
+    def _tied_entries(
+        delta: np.ndarray,
+        partner: np.ndarray,
+        efficacy: np.ndarray,
+        cap: float,
+        out_delta: np.ndarray,
+        out_scale: np.ndarray,
+    ) -> None:
+        for e in prange(delta.shape[0]):
+            k = partner[e]
+            d = 0.5 * (delta[e] + delta[k]) if k >= 0 else delta[e]
+            out_delta[e] = d
+            out_scale[e] = min(max(efficacy[e] + d, -cap), cap)
+
+    _tied, _tied_parallel = _rows_builds(_tied_entries)
+
+
+def optimizer_step(
+    raw: np.ndarray,
+    velocity: np.ndarray,
+    second: np.ndarray,
+    momentum: float,
+    momentum_correction: float,
+    rho: float,
+    rho_correction: float,
+    eta: float,
+    floor: float,
+    relative: float,
+    tiny: float,
+    group: np.ndarray,
+    groups: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``Learner._update``'s per-synapse arithmetic in two compiled passes, to the bit: the
+    momentum (above zero), the second moment and its normalization (``rho`` above zero; the
+    absolute ``floor``, or the projection-relative floor of share ``relative`` over ``group``),
+    and the rate. Returns ``(velocity, second moment, step)``; the moments a setting leaves off
+    come back as given."""
+    assert njit is not None
+    count = len(raw)
+    raw = np.ascontiguousarray(raw, dtype=float)
+    has_momentum, has_normalize = momentum > 0, rho > 0
+    new_velocity = np.empty(count) if has_momentum else velocity
+    new_second = np.empty(count) if has_normalize else second
+    term, root = np.empty(count), np.empty(count if has_normalize else 1)
+    parallel = _elements_in_parallel(count)
+    (_moments_parallel if parallel else _moments)(
+        raw, np.ascontiguousarray(velocity, dtype=float), np.ascontiguousarray(second, dtype=float),
+        float(momentum), float(1 - momentum), float(momentum_correction), float(rho),
+        float(1 - rho), float(rho_correction), has_momentum, has_normalize, new_velocity,
+        new_second, term, root,
+    )
+    mode = 0 if not has_normalize else (2 if relative else 1)
+    group_root = np.zeros(1)
+    if mode == 2:
+        power, members = _group_power(root, group, int(groups))
+        group_root = np.sqrt(power / members)
+    step = np.empty(count)
+    (_step_parallel if parallel else _step)(
+        term, root, group, group_root, float(eta), mode, float(floor), float(relative),
+        float(tiny), step,
+    )
+    return new_velocity, new_second, step
+
+
+def tied_step(
+    delta: np.ndarray, partner: np.ndarray, efficacy: np.ndarray, cap: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """``Learner.apply``'s per-synapse arithmetic for an all-plastic learner without per-synapse
+    rates or groups, to the bit: each tied pair moves by the mean of its two steps (``partner``,
+    -1 for an untied synapse), and the new efficacy is bounded by ``cap``. Returns ``(step,
+    efficacy)``."""
+    assert njit is not None
+    count = len(delta)
+    out_delta, out_scale = np.empty(count), np.empty(count)
+    (_tied_parallel if _elements_in_parallel(count) else _tied)(
+        np.ascontiguousarray(delta, dtype=float), partner,
+        np.ascontiguousarray(efficacy, dtype=float), float(cap), out_delta, out_scale,
+    )
+    return out_delta, out_scale

@@ -1120,10 +1120,10 @@ class Brain:
             v, a, s, traj, taken, activity_change, handle = kernel.run(
                 v, a, drive, keep, steps, trajectory, nudge, tolerance, state, capture
             )
-        elif self._blocked and not trajectory and capture is None and _FUSED:
+        elif not trajectory and capture is None and _FUSED and self._fused_blocks() is not None:
             from .fused import fused_settle
 
-            flat, apical = self._fused_blocks()
+            flat, apical = cast(tuple[np.ndarray, Any], self._fused_blocks())
             s, taken, activity_change = fused_settle(
                 v,
                 a,
@@ -1225,12 +1225,12 @@ class Brain:
         a = np.atleast_2d(state.adaptation)
         if v.shape != d.shape or a.shape != d.shape:
             raise ValueError("state batch does not match the drive batch")
-        if self._blocked and _FUSED:
+        if _FUSED and self._fused_blocks() is not None:
             # the same equations in one compiled pass: a checked settle on the CPU then
             # costs one transport per chunk, not one NumPy operation per term
             from .fused import fused_residual
 
-            flat, apical = self._fused_blocks()
+            flat, apical = cast(tuple[np.ndarray, Any], self._fused_blocks())
             return fused_residual(
                 v, a, d, self.bias, self.layout, flat, keep, self.neuron_model, nudge,
                 apical=apical,
@@ -1322,13 +1322,15 @@ class Brain:
             basal -= adapt.strength * np.atleast_2d(np.asarray(state.adaptation, dtype=float))
         return apical.gain(basal, raw)
 
-    def _fused_blocks(self) -> tuple[np.ndarray, Any]:
+    def _fused_blocks(self) -> tuple[np.ndarray, Any] | None:
         """The flat blocks the fused kernels read and, with an apical compartment, its blocks
-        apart (``fused.ApicalBlocks``): the flat array then holds the basal synapses alone."""
+        apart (``fused.ApicalBlocks``): the flat array then holds the basal synapses alone.
+        None when the connectome is not blocked, or a subclass withholds its blocks."""
         if self.apical is None:
             flat = self._blocks
-            assert flat is not None
-            return flat, None
+            return None if flat is None else (flat, None)
+        if not self._blocked:
+            return None
         _, flat_basal, flat_apical, basal_pairs, apical_pairs, _, _ = self._apical_parts()
         return flat_basal, (self.apical, basal_pairs, flat_apical, apical_pairs)
 
