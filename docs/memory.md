@@ -475,7 +475,9 @@ for token in range(TOKENS):                          # no lesson: every token is
   heard token is on the recall port in a copy-back question, the successor on the next port in
   a succession. A newborn has to start from one; the recall port, the token the read delivers,
   is the start, and the next port's gain is learned. Started equal, the two ports drive the
-  heard token and its distractor alike and the newborn answers at chance between them.
+  heard token and the distractor that followed it alike: a newborn produced the heard token on
+  0.53 to 0.67 of untaught questions, and 300 lessons took that to 0.13 at most (founder 0, a
+  development reading).
 
 In the [copy-tokens benchmark](../benchmarks/attention/copy_tokens.py) a token is heard, two
 other tokens follow, and a cue asks for the heard token back; tokens 0 to 4 are taught as
@@ -492,8 +494,8 @@ asks for the token that followed it. On six founders of one module
 | `recall_copy=1.2` without tokens | 0.00 | 0.22 to 0.87 | 0.86 to 0.97 | 0.70 to 1.00 |
 
 Uniform random answers 0.125. With the pathway the answer follows its read: the read and the
-answer agree on every untaught and taught question, and on succession the answer is within 0.04
-of the read (the founder's within 0.05). Two founders of a deep apical brain (`modules=(32, 24,
+answer agree on every untaught and taught question, and on succession the answer trails the read
+(1.00) by 0.03 on average and 0.06 at most, as the founder's does (0.03, 0.05). Two founders of a deep apical brain (`modules=(32, 24,
 24)`, `apical=0.25`) read the same: untaught 1.00, succession 0.94 and 0.98 against 0.97 and
 0.99. A successor never taught stays at 0.00 in every arm: the next port's gain grew to about 0.1
 in 600 lessons. The weaker identity loses the untaught tokens on some founders, the association

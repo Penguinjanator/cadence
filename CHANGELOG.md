@@ -90,8 +90,9 @@
   `Recall.action_ports(heads, next)`; the three options are construction settings, described
   and saved only where they differ from their founders. Founder brains are byte-identical to
   0.90.0 (checkpoint arrays, acts and descriptions of eight compositions).
-- The look-back, contextual-choice, held-heads, depth AND-count and deep-memory receipts are
-  rebuilt on this source with the same readings.
+- The look-back, contextual-choice and held-heads receipts are rebuilt on this source with
+  identical bodies. The depth AND-count and deep-memory receipts bind `generic.py` and wait for
+  a rebuild on the machine that recorded them.
 
 ## 0.90.0 — 2026-10-28
 
