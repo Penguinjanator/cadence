@@ -93,8 +93,10 @@
   and saved only where they differ from their founders. Founder brains are byte-identical to
   0.90.0 (checkpoint arrays, acts and descriptions of eight compositions).
 - The look-back, contextual-choice and held-heads receipts are rebuilt on this source with
-  identical bodies, and the depth AND-count and deep-memory receipts on the NumPy loop
-  (`CADENCE_FUSED=0`) on the machine that recorded them, with the same readings.
+  identical bodies, and the depth receipts on the NumPy loop (`CADENCE_FUSED=0`) on the machine
+  that recorded them: the AND-count with identical readings, the deep memory with the same
+  verdicts. 0.90.0 run there with the same thread settings gives this source's deep-memory rows
+  exactly; the retained ones differed in a control arm's readings.
 
 ## 0.90.0 — 2026-10-28
 
