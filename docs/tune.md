@@ -95,6 +95,37 @@ deep = Brain.compose(
   `apical` times each region's bottom-up drive, enough to bias the settle and never enough to
   take it over.
 
+A deep brain with every memory and attention feature is one call. Each line adds one feature to
+the recipe above:
+
+```python
+full = Brain.compose(
+    inputs=16, actions=4, seed=0, arousal=True,
+    modules=(64, 32, 32), apical=0.25,                  # three regions that learn in depth
+    teaching="normalized", learning_normalize_relative=0.1,
+    learning_nudged_steps=32, learning_nudged_fixed=True,
+    learned_code=16, attention=True,                     # a learned code, read by attention
+    recall_heads=2,                                      # two facts in one settle
+    recall_boundary=True,                                # the start of an episode has a slot
+    observers=(16,),                                     # optional System 2
+)
+assert full.live(np.eye(16)[[3]]).shape == (1,)
+```
+
+- `learned_code=16, attention=True`: the brain learns a code of its observations and its recall
+  memory attends over its own recent moments by that code
+  ([single-head attention](memory.md#single-head-learned-code-attention-opt-in)).
+- `recall_heads=2`: two heads read the memory with addresses of their own, so one settle can
+  combine two remembered facts ([several heads](memory.md#several-heads-opt-in)). The position
+  term, on by default, lets a cue choose how far back a head looks.
+- `recall_boundary=True`: a question about the start of an episode has a slot to read
+  ([the episode's boundary](memory.md#episodes-keys-and-windows)).
+- `observers=(16,)`: a System 2 region inside the same settle, bounded by the compartment.
+
+Every option is checked by the tests beside every other (`tests/test_observers_compat.py`), and
+the [memory benchmarks on deep brains](../benchmarks/depth/README.md#memory-on-deep-brains)
+measure what depth keeps and costs.
+
 ## Defaults and expert overrides
 
 Set only the values you intend to change; the rest keep their composed founders, which
