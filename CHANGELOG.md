@@ -1,6 +1,59 @@
 # Changelog
 
-## Unreleased
+## 0.90.0 — 2026-10-28
+
+- Add the apical compartment (opt-in, `Brain.compose(apical=fraction)`, founder 0: off). In a
+  chain of reciprocally joined regions each region heard the region above it through the reverse
+  half of its own upward pair, summed like any synapse; the loop through the pair grew with the
+  weights until the settle slowed near its critical gain and a second module carried an echo of
+  the answer, so depth added little. With the option the top-down half of every reciprocal pair
+  between two regions lands on an apical compartment: in every sweep each region that hears a
+  region above it adds `fraction * rms(b) * u / sqrt(rms(u)^2 + rms(b)^2)` to its members' basal
+  input `b`, `u` their apical input, the root mean squares over the region. The direction is kept
+  and the magnitude never exceeds `fraction` times the bottom-up drive. A nudged settle holds the
+  gain each pool had at the free phase's state (`Brain.apical_gain`, `Nudge.apical_gain`), so a
+  nudge's change of the top-down input passes undistorted where the drive sits at its bound. It
+  runs inside the settle
+  on the host (blocked and segmented transport) and on torch (blocks and gather-scatter), and in
+  the residual; the numba kernel is skipped for such a graph and the mlx backend refuses it.
+  Apical brains settle at half the founder's step. `NeuralGraph(..., apical=Apical(...))` gives any
+  graph the compartment. See [the apical compartment](docs/anatomy.md#the-apical-compartment).
+- Add `LearnerConfig.normalize_relative` (founder 0): above zero, in place of `normalize_floor`,
+  each synapse's RMS gets that share of its projection's RMS (a bias: its range's), host and
+  device, so faint credit in a deep region steps on its own scale.
+- Add `LearnerConfig.nudged_fixed` (founder `False`): finite nudged phases, and the actor's
+  eligibility settle, run their whole `nudged_steps` instead of stopping at the tolerance.
+- Add the depth benchmarks: `benchmarks/depth/and_count.py` (`cadence-depth-and-count/1`; one to
+  four modules against tanh networks of one and two hidden layers: four modules 0.864, two hidden
+  layers 0.885, one module 0.584, one hidden layer 0.426) and `benchmarks/depth/memory.py`
+  (`cadence-depth-memory/1`; the look-back, contextual-choice and held-heads benchmarks unedited
+  on brains of two and three modules).
+- System 2 observers with the compartment: an observer's return to the modules, the association
+  and the motor region is a top-down half, so with `apical` set it lands apically and adds at
+  most `apical` times each region's bottom-up drive. Observers are tested beside every memory,
+  the learned code, held heads and the torch backend (`tests/test_observers_compat.py`).
+- Add the recall memory's boundary (opt-in, `recall_boundary=True`, founder off). A slot's next
+  is taught by the moment that follows it, so the first event of an episode was the one event no
+  slot's next held, and a brain that answered a cue through the next port could not reach the
+  start of an episode: founder 3 of the look-back benchmark answered `first` at 0.83, and brains
+  of two and three modules at 0.38 to 0.44. With the option every stream that begins holds a
+  silent boundary slot (zero key, zero value) whose next the first event teaches; a memory of one
+  slot holds none. Every founder
+  of one, two and three modules answers both look-back cues at 1.00. The look-back benchmark
+  composes its memory with the boundary (`cadence-look-back/2`).
+- Checkpoints: a learner whose graph has the compartment saves it (`apical_synapses`,
+  `apical_groups`, fraction and floor) in the new format `cadence-checkpoint/5`, which 0.89.0 and
+  earlier refuse; a learner with `normalize_relative` or `nudged_fixed` takes that format too, so
+  an older loader refuses it instead of dropping the settings. Without them every checkpoint is
+  written as before; the two new learner settings are left out of saved configurations,
+  described genes and `to_dict` at their founder values, so every brain composed without them
+  reads, saves and describes as in 0.89.0.
+- The tools that read a graph as a plain synaptic sum refuse a graph with the compartment:
+  `Brain.dense()`, `reference.conformance` and `certificate()`. A `SettlementRecord` carries the
+  graph's compartment (`apical`, None without one). The compartment's floor must be positive.
+- `Brain.retune(teaching=..., learning_...=...)` applies the teaching point and the learning
+  genes together, so a change that is valid as a whole (back to `teaching="founder"` with
+  `learning_normalize_relative=0`) is accepted in one call.
 
 ## 0.89.0 — 2026-10-26
 

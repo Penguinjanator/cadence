@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from . import regions
 from .arousal import Arousal, ArousalConfig
+from .brain import Apical, BrainState, Equilibrium, Nudge, available_backends
 from .brain import Brain as NeuralGraph
-from .brain import BrainState, Equilibrium, Nudge, available_backends
 from .certificate import (
     Certificate,
     EPStructure,
@@ -89,6 +89,7 @@ __all__ = [
     "SettlementRecord",
     "record_settlements",
     "NeuralGraph",
+    "Apical",
     "BrainState",
     "Equilibrium",
     "Connectome",
@@ -109,4 +110,4 @@ __all__ = [
     "save",
 ]
 
-__version__ = "0.89.0"
+__version__ = "0.90.0"

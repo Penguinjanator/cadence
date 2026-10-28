@@ -33,6 +33,7 @@ def test_the_arms_differ_only_in_the_position_term() -> None:
     assert with_term.recall.position == 32 and with_term.recall.position_maps
     assert without.recall.position == 0 and not without.recall.position_maps
     assert with_term.recall.recency == without.recall.recency == 0.0
+    assert with_term.recall.boundary and without.recall.boundary
     assert with_term.hippocampus is None and with_term._episodic is None  # noqa: SLF001
     assert with_term.describe()["layout"] == without.describe()["layout"]
 
@@ -42,10 +43,10 @@ def test_retained_receipt_is_source_bound_and_recomputed() -> None:
     assert ok, message
     body = subject.cd.Receipt.read(RECEIPT).body
     assert sorted(f["seed"] for f in body["founders"]) == [0, 1, 2, 3]
-    # every founder's term beats the memory without it; founder 3 answers "first" below 0.9
+    # with the boundary every founder's term answers both cues and beats the memory without it
     assert all(f["gates"]["beats_the_memory_without_it"] for f in body["founders"])
-    assert [f["passed"] for f in body["founders"]] == [True, True, True, False]
-    assert not body["passed"]
+    assert [f["passed"] for f in body["founders"]] == [True, True, True, True]
+    assert body["passed"]
 
 
 def test_the_check_refuses_a_decision_its_readings_do_not_support() -> None:

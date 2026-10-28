@@ -88,7 +88,14 @@ def settle_neuron_by_neuron(
 
 
 def conformance(brain: Brain, stimulus: Any, *, steps: int = 60) -> dict[str, Any]:
-    """Compare ``brain`` with the neuron-by-neuron reference on the same stimulus."""
+    """Compare ``brain`` with the neuron-by-neuron reference on the same stimulus. The
+    reference sums every synapse, so a brain with an apical compartment (whose top-down input
+    is normalized over a region) is refused."""
+    if brain.apical is not None:
+        raise ValueError(
+            "the neuron-by-neuron reference sums every synapse; a brain with an apical "
+            "compartment normalizes its top-down input over a region, which it does not model"
+        )
     drive = brain.stimulus_vector(stimulus)
     state = brain.settle(drive, steps=steps, trajectory=True)
     assert state.trajectory is not None

@@ -411,6 +411,8 @@ class ActorCritic:
             beta,
             softmax_temperature=actual,
             groups=self.group_id,
+            # an apical compartment passes the nudge's change at the gain the free phase set
+            apical_gain=self.learner.brain.apical_gain(drive, free),
         )
         return self.learner.brain.settle_batch(
             drive,
@@ -419,7 +421,7 @@ class ActorCritic:
             else self.config.eligibility_steps,
             state=free,
             nudge=nudge,
-            tolerance=cfg.tolerance,
+            tolerance=None if cfg.nudged_fixed else cfg.tolerance,
         )
 
     def learn(

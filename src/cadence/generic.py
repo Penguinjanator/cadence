@@ -55,9 +55,10 @@ from ._configuration import (
     scales_of,
     split_genes,
     taught,
+    teaching_fields,
 )
 from .arousal import Arousal, ArousalConfig
-from .brain import Backend, BrainState, Equilibrium
+from .brain import Apical, Backend, BrainState, Equilibrium
 from .brain import Brain as NeuralGraph
 from .code import LearnedCode
 from .connectome import Connectome
@@ -130,6 +131,45 @@ def _learning() -> LearnerConfig:
         nudged_steps=12,
         momentum=0.9,
     )
+
+
+# The settle's step in a brain with an apical compartment (``apical=fraction``). A normalized
+# top-down input is a loop of bounded magnitude, not of bounded gain: at the full step its
+# fast mode rings and a teaching free phase can run out its budget; the half step damps it.
+# The fixed point, and so every answer and contrast the settle reaches, is the same.
+_APICAL_STEP = 0.5
+
+
+def _apical(connectome: Connectome, fraction: float) -> Apical:
+    """The top-down half of every reciprocal pair between two regions, as an apical
+    compartment of ``fraction``.
+
+    The regions are the populations named without a slash, ordered by their first neuron as
+    ``develop`` lays a genome out. A synapse lands apically when its reverse synapse exists
+    and its presynaptic region comes after its postsynaptic one: a module's input from the
+    module above it, the association's from the motor region, any region's from an observer.
+    The one-way projections (the sensory input, the working trace, the efference copy, the
+    history and the recall memory) and the synapses within a region stay basal. Each region
+    that receives apical synapses is one pool."""
+    n = connectome.n
+    region = np.full(n, -1, dtype=np.int64)
+    named = [
+        (min(members), name) for name, members in connectome.populations.items()
+        if "/" not in name and len(members)
+    ]
+    for rank, (_, name) in enumerate(sorted(named)):
+        region[np.asarray(connectome.populations[name], dtype=np.int64)] = rank
+    pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+    key = pre * n + post
+    reverse = post * n + pre
+    order = np.sort(key)
+    hit = np.minimum(np.searchsorted(order, reverse), max(len(order) - 1, 0))
+    paired = (order[hit] == reverse) if len(order) else np.zeros(0, dtype=bool)
+    synapses = paired & (region[pre] > region[post]) & (region[post] >= 0)
+    groups = np.full(n, -1, dtype=np.int64)
+    for rank in np.unique(region[post[synapses]]):
+        groups[region == rank] = rank
+    return Apical(synapses, groups, fraction)
 
 
 def _reward() -> ActorCriticConfig:
@@ -420,9 +460,15 @@ def _load_composition(value: Any, learner: Learner) -> dict[str, Any] | None:
         # provenance without a working_memory_scale was composed at the fixed scale 12
         value = {**value, "working_memory_scale": 12.0}
     if not isinstance(value, dict) or set(value) - {
-        "history_scale", "recall_scale", "image", "code", "learned_code", "attention"
+        "history_scale", "recall_scale", "image", "code", "learned_code", "attention", "apical"
     } != (expected | {"working_memory_scale"}):
         raise ValueError("invalid saved composition provenance")
+    compartment = learner.brain.apical
+    if ("apical" in value) != (compartment is not None) or (
+        compartment is not None and real("saved apical", value["apical"], low=0)
+        != compartment.fraction
+    ):
+        raise ValueError("a composed apical compartment is saved with its graph, and only then")
     if "attention" in value and value["attention"] is not True:
         raise ValueError("invalid saved composition attention")
     for name in ("inputs", "actions", "seed"):
@@ -645,9 +691,10 @@ def _validate_learned_code(meta: dict[str, Any], data: Mapping[str, Any], learne
         value = spec[name]
         if isinstance(value, bool) or not isinstance(value, int) or value < 0:
             raise ValueError(f"saved learned code {name} must be a nonnegative integer")
-    # the held code steps its own phase alone: the brain keeps the model's step
+    # the held code steps its own phase alone: the brain keeps the model's step, the half
+    # step with an apical compartment
     dt = learner.brain.neuron_model.dt
-    expected = 1.0
+    expected = 1.0 if learner.brain.apical is None else _APICAL_STEP
     if dt != expected:
         raise ValueError("the saved learned code's stepping disagrees with the saved step")
     work = spec["work"]
@@ -1575,6 +1622,7 @@ class Brain:
         inputs: int | None = None,
         code: int | None = None,
         learned_code: int | None = None,
+        apical: float = 0.0,
         **genes: Any,
     ) -> None:
         populations = connectome.populations
@@ -1688,8 +1736,18 @@ class Brain:
         efference_amplitude = _validate_efference_amplitude(efference_amplitude)
         history_decays = _history_decays(history_decays)
         history_amplitude = real("history_amplitude", history_amplitude, low=0)
+        # the apical compartment (opt-in): the top-down half of every reciprocal pair between
+        # regions, normalized to the bottom-up input of the region it lands on
+        fraction = real("apical", apical, low=0)
+        compartment = _apical(connectome, fraction) if fraction else None
+        if compartment is not None and not compartment.synapses.any():
+            raise ValueError("apical needs reciprocal pairs between regions; this anatomy has none")
         brain = NeuralGraph(
-            connectome, learning_neuron_model(dt=1.0), backend=backend, device=device
+            connectome,
+            learning_neuron_model(dt=1.0 if compartment is None else _APICAL_STEP),
+            backend=backend,
+            device=device,
+            apical=compartment,
         )
         self._composition: dict[str, Any] | None = None  # construction provenance, not parameters
         # ``attention`` is a compose-only recipe marker. Its behavior is fully represented by
@@ -1707,7 +1765,9 @@ class Brain:
         if learned:
             self.learned_code = LearnedCode(
                 len(self.sensory_index), learned["units"], len(self.prefrontal_index),
-                brain.neuron_model, seed=seed,
+                # the code's own phase keeps the full step whatever the brain's settle takes
+                brain.neuron_model if compartment is None else learning_neuron_model(dt=1.0),
+                seed=seed,
                 **{name: learned[name] for name in LearnedCode.GENES},
             )
             self._code_synapses = self._learned_code_synapses()
@@ -2302,6 +2362,9 @@ class Brain:
         start at zero and lessons teach them at ``recall_position_rate`` (runtime, founder
         0.1), whatever ``recall_address`` is; ``recall_position=0`` builds none. A brain
         saved without a position term loads without one.
+        ``recall_boundary=True`` (runtime, founder off) gives each stream that begins a
+        boundary slot first, a silent moment whose next the stream's first event teaches, so
+        the start of an episode has a predecessor as every later event has.
         ``recall_capacity``, ``recall_next``, ``recall_window``,
         ``recall_window_decay``, ``recall_heads`` (several held heads over the one bank,
         each with its own port and address map) and ``recall_position`` are construction
@@ -2454,6 +2517,8 @@ class Brain:
             result._composition["learned_code"] = learned
         if attention:
             result._composition["attention"] = True
+        if result.brain.apical is not None:
+            result._composition["apical"] = result.brain.apical.fraction
         return result
 
     def retune(self, **genes: Any) -> Brain:
@@ -2493,7 +2558,7 @@ class Brain:
             *_EPISODIC_SETTINGS, "recall", *(f"recall_{name}" for name in Recall.CONSTRUCTION),
             *(f"recall_{name}" for name in Recall.CONSTRUCTION_OPTIONS), "code",
             "learned_code", *(f"learned_code_{name}" for name in LearnedCode.CONSTRUCTION),
-            "attention",
+            "attention", "apical",
         }
         for name in options:
             refusal = rescaled(name)
@@ -2508,8 +2573,9 @@ class Brain:
                 "configuration: pass one of them"
             )
         learning = options.pop("learning", self.learner.config)
-        if point is not None:
-            learning = taught(point, learning)
+        # a teaching point's fields join the learning genes, so the configuration is checked
+        # once with all of them (teaching="founder" with learning_normalize_relative=0 is valid)
+        pointed = {} if point is None else teaching_fields(point)
         reward = options.pop("reward", self.basal_ganglia.config)
         current_arousal = None if self.arousal is None else self.arousal.config
         arousal = options.pop("arousal", current_arousal)
@@ -2585,7 +2651,7 @@ class Brain:
             )
 
         learning_genes, actor_genes, arousal_genes = split_genes(options)
-        learning = configured(learning, learning_genes, "learning")
+        learning = configured(learning, {**pointed, **learning_genes}, "learning")
         if learning.initial_damping and (
             self.brain.backend != "cpu" or self.brain.precision not in (None, "float64")
         ):
@@ -2672,6 +2738,8 @@ class Brain:
                 if name != "nudge" and name not in steps
             }
         )
+        if self.brain.apical is not None:  # described where it differs from its founder, 0
+            genes["apical"] = self.brain.apical.fraction
         genes.update({f"actor_{name}": value for name, value in actor.items()})
         if arousal is not None:
             genes.update({f"arousal_{name}": value for name, value in arousal.items()})
@@ -3078,6 +3146,7 @@ class Brain:
             dense_limit=brain.dense_limit,
             layout=brain.layout,
             precision=brain.precision,
+            apical=brain.apical,
         )
         following = damped.equilibrate(
             drive, state=_copy_state(phase.state), budget=budget - phase.steps, tolerance=tolerance

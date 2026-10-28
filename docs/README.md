@@ -9,13 +9,13 @@ and an MLP or classifier setup is a control to compare against. The
 ## Install
 
 ```sh
-python -m pip install cadence-net==0.89.0
+python -m pip install cadence-net==0.90.0
 ```
 
 Cadence needs Python 3.11 or later and NumPy. From a checkout, run `python -m pip install -e .`
 at the repository root. The extras `[fast]` (Numba and SciPy), `[accel]` (PyTorch) and
 `[apple]` (MLX) add backends; [backends](backends.md) says which to choose. The
-[v0.89.0 documentation](https://github.com/muellerberndt/cadence/blob/v0.89.0/docs/README.md)
+[v0.90.0 documentation](https://github.com/muellerberndt/cadence/blob/v0.90.0/docs/README.md)
 is pinned to the release tag.
 
 ## By situation
@@ -27,6 +27,7 @@ is pinned to the release tag.
 | The world to pay for good acts | `step`, `act` and `learn`, delayed pay, chains | [Learning from reward](reward.md) |
 | The brain to remember | Start with the default trace/store; add `memory_choice=True` for episodic voting or `learned_code=units, attention=True` for contextual retrieval | [Choose a memory](memory.md#start-with-the-need) |
 | Wide inputs: images, codes | image `inputs`, `code=units`, `learned_code=units` | [Wide inputs](senses.md) |
+| A deep brain, with every memory and attention feature | `modules=(64, 32, 32)`, `apical=0.25`, the depth teaching settings, `attention=True`, `recall_heads=2` | [Deep brains](tune.md#deep-brains) |
 | To read or change a living brain | `describe`, `retune`, `last_settlement`, the founders | [Tune and read](tune.md) |
 | To show a result | baselines, controls, `fit` as a control, receipts | [Evaluate a brain](evaluate.md) |
 | Your own regions, a connectome, evolution | `Genome`, `develop`, `compose(connectome=)`, `evolve` | [Your own anatomy](anatomy.md) |

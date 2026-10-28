@@ -128,6 +128,49 @@ place on the same ordered pair of neurons merge into one, whose count is the sum
 sign is the count-weighted mean; a synapse from a neuron onto itself is dropped. `Genome(regions, projections, label="genome")`
 checks every projection end when it is built and refuses an empty or duplicated region name list.
 
+### The apical compartment
+
+In a chain of reciprocally joined regions each region hears the region above it through the
+reverse half of the pair that carries its own output up. Summed with the region's bottom-up
+input, that top-down input closes a loop whose gain grows with the weights: the settle slows as
+the loop nears its critical gain, and the region comes to carry an echo of the answer instead of
+a representation of its input, so a second module adds little to the first.
+
+`Brain.compose(..., apical=fraction)` lands the top-down half of every reciprocal pair between
+two regions on an apical compartment, as the areas above a cortical pyramidal cell reach its
+apical tuft. The regions are the populations named without a slash, in the order `develop` lays
+them out; a synapse lands apically when its reverse synapse exists and its presynaptic region
+comes after its postsynaptic one: a module's input from the module above, the association's from
+the motor region, any region's from an observer. One-way projections (the sensory input, the
+working trace, the efference copy, the history and the recall memory) stay basal. In every sweep
+each region that hears a region above it adds to every member's basal input `b` (its other
+synapses, the stimulus, the bias, a nudge) the drive
+
+```text
+fraction * rms(b) * u / sqrt(rms(u)^2 + rms(b)^2)
+```
+
+of its apical input `u`, the root mean squares taken over the region, row by row. The top-down
+direction is kept and its magnitude never exceeds `fraction` times the region's bottom-up drive,
+however large the weights grow. A nudged settle holds the gain each pool had at the free phase's
+state, one per row and pool (`Brain.apical_gain`, carried as `Nudge.apical_gain`): where the drive
+sits at its bound the per-sweep normalization keeps only the direction of `u`, and would suppress a
+nudge's change along it, so the change arrives at the free phase's gain instead, undistorted. The
+free phase and its fixed point are the normalized ones. A brain with the compartment settles at
+half the founder's step, which damps the loop's fast mode and moves no fixed point. `NeuralGraph(..., apical=Apical(synapses, groups, fraction))` gives any
+graph the compartment: `synapses` a bool per synapse, `groups` a pool per neuron.
+
+Credit that reaches a region k levels below the motor region shrinks by about the fraction per
+level, below a coarse settle's error. A brain with the compartment therefore learns with the
+[projection-relative floor](teach.md#rates-under-normalization) and settled phases: the founder of
+`benchmarks/depth` composes `apical=0.25` with `teaching="normalized"`,
+`learning_normalize_relative=0.1`, `learning_nudged_steps=32` and `learning_nudged_fixed=True`
+(nudged phases of a whole 32 sweeps from a free phase at the founder's tolerance; the opposite
+phases' common drift cancels in the contrast).
+There, on a task that takes two layers of thresholds, one to four processing regions order by
+depth, and four come within 0.02 of a network of two hidden layers; see the
+[depth benchmark](../benchmarks/depth/README.md) and [deep brains](tune.md#deep-brains).
+
 ### Ports after development
 
 `develop(genome, seed=0)` lays the regions out in order as contiguous populations named

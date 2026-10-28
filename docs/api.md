@@ -84,7 +84,8 @@ Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9,
       efference_decay=0.2, efference_amplitude=0.0,
       history_decays=(), history_amplitude=3.0, recall=False, learning=None,
       reward=None, slots=1, arousal=None, seed=0,
-      backend="cpu", device=None, inputs=None, code=None, learned_code=None, **genes)
+      backend="cpu", device=None, inputs=None, code=None, learned_code=None, apical=0.0,
+      **genes)
 ```
 
 Wraps any connectome with populations `association`, `motor` and `sensory` (or
@@ -299,7 +300,8 @@ Recall(connectome, amplitude=3.0, temperature=0.25, heard=1.0, recency=0.25,
        address_temperature=0.1,
        address_step="lms", null=None, address_reward=0.0,
        window=1, window_decay=1.0, heads=1,
-       source="sensory", target="recall", inputs=0, writes=0, position=32, position_rate=0.1)
+       source="sensory", target="recall", inputs=0, writes=0, position=32, position_rate=0.1,
+       boundary=False)
 ```
 
 The held-input index memory of each stream's recent moments. Each constructor argument is the
@@ -316,10 +318,10 @@ settings of 0.84.3 that left in this version, each with its reading, are
 | `witness(observations, state)` | Writes the moment as a slot after its settle. |
 | `learn(graph, learned) -> dict` | The address lesson after a teaching step; returns `address_rows`, `address_error`, `address_refused`, and with a position term `position_rows` and `position_refused` (zero when nothing moved). A nonfinite step is refused per row (per head for the position maps). With several heads each head steps its own maps: rows and refusals are summed over the heads, the error averaged over the heads that moved. The position term learns whatever `address` is. |
 | `contrast_rows(graph, plus, minus)`, `propose(step)`, `accept(proposal)` | Reward training of the address map at `address_reward > 0`; `ActorCritic` calls them. `contrast_rows` is `None` at 0. |
-| `end(batch, rows=None)` | Ends episodes and keeps the slots, as `Brain.reset(keep=("slots",))` does; the latest slot learns no successor. |
+| `end(batch, rows=None)` | Ends episodes and keeps the slots, as `Brain.reset(keep=("slots",))` does; the latest slot learns no successor. With `boundary` an end of every stream opens one boundary slot. |
 | `weights(address, position=None)`, `position_term(head, event, cortex)`, `ages()`, `buckets()`, `readback(graph, region, movement, head=0)`, `activity(state)` | The read's slot shares (with a head's position term from `position_term`, the shares the read used; without it the content's and recency's alone), one head's position term at every slot, slot ages and their position buckets, and the association movement read back through one head's recall synapses. |
 | `reset(batch, rows=None)`, `keep(rows)`, `snapshot()`, `restore(snapshot)`, `reading()`, `hold(reading)`, `imagined()` | Stream bookkeeping; `imagined()` is a copy that reads the live slots and writes none. |
-| `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)`, `Recall.removed(name)`, `Recall.ports(heads, next=True)`, `Recall.position_count(position, capacity)`, `Recall.position_names(head)` | The always-described genes, the eight options saved only where they differ, validation of one gene, the null slot's logit, the refusal of a removed setting, the regions of each head's port, the number of age buckets, and the checkpoint names of one head's position maps. |
+| `Recall.founders()`, `Recall.options()`, `Recall.setting(name, value)`, `Recall.null_logit(null, temperature)`, `Recall.removed(name)`, `Recall.ports(heads, next=True)`, `Recall.position_count(position, capacity)`, `Recall.position_names(head)` | The always-described genes, the nine options saved only where they differ, validation of one gene, the null slot's logit, the refusal of a removed setting, the regions of each head's port, the number of age buckets, and the checkpoint names of one head's position maps. |
 | `attended_heads`, `head_map(head)`, `position_map(head)`, `position_maps`, `position_buckets` | Every head's attention of the latest read (head 0's is `attended`), one head's address map `(w_x, w_c, b)` (head 0's map is `w_x`, `w_c`, `b`), one head's position maps `(P_x, P_c, p)` (head 0's are `position_x`, `position_c`, `position_b`; refused at `position=0`), every head's (empty at `position=0`), and their number of age buckets. |
 | `RUNTIME`, `CONSTRUCTION`, `OPTIONS`, `CONSTRUCTION_OPTIONS`, `RETIRED`, `FORMAT`, `STEPS` | Class tuples: retunable genes, construction genes, the options and those fixed at construction, the settings this version removed, the keys the 0.84.3 format wrote for three of them with the one value at which such a file loads, and the allowed values of `address_step`. |
 | `keys`, `values`, `nexts`, `held`, `previous`, `ended`, `past`, `w_x`, `w_c`, `b`, `heads`, `head_maps`, `address_width`, `neurons`, `streams`, `slots`, `attended`, `to_dict()` | State arrays and sizes; `head_maps` holds the address maps of heads 1 and up. |
@@ -397,7 +399,7 @@ settings the readings retired with what the region does instead. Guide:
 LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, free_steps=100, nudged_steps=50,
               tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0,
               normalize_floor=1e-3, momentum=0.0, scale_cap=8.0, qualified=False,
-              damping=3, surprise=False, initial_damping=0)
+              damping=3, surprise=False, initial_damping=0, normalize_relative=0.0)
 Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None,
         plastic_neurons=None, reciprocal=True, tie_groups=None,
         synapse_rate=None, slots=1, updates=0, contrast_updates=0)
@@ -457,7 +459,10 @@ configuration; `backend`, `device` and `precision` may differ from the saved one
 composed brain. The ordinary format is `cadence-checkpoint/2`; `/1` loads, and a `cadence-checkpoint/3`
 file is refused with a message naming the release that reads it.
 Nonzero `initial_damping` writes `cadence-checkpoint/4` with a checked numerical-policy
-identity, including inside `Brain.save`. Older loaders refuse this format. A saved
+identity, including inside `Brain.save`. Older loaders refuse this format. A graph with an
+apical compartment writes `cadence-checkpoint/5` with the compartment's synapses, pools,
+fraction and floor (and the numerical policy when there is one), which older loaders refuse
+rather than settle the brain without it. A saved
 non-default policy is validated before any explicit config override; an effective
 non-default policy refuses a non-CPU or non-float64 destination before backend creation.
 
@@ -489,14 +494,16 @@ Construction warns when `eta_bias` exceeds a positive `eta`.
 ```text
 NeuralGraph(connectome, neuron_model, *, backend="cpu", efficacy=None,
             log_gain=None, bias=None, device=None, dense_limit=2048,
-            layout=None, precision=None)
+            layout=None, precision=None, apical=None)
 ```
 
 The runnable graph of graded neurons ([how the graph settles](settling.md)). `efficacy`
 defaults to the connectome's signs, `log_gain` and `bias` to zero. Graphs whose dense blocks
 fit in `dense_limit` squared entries use the [block transport](#blocks-cadenceblocks);
 `layout` passes a precomputed cut. `precision` (torch only) is `"float32"` or `"float64"`
-([backends](backends.md)). Parameter arrays are read-only; assign whole validated arrays to
+([backends](backends.md)). `apical` (an `Apical`) lands some synapses on an apical
+compartment ([the apical compartment](anatomy.md#the-apical-compartment)); the mlx backend
+refuses it. Parameter arrays are read-only; assign whole validated arrays to
 `efficacy`, `bias` or `log_gain`, or use `with_parameters`. Nonfinite values are refused
 before any change.
 
@@ -506,6 +513,7 @@ before any change.
 | `settle_batch(drive, ...) -> BrainState` | The same for `(batch, n)` drives. `mask` is `(n,)`, `(1, n)` or `(batch, n)` in `[0, 1]`. |
 | `equilibrate(drive, *, budget=512, chunk=32, tolerance=1e-5, state=None, mask=None, nudge=None, damping=0, initial_damping=0) -> Equilibrium` | Settles until the equation residual is below `tolerance`, checked per chunk; the remaining halvings from `initial_damping` to `damping` share the budget. Nonzero starts currently require CPU float64. |
 | `residual(drive, state, *, nudge=None, mask=None, on_device=True) -> ndarray` | Per-row fixed-point discrepancy; no state change. |
+| `apical_gain(drive, state) -> ndarray or None` | The apical compartment's gain per row and pool at `state`, what a nudged settle from it holds; `None` without the compartment. |
 | `stimulus_vector(stimulus)`, `stimulus_levels(levels)`, `readings(state, names, i=0, level=0.5)` | Drive construction ([pattern targets](settling.md#pattern-targets)); population readings. |
 | `with_parameters(*, efficacy=None, log_gain=None, bias=None)`, `weights`, `dense()`, `to_dict()` | A new graph; effective drive per synapse; the `W[pre, post]` matrix. |
 | `contrast_on_device(plus, minus)` | The learning contrast on the accelerator, or `None`. |
@@ -518,7 +526,8 @@ stability, uniqueness or task quality ([the certificate](settling.md#the-settlin
 | --- | --- |
 | `BrainState(v, activation, adaptation, steps, trajectory=None, activity_change=None, device=None)` | `(n,)` or `(batch, n)` arrays; `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`. |
 | `Equilibrium(state, residual, steps, tolerance, residual_checks=0, damping_halvings=0, stagnation_checks=0, initial_damping=0)` | Per-row `converged` and `qualified` (the residual within `tolerance`); `steps` counts local sweeps. `damping_halvings` is the absolute final index, and `relative_damping_halvings` counts further halvings after `initial_damping`. |
-| `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None, anchor=None, anchor_gain=None)` | Extra drive `beta * mask * (target - s)`, or against `softmax(s / T)` per group; `weight` scales rows. `anchor` and `anchor_gain` (supplied together, finite, gain nonnegative per neuron) add `anchor_gain * (anchor - s)`, unscaled by `beta`, mask or weight. `drive(s)`. |
+| `Apical(synapses, groups, fraction, floor=1.0)` | `synapses` a bool per synapse, `groups` a pool per neuron (`-1` none); `drive(basal, raw)` the normalized apical drive, `members`, `check(synapses, neurons, post)`, `to_dict()`. |
+| `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None, anchor=None, anchor_gain=None, apical_gain=None)` | Extra drive `beta * mask * (target - s)`, or against `softmax(s / T)` per group; `weight` scales rows. `anchor` and `anchor_gain` (supplied together, finite, gain nonnegative per neuron) add `anchor_gain * (anchor - s)`, unscaled by `beta`, mask or weight. `apical_gain` (`(batch, pools)`, nonnegative) is the apical compartment's gain the settle holds. `drive(s)`. |
 
 `available_backends() -> dict` names what is installed, such as
 `{"cpu": "numpy float64", "torch": "mps float32"}`. `ep_structure` and the settling
@@ -554,7 +563,7 @@ rest, `slope_at(v)` its derivative, `rest_emission` the raw value subtracted at 
 
 ```text
 layout(connectome, *, max_pairs=256) -> Layout
-BlockTransport(layout, flat)
+BlockTransport(layout, flat, pairs=None)
 block_contrast(layout, s_plus, s_minus) -> ndarray
 ```
 
@@ -563,8 +572,9 @@ that carry synapses; with no contiguous populations or more than `max_pairs` blo
 full block. `Layout` has `starts`, `pair_pre`, `pair_post`, `offset`, `edge_index`, `ranges`,
 `pairs`, `size`, `bounds(k)`, `sources()` (ranges receiving no synapses),
 `parallel_synapses` (distinct synapses sharing a matrix entry), `flat(weights)`,
-`blocks(flat)` and `to_dict()`. `BlockTransport.synaptic_input(s)` reuses the product of
-every source range that did not move since the previous call. `block_contrast` is the
+`blocks(flat)`, `block_of_edge` (the block of each synapse) and `to_dict()`.
+`BlockTransport.synaptic_input(s)` sums the blocks `pairs` names (every block by default) and
+reuses the product of every source range that did not move since the previous call. `block_contrast` is the
 learning contrast as one Gram product per block.
 
 ## Certificate (`cadence.certificate`)

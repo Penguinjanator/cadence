@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 if TYPE_CHECKING:
-    from .brain import Brain, BrainState, Nudge
+    from .brain import Apical, Brain, BrainState, Nudge
     from .connectome import Connectome
     from .neuron import NeuronModel
 
@@ -48,6 +48,9 @@ class SettlementRecord:
     activation: np.ndarray
     adaptation: np.ndarray
     steps: int
+    # the graph's apical compartment, None without one: with it the top-down input is
+    # normalized per region and pool, so the recorded weights alone do not give the drive
+    apical: Apical | None = None
 
 
 _observer: ContextVar[tuple[Callable[[SettlementRecord], None], str] | None] = ContextVar(
@@ -113,6 +116,7 @@ class _Capture:
             activation,
             adaptation,
             state.steps,
+            copy.deepcopy(brain.apical),
         )
         token = _observer.set(None)
         try:

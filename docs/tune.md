@@ -62,6 +62,70 @@ assert recursive.live(observation).shape == (1,)
 Observers settle with the base and never override a finished answer. The wiring
 permits recursive correction without teaching it.
 
+### Deep brains
+
+Several processing regions learn features of features only with the
+[apical compartment](anatomy.md#the-apical-compartment). Without it each region hears the
+region above it through a loop that grows with the weights, and a second module carries an echo
+of the answer. The recipe of the [depth benchmark](../benchmarks/depth/README.md):
+
+```python
+deep = Brain.compose(
+    inputs=48, actions=7, modules=(128, 64, 64, 64), apical=0.25,
+    teaching="normalized", learning_normalize_relative=0.1,
+    learning_nudged_steps=32, learning_nudged_fixed=True, seed=0,
+)
+```
+
+- **What it buys.** On a task that needs two layers of thresholds, one module reads 0.58 of
+  held-out rows after 4,000 lessons, two 0.66, three 0.81 and four 0.86, against 0.89 for a
+  network of two hidden layers trained by backpropagation.
+- **Why the learning settings.** Credit reaching a region k levels below the motor region
+  shrinks about fourfold per level. The projection-relative floor lets each projection step on
+  its own scale, and fixed nudged phases carry the nudge down to the lower regions.
+- **Cost.** An apical brain settles at half the founder's step, yet its bounded top-down loop
+  settles in fewer sweeps than a flat brain whose loop has grown.
+- **Lessons.** A deeper brain acquires more slowly at first; compare depths at matched lessons
+  and give it a longer budget before reading it.
+- **Memories.** The recall memory reads into the top region, and its benchmarks run on brains
+  of two and three modules ([memory on deep brains](../benchmarks/depth/README.md#memory-on-deep-brains)).
+  With `recall_boundary=True` a question about the start of an episode has a slot to read.
+- **Observers.** An observer's return to the modules, the association and the motor region is a
+  top-down half too, so with `apical` set it lands on the same compartment: System 2 adds at most
+  `apical` times each region's bottom-up drive, enough to bias the settle and never enough to
+  take it over.
+
+A deep brain with every memory and attention feature is one call. Each line adds one feature to
+the recipe above:
+
+```python
+full = Brain.compose(
+    inputs=16, actions=4, seed=0, arousal=True,
+    modules=(64, 32, 32), apical=0.25,                  # three regions that learn in depth
+    teaching="normalized", learning_normalize_relative=0.1,
+    learning_nudged_steps=32, learning_nudged_fixed=True,
+    learned_code=16, attention=True,                     # a learned code, read by attention
+    recall_heads=2,                                      # two facts in one settle
+    recall_boundary=True,                                # the start of an episode has a slot
+    observers=(16,),                                     # optional System 2
+)
+assert full.live(np.eye(16)[[3]]).shape == (1,)
+```
+
+- `learned_code=16, attention=True`: the brain learns a code of its observations and its recall
+  memory attends over its own recent moments by that code
+  ([single-head attention](memory.md#single-head-learned-code-attention-opt-in)).
+- `recall_heads=2`: two heads read the memory with addresses of their own, so one settle can
+  combine two remembered facts ([several heads](memory.md#several-heads-opt-in)). The position
+  term, on by default, lets a cue choose how far back a head looks.
+- `recall_boundary=True`: a question about the start of an episode has a slot to read
+  ([the episode's boundary](memory.md#episodes-keys-and-windows)).
+- `observers=(16,)`: a System 2 region inside the same settle, bounded by the compartment.
+
+Every option is checked by the tests beside every other (`tests/test_observers_compat.py`), and
+the [memory benchmarks on deep brains](../benchmarks/depth/README.md#memory-on-deep-brains)
+measure what depth keeps and costs.
+
 ## Defaults and expert overrides
 
 Set only the values you intend to change; the rest keep their composed founders, which
@@ -92,6 +156,7 @@ or `retune`, as before.
 | Setting | Composed founder | Changed at | Home |
 | --- | --- | --- | --- |
 | `modules`, `observers` | `(64,)`, `()` | construction | [map](#brain) |
+| `apical` | `0.0`: every synapse summed alike | construction | [the apical compartment](anatomy.md#the-apical-compartment) |
 | `lateral`, `slots` | `0.0`, `1` | construction | [motor competition](#operating-point-and-motor-competition) |
 | `scales`: `"sensory"`, `"trace"`, `"history"`, `"recall"` | `1.0`, `1.2`, `1.2`, `1.2` | construction | [image inputs](senses.md#image-inputs), [memory](memory.md#working-trace) |
 | `features`, `field`, `seed` | `8`, `3`, `0` | construction | [image inputs](senses.md#image-inputs) |
@@ -102,6 +167,7 @@ or `retune`, as before.
 | `learning_initial_damping` | `0` | retune, qualified CPU float64 teaching only | [initial numerical step](settling.md#qualified-teaching-budgets) |
 | `learning_scale_cap`, `learning_surprise` | `8.0`, `False` | retune | [learning](settling.md#7-every-knob) |
 | `learning_momentum` | `0.9` | retune | [learning](teach.md#rates-under-normalization) |
+| `learning_normalize_relative` | `0.0`: the teaching point's `normalize_floor` | retune | [learning](teach.md#rates-under-normalization) |
 | `actor_gamma`, `actor_lam`, `actor_eligibility_steps`, `actor_eta`, `actor_eta_bias`, `actor_eta_critic` | `0.9`, `0.8`, `12`, `1.0`, `0.05`, `0.3` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `actor_dopamine_cap` | `1.0` | retune | [reward](reward.md#eligibility-traces-and-dopamine) |
 | `arousal` | off; `True` is `ArousalConfig()` | construction (switch), retune (fields) | [continuous](start.md#routine-and-repair-live) |

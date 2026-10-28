@@ -137,8 +137,14 @@ def certificate(brain: Brain) -> Certificate:
 
     Reads the effective weights, the neuron model's slope and leak, and whether adaptation
     is present. Ablation masks only remove synapses, so a certified brain stays certified
-    under any mask.
+    under any mask. The argument bounds a plain synaptic sum, so a brain with an apical
+    compartment is refused.
     """
+    if brain.apical is not None:
+        raise ValueError(
+            "the settling certificate bounds a plain synaptic sum; a brain with an apical "
+            "compartment normalizes its top-down input, which the certificate does not cover"
+        )
     model = brain.neuron_model
     return Certificate(
         row_mass=row_mass(brain),

@@ -69,6 +69,9 @@ __all__ = [
 
 
 SCALE_CAP = 8.0  # the default of LearnerConfig.scale_cap: the magnitude a synapse may not exceed
+# added to a relative floor's divisor: a projection whose synapses never moved divides its
+# zero step by this rather than by zero
+_RELATIVE_TINY = 1e-12
 _MOMENTS = ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
 
 
@@ -97,6 +100,16 @@ class LearnerConfig:
     surprise: bool = False
     # qualified phases only: start at this index of the existing dt-halving schedule
     initial_damping: int = 0
+    # >0: in place of normalize_floor, each synapse's RMS gets this share of the RMS of its
+    # projection (the block of synapses between its two neuron ranges) added, and each bias
+    # this share of its range's; a constant floor binds where credit is faint (a deep module)
+    # and is too small where it is strong, so the projection's own scale is the reference
+    normalize_relative: float = 0.0
+    # finite teaching only: the nudged phases run their whole ``nudged_steps`` instead of
+    # stopping at ``tolerance``; a nudge's effect on a region several synapses from the output
+    # moves less than a coarse tolerance in a sweep, and the opposite phases' common drift
+    # cancels in the contrast, so the free phase may stay coarse
+    nudged_fixed: bool = False
 
     def __post_init__(self) -> None:
         # Config fields have host scalar semantics, including before a save/load.
@@ -137,6 +150,12 @@ class LearnerConfig:
             raise ValueError("temperature must be finite and positive")
         if not np.isfinite(self.normalize_floor) or self.normalize_floor <= 0:
             raise ValueError("normalize_floor must be finite and positive")
+        if not np.isfinite(self.normalize_relative) or self.normalize_relative < 0:
+            raise ValueError("normalize_relative must be finite and nonnegative")
+        if self.normalize_relative and not self.normalize:
+            raise ValueError("normalize_relative needs normalize above zero")
+        if not isinstance(self.nudged_fixed, bool):
+            raise ValueError("nudged_fixed must be boolean")
         if self.tolerance is not None and (not np.isfinite(self.tolerance) or self.tolerance < 0):
             raise ValueError("tolerance must be finite and nonnegative, or None")
         if not isinstance(self.qualified, bool):
@@ -191,7 +210,15 @@ class LearnerConfig:
             )
 
     def to_dict(self) -> dict[str, Any]:
-        return {k: getattr(self, k) for k in self.__slots__}
+        # a new setting at its neutral value is left out, so a record of a config without it
+        # reads the same as before the setting existed
+        return {
+            k: getattr(self, k) for k in self.__slots__
+            if not (k in _NEUTRAL and getattr(self, k) == _NEUTRAL[k])
+        }
+
+
+_NEUTRAL: dict[str, Any] = {"normalize_relative": 0.0, "nudged_fixed": False}
 
 
 @dataclass(frozen=True)
@@ -496,7 +523,13 @@ class Learner:
             drive, steps=cfg.free_steps, state=warm, tolerance=cfg.tolerance
         )
 
-    def nudge_for(self, target: np.ndarray, beta: float, weight: np.ndarray | None = None) -> Nudge:
+    def nudge_for(
+        self,
+        target: np.ndarray,
+        beta: float,
+        weight: np.ndarray | None = None,
+        apical_gain: np.ndarray | None = None,
+    ) -> Nudge:
         cfg = self.config
         temperature = cfg.temperature if cfg.nudge == "cross_entropy" else None
         # With several slots each slot's nudge carries beta / slots, so the contrast over 2 beta is
@@ -508,6 +541,7 @@ class Learner:
             softmax_temperature=temperature,
             weight=weight,
             groups=self.output_groups,
+            apical_gain=apical_gain,
         )
 
     def nudged(
@@ -525,10 +559,12 @@ class Learner:
         target is an action that was taken).
         """
         cfg = self.config
+        # an apical compartment passes the nudge's change at the gain the free phase set
+        held = self.brain.apical_gain(drive, free)
         if cfg.qualified:
             phase = self._qualified_phase(
                 drive, free, cfg.nudged_steps,
-                self.nudge_for(target, sign * cfg.beta, weight),
+                self.nudge_for(target, sign * cfg.beta, weight, held),
             )
             name = "nudged" if sign >= 0 else "opposite"
             if not np.all(phase.qualified):
@@ -538,8 +574,8 @@ class Learner:
             drive,
             steps=cfg.nudged_steps,
             state=free,
-            nudge=self.nudge_for(target, sign * cfg.beta, weight),
-            tolerance=cfg.tolerance,
+            nudge=self.nudge_for(target, sign * cfg.beta, weight, held),
+            tolerance=None if cfg.nudged_fixed else cfg.tolerance,
         )
 
     def _nudged_budget_hint(self) -> str | None:
@@ -788,15 +824,50 @@ class Learner:
             held["second_moment"].mul_(rho).addcmul_(raw_edges, raw_edges, value=1.0 - rho)
             held["second_moment_bias"].mul_(rho).addcmul_(raw_neurons, raw_neurons, value=1.0 - rho)
             correction = 1.0 - rho**count
-            edges = edges / ((held["second_moment"] / correction).sqrt() + cfg.normalize_floor)
-            neurons = neurons / (
-                (held["second_moment_bias"] / correction).sqrt() + cfg.normalize_floor
-            )
+            if cfg.normalize_relative:
+                rms = (held["second_moment"] / correction).sqrt()
+                rms_bias = (held["second_moment_bias"] / correction).sqrt()
+                torch = kernel.torch
+                divisors = []
+                for values, group in zip(
+                    (rms, rms_bias), self._projections_on_device(kernel), strict=True
+                ):
+                    size = int(group[1])
+                    power = torch.zeros(size, dtype=values.dtype, device=values.device)
+                    power.index_add_(0, group[0], values * values)
+                    floor = (power / group[2]).sqrt()[group[0]]
+                    divisors.append(values + cfg.normalize_relative * floor + _RELATIVE_TINY)
+                edges, neurons = edges / divisors[0], neurons / divisors[1]
+            else:
+                edges = edges / ((held["second_moment"] / correction).sqrt() + cfg.normalize_floor)
+                neurons = neurons / (
+                    (held["second_moment_bias"] / correction).sqrt() + cfg.normalize_floor
+                )
         if not bool(kernel.torch.stack([
             kernel.torch.isfinite(held[name]).all() for name in _MOMENTS
         ]).all()):
             raise ValueError("optimizer moments must remain finite")
         return edges, neurons
+
+    def _projections_on_device(self, kernel: Any) -> list[tuple[Any, int, Any]]:
+        """``_projections`` on the kernel's device: per group the index, the group count and
+        each group's member count, made once per kernel and layout."""
+        held = self.__dict__.get("_projection_device")
+        layout = self.brain.layout
+        if held is None or held[0] is not kernel or held[1] is not layout:
+            torch = kernel.torch
+            groups = []
+            for group in self._projections():
+                size = int(group.max()) + 1 if len(group) else 0
+                count = np.maximum(np.bincount(group, minlength=size), 1).astype(float)
+                groups.append((
+                    torch.from_numpy(np.ascontiguousarray(group)).to(kernel.device),
+                    size,
+                    torch.from_numpy(count).to(kernel.device, kernel.param_dtype),
+                ))
+            held = (kernel, layout, groups)
+            self.__dict__["_projection_device"] = held
+        return cast(list[tuple[Any, int, Any]], held[2])
 
     def _device_indices(self, kernel: Any) -> dict[str, Any]:
         """Index tensors of the update on the kernel's device, made once per kernel and masks."""
@@ -892,6 +963,28 @@ class Learner:
             "bias_step": float(db.abs().mean()),
         }
 
+    def _projections(self) -> tuple[np.ndarray, np.ndarray]:
+        """Each synapse's projection (its block of the layout) and each neuron's range."""
+        layout = self.brain.layout
+        held = self.__dict__.get("_projection_index")
+        if held is None or held[0] is not layout:
+            ranges = np.searchsorted(layout.starts, np.arange(self.brain.connectome.n), "right") - 1
+            held = (layout, np.asarray(layout.block_of_edge), np.asarray(ranges))
+            self.__dict__["_projection_index"] = held
+        return held[1], held[2]
+
+    def _relative_rms(self, rms: np.ndarray, rms_bias: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """The divisors of a relative floor: each RMS plus ``normalize_relative`` times the RMS
+        of its projection (synapses) or its range (biases)."""
+        share = self.config.normalize_relative
+        out = []
+        for values, group in zip((rms, rms_bias), self._projections(), strict=True):
+            size = int(group.max()) + 1 if len(group) else 0
+            power = np.bincount(group, weights=values * values, minlength=size)
+            count = np.maximum(np.bincount(group, minlength=size), 1)
+            out.append(values + share * np.sqrt(power / count)[group] + _RELATIVE_TINY)
+        return out[0], out[1]
+
     def update(
         self, free: BrainState, nudged: BrainState, opposite: BrainState | None = None
     ) -> dict[str, float]:
@@ -938,8 +1031,14 @@ class Learner:
             self.second_moment = rho * self.second_moment + (1 - rho) * raw_synapse**2
             self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_neuron**2
             correction = 1.0 - rho**count
-            rms = np.sqrt(self.second_moment / correction) + cfg.normalize_floor
-            rms_bias = np.sqrt(self.second_moment_bias / correction) + cfg.normalize_floor
+            if cfg.normalize_relative:
+                rms, rms_bias = self._relative_rms(
+                    np.sqrt(self.second_moment / correction),
+                    np.sqrt(self.second_moment_bias / correction),
+                )
+            else:
+                rms = np.sqrt(self.second_moment / correction) + cfg.normalize_floor
+                rms_bias = np.sqrt(self.second_moment_bias / correction) + cfg.normalize_floor
             synapse_term, neuron_term = synapse_term / rms, neuron_term / rms_bias
         delta_scale = cfg.eta * synapse_term
         delta_bias = cfg.eta_bias * neuron_term
@@ -1003,10 +1102,11 @@ class Learner:
             if judged is None:
                 drive, target, weight = self._lesson(taught, drive, target, weight)
                 free = _restrict(free, taught)
+            held = self.brain.apical_gain(drive, free)
             for name, sign in (("nudged", 1.0), ("opposite", -1.0)):
                 phases[name] = self._qualified_phase(
                     drive, free, cfg.nudged_steps,
-                    self.nudge_for(target, sign * cfg.beta, weight),
+                    self.nudge_for(target, sign * cfg.beta, weight, held),
                 )
                 if not np.all(phases[name].qualified):
                     raise LearningPhaseError(name, phases, self._nudged_budget_hint())
@@ -1040,15 +1140,16 @@ class Learner:
             free = _restrict(free, taught)
         nudged = self.nudged(drive, free, target, weight=weight)
         opposite = self.nudged(drive, free, target, sign=-1.0, weight=weight)
+        held = self.brain.apical_gain(drive, free)
         phases["nudged"] = Equilibrium(
             nudged, self.brain.residual(drive, nudged,
-                nudge=self.nudge_for(target, cfg.beta, weight)),
+                nudge=self.nudge_for(target, cfg.beta, weight, held)),
             nudged.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
             residual_checks=1,
         )
         phases["opposite"] = Equilibrium(
             opposite, self.brain.residual(drive, opposite,
-                nudge=self.nudge_for(target, -cfg.beta, weight)),
+                nudge=self.nudge_for(target, -cfg.beta, weight, held)),
             opposite.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
             residual_checks=1,
         )
@@ -1285,6 +1386,7 @@ class Learner:
             dense_limit=self.brain.dense_limit,
             layout=self.brain.layout,
             precision=self.brain.precision,
+            apical=self.brain.apical,
         )
 
     # -- readout
@@ -1769,6 +1871,7 @@ def calibrate_bias(
             efficacy=efficacy, log_gain=brain.log_gain, bias=b,
             device=str(brain._torch.device) if brain._torch is not None else None,
             dense_limit=brain.dense_limit, layout=brain.layout, precision=brain.precision,
+            apical=brain.apical,
         )
 
     def solve(b: np.ndarray, *, kind: str, round_index: int, group: int | None) -> BrainState:

@@ -9,7 +9,9 @@ hold random symbols, so content cannot name the cued slot; recency is off
 (``recall_recency=0``), so no fixed preference for the newest slot serves either cue. The
 founder memory with its position term (``recall_position=32``) is compared with the memory
 without it (``recall_position=0``) at the same lessons and test episodes, and with uniform
-random (1/4).
+random (1/4). Both memories hold the episode's boundary (``recall_boundary=True``): a silent
+slot before the first symbol whose next the first symbol teaches, so the first symbol, like
+every later one, can be read through its own slot's value or its predecessor's next.
 
 This is bounded component evidence that lessons can teach a cue to choose how far back the
 read looks. It is not evidence for order questions in language or music.
@@ -49,7 +51,7 @@ def compose(seed: int, position: int) -> cd.Brain:
     return cd.Brain.compose(
         INPUTS, SYMBOLS, modules=(24,), seed=seed, episodic=False, recall=True,
         recall_position=position, recall_recency=0.0, recall_temperature=0.25,
-        teaching="normalized",
+        teaching="normalized", recall_boundary=True,
     )
 
 
@@ -146,12 +148,13 @@ def main() -> None:
             args.founder_out.write_text(json.dumps(founders[0], sort_keys=True, indent=2) + "\n")
             return
     result = {
-        "schema": "cadence-look-back/1",
+        "schema": "cadence-look-back/2",
         "scope": "a taught cue chooses how far back the read looks; bounded component evidence",
         "configuration": {
             "inputs": INPUTS, "symbols": SYMBOLS, "length": LENGTH, "modules": [24],
             "lessons": LESSONS, "tests": TESTS, "teaching": "normalized", "recall_recency": 0.0,
             "recall_temperature": 0.25, "episodic": False, "positions": [32, 0],
+            "recall_boundary": True,
         },
         "founders": founders,
         "passed": all(founder["passed"] for founder in founders),
@@ -160,7 +163,7 @@ def main() -> None:
     if problem is not None:
         raise AssertionError(problem)
     if args.out is not None:
-        cd.Receipt.build("cadence-look-back/1", result, sources()).write(args.out)
+        cd.Receipt.build("cadence-look-back/2", result, sources()).write(args.out)
     print(json.dumps(result, sort_keys=True, indent=2, allow_nan=False))
 
 

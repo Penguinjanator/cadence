@@ -788,10 +788,11 @@ brain keeps reading as it did. The maps are saved with the brain when the term i
 
 In the [look-back benchmark](../benchmarks/attention/look_back.py) a stream of five random
 symbols is followed by a cue, `first` or `last`, and the answer is the symbol at the cued place.
-Taught on the cue moment alone, the term learns to look back to the oldest slot on `first` and to
-the newest on `last`: three of four founders answer both cues at 1.00, the fourth 0.83 and 1.00,
-against 0.31 to 0.81 per cue without the term and 0.25 for uniform random
-([receipt](../benchmarks/attention/results/look-back.json)).
+Taught on the cue moment alone, the term learns to look back to the start of the episode on
+`first` and to the newest slot on `last`: with the episode's boundary every founder answers both
+cues at 1.00, against 0.29 to 0.80 per cue without the term and 0.25 for uniform random
+([receipt](../benchmarks/attention/results/look-back.json)). Without the boundary one founder
+answered `first` at 0.83.
 
 ### Episodes, keys and windows
 
@@ -801,6 +802,20 @@ and the cortex of the moment before, the history and the window begin afresh.
 `brain.reset(keep=("slots",))` keeps the slots across a reset: each stream ends an episode
 there (`Recall.end`), and the ended episode's last slot learns no successor from the next
 stream's first moment.
+
+**The episode's boundary (opt-in, `recall_boundary=True`).** A slot's next is taught by the
+moment that follows it, so every event but the first has a predecessor whose next holds it, and
+a read can find an event through two ports: its own slot's value, or the slot before's next.
+The first event of an episode has only the first. A brain that learns to answer one cue through
+the next port then has no route to the start of an episode. With the option each stream that
+begins holds a boundary slot first, a silent moment of zero key and zero value whose next the
+first event teaches, so both routes exist for every position. A stream begins when the memory
+empties its streams, when some of them are reset (their boundary takes the latest slot, the
+moment the others wrote last) and when every stream ends an episode with its slots kept. A stream
+that ends its episode alone begins the next one without a boundary, and a memory of one slot
+(`recall_capacity=1`) holds none. The boundary is no written
+moment, and its logit is its age's alone: a cue finds it through the position term, or with an
+address that points away from every stored key.
 
 The founder key is the present event alone, so where an event recurs with different
 continuations the read returns a mixture of every occurrence's successor. One construction
@@ -842,6 +857,7 @@ map.
 | `recall_heads` | `1` | construction | Heads reading the one bank, each with its own port and address map ([several heads](#several-heads-opt-in)) |
 | `recall_position` | `32` | construction | Ages below it get a bucket each, older ones one per doubling; every head learns a term per bucket ([position](#position-how-long-ago-a-moment-happened)); `0` builds none |
 | `recall_position_rate` | `0.1` | retune | Rate of the position term's lesson step; `0.0` freezes it |
+| `recall_boundary` | `False` | retune | Each stream that begins holds a silent boundary slot whose next the first event teaches ([the episode's boundary](#episodes-keys-and-windows)); a retune applies from the next stream that begins |
 
 The [API reference](api.md#recall-memory-genes) gives the `Recall` class signature.
 
