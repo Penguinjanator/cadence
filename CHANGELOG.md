@@ -8,12 +8,14 @@
   builds each new slot array with one copy (0.91.0 made two or three); the content scores of an
   address over the present slots are kept until the slots change, so the address lesson and an
   act that addresses the slots as the lesson did read them again; the device index of the
-  association columns is made once per device. A composer with three modules (256, 128, 128),
-  four recall heads, the copy pathway, the executed command in its slots, 64 streams and a full
-  memory of 320 slots: per moment on the CPU backend the address lessons take 20 ms against 106
-  ms, the reads 20 ms against 36 ms and the write 11 ms against 23 ms; on a shared A10G in
-  float32 a moment takes 0.37 to 0.42 s against 0.61 to 0.68 s. Every act, lesson report, slot
-  and efficacy of 380 such moments on the CPU backend has the same bits as in 0.91.0.
+  association columns is made once per device. A sequence brain with three modules (256, 128,
+  128), four recall heads, the copy pathway, the executed command in its slots, 64 streams and
+  a full memory of 320 slots, a lesson and an act per moment: on the CPU backend the address
+  lessons take 20 ms per moment against 106 ms, the reads 20 ms against 36 ms and the write 11
+  ms against 23 ms; on a shared A10G in float32 a moment takes 0.36 to 0.42 s against 0.61 to
+  0.68 s, and on that machine's CPU backend 0.49 s against 0.77 s. Every act, lesson report,
+  slot, address map and efficacy of 380 such moments on the CPU backend has the same bits as in
+  0.91.0, on a Mac and on Linux, with and without recall threads.
 - `CADENCE_RECALL_THREADS=N` (default 1: none) shares a recall memory's products and copies over
   its slots among N threads by blocks of streams, each block one NumPy call, so every value is
   summed by the same loop at any count. See [backends](docs/backends.md).
