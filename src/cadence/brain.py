@@ -128,6 +128,9 @@ class Nudge:
     # It is not multiplied by the target nudge's beta or per-row weight.
     anchor: np.ndarray | None = None  # (batch, n), (1, n), or (n,)
     anchor_gain: np.ndarray | None = None  # nonnegative (n,)
+    # A graph with an apical compartment: the gain each pool's apical input passes at, one per
+    # row and pool, held through the nudged settle (the free phase's, ``Brain.apical_gain``)
+    apical_gain: np.ndarray | None = None  # nonnegative (batch, pools)
 
     def __post_init__(self) -> None:
         mask, target = np.asarray(self.mask), np.asarray(self.target)
@@ -193,6 +196,11 @@ class Nudge:
                 raise ValueError("anchor must be finite")
             object.__setattr__(self, "anchor", anchor.copy())
             object.__setattr__(self, "anchor_gain", gain.copy())
+        if self.apical_gain is not None:
+            held = np.asarray(self.apical_gain, dtype=float)
+            if held.ndim != 2 or not np.isfinite(held).all() or (held < 0).any():
+                raise ValueError("apical_gain must be finite and nonnegative, one per row and pool")
+            object.__setattr__(self, "apical_gain", held.copy())
 
     def drive(self, s: np.ndarray) -> np.ndarray:
         s = np.asarray(s, dtype=float)
@@ -314,17 +322,28 @@ class Apical:
         if self.synapses.any() and (self.groups[np.asarray(post)[self.synapses]] < 0).any():
             raise ValueError("every apical synapse must land on a neuron of a pool")
 
-    def drive(self, basal: np.ndarray, raw: np.ndarray) -> np.ndarray:
-        """The normalized apical drive ``(batch, n)`` from the basal and raw apical inputs."""
-        out = np.zeros_like(raw)
+    def gain(self, basal: np.ndarray, raw: np.ndarray) -> np.ndarray:
+        """The normalization's gain ``(batch, pools)``: ``fraction * rms(b) / sqrt(rms(u)^2 +
+        (floor * rms(b))^2)`` per row and pool."""
         fraction, floor2 = self.fraction, self.floor * self.floor
-        for members in self.members:
+        out = np.empty((len(basal), len(self.members)))
+        for k, members in enumerate(self.members):
             b = basal[:, members]
             u = raw[:, members]
-            basal2 = np.mean(b * b, axis=1, keepdims=True)
-            raw2 = np.mean(u * u, axis=1, keepdims=True)
-            gain = fraction * np.sqrt(basal2) / np.sqrt(raw2 + floor2 * basal2 + _APICAL_TINY)
-            out[:, members] = gain * u
+            basal2 = np.mean(b * b, axis=1)
+            raw2 = np.mean(u * u, axis=1)
+            out[:, k] = fraction * np.sqrt(basal2) / np.sqrt(raw2 + floor2 * basal2 + _APICAL_TINY)
+        return out
+
+    def drive(
+        self, basal: np.ndarray, raw: np.ndarray, held: np.ndarray | None = None
+    ) -> np.ndarray:
+        """The apical drive ``(batch, n)``: the raw apical input at the normalization's gain,
+        or at the ``held`` gain ``(batch, pools)`` of a nudged settle."""
+        gain = self.gain(basal, raw) if held is None else held
+        out = np.zeros_like(raw)
+        for k, members in enumerate(self.members):
+            out[:, members] = gain[:, k : k + 1] * raw[:, members]
         return out
 
     def to_dict(self) -> dict[str, Any]:
@@ -1203,7 +1222,7 @@ class Brain:
                 error -= adapt.strength * a
             if nudge is not None:
                 error += nudge.drive(s)
-            error += self.apical.drive(error, raw)
+            error += self.apical.drive(error, raw, None if nudge is None else nudge.apical_gain)
             error -= v
         # (projected_next_v - v) / dt, written without cancellation for keep=1.
         error = keep * error + (keep - 1.0) * v / self.neuron_model.dt
@@ -1260,6 +1279,21 @@ class Brain:
         self.__dict__["_apical_cache"] = parts
         return parts
 
+    def apical_gain(self, drive: np.ndarray, state: BrainState) -> np.ndarray | None:
+        """The apical compartment's gain ``(batch, pools)`` at ``state`` under ``drive``: what a
+        nudged settle from it holds (``Nudge.apical_gain``); None without the compartment."""
+        apical = self.apical
+        if apical is None:
+            return None
+        d = np.atleast_2d(np.asarray(drive, dtype=float))
+        s = np.atleast_2d(np.asarray(state.activation, dtype=float))
+        basal, raw = self._split_input(s, *self._apical_transports())
+        basal += d + self.bias
+        adapt = self.neuron_model.adaptation
+        if adapt is not None:
+            basal -= adapt.strength * np.atleast_2d(np.asarray(state.adaptation, dtype=float))
+        return apical.gain(basal, raw)
+
     def _apical_transports(self) -> tuple[BlockTransport | None, BlockTransport | None]:
         """One settle's transports of the basal and the apical blocks; None when segmented."""
         _, flat_basal, flat_apical, basal_pairs, apical_pairs, _, _ = self._apical_parts()
@@ -1307,10 +1341,13 @@ class Brain:
         standing = drive + self.bias  # the part of every neuron's drive that does not move
         apical = self.apical
         blocks = basal_blocks = apical_blocks = None
+        held = None if nudge is None else nudge.apical_gain
         if apical is None:
             blocks = None if self._blocks is None else BlockTransport(self.layout, self._blocks)
         else:
             basal_blocks, apical_blocks = self._apical_transports()
+            if held is not None and held.shape != (len(v), len(apical.members)):
+                raise ValueError("a nudge's apical_gain needs one entry per row and pool")
         s = neuron_model.activation(v)
         if masked:
             s *= keep
@@ -1331,7 +1368,7 @@ class Brain:
                 total += nudge.drive(s)
             if raw is not None:  # the apical compartment, normalized to the basal input
                 assert apical is not None
-                total += apical.drive(total, raw)
+                total += apical.drive(total, raw, held)
             total -= v
             total *= neuron_model.dt
             v += total  # neuron-local update: v <- v + dt (-v + total)
@@ -1589,22 +1626,35 @@ class _TorchKernel:
             out[:, b0:b1].addmm_(s[:, a0:a1], self.apical_blocks[k])
         return out
 
-    def _apical_drive(self, basal: Any, raw: Any) -> Any:
-        """``Apical.drive`` on the device."""
+    def _apical_drive(self, basal: Any, raw: Any, held: Any = None) -> Any:
+        """``Apical.drive`` on the device; ``held`` a ``(batch, pools)`` tensor of held gains."""
         torch = self.torch
         apical = self.apical
         assert apical is not None
         out = torch.zeros_like(raw)
         floor2 = apical.floor * apical.floor
-        for members in self.pools:
-            b = basal[:, members]
+        for k, members in enumerate(self.pools):
             u = raw[:, members]
-            basal2 = (b * b).mean(dim=1, keepdim=True)
-            raw2 = (u * u).mean(dim=1, keepdim=True)
-            spread = (raw2 + floor2 * basal2 + _APICAL_TINY).sqrt()
-            gain = apical.fraction * basal2.sqrt() / spread
+            if held is None:
+                b = basal[:, members]
+                basal2 = (b * b).mean(dim=1, keepdim=True)
+                raw2 = (u * u).mean(dim=1, keepdim=True)
+                spread = (raw2 + floor2 * basal2 + _APICAL_TINY).sqrt()
+                gain = apical.fraction * basal2.sqrt() / spread
+            else:
+                gain = held[:, k : k + 1]
             out[:, members] = gain * u
         return out
+
+    def _held(self, nudge: Nudge | None, batch: int) -> Any:
+        """A nudge's held apical gains as a device tensor, or None."""
+        if nudge is None or nudge.apical_gain is None or self.apical is None:
+            return None
+        if nudge.apical_gain.shape != (batch, len(self.pools)):
+            raise ValueError("a nudge's apical_gain needs one entry per row and pool")
+        return self.torch.from_numpy(np.ascontiguousarray(nudge.apical_gain)).to(
+            self.device, self.dtype
+        )
 
     def _activation(self, v: Any) -> Any:
         torch, neuron_model = self.torch, self.neuron_model
@@ -1723,7 +1773,9 @@ class _TorchKernel:
                     error = error + self._push(
                         s, nudge, target, mask, groups, weight, anchor, anchor_gain
                     )
-                error = error + self._apical_drive(error, self._apical_input(s)) - v
+                error = error + self._apical_drive(
+                    error, self._apical_input(s), self._held(nudge, batch)
+                ) - v
             error = k * error + (k - 1.0) * v / neuron_model.dt
             result = error.abs().amax(dim=1)
             if adapt is not None:
@@ -1820,6 +1872,7 @@ class _TorchKernel:
         batch = v.shape[0]
         adapt = neuron_model.adaptation
         target, mask, groups, weight, anchor, anchor_gain = self._nudge_tensors(nudge, batch)
+        held = self._held(nudge, batch)
         traj = []
         taken = 0
         activity_change = torch.zeros(batch, dtype=self.dtype, device=self.device)
@@ -1841,7 +1894,7 @@ class _TorchKernel:
                 if nudge is not None:
                     total += self._push(s, nudge, target, mask, groups, weight, anchor, anchor_gain)
                 if self.apical is not None:  # the apical compartment, normalized to the basal
-                    total += self._apical_drive(total, self._apical_input(s))
+                    total += self._apical_drive(total, self._apical_input(s), held)
                 v = (v + neuron_model.dt * (-v + total)) * k
                 previous = s
                 s = self._activation(v) * k

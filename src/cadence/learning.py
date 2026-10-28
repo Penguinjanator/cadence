@@ -523,7 +523,13 @@ class Learner:
             drive, steps=cfg.free_steps, state=warm, tolerance=cfg.tolerance
         )
 
-    def nudge_for(self, target: np.ndarray, beta: float, weight: np.ndarray | None = None) -> Nudge:
+    def nudge_for(
+        self,
+        target: np.ndarray,
+        beta: float,
+        weight: np.ndarray | None = None,
+        apical_gain: np.ndarray | None = None,
+    ) -> Nudge:
         cfg = self.config
         temperature = cfg.temperature if cfg.nudge == "cross_entropy" else None
         # With several slots each slot's nudge carries beta / slots, so the contrast over 2 beta is
@@ -535,6 +541,7 @@ class Learner:
             softmax_temperature=temperature,
             weight=weight,
             groups=self.output_groups,
+            apical_gain=apical_gain,
         )
 
     def nudged(
@@ -552,10 +559,12 @@ class Learner:
         target is an action that was taken).
         """
         cfg = self.config
+        # an apical compartment passes the nudge's change at the gain the free phase set
+        held = self.brain.apical_gain(drive, free)
         if cfg.qualified:
             phase = self._qualified_phase(
                 drive, free, cfg.nudged_steps,
-                self.nudge_for(target, sign * cfg.beta, weight),
+                self.nudge_for(target, sign * cfg.beta, weight, held),
             )
             name = "nudged" if sign >= 0 else "opposite"
             if not np.all(phase.qualified):
@@ -565,7 +574,7 @@ class Learner:
             drive,
             steps=cfg.nudged_steps,
             state=free,
-            nudge=self.nudge_for(target, sign * cfg.beta, weight),
+            nudge=self.nudge_for(target, sign * cfg.beta, weight, held),
             tolerance=None if cfg.nudged_fixed else cfg.tolerance,
         )
 
@@ -1093,10 +1102,11 @@ class Learner:
             if judged is None:
                 drive, target, weight = self._lesson(taught, drive, target, weight)
                 free = _restrict(free, taught)
+            held = self.brain.apical_gain(drive, free)
             for name, sign in (("nudged", 1.0), ("opposite", -1.0)):
                 phases[name] = self._qualified_phase(
                     drive, free, cfg.nudged_steps,
-                    self.nudge_for(target, sign * cfg.beta, weight),
+                    self.nudge_for(target, sign * cfg.beta, weight, held),
                 )
                 if not np.all(phases[name].qualified):
                     raise LearningPhaseError(name, phases, self._nudged_budget_hint())
@@ -1130,15 +1140,16 @@ class Learner:
             free = _restrict(free, taught)
         nudged = self.nudged(drive, free, target, weight=weight)
         opposite = self.nudged(drive, free, target, sign=-1.0, weight=weight)
+        held = self.brain.apical_gain(drive, free)
         phases["nudged"] = Equilibrium(
             nudged, self.brain.residual(drive, nudged,
-                nudge=self.nudge_for(target, cfg.beta, weight)),
+                nudge=self.nudge_for(target, cfg.beta, weight, held)),
             nudged.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
             residual_checks=1,
         )
         phases["opposite"] = Equilibrium(
             opposite, self.brain.residual(drive, opposite,
-                nudge=self.nudge_for(target, -cfg.beta, weight)),
+                nudge=self.nudge_for(target, -cfg.beta, weight, held)),
             opposite.steps, cfg.tolerance if cfg.tolerance is not None else 0.0,
             residual_checks=1,
         )

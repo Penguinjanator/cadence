@@ -273,3 +273,36 @@ def test_fixed_nudged_phases_run_their_whole_budget():
     assert fixed.describe()["genes"]["learning_nudged_fixed"] is True
     with pytest.raises(ValueError, match="nudged_fixed"):
         LearnerConfig(nudged_fixed=1)
+
+
+def test_a_nudged_settle_holds_the_free_phase_gain():
+    brain = apical_brain(seed=11, teaching="normalized")
+    graph, learner = brain.brain, brain.learner
+    x = np.random.default_rng(12).normal(size=(5, 4))
+    drive = brain.stimulus(x)
+    free = learner.free(drive)
+    held = graph.apical_gain(drive, free)
+    assert held.shape == (5, len(graph.apical.members)) and (held >= 0).all()
+    assert (held <= graph.apical.fraction / graph.apical.floor + 1e-12).all()
+    target = learner.targets(np.array([0, 1, 2, 0, 1]))
+    nudge = learner.nudge_for(target, 0.1, None, held)
+    a = graph.settle_batch(drive, steps=30, state=free, nudge=nudge)
+    # the same settle by hand: every sweep's apical drive is the held gain times the raw input
+    v = np.array(free.v, copy=True)
+    s = np.asarray(free.activation)
+    model = graph.neuron_model
+    for _ in range(30):
+        basal, raw = graph._split_input(s, *graph._apical_transports())
+        total = basal + drive + graph.bias + nudge.drive(s) + graph.apical.drive(basal, raw, held)
+        v = v + model.dt * (total - v)
+        s = model.activation(v)
+    np.testing.assert_allclose(a.activation, s, atol=1e-12)
+    # the learner's nudged phase passes the same gain
+    np.testing.assert_allclose(learner.nudged(drive, free, target).activation,
+                               graph.settle_batch(drive, steps=learner.config.nudged_steps, state=free,
+                                                  nudge=nudge, tolerance=learner.config.tolerance).activation)
+    with pytest.raises(ValueError, match="apical_gain"):
+        graph.settle_batch(drive, steps=2, state=free,
+                           nudge=learner.nudge_for(target, 0.1, None, held[:2]))
+    founder = Brain.compose(4, 3, modules=(6, 5), seed=11)
+    assert founder.brain.apical_gain(drive, founder.learner.free(drive)) is None

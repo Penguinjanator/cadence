@@ -2,6 +2,31 @@
 
 ## Unreleased
 
+- Add the apical compartment (opt-in, `Brain.compose(apical=fraction)`, founder 0: off). In a
+  chain of reciprocally joined regions each region heard the region above it through the reverse
+  half of its own upward pair, summed like any synapse; the loop through the pair grew with the
+  weights until the settle slowed near its critical gain and a second module carried an echo of
+  the answer, so depth added little. With the option the top-down half of every reciprocal pair
+  between two regions lands on an apical compartment: in every sweep each region that hears a
+  region above it adds `fraction * rms(b) * u / sqrt(rms(u)^2 + rms(b)^2)` to its members' basal
+  input `b`, `u` their apical input, the root mean squares over the region. The direction is kept
+  and the magnitude never exceeds `fraction` times the bottom-up drive. It runs inside the settle
+  on the host (blocked and segmented transport) and on torch (blocks and gather-scatter), and in
+  the residual; the numba kernel is skipped for such a graph and the mlx backend refuses it.
+  Apical brains settle at half the founder's step. `NeuralGraph(..., apical=Apical(...))` gives any
+  graph the compartment. See [the apical compartment](docs/anatomy.md#the-apical-compartment).
+- Add `LearnerConfig.normalize_relative` (founder 0): above zero, in place of `normalize_floor`,
+  each synapse's RMS gets that share of its projection's RMS (a bias: its range's), host and
+  device, so faint credit in a deep region steps on its own scale.
+- Add `LearnerConfig.nudged_fixed` (founder `False`): finite nudged phases, and the actor's
+  eligibility settle, run their whole `nudged_steps` instead of stopping at the tolerance.
+- Add the depth benchmark (`benchmarks/depth/and_count.py`, `cadence-depth-and-count/1`).
+- Checkpoints: a learner whose graph has the compartment saves it (`apical_synapses`,
+  `apical_groups`, fraction and floor) in the new format `cadence-checkpoint/5`, which 0.89.0 and
+  earlier refuse. Without the compartment every checkpoint is written as before; the two new
+  learner settings are left out of saved configurations, described genes and `to_dict` at their
+  founder values, so every brain composed without them reads, saves and describes as in 0.89.0.
+
 ## 0.89.0 — 2026-10-26
 
 - Give the recall memory a position term, on by default. A key said what a moment was and

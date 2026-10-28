@@ -1,0 +1,44 @@
+# Depth on a task that needs it: the AND-count
+
+Every observation is 24 pairs of bits. A pair is on when both its bits are; the answer is the
+number of pairs on, less three, capped at six: seven classes, a uniform-random choice right a
+seventh of the time. A pair's AND is a threshold of two inputs and the answer bins a count of such
+thresholds, so no linear readout of the bits names it: one hidden layer approximates the task and
+two represent it. A tanh network of one hidden layer of 128 trained by backpropagation reaches
+about 0.43 of the held-out rows in 4,000 lessons of 64, one of two layers (128, 64) about 0.88:
+depth pays here, and quickly.
+
+[`and_count.py`](and_count.py) teaches, on the same lessons:
+
+| arm | what it is |
+| --- | --- |
+| `one`, `two`, `three` | `Brain.compose(48, 7, modules=...)` with (128,), (128, 64) and (128, 64, 64): the apical compartment (`apical=0.25`), normalized teaching with the projection-relative floor (`learning_normalize_relative=0.1`) and nudged phases of a whole 32 sweeps (`learning_nudged_steps=32`, `learning_nudged_fixed=True`), every row taught, no memories |
+| `mlp_one`, `mlp_two` | tanh networks of hidden layers (128,) and (128, 64), backpropagation with Adam at 1e-3 on the softmax cross-entropy |
+| `random` | the uniform-random choice |
+
+Each lesson draws 64 of the 198,000 training rows; every 500 lessons the 2,000 held-out rows are
+answered, a Cadence brain's answer by its own free settle.
+
+```sh
+python benchmarks/depth/and_count.py --out /tmp/depth --lessons 4000 --seeds 0 1 2 --jobs 12
+python benchmarks/depth/and_count.py --verify /tmp/depth/summary.json
+```
+
+The receipt `summary.json` holds every reading, the settle work (mean free sweeps and the share of
+lessons that ran out of their free budget) and the depth gains over one region, bound to this
+script's and the library's source; `--verify` recomputes the summary from the readings.
+
+## Result
+
+RESULTS_PLACEHOLDER
+
+## Why the compartment
+
+Without it the composed brain's reciprocal pairs sum their top-down half like any synapse. The loop
+through the readout pair then grows with the weights until the settle slows near its critical gain,
+the region below the motor region carries an echo of the answer, and a second module adds little.
+The [apical compartment](../../docs/anatomy.md#the-apical-compartment) bounds every region's
+top-down drive to a share of its bottom-up drive. Credit reaching a region k levels below the
+output then shrinks about fourfold per level: the projection-relative floor lets each projection
+step on its own scale, and nudged phases of a whole budget carry the nudge down, while the opposite
+phases' common drift cancels in the contrast.

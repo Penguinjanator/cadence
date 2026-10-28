@@ -8,7 +8,7 @@ layer approximates the task and two represent it.
 
 The arms are Cadence brains of one, two and three processing regions (``modules`` (128,),
 (128, 64) and (128, 64, 64)), composed with the apical compartment, normalized teaching with
-the projection-relative floor and settled to 1e-5; tanh networks of one and two hidden layers
+the projection-relative floor and nudged phases of a whole 32 sweeps; tanh networks of one and two hidden layers
 of the same widths trained by backpropagation with Adam; and the uniform-random choice. Every
 lesson teaches 64 rows drawn from the training rows, every row (no surprise rule); every
 ``--every`` lessons the 2,000 held-out rows are answered by the brain's own free settle.
@@ -43,13 +43,14 @@ CADENCE = {"one": (128,), "two": (128, 64), "three": (128, 64, 64)}
 MLP = {"mlp_one": (128,), "mlp_two": (128, 64)}
 ARMS = (*CADENCE, *MLP, "random")
 # the composed brain of every Cadence arm: the apical compartment, normalized steps with the
-# projection-relative floor, phases settled to 1e-5 with 32 nudged sweeps, no memories
+# projection-relative floor, nudged phases of a whole 32 sweeps from a free phase at the
+# founder's tolerance, no memories
 COMPOSE: dict[str, Any] = {
     "apical": 0.25,
     "teaching": "normalized",
     "learning_normalize_relative": 0.1,
-    "learning_tolerance": 1e-5,
     "learning_nudged_steps": 32,
+    "learning_nudged_fixed": True,
     "learning_surprise": False,
     "episodic": False,
     "working_memory_amplitude": 0.0,
