@@ -139,9 +139,10 @@ NumPy loop's float64 arithmetic whenever no trajectory or recording is requested
 summed in NumPy's order. The rows of a batch settle on Numba's threads, as many as
 `NUMBA_NUM_THREADS` or `numba.set_num_threads` allow, to the same bits at any count, once a
 sweep covers at least 65,536 neurons over its rows (an 8,000-neuron brain from a batch of 8);
-a smaller sweep, a single row, or `NUMBA_NUM_THREADS=1` never starts them. Each worker of a
-process pool should set `NUMBA_NUM_THREADS=1` (or its share of the cores), since every process
-otherwise starts one thread per core. `CADENCE_FUSED=0` in the environment before `cadence` is imported forces the
+a smaller sweep, a single row, or `NUMBA_NUM_THREADS=1` never starts them. A sweep waits for
+its slowest row, so on a machine busy with other work the threads can be slower than one: each
+worker of a process pool should set `NUMBA_NUM_THREADS=1` (or its share of the cores), since
+every process otherwise starts one thread per core. `CADENCE_FUSED=0` in the environment before `cadence` is imported forces the
 NumPy loop.
 
 A device kernel implements five operations: block products between neuron ranges, the
