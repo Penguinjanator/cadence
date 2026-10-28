@@ -227,6 +227,64 @@ def _recall_genes(recall: Any, genes: dict[str, Any]) -> dict[str, Any]:
     return {**founders, **settings}
 
 
+def _copy_identity(
+    connectome: Connectome, recalled: Mapping[str, Any], offset: int
+) -> Connectome:
+    """The connectome whose copy pathway starts from the declared tokens (``recall_tokens``).
+
+    For motor neuron ``j`` of token ``tokens[j]``: the synapse from every head's ``recall``
+    port at value coordinate ``offset + tokens[j]`` (the observation's own coordinates in the
+    value) starts at ``recall_copy``, so the token the read delivers drives its own action; the
+    synapse from every ``next`` port at that coordinate starts at zero; and the synapse from
+    sensory neuron ``tokens[j]`` starts at ``-recall_copy``, so a token the present
+    observation already holds, the read's echo of the moment that addressed it, is not copied
+    back. Every other synapse into the motor region from a read port, or from the sensory
+    region, starts at zero. The same connectome when it already starts so (a saved brain).
+    Every one of these synapses learns on its own, as every synapse does."""
+    populations = connectome.populations
+    n = connectome.n
+    value = np.full(n, -1, dtype=np.int64)  # each port neuron's value coordinate
+    names = [name for port in Recall.ports(recalled.get("heads", 1), recalled["next"])
+             for name in port]
+    for name in names:
+        neurons = np.asarray(populations[name], dtype=np.int64)
+        value[neurons] = np.arange(len(neurons))
+        if recalled.get("action", False):  # the command's part: no token, starts at zero
+            value[np.asarray(populations[f"{name}_action"], dtype=np.int64)] = -2
+    sensory = np.asarray(populations["sensory"], dtype=np.int64)
+    heard = np.full(n, -1, dtype=np.int64)
+    heard[sensory] = np.arange(len(sensory))
+    motor = np.asarray(populations["motor"], dtype=np.int64)
+    local_motor = np.full(n, -1, dtype=np.int64)
+    local_motor[motor] = np.arange(len(motor))
+    tokens = np.asarray(recalled["tokens"], dtype=np.int64)
+    pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+    token = np.where(local_motor[post] >= 0, tokens[np.maximum(local_motor[post], 0)], -1)
+    pathway = (value[pre] != -1) & (local_motor[post] >= 0)
+    identity = pathway & (token >= 0) & (value[pre] == offset + token)
+    echoes = (heard[pre] >= 0) & (token >= 0) & (heard[pre] == token)
+    declared = int((tokens >= 0).sum())
+    if int(identity.sum()) != declared * len(names) or int(echoes.sum()) != declared:
+        raise ValueError(
+            "recall_tokens need a synapse from every read port's token coordinate and from the "
+            "token's sensory neuron into its motor neuron; Brain.compose adds them"
+        )
+    reading = np.isin(pre, np.concatenate([
+        np.asarray(populations[name], dtype=np.int64) for name in names
+        if name.startswith("recall")
+    ]))
+    copy = float(recalled["copy"])
+    sign = np.where(pathway | ((heard[pre] >= 0) & (local_motor[post] >= 0)), 0.0, connectome.sign)
+    sign[identity & reading] = copy
+    sign[echoes] = -copy
+    if np.array_equal(sign, connectome.sign):
+        return connectome
+    return Connectome(
+        n, connectome.pre, connectome.post, connectome.count, sign,
+        dict(populations), connectome.label,
+    )
+
+
 def _learned_code_units(value: Any) -> int:
     """The units of the brain's learned code: ``learned_code`` as given, 0 or None for none."""
     if value is None:
@@ -1031,14 +1089,19 @@ def _validate_recall_state(
         )
     association = len(populations["association"])
     key = width
-    value = key  # the values are the events
+    # with ``action`` a slot also carries the command, one value per motor neuron, in its key
+    # and value, and the maps read the command of the moment before
+    command = len(learner.output_index) if settings.get("action", False) else 0
+    value = key + command  # the values are the events
     # the window's k events in order
     window = settings.get("window", 1)
-    address = window * key
+    address = window * key + command
     heads = settings.get("heads", 1)
     regions = tuple(name for port in Recall.ports(heads, settings["next"]) for name in port)
     if (
-        any(len(populations.get(name, ())) != value for name in regions)
+        any(len(populations.get(name, ())) != key for name in regions)
+        or any(len(populations.get(f"{name}_action", ())) != command
+               for name in (regions if command else ()))
         or recalled["neurons"] != value * len(regions)
     ):
         raise ValueError("a saved recall memory needs recall and next regions of its value width")
@@ -1070,17 +1133,19 @@ def _validate_recall_state(
     if array("held", (batch, slots)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: held")
     array("previous", (batch, association))
+    if command:
+        array("acted", (batch, command))
     # the format of 0.84.3 wrote the context history, empty at the one value of ``FORMAT``
     history = data.get("recall/history")
     if history is not None:
         array("history", (0 if not len(history) else batch, key))
-    shapes = {"w_x": (key, address), "w_c": (association, address), "b": (address,)}
+    shapes = {"w_x": (key + command, address), "w_c": (association, address), "b": (address,)}
     maps = dict(shapes)
     for h in range(1, heads):  # every further head's address map
         maps.update({f"{name}_{h}": shape for name, shape in shapes.items()})
     count = Recall.position_count(settings.get("position", 0), settings["capacity"])
     for h in range(heads if count else 0):  # every head's position maps, with a position term
-        shapes_h = ((key, count), (association, count), (count,))
+        shapes_h = ((key + command, count), (association, count), (count,))
         maps.update(dict(zip(Recall.position_names(h), shapes_h, strict=True)))
     for name, shape in maps.items():
         array(name, shape)
@@ -1088,7 +1153,7 @@ def _validate_recall_state(
         past = data.get("recall/past")  # is refused by the shape
         array("past", (0 if past is None or not len(past) else batch, window - 1, key))
     # the actor's eligibility of the address map, and the contrast of a pending action
-    eligibility = (batch, key + association + 1, heads * address)
+    eligibility = (batch, key + command + association + 1, heads * address)
     if "recall/trace" in data:
         array("trace", eligibility)
     if "recall/pending" in data:
@@ -1099,6 +1164,8 @@ def _validate_recall_state(
     if "recall/ended" in data and array("ended", (batch,)).dtype != np.bool_:
         raise ValueError("invalid saved recall state: ended")
     expected = {"keys", "values", "nexts", "held", "previous", *maps}
+    if command:
+        expected |= {"acted"}
     if history is not None:
         expected |= {"history"}
     if window > 1:
@@ -1488,6 +1555,40 @@ def _layout(
                 projections.append(
                     Projection(name, "association", scale=recall_scale, reciprocal=False)
                 )
+        ports = [
+            name for port in Recall.ports(recalled.get("heads", 1), recalled["next"])
+            for name in port
+        ]
+        if recalled.get("action", False):
+            # every port's read of the executed command, one neuron per motor neuron, appended
+            # last: the brain that keeps the command is the brain without it plus these regions,
+            # whose synapses into the association start at zero, so a newborn settles as one
+            # without them until learning gives them weight
+            for name in ports:
+                regions.append(Region(f"{name}_action", actions))
+                projections.append(
+                    Projection(f"{name}_action", "association", scale=0.0, reciprocal=False)
+                )
+        if recalled.get("copy", 0.0):
+            # the copy pathway from every read port into the motor region, appended last: the
+            # brain with it is the brain without it plus these synapses, drawn at the initial
+            # magnitude ``recall_copy`` (the command's part at zero); declared tokens start it
+            # as their identity once developed (``_copy_identity``)
+            for name in ports:
+                projections.append(
+                    Projection(name, "motor", scale=recalled["copy"], reciprocal=False)
+                )
+            if recalled.get("action", False):
+                for name in ports:
+                    projections.append(
+                        Projection(f"{name}_action", "motor", scale=0.0, reciprocal=False)
+                    )
+            if recalled.get("tokens") is not None:
+                # the present observation's tokens into their actions, the copy's echo
+                # suppression, drawn at zero and started at ``-recall_copy`` once developed
+                projections.append(
+                    Projection(regions[0].name, "motor", scale=0.0, reciprocal=False)
+                )
     genome = Genome(tuple(regions), tuple(projections), label="composed-brain")
     return genome, {
         "inputs": inputs,
@@ -1545,7 +1646,9 @@ class Brain:
     block of sensory width per entry of ``history_decays``) for the observations as heard
     and, with ``recall=True``, ``recall`` and ``next`` (one neuron per value coordinate each)
     for the index memory of the stream's moments, and with ``recall_heads=k`` also
-    ``recall_h`` and ``next_h`` for each further head; ``Genome.composed`` lays one out. Without
+    ``recall_h`` and ``next_h`` for each further head (with ``recall_action`` each of them
+    with a ``<region>_action`` region of one neuron per motor neuron, and with
+    ``recall_copy`` synapses from them into ``motor``); ``Genome.composed`` lays one out. Without
     ``recall=True`` populations of those names are ordinary ones. ``Brain.compose`` builds
     the default brain with working memory, and with ``connectome`` gives a custom anatomy
     its founders.
@@ -1686,6 +1789,40 @@ class Brain:
         # than on the observation itself
         self._coded_keys = bool(units) or bool(learned)
         recalled = _recall_genes(recall, genes)  # the recall_* genes leave ``genes`` here
+        # declared tokens start the copy pathway as their identity, the echo included
+        tokened = recalled.get("tokens") is not None and bool(recalled.get("copy", 0.0))
+        if tokened:
+            # the observation's own coordinates in the recall values: the observation itself,
+            # or a learned code joined to it, after the code's units
+            joined = bool(learned) and LearnedCode.joins(self.inputs, learned["units"])
+            if sensory != "sensory":
+                raise ValueError("recall_tokens need a vector brain with a 'sensory' population")
+            if self.sparse_code is not None or (learned and not joined):
+                raise ValueError(
+                    "recall_tokens need the observation's own coordinates in the recall values: "
+                    "a brain without a code, or a learned code joined to an observation no "
+                    "wider than it"
+                )
+            if len(recalled["tokens"]) != len(self.motor_index):
+                raise ValueError(
+                    "recall_tokens name one observation coordinate per motor neuron "
+                    f"({len(self.motor_index)})"
+                )
+            if max(recalled["tokens"]) >= self.inputs:
+                raise ValueError(
+                    f"recall_tokens name observation coordinates below {self.inputs}"
+                )
+            ports = [
+                name for port in Recall.ports(recalled.get("heads", 1), recalled["next"])
+                for name in port
+            ]
+            if recalled.get("action", False):
+                ports += [f"{name}_action" for name in ports]
+            if all(name in populations for name in (*ports, "motor")):  # else the memory names it
+                connectome = _copy_identity(
+                    connectome, recalled, learned["units"] if learned else 0
+                )
+                self.connectome = connectome
         learning_genes, actor_genes, arousal_genes = split_genes(genes)
         learning = configured(_learning() if learning is None else learning, learning_genes,
                               "learning")
@@ -1775,7 +1912,15 @@ class Brain:
             # the first module reads the code alone: the sensory neurons project to the code
             # region and nowhere else
             pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
-            if (np.isin(pre, self.sensory_index) & ~np.isin(post, self.code_index)).any():
+            # the copy pathway's echo suppression (``recall_tokens``) is the one exception:
+            # the present observation's tokens reach their own actions
+            echo = (
+                np.isin(post, self.motor_index) if tokened
+                else np.zeros(len(post), dtype=bool)
+            )
+            if (
+                np.isin(pre, self.sensory_index) & ~np.isin(post, self.code_index) & ~echo
+            ).any():
                 raise ValueError(
                     "a learned code's sensory neurons project to the code region alone"
                 )
@@ -1849,6 +1994,7 @@ class Brain:
             self.recall = Recall(
                 connectome, **recalled, source=sensory,
                 inputs=self.code_width if coded_memory else 0,
+                actions=len(self.motor_index),
             )
             # with ``recall_address_reward`` the actor keeps the address map's eligibility
             self.basal_ganglia.memory = self.recall
@@ -2365,10 +2511,24 @@ class Brain:
         ``recall_boundary=True`` (runtime, founder off) gives each stream that begins a
         boundary slot first, a silent moment whose next the stream's first event teaches, so
         the start of an episode has a predecessor as every later event has.
+        ``recall_copy`` above 0 (construction, founder 0.0) adds the copy pathway: plastic
+        synapses from every head's read ports into the motor region, appended last and drawn
+        at that magnitude, learned by the settle's contrast. ``recall_tokens`` (construction,
+        founder None) declares per action the observation coordinate that is the same token
+        (``-1`` for none; a brain without a code, or a learned code joined to the
+        observation): the pathway then starts from each recall port as that identity at
+        ``recall_copy``, from each next port at zero, and from the sensory region as the
+        negative identity, so a token the read delivers drives its own action unless the
+        present observation already holds it.
+        ``recall_action=True`` (construction, founder off) writes the executed command, one
+        value per motor neuron, into every slot's key and value, read on ``<port>_action``
+        regions whose synapses into the association start at zero; the address and position
+        maps also read the command of the moment before, so a newborn reads and settles as
+        one without it.
         ``recall_capacity``, ``recall_next``, ``recall_window``,
         ``recall_window_decay``, ``recall_heads`` (several held heads over the one bank,
-        each with its own port and address map) and ``recall_position`` are construction
-        settings; the keys, the
+        each with its own port and address map), ``recall_position``, ``recall_copy``,
+        ``recall_tokens`` and ``recall_action`` are construction settings; the keys, the
         values and the address map follow the observation code's width, a brain's ``code``
         among the ways to bound it. The settings of 0.84.3 that this version removed
         (``recall_write``, ``recall_key``, ``recall_episodes``, ``recall_value``,
@@ -3902,9 +4062,10 @@ class Brain:
         trace, echo = branch.get("working_memory"), branch.get("efference")
         heard, recalled = branch.get("history"), branch.get("recall")
         # the branch issues the act the brain would issue where the act is heard, by the copy
-        # of the command; the episodic vote is read under the branch's own temporal context,
-        # the stream's moved on privately by the branch's acts
-        issues = echo is not None
+        # of the command or by a recall memory that keeps it; the episodic vote is read under
+        # the branch's own temporal context, the stream's moved on privately by the branch's
+        # acts
+        issues = echo is not None or (recalled is not None and recalled.action)
         episodic = branch.get("episodic")
         # the learned code's live state stays as it was: an imagined moment settles the region
         # as a real one does, at the step its competition needs, and the branch leaves the
@@ -3949,7 +4110,8 @@ class Brain:
                     # the imagined observation, as the cortex read it, joins the private history
                     heard.hear(self._heard(value, code))
                 if recalled is not None:
-                    recalled.witness(code, phase.state)  # the branch's cortex moves on
+                    # the branch's cortex moves on, and with ``recall_action`` its command
+                    recalled.witness(code, phase.state, command if recalled.action else None)
         finally:
             self._coded_moment, self._code_settlement = moment, settlement
             if region is not None and held is not None:
@@ -4057,9 +4219,11 @@ class Brain:
             # drive holds the present
             self.history.hear(self._heard(x, code))
         if self.recall is not None:
-            # the moment acted on joins the stream's slots; its settled cortex enters the
-            # next moment's address
-            self.recall.witness(code, free)
+            # the moment acted on joins the stream's slots, with ``recall_action`` with the
+            # command executed on it; its settled cortex enters the next moment's address
+            self.recall.witness(
+                code, free, self._command(action) if self.recall.action else None
+            )
         if episodic is not None:
             guess = None
             if episodic.steps:
@@ -4638,6 +4802,8 @@ class Brain:
                 )
                 if recall.window > 1:  # validated above: saved with the window
                     recall.past = data["recall/past"].astype(float)
+                if recall.action:  # validated above: saved with the command
+                    recall.acted = data["recall/acted"].astype(float)
                 recall.writes = int(recalled["writes"])
             result.learner = learner
             result._composition = composition

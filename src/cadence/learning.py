@@ -72,6 +72,17 @@ SCALE_CAP = 8.0  # the default of LearnerConfig.scale_cap: the magnitude a synap
 # added to a relative floor's divisor: a projection whose synapses never moved divides its
 # zero step by this rather than by zero
 _RELATIVE_TINY = 1e-12
+
+
+def _compiled_passes() -> bool:
+    """Whether the compiled per-synapse passes of ``cadence.fused`` are in use (same bits)."""
+    try:
+        from .fused import compiled
+    except ImportError:  # pragma: no cover
+        return False
+    return compiled()
+
+
 _MOMENTS = ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
 
 
@@ -558,9 +569,20 @@ class Learner:
         contrast. ``weight`` scales the pull row by row (an advantage, when the
         target is an action that was taken).
         """
-        cfg = self.config
         # an apical compartment passes the nudge's change at the gain the free phase set
-        held = self.brain.apical_gain(drive, free)
+        return self._nudged(drive, free, target, self.brain.apical_gain(drive, free), sign, weight)
+
+    def _nudged(
+        self,
+        drive: np.ndarray,
+        free: BrainState,
+        target: np.ndarray,
+        held: np.ndarray | None,
+        sign: float = 1.0,
+        weight: np.ndarray | None = None,
+    ) -> BrainState:
+        """``nudged`` at the apical gain ``held`` the caller read from the free phase."""
+        cfg = self.config
         if cfg.qualified:
             phase = self._qualified_phase(
                 drive, free, cfg.nudged_steps,
@@ -674,8 +696,8 @@ class Learner:
             return edges / (batch * span), neurons / (batch * span)
         s_plus, s_minus = nudged.activation, minus_state.activation
         if self.brain._blocked and w.synapses > 4 * w.n:
-            gram = block_contrast(self.brain.layout, s_plus, s_minus)
-            return gram / (len(s_plus) * span), (s_plus - s_minus).mean(axis=0) / span
+            gram = block_contrast(self.brain.layout, s_plus, s_minus, len(s_plus) * span)
+            return gram, (s_plus - s_minus).mean(axis=0) / span
         if not self.brain._blocked:
             # Sparse graphs must not materialize the layout's potentially n-by-n matrix.
             # Bound each temporary to about one million batch/synapse entries.
@@ -730,6 +752,9 @@ class Learner:
             or not np.isfinite(delta_bias).all()
         ):
             raise ValueError("steps must be finite vectors, one per synapse and one per neuron")
+        if (all_trainable and self.synapse_rate is None and not len(self._members)
+                and len(delta_scale) and self.brain._torch is None and _compiled_passes()):
+            return self._compiled_apply(delta_scale, delta_bias)
         if not all_trainable:
             delta_scale[~self.plastic_synapses] = 0.0
         if self.synapse_rate is not None:  # each synapse's own step, before tying
@@ -770,10 +795,34 @@ class Learner:
             "bias_step": float(np.abs(delta_bias).mean()),
         }
 
+    def _compiled_apply(self, delta_scale: np.ndarray, delta_bias: np.ndarray) -> dict[str, float]:
+        """``apply`` for an all-plastic learner without per-synapse rates or tied groups: the
+        pair tying and the bound in one compiled pass (``fused.tied_step``, the same bits)."""
+        from .fused import tied_step
+
+        partner = self.__dict__.get("_partner")
+        if partner is None or partner[0] is not self._paired:
+            full = np.full(self.brain.connectome.synapses, -1, dtype=np.int64)
+            full[self._paired] = self._paired_reverse
+            partner = (self._paired, full)
+            self.__dict__["_partner"] = partner
+        delta_scale, scale = tied_step(delta_scale, partner[1], self.brain.efficacy,
+                                       self.config.scale_cap)
+        if not np.isfinite(delta_scale).all():
+            raise ValueError("scaled and tied steps must remain finite")
+        assert self.plastic_neurons is not None
+        delta_bias = np.where(self.plastic_neurons, delta_bias, 0.0)
+        self.brain = self.brain.with_parameters(efficacy=scale, bias=self.brain.bias + delta_bias)
+        self.updates += 1
+        return {
+            "scale_step": float(np.abs(delta_scale).mean()),
+            "bias_step": float(np.abs(delta_bias).mean()),
+        }
+
     def _device_kernel(self, plus: BrainState, minus: BrainState) -> Any:
         """The torch kernel both states rest on, when the update can stay on the device."""
         kernel = self.brain._torch
-        if kernel is None or kernel.layout is None:
+        if kernel is None:
             return None
         for state in (plus, minus):
             if state.device is None or state.device.get("holder") is not kernel:
@@ -976,14 +1025,54 @@ class Learner:
     def _relative_rms(self, rms: np.ndarray, rms_bias: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
         """The divisors of a relative floor: each RMS plus ``normalize_relative`` times the RMS
         of its projection (synapses) or its range (biases)."""
+        synapses, neurons = self._projections()
+        return self._relative_divisor(rms, synapses), self._relative_divisor(rms_bias, neurons)
+
+    def _relative_divisor(self, values: np.ndarray, group: np.ndarray) -> np.ndarray:
         share = self.config.normalize_relative
-        out = []
-        for values, group in zip((rms, rms_bias), self._projections(), strict=True):
-            size = int(group.max()) + 1 if len(group) else 0
-            power = np.bincount(group, weights=values * values, minlength=size)
-            count = np.maximum(np.bincount(group, minlength=size), 1)
-            out.append(values + share * np.sqrt(power / count)[group] + _RELATIVE_TINY)
-        return out[0], out[1]
+        size = int(group.max()) + 1 if len(group) else 0
+        if len(group) and _compiled_passes():  # the same sums in one compiled pass
+            from .fused import relative_floor
+
+            return relative_floor(values, group, size, share, _RELATIVE_TINY)
+        power = np.bincount(group, weights=values * values, minlength=size)
+        count = np.maximum(np.bincount(group, minlength=size), 1)
+        return np.asarray(values + share * np.sqrt(power / count)[group] + _RELATIVE_TINY)
+
+    def _compiled_step(
+        self, raw_synapse: np.ndarray, raw_neuron: np.ndarray, count: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """``_update``'s step from the contrasts: the per-synapse arithmetic in compiled passes
+        (``fused.optimizer_step``, the same bits), the per-neuron one as written below."""
+        from .fused import optimizer_step
+
+        cfg = self.config
+        m, rho = cfg.momentum, cfg.normalize
+        momentum_correction = 1.0 - m**count if m > 0 else 1.0
+        rho_correction = 1.0 - rho**count if rho > 0 else 1.0
+        neuron_term = raw_neuron
+        if m > 0:
+            self.velocity_bias = m * self.velocity_bias + (1 - m) * raw_neuron
+            neuron_term = self.velocity_bias / momentum_correction
+        group = self._projections()[0]
+        velocity, second, delta_scale = optimizer_step(
+            raw_synapse, self.velocity, self.second_moment, m, momentum_correction, rho,
+            rho_correction, cfg.eta, cfg.normalize_floor, cfg.normalize_relative, _RELATIVE_TINY,
+            group, int(group.max()) + 1,
+        )
+        if m > 0:
+            self.velocity = velocity
+        if rho > 0:
+            self.second_moment = second
+            self.second_moment_bias = rho * self.second_moment_bias + (1 - rho) * raw_neuron**2
+            root = np.sqrt(self.second_moment_bias / rho_correction)
+            if cfg.normalize_relative:
+                rms_bias = self._relative_divisor(root, self._projections()[1])
+            else:
+                rms_bias = root + cfg.normalize_floor
+            neuron_term = neuron_term / rms_bias
+        assert cfg.eta_bias is not None  # resolved at construction
+        return delta_scale, cfg.eta_bias * neuron_term
 
     def update(
         self, free: BrainState, nudged: BrainState, opposite: BrainState | None = None
@@ -1020,6 +1109,13 @@ class Learner:
             raise ValueError("phase contrasts must be finite")
         raw_synapse, raw_neuron = synapse_term, neuron_term
         count = self.contrast_updates + 1  # only this optimizer's own history
+        if len(raw_synapse) and _compiled_passes():
+            delta_scale, delta_bias = self._compiled_step(raw_synapse, raw_neuron, count)
+            if not all(np.isfinite(getattr(self, name)).all() for name in _MOMENTS):
+                raise ValueError("optimizer moments must remain finite")
+            report = self.apply(delta_scale, delta_bias)
+            self.contrast_updates += 1
+            return report
         if cfg.momentum > 0:  # local: a synapse accumulates only its own contrast
             m = cfg.momentum
             self.velocity = m * self.velocity + (1 - m) * synapse_term
@@ -1138,9 +1234,9 @@ class Learner:
         if judged is None:
             drive, target, weight = self._lesson(taught, drive, target, weight)
             free = _restrict(free, taught)
-        nudged = self.nudged(drive, free, target, weight=weight)
-        opposite = self.nudged(drive, free, target, sign=-1.0, weight=weight)
-        held = self.brain.apical_gain(drive, free)
+        held = self.brain.apical_gain(drive, free)  # read once, held by both phases
+        nudged = self._nudged(drive, free, target, held, weight=weight)
+        opposite = self._nudged(drive, free, target, held, sign=-1.0, weight=weight)
         phases["nudged"] = Equilibrium(
             nudged, self.brain.residual(drive, nudged,
                 nudge=self.nudge_for(target, cfg.beta, weight, held)),

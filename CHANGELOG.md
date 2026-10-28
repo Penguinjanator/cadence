@@ -1,5 +1,103 @@
 # Changelog
 
+## 0.91.0 — 2026-10-28
+
+- The fused CPU settle runs the rows of a batch on Numba's threads. Each sweep computes the
+  block products of the whole batch (distinct blocks on distinct threads, one BLAS call per
+  block, as before), then every row's step; a row reads only itself, so the rows run in
+  parallel with exactly the serial arithmetic, and the batch-wide stopping rule is read after
+  the sweep. Settles, residuals and whole lessons are bit-identical to 0.90.0 at every thread
+  count. The thread count is Numba's (`NUMBA_NUM_THREADS`, `numba.set_num_threads`); a sweep
+  of fewer than 65,536 neurons over its rows, a single row or `NUMBA_NUM_THREADS=1` never
+  starts the threads (handing a sweep to them costs tens of microseconds), and a process forked
+  from one whose GNU OpenMP threads ran settles serially. Workers of a process pool should set
+  `NUMBA_NUM_THREADS=1`. See [backends](docs/backends.md).
+- A graph with an apical compartment settles and checks its residual in the fused kernel
+  (0.90.0 took the NumPy loop): the basal input summed in the NumPy loop's order, each pool's
+  RMS in NumPy's pairwise order, the held gain of a nudged settle. On a Mac and on one Linux
+  machine it gives the NumPy loop's bits (potentials, activations, adaptation, residuals, sweep
+  counts). On the Linux machine that recorded the depth receipts it differs at rounding: one unit
+  in the last place of a settle's activations, 4e-14 in the weights of the AND-count's
+  two-module brain after one lesson and 7e-12 after 20, with equal sweep counts. Over thousands
+  of lessons the difference moves readings: after 4,000 lessons the AND-count reads one 0.579,
+  two 0.642, three 0.804 and four 0.853 there, against the NumPy loop's 0.584, 0.662, 0.809 and
+  0.864. `CADENCE_FUSED=0` selects the NumPy loop. `activity_change` differs at rounding, as on
+  the plain fused path.
+- The per-synapse passes of a lesson run as compiled loops with NumPy's element arithmetic,
+  on Numba's threads when long: the flat block scatter, the contrast's gather, the
+  projection-relative floor, and the optimizer step (momentum, second moment, floor, rate, pair
+  tying and bound) of a host learner whose synapses are all plastic. A lesson finds its apical
+  blocks once per compartment and reads the free phase's apical gain once for both nudged
+  phases. Weights, moments and reports are the same bits.
+- Add `benchmarks/settle_threads.py`: seconds per lesson of a deep apical brain and a flat
+  founder at several thread counts, checking that every count learns the same weights.
+- Make the torch backend fast on a GPU, its answers unchanged. A torch settle keeps its state on
+  the device neuron-major and sums each sweep's synaptic input by a transport plan made once per
+  graph: the rows of the synapse matrix that read the same presynaptic neurons (the feature maps
+  of one receptive field, a dense region's neurons) form groups, and the groups of one shape are
+  one batched product, unpadded, each row written by one product in a fixed order. On CUDA with
+  Triton every small group is one Triton launch and the neuron update of a sweep (potential,
+  activation, adaptation, movement) another; the sweeps of a settle are captured as CUDA graphs
+  and replayed; the movement test of a tolerance is read one sweep behind, so the host never
+  stalls the device, and the reported state and step count stay those of the first sweep that
+  met the tolerance; drives and masks reach the device through pinned buffers; the apical gain
+  a nudged phase holds is read on the device, once per lesson; the learning contrast is
+  computed on the device for every graph. A lesson of a four-stage visual brain with the
+  apical compartment (7,956 neurons, 903,520 synapses) on a shared A10G in float64 takes 0.17 s
+  at batch 64 (1.97 s in 0.90.0, 2.41 s on one CPU core), 1.64 s at batch 1,024 (7.67 s) and
+  6.2 s at batch 4,096 (25.7 s); see `benchmarks/torch_gpu/`. Every plan matches the float64
+  host path to rounding, with the same fixed points and step counts and activations within
+  1e-10 (`tests/test_torch_settle_parity.py`), and the grouped and block plans are deterministic
+  run to run (cuSPARSE, the plan of a graph whose rows share few presynaptic neurons, is not).
+  `CADENCE_TRITON=0`, `CADENCE_CUDA_GRAPHS=0` and `CADENCE_TORCH_TRANSPORT=grouped|blocks|sparse`
+  select the slower paths for comparison.
+- A float32 torch state's residual (`NeuralGraph.residual`) and apical gain are computed on its
+  device in float64 by a float64 copy of the kernel, the float64 reference they were computed by
+  on the host before, so `precision="float32"` no longer pays a host transport per check: its
+  lessons of the deep brain run two to three times faster than float64 on the A10G.
+- A brain rebuilt on new parameters (`with_parameters`, a damped copy, a calibration candidate)
+  reuses its connectome's torch transport plan instead of analysing the graph again.
+- Add the copy pathway (opt-in, `recall_copy=magnitude`, founder 0.0: none;
+  [#233](https://github.com/muellerberndt/cadence/issues/233)). What the recall read retrieved
+  reached the answer only through the association region, so a token never taught as an answer
+  was read correctly and never produced. With the option plastic synapses run from every head's
+  read ports (`recall`, `next`) into the motor region, appended last and drawn at that
+  magnitude, learned by the settle's contrast inside the one settle. `recall_tokens` (founder
+  None) declares per action the observation coordinate of the same token (a brain without a
+  code, or a learned code joined to the observation); the pathway then starts as that identity
+  from each recall port at `recall_copy`, from each next port at zero, and from the present
+  observation at `-recall_copy`, so the read's echo of the moment that addressed it is not
+  copied back. A newborn produces every declared token its read delivers, and a token never
+  read keeps its route to its action. Benchmark `benchmarks/attention/copy_tokens.py`
+  (`cadence-copy-tokens/1`, six founders): tokens never taught as answers produced at 1.00
+  (founder memory 0.00, whose read names them at 0.32 to 1.00), taught answers 1.00 (0.72 to
+  0.98), in-context succession 0.94 to 0.99 against the founder's 0.95 to 0.99; drawn without
+  tokens the pathway produces none, and at the recall projection's scale (1.2) it costs taught
+  answers (0.58 against 0.90) and succession (0.92 against 0.97). A successor never taught stays
+  unanswered in every arm.
+- Add the executed command to the recall memory (opt-in, `recall_action=True`, founder off;
+  [#235](https://github.com/muellerberndt/cadence/issues/235)). Every written slot carries the
+  command the stream executed at that moment, one coordinate per motor neuron (one-hot within
+  each motor slot; zero for a moment `wait` senses), in its key and its value; each read port
+  reads it on a `<port>_action` region whose synapses into the association start at zero, and
+  the address and position maps also read the command of the moment before
+  (`Recall.acted`, saved with the brain). A newborn settles and acts as the same founder without
+  the option. The episodic vote is unchanged: its context key already holds each issued command
+  at the share `1 - memory_context`. Benchmark `benchmarks/attention/own_action.py`
+  (`cadence-own-action/1`, six founders, identical observations): alternating its own actions
+  1.00 (founder recall memory 0.78, no recall memory 0.47, uniform random 0.48; commands erased
+  0.26), a press every third moment 0.97 (0.65, 0.36, 0.46; erased 0.33); the efference copy
+  reads 1.00 on both.
+- `Recall.witness(observations, state, command=None)`, `Recall.copy_synapses()`,
+  `Recall.action_ports(heads, next)`; the three options are construction settings, described
+  and saved only where they differ from their founders. Founder brains are byte-identical to
+  0.90.0 (checkpoint arrays, acts and descriptions of eight compositions).
+- The look-back, contextual-choice and held-heads receipts are rebuilt on this source with
+  identical bodies, and the depth receipts on the NumPy loop (`CADENCE_FUSED=0`) on the machine
+  that recorded them: the AND-count with identical readings, the deep memory with the same
+  verdicts. 0.90.0 run there with the same thread settings gives this source's deep-memory rows
+  exactly; the retained ones differed in a control arm's readings.
+
 ## 0.90.0 — 2026-10-28
 
 - Add the apical compartment (opt-in, `Brain.compose(apical=fraction)`, founder 0: off). In a

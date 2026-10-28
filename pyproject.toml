@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cadence-net"
-version = "0.90.0"
+version = "0.91.0"
 description = "Research toward general intelligence through local repair, equilibrium detuning and self-reflection."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -82,5 +82,5 @@ packages = ["cadence"]
 mypy_path = "src"
 
 [[tool.mypy.overrides]]
-module = ["torch", "torch.*", "numba", "numba.*", "mlx", "mlx.*"]
+module = ["torch", "torch.*", "numba", "numba.*", "mlx", "mlx.*", "triton", "triton.*"]
 ignore_missing_imports = true

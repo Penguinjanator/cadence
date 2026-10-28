@@ -20,7 +20,7 @@ Each lesson draws 64 of the 198,000 training rows; every 500 lessons the 2,000 h
 answered, a Cadence brain's answer by its own free settle.
 
 ```sh
-python benchmarks/depth/and_count.py --out /tmp/depth --lessons 4000 --seeds 0 1 2 --jobs 15
+CADENCE_FUSED=0 python benchmarks/depth/and_count.py --out /tmp/depth --lessons 4000 --seeds 0 1 2 --jobs 15
 python benchmarks/depth/and_count.py --verify /tmp/depth/summary.json
 ```
 
@@ -46,9 +46,11 @@ lessons:
 Every added module raises the accuracy, and four modules come within 0.02 of the two-layer
 network. One region already beats one hidden layer: its loop through the readout pair settles
 the answer and the region together, a recurrent depth a feed-forward layer lacks. A free settle
-takes 94 to 141 sweeps and none ran out of its budget. The receipt was produced on a 192-core
-Linux machine with all 21 cells in parallel (about ten minutes); other machines reproduce the
-pattern, not every digit, since the lessons' arithmetic differs in its last bits.
+takes 94 to 141 sweeps and none ran out of its budget. The receipt was produced on the NumPy
+loop (`CADENCE_FUSED=0`) on a 192-core Linux machine with all 21 cells in parallel. Other
+machines, and the default fused kernel on that machine, reproduce the pattern, not every digit,
+since the lessons' arithmetic differs in its last bits: the fused kernel there reads one 0.579,
+two 0.642, three 0.804 and four 0.853.
 
 ## Why the compartment
 
@@ -70,7 +72,7 @@ projection-relative floor (`learning_normalize_relative=0.1`) and normalized tea
 benchmark sets none. Each benchmark's own gates and controls decide each founder.
 
 ```sh
-python benchmarks/depth/memory.py --out /tmp/depth-memory --depths 2 3 --jobs 32
+CADENCE_FUSED=0 python benchmarks/depth/memory.py --out /tmp/depth-memory --depths 2 3 --jobs 32
 python benchmarks/depth/memory.py --verify /tmp/depth-memory/summary.json
 ```
 
