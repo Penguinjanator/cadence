@@ -137,9 +137,6 @@ def _learning() -> LearnerConfig:
 # fast mode rings and a teaching free phase can run out its budget; the half step damps it.
 # The fixed point, and so every answer and contrast the settle reaches, is the same.
 _APICAL_STEP = 0.5
-# whether the readout pair's top-down half (the motor region's input to the association)
-# lands apically too; a test switch while the two rules are compared
-_APICAL_READOUT = True
 
 
 def _apical(connectome: Connectome, fraction: float) -> Apical:
@@ -168,8 +165,6 @@ def _apical(connectome: Connectome, fraction: float) -> Apical:
     hit = np.minimum(np.searchsorted(order, reverse), max(len(order) - 1, 0))
     paired = (order[hit] == reverse) if len(order) else np.zeros(0, dtype=bool)
     synapses = paired & (region[pre] > region[post]) & (region[post] >= 0)
-    if not _APICAL_READOUT and "motor" in connectome.populations:
-        synapses &= ~np.isin(pre, np.asarray(connectome.populations["motor"], dtype=np.int64))
     groups = np.full(n, -1, dtype=np.int64)
     for rank in np.unique(region[post[synapses]]):
         groups[region == rank] = rank
