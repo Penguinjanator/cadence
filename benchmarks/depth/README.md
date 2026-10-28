@@ -12,7 +12,7 @@ depth pays here, and quickly.
 
 | arm | what it is |
 | --- | --- |
-| `one`, `two`, `three` | `Brain.compose(48, 7, modules=...)` with (128,), (128, 64) and (128, 64, 64): the apical compartment (`apical=0.25`), normalized teaching with the projection-relative floor (`learning_normalize_relative=0.1`) and nudged phases of a whole 32 sweeps (`learning_nudged_steps=32`, `learning_nudged_fixed=True`), every row taught, no memories |
+| `one` to `four` | `Brain.compose(48, 7, modules=...)` with (128,), (128, 64), (128, 64, 64) and (128, 64, 64, 64): the apical compartment (`apical=0.25`), normalized teaching with the projection-relative floor (`learning_normalize_relative=0.1`) and nudged phases of a whole 32 sweeps (`learning_nudged_steps=32`, `learning_nudged_fixed=True`), every row taught, no memories |
 | `mlp_one`, `mlp_two` | tanh networks of hidden layers (128,) and (128, 64), backpropagation with Adam at 1e-3 on the softmax cross-entropy |
 | `random` | the uniform-random choice |
 
@@ -20,7 +20,7 @@ Each lesson draws 64 of the 198,000 training rows; every 500 lessons the 2,000 h
 answered, a Cadence brain's answer by its own free settle.
 
 ```sh
-python benchmarks/depth/and_count.py --out /tmp/depth --lessons 4000 --seeds 0 1 2 --jobs 12
+python benchmarks/depth/and_count.py --out /tmp/depth --lessons 4000 --seeds 0 1 2 --jobs 15
 python benchmarks/depth/and_count.py --verify /tmp/depth/summary.json
 ```
 

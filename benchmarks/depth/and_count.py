@@ -6,8 +6,8 @@ names the right one a seventh of the time. A pair's AND is a threshold of two in
 answer bins a count of such thresholds, so no linear readout of the bits names it: one hidden
 layer approximates the task and two represent it.
 
-The arms are Cadence brains of one, two and three processing regions (``modules`` (128,),
-(128, 64) and (128, 64, 64)), composed with the apical compartment, normalized teaching with
+The arms are Cadence brains of one to four processing regions (``modules`` (128,), (128, 64),
+(128, 64, 64) and (128, 64, 64, 64)), composed with the apical compartment, normalized teaching with
 the projection-relative floor and nudged phases of a whole 32 sweeps; tanh networks of one and two hidden layers
 of the same widths trained by backpropagation with Adam; and the uniform-random choice. Every
 lesson teaches 64 rows drawn from the training rows, every row (no surprise rule); every
@@ -39,7 +39,7 @@ ROOT = HERE.parents[1]
 KIND = "cadence-depth-and-count/1"
 PAIRS, SHIFT, CLASSES = 24, 3, 7
 DATA_SEED, ROWS, HELD, BATCH = 12345, 200_000, 2_000, 64
-CADENCE = {"one": (128,), "two": (128, 64), "three": (128, 64, 64)}
+CADENCE = {"one": (128,), "two": (128, 64), "three": (128, 64, 64), "four": (128, 64, 64, 64)}
 MLP = {"mlp_one": (128,), "mlp_two": (128, 64)}
 ARMS = (*CADENCE, *MLP, "random")
 # the composed brain of every Cadence arm: the apical compartment, normalized steps with the
@@ -197,8 +197,8 @@ def summarize(runs: list[dict[str, Any]]) -> dict[str, Any]:
         final.setdefault(run["arm"], []).append(run["curve"][-1]["accuracy"])
     means = {arm: float(np.mean(values)) for arm, values in sorted(final.items())}
     gains = {}
-    for deep, shallow in (("two", "one"), ("three", "one"), ("three", "two"),
-                          ("mlp_two", "mlp_one")):
+    for deep, shallow in (("two", "one"), ("three", "one"), ("three", "two"), ("four", "one"),
+                          ("four", "three"), ("mlp_two", "mlp_one")):
         if deep in means and shallow in means:
             gains[f"{deep}-{shallow}"] = means[deep] - means[shallow]
     return {"final_accuracy": means, "depth_gain": gains}
