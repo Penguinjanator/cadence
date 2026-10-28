@@ -60,3 +60,32 @@ top-down drive to a share of its bottom-up drive. Credit reaching a region k lev
 output then shrinks about fourfold per level: the projection-relative floor lets each projection
 step on its own scale, and nudged phases of a whole budget carry the nudge down, while the opposite
 phases' common drift cancels in the contrast.
+
+## Memory on deep brains
+
+[`memory.py`](memory.py) runs the [look-back, contextual-choice and held-heads
+benchmarks](../attention/README.md) unedited, with every brain they compose deepened: each
+module width repeated two or three times, the apical compartment (`apical=0.25`), the
+projection-relative floor (`learning_normalize_relative=0.1`) and normalized teaching where a
+benchmark sets none. Each benchmark's own gates and controls decide each founder.
+
+```sh
+python benchmarks/depth/memory.py --out /tmp/depth-memory --depths 2 3 --jobs 32
+python benchmarks/depth/memory.py --verify /tmp/depth-memory/summary.json
+```
+
+Founders passing their benchmark's gates ([receipt](results/memory.json)):
+
+| Benchmark | Two modules | Three modules |
+| --- | --- | --- |
+| look-back, `first` and `last` | 4 of 4 | 4 of 4 |
+| contextual choice | 3 of 4 | 4 of 4 |
+| held heads, two facts reported | 4 of 4 | 4 of 4 |
+| held heads, one action from two facts | 3 of 4 | 2 of 4 |
+
+Every founder answers both look-back cues at 1.00 at both depths, and every held-heads founder
+reports two facts. The misses: two-module contextual-choice founder 1 reads the right record
+0.82 against 0.18, and its readout answers one class for both contexts; the one-action held-heads
+rule misses where the two heads read the same record (founder 0 at both depths, founder 3 at
+three modules). Founder 0 at two modules separates its heads with twice the lessons, at 0.885 on
+untaught pairs against the gate's 0.90: a deeper brain acquires the rule more slowly.

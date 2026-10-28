@@ -53,3 +53,16 @@ def test_the_retained_receipt_is_source_bound_and_recomputed():
     # every added module raises the accuracy; four come within 0.05 of two hidden layers
     assert means["one"] < means["two"] < means["three"] < means["four"]
     assert means["four"] > means["mlp_two"] - 0.05 and means["one"] > means["mlp_one"]
+
+
+def test_the_memory_receipt_is_source_bound_and_recomputed():
+    spec = importlib.util.spec_from_file_location("depth_memory", HERE / "memory.py")
+    assert spec is not None and spec.loader is not None
+    memory = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(memory)
+    path = HERE / "results" / "memory.json"
+    valid, message = cd.Receipt.verify(path, sources=memory.sources(), check=memory.check)
+    assert valid, message
+    summary = cd.Receipt.read(path).body["summary"]
+    assert summary["look_back"] == {d: {"passed": 4, "founders": 4} for d in ("2", "3")}
+    assert len(memory.cells([2, 3], [0, 1, 2, 3])) == 32
