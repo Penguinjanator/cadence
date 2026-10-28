@@ -25,6 +25,32 @@
   phases. Weights, moments and reports are the same bits.
 - Add `benchmarks/settle_threads.py`: seconds per lesson of a deep apical brain and a flat
   founder at several thread counts, checking that every count learns the same weights.
+- Make the torch backend fast on a GPU, its answers unchanged. A torch settle keeps its state on
+  the device neuron-major and sums each sweep's synaptic input by a transport plan made once per
+  graph: the rows of the synapse matrix that read the same presynaptic neurons (the feature maps
+  of one receptive field, a dense region's neurons) form groups, and the groups of one shape are
+  one batched product, unpadded, each row written by one product in a fixed order. On CUDA with
+  Triton every small group is one Triton launch and the neuron update of a sweep (potential,
+  activation, adaptation, movement) another; the sweeps of a settle are captured as CUDA graphs
+  and replayed; the movement test of a tolerance is read one sweep behind, so the host never
+  stalls the device, and the reported state and step count stay those of the first sweep that
+  met the tolerance; drives and masks reach the device through pinned buffers; the apical gain
+  a nudged phase holds is read on the device, once per lesson; the learning contrast is
+  computed on the device for every graph. A lesson of a four-stage visual brain with the
+  apical compartment (7,956 neurons, 903,520 synapses) on a shared A10G in float64 takes 0.17 s
+  at batch 64 (1.97 s in 0.90.0, 2.41 s on one CPU core), 1.64 s at batch 1,024 (7.67 s) and
+  6.2 s at batch 4,096 (25.7 s); see `benchmarks/torch_gpu/`. Every plan matches the float64
+  host path to rounding, with the same fixed points and step counts and activations within
+  1e-10 (`tests/test_torch_settle_parity.py`), and the grouped and block plans are deterministic
+  run to run (cuSPARSE, the plan of a graph whose rows share few presynaptic neurons, is not).
+  `CADENCE_TRITON=0`, `CADENCE_CUDA_GRAPHS=0` and `CADENCE_TORCH_TRANSPORT=grouped|blocks|sparse`
+  select the slower paths for comparison.
+- A float32 torch state's residual (`NeuralGraph.residual`) and apical gain are computed on its
+  device in float64 by a float64 copy of the kernel, the float64 reference they were computed by
+  on the host before, so `precision="float32"` no longer pays a host transport per check: its
+  lessons of the deep brain run two to three times faster than float64 on the A10G.
+- A brain rebuilt on new parameters (`with_parameters`, a damped copy, a calibration candidate)
+  reuses its connectome's torch transport plan instead of analysing the graph again.
 - The depth receipts (`benchmarks/depth/results`) bind `brain.py` and `learning.py`, so they
   need rebuilding on this source, on the platform that produced them: the AND-count gives the
   same readings as 0.90.0 lesson for lesson on another machine, but that machine's readings

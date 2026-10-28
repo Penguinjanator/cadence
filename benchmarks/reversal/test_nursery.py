@@ -358,7 +358,7 @@ def test_resigned_receipts_cannot_turn_invalid_readings_into_evidence(
 
 
 @pytest.mark.parametrize(
-    "data", [b"[]\n", b"null\n", b"{}\n", b"not json", gzip.compress(b"{}")[:-4]]
+    "data", [b"[]\n", b"null\n", b"{}\n", b"not json", gzip.compress(b"{}", mtime=0)[:-4]]
 )
 def test_malformed_receipts_fail_closed(tmp_path, data):
     path = tmp_path / ("bad.json.gz" if data.startswith(b"\x1f\x8b") else "bad.json")

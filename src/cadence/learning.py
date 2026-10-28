@@ -822,7 +822,7 @@ class Learner:
     def _device_kernel(self, plus: BrainState, minus: BrainState) -> Any:
         """The torch kernel both states rest on, when the update can stay on the device."""
         kernel = self.brain._torch
-        if kernel is None or kernel.layout is None:
+        if kernel is None:
             return None
         for state in (plus, minus):
             if state.device is None or state.device.get("holder") is not kernel:
