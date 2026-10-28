@@ -175,6 +175,13 @@ environment before `cadence` is imported forces the NumPy loop, on which the dep
 and the look-back, contextual-choice, held-heads, copy-tokens and own-action receipts were
 recorded.
 
+A recall memory's reads, writes and address lessons run on the host under every backend: products
+of each stream's address or attention with its slots, and the copy of the slots a write makes.
+`CADENCE_RECALL_THREADS=N` shares those of at least 262,144 values among N threads by blocks of
+streams; each block is one NumPy call, so every value is summed by the same loop and the results
+are the same bits at any count. The default, 1, starts no threads. As with Numba's threads, a
+worker of a process pool should keep its share of the cores.
+
 A device kernel implements five operations: the synaptic transport, the elementwise neuron
 update, the softmax over the nudged group, the apical normalization and the largest movement
 for the tolerance. Check a new one against the

@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased
+
+- A recall memory does less host work per moment, its results the same bits. The address
+  lesson reads the slots themselves when it teaches every stream (0.91.0 copied the keys, values
+  and successors of every stream for every head) and gathers the moving rows once; a write
+  builds each new slot array with one copy (0.91.0 made two or three); the content scores of an
+  address over the present slots are kept until the slots change, so the address lesson and an
+  act that addresses the slots as the lesson did read them again; the device index of the
+  association columns is made once per device. A composer with three modules (256, 128, 128),
+  four recall heads, the copy pathway, the executed command in its slots, 64 streams and a full
+  memory of 320 slots: per moment on the CPU backend the address lessons take 20 ms against 106
+  ms, the reads 20 ms against 36 ms and the write 11 ms against 23 ms; on a shared A10G in
+  float32 a moment takes 0.37 to 0.42 s against 0.61 to 0.68 s. Every act, lesson report, slot
+  and efficacy of 380 such moments on the CPU backend has the same bits as in 0.91.0.
+- `CADENCE_RECALL_THREADS=N` (default 1: none) shares a recall memory's products and copies over
+  its slots among N threads by blocks of streams, each block one NumPy call, so every value is
+  summed by the same loop at any count. See [backends](docs/backends.md).
+- The look-back, contextual-choice, held-heads, copy-tokens, own-action and deep-memory receipts
+  bind `stream.py`; rebuilt on this source with identical bodies (the deep memory's runs record
+  their wall-clock seconds).
+
 ## 0.91.0 — 2026-10-28
 
 - The fused CPU settle runs the rows of a batch on Numba's threads. Each sweep computes the
