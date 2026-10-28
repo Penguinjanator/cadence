@@ -113,3 +113,27 @@ def test_the_boundary_is_saved_loaded_and_retuned(tmp_path):
     founder.reset()  # the next stream begins at one
     founder.act(event(1), greedy=True)
     assert founder.recall.slots == 2 and not founder.recall.keys[0, 0].any()
+
+
+def test_a_stream_reset_alone_then_an_end_of_every_stream_leaves_no_dead_slot():
+    brain = composed(recall_boundary=True)
+    brain.act(event(1, 2), greedy=True)
+    recall = brain.recall
+    recall.reset(2, rows=np.array([0]))
+    recall.end(2)
+    brain.act(event(3, 4), greedy=True)
+    dead = (recall.held & ~recall.keys.any(axis=2) & ~recall.values.any(axis=2)
+            & ~recall.nexts.any(axis=2))
+    assert not dead.any()  # every boundary learned its stream's first event
+    for row, symbol in ((0, 3), (1, 4)):
+        boundary = recall.held[row] & ~recall.keys[row].any(axis=1)
+        np.testing.assert_array_equal(recall.nexts[row][boundary][-1], event(symbol)[0])
+
+
+def test_a_memory_of_one_slot_holds_no_boundary():
+    brain = composed(recall_boundary=True, recall_capacity=1)
+    for s in (2, 5):
+        brain.act(event(s), greedy=True)
+    np.testing.assert_array_equal(brain.recall.values[0], event(5))
+    brain.reset(keep=("slots",))
+    assert brain.recall.slots == 1 and brain.recall.ended.all()

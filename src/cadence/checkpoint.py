@@ -36,8 +36,9 @@ HOMEOSTASIS_FORMAT = "cadence-checkpoint/3"
 # Non-default numerical policy; older loaders must refuse instead of dropping it.
 INITIAL_DAMPING_FORMAT = "cadence-checkpoint/4"
 _INITIAL_DAMPING_POLICY = "initial-damping/1"
-# A graph with an apical compartment: older loaders must refuse it instead of settling the
-# brain without the compartment. Carries the initial-damping policy too when it has one.
+# A graph with an apical compartment, or a learner with the settings that came with it
+# (``normalize_relative``, ``nudged_fixed``): older loaders must refuse it instead of settling or
+# teaching the brain without them. Carries the initial-damping policy too when it has one.
 APICAL_FORMAT = "cadence-checkpoint/5"
 
 __all__ = ["FORMAT", "load", "save"]
@@ -87,6 +88,8 @@ def _learner_data(learner: Learner) -> dict[str, np.ndarray]:
             "initial_damping": learner.config.initial_damping,
         }
     compartment: dict[str, np.ndarray] = {}
+    if learner.config.normalize_relative or learner.config.nudged_fixed:
+        meta["format"] = APICAL_FORMAT
     if brain.apical is not None:
         meta["format"] = APICAL_FORMAT
         meta["apical"] = {"fraction": brain.apical.fraction, "floor": brain.apical.floor}
@@ -195,11 +198,24 @@ def load(
         known = (FORMAT, INITIAL_DAMPING_FORMAT, APICAL_FORMAT)
         if not first and meta.get("format") not in known:
             raise ValueError(f"not a cadence checkpoint: {meta.get('format')!r}")
-        if apical_format != ("apical" in meta) or apical_format != (
-            "apical_synapses" in data.files
+        if ("apical" in meta) != ("apical_synapses" in data.files) or (
+            "apical" in meta and not apical_format
         ):
             raise ValueError(
                 "an apical compartment belongs to checkpoint format cadence-checkpoint/5"
+            )
+        depth_settings = bool(
+            meta["config"].get("normalize_relative") or meta["config"].get("nudged_fixed")
+        )
+        if apical_format and "apical" not in meta and not depth_settings:
+            raise ValueError(
+                "a cadence-checkpoint/5 file holds an apical compartment or the learner's "
+                "normalize_relative or nudged_fixed"
+            )
+        if depth_settings and not apical_format:
+            raise ValueError(
+                "normalize_relative and nudged_fixed belong to checkpoint format "
+                "cadence-checkpoint/5"
             )
         if initial_policy:
             saved_config = LearnerConfig(**_known_config(meta["config"]))
@@ -244,7 +260,7 @@ def load(
             **model, adaptation=Adaptation(**adaptation) if adaptation else None
         )
         apical = None
-        if apical_format:
+        if "apical" in meta:
             spec = meta["apical"]
             if not isinstance(spec, dict) or set(spec) != {"fraction", "floor"}:
                 raise ValueError("invalid checkpoint apical compartment")

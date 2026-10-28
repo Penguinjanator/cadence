@@ -29,14 +29,23 @@
   slot's next held, and a brain that answered a cue through the next port could not reach the
   start of an episode: founder 3 of the look-back benchmark answered `first` at 0.83, and brains
   of two and three modules at 0.38 to 0.44. With the option every stream that begins holds a
-  silent boundary slot (zero key, zero value) whose next the first event teaches. Every founder
+  silent boundary slot (zero key, zero value) whose next the first event teaches; a memory of one
+  slot holds none. Every founder
   of one, two and three modules answers both look-back cues at 1.00. The look-back benchmark
   composes its memory with the boundary (`cadence-look-back/2`).
 - Checkpoints: a learner whose graph has the compartment saves it (`apical_synapses`,
   `apical_groups`, fraction and floor) in the new format `cadence-checkpoint/5`, which 0.89.0 and
-  earlier refuse. Without the compartment every checkpoint is written as before; the two new
-  learner settings are left out of saved configurations, described genes and `to_dict` at their
-  founder values, so every brain composed without them reads, saves and describes as in 0.89.0.
+  earlier refuse; a learner with `normalize_relative` or `nudged_fixed` takes that format too, so
+  an older loader refuses it instead of dropping the settings. Without them every checkpoint is
+  written as before; the two new learner settings are left out of saved configurations,
+  described genes and `to_dict` at their founder values, so every brain composed without them
+  reads, saves and describes as in 0.89.0.
+- The tools that read a graph as a plain synaptic sum refuse a graph with the compartment:
+  `Brain.dense()`, `reference.conformance` and `certificate()`. A `SettlementRecord` carries the
+  graph's compartment (`apical`, None without one). The compartment's floor must be positive.
+- `Brain.retune(teaching=..., learning_...=...)` applies the teaching point and the learning
+  genes together, so a change that is valid as a whole (back to `teaching="founder"` with
+  `learning_normalize_relative=0`) is accepted in one call.
 
 ## 0.89.0 — 2026-10-26
 

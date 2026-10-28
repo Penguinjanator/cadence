@@ -403,12 +403,14 @@ class Recall:
     the first slot's value or the boundary's next. A stream begins when the memory empties
     its streams, when ``reset`` empties some of them (their boundary takes the latest slot,
     the moment the other streams wrote last) and when ``end`` ends the episodes of every
-    stream (one new slot for all of them; a stream whose latest slot is silent and has no
-    successor yet keeps it as its boundary). A stream that ends its episode alone (``end``
-    of some rows) begins the next one without a boundary, as the founder memory does. The
-    boundary is no written moment (``writes`` leaves it out), and its key is zero: its logit
-    is its age's alone, so a cue finds it by age through the position term, or by an
-    address that points away from every stored key.
+    stream (one new slot for all of them, which a stream whose latest slot is silent and has
+    no successor yet takes in place of that slot; when every stream's latest slot is so, it
+    serves as the boundary and none is added). A stream that ends its episode alone (``end``
+    of some rows) begins the next one without a boundary, as the founder memory does, and a
+    memory of one slot (``capacity=1``) holds none. The boundary is no written moment
+    (``writes`` leaves it out), and its key is zero: its logit is its age's alone, so a cue
+    finds it by age through the position term, or by an address that points away from every
+    stored key.
 
     With ``window`` k above 1 (a construction setting, with ``window_decay`` d) the key's
     fixed part is an ordered window of the stream's last k events, ``[heard * x_t, d * heard
@@ -826,7 +828,7 @@ class Recall:
 
     def _empty(self, batch: int) -> None:
         # with ``boundary`` every stream begins at its boundary slot, a silent moment
-        slots = 1 if self.boundary and batch else 0
+        slots = 1 if self._bounded() and batch else 0
         self.keys = np.zeros((batch, slots, self.address_width))
         self.values = np.zeros((batch, slots, self.value_width))
         self.nexts = np.zeros((batch, slots, self.value_width))
@@ -862,7 +864,7 @@ class Recall:
         keys = np.where(keep[:, None, None], self.keys, 0.0)
         values = np.where(keep[:, None, None], self.values, 0.0)
         nexts = np.where(keep[:, None, None], self.nexts, 0.0)
-        if self.boundary:
+        if self._bounded():
             # the streams that begin again hold their boundary in the latest slot, the moment
             # the other streams wrote last
             if not held.shape[1]:
@@ -908,10 +910,15 @@ class Recall:
         if not chosen.any():
             return
         # new arrays, never writes into the old ones: a caller may hold them to restore
-        if self.boundary and chosen.all():
+        if self._bounded() and chosen.all():
             # every stream begins its next episode at a boundary slot, which learns the first
             # event; the closed episode's latest slot learns no successor
-            if not self._silent():
+            silent = self._silent()
+            if not silent.all():
+                if silent.any():  # a silent latest slot gives way to the new one, never stays
+                    held = self.held.copy()
+                    held[silent, -1] = False
+                    self.held = held
                 self._append(np.zeros((batch, self.address_width)), np.ones(batch, dtype=bool))
             self.ended = np.zeros(batch, dtype=bool)
         else:
@@ -921,15 +928,21 @@ class Recall:
         self._attended = None
         self._head_reads = None
 
-    def _silent(self) -> bool:
-        """Whether every stream's latest slot is silent and has no successor yet: a boundary,
-        or a silent moment, which serves as one."""
-        return bool(
-            self.slots
-            and self.held[:, -1].all()
-            and not np.any(self.keys[:, -1])
-            and not np.any(self.values[:, -1])
-            and not np.any(self.nexts[:, -1])
+    def _bounded(self) -> bool:
+        """Whether streams that begin hold a boundary slot: ``boundary`` on, and room for the
+        boundary beside a moment (a memory of one slot holds none)."""
+        return bool(self.boundary) and self.capacity > 1
+
+    def _silent(self) -> np.ndarray:
+        """Each stream whose latest slot it holds is silent and has no successor yet: a
+        boundary, or a silent moment, which serves as one."""
+        if not self.slots:
+            return np.zeros(self.streams, dtype=bool)
+        return np.asarray(
+            self.held[:, -1]
+            & ~self.keys[:, -1].any(axis=1)
+            & ~self.values[:, -1].any(axis=1)
+            & ~self.nexts[:, -1].any(axis=1)
         )
 
     def keep(self, rows: np.ndarray) -> None:

@@ -306,3 +306,85 @@ def test_a_nudged_settle_holds_the_free_phase_gain():
                            nudge=learner.nudge_for(target, 0.1, None, held[:2]))
     founder = Brain.compose(4, 3, modules=(6, 5), seed=11)
     assert founder.brain.apical_gain(drive, founder.learner.free(drive)) is None
+
+
+def test_a_zero_floor_is_refused():
+    with pytest.raises(ValueError, match="floor"):
+        Apical(np.zeros(3, bool), np.zeros(4, dtype=int), 0.25, floor=0.0)
+
+
+def test_the_residual_refuses_a_held_gain_of_another_shape():
+    brain = apical_brain(seed=11, teaching="normalized")
+    graph, learner = brain.brain, brain.learner
+    drive = brain.stimulus(np.random.default_rng(12).normal(size=(3, 4)))
+    free = learner.free(drive)
+    held = graph.apical_gain(drive, free)
+    target = learner.targets(np.array([0, 1, 2]))
+    assert graph.residual(drive, free, nudge=learner.nudge_for(target, 0.1, None, held)).shape == (3,)
+    with pytest.raises(ValueError, match="apical_gain"):
+        graph.residual(drive, free, nudge=learner.nudge_for(target, 0.1, None, held[:1]))
+
+
+def test_tools_that_read_the_plain_sum_refuse_the_compartment():
+    from cadence.certificate import certificate
+    from cadence.reference import conformance
+
+    graph = apical_brain().brain
+    with pytest.raises(ValueError, match="apical"):
+        graph.dense()
+    with pytest.raises(ValueError, match="apical"):
+        conformance(graph, None)
+    with pytest.raises(ValueError, match="apical"):
+        certificate(graph)
+    founder = Brain.compose(4, 3, modules=(6, 5), seed=2).brain
+    assert founder.dense().shape == (founder.connectome.n, founder.connectome.n)
+    assert certificate(founder) is not None
+
+
+def test_a_settlement_record_carries_the_compartment():
+    from cadence.recording import record_settlements
+
+    brain = apical_brain()
+    records = []
+    with record_settlements(records.append):
+        brain.learner.free(brain.stimulus(np.ones((1, 4))))
+    assert records and records[0].apical is not None
+    np.testing.assert_array_equal(records[0].apical.synapses, brain.brain.apical.synapses)
+    founder, plain = Brain.compose(4, 3, modules=(6, 5), seed=2), []
+    with record_settlements(plain.append):
+        founder.learner.free(founder.stimulus(np.ones((1, 4))))
+    assert plain and plain[0].apical is None
+
+
+def test_the_new_learner_settings_take_the_new_format_without_the_compartment(tmp_path):
+    import json
+
+    brain = Brain.compose(4, 3, modules=(6, 5), seed=2, teaching="normalized",
+                          learning_normalize_relative=0.1, learning_nudged_fixed=True)
+    path = brain.learner.save(tmp_path / "learner.npz")
+    with np.load(path, allow_pickle=False) as data:
+        meta = json.loads(str(data["meta"]))
+        arrays = {name: data[name] for name in data.files}
+    assert meta["format"] == "cadence-checkpoint/5" and "apical" not in meta
+    assert Learner.load(path).config == brain.learner.config
+    # the settings under the ordinary format are refused, never dropped
+    np.savez(tmp_path / "old.npz", **{**arrays, "meta": np.array(json.dumps(
+        {**meta, "format": "cadence-checkpoint/2"}))})
+    with pytest.raises(ValueError, match="cadence-checkpoint/5"):
+        Learner.load(tmp_path / "old.npz")
+    # and the new format without either is refused too
+    plain = {**meta["config"]}
+    plain.pop("normalize_relative")
+    plain.pop("nudged_fixed")
+    np.savez(tmp_path / "empty.npz", **{**arrays, "meta": np.array(json.dumps(
+        {**meta, "config": plain}))})
+    with pytest.raises(ValueError, match="cadence-checkpoint/5"):
+        Learner.load(tmp_path / "empty.npz")
+
+
+def test_retune_takes_a_teaching_point_and_the_relative_floor_together():
+    brain = Brain.compose(4, 3, modules=(6, 5), seed=2, teaching="normalized",
+                          learning_normalize_relative=0.1)
+    brain.retune(teaching="founder", learning_normalize_relative=0.0)
+    config = brain.learner.config
+    assert config.normalize == 0.0 and config.normalize_relative == 0.0 and config.eta == 0.5

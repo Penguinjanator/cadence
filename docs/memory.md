@@ -788,10 +788,11 @@ brain keeps reading as it did. The maps are saved with the brain when the term i
 
 In the [look-back benchmark](../benchmarks/attention/look_back.py) a stream of five random
 symbols is followed by a cue, `first` or `last`, and the answer is the symbol at the cued place.
-Taught on the cue moment alone, the term learns to look back to the oldest slot on `first` and to
-the newest on `last`: three of four founders answer both cues at 1.00, the fourth 0.83 and 1.00,
-against 0.31 to 0.81 per cue without the term and 0.25 for uniform random
-([receipt](../benchmarks/attention/results/look-back.json)).
+Taught on the cue moment alone, the term learns to look back to the start of the episode on
+`first` and to the newest slot on `last`: with the episode's boundary every founder answers both
+cues at 1.00, against 0.29 to 0.80 per cue without the term and 0.25 for uniform random
+([receipt](../benchmarks/attention/results/look-back.json)). Without the boundary one founder
+answered `first` at 0.83.
 
 ### Episodes, keys and windows
 
@@ -811,7 +812,8 @@ begins holds a boundary slot first, a silent moment of zero key and zero value w
 first event teaches, so both routes exist for every position. A stream begins when the memory
 empties its streams, when some of them are reset (their boundary takes the latest slot, the
 moment the others wrote last) and when every stream ends an episode with its slots kept. A stream
-that ends its episode alone begins the next one without a boundary. The boundary is no written
+that ends its episode alone begins the next one without a boundary, and a memory of one slot
+(`recall_capacity=1`) holds none. The boundary is no written
 moment, and its logit is its age's alone: a cue finds it through the position term, or with an
 address that points away from every stored key.
 

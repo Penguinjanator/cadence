@@ -79,11 +79,17 @@ def removed(name: str) -> str:
     return f"{name} was removed in this version; cadence-net 0.84.3 takes it"
 
 
-def taught(point: Any, base: LearnerConfig) -> LearnerConfig:
-    """``base`` at a teaching point: its steps and normalization replaced."""
+def teaching_fields(point: Any) -> dict[str, float]:
+    """The learner fields a teaching point sets: its steps and normalization."""
     if not isinstance(point, str) or point not in TEACHING:
         raise ValueError("teaching must be 'founder' or 'normalized'")
     steps = TEACHING[point]
+    return {name: steps[name] for name in ("eta", "eta_bias", "normalize", "normalize_floor")}
+
+
+def taught(point: Any, base: LearnerConfig) -> LearnerConfig:
+    """``base`` at a teaching point: its steps and normalization replaced."""
+    steps = teaching_fields(point)
     return replace(
         base, eta=steps["eta"], eta_bias=steps["eta_bias"], normalize=steps["normalize"],
         normalize_floor=steps["normalize_floor"],

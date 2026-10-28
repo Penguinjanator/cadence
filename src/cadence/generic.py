@@ -55,6 +55,7 @@ from ._configuration import (
     scales_of,
     split_genes,
     taught,
+    teaching_fields,
 )
 from .arousal import Arousal, ArousalConfig
 from .brain import Apical, Backend, BrainState, Equilibrium
@@ -2572,8 +2573,9 @@ class Brain:
                 "configuration: pass one of them"
             )
         learning = options.pop("learning", self.learner.config)
-        if point is not None:
-            learning = taught(point, learning)
+        # a teaching point's fields join the learning genes, so the configuration is checked
+        # once with all of them (teaching="founder" with learning_normalize_relative=0 is valid)
+        pointed = {} if point is None else teaching_fields(point)
         reward = options.pop("reward", self.basal_ganglia.config)
         current_arousal = None if self.arousal is None else self.arousal.config
         arousal = options.pop("arousal", current_arousal)
@@ -2649,7 +2651,7 @@ class Brain:
             )
 
         learning_genes, actor_genes, arousal_genes = split_genes(options)
-        learning = configured(learning, learning_genes, "learning")
+        learning = configured(learning, {**pointed, **learning_genes}, "learning")
         if learning.initial_damping and (
             self.brain.backend != "cpu" or self.brain.precision not in (None, "float64")
         ):

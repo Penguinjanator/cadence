@@ -296,8 +296,8 @@ class Apical:
                 raise ValueError(f"apical {name} must be a real number")
         if not np.isfinite(self.fraction) or self.fraction <= 0:
             raise ValueError("apical fraction must be finite and positive")
-        if not np.isfinite(self.floor) or self.floor < 0:
-            raise ValueError("apical floor must be finite and nonnegative")
+        if not np.isfinite(self.floor) or self.floor <= 0:
+            raise ValueError("apical floor must be finite and positive")
         synapses = synapses.copy()
         groups = groups.astype(np.int64, copy=True)
         synapses.setflags(write=False)
@@ -340,6 +340,8 @@ class Apical:
     ) -> np.ndarray:
         """The apical drive ``(batch, n)``: the raw apical input at the normalization's gain,
         or at the ``held`` gain ``(batch, pools)`` of a nudged settle."""
+        if held is not None and np.shape(held) != (len(raw), len(self.members)):
+            raise ValueError("a nudge's apical_gain needs one entry per row and pool")
         gain = self.gain(basal, raw) if held is None else held
         out = np.zeros_like(raw)
         for k, members in enumerate(self.members):
@@ -717,8 +719,15 @@ class Brain:
     def dense(self) -> np.ndarray:
         """The synapse matrix ``W[pre, post]``: the synaptic input of a batch ``s`` is ``s @ W``.
 
-        Built on demand, for exporting the net to another runtime such as a browser page.
+        Built on demand, for exporting the net to another runtime such as a browser page. A
+        graph with an apical compartment is refused: its top-down input is normalized per
+        region, which the matrix does not carry.
         """
+        if self.apical is not None:
+            raise ValueError(
+                "dense() is the plain synaptic sum; a graph with an apical compartment "
+                "normalizes its top-down input, which the matrix does not carry"
+            )
         dense = np.zeros((self.connectome.n, self.connectome.n))
         np.add.at(dense, (self.connectome.pre, self.connectome.post), self._weights)
         return dense
