@@ -30,7 +30,25 @@ script's and the library's source; `--verify` recomputes the summary from the re
 
 ## Result
 
-RESULTS_PLACEHOLDER
+The [receipt](results/and-count.json), three seeds per arm, final held-out accuracy after 4,000
+lessons:
+
+| Arm | Seeds 0, 1, 2 | Mean |
+| --- | --- | --- |
+| `one` | 0.63, 0.56, 0.57 | 0.58 |
+| `two` | 0.64, 0.64, 0.70 | 0.66 |
+| `three` | 0.85, 0.80, 0.77 | 0.81 |
+| `four` | 0.88, 0.88, 0.84 | 0.86 |
+| `mlp_one` | 0.43, 0.43, 0.42 | 0.43 |
+| `mlp_two` | 0.88, 0.89, 0.89 | 0.89 |
+| `random` | 0.14, 0.15, 0.15 | 0.15 |
+
+Every added module raises the accuracy, and four modules come within 0.02 of the two-layer
+network. One region already beats one hidden layer: its loop through the readout pair settles
+the answer and the region together, a recurrent depth a feed-forward layer lacks. A free settle
+takes 94 to 141 sweeps and none ran out of its budget. The receipt was produced on a 192-core
+Linux machine with all 21 cells in parallel (about ten minutes); other machines reproduce the
+pattern, not every digit, since the lessons' arithmetic differs in its last bits.
 
 ## Why the compartment
 

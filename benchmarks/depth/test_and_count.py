@@ -41,3 +41,15 @@ def test_every_arm_runs_and_the_receipt_verifies(tmp_path):
     body["summary"]["final_accuracy"]["one"] += 0.5
     forged = cd.Receipt.build(bench.KIND, body, bench.sources()).write(tmp_path / "forged.json")
     assert not cd.Receipt.verify(forged, sources=bench.sources(), check=bench.check)[0]
+
+
+def test_the_retained_receipt_is_source_bound_and_recomputed():
+    path = HERE / "results" / "and-count.json"
+    valid, message = cd.Receipt.verify(path, sources=bench.sources(), check=bench.check)
+    assert valid, message
+    body = cd.Receipt.read(path).body
+    assert body["lessons"] == 4000 and body["seeds"] == [0, 1, 2]
+    means = body["summary"]["final_accuracy"]
+    # every added module raises the accuracy; four come within 0.05 of two hidden layers
+    assert means["one"] < means["two"] < means["three"] < means["four"]
+    assert means["four"] > means["mlp_two"] - 0.05 and means["one"] > means["mlp_one"]
