@@ -18,7 +18,9 @@ rule sees the trace as a stimulus and does not differentiate through it.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import os
+from collections.abc import Callable, Mapping, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from copy import copy
 from dataclasses import dataclass, field, fields
 from types import MappingProxyType
@@ -33,6 +35,46 @@ from .connectome import Connectome
 from .learning import LearnedState
 
 __all__ = ["Trace", "FastSynapses", "History", "Recall", "columns"]
+
+
+# a product or copy over the slots of at least this many values runs on the recall threads
+_THREADED = 1 << 18
+_POOLS: dict[tuple[int, int], ThreadPoolExecutor] = {}
+
+
+def _recall_threads() -> int:
+    """``CADENCE_RECALL_THREADS``, the threads that share a recall memory's large products over
+    its slots (1, the default: none)."""
+    try:
+        return max(1, int(os.environ.get("CADENCE_RECALL_THREADS", "1")))
+    except ValueError:
+        return 1
+
+
+def _by_rows(task: Callable[[int, int], Any], rows: int, size: int) -> list[Any] | None:
+    """``task(start, stop)`` over blocks of ``rows`` on the recall threads, in order; None when
+    the work (``size`` values) is too small to share or there is one thread. A process makes
+    its own threads: a pool inherited through a fork has none."""
+    threads = min(_recall_threads(), rows)
+    if threads <= 1 or size < _THREADED:
+        return None
+    key = (os.getpid(), threads)
+    pool = _POOLS.get(key)
+    if pool is None:
+        pool = _POOLS[key] = ThreadPoolExecutor(threads, thread_name_prefix="cadence-recall")
+    bounds = np.linspace(0, rows, threads + 1).astype(int)
+    return list(pool.map(lambda i: task(int(bounds[i]), int(bounds[i + 1])), range(threads)))
+
+
+def _einsum(spec: str, a: np.ndarray, b: np.ndarray) -> np.ndarray:
+    """``np.einsum(spec, a, b)`` for operands that lead with the streams, as the output does;
+    on the recall threads each block of streams is its own call, so every output value is
+    summed by the loop one call over all streams uses."""
+    parts = _by_rows(
+        lambda start, stop: np.einsum(spec, a[start:stop], b[start:stop]),
+        len(a), max(a.size, b.size),
+    )
+    return np.einsum(spec, a, b) if parts is None else np.concatenate(parts)
 
 
 def _stream_rows(rows: np.ndarray, batch: int) -> np.ndarray:
@@ -858,6 +900,9 @@ class Recall:
         # and ``attended``)
         self._head_reads: tuple[tuple[np.ndarray, ...], tuple[np.ndarray | None, ...]] | None = None
         self._private = False  # an imagined branch reads the slots and writes none
+        # the latest content scores per address over the present slots (``_content``)
+        self._contents: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = []
+        self._device_columns: Any = None  # the association's columns on a torch device
         self.reset(0)
 
     # -- layout and per-stream state
@@ -1186,6 +1231,7 @@ class Recall:
         branch._attended = None
         branch._head_reads = None
         branch._private = True
+        branch._contents = []
         return branch
 
     # -- the moment's address and read
@@ -1239,12 +1285,32 @@ class Recall:
         """The logits of the attention over slots: ``address . key / temperature`` less
         ``recency`` times each slot's age, plus a head's ``position`` term (``(rows, slots)``,
         ``_position``), ``-inf`` at a slot its stream does not hold."""
-        logits = np.einsum("bk,bmk->bm", address, keys) / self.temperature
+        logits = self._content(address, keys)
         if self.recency:
             logits = logits - np.asarray(self.recency * self.ages())[None, :]
         if position is not None:
             logits = logits + position
         return logits if held is None else np.where(held, logits, -np.inf)
+
+    def _content(self, address: np.ndarray, keys: np.ndarray) -> np.ndarray:
+        """``address . key / temperature`` at every slot, a new array. Over the present slots
+        an address with the same bits as one scored since the slots last changed reads that
+        score again: a moment's lesson, its address lesson and its act address the same slots,
+        and the act addresses them as the lesson did wherever the lesson left the map as it
+        was."""
+        if keys is not self.keys or address.dtype != np.float64:
+            return np.asarray(_einsum("bk,bmk->bm", address, keys) / self.temperature)
+        if self._contents and self._contents[0][1] is not keys:
+            self._contents = []  # the slots changed since: every score is stale
+        bits = np.ascontiguousarray(address).view(np.uint64)
+        for scored, _, logits in self._contents:
+            if scored.shape == bits.shape and np.array_equal(scored, bits):
+                return logits.copy()
+        logits = np.asarray(_einsum("bk,bmk->bm", address, keys) / self.temperature)
+        if len(self._contents) >= 4 * self.heads:
+            self._contents.pop(0)
+        self._contents.append((bits.copy(), keys, logits.copy()))
+        return logits
 
     def weights(self, address: np.ndarray, position: np.ndarray | None = None) -> np.ndarray | None:
         """``p`` over each stream's slots for the ``(batch, key)`` addresses, or None when the
@@ -1297,11 +1363,9 @@ class Recall:
             attended.append(p)
             if p is not None:
                 recall_columns, next_columns = self._head_columns[h]
-                out[:, recall_columns] = self.amplitude * np.einsum("bm,bmc->bc", p, self.values)
+                out[:, recall_columns] = self.amplitude * _einsum("bm,bmc->bc", p, self.values)
                 if self.next:
-                    out[:, next_columns] = self.amplitude * np.einsum(
-                        "bm,bmc->bc", p, self.nexts
-                    )
+                    out[:, next_columns] = self.amplitude * _einsum("bm,bmc->bc", p, self.nexts)
         self._attended = attended[0]  # the attention this read uses, kept past the write
         self._head_reads = (tuple(addresses), tuple(attended)) if self.heads > 1 else None
         return out
@@ -1335,9 +1399,13 @@ class Recall:
             if isinstance(cols, slice):
                 part = s[:, cols]
             else:
-                import torch
+                index = self._device_columns
+                if index is None or index.device != s.device:
+                    import torch
 
-                part = s[:, torch.as_tensor(np.asarray(cols), device=s.device)]
+                    index = torch.as_tensor(np.asarray(cols), device=s.device)
+                    self._device_columns = index
+                part = s[:, index]
             return np.ascontiguousarray(part.detach().to("cpu").numpy().astype(float))
         settled = np.atleast_2d(np.asarray(state.activation, dtype=float))
         return np.asarray(settled[:, cols], dtype=float).copy()
@@ -1394,11 +1462,10 @@ class Recall:
         an episode (``end``) teaches it nothing, and its new slot is open again."""
         if len(key) != self.streams:
             self._empty(len(key))
-        nexts = self.nexts
+        successor: tuple[Any, ...] | None = None
         if self.slots:
-            nexts = nexts.copy()
             if self.held.all() and not self.ended.any():
-                nexts[:, -1] = value
+                successor = (slice(None), value)
             else:
                 # each stream's latest held slot learns what followed it, unless it closed an
                 # episode
@@ -1406,28 +1473,54 @@ class Recall:
                 rows = held.any(axis=1) & ~self.ended
                 latest = held.shape[1] - 1 - np.argmax(held[:, ::-1], axis=1)
                 index = np.flatnonzero(rows)
-                nexts[index, latest[index]] = value[index]
+                successor = (index, latest[index], value[index])
         if self.ended.any():  # every stream's new slot is open to its successor
             self.ended = np.zeros(len(key), dtype=bool)
-        self.nexts = nexts
-        self._append(key, np.ones(len(key), dtype=bool), value)
+        self._append(key, np.ones(len(key), dtype=bool), value, successor)
 
     def _append(
-        self, key: np.ndarray, held: np.ndarray, value: np.ndarray | None = None
+        self,
+        key: np.ndarray,
+        held: np.ndarray,
+        value: np.ndarray | None = None,
+        successor: tuple[Any, ...] | None = None,
     ) -> None:
         """A new latest slot for every stream, of ``key`` and ``value`` (zero without one) and
         no successor yet, held by the streams ``held`` marks; beyond ``capacity`` the oldest
-        slot is dropped."""
+        slot is dropped. ``successor`` is what the slots before learn as their next
+        (``_observe``): ``(slice(None), value)`` for every stream's latest slot, or ``(rows,
+        slots, values)``. Every array is new, written once: a caller may hold the old ones."""
         if value is None:
             value = np.zeros((len(key), self.value_width))
-        keys = np.concatenate([self.keys, key[:, None, :]], axis=1)
-        values = np.concatenate([self.values, value[:, None, :]], axis=1)
-        nexts = np.concatenate([self.nexts, np.zeros_like(value)[:, None, :]], axis=1)
-        held = np.concatenate([self.held, held[:, None]], axis=1)
-        if keys.shape[1] > self.capacity:
-            drop = keys.shape[1] - self.capacity
-            keys, values, nexts, held = (a[:, drop:].copy() for a in (keys, values, nexts, held))
-        self.keys, self.values, self.nexts, self.held = keys, values, nexts, held
+        kept = self.keys.shape[1]
+        drop = max(kept + 1 - self.capacity, 0)
+
+        def grown(old: np.ndarray, new: np.ndarray | None) -> np.ndarray:
+            out = np.empty((old.shape[0], kept + 1 - drop, *old.shape[2:]), dtype=old.dtype)
+
+            def move(start: int, stop: int) -> None:
+                out[start:stop, : kept - drop] = old[start:stop, drop:]
+
+            if _by_rows(move, len(old), old.size) is None:
+                move(0, len(old))
+            if new is None:
+                out[:, -1] = 0
+            else:
+                out[:, -1] = new
+            return out
+
+        nexts = grown(self.nexts, None)
+        if successor is not None and kept:
+            if len(successor) == 2:
+                if kept - drop:  # the latest slot survives the drop
+                    nexts[:, kept - 1 - drop] = successor[1]
+            else:
+                rows, slots, values = successor
+                keep = slots >= drop
+                nexts[rows[keep], slots[keep] - drop] = values[keep]
+        self.keys, self.values, self.nexts, self.held = (
+            grown(self.keys, key), grown(self.values, value), nexts, grown(self.held, held)
+        )
 
     # -- the address lesson
 
@@ -1646,13 +1739,16 @@ class Recall:
         the lesson names and the log of the prior attention the address gave (head ``head``'s
         position term in it). None when no row moves. The arithmetic is unchecked: a caller
         checks what it keeps."""
-        values, nexts, keys = self.values[rows], self.nexts[rows], self.keys[rows]
-        held = self.held[rows]
+        if len(rows) == len(self.keys):  # every stream, in order: the slots themselves
+            values, nexts, keys, held = self.values, self.nexts, self.keys, self.held
+        else:
+            values, nexts, keys = self.values[rows], self.nexts[rows], self.keys[rows]
+            held = self.held[rows]
         masked = not held.all()
-        score = np.einsum("bc,bmc->bm", d_value, values)
+        score = _einsum("bc,bmc->bm", d_value, values)
         norm = np.sum(d_value * d_value, axis=1)
         if d_next is not None:
-            score += np.einsum("bc,bmc->bm", d_next, nexts)
+            score += _einsum("bc,bmc->bm", d_next, nexts)
             norm += np.sum(d_next * d_next, axis=1)
         norm = np.sqrt(norm)
         moving = norm > 1e-12
@@ -1663,27 +1759,30 @@ class Recall:
         x, c, q, key = (
             a[rows][moving] for a in (moment.inputs, moment.cortex, moment.address, moment.key)
         )
+        everyone = bool(moving.all())
+        keys = keys if everyone else keys[moving]
         rate = self.address
         # finite inputs can still overflow the arithmetic below: the check before the step is
         # kept refuses what is not finite
         with np.errstate(over="ignore", invalid="ignore", divide="ignore"):
             logits = score[moving] / norm[moving, None] / self.address_temperature
             if masked:
-                logits = np.where(held[moving], logits, -np.inf)
+                held = held if everyone else held[moving]
+                logits = np.where(held, logits, -np.inf)
             # among the moments the address attended to: the attention is the prior
             attention = self._attention(
-                q, keys[moving], held[moving] if masked else None, self.position_term(head, x, c)
+                q, keys, held if masked else None, self.position_term(head, x, c)
             )
             attention -= attention.max(axis=1, keepdims=True)
             attention -= np.log(np.exp(attention).sum(axis=1, keepdims=True))
             logits = logits + attention
             p = np.exp(logits - logits.max(axis=1, keepdims=True))
             p /= p.sum(axis=1, keepdims=True)
-            target = np.einsum("bm,bmk->bk", p, keys[moving])
+            target = _einsum("bm,bmk->bk", p, keys)
             if self.address_step == "toward":
                 # from the mixture the address attended to: moving q by s (K* - K_bar) raises
                 # the named slots' mean logit by s |K* - K_bar|^2 / T over the attended ones'
-                error = target - np.einsum("bm,bmk->bk", np.exp(attention), keys[moving])
+                error = target - _einsum("bm,bmk->bk", np.exp(attention), keys)
             else:
                 error = target - q
             # each row's gain on its own address, rate * |z|^2, is at most one: a row taught
