@@ -56,9 +56,8 @@ from ._configuration import (
     split_genes,
     taught,
 )
-from .apical import Apical
 from .arousal import Arousal, ArousalConfig
-from .brain import Backend, BrainState, Equilibrium
+from .brain import Apical, Backend, BrainState, Equilibrium
 from .brain import Brain as NeuralGraph
 from .code import LearnedCode
 from .connectome import Connectome

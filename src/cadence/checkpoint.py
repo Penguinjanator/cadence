@@ -22,8 +22,7 @@ from typing import Any
 
 import numpy as np
 
-from .apical import Apical
-from .brain import Backend, Brain
+from .brain import Apical, Backend, Brain
 from .connectome import Connectome
 from .learning import Learner, LearnerConfig
 from .neuron import Adaptation, NeuronModel

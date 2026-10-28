@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 from cadence import Brain, Learner
-from cadence.apical import Apical
+from cadence.brain import Apical
 from cadence.brain import Brain as Graph
 from cadence.genome import Genome, Projection, Region, develop
 from cadence.learning import LearnerConfig
