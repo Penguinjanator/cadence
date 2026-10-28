@@ -18,6 +18,7 @@ rule sees the trace as a stimulus and does not differentiate through it.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from copy import copy
 from dataclasses import dataclass, field, fields
 from types import MappingProxyType
@@ -345,6 +346,9 @@ class _Moment(NamedTuple):
     cortex: np.ndarray  # the settled association activity of the moment before
     address: np.ndarray  # the address q, computed before the settle
     key: np.ndarray  # the fixed part of the address, the slot's key once it is written
+    # what the address and position maps read of the moment: the event, and with ``action``
+    # the command the stream executed at the moment before
+    inputs: np.ndarray
 
 
 @dataclass
@@ -457,6 +461,26 @@ class Recall:
     ``position_map(h)`` gives head h's maps and ``position_term(h, x, c)`` its term at every
     slot; ``weights(address, position)`` with that term gives the attention the read used.
 
+    With ``action`` (an option, founder off; a construction setting) every written slot also
+    carries the command the stream executed at that moment, one coordinate per motor neuron
+    (``actions`` of them, one-hot within each motor slot; zero for a moment ``wait`` senses),
+    in its key and in its value: the key gains ``actions`` coordinates after the window's
+    events, and the value, so the next as well, holds the event and the command. Each head's
+    read port holds the command part on regions of its own, ``<port>_action``, whose
+    synapses into the association start at zero (the composition develops them so). The
+    address and position maps also read the command the stream executed at the moment
+    before, ``u = [x, a_prev]`` in place of ``x``; the address's fixed part holds zero on the
+    command coordinates. With every new map entry and synapse at zero a newborn reads and
+    settles as one without the option, and the address lesson can teach the maps to look for
+    a slot by what was done there.
+
+    ``copy`` and ``tokens`` (options, founders ``0.0`` and None; construction settings) record
+    a pathway the composition adds: plastic synapses from every head's read port into the
+    motor region, ``copy`` their initial magnitude, learned by the settle's contrast as every
+    synapse is. ``tokens`` declares, per motor neuron, the observation coordinate that is the
+    same token (``-1`` for none), and the pathway then starts as that identity. The memory
+    checks that the synapses are there; it reads and writes nothing of its own for them.
+
     The settings of 0.84.3 that this version removed (``RETIRED``, and ``recency=None``) are
     refused with a message naming that release; a checkpoint of 0.84.3 carries the keys its
     format always wrote for three of them, which load at their one value (``FORMAT``).
@@ -487,6 +511,11 @@ class Recall:
     position: int = 32
     position_rate: float = 0.1
     boundary: bool = False
+    copy: float = 0.0
+    tokens: tuple[int, ...] | None = None
+    action: bool = False
+    # the motor neurons a slot's command covers with ``action``: a brain passes its motor width
+    actions: int = 0
     keys: np.ndarray = field(init=False, repr=False)
     values: np.ndarray = field(init=False, repr=False)
     nexts: np.ndarray = field(init=False, repr=False)
@@ -502,12 +531,14 @@ class Recall:
     CONSTRUCTION = ("capacity", "next")
     # options beside the founder memory: a memory describes and saves an option only where it
     # differs from its founder, and a saved memory without one takes its founder; each is
-    # runtime except the window, the heads and the position term, which shape the memory
+    # runtime except the window, the heads, the position term, the copy pathway and the
+    # executed command, which shape the memory or the anatomy
     OPTIONS = (
         "address_step", "null", "address_reward", "window", "window_decay", "heads", "position",
-        "position_rate", "boundary",
+        "position_rate", "boundary", "copy", "tokens", "action",
     )
-    CONSTRUCTION_OPTIONS = ("window", "window_decay", "heads", "position")
+    CONSTRUCTION_OPTIONS = ("window", "window_decay", "heads", "position", "copy", "tokens",
+                            "action")
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
     RETIRED = ("write", "key", "episodes", "value", "context", "context_decay")
     # the keys the checkpoint format of 0.84.3 (``cadence-generic/8`` and ``/9``) always wrote
@@ -563,10 +594,37 @@ class Recall:
             ):
                 raise ValueError("capacity must be an integer of at least 1")
             return int(value)
-        if name in ("next", "boundary"):
+        if name in ("next", "boundary", "action"):
             if not isinstance(value, bool):
                 raise ValueError(f"{name} must be boolean")
             return value
+        if name == "copy":
+            return real(name, value, low=0)
+        if name == "tokens":
+            if value is None:
+                return None
+            if isinstance(value, (str, bytes, Mapping)) or not isinstance(
+                value, (Sequence, np.ndarray)
+            ):
+                raise ValueError(
+                    "tokens is a sequence of observation coordinates, one per motor neuron "
+                    "(-1 where none)"
+                )
+            out = []
+            for item in value:
+                if (
+                    isinstance(item, (bool, np.bool_))
+                    or not isinstance(item, (int, np.integer))
+                    or item < -1
+                ):
+                    raise ValueError(
+                        "tokens are integer observation coordinates, -1 where a motor neuron "
+                        "has none"
+                    )
+                out.append(int(item))
+            if not any(item >= 0 for item in out):
+                raise ValueError("tokens must name at least one observation coordinate")
+            return tuple(out)
         if name == "address_step":
             if not isinstance(value, str) or value not in Recall.STEPS:
                 raise ValueError(f"address_step is one of {Recall.STEPS}")
@@ -631,6 +689,73 @@ class Recall:
         )
 
     @staticmethod
+    def action_ports(heads: int, next: bool = True) -> tuple[tuple[str, ...], ...]:
+        """The regions that hold each head's read of the command with ``action``: one per
+        region of ``ports``, named ``<region>_action``."""
+        return tuple(
+            tuple(f"{name}_action" for name in port) for port in Recall.ports(heads, next)
+        )
+
+    def _port_neurons(self, name: str, width: int) -> np.ndarray:
+        """The neurons of a read port region in value order: the region's ``width`` event
+        neurons and, with ``action``, its command region's neurons after them."""
+        populations = self.connectome.populations
+        neurons = np.asarray(populations[name], dtype=np.int64)
+        if len(neurons) != width:
+            raise ValueError(
+                f"the {name} region needs one neuron per event coordinate ({width})"
+            )
+        if not self.action:
+            return neurons
+        command = np.asarray(populations[f"{name}_action"], dtype=np.int64)
+        if len(command) != self.actions:
+            raise ValueError(
+                f"the {name}_action region needs one neuron per motor neuron ({self.actions})"
+            )
+        return np.concatenate([neurons, command])
+
+    def copy_synapses(self) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """The copy pathway's synapses: every synapse from a head's read port neuron into the
+        motor region, their indices, and for each the value coordinate it reads and the motor
+        neuron it drives (the motor population's order)."""
+        connectome = self.connectome
+        motor = np.asarray(connectome.populations.get("motor", ()), dtype=np.int64)
+        pre, post = np.asarray(connectome.pre), np.asarray(connectome.post)
+        value = -np.ones(connectome.n, dtype=np.int64)
+        for recall, following in self._heads:
+            value[recall] = np.arange(len(recall))
+            value[following] = np.arange(len(following))
+        local_motor = -np.ones(connectome.n, dtype=np.int64)
+        local_motor[motor] = np.arange(len(motor))
+        synapses = np.flatnonzero((value[pre] >= 0) & (local_motor[post] >= 0))
+        return synapses, value[pre[synapses]], local_motor[post[synapses]]
+
+    def _check_copy(self) -> None:
+        """With ``copy`` every read port reaches the motor region; ``tokens`` needs ``copy``
+        and names one coordinate per motor neuron within the event."""
+        if self.tokens is not None and not self.copy:
+            raise ValueError("tokens declare the copy pathway's identity and need copy above 0")
+        if not self.copy:
+            return
+        motor = self.connectome.populations.get("motor", ())
+        if not len(motor):
+            raise ValueError("a copy pathway needs a population named 'motor'")
+        synapses, _, _ = self.copy_synapses()
+        pre = np.asarray(self.connectome.pre)[synapses]
+        for recall, following in self._heads:
+            for region in (recall, following):
+                if len(region) and not np.isin(region[: self.key_width], pre).any():
+                    raise ValueError(
+                        "copy needs synapses from every read port into the motor region; "
+                        "Brain.compose adds them"
+                    )
+        if self.tokens is not None:
+            if len(self.tokens) != len(motor):
+                raise ValueError(
+                    f"tokens name one observation coordinate per motor neuron ({len(motor)})"
+                )
+
+    @staticmethod
     def null_logit(null: float | None, temperature: float) -> float | None:
         """The null slot's logit ``null / temperature``, or None without a null slot; a pair
         of settings whose logit is not finite is refused."""
@@ -652,15 +777,28 @@ class Recall:
             self.source, "association", self.target, *(("next",) if self.next else ()),
             *(name for port in self.ports(self.heads, self.next)[1:] for name in port),
         )
+        if self.action and self.target != "recall":
+            raise ValueError("a recall memory that keeps the command reads into the recall regions")
+        if self.action:
+            regions = (*regions, *(
+                name for port in self.action_ports(self.heads, self.next) for name in port
+            ))
         for name in regions:
             if name not in populations:
                 raise ValueError(f"a recall memory needs a population named {name!r}")
+        if (
+            isinstance(self.actions, (bool, np.bool_))
+            or not isinstance(self.actions, (int, np.integer))
+            or self.actions < 0
+        ):
+            raise ValueError("actions must be a nonnegative integer: the motor neurons")
+        self.actions = int(self.actions)
+        if self.action and not self.actions:
+            raise ValueError("action needs the motor width a slot's command covers (actions)")
+        # the command coordinates of a slot, of its key and of the maps' inputs
+        self.command_width = self.actions if self.action else 0
         self.observed: np.ndarray = np.asarray(populations[self.source], dtype=np.int64)
         self.association: np.ndarray = np.asarray(populations["association"], dtype=np.int64)
-        self.recall_neurons: np.ndarray = np.asarray(populations[self.target], dtype=np.int64)
-        self.next_neurons: np.ndarray = (
-            np.asarray(populations["next"], dtype=np.int64) if self.next else np.zeros(0, np.int64)
-        )
         if (
             isinstance(self.inputs, (bool, np.bool_))
             or not isinstance(self.inputs, (int, np.integer))
@@ -669,17 +807,17 @@ class Recall:
             raise ValueError("inputs must be a nonnegative integer; 0 reads the source range")
         self.inputs = int(self.inputs)
         self.key_width = self.inputs or len(self.observed)
-        self.value_width = self.key_width  # the values are the events
-        if len(self.recall_neurons) != self.value_width or (
-            self.next and len(self.next_neurons) != self.value_width
-        ):
-            raise ValueError(
-                f"the {self.target} and next regions need one neuron per value coordinate "
-                f"({self.value_width})"
-            )
+        # the values are the events, with ``action`` followed by the command
+        self.value_width = self.key_width + self.command_width
         width = self.key_width
-        self.address_width = self.window * width  # the window's k events
-        self.w_x = np.zeros((width, self.address_width))
+        self.recall_neurons: np.ndarray = self._port_neurons(self.target, width)
+        self.next_neurons: np.ndarray = (
+            self._port_neurons("next", width) if self.next else np.zeros(0, np.int64)
+        )
+        self.address_width = self.window * width + self.command_width  # the window's k events
+        # the maps read the event, and with ``action`` the command of the moment before
+        self.map_width = width + self.command_width
+        self.w_x = np.zeros((self.map_width, self.address_width))
         self.w_c = np.zeros((len(self.association), self.address_width))
         self.b = np.zeros(self.address_width)
         self._recall_columns = columns(self.recall_neurons)
@@ -693,18 +831,8 @@ class Recall:
             (self.recall_neurons, self.next_neurons)
         ]
         for port in self.ports(self.heads, self.next)[1:]:
-            recall = np.asarray(populations[port[0]], dtype=np.int64)
-            following = (
-                np.asarray(populations[port[1]], dtype=np.int64)
-                if self.next else np.zeros(0, np.int64)
-            )
-            if len(recall) != self.value_width or (
-                self.next and len(following) != self.value_width
-            ):
-                raise ValueError(
-                    f"each head's recall and next regions need one neuron per value coordinate "
-                    f"({self.value_width})"
-                )
+            recall = self._port_neurons(port[0], width)
+            following = self._port_neurons(port[1], width) if self.next else np.zeros(0, np.int64)
             self._heads.append((recall, following))
         self._head_columns = [(columns(r), columns(n)) for r, n in self._heads]
         self._head_synapses = [(self._synapses(r), self._synapses(n)) for r, n in self._heads]
@@ -717,9 +845,13 @@ class Recall:
         # every head's position maps ``(P_x, P_c, p)``, head 0's first; none without ``position``
         count = self.position_buckets
         self.position_maps: list[tuple[np.ndarray, np.ndarray, np.ndarray]] = [
-            (np.zeros((width, count)), np.zeros((len(self.association), count)), np.zeros(count))
+            (
+                np.zeros((self.map_width, count)), np.zeros((len(self.association), count)),
+                np.zeros(count),
+            )
             for _ in range(self.heads if count else 0)
         ]
+        self._check_copy()
         self.last: _Moment | None = None
         self._attended: np.ndarray | None = None  # the attention of the latest read
         # every head's address and attention of the latest read (head 0's are ``last.address``
@@ -790,8 +922,9 @@ class Recall:
         self, head: int, event: np.ndarray, cortex: np.ndarray
     ) -> np.ndarray | None:
         """Head ``head``'s position term at every slot for the moments ``event`` (the event
-        heard) and ``cortex`` (the association of the moment before), ``(rows, slots)``; None
-        without a position term or without slots."""
+        heard; with ``action`` the event and the command executed at the moment before, the
+        maps' inputs) and ``cortex`` (the association of the moment before), ``(rows,
+        slots)``; None without a position term or without slots."""
         if not self.position_maps or not self.slots:
             return None
         p_x, p_c, p = self.position_maps[head]
@@ -834,6 +967,8 @@ class Recall:
         self.nexts = np.zeros((batch, slots, self.value_width))
         self.held = np.ones((batch, slots), dtype=bool)
         self.previous = np.zeros((batch, len(self.association)))
+        # per stream with ``action``: the command it executed at the moment before
+        self.acted = np.zeros((batch, self.command_width))
         # per stream: its latest slot closed an episode (``end``) and learns no successor
         self.ended = np.zeros(batch, dtype=bool)
         # the window's previous events per stream, the latest first; none: zeros
@@ -887,9 +1022,11 @@ class Recall:
 
     def _fresh(self, keep: np.ndarray) -> None:
         """The moment before begins afresh for the streams ``keep`` does not mark: the cortex
-        of the moment before and the window's events."""
+        of the moment before, the window's events and the command executed at it."""
         batch = len(keep)
         self.previous = np.where(keep[:, None], self.previous, 0.0)
+        if len(self.acted) == batch:
+            self.acted = np.where(keep[:, None], self.acted, 0.0)
         if len(self.past) == batch:
             self.past = np.where(keep[:, None, None], self.past, 0.0)
 
@@ -952,6 +1089,8 @@ class Recall:
             a[rows] for a in (self.keys, self.values, self.nexts, self.held)
         )
         self.previous = self.previous[rows]
+        if len(self.acted):
+            self.acted = self.acted[rows]
         if len(self.past):
             self.past = self.past[rows]
         self.ended = self.ended[rows]
@@ -964,7 +1103,7 @@ class Recall:
         these arrays rather than changing them."""
         return {
             name: getattr(self, name)
-            for name in ("keys", "values", "nexts", "held", "previous", "ended", "past")
+            for name in ("keys", "values", "nexts", "held", "previous", "ended", "past", "acted")
         }
 
     def restore(self, snapshot: dict[str, Any]) -> None:
@@ -1022,6 +1161,8 @@ class Recall:
             out["ended"] = self.ended
         if self.window > 1:
             out["past"] = self.past
+        if self.action:  # the command each stream executed at the moment before
+            out["acted"] = self.acted
         for h, (w_x, w_c, b) in enumerate(self.head_maps, start=1):
             out.update({f"w_x_{h}": w_x, f"w_c_{h}": w_c, f"b_{h}": b})
         for h, maps in enumerate(self.position_maps):  # saved only with a position term
@@ -1036,10 +1177,11 @@ class Recall:
 
     def imagined(self) -> Recall:
         """A private copy for an imagined branch: it reads the live slots and writes none; the
-        cortex of the moment before and the window's events follow the branch."""
+        cortex of the moment before, the window's events and the command follow the branch."""
         branch = copy(self)
         branch.previous = self.previous.copy()
         branch.past = self.past.copy()
+        branch.acted = self.acted.copy()
         branch.last = None
         branch._attended = None
         branch._head_reads = None
@@ -1076,8 +1218,16 @@ class Recall:
             )
             scale = self.heard * self.window_decay ** np.arange(1, self.window)
             key = np.concatenate([key, (scale[None, :, None] * past).reshape(n, -1)], axis=1)
-        q = key + x @ self.w_x + c @ self.w_c + self.b
-        return _Moment(x, c, q, key)
+        inputs = x
+        if self.action:
+            # the command coordinates of the key are the slot's own command, written after the
+            # settle; before it the address holds zero there, and the maps read the command
+            # the stream executed at the moment before
+            acted = self.acted if len(self.acted) == n else np.zeros((n, self.command_width))
+            key = np.concatenate([key, np.zeros((n, self.command_width))], axis=1)
+            inputs = np.concatenate([x, acted], axis=1)
+        q = key + inputs @ self.w_x + c @ self.w_c + self.b
+        return _Moment(x, c, q, key, inputs)
 
     def _attention(
         self,
@@ -1141,7 +1291,7 @@ class Recall:
         ]
         attended: list[np.ndarray | None] = []
         for h, address in enumerate(addresses):
-            p = self.weights(address, self.position_term(h, moment.event, moment.cortex))
+            p = self.weights(address, self.position_term(h, moment.inputs, moment.cortex))
             if p is not None:
                 p.flags.writeable = False
             attended.append(p)
@@ -1162,7 +1312,7 @@ class Recall:
         if head == 0:
             return moment.address
         w_x, w_c, b = self.head_maps[head - 1]
-        return np.asarray(moment.key + moment.event @ w_x + moment.cortex @ w_c + b)
+        return np.asarray(moment.key + moment.inputs @ w_x + moment.cortex @ w_c + b)
 
     def _head_address(self, moment: _Moment, head: int) -> np.ndarray:
         """Head ``head``'s address of the moment the latest read addressed: the one it read
@@ -1192,12 +1342,17 @@ class Recall:
         settled = np.atleast_2d(np.asarray(state.activation, dtype=float))
         return np.asarray(settled[:, cols], dtype=float).copy()
 
-    def witness(self, observations: np.ndarray, state: BrainState) -> None:
+    def witness(
+        self, observations: np.ndarray, state: BrainState, command: np.ndarray | None = None
+    ) -> None:
         """After the settle: the ``(batch, inputs)`` observations the streams acted on join
         their slots under the moment's key, the slot before learns them as its next, and the
-        settled cortex of ``state`` and the window move on to this moment. Another batch
-        size begins the streams with empty memories first. An imagined branch moves the
-        cortex and the window only."""
+        settled cortex of ``state`` and the window move on to this moment. With ``action``
+        ``command`` is the ``(batch, actions)`` command each stream executed at this moment
+        (None for a moment without one, which carries zeros); it joins the slot's key and
+        value and becomes the command of the moment before. Another batch size begins the
+        streams with empty memories first. An imagined branch moves the cortex, the window
+        and the command only."""
         x = self._port(observations)
         moment = self.last
         if moment is None or moment.event.shape != x.shape or not np.array_equal(moment.event, x):
@@ -1205,9 +1360,22 @@ class Recall:
         cortex = self.activity(state)
         if len(cortex) != len(x):
             raise ValueError("the settled state needs one row per stream")
+        key, value = moment.key, moment.event
+        if self.action:
+            done = np.zeros((len(x), self.command_width))
+            if command is not None:
+                done = np.asarray(command, dtype=float)
+                if done.shape != (len(x), self.command_width) or not np.isfinite(done).all():
+                    raise ValueError(
+                        f"a command is one finite row of {self.command_width} values per stream"
+                    )
+            key = np.concatenate([key[:, : -self.command_width], done], axis=1)
+            value = np.concatenate([value, done], axis=1)
         if not self._private:
-            self._observe(moment.key, moment.event)
+            self._observe(key, value)
             self.writes += len(x)
+        if self.action:  # after the write, which begins streams of another batch afresh
+            self.acted = done.copy()
         self.previous = cortex
         if self.window > 1:  # this moment enters the window, the oldest leaves it
             past = (
@@ -1493,7 +1661,7 @@ class Recall:
         if not moving.any():
             return None
         x, c, q, key = (
-            a[rows][moving] for a in (moment.event, moment.cortex, moment.address, moment.key)
+            a[rows][moving] for a in (moment.inputs, moment.cortex, moment.address, moment.key)
         )
         rate = self.address
         # finite inputs can still overflow the arithmetic below: the check before the step is
@@ -1547,7 +1715,7 @@ class Recall:
         if not self.address_reward:
             return None
         movement = self.activity(plus) - self.activity(minus)
-        batch, width, columns_ = len(movement), self.key_width, self.address_width
+        batch, width, columns_ = len(movement), self.map_width, self.address_width
         out = np.zeros((batch, width + len(self.association) + 1, self.heads * columns_))
         moment = self.last
         if moment is None or not self.slots or self.streams != batch or len(moment.key) != batch:
@@ -1577,7 +1745,7 @@ class Recall:
         if not self.address_reward:
             return None
         step = np.asarray(step, dtype=float)
-        width, columns_ = self.key_width, self.address_width
+        width, columns_ = self.map_width, self.address_width
         shape = (width + len(self.association) + 1, self.heads * columns_)
         if step.shape != shape:
             raise ValueError(f"an address map's step is a {shape} array")
@@ -1625,6 +1793,8 @@ class Recall:
             {name: getattr(self, name) for name in self.OPTIONS
              if getattr(self, name) != founders[name]}
         )
+        if "tokens" in out:  # JSON-safe: a list, as a checkpoint keeps it
+            out["tokens"] = list(out["tokens"])
         return out
 
 
