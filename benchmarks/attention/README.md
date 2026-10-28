@@ -4,19 +4,22 @@
 
 The [look-back benchmark](look_back.py) streams five random symbols, then a cue, `first` or
 `last`, and asks for the symbol at the cued place. The cue matches no stored key and recency
-is off, so only the position term can tell the slots apart. Only the cue moment is taught,
-1200 episodes per founder at `teaching="normalized"`; 160 test episodes follow without
-lessons. Its four-founder [receipt](results/look-back.json):
+is off, so only the position term can tell the slots apart. Both memories hold the episode's
+boundary (`recall_boundary=True`), so the first symbol, like every later one, can be read
+through its own slot or its predecessor's next. Only the cue moment is taught, 1200 episodes
+per founder at `teaching="normalized"`; 160 test episodes follow without lessons. Its
+four-founder [receipt](results/look-back.json):
 
 | Founder | With the term: `first`, `last` | Without it: `first`, `last` | Uniform random |
 | --- | --- | --- | --- |
-| 0 | 1.00, 1.00 | 0.42, 0.63 | 0.25 |
-| 1 | 1.00, 1.00 | 0.51, 0.70 | 0.25 |
-| 2 | 1.00, 1.00 | 0.46, 0.81 | 0.25 |
-| 3 | 0.83, 1.00 | 0.31, 0.73 | 0.25 |
+| 0 | 1.00, 1.00 | 0.38, 0.76 | 0.25 |
+| 1 | 1.00, 1.00 | 0.45, 0.67 | 0.25 |
+| 2 | 1.00, 1.00 | 0.44, 0.80 | 0.25 |
+| 3 | 1.00, 1.00 | 0.29, 0.76 | 0.25 |
 
-Founder 3 misses the declared gate of 0.9 on both cues, so the receipt's decision is not
-passed; every founder's term beats the memory without it by at least 0.29. The result is
+Every founder passes the declared gate of 0.9 on both cues, and every founder's term beats the
+memory without it. Without the boundary, founder 3 answered `first` at 0.83: it had learned to
+answer through the next port, and no slot's next held the first symbol. The result is
 recomputed by `test_look_back.py`.
 
 ```sh

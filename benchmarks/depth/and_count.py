@@ -7,11 +7,12 @@ answer bins a count of such thresholds, so no linear readout of the bits names i
 layer approximates the task and two represent it.
 
 The arms are Cadence brains of one to four processing regions (``modules`` (128,), (128, 64),
-(128, 64, 64) and (128, 64, 64, 64)), composed with the apical compartment, normalized teaching with
-the projection-relative floor and nudged phases of a whole 32 sweeps; tanh networks of one and two hidden layers
-of the same widths trained by backpropagation with Adam; and the uniform-random choice. Every
-lesson teaches 64 rows drawn from the training rows, every row (no surprise rule); every
-``--every`` lessons the 2,000 held-out rows are answered by the brain's own free settle.
+(128, 64, 64) and (128, 64, 64, 64)), composed with the apical compartment, normalized teaching
+with the projection-relative floor and nudged phases of a whole 32 sweeps; tanh networks of one
+and two hidden layers of the same widths trained by backpropagation with Adam; and the
+uniform-random choice. Every lesson teaches 64 rows drawn from the training rows, every row (no
+surprise rule); every ``--every`` lessons the 2,000 held-out rows are answered by the brain's own
+free settle.
 
     python benchmarks/depth/and_count.py --out /tmp/depth --lessons 4000 --seeds 0 1 --jobs 4
     python benchmarks/depth/and_count.py --verify /tmp/depth/summary.json
