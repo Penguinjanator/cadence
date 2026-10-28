@@ -558,9 +558,20 @@ class Learner:
         contrast. ``weight`` scales the pull row by row (an advantage, when the
         target is an action that was taken).
         """
-        cfg = self.config
         # an apical compartment passes the nudge's change at the gain the free phase set
-        held = self.brain.apical_gain(drive, free)
+        return self._nudged(drive, free, target, sign, weight, self.brain.apical_gain(drive, free))
+
+    def _nudged(
+        self,
+        drive: np.ndarray,
+        free: BrainState,
+        target: np.ndarray,
+        sign: float,
+        weight: np.ndarray | None,
+        held: np.ndarray | None,
+    ) -> BrainState:
+        """``nudged`` with the free phase's apical gain already read (one read per lesson)."""
+        cfg = self.config
         if cfg.qualified:
             phase = self._qualified_phase(
                 drive, free, cfg.nudged_steps,
@@ -773,7 +784,7 @@ class Learner:
     def _device_kernel(self, plus: BrainState, minus: BrainState) -> Any:
         """The torch kernel both states rest on, when the update can stay on the device."""
         kernel = self.brain._torch
-        if kernel is None or kernel.layout is None:
+        if kernel is None:
             return None
         for state in (plus, minus):
             if state.device is None or state.device.get("holder") is not kernel:
@@ -1138,9 +1149,9 @@ class Learner:
         if judged is None:
             drive, target, weight = self._lesson(taught, drive, target, weight)
             free = _restrict(free, taught)
-        nudged = self.nudged(drive, free, target, weight=weight)
-        opposite = self.nudged(drive, free, target, sign=-1.0, weight=weight)
         held = self.brain.apical_gain(drive, free)
+        nudged = self._nudged(drive, free, target, 1.0, weight, held)
+        opposite = self._nudged(drive, free, target, -1.0, weight, held)
         phases["nudged"] = Equilibrium(
             nudged, self.brain.residual(drive, nudged,
                 nudge=self.nudge_for(target, cfg.beta, weight, held)),
