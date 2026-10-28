@@ -25,8 +25,10 @@
   phases. Weights, moments and reports are the same bits.
 - Add `benchmarks/settle_threads.py`: seconds per lesson of a deep apical brain and a flat
   founder at several thread counts, checking that every count learns the same weights.
-- The depth receipts (`benchmarks/depth/results`) bind `brain.py` and `learning.py` and are
-  rebuilt on this source.
+- The depth receipts (`benchmarks/depth/results`) bind `brain.py` and `learning.py`, so they
+  need rebuilding on this source, on the platform that produced them: the AND-count gives the
+  same readings as 0.90.0 lesson for lesson on another machine, but that machine's readings
+  differ from the retained ones from the first 500 lessons on.
 
 ## 0.90.0 — 2026-10-28
 
