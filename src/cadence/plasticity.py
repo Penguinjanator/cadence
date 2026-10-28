@@ -419,7 +419,7 @@ class ActorCritic:
             else self.config.eligibility_steps,
             state=free,
             nudge=nudge,
-            tolerance=cfg.tolerance,
+            tolerance=None if cfg.nudged_fixed else cfg.tolerance,
         )
 
     def learn(

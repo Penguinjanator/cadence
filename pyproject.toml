@@ -63,6 +63,7 @@ testpaths = [
     "benchmarks/instruments",
     "benchmarks/learned_code",
     "benchmarks/attention",
+    "benchmarks/depth",
 ]
 
 [tool.ruff]

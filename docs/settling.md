@@ -531,6 +531,7 @@ unless set again or passed as `None`. Select rates on development data and freez
 | `temperature` | `LearnerConfig` | softmax temperature `T` of the cross-entropy nudge; in a composed brain also the sampled policy's base temperature | 0.2 |
 | `momentum` | `LearnerConfig` | in `[0, 1)`: step on a bias-corrected running mean of each contrast | 0.0 |
 | `normalize`, `normalize_floor` | `LearnerConfig` | forgetting factor in `[0, 1)` of a running RMS that divides each step, plus a floor ([below](teach.md#rates-under-normalization)) | 0.0 (off), 1e-3 |
+| `normalize_relative` | `LearnerConfig` | above zero, in place of `normalize_floor`, that share of the RMS of the synapse's projection (a bias: its range) ([rates](teach.md#rates-under-normalization)) | 0.0 (off) |
 | `scale_cap` | `LearnerConfig` | largest plastic efficacy magnitude; smaller keeps readouts out of saturation | 8.0 |
 | `qualified`, `damping` | `LearnerConfig` | require full-equation phases; most `dt` halvings per phase | `False`, 3 |
 | `initial_damping` | `LearnerConfig` | first numerical halving index, in `0..damping`; nonzero requires qualified teaching on CPU float64 | 0 |

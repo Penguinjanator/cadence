@@ -28,7 +28,7 @@ _KINDS = {
     "arousal": ArousalConfig,
 }
 _FIELDS = {prefix: {field.name for field in fields(kind)} for prefix, kind in _KINDS.items()}
-_BOOLEAN = {"qualified", "surprise"}
+_BOOLEAN = {"qualified", "surprise", "nudged_fixed"}
 _INTEGER = {
     "free_steps", "nudged_steps", "damping", "initial_damping", "eligibility_steps", "youth",
     "hindsight",

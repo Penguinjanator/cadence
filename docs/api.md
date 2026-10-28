@@ -84,7 +84,8 @@ Brain(connectome, *, episodic=True, consolidation=0.05, memory_decay=0.9,
       efference_decay=0.2, efference_amplitude=0.0,
       history_decays=(), history_amplitude=3.0, recall=False, learning=None,
       reward=None, slots=1, arousal=None, seed=0,
-      backend="cpu", device=None, inputs=None, code=None, learned_code=None, **genes)
+      backend="cpu", device=None, inputs=None, code=None, learned_code=None, apical=0.0,
+      **genes)
 ```
 
 Wraps any connectome with populations `association`, `motor` and `sensory` (or
@@ -397,7 +398,7 @@ settings the readings retired with what the region does instead. Guide:
 LearnerConfig(beta=0.1, eta=0.2, eta_bias=None, free_steps=100, nudged_steps=50,
               tolerance=1e-4, nudge="cross_entropy", temperature=0.2, normalize=0.0,
               normalize_floor=1e-3, momentum=0.0, scale_cap=8.0, qualified=False,
-              damping=3, surprise=False, initial_damping=0)
+              damping=3, surprise=False, initial_damping=0, normalize_relative=0.0)
 Learner(brain, outputs, config=LearnerConfig(), plastic_synapses=None,
         plastic_neurons=None, reciprocal=True, tie_groups=None,
         synapse_rate=None, slots=1, updates=0, contrast_updates=0)
@@ -457,7 +458,10 @@ configuration; `backend`, `device` and `precision` may differ from the saved one
 composed brain. The ordinary format is `cadence-checkpoint/2`; `/1` loads, and a `cadence-checkpoint/3`
 file is refused with a message naming the release that reads it.
 Nonzero `initial_damping` writes `cadence-checkpoint/4` with a checked numerical-policy
-identity, including inside `Brain.save`. Older loaders refuse this format. A saved
+identity, including inside `Brain.save`. Older loaders refuse this format. A graph with an
+apical compartment writes `cadence-checkpoint/5` with the compartment's synapses, pools,
+fraction and floor (and the numerical policy when there is one), which older loaders refuse
+rather than settle the brain without it. A saved
 non-default policy is validated before any explicit config override; an effective
 non-default policy refuses a non-CPU or non-float64 destination before backend creation.
 
@@ -489,14 +493,16 @@ Construction warns when `eta_bias` exceeds a positive `eta`.
 ```text
 NeuralGraph(connectome, neuron_model, *, backend="cpu", efficacy=None,
             log_gain=None, bias=None, device=None, dense_limit=2048,
-            layout=None, precision=None)
+            layout=None, precision=None, apical=None)
 ```
 
 The runnable graph of graded neurons ([how the graph settles](settling.md)). `efficacy`
 defaults to the connectome's signs, `log_gain` and `bias` to zero. Graphs whose dense blocks
 fit in `dense_limit` squared entries use the [block transport](#blocks-cadenceblocks);
 `layout` passes a precomputed cut. `precision` (torch only) is `"float32"` or `"float64"`
-([backends](backends.md)). Parameter arrays are read-only; assign whole validated arrays to
+([backends](backends.md)). `apical` (an `Apical`) lands some synapses on an apical
+compartment ([the apical compartment](anatomy.md#the-apical-compartment)); the mlx backend
+refuses it. Parameter arrays are read-only; assign whole validated arrays to
 `efficacy`, `bias` or `log_gain`, or use `with_parameters`. Nonfinite values are refused
 before any change.
 
@@ -518,6 +524,7 @@ stability, uniqueness or task quality ([the certificate](settling.md#the-settlin
 | --- | --- |
 | `BrainState(v, activation, adaptation, steps, trajectory=None, activity_change=None, device=None)` | `(n,)` or `(batch, n)` arrays; `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`. |
 | `Equilibrium(state, residual, steps, tolerance, residual_checks=0, damping_halvings=0, stagnation_checks=0, initial_damping=0)` | Per-row `converged` and `qualified` (the residual within `tolerance`); `steps` counts local sweeps. `damping_halvings` is the absolute final index, and `relative_damping_halvings` counts further halvings after `initial_damping`. |
+| `Apical(synapses, groups, fraction, floor=1.0)` | `synapses` a bool per synapse, `groups` a pool per neuron (`-1` none); `drive(basal, raw)` the normalized apical drive, `members`, `check(synapses, neurons, post)`, `to_dict()`. |
 | `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None, anchor=None, anchor_gain=None)` | Extra drive `beta * mask * (target - s)`, or against `softmax(s / T)` per group; `weight` scales rows. `anchor` and `anchor_gain` (supplied together, finite, gain nonnegative per neuron) add `anchor_gain * (anchor - s)`, unscaled by `beta`, mask or weight. `drive(s)`. |
 
 `available_backends() -> dict` names what is installed, such as
@@ -554,7 +561,7 @@ rest, `slope_at(v)` its derivative, `rest_emission` the raw value subtracted at 
 
 ```text
 layout(connectome, *, max_pairs=256) -> Layout
-BlockTransport(layout, flat)
+BlockTransport(layout, flat, pairs=None)
 block_contrast(layout, s_plus, s_minus) -> ndarray
 ```
 
@@ -563,8 +570,9 @@ that carry synapses; with no contiguous populations or more than `max_pairs` blo
 full block. `Layout` has `starts`, `pair_pre`, `pair_post`, `offset`, `edge_index`, `ranges`,
 `pairs`, `size`, `bounds(k)`, `sources()` (ranges receiving no synapses),
 `parallel_synapses` (distinct synapses sharing a matrix entry), `flat(weights)`,
-`blocks(flat)` and `to_dict()`. `BlockTransport.synaptic_input(s)` reuses the product of
-every source range that did not move since the previous call. `block_contrast` is the
+`blocks(flat)`, `block_of_edge` (the block of each synapse) and `to_dict()`.
+`BlockTransport.synaptic_input(s)` sums the blocks `pairs` names (every block by default) and
+reuses the product of every source range that did not move since the previous call. `block_contrast` is the
 learning contrast as one Gram product per block.
 
 ## Certificate (`cadence.certificate`)

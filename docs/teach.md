@@ -132,6 +132,15 @@ first update is `rate * g / (abs(g) + floor)`, so a consistent signal well above
 by about the rate whatever its size; changing signals can step above it. Momentum with RMS is an
 Adam-style update.
 
+A constant floor is no reference for every synapse at once. Credit that reaches a region several
+synapses from the output is orders of magnitude fainter than the readout's, so the floor that keeps
+the readout's quiet synapses still swallows the deep region's whole signal. `normalize_relative`
+above zero replaces it by a floor of that share of each synapse's projection (the block of synapses
+between its two neuron ranges; a bias reads its range): every projection steps at about the rate on
+its own scale, the faint one as the strong one, and a synapse quieter than its projection still
+steps less. It needs `normalize` above zero; 0.1 is the founder of brains with the
+[apical compartment](anatomy.md#the-apical-compartment), and 0 keeps `normalize_floor`.
+
 The composed rates (`eta=0.5` teaching, 1.0 actor) are unnormalized; normalized at those rates,
 steps can dwarf the raw signals and saturate the outputs. Retune `eta` and `eta_bias` together;
 a development sweep might start at `eta` 0.001 to 0.003, checked against acquisition, retention

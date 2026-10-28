@@ -105,6 +105,11 @@ class LearnerConfig:
     # this share of its range's; a constant floor binds where credit is faint (a deep module)
     # and is too small where it is strong, so the projection's own scale is the reference
     normalize_relative: float = 0.0
+    # finite teaching only: the nudged phases run their whole ``nudged_steps`` instead of
+    # stopping at ``tolerance``; a nudge's effect on a region several synapses from the output
+    # moves less than a coarse tolerance in a sweep, and the opposite phases' common drift
+    # cancels in the contrast, so the free phase may stay coarse
+    nudged_fixed: bool = False
 
     def __post_init__(self) -> None:
         # Config fields have host scalar semantics, including before a save/load.
@@ -149,6 +154,8 @@ class LearnerConfig:
             raise ValueError("normalize_relative must be finite and nonnegative")
         if self.normalize_relative and not self.normalize:
             raise ValueError("normalize_relative needs normalize above zero")
+        if not isinstance(self.nudged_fixed, bool):
+            raise ValueError("nudged_fixed must be boolean")
         if self.tolerance is not None and (not np.isfinite(self.tolerance) or self.tolerance < 0):
             raise ValueError("tolerance must be finite and nonnegative, or None")
         if not isinstance(self.qualified, bool):
@@ -211,7 +218,7 @@ class LearnerConfig:
         }
 
 
-_NEUTRAL = {"normalize_relative": 0.0}
+_NEUTRAL: dict[str, Any] = {"normalize_relative": 0.0, "nudged_fixed": False}
 
 
 @dataclass(frozen=True)
@@ -559,7 +566,7 @@ class Learner:
             steps=cfg.nudged_steps,
             state=free,
             nudge=self.nudge_for(target, sign * cfg.beta, weight),
-            tolerance=cfg.tolerance,
+            tolerance=None if cfg.nudged_fixed else cfg.tolerance,
         )
 
     def _nudged_budget_hint(self) -> str | None:

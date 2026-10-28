@@ -257,3 +257,19 @@ def test_each_step_is_divided_by_its_projection_scale():
         members = slice(starts[r], starts[r + 1])
         expected = rms_bias[members] + 0.1 * np.sqrt(np.mean(rms_bias[members] ** 2)) + 1e-12
         np.testing.assert_allclose(divisor_bias[members], expected, rtol=1e-12)
+
+
+def test_fixed_nudged_phases_run_their_whole_budget():
+    rng = np.random.default_rng(10)
+    x, labels = rng.normal(size=(4, 4)), np.array([0, 1, 2, 0])
+    stopping = apical_brain(teaching="normalized", learning_nudged_steps=40)
+    fixed = apical_brain(teaching="normalized", learning_nudged_steps=40,
+                         learning_nudged_fixed=True)
+    early = stopping.lesson(x, labels)
+    whole = fixed.lesson(x, labels)
+    assert early["nudged_steps"] < 40 and whole["nudged_steps"] == 40
+    assert whole["free_steps"] == early["free_steps"]  # the free phase keeps its tolerance
+    assert "nudged_fixed" not in LearnerConfig().to_dict()
+    assert fixed.describe()["genes"]["learning_nudged_fixed"] is True
+    with pytest.raises(ValueError, match="nudged_fixed"):
+        LearnerConfig(nudged_fixed=1)
