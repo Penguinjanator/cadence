@@ -24,6 +24,14 @@
 - Add `LearnerConfig.nudged_fixed` (founder `False`): finite nudged phases, and the actor's
   eligibility settle, run their whole `nudged_steps` instead of stopping at the tolerance.
 - Add the depth benchmark (`benchmarks/depth/and_count.py`, `cadence-depth-and-count/1`).
+- Add the recall memory's boundary (opt-in, `recall_boundary=True`, founder off). A slot's next
+  is taught by the moment that follows it, so the first event of an episode was the one event no
+  slot's next held, and a brain that answered a cue through the next port could not reach the
+  start of an episode: founder 3 of the look-back benchmark answered `first` at 0.83, and brains
+  of two and three modules at 0.38 to 0.44. With the option every stream that begins holds a
+  silent boundary slot (zero key, zero value) whose next the first event teaches. Every founder
+  of one, two and three modules answers both look-back cues at 1.00. The look-back benchmark
+  composes its memory with the boundary (`cadence-look-back/2`).
 - Checkpoints: a learner whose graph has the compartment saves it (`apical_synapses`,
   `apical_groups`, fraction and floor) in the new format `cadence-checkpoint/5`, which 0.89.0 and
   earlier refuse. Without the compartment every checkpoint is written as before; the two new

@@ -2366,6 +2366,9 @@ class Brain:
         start at zero and lessons teach them at ``recall_position_rate`` (runtime, founder
         0.1), whatever ``recall_address`` is; ``recall_position=0`` builds none. A brain
         saved without a position term loads without one.
+        ``recall_boundary=True`` (runtime, founder off) gives each stream that begins a
+        boundary slot first, a silent moment whose next the stream's first event teaches, so
+        the start of an episode has a predecessor as every later event has.
         ``recall_capacity``, ``recall_next``, ``recall_window``,
         ``recall_window_decay``, ``recall_heads`` (several held heads over the one bank,
         each with its own port and address map) and ``recall_position`` are construction

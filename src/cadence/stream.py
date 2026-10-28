@@ -396,6 +396,20 @@ class Recall:
     and the moment before begins afresh; the brain ends an episode so under
     ``Brain.reset(keep=("slots",))`` and empties the stream when an episode ends in a life.
 
+    With ``boundary`` (an option, founder off) a stream that begins holds a boundary slot
+    first: a silent moment, zero key and zero value, whose next the stream's first event
+    teaches as every written moment's next is taught. The first event then has a predecessor
+    as every later event has, so the start of an episode can be read through either port:
+    the first slot's value or the boundary's next. A stream begins when the memory empties
+    its streams, when ``reset`` empties some of them (their boundary takes the latest slot,
+    the moment the other streams wrote last) and when ``end`` ends the episodes of every
+    stream (one new slot for all of them; a stream whose latest slot is silent and has no
+    successor yet keeps it as its boundary). A stream that ends its episode alone (``end``
+    of some rows) begins the next one without a boundary, as the founder memory does. The
+    boundary is no written moment (``writes`` leaves it out), and its key is zero: its logit
+    is its age's alone, so a cue finds it by age through the position term, or by an
+    address that points away from every stored key.
+
     With ``window`` k above 1 (a construction setting, with ``window_decay`` d) the key's
     fixed part is an ordered window of the stream's last k events, ``[heard * x_t, d * heard
     * x_{t-1}, ..., d^(k-1) * heard * x_{t-k+1}]``, each position on coordinates of its own:
@@ -470,6 +484,7 @@ class Recall:
     writes: int = 0  # slots written over the memory's life, one per stream and moment
     position: int = 32
     position_rate: float = 0.1
+    boundary: bool = False
     keys: np.ndarray = field(init=False, repr=False)
     values: np.ndarray = field(init=False, repr=False)
     nexts: np.ndarray = field(init=False, repr=False)
@@ -488,7 +503,7 @@ class Recall:
     # runtime except the window, the heads and the position term, which shape the memory
     OPTIONS = (
         "address_step", "null", "address_reward", "window", "window_decay", "heads", "position",
-        "position_rate",
+        "position_rate", "boundary",
     )
     CONSTRUCTION_OPTIONS = ("window", "window_decay", "heads", "position")
     # the settings of 0.84.3 this version removed, refused by name with a message naming it
@@ -546,9 +561,9 @@ class Recall:
             ):
                 raise ValueError("capacity must be an integer of at least 1")
             return int(value)
-        if name == "next":
+        if name in ("next", "boundary"):
             if not isinstance(value, bool):
-                raise ValueError("next must be boolean")
+                raise ValueError(f"{name} must be boolean")
             return value
         if name == "address_step":
             if not isinstance(value, str) or value not in Recall.STEPS:
@@ -810,10 +825,12 @@ class Recall:
             ]
 
     def _empty(self, batch: int) -> None:
-        self.keys = np.zeros((batch, 0, self.address_width))
-        self.values = np.zeros((batch, 0, self.value_width))
-        self.nexts = np.zeros((batch, 0, self.value_width))
-        self.held = np.zeros((batch, 0), dtype=bool)
+        # with ``boundary`` every stream begins at its boundary slot, a silent moment
+        slots = 1 if self.boundary and batch else 0
+        self.keys = np.zeros((batch, slots, self.address_width))
+        self.values = np.zeros((batch, slots, self.value_width))
+        self.nexts = np.zeros((batch, slots, self.value_width))
+        self.held = np.ones((batch, slots), dtype=bool)
         self.previous = np.zeros((batch, len(self.association)))
         # per stream: its latest slot closed an episode (``end``) and learns no successor
         self.ended = np.zeros(batch, dtype=bool)
@@ -845,6 +862,15 @@ class Recall:
         keys = np.where(keep[:, None, None], self.keys, 0.0)
         values = np.where(keep[:, None, None], self.values, 0.0)
         nexts = np.where(keep[:, None, None], self.nexts, 0.0)
+        if self.boundary:
+            # the streams that begin again hold their boundary in the latest slot, the moment
+            # the other streams wrote last
+            if not held.shape[1]:
+                keys, values, nexts = (
+                    np.zeros((batch, 1, a.shape[2])) for a in (keys, values, nexts)
+                )
+                held = np.zeros((batch, 1), dtype=bool)
+            held[chosen, -1] = True
         # slots no stream holds any more are dropped from the oldest end
         lead = held.any(axis=0)
         first = int(np.argmax(lead)) if lead.any() else held.shape[1]
@@ -882,11 +908,29 @@ class Recall:
         if not chosen.any():
             return
         # new arrays, never writes into the old ones: a caller may hold them to restore
-        self.ended = self.ended | chosen
+        if self.boundary and chosen.all():
+            # every stream begins its next episode at a boundary slot, which learns the first
+            # event; the closed episode's latest slot learns no successor
+            if not self._silent():
+                self._append(np.zeros((batch, self.address_width)), np.ones(batch, dtype=bool))
+            self.ended = np.zeros(batch, dtype=bool)
+        else:
+            self.ended = self.ended | chosen
         self._fresh(~chosen)
         self.last = None
         self._attended = None
         self._head_reads = None
+
+    def _silent(self) -> bool:
+        """Whether every stream's latest slot is silent and has no successor yet: a boundary,
+        or a silent moment, which serves as one."""
+        return bool(
+            self.slots
+            and self.held[:, -1].all()
+            and not np.any(self.keys[:, -1])
+            and not np.any(self.values[:, -1])
+            and not np.any(self.nexts[:, -1])
+        )
 
     def keep(self, rows: np.ndarray) -> None:
         """Keep the memories of ``rows`` only (streams that ended are dropped)."""
@@ -1182,13 +1226,23 @@ class Recall:
                 latest = held.shape[1] - 1 - np.argmax(held[:, ::-1], axis=1)
                 index = np.flatnonzero(rows)
                 nexts[index, latest[index]] = value[index]
-        fresh = np.ones((len(key), 1), dtype=bool)
         if self.ended.any():  # every stream's new slot is open to its successor
             self.ended = np.zeros(len(key), dtype=bool)
+        self.nexts = nexts
+        self._append(key, np.ones(len(key), dtype=bool), value)
+
+    def _append(
+        self, key: np.ndarray, held: np.ndarray, value: np.ndarray | None = None
+    ) -> None:
+        """A new latest slot for every stream, of ``key`` and ``value`` (zero without one) and
+        no successor yet, held by the streams ``held`` marks; beyond ``capacity`` the oldest
+        slot is dropped."""
+        if value is None:
+            value = np.zeros((len(key), self.value_width))
         keys = np.concatenate([self.keys, key[:, None, :]], axis=1)
         values = np.concatenate([self.values, value[:, None, :]], axis=1)
-        nexts = np.concatenate([nexts, np.zeros_like(value)[:, None, :]], axis=1)
-        held = np.concatenate([self.held, fresh], axis=1)
+        nexts = np.concatenate([self.nexts, np.zeros_like(value)[:, None, :]], axis=1)
+        held = np.concatenate([self.held, held[:, None]], axis=1)
         if keys.shape[1] > self.capacity:
             drop = keys.shape[1] - self.capacity
             keys, values, nexts, held = (a[:, drop:].copy() for a in (keys, values, nexts, held))
