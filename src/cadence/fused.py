@@ -110,20 +110,31 @@ if njit is not None and hasattr(os, "register_at_fork"):
     os.register_at_fork(after_in_child=_after_fork)
 
 
-def _in_parallel(batch: int) -> bool:
-    """Whether ``batch`` rows run on the parallel build: more than one row, and Numba runs more
-    than one thread. Both builds give the same bits; a single row, or ``NUMBA_NUM_THREADS=1``,
-    never starts Numba's threads."""
-    if batch < 2 or _FORKED_FROM_OPENMP or int(_numba.config.NUMBA_NUM_THREADS) < 2:
+# A sweep of at least this many neurons over all rows runs its rows on Numba's threads; a
+# smaller one runs serially, since handing a sweep to the threads costs tens of microseconds.
+_PARALLEL_WORK = 1 << 16
+
+
+def _threads() -> bool:
+    """Whether Numba runs more than one thread here. ``NUMBA_NUM_THREADS=1`` never starts them."""
+    if _FORKED_FROM_OPENMP or int(_numba.config.NUMBA_NUM_THREADS) < 2:
         return False
     return bool(_numba.get_num_threads() > 1)
 
 
+def _in_parallel(batch: int, neurons: int) -> bool:
+    """Whether ``batch`` rows of ``neurons`` settle on the parallel build: more than one row, a
+    sweep of at least ``_PARALLEL_WORK`` neurons, more than one thread. Both builds give the
+    same bits."""
+    return batch >= 2 and batch * neurons >= _PARALLEL_WORK and _threads()
+
+
 def _launch(
-    serial: Callable[..., Any], parallel: Callable[..., Any], batch: int, *args: Any
+    serial: Callable[..., Any], parallel: Callable[..., Any], batch: int, neurons: int,
+    *args: Any,
 ) -> Any:
-    """Run a kernel's serial or parallel build on ``batch`` rows."""
-    return (parallel if _in_parallel(batch) else serial)(*args)
+    """Run a kernel's serial or parallel build on ``batch`` rows of ``neurons``."""
+    return (parallel if _in_parallel(batch, neurons) else serial)(*args)
 
 
 if njit is not None:
@@ -1246,6 +1257,7 @@ def fused_settle(
         _kernel,
         _kernel_parallel,
         batch,
+        n,
         v,
         a,
         s,
@@ -1324,6 +1336,7 @@ def fused_residual(
         _residual_kernel,
         _residual_kernel_parallel,
         batch,
+        n,
         np.ascontiguousarray(v, dtype=float),
         np.ascontiguousarray(a, dtype=float),
         np.ascontiguousarray(drive + bias),
@@ -1487,11 +1500,11 @@ def contrast_mean(
 # -- per-synapse passes of a lesson: the same element arithmetic as NumPy, one compiled pass
 
 # A pass this long runs on Numba's threads (when it runs more than one); a shorter one serially.
-_PARALLEL_ELEMENTS = 1 << 17
+_PARALLEL_ELEMENTS = 1 << 19
 
 
 def _elements_in_parallel(count: int) -> bool:
-    return count >= _PARALLEL_ELEMENTS and _in_parallel(2)
+    return count >= _PARALLEL_ELEMENTS and _threads()
 
 
 if njit is not None:

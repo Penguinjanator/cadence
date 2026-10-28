@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+- The fused CPU settle runs the rows of a batch on Numba's threads. Each sweep computes the
+  block products of the whole batch (distinct blocks on distinct threads, one BLAS call per
+  block, as before), then every row's step; a row reads only itself, so the rows run in
+  parallel with exactly the serial arithmetic, and the batch-wide stopping rule is read after
+  the sweep. Settles, residuals and whole lessons are bit-identical to 0.90.0 at every thread
+  count. The thread count is Numba's (`NUMBA_NUM_THREADS`, `numba.set_num_threads`); a sweep
+  of fewer than 65,536 neurons over its rows, a single row or `NUMBA_NUM_THREADS=1` never
+  starts the threads (handing a sweep to them costs tens of microseconds), and a process forked
+  from one whose GNU OpenMP threads ran settles serially. Workers of a process pool should set
+  `NUMBA_NUM_THREADS=1`. See [backends](docs/backends.md).
+- A graph with an apical compartment settles and checks its residual in the fused kernel
+  (0.90.0 took the NumPy loop): the basal input summed in the NumPy loop's order, each pool's
+  RMS in NumPy's pairwise order, the held gain of a nudged settle. On the machines tested it
+  gives the NumPy loop's bits (potentials, activations, adaptation, residuals, sweep counts);
+  `activity_change` differs at rounding, as on the plain fused path.
+- The per-synapse passes of a lesson run as compiled loops with NumPy's element arithmetic,
+  on Numba's threads when long: the flat block scatter, the contrast's gather, the
+  projection-relative floor, and the optimizer step (momentum, second moment, floor, rate, pair
+  tying and bound) of a host learner whose synapses are all plastic. A lesson finds its apical
+  blocks once per compartment and reads the free phase's apical gain once for both nudged
+  phases. Weights, moments and reports are the same bits.
+- Add `benchmarks/settle_threads.py`: seconds per lesson of a deep apical brain and a flat
+  founder at several thread counts, checking that every count learns the same weights.
+- The depth receipts (`benchmarks/depth/results`) bind `brain.py` and `learning.py` and are
+  rebuilt on this source.
+
 ## 0.90.0 — 2026-10-28
 
 - Add the apical compartment (opt-in, `Brain.compose(apical=fraction)`, founder 0: off). In a

@@ -25,13 +25,15 @@ THREADS = sorted({1, 2, 4, min(8, int(numba.config.NUMBA_NUM_THREADS))} & set(
 @contextmanager
 def build(parallel: bool, threads: int = 1) -> Iterator[None]:
     """Run the fused kernels on one build at ``threads`` Numba threads."""
-    chosen, previous = fused._in_parallel, numba.get_num_threads()
-    fused._in_parallel = lambda batch: parallel  # type: ignore[assignment]
+    chosen, threads_on, previous = fused._in_parallel, fused._threads, numba.get_num_threads()
+    fused._in_parallel = lambda batch, neurons: parallel  # type: ignore[assignment]
+    fused._threads = lambda: parallel  # type: ignore[assignment]
     numba.set_num_threads(threads)
     try:
         yield
     finally:
         fused._in_parallel = chosen  # type: ignore[assignment]
+        fused._threads = threads_on  # type: ignore[assignment]
         numba.set_num_threads(previous)
 
 
@@ -128,15 +130,20 @@ def test_the_parallel_build_settles_and_checks_to_the_serial_bits(batch: int) ->
                 np.testing.assert_array_equal(again, check)
 
 
-def test_the_kernel_picks_the_serial_build_for_one_row_or_one_thread() -> None:
+def test_the_kernel_picks_the_serial_build_for_one_row_a_small_sweep_or_one_thread() -> None:
     previous = numba.get_num_threads()
+    work = fused._PARALLEL_WORK
     try:
-        assert not fused._in_parallel(1)
+        assert not fused._in_parallel(1, 10 * work)
+        assert not fused._in_parallel(2, work // 2 - 1)
         numba.set_num_threads(1)
-        assert not fused._in_parallel(64)
+        assert not fused._in_parallel(64, work)
+        assert not fused._elements_in_parallel(10 * fused._PARALLEL_ELEMENTS)
         if numba.config.NUMBA_NUM_THREADS > 1:
             numba.set_num_threads(2)
-            assert fused._in_parallel(64)
+            assert fused._in_parallel(2, work // 2) and fused._in_parallel(64, work)
+            assert fused._elements_in_parallel(fused._PARALLEL_ELEMENTS)
+            assert not fused._elements_in_parallel(fused._PARALLEL_ELEMENTS - 1)
     finally:
         numba.set_num_threads(previous)
 
@@ -209,7 +216,7 @@ def test_the_compiled_lesson_passes_are_numpys_to_the_bit() -> None:
         values + 0.1 * np.sqrt(power / count)[group] + 1e-12,
     )
     # and on Numba's threads, over a pass long enough to take them
-    big = 1 << 18
+    big = fused._PARALLEL_ELEMENTS
     index = rng.permutation(big).astype(np.int64)
     values = rng.normal(size=big)
     group = rng.integers(0, 40, big)

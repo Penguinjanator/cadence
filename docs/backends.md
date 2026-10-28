@@ -80,7 +80,7 @@ changing-input workload before switching: small brains spend more time launching
 operations than doing arithmetic, while large batches and dense blocks gain from accelerator
 matrix products. The [System 1 CUDA qualification](../benchmarks/system1_cuda/RESULTS.md)
 compares CPU, CUDA float64 and CUDA float32 on complete decisions; on its small continuing
-nursery CPU with Numba is faster. Cap BLAS threads for parallel workers. To compare two
+nursery CPU with Numba is faster. Cap BLAS and Numba threads for parallel workers. To compare two
 implementations, use identical dtype, steps and tolerances over several seeds, warm up,
 alternate the order, synchronize around each timed call, and compare residuals and states too.
 
@@ -135,8 +135,14 @@ is `None` until a sparse CPU multiply runs, then `"scipy_csr"` or `"numpy_segmen
 With Numba installed, the CPU backend settles blocked connectomes in one compiled loop (block
 transport, then each neuron's update, activation, adaptation and nudge in place) with the
 NumPy loop's float64 arithmetic whenever no trajectory or recording is requested, and computes
-`residual` the same way. `CADENCE_FUSED=0` in the environment before `cadence` is imported
-forces the NumPy loop.
+`residual` the same way; a graph with an apical compartment is settled there too, its pool RMS
+summed in NumPy's order. The rows of a batch settle on Numba's threads, as many as
+`NUMBA_NUM_THREADS` or `numba.set_num_threads` allow, to the same bits at any count, once a
+sweep covers at least 65,536 neurons over its rows (an 8,000-neuron brain from a batch of 8);
+a smaller sweep, a single row, or `NUMBA_NUM_THREADS=1` never starts them. Each worker of a
+process pool should set `NUMBA_NUM_THREADS=1` (or its share of the cores), since every process
+otherwise starts one thread per core. `CADENCE_FUSED=0` in the environment before `cadence` is imported forces the
+NumPy loop.
 
 A device kernel implements five operations: block products between neuron ranges, the
 elementwise neuron update, the softmax over the nudged group, an equality check on still
