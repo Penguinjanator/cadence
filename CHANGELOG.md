@@ -14,9 +14,15 @@
   `NUMBA_NUM_THREADS=1`. See [backends](docs/backends.md).
 - A graph with an apical compartment settles and checks its residual in the fused kernel
   (0.90.0 took the NumPy loop): the basal input summed in the NumPy loop's order, each pool's
-  RMS in NumPy's pairwise order, the held gain of a nudged settle. On the machines tested it
-  gives the NumPy loop's bits (potentials, activations, adaptation, residuals, sweep counts);
-  `activity_change` differs at rounding, as on the plain fused path.
+  RMS in NumPy's pairwise order, the held gain of a nudged settle. On a Mac and on one Linux
+  machine it gives the NumPy loop's bits (potentials, activations, adaptation, residuals, sweep
+  counts). On the Linux machine that recorded the depth receipts it differs at rounding: one unit
+  in the last place of a settle's activations, 4e-14 in the weights of the AND-count's
+  two-module brain after one lesson and 7e-12 after 20, with equal sweep counts. Over thousands
+  of lessons the difference moves readings: after 4,000 lessons the AND-count reads one 0.579,
+  two 0.642, three 0.804 and four 0.853 there, against the NumPy loop's 0.584, 0.662, 0.809 and
+  0.864. `CADENCE_FUSED=0` selects the NumPy loop. `activity_change` differs at rounding, as on
+  the plain fused path.
 - The per-synapse passes of a lesson run as compiled loops with NumPy's element arithmetic,
   on Numba's threads when long: the flat block scatter, the contrast's gather, the
   projection-relative floor, and the optimizer step (momentum, second moment, floor, rate, pair
@@ -51,10 +57,6 @@
   lessons of the deep brain run two to three times faster than float64 on the A10G.
 - A brain rebuilt on new parameters (`with_parameters`, a damped copy, a calibration candidate)
   reuses its connectome's torch transport plan instead of analysing the graph again.
-- The depth receipts (`benchmarks/depth/results`) bind `brain.py` and `learning.py`, so they
-  need rebuilding on this source, on the platform that produced them: the AND-count gives the
-  same readings as 0.90.0 lesson for lesson on another machine, but that machine's readings
-  differ from the retained ones from the first 500 lessons on.
 - Add the copy pathway (opt-in, `recall_copy=magnitude`, founder 0.0: none;
   [#233](https://github.com/muellerberndt/cadence/issues/233)). What the recall read retrieved
   reached the answer only through the association region, so a token never taught as an answer
@@ -91,8 +93,8 @@
   and saved only where they differ from their founders. Founder brains are byte-identical to
   0.90.0 (checkpoint arrays, acts and descriptions of eight compositions).
 - The look-back, contextual-choice and held-heads receipts are rebuilt on this source with
-  identical bodies. The depth AND-count and deep-memory receipts bind `generic.py` and wait for
-  a rebuild on the machine that recorded them.
+  identical bodies, and the depth AND-count and deep-memory receipts on the NumPy loop
+  (`CADENCE_FUSED=0`) on the machine that recorded them, with the same readings.
 
 ## 0.90.0 — 2026-10-28
 

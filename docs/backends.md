@@ -168,8 +168,12 @@ sweep covers at least 65,536 neurons over its rows (an 8,000-neuron brain from a
 a smaller sweep, a single row, or `NUMBA_NUM_THREADS=1` never starts them. A sweep waits for
 its slowest row, so on a machine busy with other work the threads can be slower than one: each
 worker of a process pool should set `NUMBA_NUM_THREADS=1` (or its share of the cores), since
-every process otherwise starts one thread per core. `CADENCE_FUSED=0` in the environment before `cadence` is imported forces the
-NumPy loop.
+every process otherwise starts one thread per core. On some machines the compiled loop's last
+bits differ from the NumPy loop's, and thousands of lessons can grow that into different
+readings (see [the depth benchmark](../benchmarks/depth/README.md)). `CADENCE_FUSED=0` in the
+environment before `cadence` is imported forces the NumPy loop, on which the depth receipts
+and the look-back, contextual-choice, held-heads, copy-tokens and own-action receipts were
+recorded.
 
 A device kernel implements five operations: the synaptic transport, the elementwise neuron
 update, the softmax over the nudged group, the apical normalization and the largest movement
