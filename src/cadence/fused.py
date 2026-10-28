@@ -83,6 +83,14 @@ def available() -> bool:
     return njit is not None
 
 
+def compiled() -> bool:
+    """Whether the compiled passes are in use: Numba is installed and ``CADENCE_FUSED`` is not
+    ``0`` (``Brain``'s switch for the fused kernels, read at call time)."""
+    from . import brain
+
+    return njit is not None and bool(brain._FUSED)
+
+
 # A process forked from one whose GNU OpenMP threads had started cannot start them again
 # (the runtime terminates the child); such a child settles its rows on the serial build.
 _FORKED_FROM_OPENMP = False
@@ -1474,3 +1482,91 @@ def contrast_mean(
         out_neurons,
     )
     return out_edges, out_neurons
+
+
+# -- per-synapse passes of a lesson: the same element arithmetic as NumPy, one compiled pass
+
+# A pass this long runs on Numba's threads (when it runs more than one); a shorter one serially.
+_PARALLEL_ELEMENTS = 1 << 17
+
+
+def _elements_in_parallel(count: int) -> bool:
+    return count >= _PARALLEL_ELEMENTS and _in_parallel(2)
+
+
+if njit is not None:
+
+    def _scatter_entries(index: np.ndarray, values: np.ndarray, out: np.ndarray) -> None:
+        for e in prange(index.shape[0]):
+            out[index[e]] = values[e]
+
+    _place, _place_parallel = _rows_builds(_scatter_entries)
+
+    def _gather_entries(
+        values: np.ndarray, index: np.ndarray, divisor: float, out: np.ndarray
+    ) -> None:
+        for e in prange(index.shape[0]):
+            out[e] = values[index[e]] / divisor
+
+    _pick, _pick_parallel = _rows_builds(_gather_entries)
+
+    @_compiled
+    def _group_power(
+        values: np.ndarray, group: np.ndarray, size: int
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """Each group's sum of squares, added in index order as ``np.bincount`` adds, and its
+        member count (at least one)."""
+        power = np.zeros(size)
+        count = np.zeros(size)
+        for e in range(values.shape[0]):
+            g = group[e]
+            power[g] += values[e] * values[e]
+            count[g] += 1.0
+        for g in range(size):
+            if count[g] < 1.0:
+                count[g] = 1.0
+        return power, count
+
+    def _floor_entries(
+        values: np.ndarray, group: np.ndarray, root: np.ndarray, share: float, tiny: float,
+        out: np.ndarray,
+    ) -> None:
+        for e in prange(values.shape[0]):
+            out[e] = values[e] + share * root[group[e]] + tiny
+
+    _divisor, _divisor_parallel = _rows_builds(_floor_entries)
+
+
+def scatter(size: int, index: np.ndarray, values: np.ndarray) -> np.ndarray:
+    """``out = zeros(size); out[index] = values`` for distinct indices, in one compiled pass."""
+    assert njit is not None
+    out = np.zeros(size)
+    count = len(index)
+    kernel = _place_parallel if _elements_in_parallel(count) else _place
+    kernel(index, np.ascontiguousarray(values, dtype=float), out)
+    return out
+
+
+def gather(values: np.ndarray, index: np.ndarray, divisor: float = 1.0) -> np.ndarray:
+    """``values[index] / divisor`` in one compiled pass."""
+    assert njit is not None
+    out = np.empty(len(index))
+    kernel = _pick_parallel if _elements_in_parallel(len(index)) else _pick
+    kernel(np.ascontiguousarray(values, dtype=float), index, float(divisor), out)
+    return out
+
+
+def relative_floor(
+    values: np.ndarray, group: np.ndarray, size: int, share: float, tiny: float
+) -> np.ndarray:
+    """``values + share * sqrt(power / count)[group] + tiny``, ``power`` and ``count`` each
+    group's ``np.bincount`` of ``values ** 2`` and of members (at least one): the divisor of a
+    projection-relative floor, to the bit."""
+    assert njit is not None
+    values = np.ascontiguousarray(values, dtype=float)
+    power, count = _group_power(values, group, int(size))
+    root = np.sqrt(power / count)
+    out = np.empty(len(values))
+    kernel = _divisor_parallel if _elements_in_parallel(len(values)) else _divisor
+    kernel(values, group, root, float(share), float(tiny), out)
+    return out

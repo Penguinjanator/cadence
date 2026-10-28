@@ -72,6 +72,17 @@ SCALE_CAP = 8.0  # the default of LearnerConfig.scale_cap: the magnitude a synap
 # added to a relative floor's divisor: a projection whose synapses never moved divides its
 # zero step by this rather than by zero
 _RELATIVE_TINY = 1e-12
+
+
+def _compiled_passes() -> bool:
+    """Whether the compiled per-synapse passes of ``cadence.fused`` are in use (same bits)."""
+    try:
+        from .fused import compiled
+    except ImportError:  # pragma: no cover
+        return False
+    return compiled()
+
+
 _MOMENTS = ("velocity", "velocity_bias", "second_moment", "second_moment_bias")
 
 
@@ -558,9 +569,20 @@ class Learner:
         contrast. ``weight`` scales the pull row by row (an advantage, when the
         target is an action that was taken).
         """
-        cfg = self.config
         # an apical compartment passes the nudge's change at the gain the free phase set
-        held = self.brain.apical_gain(drive, free)
+        return self._nudged(drive, free, target, self.brain.apical_gain(drive, free), sign, weight)
+
+    def _nudged(
+        self,
+        drive: np.ndarray,
+        free: BrainState,
+        target: np.ndarray,
+        held: np.ndarray | None,
+        sign: float = 1.0,
+        weight: np.ndarray | None = None,
+    ) -> BrainState:
+        """``nudged`` at the apical gain ``held`` the caller read from the free phase."""
+        cfg = self.config
         if cfg.qualified:
             phase = self._qualified_phase(
                 drive, free, cfg.nudged_steps,
@@ -674,8 +696,8 @@ class Learner:
             return edges / (batch * span), neurons / (batch * span)
         s_plus, s_minus = nudged.activation, minus_state.activation
         if self.brain._blocked and w.synapses > 4 * w.n:
-            gram = block_contrast(self.brain.layout, s_plus, s_minus)
-            return gram / (len(s_plus) * span), (s_plus - s_minus).mean(axis=0) / span
+            gram = block_contrast(self.brain.layout, s_plus, s_minus, len(s_plus) * span)
+            return gram, (s_plus - s_minus).mean(axis=0) / span
         if not self.brain._blocked:
             # Sparse graphs must not materialize the layout's potentially n-by-n matrix.
             # Bound each temporary to about one million batch/synapse entries.
@@ -980,6 +1002,11 @@ class Learner:
         out = []
         for values, group in zip((rms, rms_bias), self._projections(), strict=True):
             size = int(group.max()) + 1 if len(group) else 0
+            if len(group) and _compiled_passes():  # the same sums in one compiled pass
+                from .fused import relative_floor
+
+                out.append(relative_floor(values, group, size, share, _RELATIVE_TINY))
+                continue
             power = np.bincount(group, weights=values * values, minlength=size)
             count = np.maximum(np.bincount(group, minlength=size), 1)
             out.append(values + share * np.sqrt(power / count)[group] + _RELATIVE_TINY)
@@ -1138,9 +1165,9 @@ class Learner:
         if judged is None:
             drive, target, weight = self._lesson(taught, drive, target, weight)
             free = _restrict(free, taught)
-        nudged = self.nudged(drive, free, target, weight=weight)
-        opposite = self.nudged(drive, free, target, sign=-1.0, weight=weight)
-        held = self.brain.apical_gain(drive, free)
+        held = self.brain.apical_gain(drive, free)  # read once, held by both phases
+        nudged = self._nudged(drive, free, target, held, weight=weight)
+        opposite = self._nudged(drive, free, target, held, sign=-1.0, weight=weight)
         phases["nudged"] = Equilibrium(
             nudged, self.brain.residual(drive, nudged,
                 nudge=self.nudge_for(target, cfg.beta, weight, held)),

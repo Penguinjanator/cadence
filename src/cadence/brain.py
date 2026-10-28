@@ -37,6 +37,7 @@ target activation, which is how the learning rule's second phase enters.
 from __future__ import annotations
 
 import copy
+import weakref
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, cast
@@ -355,6 +356,28 @@ class Apical:
             "fraction": self.fraction,
             "floor": self.floor,
         }
+
+
+# the blocks that hold basal and apical synapses, per compartment: fixed by the compartment and
+# the layout, so found once for every brain that shares both (each lesson makes a new brain)
+_APICAL_BLOCKS: weakref.WeakKeyDictionary[Apical, tuple[Layout, list[int], list[int]]] = (
+    weakref.WeakKeyDictionary()
+)
+
+
+def _apical_blocks(apical: Apical, layout: Layout) -> tuple[list[int], list[int]]:
+    """The blocks of ``layout`` that hold basal synapses and those that hold apical ones, in
+    block order."""
+    held = _APICAL_BLOCKS.get(apical)
+    if held is None or held[0] is not layout:
+        block = np.asarray(layout.block_of_edge)
+        mask = apical.synapses
+        basal = np.bincount(block[~mask], minlength=layout.pairs) > 0
+        top_down = np.bincount(block[mask], minlength=layout.pairs) > 0
+        held = (layout, [int(k) for k in np.flatnonzero(basal)],
+                [int(k) for k in np.flatnonzero(top_down)])
+        _APICAL_BLOCKS[apical] = held
+    return held[1], held[2]
 
 
 def _softmax_groups(nudge: Nudge) -> list[np.ndarray]:
@@ -1278,9 +1301,7 @@ class Brain:
             lay = self.layout
             flat_basal = lay.flat(basal_weights)
             flat_apical = lay.flat(apical_weights)
-            block = lay.block_of_edge
-            basal_pairs = sorted(int(k) for k in np.unique(block[~mask]))
-            apical_pairs = sorted(int(k) for k in np.unique(block[mask]))
+            basal_pairs, apical_pairs = _apical_blocks(apical, lay)
         parts = (weights, flat_basal, flat_apical, basal_pairs, apical_pairs,
                  basal_weights, apical_weights)
         self.__dict__["_apical_cache"] = parts

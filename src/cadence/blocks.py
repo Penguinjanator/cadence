@@ -33,6 +33,15 @@ from .connectome import Connectome
 __all__ = ["Layout", "layout", "BlockTransport", "block_contrast"]
 
 
+def _compiled() -> bool:
+    """Whether the compiled passes of ``cadence.fused`` are in use (same bits either way)."""
+    try:
+        from .fused import compiled
+    except ImportError:  # pragma: no cover
+        return False
+    return compiled()
+
+
 @dataclass(frozen=True)
 class Layout:
     """Contiguous neuron ranges and the ordered pairs of ranges that carry synapses."""
@@ -68,6 +77,10 @@ class Layout:
 
     def flat(self, weights: np.ndarray) -> np.ndarray:
         """The flat block array, summing parallel synapses at their shared endpoints."""
+        if not self.parallel_synapses and _compiled():
+            from .fused import scatter
+
+            return scatter(self.size, self.edge_index, weights)
         out = np.zeros(self.size)
         if self.parallel_synapses:
             np.add.at(out, self.edge_index, weights)
@@ -179,8 +192,11 @@ class BlockTransport:
         return out
 
 
-def block_contrast(layout: Layout, s_plus: np.ndarray, s_minus: np.ndarray) -> np.ndarray:
-    """``sum_b s+[b, pre] s+[b, post] - s-[b, pre] s-[b, post]`` for every synapse, by blocks.
+def block_contrast(
+    layout: Layout, s_plus: np.ndarray, s_minus: np.ndarray, divisor: float = 1.0
+) -> np.ndarray:
+    """``sum_b s+[b, pre] s+[b, post] - s-[b, pre] s-[b, post]`` for every synapse, by blocks,
+    divided by ``divisor``.
 
     A range whose activation is the same in both phases (the stimulated inputs)
     contributes ``A.T @ (B+ - B-)``: one product instead of two.
@@ -194,4 +210,8 @@ def block_contrast(layout: Layout, s_plus: np.ndarray, s_minus: np.ndarray) -> n
         if not np.array_equal(a_plus, a_minus):
             block = block + (a_plus - a_minus).T @ b_minus
         g[layout.offset[k] : layout.offset[k + 1]] = block.ravel()
-    return np.asarray(g[layout.edge_index])
+    if _compiled():
+        from .fused import gather
+
+        return gather(g, layout.edge_index, divisor)
+    return np.asarray(g[layout.edge_index] / divisor)
