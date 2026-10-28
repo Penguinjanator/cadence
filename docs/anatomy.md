@@ -167,8 +167,9 @@ level, below a coarse settle's error. A brain with the compartment therefore lea
 `learning_normalize_relative=0.1`, `learning_nudged_steps=32` and `learning_nudged_fixed=True`
 (nudged phases of a whole 32 sweeps from a free phase at the founder's tolerance; the opposite
 phases' common drift cancels in the contrast).
-There, on a task that takes two layers of thresholds, one, two and three processing regions
-order by depth; see the [depth benchmark](../benchmarks/depth/README.md).
+There, on a task that takes two layers of thresholds, one to four processing regions order by
+depth, and four come within 0.02 of a network of two hidden layers; see the
+[depth benchmark](../benchmarks/depth/README.md) and [deep brains](tune.md#deep-brains).
 
 ### Ports after development
 

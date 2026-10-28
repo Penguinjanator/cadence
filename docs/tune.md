@@ -62,6 +62,39 @@ assert recursive.live(observation).shape == (1,)
 Observers settle with the base and never override a finished answer. The wiring
 permits recursive correction without teaching it.
 
+### Deep brains
+
+Several processing regions learn features of features only with the
+[apical compartment](anatomy.md#the-apical-compartment). Without it each region hears the
+region above it through a loop that grows with the weights, and a second module carries an echo
+of the answer. The recipe of the [depth benchmark](../benchmarks/depth/README.md):
+
+```python
+deep = Brain.compose(
+    inputs=48, actions=7, modules=(128, 64, 64, 64), apical=0.25,
+    teaching="normalized", learning_normalize_relative=0.1,
+    learning_nudged_steps=32, learning_nudged_fixed=True, seed=0,
+)
+```
+
+- **What it buys.** On a task that needs two layers of thresholds, one module reads 0.58 of
+  held-out rows after 4,000 lessons, two 0.66, three 0.81 and four 0.86, against 0.89 for a
+  network of two hidden layers trained by backpropagation.
+- **Why the learning settings.** Credit reaching a region k levels below the motor region
+  shrinks about fourfold per level. The projection-relative floor lets each projection step on
+  its own scale, and fixed nudged phases carry the nudge down to the lower regions.
+- **Cost.** An apical brain settles at half the founder's step, yet its bounded top-down loop
+  settles in fewer sweeps than a flat brain whose loop has grown.
+- **Lessons.** A deeper brain acquires more slowly at first; compare depths at matched lessons
+  and give it a longer budget before reading it.
+- **Memories.** The recall memory reads into the top region, and its benchmarks run on brains
+  of two and three modules ([memory on deep brains](../benchmarks/depth/README.md#memory-on-deep-brains)).
+  With `recall_boundary=True` a question about the start of an episode has a slot to read.
+- **Observers.** An observer's return to the modules, the association and the motor region is a
+  top-down half too, so with `apical` set it lands on the same compartment: System 2 adds at most
+  `apical` times each region's bottom-up drive, enough to bias the settle and never enough to
+  take it over.
+
 ## Defaults and expert overrides
 
 Set only the values you intend to change; the rest keep their composed founders, which
