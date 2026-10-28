@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.91.0 — 2026-10-28
 
 - The fused CPU settle runs the rows of a batch on Numba's threads. Each sweep computes the
   block products of the whole batch (distinct blocks on distinct threads, one BLAS call per
