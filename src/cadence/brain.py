@@ -1503,6 +1503,15 @@ class _TorchKernel:
                 else torch.from_numpy(np.asarray(members)).to(self.device)
                 for members in apical.members
             ]
+            # the pools as an indicator matrix (neurons x pools) over its member counts: a
+            # pool's mean square and the drive's spread to its members are one product each
+            indicator = np.zeros((connectome.n, len(apical.members)))
+            for k, members in enumerate(apical.members):
+                indicator[members, k] = 1.0
+            self.pool_matrix = torch.from_numpy(indicator).to(self.device, self.dtype)
+            self.pool_mean = torch.from_numpy(
+                indicator / np.maximum(indicator.sum(axis=0, keepdims=True), 1.0)
+            ).to(self.device, self.dtype)
             if layout is not None:
                 of_edge = layout.block_of_edge
                 self.basal_pairs = sorted(int(k) for k in np.unique(of_edge[~apical.synapses]))
@@ -1628,23 +1637,14 @@ class _TorchKernel:
 
     def _apical_drive(self, basal: Any, raw: Any, held: Any = None) -> Any:
         """``Apical.drive`` on the device; ``held`` a ``(batch, pools)`` tensor of held gains."""
-        torch = self.torch
         apical = self.apical
         assert apical is not None
-        out = torch.zeros_like(raw)
-        floor2 = apical.floor * apical.floor
-        for k, members in enumerate(self.pools):
-            u = raw[:, members]
-            if held is None:
-                b = basal[:, members]
-                basal2 = (b * b).mean(dim=1, keepdim=True)
-                raw2 = (u * u).mean(dim=1, keepdim=True)
-                spread = (raw2 + floor2 * basal2 + _APICAL_TINY).sqrt()
-                gain = apical.fraction * basal2.sqrt() / spread
-            else:
-                gain = held[:, k : k + 1]
-            out[:, members] = gain * u
-        return out
+        if held is None:
+            basal2 = (basal * basal) @ self.pool_mean
+            raw2 = (raw * raw) @ self.pool_mean
+            spread = (raw2 + apical.floor * apical.floor * basal2 + _APICAL_TINY).sqrt()
+            held = apical.fraction * basal2.sqrt() / spread
+        return (held @ self.pool_matrix.T) * raw
 
     def _held(self, nudge: Nudge | None, batch: int) -> Any:
         """A nudge's held apical gains as a device tensor, or None."""
