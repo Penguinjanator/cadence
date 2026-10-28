@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased
+
+- Add the copy pathway (opt-in, `recall_copy=magnitude`, founder 0.0: none;
+  [#233](https://github.com/muellerberndt/cadence/issues/233)). What the recall read retrieved
+  reached the answer only through the association region, so a token never taught as an answer
+  was read correctly and never produced. With the option plastic synapses run from every head's
+  read ports (`recall`, `next`) into the motor region, appended last and drawn at that
+  magnitude, learned by the settle's contrast inside the one settle. `recall_tokens` (founder
+  None) declares per action the observation coordinate of the same token (a brain without a
+  code, or a learned code joined to the observation); the pathway then starts as that identity
+  from each recall port at `recall_copy`, from each next port at zero, and from the present
+  observation at `-recall_copy`, so the read's echo of the moment that addressed it is not
+  copied back. A newborn produces every declared token its read delivers, and a token never
+  read keeps its route to its action. Benchmark `benchmarks/attention/copy_tokens.py`
+  (`cadence-copy-tokens/1`, six founders): tokens never taught as answers produced at 1.00
+  (founder memory 0.00, whose read names them at 0.32 to 1.00), taught answers 1.00 (0.72 to
+  0.98), in-context succession 0.94 to 0.99 against the founder's 0.95 to 0.99; drawn without
+  tokens the pathway produces none, and at the recall projection's scale (1.2) it costs taught
+  answers (0.58 against 0.90) and succession (0.92 against 0.97). A successor never taught stays
+  unanswered in every arm.
+- Add the executed command to the recall memory (opt-in, `recall_action=True`, founder off;
+  [#235](https://github.com/muellerberndt/cadence/issues/235)). Every written slot carries the
+  command the stream executed at that moment, one coordinate per motor neuron (one-hot within
+  each motor slot; zero for a moment `wait` senses), in its key and its value; each read port
+  reads it on a `<port>_action` region whose synapses into the association start at zero, and
+  the address and position maps also read the command of the moment before
+  (`Recall.acted`, saved with the brain). A newborn settles and acts as the same founder without
+  the option. The episodic vote is unchanged: its context key already holds each issued command
+  at the share `1 - memory_context`. Benchmark `benchmarks/attention/own_action.py`
+  (`cadence-own-action/1`, six founders, identical observations): alternating its own actions
+  1.00 (founder recall memory 0.78, no recall memory 0.47, uniform random 0.48; commands erased
+  0.26), a press every third moment 0.97 (0.65, 0.36, 0.46; erased 0.33); the efference copy
+  reads 1.00 on both.
+- `Recall.witness(observations, state, command=None)`, `Recall.copy_synapses()`,
+  `Recall.action_ports(heads, next)`; the three options are construction settings, described
+  and saved only where they differ from their founders. Founder brains are byte-identical to
+  0.90.0 (checkpoint arrays, acts and descriptions of eight compositions).
+- The look-back, contextual-choice, held-heads, depth AND-count and deep-memory receipts are
+  rebuilt on this source with the same readings.
+
 ## 0.90.0 — 2026-10-28
 
 - Add the apical compartment (opt-in, `Brain.compose(apical=fraction)`, founder 0: off). In a
