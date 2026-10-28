@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.90.0 — 2026-10-28
 
 - Add the apical compartment (opt-in, `Brain.compose(apical=fraction)`, founder 0: off). In a
   chain of reciprocally joined regions each region heard the region above it through the reverse
@@ -23,7 +23,15 @@
   device, so faint credit in a deep region steps on its own scale.
 - Add `LearnerConfig.nudged_fixed` (founder `False`): finite nudged phases, and the actor's
   eligibility settle, run their whole `nudged_steps` instead of stopping at the tolerance.
-- Add the depth benchmark (`benchmarks/depth/and_count.py`, `cadence-depth-and-count/1`).
+- Add the depth benchmarks: `benchmarks/depth/and_count.py` (`cadence-depth-and-count/1`; one to
+  four modules against tanh networks of one and two hidden layers: four modules 0.864, two hidden
+  layers 0.885, one module 0.584, one hidden layer 0.426) and `benchmarks/depth/memory.py`
+  (`cadence-depth-memory/1`; the look-back, contextual-choice and held-heads benchmarks unedited
+  on brains of two and three modules).
+- System 2 observers with the compartment: an observer's return to the modules, the association
+  and the motor region is a top-down half, so with `apical` set it lands apically and adds at
+  most `apical` times each region's bottom-up drive. Observers are tested beside every memory,
+  the learned code, held heads and the torch backend (`tests/test_observers_compat.py`).
 - Add the recall memory's boundary (opt-in, `recall_boundary=True`, founder off). A slot's next
   is taught by the moment that follows it, so the first event of an episode was the one event no
   slot's next held, and a brain that answered a cue through the next port could not reach the
