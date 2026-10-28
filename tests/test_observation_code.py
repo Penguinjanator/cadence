@@ -609,7 +609,7 @@ def test_a_custom_anatomy_takes_the_code_and_keeps_recall_off_unless_asked(tmp_p
         cd.Brain(anatomy(256, 16, None), inputs=3_230, code=128)
     with pytest.raises(ValueError, match="with inputs the sensory region is the code"):
         cd.Brain(anatomy(256, 16, None), inputs=3_230)  # no code: the region is not one
-    with pytest.raises(ValueError, match=r"one neuron per value coordinate \(1024\)"):
+    with pytest.raises(ValueError, match=r"one neuron per event coordinate \(1024\)"):
         cd.Brain(anatomy(3_230, 16, 512), code=1024, recall=True)
     with pytest.raises(ValueError, match="inputs must be an integer of at least 1"):
         cd.Brain(anatomy(256, 16, None), inputs=0, code=256)

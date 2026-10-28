@@ -35,8 +35,8 @@ readings, outside the receipt unless stated):
   succession 0.79 to 0.95, mean 0.87, against 0.94 to 0.99 with it: the recall port answers a cue
   with its own token.
 - Each port's identity tied into one learned gain (`Learner(tie_groups=...)`): on the receipt's
-  six founders it read the same as the untied pathway (untaught 1.00, succession within 0.03), so
-  the ties were left out.
+  six founders it produced the untaught tokens at 1.00 as the untied pathway does, with succession
+  0.91 to 0.98 against 0.94 to 0.99, so the ties were left out.
 - The apical compartment as a bound was not needed: on the deep apical brain the pathway, which
   lands basally, keeps succession, and a bound relative to the motor region's bottom-up drive would
   cap the copy of a token whose action that drive never raised. It was not measured.
