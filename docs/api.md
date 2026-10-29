@@ -390,6 +390,10 @@ prediction and, at a learned moment, the context-free code `free`); the constant
 `SILENCE`, `ACTIVE` and `IDENTITY`, held as the instance's attributes of the same names in
 lower case, `learning` (False holds every table still) and `top_down` (0 is the control
 without the top-down boundary) the two a reading or a control changes on a copy.
+Both step bounds include the supplied neuron model's synaptic `gain`; the standing
+`top_down` anchor has its own gain. They bound negative modes only. A custom model still
+needs its largest slope-weighted coupling eigenvalue below one. A refused enclosing
+action or outcome restores the previous code step; attempted-work diagnostics may advance.
 `LearnedCode.founders()` and `LearnedCode.setting(name, value)` give and validate the one
 setting, `fields`; `GENES`, `RUNTIME` and `CONSTRUCTION` name it, and `REMOVED` the
 settings the readings retired with what the region does instead. Guide:
@@ -526,9 +530,9 @@ stability, uniqueness or task quality ([the certificate](settling.md#the-settlin
 
 | Type | Fields |
 | --- | --- |
-| `BrainState(v, activation, adaptation, steps, trajectory=None, activity_change=None, device=None)` | `(n,)` or `(batch, n)` arrays; `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`. |
+| `BrainState(v, activation, adaptation, steps, trajectory=None, activity_change=None, device=None, discarded_steps=0)` | `(n,)` or `(batch, n)` arrays; `row(i)`, `mean(members, i)`, `fraction_active(members, level, i)`, `active(level, i)`, `batched`. `attempted_steps = steps + discarded_steps` includes CUDA tolerance lookahead beyond the returned state. |
 | `Equilibrium(state, residual, steps, tolerance, residual_checks=0, damping_halvings=0, stagnation_checks=0, initial_damping=0)` | Per-row `converged` and `qualified` (the residual within `tolerance`); `steps` counts local sweeps. `damping_halvings` is the absolute final index, and `relative_damping_halvings` counts further halvings after `initial_damping`. |
-| `Apical(synapses, groups, fraction, floor=1.0)` | `synapses` a bool per synapse, `groups` a pool per neuron (`-1` none); `drive(basal, raw)` the normalized apical drive, `members`, `check(synapses, neurons, post)`, `to_dict()`. |
+| `Apical(synapses, groups, fraction, floor=1.0)` | `synapses` a bool per synapse, `groups` an int64-representable pool per neuron (`-1` none); `drive(basal, raw)` the normalized apical drive, `members`, `check(synapses, neurons, post)`, `to_dict()`. Checkpoint loading applies the same strict types and rejects coerced or incomplete topology. |
 | `Nudge(target, mask, beta, softmax_temperature=None, weight=None, groups=None, anchor=None, anchor_gain=None, apical_gain=None)` | Extra drive `beta * mask * (target - s)`, or against `softmax(s / T)` per group; `weight` scales rows. `anchor` and `anchor_gain` (supplied together, finite, gain nonnegative per neuron) add `anchor_gain * (anchor - s)`, unscaled by `beta`, mask or weight. `apical_gain` (`(batch, pools)`, nonnegative) is the apical compartment's gain the settle holds. `drive(s)`. |
 
 `available_backends() -> dict` names what is installed, such as
@@ -595,7 +599,9 @@ ep_structure(brain, *, fixed_inputs=(), tolerance=1e-12) -> EPStructure
 when uncertified) and `to_dict()`; construction requires finite values, `row_mass >= 0`,
 `lipschitz > 0` and `dt` in `(0, 1]`. `EPStructure` (frozen) reports `fixed_inputs`,
 `free_neurons`, `free_asymmetry`, `fixed_incoming_mass`, `adaptation`, `tolerance` and
-`compatible`, which covers structure only. Guide: [the settling certificate](settling.md#the-settling-certificate),
+`compatible`, which covers structure only. `certificate` and `ep_structure` raise `ValueError`
+for apical graphs; their plain-sum arguments do not cover state-dependent compartment gains.
+Guide: [the settling certificate](settling.md#the-settling-certificate),
 [equilibrium-propagation scope](settling.md#equilibrium-propagation-scope).
 
 ## Neuron-by-neuron reference (`cadence.reference`)

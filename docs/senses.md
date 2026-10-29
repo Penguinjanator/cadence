@@ -165,6 +165,11 @@ dictionary's negative modes allow over every state (`LearnedCode.rest_stability`
 moment with `RuntimeError` before anything changes when it does not qualify there either, as a
 refused free solve does. A world of one input needs this from its first moment.
 Local contraction also requires the largest slope-weighted coupling eigenvalue below one.
+The expert `LearnedCode` constructor's step bounds include the neuron model's actual
+synaptic gain and the standing anchor separately; `Brain.compose` uses unit synaptic gain.
+The code phase's chosen step is provisional until the action, wait, lesson or feedback
+that uses it is accepted. Refusal restores the previous step and latest accepted phase,
+while attempted-work counters and refusal diagnostics may advance.
 Custom controls such as `top_down=0` with a large negative-branch leak need that separate
 check: damping cannot stabilize an intrinsically growing mode.
 

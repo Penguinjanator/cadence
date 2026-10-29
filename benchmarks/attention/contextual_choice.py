@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,7 @@ import cadence as cd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+evidence = runpy.run_path(str(ROOT / "benchmarks/provenance.py"))
 INPUTS = 12
 ACTIONS = 2
 CODE = 8
@@ -32,14 +34,8 @@ RANDOM_BASELINE = 1.0 / ACTIONS
 
 
 def sources() -> list[tuple[str, Path]]:
-    """The public implementation bytes this result depends on."""
-    names = (
-        "benchmarks/attention/contextual_choice.py",
-        "src/cadence/generic.py",
-        "src/cadence/stream.py",
-        "src/cadence/code.py",
-    )
-    return [(name, ROOT / name) for name in names]
+    """Complete executed library and experiment source identity."""
+    return evidence["sources"](ROOT, "benchmarks/attention/contextual_choice.py")
 
 
 def observation(kind: str, value: int | None = None) -> np.ndarray:
@@ -307,6 +303,10 @@ def evaluate(
     correct = [int(answer == index % 2) for index, answer in enumerate(answers)]
     encoded = np.asarray(codes)
     return {
+        "trials": trials,
+        "correct": int(sum(correct)),
+        "per_context_correct": {str(context): int(sum(correct[context::2]))
+                                for context in CONTEXTS},
         "accuracy": float(np.mean(correct)),
         "per_context_accuracy": {
             str(context): float(np.mean(correct[context::2])) for context in CONTEXTS
@@ -318,6 +318,7 @@ def evaluate(
     }
 
 
+@evidence["record"](ROOT, "benchmarks/attention/contextual_choice.py")
 def run_founder(seed: int, *, trials: int = 32) -> dict[str, Any]:
     """Acquire and evaluate the frozen single-head gate for one founder."""
     brain = compose(seed)
@@ -372,14 +373,91 @@ def run_founder(seed: int, *, trials: int = 32) -> dict[str, Any]:
     }
 
 
+def configuration(trials: int = 32, seeds: list[int] | None = None) -> dict[str, Any]:
+    settings = {
+        "inputs": INPUTS,
+        "actions": ACTIONS,
+        "learned_code": CODE,
+        "modules": [24],
+        "code_rounds": 16,
+        "policy_rounds": 128,
+        "recall_window": 2,
+        "recall_temperature": 0.1,
+        "recall_recency": 0.0,
+        "recall_address": 0.0,
+        "recall_position": 0,
+    }
+    settings["seeds"] = [0, 1, 2, 3] if seeds is None else seeds
+    settings["trials"] = trials
+    return settings
+
+
+def gates_of(founder: dict[str, Any]) -> dict[str, bool]:
+    """Recompute one founder's original behavioral gates without running a neural phase."""
+    panels = founder["panels"]
+    intact = panels["contextual"]
+    gates = {
+        "training_completed": founder["training"]["accepted"]
+        == founder["training"]["rounds"]
+        and founder["training"]["refused"] == 0,
+        "accuracy": intact["accuracy"] >= 0.95,
+        "each_context": min(intact["per_context_accuracy"].values()) >= 0.95,
+        "no_refusals": intact["refusals"] == 0,
+        "identical_final_code": intact["identical_final_code"],
+        "selected_relevant_evidence": intact["mean_correct_evidence_mass"]
+        >= intact["mean_wrong_evidence_mass"] + 0.25,
+        "beats_present_only": intact["accuracy"] - panels["present_only"]["accuracy"]
+        >= 0.2,
+        "beats_memory_off": intact["accuracy"] - panels["memory_off"]["accuracy"] >= 0.2,
+        "beats_uniform_random": intact["accuracy"]
+        - founder["uniform_random_baseline_accuracy"]
+        >= 0.2,
+        "relevant_erasure_matters": intact["accuracy"]
+        - panels["relevant_erased"]["accuracy"]
+        >= 0.2,
+        "all_erasure_matters": intact["accuracy"] - panels["all_erased"]["accuracy"] >= 0.2,
+        "irrelevant_erasure_stable": abs(
+            intact["accuracy"] - panels["other_erased"]["accuracy"]
+        )
+        <= 0.05,
+        "bank_unchanged": founder["gates"]["bank_unchanged"],
+        "no_episodic_memory": founder["gates"]["no_episodic_memory"],
+    }
+    return gates
+
+
 def check(body: dict[str, Any]) -> str | None:
     """Recompute the retained pass decision from its recorded behavioral readings."""
     try:
+        cfg = body["configuration"]
+        trials, declared = cfg["trials"], cfg["seeds"]
+        if (type(trials) is not int or trials < 2 or trials % 2
+                or not evidence["seeds"](declared, 2)):
+            return "invalid trial or founder census"
+        problem = evidence["metadata"](
+            body, "cadence-contextual-attention/1", configuration(trials, declared))
+        if problem:
+            return problem
         founders = body["founders"]
+        if sorted(f["seed"] for f in founders) != sorted(declared):
+            return "founders differ from the declared protocol"
         if body["schema"] != "cadence-contextual-attention/1" or len(founders) < 2:
             return "wrong schema or too few founders"
         for founder in founders:
+            problem = evidence["worker"](founder, ROOT, "benchmarks/attention/contextual_choice.py")
+            if problem:
+                return problem
             panels = founder["panels"]
+            for panel in panels.values():
+                if (panel["trials"] != trials or type(panel["correct"]) is not int
+                        or not 0 <= panel["correct"] <= trials
+                        or panel["accuracy"] != panel["correct"] / trials):
+                    return "panel accuracy or denominator differs"
+                for context in CONTEXTS:
+                    count = panel["per_context_correct"][str(context)]
+                    if (type(count) is not int or not 0 <= count <= trials // 2
+                            or panel["per_context_accuracy"][str(context)] != count / (trials // 2)):
+                        return "context accuracy or denominator differs"
             intact = panels["contextual"]
             expected = {
                 "training_completed": founder["training"]["accepted"]
@@ -417,6 +495,15 @@ def check(body: dict[str, Any]) -> str | None:
     return None
 
 
+def historical_check(body: dict[str, Any]) -> str | None:
+    """Arithmetic at the historical receipt's original source and metric scope."""
+    return evidence["historical_check"](ROOT, "benchmarks/attention/results/contextual-choice-v0870.json", body)
+
+
+def verify_historical(path: Path) -> tuple[bool, str]:
+    return evidence["verify_historical"](ROOT, path, "benchmarks/attention/results/contextual-choice-v0870.json")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2, 3])
@@ -427,19 +514,8 @@ def main() -> None:
     result = {
         "schema": "cadence-contextual-attention/1",
         "scope": "single-head learned-code contextual choice; bounded component evidence",
-        "configuration": {
-            "inputs": INPUTS,
-            "actions": ACTIONS,
-            "learned_code": CODE,
-            "modules": [24],
-            "code_rounds": 16,
-            "policy_rounds": 128,
-            "recall_window": 2,
-            "recall_temperature": 0.1,
-            "recall_recency": 0.0,
-            "recall_address": 0.0,
-            "recall_position": 0,
-        },
+        "configuration": configuration(args.trials, args.seeds),
+        "execution": evidence["environment"](),
         "founders": founders,
         "passed": len(founders) >= 2 and all(founder["passed"] for founder in founders),
     }

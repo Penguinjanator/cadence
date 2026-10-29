@@ -115,6 +115,15 @@ read on the host and `on_device=False` use the float64 host reference. A positiv
 next sweep is queued before the host reads the flag, into the other state slot), so the host
 never stalls the device, and the reported state and step count are those of the first sweep
 that met the tolerance. Fixed step counts and the inner chunks of `equilibrate` read nothing.
+CPU and MPS check before starting another sweep. For a direct CUDA movement-tolerance solve,
+`BrainState.steps` is the returned state's sweep index, `discarded_steps` counts lookahead,
+and `attempted_steps` counts both. Use the latter for executed-work comparisons; this is
+still a sweep count rather than a total resource or energy meter.
+
+Torch workspaces reuse device temperature inputs when arousal changes the sampling heat.
+Captured graphs read those current values. Topology and arithmetic-branch changes use bounded
+caches whose eviction drops dependent configurations and captures together, so a continuing
+changing-temperature life does not retain a new set of nudge tensors at every moment.
 
 Masks have shape `(n,)` or `(1, n)` for every row, or `(batch, n)` per row, with entries in
 [0, 1], on every backend. A mask scales potential and activation at each step; zero removes a

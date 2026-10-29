@@ -34,7 +34,9 @@ def test_every_arm_runs_and_the_receipt_verifies(tmp_path):
         assert [row["lesson"] for row in run["curve"]] == [2, 4]
         assert all(0.0 <= row["accuracy"] <= 1.0 for row in run["curve"])
     assert runs[1]["apical"]["pools"] == 2  # module_0 and the association hear the regions above
-    body = {"schema": bench.KIND, "runs": runs, "summary": bench.summarize(runs)}
+    body = {"schema": bench.KIND, "runs": runs, "summary": bench.summarize(runs),
+            "configuration": bench.configuration(4, 2, [0], [r["arm"] for r in runs], 600, 50),
+            "execution": bench.evidence["environment"]()}
     path = cd.Receipt.build(bench.KIND, body, bench.sources()).write(tmp_path / "summary.json")
     valid, message = cd.Receipt.verify(path, sources=bench.sources(), check=bench.check)
     assert valid, message
@@ -45,7 +47,7 @@ def test_every_arm_runs_and_the_receipt_verifies(tmp_path):
 
 def test_the_retained_receipt_is_source_bound_and_recomputed():
     path = HERE / "results" / "and-count.json"
-    valid, message = cd.Receipt.verify(path, sources=bench.sources(), check=bench.check)
+    valid, message = bench.verify_historical(path)
     assert valid, message
     body = cd.Receipt.read(path).body
     assert body["lessons"] == 4000 and body["seeds"] == [0, 1, 2]
@@ -61,7 +63,7 @@ def test_the_memory_receipt_is_source_bound_and_recomputed():
     memory = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(memory)
     path = HERE / "results" / "memory.json"
-    valid, message = cd.Receipt.verify(path, sources=memory.sources(), check=memory.check)
+    valid, message = memory.verify_historical(path)
     assert valid, message
     summary = cd.Receipt.read(path).body["summary"]
     assert summary["look_back"] == {d: {"passed": 4, "founders": 4} for d in ("2", "3")}

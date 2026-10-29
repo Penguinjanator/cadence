@@ -289,7 +289,12 @@ class Apical:
         groups = np.asarray(self.groups)
         if synapses.ndim != 1 or synapses.dtype != np.bool_:
             raise ValueError("apical synapses must be a boolean vector, one entry per synapse")
-        if groups.ndim != 1 or not np.issubdtype(groups.dtype, np.integer) or (groups < -1).any():
+        if (
+            groups.ndim != 1
+            or not np.issubdtype(groups.dtype, np.integer)
+            or (groups < -1).any()
+            or (groups > np.iinfo(np.int64).max).any()
+        ):
             raise ValueError("apical groups must be an integer per neuron, -1 for none")
         for name in ("fraction", "floor"):
             value = getattr(self, name)
@@ -418,6 +423,12 @@ class BrainState:
     device: Any = (
         None  # the same state on an accelerator, so a continuation or a contrast stays there
     )
+    discarded_steps: int = 0  # CUDA tolerance lookahead beyond the returned state
+
+    @property
+    def attempted_steps(self) -> int:
+        """Executed sweeps of this settle, including discarded CUDA tolerance lookahead."""
+        return self.steps + self.discarded_steps
 
     @property
     def batched(self) -> bool:
@@ -452,6 +463,7 @@ def _copy_state(state: BrainState | None) -> BrainState | None:
         state.adaptation.copy(),
         state.steps,
         activity_change=None if state.activity_change is None else state.activity_change.copy(),
+        discarded_steps=state.discarded_steps,
     )
 
 
@@ -837,6 +849,7 @@ class Brain:
             steps=out.steps,
             trajectory=None if out.trajectory is None else out.trajectory[:, 0, :],
             activity_change=None if out.activity_change is None else out.activity_change[0],
+            discarded_steps=out.discarded_steps,
         )
 
     def _with_dt(self, dt: float) -> Brain:
@@ -1153,6 +1166,7 @@ class Brain:
             trajectory=traj,
             activity_change=activity_change,
             device=handle,
+            discarded_steps=0 if handle is None else int(handle.get("discarded_steps", 0)),
         )
         if capture is not None:
             capture.finish(self, drive, keep, nudge, result)
@@ -2007,6 +2021,13 @@ class _Workspace:
         self.graphs: OrderedDict[Any, Any] = OrderedDict()
         self.seen: dict[Any, int] = {}  # eager runs per graph key, before a capture
         self.configs: dict[Any, Any] = {}  # per graph key: its sweep configuration
+        self.executed_steps = 0
+
+    def clear_captures(self) -> None:
+        """Drop configurations and every graph/reference that can own their nudge buffers."""
+        self.graphs.clear()
+        self.seen.clear()
+        self.configs.clear()
 
 
 
@@ -2227,7 +2248,12 @@ class _NudgeBuffers:
         u, u_range, u_index, groups, tiled = spec
         m = len(u)
         self.m, self.u_range, self.u_index, self.groups = m, u_range, u_index, groups
-        self.tiled = tiled  # equal contiguous groups: one softmax over a (groups, size) view
+        self.temperatures = (
+            None if groups is None else torch.zeros(len(groups), 1, 1, dtype=dtype, device=device)
+        )
+        self.tiled = None if tiled is None else (
+            *tiled[:3], self.temperatures, tiled[3]
+        )  # equal contiguous groups: one softmax over a (groups, size) view
         self.target = torch.zeros(m, batch, dtype=dtype, device=device)
         self.mask = torch.zeros(m, 1, dtype=dtype, device=device)
         self.beta = torch.zeros((), dtype=dtype, device=device)
@@ -2477,17 +2503,16 @@ class _TorchKernel:
             push.narrow(0, start, count * size).copy_(value.view(count * size, batch))
         else:  # one softmax per group of competing neurons
             push.zero_()
-            for span, index, temperature in buffers.groups:
+            assert buffers.temperatures is not None
+            for k, (span, index, pieces, _members) in enumerate(buffers.groups):
                 logits = _take(s_u, span, index)
-                tiny = torch.finfo(logits.dtype).tiny
-                if temperature < tiny:
+                if pieces:
                     # Divide in representable pieces: zero remains zero, negative
                     # overflow remains a legitimate zero-probability logit.
                     logits = logits - logits.amax(dim=0, keepdim=True)
-                    while temperature < tiny:
-                        logits = logits / tiny
-                        temperature /= tiny
-                p = torch.softmax(logits / temperature, dim=0)
+                    for _ in range(pieces):
+                        logits = logits / torch.finfo(logits.dtype).tiny
+                p = torch.softmax(logits / buffers.temperatures[k, 0, 0], dim=0)
                 value = _take(buffers.target, span, index) - p
                 value.mul_(buffers.beta)
                 value.mul_(_take(buffers.mask, span, index))
@@ -2588,18 +2613,30 @@ class _TorchKernel:
         return self._staging.upload(x, self.dtype)
 
     def _nudge_spec(self, nudge: Nudge) -> tuple[Any, Any]:
-        """The neurons a nudge reaches and its softmax groups on the device, made once per
-        mask, grouping and temperature; returns ``(signature, spec)``."""
+        """The nudge's topology and arithmetic branches, independent of temperature values.
+
+        Temperatures are mutable device inputs. Only a change in the number of divisions
+        needed for a subnormal temperature changes the captured operation sequence.
+        """
         torch = self.torch
         mask = np.asarray(nudge.mask)
         reach = mask > 0
         if nudge.anchor is not None:
             reach = reach | (np.asarray(nudge.anchor_gain) > 0)
         temperature = nudge.softmax_temperature
+        members = None if temperature is None else _softmax_groups(nudge)
+        tiny = float(np.finfo(np.float32 if self.dtype == torch.float32 else np.float64).tiny)
+        pieces = []
+        for group in members or ():
+            value, count = _group_temperature(nudge, group), 0
+            while value < tiny:
+                value /= tiny
+                count += 1
+            pieces.append(count)
         key = (
             reach.tobytes(),
             None if nudge.groups is None else np.asarray(nudge.groups).tobytes(),
-            None if temperature is None else np.asarray(temperature, float).tobytes(),
+            None if members is None else tuple(pieces),
             (mask > 0).tobytes() if nudge.anchor is not None else None,
         )
         held = self._nudge_specs.get(key)
@@ -2614,17 +2651,17 @@ class _TorchKernel:
                 torch.from_numpy(u).to(self.device)
             )
             groups = None
-            if temperature is not None:
+            if members is not None:
                 groups = []
-                for members in _softmax_groups(nudge):
-                    where = np.searchsorted(u, members).astype(np.int64)
+                for group, count in zip(members, pieces, strict=True):
+                    where = np.searchsorted(u, group).astype(np.int64)
                     span = (
                         (int(where[0]), len(where))
                         if np.array_equal(where, np.arange(where[0], where[0] + len(where)))
                         else None
                     )
                     index = None if span is not None else torch.from_numpy(where).to(self.device)
-                    groups.append((span, index, _group_temperature(nudge, members)))
+                    groups.append((span, index, count, group))
             spec = (u, u_range, u_index, groups, self._tiled(groups, len(u)))
             if len(self._nudge_specs) > 64:
                 self._nudge_specs.clear()
@@ -2633,19 +2670,15 @@ class _TorchKernel:
 
     def _tiled(self, groups: list[Any] | None, reach: int) -> Any:
         """Softmax groups that are equal, contiguous and side by side, as one batched view:
-        ``(start, groups, size, temperatures (groups, 1, 1), covers the reach)``; else None."""
-        if not groups or any(span is None for span, _, _ in groups):
+        ``(start, groups, size, covers the reach)``; else None."""
+        if not groups or any(span is None or pieces for span, _, pieces, _ in groups):
             return None
         size = groups[0][0][1]
         start = groups[0][0][0]
-        tiny = float(np.finfo(np.float32 if self.dtype == self.torch.float32 else np.float64).tiny)
-        for k, (span, _, temperature) in enumerate(groups):
-            if span != (start + k * size, size) or temperature < tiny:
+        for k, (span, _, _pieces, _) in enumerate(groups):
+            if span != (start + k * size, size):
                 return None
-        temperatures = self.torch.tensor(
-            [t for _, _, t in groups], dtype=self.dtype, device=self.device
-        ).view(-1, 1, 1)
-        return start, len(groups), size, temperatures, start == 0 and len(groups) * size == reach
+        return start, len(groups), size, start == 0 and len(groups) * size == reach
 
     def _nudge_buffers(self, ws: Any, nudge: Nudge | None, batch: int) -> Any:
         """The nudge's buffers in ``ws``, filled for this settle; None without a reach."""
@@ -2659,9 +2692,21 @@ class _TorchKernel:
         full = (signature, weight, anchor)
         buffers = ws.nudges.get(full)
         if buffers is None:
+            if len(ws.nudges) >= 16:
+                ws.clear_captures()
+                ws.nudges.clear()
             buffers = ws.nudges[full] = _NudgeBuffers(
                 self.torch, self.device, self.dtype, spec, batch, weight, anchor
             )
+        if buffers.groups is not None:
+            temperatures = []
+            tiny = float(self.torch.finfo(self.dtype).tiny)
+            for _, _, pieces, group in buffers.groups:
+                value = _group_temperature(nudge, group)
+                for _ in range(pieces):
+                    value /= tiny
+                temperatures.append(value)
+            buffers.temperatures.copy_(self._upload(np.asarray(temperatures)).view(-1, 1, 1))
         n = self.n
         buffers.target.copy_(self._upload(np.broadcast_to(nudge.target, (batch, n))[:, u]).T)
         buffers.mask.copy_(self._upload(np.asarray(nudge.mask)[u])[:, None])
@@ -2724,6 +2769,8 @@ class _TorchKernel:
         # one configuration object per key, reused by every settle of that key
         cfg = ws.configs.get(key)
         if cfg is None:
+            if len(ws.configs) >= 32:
+                ws.clear_captures()
             cfg = ws.configs[key] = _SweepConfig(
                 key, kind is not None, keep_buffer, buffers, held, tolerance
             )
@@ -2786,6 +2833,7 @@ class _TorchKernel:
         """Sweeps ``t`` to ``t + length - 1``: a graph replay or eager sweeps; on CUDA the
         event of the last one's slot is recorded for the movement test."""
         graph = self._graph(ws, cfg, t % 2, length) if graphs else None
+        ws.executed_steps += length
         if graph is not None:
             with self.torch.cuda.device(self.device):
                 graph.replay()
@@ -2812,10 +2860,12 @@ class _TorchKernel:
         """Run up to ``steps`` sweeps from slot 0; returns the sweeps taken (the final slot is
         their parity)."""
         sync_each = traj is not None or capture is not None
+        ws.executed_steps = 0
         graphs = self._graphs_on(sync_each)
         if sync_each:
             for t in range(steps):
                 self._sweep(ws, cfg, t % 2, (t + 1) % 2)
+                ws.executed_steps += 1
                 j = (t + 1) % 2
                 if capture is not None:
                     capture.step(
@@ -2833,6 +2883,14 @@ class _TorchKernel:
                 length = min(8, steps - t) if graphs else steps - t
                 self._advance(ws, cfg, t, length, graphs)
                 t += length
+            return steps
+        if not ws.cuda:
+            # CPU and MPS have no CUDA host-copy overlap to hide. Check before starting
+            # another sweep, so the returned count also counts all attempted work.
+            for t in range(steps):
+                self._advance(ws, cfg, t, 1, False)
+                if self._met(ws, t):
+                    return t + 1
             return steps
         # The movement test one sweep behind: sweep t + 1 is queued before sweep t's flag is
         # read, and writes the other slot, so a met tolerance at t keeps its state intact.
@@ -3043,6 +3101,7 @@ class _TorchKernel:
                     _host_copy(ws.v[0].T), _host_copy(ws.s[0].T),
                     _host_copy(a_in if ws.a is None else ws.a[0].T),
                 )
+            ws.executed_steps = 0
             taken = self._loop(ws, cfg, steps, traj, capture, a_in) if steps else 0
             j = taken % 2
             contiguous = torch.contiguous_format
@@ -3058,7 +3117,8 @@ class _TorchKernel:
 
         # fetch closes over the tensors, never over the handle: a cycle there would hold the
         # device memory of every settled state until a garbage-collection pass
-        held = {"kernel": self.backend_name, "holder": self, "fetch": fetch, **tensors}
+        held = {"kernel": self.backend_name, "holder": self, "fetch": fetch,
+                "discarded_steps": ws.executed_steps - taken, **tensors}
         return (
             None,
             None,

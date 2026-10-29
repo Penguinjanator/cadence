@@ -17,8 +17,10 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import runpy
 import time
 from concurrent.futures import ProcessPoolExecutor
+from contextlib import contextmanager
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -27,6 +29,7 @@ import cadence as cd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+evidence = runpy.run_path(str(ROOT / "benchmarks/provenance.py"))
 KIND = "cadence-depth-memory/1"
 BENCHMARKS = ("look_back", "contextual_choice", "held_heads")
 SEEDS = (0, 1, 2, 3)
@@ -45,15 +48,12 @@ def benchmark(name: str) -> ModuleType:
 
 
 def sources() -> list[tuple[str, Path]]:
-    """This script's bytes and those of every benchmark it runs, with their library sources."""
-    # the compartment and the learner's changes live in brain.py and learning.py
-    names = {"benchmarks/depth/memory.py", "src/cadence/brain.py", "src/cadence/learning.py"}
-    for name in BENCHMARKS:
-        names.update(path for path, _ in benchmark(name).sources())
-    return [(name, ROOT / name) for name in sorted(names)]
+    """Complete library and component protocol source identity."""
+    return evidence["sources"](ROOT, "benchmarks/depth/memory.py", *("benchmarks/attention/" + name + ".py" for name in BENCHMARKS))
 
 
-def deepen(depth: int) -> None:
+@contextmanager
+def deepen(depth: int):
     """Every ``Brain.compose`` in this process composes ``depth`` times the modules, with the
     compartment, the relative floor and normalized teaching where the call sets none."""
     original = cd.Brain.compose.__func__
@@ -67,16 +67,22 @@ def deepen(depth: int) -> None:
         return original(cls, *args, **options)
 
     cd.Brain.compose = classmethod(compose)  # type: ignore[method-assign]
+    try:
+        yield
+    finally:
+        cd.Brain.compose = classmethod(original)
 
 
+@evidence["record"](ROOT, "benchmarks/depth/memory.py",
+                    *("benchmarks/attention/" + name + ".py" for name in BENCHMARKS))
 def run_cell(name: str, depth: int, seed: int, rule: str | None) -> dict[str, Any]:
-    deepen(depth)
-    module = benchmark(name)
     started = time.time()
-    if name == "held_heads":
-        result = module.run_founder(seed, rule)
-    else:
-        result = module.run_founder(seed)
+    with deepen(depth):
+        module = benchmark(name)
+        if name == "held_heads":
+            result = module.run_founder(seed, rule)
+        else:
+            result = module.run_founder(seed)
     return {"benchmark": name, "depth": depth, "seed": seed, "rule": rule,
             "passed": bool(result["passed"]), "result": result,
             "seconds": round(time.time() - started, 1)}
@@ -108,8 +114,30 @@ def check(body: dict[str, Any]) -> str | None:
     try:
         if body["schema"] != KIND:
             return "wrong schema"
+        configuration = body["configuration"]
+        depths, declared = configuration["depths"], configuration["seeds"]
+        if (not evidence["seeds"](declared) or not isinstance(depths, list)
+                or not depths or any(type(d) is not int or d < 2 for d in depths)
+                or len(set(depths)) != len(depths)):
+            return "invalid depth/founder census"
+        expected = {"depths": depths, "seeds": declared, "rules": list(RULES),
+                    "apical": APICAL, "normalize_relative": RELATIVE}
+        problem = evidence["metadata"](body, KIND, expected)
+        if problem:
+            return problem
+        actual = [(r["benchmark"], r["depth"], r["seed"], r["rule"]) for r in body["runs"]]
+        if sorted(actual, key=str) != sorted(cells(depths, declared), key=str):
+            return "missing, duplicate or undeclared depth cells"
         for run in body["runs"]:
+            problem = evidence["worker"](
+                run, ROOT, "benchmarks/depth/memory.py",
+                *("benchmarks/attention/" + name + ".py" for name in BENCHMARKS))
+            if problem:
+                return problem
             gates = run["result"].get("gates")
+            expected_gates = benchmark(run["benchmark"]).gates_of(run["result"])
+            if gates != expected_gates:
+                return "a nested founder's gates do not follow from its measurements"
             if gates is not None and run["passed"] != all(gates.values()):
                 return f"{run['benchmark']} founder {run['seed']}: the decision does not follow"
             if run["passed"] != bool(run["result"]["passed"]):
@@ -119,6 +147,14 @@ def check(body: dict[str, Any]) -> str | None:
     except (KeyError, TypeError, ValueError):
         return "incomplete or invalid readings"
     return None
+
+
+def historical_check(body: dict[str, Any]) -> str | None:
+    return evidence["historical_check"](ROOT, "benchmarks/depth/results/memory.json", body)
+
+
+def verify_historical(path: Path) -> tuple[bool, str]:
+    return evidence["verify_historical"](ROOT, path, "benchmarks/depth/results/memory.json")
 
 
 def main() -> None:
@@ -149,6 +185,9 @@ def main() -> None:
                                                   "seconds")}), flush=True)
     body = {
         "schema": KIND,
+        "configuration": {"depths": args.depths, "seeds": args.seeds, "rules": list(RULES),
+                          "apical": APICAL, "normalize_relative": RELATIVE},
+        "execution": evidence["environment"](),
         "compose": {"apical": APICAL, "learning_normalize_relative": RELATIVE,
                     "teaching": "normalized where the benchmark sets none",
                     "modules": "each benchmark's widths repeated depth times"},

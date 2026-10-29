@@ -99,7 +99,7 @@ def test_global_step_bound_covers_a_steeper_negative_activation_branch():
     step = model.dt / 2**bound
     # Independent Jacobian including the standing boundary's restoring term.
     slopes = np.diag(model.slope_at(v)[0])
-    coupling = code.lateral() - code.top_down * np.eye(code.units)
+    coupling = model.gain * code.lateral() - code.top_down * np.eye(code.units)
     jacobian = np.eye(code.units) + step * (-np.eye(code.units) + coupling @ slopes)
     assert np.max(np.abs(np.linalg.eigvals(jacobian))) < 1.0
 

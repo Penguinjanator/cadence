@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 import warnings
 from pathlib import Path
 from typing import Any
@@ -31,6 +32,7 @@ import cadence as cd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+evidence = runpy.run_path(str(ROOT / "benchmarks/provenance.py"))
 SYMBOLS, LENGTH, INPUTS = 4, 5, 8
 FIRST, LAST = 4, 5  # the cues' inputs
 LESSONS, TESTS = 1200, 160
@@ -38,13 +40,8 @@ UNIFORM = 1 / SYMBOLS
 
 
 def sources() -> list[tuple[str, Path]]:
-    """The public implementation bytes this result depends on."""
-    names = (
-        "benchmarks/attention/look_back.py",
-        "src/cadence/generic.py",
-        "src/cadence/stream.py",
-    )
-    return [(name, ROOT / name) for name in names]
+    """Complete executed library and experiment source identity."""
+    return evidence["sources"](ROOT, "benchmarks/attention/look_back.py")
 
 
 def compose(seed: int, position: int) -> cd.Brain:
@@ -99,6 +96,7 @@ def run_arm(seed: int, position: int) -> dict[str, Any]:
     }
 
 
+@evidence["record"](ROOT, "benchmarks/attention/look_back.py")
 def run_founder(seed: int) -> dict[str, Any]:
     with_term, without = run_arm(seed, 32), run_arm(seed, 0)
     gates = {
@@ -111,12 +109,46 @@ def run_founder(seed: int) -> dict[str, Any]:
             "uniform_random": UNIFORM, "gates": gates, "passed": all(gates.values())}
 
 
+def configuration(seeds: list[int] | None = None) -> dict[str, Any]:
+    settings = {
+        "inputs": INPUTS, "symbols": SYMBOLS, "length": LENGTH, "modules": [24],
+        "lessons": LESSONS, "tests": TESTS, "teaching": "normalized", "recall_recency": 0.0,
+        "recall_temperature": 0.25, "episodic": False, "positions": [32, 0],
+        "recall_boundary": True,
+    }
+    settings["seeds"] = [0, 1, 2, 3] if seeds is None else seeds
+    return settings
+
+
+def gates_of(founder: dict[str, Any]) -> dict[str, bool]:
+    """Recompute one founder's original behavioral gates without running a neural phase."""
+    a, b = founder["with_position"], founder["without_position"]
+    gates = {
+        "both_cues_with_the_term": min(a["first"], a["last"]) >= 0.9,
+        "beats_the_memory_without_it": a["accuracy"] >= b["accuracy"] + 0.2,
+        "beats_uniform_random": a["accuracy"] >= UNIFORM + 0.5,
+        "the_term_was_taught": a["maps_moved"],
+    }
+    return gates
+
+
 def check(body: dict[str, Any]) -> str | None:
     """The decision the readings support, or the reason they do not."""
+    declared = body.get("configuration", {}).get("seeds")
+    if not evidence["seeds"](declared, 4):
+        return "invalid founder census"
+    problem = evidence["metadata"](body, "cadence-look-back/2", configuration(declared))
+    if problem:
+        return problem
     founders = body.get("founders", [])
+    if sorted(f["seed"] for f in founders) != sorted(declared):
+        return "founders differ from the declared protocol"
     if len(founders) < 4:
         return "fewer than four founders"
     for founder in founders:
+        problem = evidence["worker"](founder, ROOT, "benchmarks/attention/look_back.py")
+        if problem:
+            return problem
         a, b = founder["with_position"], founder["without_position"]
         gates = {
             "both_cues_with_the_term": min(a["first"], a["last"]) >= 0.9,
@@ -129,6 +161,15 @@ def check(body: dict[str, Any]) -> str | None:
     if body["passed"] != all(f["passed"] for f in founders):
         return "the decision does not follow from the founders"
     return None
+
+
+def historical_check(body: dict[str, Any]) -> str | None:
+    """Arithmetic at the historical receipt's original source and metric scope."""
+    return evidence["historical_check"](ROOT, "benchmarks/attention/results/look-back.json", body)
+
+
+def verify_historical(path: Path) -> tuple[bool, str]:
+    return evidence["verify_historical"](ROOT, path, "benchmarks/attention/results/look-back.json")
 
 
 def main() -> None:
@@ -150,12 +191,8 @@ def main() -> None:
     result = {
         "schema": "cadence-look-back/2",
         "scope": "a taught cue chooses how far back the read looks; bounded component evidence",
-        "configuration": {
-            "inputs": INPUTS, "symbols": SYMBOLS, "length": LENGTH, "modules": [24],
-            "lessons": LESSONS, "tests": TESTS, "teaching": "normalized", "recall_recency": 0.0,
-            "recall_temperature": 0.25, "episodic": False, "positions": [32, 0],
-            "recall_boundary": True,
-        },
+        "configuration": configuration(sorted(f["seed"] for f in founders)),
+        "execution": evidence["environment"](),
         "founders": founders,
         "passed": all(founder["passed"] for founder in founders),
     }

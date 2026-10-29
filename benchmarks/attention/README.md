@@ -120,16 +120,41 @@ orders of some value pairs never taught. Its four-founder
 | Report two facts | 1.00 on every founder | 0.79, 0.77, 0.98, 0.82 | 0.21 to 0.24 | 0.03 |
 | One action from two facts | 1.00 on every founder | 0.96, 0.96, 0.97, 0.98 | 0.59 to 0.76 | 0.10 |
 
-The heads attend different records on every trial, with no refusal. One head learns its
+The original heads prefer different role records on every trial, with no refusal; that
+receipt's metric compared only the role-record columns, and did not retain whole-bank
+maxima. One head learns its
 address at the same settings. Lessons switch to the brain's wrong rows once its running share
 of wrong answers falls below 0.02 (lesson 176 to 415). Misses of the reporting slots on
 untaught pairs all give the other asked value (`other_asked_value` equals `wrong_slots`); a
 single action generalizes. The result is
-recomputed by `test_held_heads.py`.
+recomputed at its original source and metric scope by `test_held_heads.py`. Current runs
+also record global maxima, mass on relevant records and distinct relevant facts. Two slots
+from the same fact, or two heads peaking on a shared neutral record, do not pass the current
+distinct-facts gate. Head selection and correct acquisition retain separate gates.
 
 ```sh
 PYTHONPATH=src python benchmarks/attention/held_heads.py --out /tmp/held-heads.json
 ```
+
+### Current and historical evidence
+
+The current attention runners bind every library Python module, package metadata, the
+protocol script and `benchmarks/provenance.py`. They record execution mode, numerical
+dependencies and thread settings; worker outputs retain their own identities before a
+merge. Checkers validate the declared configuration and founder/arm census as well as the
+arithmetic. Receipt verification checks those records; reproducing acquisition requires
+running the declared training protocol.
+
+The original positive receipts remain unchanged, with the source bytes and metric coverage
+they actually recorded. Verify those explicitly as historical evidence:
+
+```sh
+python benchmarks/provenance.py --historical benchmarks/attention/results/held-heads.json
+```
+
+This verifies the registered result, archived source hashes and recorded gate arithmetic.
+It does not label old scores as measurements of a newer implementation. Keep new measured
+results in separate files.
 
 ## Public single-head contextual recipe (0.87.0)
 

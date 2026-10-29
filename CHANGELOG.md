@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.91.1 — 2026-10-29
+
+- Reuse Torch nudge temperature inputs across changing arousal heat. Bound topology and
+  tolerance caches together with their dependent capture/configuration references, so a
+  continuing life retains bounded nudge storage. Tiny-temperature arithmetic keeps its own
+  capture branch and reads the current temperature.
+- CPU and MPS tolerance solves check before executing another sweep. `BrainState` exposes
+  `discarded_steps` and `attempted_steps` for CUDA's intentional lookahead while preserving
+  the returned state's `steps` index.
+- Refuse `ep_structure` on apical graphs: the symmetric plain-sum EP argument does not cover
+  their state-dependent normalization. Keep residual qualification and the held-gain local
+  learning rule distinct from a loss-gradient certificate.
+- Validate original apical checkpoint types and both topology arrays before construction;
+  reject NaN/numeric masks, fractional or overflowing pool labels and coerced scalar fields.
+  Valid checkpoints retain exact continuation.
+- Include the neuron model's actual synaptic gain in both expert learned-code step bounds.
+  Restore the previous code step and phase when an enclosing action, prediction, wait,
+  lesson or feedback operation refuses. Validate feedback before preparing the next code.
+- Measure held heads over the whole memory bank, with separate role-only and global maxima,
+  relevant mass, distinct facts, answer counts and denominators. Check both trained arms'
+  completion. The existing task gates retain their thresholds.
+- Bind current attention/depth experiments to every library module, package metadata and
+  protocol source. Record numerical dependencies, effective solver mode and thread settings;
+  bind worker outputs before merging, and validate configurations and founder/arm census.
+  Preserve original receipts and source snapshots under explicit historical verification.
+- Count the actual positive and opposite teaching phases in the thread benchmark. Compare
+  optimizer state and phase counts as well as parameters, and exit nonzero on disagreement.
+- Restore the original constructor after each deep-memory benchmark job. Reusing a worker
+  now runs the declared depth rather than multiplying the depth again on each job; source,
+  configuration, cell census and nested behavioral decisions are checked explicitly.
+- Reduce recall-memory host copies: an all-stream address lesson reads the canonical slot
+  arrays, selected keys are gathered once, and a write builds each new bounded slot array
+  with one copy while preserving snapshots. Cache immutable association indices per device.
+- Reconcile the task-design and continuing-world-model guides with the current Brain API,
+  run the continuing example in installed-package documentation checks, and document the
+  mathematical, serialization, refusal and executed-work boundaries above.
+
 ## 0.91.0 — 2026-10-28
 
 - The fused CPU settle runs the rows of a batch on Numba's threads. Each sweep computes the

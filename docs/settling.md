@@ -313,6 +313,7 @@ phases.
 
 ### 5. Why the contrast is a gradient
 
+This section concerns the plain synaptic sum, without apical normalization.
 Let `F` be the recurrent neurons with the input activations held fixed. With no adaptation,
 symmetric effective recurrent weights and a monotone differentiable activation, the
 continuous-time dynamics descend
@@ -649,6 +650,10 @@ structural check that the graph admits the symmetric free-state argument of
 [equilibrium propagation](https://arxiv.org/abs/1602.05179). It is separate from the
 contraction certificate. Repeated or out-of-range `fixed_inputs` and a negative or nonfinite
 `tolerance` raise `ValueError`.
+An apical graph also raises `ValueError`: raw reciprocal symmetry does not remove its
+state-dependent normalization. Its held-gain learning rule remains an implemented local
+contrast, whose usefulness is measured by the depth benchmarks; neither its structural
+symmetry nor residual qualification gives it this plain-sum gradient theorem.
 
 | Field | Meaning |
 | --- | --- |

@@ -194,7 +194,10 @@ def ep_structure(
     bias, parameter tying, or the contact/gain and loss-temperature conversion of a raw
     contrast. Inspect those separately before interpreting a contrast as a gradient.
     Parallel effective edges are summed before comparing the free/free matrix.
+    Apical normalization is outside this plain-sum structural argument and is refused.
     """
+    if brain.apical is not None:
+        raise ValueError("ep_structure does not cover a graph with an apical compartment")
     if not np.isfinite(tolerance) or tolerance < 0:
         raise ValueError("tolerance must be finite and nonnegative")
     n, graph = brain.connectome.n, brain.connectome

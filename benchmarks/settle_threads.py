@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import cProfile
+import hashlib
 import json
 import os
 import platform
@@ -78,7 +79,7 @@ def run(kind: str, threads: int, args: argparse.Namespace) -> dict[str, Any]:
     work = lessons(args.warmup + args.lessons, args.batch, args.inputs, args.classes)
     for x, y in work[: args.warmup]:  # compiles the kernels on first use; not timed
         brain.lesson(x, y)
-    seconds, sweeps = [], []
+    seconds, sweeps, phases = [], [], []
     profile = cProfile.Profile() if args.split else None
     for x, y in work[args.warmup :]:
         if profile is not None:
@@ -88,13 +89,20 @@ def run(kind: str, threads: int, args: argparse.Namespace) -> dict[str, Any]:
         seconds.append(time.perf_counter() - started)
         if profile is not None:
             profile.disable()
-        sweeps.append(report.get("free_steps", 0.0) + 2.0 * report.get("nudged_steps", 0.0))
+        phase = [report.get(name, 0.0)
+                 for name in ("free_steps", "nudged_steps", "opposite_steps")]
+        phases.append(phase)
+        sweeps.append(sum(phase))
     out: dict[str, Any] = {
         "kind": kind, "threads": threads, "neurons": int(brain.connectome.n),
         "synapses": int(brain.connectome.synapses),
         "seconds_min": float(np.min(seconds)), "seconds_median": float(np.median(seconds)),
         "sweeps_per_lesson": float(np.mean(sweeps)),
         "weights": brain.brain.efficacy.copy(), "bias": brain.brain.bias.copy(),
+        "optimizer": {name: getattr(brain.learner, name).copy() for name in (
+            "velocity", "velocity_bias", "second_moment", "second_moment_bias")},
+        "phases": phases, "updates": brain.learner.updates,
+        "contrast_updates": brain.learner.contrast_updates,
     }
     if profile is not None:
         split: dict[str, float] = {}
@@ -132,7 +140,11 @@ def main() -> None:
             if base is None:
                 base = dict(reading)
             same = (np.array_equal(reading["weights"], base["weights"])
-                    and np.array_equal(reading["bias"], base["bias"]))
+                    and np.array_equal(reading["bias"], base["bias"])
+                    and all(np.array_equal(value, base["optimizer"][name])
+                            for name, value in reading["optimizer"].items())
+                    and all(reading[key] == base[key]
+                            for key in ("phases", "updates", "contrast_updates")))
             speedup = base["seconds_min"] / reading["seconds_min"]
             print(f"{kind:5s} n={reading['neurons']} synapses={reading['synapses']} "
                   f"threads={threads:3d}  {reading['seconds_min']:.3f} s/lesson (median "
@@ -144,11 +156,19 @@ def main() -> None:
                                   sorted(reading["split"].items(), key=lambda kv: -kv[1]))
                 print(f"      split: {parts}")
             reading.update(speedup=speedup, identical=same)
+            arrays = {"weights": reading["weights"], "bias": reading["bias"],
+                      **reading["optimizer"]}
+            reading["parameter_sha256"] = {
+                name: hashlib.sha256(value.tobytes()).hexdigest() for name, value in arrays.items()
+            }
             del reading["weights"], reading["bias"]
+            del reading["optimizer"]
             readings.append(reading)
     if args.out:
         with open(args.out, "w") as handle:
             json.dump({"platform": platform.platform(), "readings": readings}, handle, indent=1)
+    if not all(reading["identical"] for reading in readings):
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

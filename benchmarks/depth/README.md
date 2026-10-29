@@ -30,8 +30,8 @@ script's and the library's source; `--verify` recomputes the summary from the re
 
 ## Result
 
-The [receipt](results/and-count.json), three seeds per arm, final held-out accuracy after 4,000
-lessons:
+The historical [receipt](results/and-count.json), three seeds per arm, final held-out accuracy
+after 4,000 lessons:
 
 | Arm | Seeds 0, 1, 2 | Mean |
 | --- | --- | --- |
@@ -43,8 +43,9 @@ lessons:
 | `mlp_two` | 0.88, 0.89, 0.89 | 0.89 |
 | `random` | 0.14, 0.15, 0.15 | 0.15 |
 
-Every added module raises the accuracy, and four modules come within 0.02 of the two-layer
-network. One region already beats one hidden layer: its loop through the readout pair settles
+Every added module raises the mean accuracy, and four modules finish about 2.2 percentage points
+below the two-layer network. These accuracy readings do not establish comparable training speed.
+One region already beats one hidden layer: its loop through the readout pair settles
 the answer and the region together, a recurrent depth a feed-forward layer lacks. A free settle
 takes 94 to 141 sweeps and none ran out of its budget. The receipt was produced on the NumPy
 loop (`CADENCE_FUSED=0`) on a 192-core Linux machine with all 21 cells in parallel. Other
@@ -91,3 +92,20 @@ reports two facts. The misses: two-module contextual-choice founder 1 reads the 
 rule misses where the two heads read the same record (founder 0 at both depths, founder 3 at
 three modules). Founder 0 at two modules separates its heads with twice the lessons, at 0.885 on
 untaught pairs against the gate's 0.90: a deeper brain acquires the rule more slowly.
+
+These retained results use their original sources and original head gates, which measured
+maxima among role records only. Current held-head runs measure maxima over the whole bank and
+whether they identify the two asked facts. The original scores cannot decide that stronger
+measurement retrospectively. Current workers also restore their temporary depth constructor
+after every job, so a reused worker runs each cell at its declared depth.
+
+Verify historical custody and recorded arithmetic explicitly from the repository root:
+
+```sh
+python benchmarks/provenance.py --historical benchmarks/depth/results/and-count.json
+python benchmarks/provenance.py --historical benchmarks/depth/results/memory.json
+```
+
+This checks the registered result and archived checker; it does not retrain a founder or admit
+the result as a measurement of the current implementation. New receipts bind every library
+module, protocol, configuration, worker identity and declared cell census.

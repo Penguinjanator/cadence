@@ -47,7 +47,7 @@ def test_the_flee_answer_needs_both_facts() -> None:
 
 
 def test_retained_receipt_is_source_bound_and_recomputed() -> None:
-    ok, message = subject.cd.Receipt.verify(RECEIPT, sources=subject.sources(), check=subject.check)
+    ok, message = subject.verify_historical(RECEIPT)
     assert ok, message
     body = subject.cd.Receipt.read(RECEIPT).body
     assert body["passed"]
@@ -58,9 +58,9 @@ def test_retained_receipt_is_source_bound_and_recomputed() -> None:
 
 def test_the_check_refuses_a_decision_its_readings_do_not_support() -> None:
     body = copy.deepcopy(subject.cd.Receipt.read(RECEIPT).body)
-    assert subject.check(body) is None
+    assert subject.historical_check(body) is None
     body["founders"][0]["arms"]["heads_2"]["trained"]["accuracy"] = 0.5
-    assert subject.check(body) is not None
+    assert subject.historical_check(body) is not None
 
 
 def test_a_short_life_runs_the_whole_protocol() -> None:

@@ -33,7 +33,7 @@ jobs:
 
           # every page whose blocks need NumPy alone: anatomy imports the benchmark
           # instruments of a source checkout and backends needs PyTorch
-          for name in ("README.md", "docs/start.md", "docs/teach.md", "docs/reward.md",
+          for name in ("README.md", "docs/start.md", "docs/world-model.md", "docs/teach.md", "docs/reward.md",
                        "docs/memory.md", "docs/senses.md", "docs/tune.md", "docs/evaluate.md",
                        "docs/settling.md", "docs/api.md"):
               page = Path(name).read_text(encoding="utf-8")

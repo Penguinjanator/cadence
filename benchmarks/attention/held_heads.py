@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import itertools
 import json
+import runpy
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -37,6 +38,7 @@ import cadence as cd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+evidence = runpy.run_path(str(ROOT / "benchmarks/provenance.py"))
 INPUTS, ROLES, ROLE, VALUE = 16, 4, 0, 4
 CODE, MODULE = 16, 64
 VALUES = {"report": 6, "flee": 10}
@@ -44,21 +46,18 @@ CALM = 0.02  # the running share of wrong answers below which only wrong rows ar
 
 
 def sources() -> list[tuple[str, Path]]:
-    """The public implementation bytes this result depends on."""
-    names = (
-        "benchmarks/attention/held_heads.py",
-        "src/cadence/generic.py",
-        "src/cadence/stream.py",
-        "src/cadence/code.py",
-    )
-    return [(name, ROOT / name) for name in names]
+    """Complete executed library and experiment source identity."""
+    return evidence["sources"](ROOT, "benchmarks/attention/held_heads.py")
 
 
 class Task:
     """The witnessed banks, the question and the answers of one task."""
 
-    def __init__(self, rule: str):
+    def __init__(self, rule: str, temperature: float = 0.25):
         self.rule, self.values = rule, VALUES[rule]
+        if isinstance(temperature, bool) or not np.isfinite(temperature) or temperature <= 0:
+            raise ValueError("recall temperature must be finite and positive")
+        self.temperature = float(temperature)
         self.neutral, self.ask = VALUE + self.values, VALUE + self.values + 1
         self.slots = 2 if rule == "report" else 1
         self.actions = self.slots * self.values
@@ -92,7 +91,8 @@ class Task:
         predates the recall position term (0.89.0), which it leaves out."""
         return cd.Brain.compose(
             INPUTS, self.actions, learned_code=CODE, attention=True, recall_heads=heads,
-            recall_address=0.01, recall_temperature=0.25, recall_position=0, modules=(MODULE,),
+            recall_address=0.01, recall_temperature=self.temperature,
+            recall_position=0, modules=(MODULE,),
             slots=self.slots, seed=seed, episodic=False, teaching="normalized",
             learning_qualified=True, learning_damping=3, learning_free_steps=1024,
             learning_nudged_steps=1024, learning_tolerance=0.003,
@@ -201,22 +201,43 @@ def evaluate(
     heads = recall.attended_heads or ()
     role_records = [3 * j + 1 for j in range(ROLES)]
     tops = [np.asarray(p)[:, role_records].argmax(axis=1) for p in heads if p is not None]
-    distinct = (
+    role_distinct = (
         float(np.mean([len({int(t[i]) for t in tops}) == len(tops) for i in range(n)]))
         if len(tops) > 1 else None
     )
+    probabilities = [np.asarray(p) for p in heads if p is not None]
+    global_tops = [p.argmax(axis=1) for p in probabilities]
+    distinct = (float(np.mean(np.stack(global_tops, axis=1)[:, 0]
+                              != np.stack(global_tops, axis=1)[:, 1]))
+                if len(global_tops) == 2 else None)
+    # A fact is its role record or direct-value record; neutral/null records are not facts.
+    facts = [np.where(t % 3 != 0, t // 3, -1) for t in global_tops]
+    distinct_facts = (float(np.mean(((facts[0] == 0) & (facts[1] == 1))
+                                    | ((facts[0] == 1) & (facts[1] == 0))))
+                      if len(facts) == 2 else None)
     return {
+        "trials": n,
+        "correct": int(correct.sum()),
         "accuracy": float(correct.mean()),
         "wrong_slots": int(wrong.sum()),
         "other_asked_value": int(other.sum()),
         "refusals": 0,
         "head_top_role": [int(np.bincount(t, minlength=ROLES).argmax()) for t in tops],
         "distinct_top": distinct,
+        "role_distinct_top": role_distinct,
+        "distinct_facts": distinct_facts,
+        "head_top_slot": [int(np.bincount(t).argmax()) for t in global_tops],
+        "head_relevant_mass": [float(p[:, [1, 2, 4, 5]].sum(axis=1).mean())
+                               for p in probabilities],
+        "head_max_attention": [float(p.max(axis=1).mean()) for p in probabilities],
     }
 
 
-def run_founder(seed: int, rule: str, *, lessons: int = 1024) -> dict[str, Any]:
-    task = Task(rule)
+@evidence["record"](ROOT, "benchmarks/attention/held_heads.py")
+def run_founder(
+    seed: int, rule: str, *, lessons: int = 1024, temperature: float = 0.25
+) -> dict[str, Any]:
+    task = Task(rule, temperature)
     arms: dict[str, Any] = {}
     for heads in (2, 1):
         brain = task.compose(seed, heads)
@@ -231,40 +252,122 @@ def run_founder(seed: int, rule: str, *, lessons: int = 1024) -> dict[str, Any]:
     random = 1.0 / task.values ** task.slots
     two, one = arms["heads_2"], arms["heads_1"]
     gates = {
-        "training_completed": two["training"]["refused"] == 0,
+        "training_completed": all(arm["training"]["accepted"] == lessons
+                                  and arm["training"]["refused"] == 0 for arm in arms.values()),
         "trained_accuracy": two["trained"].get("accuracy", 0.0) >= 0.95,
         "beats_one_head": two["trained"].get("accuracy", 0.0)
         - one["trained"].get("accuracy", 0.0) >= 0.2,
         "beats_uniform_random": two["trained"].get("accuracy", 0.0) - random >= 0.2,
-        "distinct_heads": (two["trained"].get("distinct_top") or 0.0) >= 0.95,
+        "distinct_heads": (two["trained"].get("distinct_facts") or 0.0) >= 0.95,
     }
     if rule == "flee":
         gates["held_out_accuracy"] = two["held_out"].get("accuracy", 0.0) >= 0.9
     return {
         "seed": seed, "rule": rule, "values": task.values, "arms": arms,
+        "protocol": {"lessons": lessons, "recall_temperature": float(temperature)},
         "uniform_random_baseline_accuracy": random, "gates": gates,
         "passed": all(gates.values()),
     }
 
 
+def configuration(
+    lessons: int = 1024, seeds: list[int] | None = None, rules: list[str] | None = None,
+    temperature: float = 0.25,
+) -> dict[str, Any]:
+    settings = {
+        "inputs": INPUTS, "learned_code": CODE, "modules": [MODULE], "lessons": lessons,
+        "recall_heads": 2, "recall_window": 2, "recall_temperature": temperature,
+        "recall_address": 0.01, "recall_recency": 0.0, "recall_position": 0, "calm_below": CALM,
+        "values": VALUES,
+        "tests": 96,
+    }
+    settings["seeds"] = [0, 1, 2, 3] if seeds is None else seeds
+    settings["rules"] = ["report", "flee"] if rules is None else rules
+    return settings
+
+
+def gates_of(founder: dict[str, Any]) -> dict[str, bool]:
+    """Recompute one founder's original behavioral gates without running a neural phase."""
+    two, one = founder["arms"]["heads_2"], founder["arms"]["heads_1"]
+    lessons = founder["protocol"]["lessons"]
+    accuracy = two["trained"].get("accuracy", 0.0)
+    gates = {
+        "training_completed": all(arm["training"]["accepted"] == lessons
+                                  and arm["training"]["refused"] == 0
+                                  for arm in founder["arms"].values()),
+        "trained_accuracy": accuracy >= 0.95,
+        "beats_one_head": accuracy - one["trained"].get("accuracy", 0.0) >= 0.2,
+        "beats_uniform_random": accuracy
+        - founder["uniform_random_baseline_accuracy"] >= 0.2,
+        "distinct_heads": (two["trained"].get("distinct_facts") or 0.0) >= 0.95,
+    }
+    if founder["rule"] == "flee":
+        gates["held_out_accuracy"] = two["held_out"].get("accuracy", 0.0) >= 0.9
+    return gates
+
+
 def check(body: dict[str, Any]) -> str | None:
     """Recompute the retained pass decisions from their recorded readings."""
     try:
-        if body["schema"] != "cadence-held-heads/1" or len(body["founders"]) < 2:
+        cfg = body["configuration"]
+        lessons, declared, rules = cfg["lessons"], cfg["seeds"], cfg["rules"]
+        temperature = cfg["recall_temperature"]
+        if (type(lessons) is not int or lessons < 1 or not evidence["seeds"](declared)
+                or not isinstance(rules, list) or not rules or len(set(rules)) != len(rules)
+                or not set(rules) <= set(VALUES)):
+            return "invalid declared lessons, founders or tasks"
+        Task(rules[0], temperature)  # the actual recipe's validation
+        problem = evidence["metadata"](
+            body, "cadence-held-heads/2", configuration(lessons, declared, rules, temperature))
+        if problem:
+            return problem
+        if sorted((f["seed"], f["rule"]) for f in body["founders"]) != sorted(
+            (seed, rule) for seed in declared for rule in rules
+        ):
+            return "founder/task census differs from the declared protocol"
+        if body["schema"] != "cadence-held-heads/2" or len(body["founders"]) < 2:
             return "wrong schema or too few founders"
         for founder in body["founders"]:
+            problem = evidence["worker"](founder, ROOT, "benchmarks/attention/held_heads.py")
+            if problem:
+                return problem
+            if founder["protocol"] != {"lessons": lessons, "recall_temperature": temperature}:
+                return "merged worker recipe differs from the declared protocol"
             task = Task(founder["rule"])
             if founder["uniform_random_baseline_accuracy"] != 1.0 / task.values ** task.slots:
                 return f"founder {founder['seed']} ({founder['rule']}) has a wrong baseline"
             two, one = founder["arms"]["heads_2"], founder["arms"]["heads_1"]
+            if set(founder["arms"]) != {"heads_1", "heads_2"}:
+                return "the declared one-head control is missing"
+            for arm in founder["arms"].values():
+                work = arm["training"]
+                if (work["lessons"] != lessons
+                        or any(type(work[k]) is not int or work[k] < 0
+                               for k in ("accepted", "refused"))
+                        or work["accepted"] + work["refused"] != lessons):
+                    return "training work differs from the declared lessons"
+                for partition in ("trained", "held_out"):
+                    reading = arm[partition]
+                    if "refused" not in reading and (
+                        reading["trials"] != cfg["tests"] or type(reading["correct"]) is not int
+                        or not 0 <= reading["correct"] <= cfg["tests"]
+                        or reading["accuracy"] != reading["correct"] / cfg["tests"]
+                    ):
+                        return "accuracy or evaluation denominator differs"
+                    for key in ("accuracy", "distinct_top", "role_distinct_top", "distinct_facts"):
+                        value = arm[partition].get(key)
+                        if value is not None and not 0 <= value <= 1:
+                            return "a probability reading lies outside [0, 1]"
             accuracy = two["trained"].get("accuracy", 0.0)
             expected = {
-                "training_completed": two["training"]["refused"] == 0,
+                "training_completed": all(arm["training"]["accepted"] == lessons
+                                          and arm["training"]["refused"] == 0
+                                          for arm in founder["arms"].values()),
                 "trained_accuracy": accuracy >= 0.95,
                 "beats_one_head": accuracy - one["trained"].get("accuracy", 0.0) >= 0.2,
                 "beats_uniform_random": accuracy
                 - founder["uniform_random_baseline_accuracy"] >= 0.2,
-                "distinct_heads": (two["trained"].get("distinct_top") or 0.0) >= 0.95,
+                "distinct_heads": (two["trained"].get("distinct_facts") or 0.0) >= 0.95,
             }
             if founder["rule"] == "flee":
                 expected["held_out_accuracy"] = two["held_out"].get("accuracy", 0.0) >= 0.9
@@ -277,11 +380,22 @@ def check(body: dict[str, Any]) -> str | None:
     return None
 
 
+def historical_check(body: dict[str, Any]) -> str | None:
+    """Arithmetic at the historical receipt's original source and metric scope."""
+    return evidence["historical_check"](ROOT, "benchmarks/attention/results/held-heads.json", body)
+
+
+def verify_historical(path: Path) -> tuple[bool, str]:
+    return evidence["verify_historical"](ROOT, path, "benchmarks/attention/results/held-heads.json")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--seeds", nargs="+", type=int, default=[0, 1, 2, 3])
     parser.add_argument("--rules", nargs="+", default=["report", "flee"])
     parser.add_argument("--lessons", type=int, default=1024)
+    parser.add_argument("--temperature", type=float, default=0.25,
+                        help="recall temperature of both the two-head arm and one-head control")
     parser.add_argument("--founder-out", type=Path, help="write one founder's readings (JSON)")
     parser.add_argument("--merge", nargs="+", type=Path, help="founder readings to combine")
     parser.add_argument("--out", type=Path)
@@ -291,19 +405,18 @@ def main() -> None:
     else:
         if args.founder_out is not None and len(args.seeds) * len(args.rules) != 1:
             raise SystemExit("--founder-out writes one founder: pass one seed and one rule")
-        founders = [run_founder(s, r, lessons=args.lessons) for r in args.rules for s in args.seeds]
+        founders = [run_founder(s, r, lessons=args.lessons, temperature=args.temperature)
+                    for r in args.rules for s in args.seeds]
         if args.founder_out is not None:
             args.founder_out.write_text(json.dumps(founders[0], sort_keys=True, indent=2) + "\n")
             return
     result = {
-        "schema": "cadence-held-heads/1",
+        "schema": "cadence-held-heads/2",
         "scope": "several facts in one settle with held heads; bounded component evidence",
-        "configuration": {
-            "inputs": INPUTS, "learned_code": CODE, "modules": [MODULE], "lessons": args.lessons,
-            "recall_heads": 2, "recall_window": 2, "recall_temperature": 0.25,
-            "recall_address": 0.01, "recall_recency": 0.0, "recall_position": 0, "calm_below": CALM,
-            "values": VALUES,
-        },
+        "configuration": configuration(
+            args.lessons, sorted({f["seed"] for f in founders}),
+            [r for r in VALUES if any(f["rule"] == r for f in founders)], args.temperature),
+        "execution": evidence["environment"](),
         "founders": founders,
         "passed": len(founders) >= 2 and all(founder["passed"] for founder in founders),
     }
@@ -311,7 +424,7 @@ def main() -> None:
     if problem is not None:
         raise AssertionError(problem)
     if args.out is not None:
-        cd.Receipt.build("cadence-held-heads/1", result, sources()).write(args.out)
+        cd.Receipt.build("cadence-held-heads/2", result, sources()).write(args.out)
     print(json.dumps(result, sort_keys=True, indent=2, allow_nan=False))
 
 

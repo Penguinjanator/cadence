@@ -45,6 +45,9 @@ and source identity stay attached to the action that was actually executed.
   the live model and original-equation tolerance. It does not change acts, evaluation or
   reward eligibility; the default index zero retains the existing schedule.
 - RMS-normalized rates are covered in [rates under normalization](teach.md#rates-under-normalization).
+- Apical normalization has its own held-gain learning law. The ordinary symmetric
+  plain-sum EP gradient argument does not cover it, and `ep_structure` refuses apical
+  graphs. Residual qualification still checks the actual declared equations.
 
 ## State and production integration
 
@@ -57,6 +60,9 @@ Calls validate shapes and finite values before mutating anything. An invalid cal
 failed transaction installs no parameter and no record. Counters of attempted work may
 advance on a refused update; report them as attempted work, never as accepted learning. An
 `imagine` call does not teach or alter live activity, though it can count its work.
+With a learned code, a refused action, wait, lesson or outcome also restores the code
+region's numerical step and previous phase. Invalid feedback is checked before that
+region settles. An outcome already accepted before a later action refuses stays accepted.
 
 `Connectome` arrays and its population mapping are read-only. `NeuralGraph.efficacy`,
 `bias`, `log_gain` and the effective `weights` return read-only views. Replace parameters

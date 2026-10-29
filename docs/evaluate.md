@@ -316,6 +316,24 @@ first disagreement: (1) the file is byte for byte the canonical form of its cont
 manifest matches; (4) when `check` is supplied, `check(body)` returns no problem text (for a
 protocol receipt: every pass flag follows from the stored readings and every tally from the
 rows). The message lists what was checked, or names the disagreement or the check's text.
+This verifies the declared source inventory; it cannot discover omitted dependencies.
+The current attention and depth runners bind every library Python module, package metadata,
+the provenance helper and their protocol scripts, and record the effective numerical mode,
+dependency versions and thread environment. Current attention checkers also validate the
+declared configuration and founder/arm census before recomputing decisions.
+
+For the original attention/depth results, use the explicit historical reader:
+
+```sh
+python benchmarks/provenance.py --historical benchmarks/attention/results/held-heads.json
+python benchmarks/provenance.py --historical benchmarks/depth/results/and-count.json
+```
+
+It checks the exact registered receipt and archived source bytes at their original evidence
+scope. It does not promote the old partial source inventory or conditional role-record head
+metric to a current measurement, and it does not replay training. New results keep separate
+receipts. Whole-bank head maxima, distinct relevant facts and answer accuracy are separate
+measurements; two globally different slots can still belong to the same fact.
 
 ### What belongs in the body
 

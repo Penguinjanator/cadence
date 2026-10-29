@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -45,6 +46,7 @@ import cadence as cd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+evidence = runpy.run_path(str(ROOT / "benchmarks/provenance.py"))
 T = 8
 HEAR, ASK, NOISE = T, T + 1, T + 2
 INPUTS = T + 3
@@ -72,13 +74,8 @@ FLAT_SEEDS, DEEP_SEEDS = (0, 1, 2, 3, 4, 5), (0, 1)
 
 
 def sources() -> list[tuple[str, Path]]:
-    """The public implementation bytes this result depends on."""
-    names = (
-        "benchmarks/attention/copy_tokens.py",
-        "src/cadence/generic.py",
-        "src/cadence/stream.py",
-    )
-    return [(name, ROOT / name) for name in names]
+    """Complete executed library and experiment source identity."""
+    return evidence["sources"](ROOT, "benchmarks/attention/copy_tokens.py")
 
 
 def obs(*on: int) -> np.ndarray:
@@ -191,6 +188,7 @@ def succession(seed: int, arm: str, depth: str) -> dict[str, float]:
     return out
 
 
+@evidence["record"](ROOT, "benchmarks/attention/copy_tokens.py")
 def run_one(job: tuple[str, str, int]) -> dict[str, Any]:
     depth, arm, seed = job
     return {"depth": depth, "arm": arm, "seed": seed,
@@ -238,9 +236,29 @@ def gates_of(runs: list[dict[str, Any]]) -> dict[str, bool]:
     return out
 
 
+def configuration() -> dict[str, Any]:
+    settings = {
+        "tokens": T, "taught": TAUGHT, "inputs": INPUTS, "length": LENGTH,
+        "lessons": LESSONS, "tests": TESTS, "teaching": "normalized",
+        "learning_surprise": True, "episodic": False, "arms": ARMS,
+        "flat": {"modules": list(FLAT["modules"]), "seeds": list(FLAT_SEEDS)},
+        "deep": {**{k: list(v) if isinstance(v, tuple) else v for k, v in DEEP.items()},
+                 "seeds": list(DEEP_SEEDS), "arms": list(DEEP_ARMS)},
+        "uniform_random": UNIFORM,
+    }
+    return settings
+
+
 def check(body: dict[str, Any]) -> str | None:
     """The decision the readings support, or the reason they do not."""
+    problem = evidence["metadata"](body, "cadence-copy-tokens/1", configuration())
+    if problem:
+        return problem
     runs = body.get("runs", [])
+    for row in runs:
+        problem = evidence["worker"](row, ROOT, "benchmarks/attention/copy_tokens.py")
+        if problem:
+            return problem
     if sorted((r["depth"], r["arm"], r["seed"]) for r in runs) != sorted(jobs()):
         return "the runs are not the declared arms and founders"
     if body.get("summary") != summary(runs):
@@ -249,6 +267,15 @@ def check(body: dict[str, Any]) -> str | None:
     if body.get("gates") != gates or body.get("passed") != all(gates.values()):
         return "the gates do not follow from the readings"
     return None
+
+
+def historical_check(body: dict[str, Any]) -> str | None:
+    """Arithmetic at the historical receipt's original source and metric scope."""
+    return evidence["historical_check"](ROOT, "benchmarks/attention/results/copy-tokens.json", body)
+
+
+def verify_historical(path: Path) -> tuple[bool, str]:
+    return evidence["verify_historical"](ROOT, path, "benchmarks/attention/results/copy-tokens.json")
 
 
 def main() -> None:
@@ -262,15 +289,8 @@ def main() -> None:
     result = {
         "schema": "cadence-copy-tokens/1",
         "scope": "a token the read delivers drives its own action; component evidence",
-        "configuration": {
-            "tokens": T, "taught": TAUGHT, "inputs": INPUTS, "length": LENGTH,
-            "lessons": LESSONS, "tests": TESTS, "teaching": "normalized",
-            "learning_surprise": True, "episodic": False, "arms": ARMS,
-            "flat": {"modules": list(FLAT["modules"]), "seeds": list(FLAT_SEEDS)},
-            "deep": {**{k: list(v) if isinstance(v, tuple) else v for k, v in DEEP.items()},
-                     "seeds": list(DEEP_SEEDS), "arms": list(DEEP_ARMS)},
-            "uniform_random": UNIFORM,
-        },
+        "configuration": configuration(),
+        "execution": evidence["environment"](),
         "runs": runs,
         "summary": summary(runs),
         "gates": gates,

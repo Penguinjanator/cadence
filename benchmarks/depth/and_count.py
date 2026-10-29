@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -37,6 +38,7 @@ import cadence as cd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+evidence = runpy.run_path(str(ROOT / "benchmarks/provenance.py"))
 KIND = "cadence-depth-and-count/1"
 PAIRS, SHIFT, CLASSES = 24, 3, 7
 DATA_SEED, ROWS, HELD, BATCH = 12345, 200_000, 2_000, 64
@@ -60,13 +62,8 @@ MLP_RATE = 1e-3
 
 
 def sources() -> list[tuple[str, Path]]:
-    names = (
-        "benchmarks/depth/and_count.py",
-        "src/cadence/brain.py",
-        "src/cadence/generic.py",
-        "src/cadence/learning.py",
-    )
-    return [(name, ROOT / name) for name in names]
+    """Complete library and component protocol source identity."""
+    return evidence["sources"](ROOT, "benchmarks/depth/and_count.py")
 
 
 def task(rows: int = ROWS, seed: int = DATA_SEED) -> tuple[np.ndarray, np.ndarray]:
@@ -140,6 +137,7 @@ def cadence_answers(brain: cd.Brain, x: np.ndarray) -> tuple[np.ndarray, dict[st
     return motor.argmax(axis=1), {"read_sweeps": int(state.steps)}
 
 
+@evidence["record"](ROOT, "benchmarks/depth/and_count.py")
 def run_arm(
     arm: str, seed: int, *, lessons: int, every: int, rows: int = ROWS, held: int = HELD
 ) -> dict[str, Any]:
@@ -210,11 +208,56 @@ def check(body: dict[str, Any]) -> str | None:
     try:
         if body["schema"] != KIND:
             return "wrong schema"
+        cfg = body["configuration"]
+        lessons, every, declared, arms = (cfg[k] for k in ("lessons", "every", "seeds", "arms"))
+        if (type(lessons) is not int or type(every) is not int or lessons < 1 or every < 1
+                or lessons % every or not evidence["seeds"](declared)
+                or not isinstance(arms, list) or not arms or len(set(arms)) != len(arms)
+                or not set(arms) <= set(ARMS)):
+            return "invalid lesson, reading, arm or founder census"
+        rows, held = cfg["rows"], cfg["held"]
+        if type(rows) is not int or type(held) is not int or not 0 < held < rows:
+            return "invalid data split"
+        expected = configuration(lessons, every, declared, arms, rows, held)
+        problem = evidence["metadata"](body, KIND, expected)
+        if problem:
+            return problem
+        if sorted((r["arm"], r["seed"]) for r in body["runs"]) != sorted(
+            (arm, seed) for arm in arms for seed in declared
+        ):
+            return "missing, duplicate or undeclared arm/founder"
+        for run in body["runs"]:
+            problem = evidence["worker"](run, ROOT, "benchmarks/depth/and_count.py")
+            if problem:
+                return problem
+            if [point["lesson"] for point in run["curve"]] != list(range(every, lessons + 1, every)):
+                return "missing or undeclared reading checkpoint"
+            if any(not 0 <= point["accuracy"] <= 1 for point in run["curve"]):
+                return "invalid accuracy"
         if summarize(body["runs"]) != body["summary"]:
             return "summary does not match the stored readings"
     except (KeyError, TypeError, ValueError, IndexError):
         return "incomplete or invalid readings"
     return None
+
+
+def configuration(
+    lessons: int, every: int, seeds: list[int], arms: list[str],
+    rows: int = ROWS, held: int = HELD,
+) -> dict[str, Any]:
+    return {"lessons": lessons, "every": every, "seeds": seeds, "arms": arms,
+            "rows": rows, "held": held, "batch": BATCH, "data_seed": DATA_SEED,
+            "pairs": PAIRS, "shift": SHIFT, "classes": CLASSES, "compose": COMPOSE,
+            "cadence_modules": {key: list(value) for key, value in CADENCE.items()},
+            "mlp_hidden": {key: list(value) for key, value in MLP.items()}, "mlp_rate": MLP_RATE}
+
+
+def historical_check(body: dict[str, Any]) -> str | None:
+    return evidence["historical_check"](ROOT, "benchmarks/depth/results/and-count.json", body)
+
+
+def verify_historical(path: Path) -> tuple[bool, str]:
+    return evidence["verify_historical"](ROOT, path, "benchmarks/depth/results/and-count.json")
 
 
 def main() -> None:
@@ -248,6 +291,8 @@ def main() -> None:
                   flush=True)
     body = {
         "schema": KIND,
+        "configuration": configuration(args.lessons, args.every, args.seeds, args.arms),
+        "execution": evidence["environment"](),
         "task": {"pairs": PAIRS, "shift": SHIFT, "classes": CLASSES, "data_seed": DATA_SEED,
                  "rows": ROWS, "held": HELD, "batch": BATCH},
         "compose": COMPOSE, "cadence_modules": {k: list(v) for k, v in CADENCE.items()},

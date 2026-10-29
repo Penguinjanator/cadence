@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import runpy
 import warnings
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
@@ -42,6 +43,7 @@ import cadence as cd
 
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parents[1]
+evidence = runpy.run_path(str(ROOT / "benchmarks/provenance.py"))
 INPUTS, ACTIONS = 4, 2
 X = np.eye(INPUTS)[[0]]  # every observation
 BOUTS, LENGTH, TESTS, CADENCE = 150, 12, 4, 3
@@ -60,13 +62,8 @@ REPEATED = "lesson on the observations the brain just acted on"
 
 
 def sources() -> list[tuple[str, Path]]:
-    """The public implementation bytes this result depends on."""
-    names = (
-        "benchmarks/attention/own_action.py",
-        "src/cadence/generic.py",
-        "src/cadence/stream.py",
-    )
-    return [(name, ROOT / name) for name in names]
+    """Complete executed library and experiment source identity."""
+    return evidence["sources"](ROOT, "benchmarks/attention/own_action.py")
 
 
 def compose(seed: int, arm: str) -> cd.Brain:
@@ -111,6 +108,7 @@ def score(brain: cd.Brain, task: str, lesion: bool = False) -> float:
     return hits / total
 
 
+@evidence["record"](ROOT, "benchmarks/attention/own_action.py")
 def run_one(job: tuple[str, str, int]) -> dict[str, Any]:
     task, arm, seed = job
     brain = compose(seed, arm)
@@ -173,8 +171,25 @@ def gates_of(runs: list[dict[str, Any]]) -> dict[str, bool]:
     return out
 
 
+def configuration() -> dict[str, Any]:
+    settings = {
+        "inputs": INPUTS, "actions": ACTIONS, "bouts": BOUTS, "length": LENGTH,
+        "tests": TESTS, "cadence": CADENCE, "modules": [24], "teaching": "normalized",
+        "learning_surprise": True, "episodic": False, "arms": ARMS, "seeds": list(SEEDS),
+        "uniform_random": UNIFORM,
+    }
+    return settings
+
+
 def check(body: dict[str, Any]) -> str | None:
+    problem = evidence["metadata"](body, "cadence-own-action/1", configuration())
+    if problem:
+        return problem
     runs = body.get("runs", [])
+    for row in runs:
+        problem = evidence["worker"](row, ROOT, "benchmarks/attention/own_action.py")
+        if problem:
+            return problem
     if sorted((r["task"], r["arm"], r["seed"]) for r in runs) != sorted(jobs()):
         return "the runs are not the declared arms and founders"
     if body.get("summary") != summary(runs):
@@ -183,6 +198,15 @@ def check(body: dict[str, Any]) -> str | None:
     if body.get("gates") != gates or body.get("passed") != all(gates.values()):
         return "the gates do not follow from the readings"
     return None
+
+
+def historical_check(body: dict[str, Any]) -> str | None:
+    """Arithmetic at the historical receipt's original source and metric scope."""
+    return evidence["historical_check"](ROOT, "benchmarks/attention/results/own-action.json", body)
+
+
+def verify_historical(path: Path) -> tuple[bool, str]:
+    return evidence["verify_historical"](ROOT, path, "benchmarks/attention/results/own-action.json")
 
 
 def main() -> None:
@@ -196,12 +220,8 @@ def main() -> None:
     result = {
         "schema": "cadence-own-action/1",
         "scope": "the recall memory carries the brain's own actions; component evidence",
-        "configuration": {
-            "inputs": INPUTS, "actions": ACTIONS, "bouts": BOUTS, "length": LENGTH,
-            "tests": TESTS, "cadence": CADENCE, "modules": [24], "teaching": "normalized",
-            "learning_surprise": True, "episodic": False, "arms": ARMS, "seeds": list(SEEDS),
-            "uniform_random": UNIFORM,
-        },
+        "configuration": configuration(),
+        "execution": evidence["environment"](),
         "runs": runs,
         "summary": summary(runs),
         "gates": gates,

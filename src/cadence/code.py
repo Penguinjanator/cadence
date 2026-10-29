@@ -346,14 +346,15 @@ class LearnedCode:
         """The step's halvings that damp the negative modes at potentials ``v``
         (``(batch, units)``): the least ``h``
         with ``dt / 2^h * (1 - mu_min) <= STEP_MARGIN``, ``mu_min`` the smallest eigenvalue
-        over the rows of ``D^1/2 (L - top_down I) D^1/2`` (``D`` the activation's slopes at
-        ``v``, ``L`` the lateral weights, ``top_down`` the standing boundary's gain); 0 when
+        over the rows of ``D^1/2 (gain L - top_down I) D^1/2`` (``D`` the activation's slopes at
+        ``v``, ``L`` the lateral weights, ``gain`` the neuron model's synaptic gain,
+        ``top_down`` the standing boundary's gain); 0 when
         the bound holds at the model's own step. Local contraction also requires the largest
         coupling eigenvalue below one, as the founder standing gain ensures."""
         v = np.atleast_2d(np.asarray(v, dtype=float))
         slopes = np.maximum(self.model.slope_at(v), 0.0)
         root = np.sqrt(slopes)
-        lateral = self.lateral()
+        lateral = self.model.gain * self.lateral()
         coupling = root[:, :, None] * lateral[None, :, :] * root[:, None, :]
         # the standing boundary's restoring term, -top_down on every unit's own diagonal
         index = np.arange(self.units)
@@ -365,9 +366,9 @@ class LearnedCode:
     def rest_stability(self) -> int:
         """The negative-mode step bound of ``stability`` over every state, from the
         dictionary alone. With every slope at most the activation's largest,
-        ``s_max``, the coupling's smallest eigenvalue is at least ``s_max (1 - lambda_max(G)
-        - top_down)``, ``G`` the dictionary's Gram matrix. This does not stabilize a custom
-        control whose largest coupling eigenvalue is at least one."""
+        ``s_max``, the coupling's smallest eigenvalue is at least ``s_max (gain *
+        (1 - lambda_max(G)) - top_down)``, ``G`` the dictionary's Gram matrix. This does not
+        stabilize a custom control whose largest coupling eigenvalue is at least one."""
         rest = float(self.model.rest_emission)
         steepest = max(rest, 0.5)  # the active branch's steepest point of the sigmoid
         positive = self.model.slope * steepest * (1.0 - steepest) / (1.0 - rest)
@@ -377,7 +378,7 @@ class LearnedCode:
         )
         s_max = max(positive, negative)
         largest = float(np.linalg.eigvalsh(self.gram())[-1])
-        mu = s_max * (1.0 - largest - self.top_down)
+        mu = s_max * (self.model.gain * (1.0 - largest) - self.top_down)
         need = self.model.dt * (1.0 - mu) / self.STEP_MARGIN
         return 0 if need <= 1.0 else int(np.ceil(np.log2(need)))
 

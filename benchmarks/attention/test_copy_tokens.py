@@ -42,7 +42,7 @@ def test_the_arms_differ_only_in_the_pathway() -> None:
 
 
 def test_retained_receipt_is_source_bound_and_recomputed() -> None:
-    ok, message = subject.cd.Receipt.verify(RECEIPT, sources=subject.sources(), check=subject.check)
+    ok, message = subject.verify_historical(RECEIPT)
     assert ok, message
     body = subject.cd.Receipt.read(RECEIPT).body
     assert body["passed"] and all(body["gates"].values())
@@ -54,7 +54,7 @@ def test_the_check_refuses_a_decision_its_readings_do_not_support() -> None:
     body = copy.deepcopy(subject.cd.Receipt.read(RECEIPT).body)
     run = next(r for r in body["runs"] if r["arm"] == "identity" and r["depth"] == "flat")
     run["held"] = 0.0
-    assert subject.check(body) is not None
+    assert subject.historical_check(body) is not None
     body = copy.deepcopy(subject.cd.Receipt.read(RECEIPT).body)
     body["runs"] = body["runs"][:-1]
-    assert subject.check(body) is not None
+    assert subject.historical_check(body) is not None

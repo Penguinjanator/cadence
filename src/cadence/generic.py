@@ -37,7 +37,8 @@ designed region can replace any of them.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from copy import deepcopy
 from pathlib import Path
 from types import MappingProxyType
@@ -2347,6 +2348,23 @@ class Brain:
         assert code is not None
         code.restep(halvings)
 
+    @contextmanager
+    def _code_attempt(self) -> Iterator[None]:
+        """Publish a code phase's numerical policy only with its enclosing operation.
+
+        Attempted settle work and refusal diagnostics remain observable. The previous
+        moment, step and live phase are restored when preparation or its consumer refuses.
+        """
+        code, moment = self.learned_code, self._coded_moment
+        held = None if code is None else (code.halvings, code.graph, code.last)
+        try:
+            yield
+        except BaseException:
+            self._coded_moment = moment
+            if code is not None and held is not None:
+                code.halvings, code.graph, code.last = held
+            raise
+
     # -- construction
 
     @classmethod
@@ -3376,7 +3394,8 @@ class Brain:
 
         One choice per output slot: ``(batch,)`` for one slot, ``(batch, slots)``
         when ``slots`` split the motor neurons, matching ``act`` and ``step``."""
-        state = self._qualified(self.stimulus(observations, memory=False), operation="predict")
+        with self._code_attempt():
+            state = self._qualified(self.stimulus(observations, memory=False), operation="predict")
         return self._choices(state)
 
     def accuracy(self, observations: Any, labels: Any) -> float:
@@ -3513,6 +3532,11 @@ class Brain:
     def _lesson(self, x: np.ndarray, labels: np.ndarray) -> dict[str, float]:
         """The lesson of validated observations and labels; ``last_learning`` takes its report
         with the ``demonstration_`` prefix."""
+        with self._code_attempt():
+            return self._teach(x, labels)
+
+    def _teach(self, x: np.ndarray, labels: np.ndarray) -> dict[str, float]:
+        """The provisional code phase and the local demonstration consuming it."""
         from .learning import LearningPhaseError
 
         batch = len(x)
@@ -3903,9 +3927,10 @@ class Brain:
             raise RuntimeError(
                 "wait needs an issued action awaiting its outcome; start with live(observations)"
             )
-        self._prepare(x)
-        drive = self.stimulus(x)
-        state = self._qualified(drive, self._activity(), operation="wait")
+        with self._code_attempt():
+            self._prepare(x)
+            drive = self.stimulus(x)
+            state = self._qualified(drive, self._activity(), operation="wait")
         code = self._coded(x)
         lived = self._lived
         routine = lived is not None and lived[4] is current and not lived[3]
@@ -4153,13 +4178,10 @@ class Brain:
         """The drive of validated observations and its qualified free state, warm from the
         stream's last state; the observations' code is computed here once for the moment.
         Refusal raises before anything changes."""
-        try:
+        with self._code_attempt():
             self._prepare(x)
             drive = self.stimulus(x)
             return drive, self._qualified(drive, self._activity(), operation="act")
-        except BaseException:
-            self._coded_moment = None
-            raise
 
     def _coded(self, x: np.ndarray) -> np.ndarray:
         """The observation code of the moment being acted on, computed by ``_settled``; of any
@@ -4300,14 +4322,26 @@ class Brain:
         the same dopamine, and the report names the step (``address_reward_step``).
         """
         following = self._observations(next_observations)
-        self._prepare(following)
         # Preflight without reading or resetting memories: invalid input must not write an episode.
+        # Only the next drive's shape is needed here; computing it would already settle code.
+        shape = np.broadcast_to(0.0, (len(following), self.connectome.n))
         reward, done, _, bootstrap = self.basal_ganglia._validated_transition(
-            reward, done, self.stimulus(following, memory=False), bootstrap
+            reward, done, shape, bootstrap
         )
         importance = SynapticMemory.salience_vector(
             np.abs(reward) if salience is None else salience, len(following)
         )
+        with self._code_attempt():
+            return self._learn_outcome(
+                reward, done, following, bootstrap, importance, salience is not None
+            )
+
+    def _learn_outcome(
+        self, reward: np.ndarray, done: np.ndarray, following: np.ndarray,
+        bootstrap: np.ndarray | None, importance: np.ndarray, supplied_salience: bool,
+    ) -> dict[str, float]:
+        """Apply a validated outcome, retaining pending feedback on numerical refusal."""
+        self._prepare(following)
         memory = self.hippocampus
         # Synaptic writes replace arrays, so retain their old references rather
         # than copying a potentially large persistent matrix for every outcome.
@@ -4349,7 +4383,7 @@ class Brain:
                     episodic.outcome(
                         self._key_of(keys, self._moment_code), action, reward, done,
                         np.ones(len(action), bool), gamma=self.basal_ganglia.config.gamma,
-                        salience=None if salience is None else importance,
+                        salience=importance if supplied_salience else None,
                     )
             if episodic is not None and done.any():
                 # the streams whose attempt ended begin the next with no context and no path

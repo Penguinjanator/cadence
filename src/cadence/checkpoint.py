@@ -198,8 +198,11 @@ def load(
         known = (FORMAT, INITIAL_DAMPING_FORMAT, APICAL_FORMAT)
         if not first and meta.get("format") not in known:
             raise ValueError(f"not a cadence checkpoint: {meta.get('format')!r}")
-        if ("apical" in meta) != ("apical_synapses" in data.files) or (
-            "apical" in meta and not apical_format
+        compartment_arrays = {"apical_synapses", "apical_groups"} & set(data.files)
+        if (
+            ("apical" in meta and compartment_arrays != {"apical_synapses", "apical_groups"})
+            or ("apical" not in meta and compartment_arrays)
+            or ("apical" in meta and not apical_format)
         ):
             raise ValueError(
                 "an apical compartment belongs to checkpoint format cadence-checkpoint/5"
@@ -265,10 +268,10 @@ def load(
             if not isinstance(spec, dict) or set(spec) != {"fraction", "floor"}:
                 raise ValueError("invalid checkpoint apical compartment")
             apical = Apical(
-                np.asarray(data["apical_synapses"]).astype(bool),
-                np.asarray(data["apical_groups"]).astype(np.int64),
-                float(spec["fraction"]),
-                float(spec["floor"]),
+                np.asarray(data["apical_synapses"]),
+                np.asarray(data["apical_groups"]),
+                spec["fraction"],
+                spec["floor"],
             )
         brain = Brain(
             connectome,

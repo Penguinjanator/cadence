@@ -49,7 +49,7 @@ def test_cold_policy_preserves_only_the_recall_window_context() -> None:
 
 def test_retained_four_founder_receipt_is_source_bound_and_recomputed() -> None:
     path = Path(__file__).with_name("results") / "contextual-choice-v0870.json"
-    ok, message = subject.cd.Receipt.verify(path, sources=subject.sources(), check=subject.check)
+    ok, message = subject.verify_historical(path)
     assert ok, message
     receipt = subject.cd.Receipt.read(path)
     assert [founder["seed"] for founder in receipt.body["founders"]] == [0, 1, 2, 3]
