@@ -455,8 +455,8 @@ def check(body: dict[str, Any]) -> str | None:
                     return "panel accuracy or denominator differs"
                 for context in CONTEXTS:
                     count = panel["per_context_correct"][str(context)]
-                    if (type(count) is not int or not 0 <= count <= trials // 2
-                            or panel["per_context_accuracy"][str(context)] != count / (trials // 2)):
+                    if (type(count) is not int or not 0 <= count <= trials // 2 or
+                            panel["per_context_accuracy"][str(context)] != count / (trials // 2)):
                         return "context accuracy or denominator differs"
             intact = panels["contextual"]
             expected = {
@@ -497,11 +497,13 @@ def check(body: dict[str, Any]) -> str | None:
 
 def historical_check(body: dict[str, Any]) -> str | None:
     """Arithmetic at the historical receipt's original source and metric scope."""
-    return evidence["historical_check"](ROOT, "benchmarks/attention/results/contextual-choice-v0870.json", body)
+    return evidence["historical_check"](
+        ROOT, "benchmarks/attention/results/contextual-choice-v0870.json", body)
 
 
 def verify_historical(path: Path) -> tuple[bool, str]:
-    return evidence["verify_historical"](ROOT, path, "benchmarks/attention/results/contextual-choice-v0870.json")
+    return evidence["verify_historical"](
+        ROOT, path, "benchmarks/attention/results/contextual-choice-v0870.json")
 
 
 def main() -> None:

@@ -275,7 +275,8 @@ def historical_check(body: dict[str, Any]) -> str | None:
 
 
 def verify_historical(path: Path) -> tuple[bool, str]:
-    return evidence["verify_historical"](ROOT, path, "benchmarks/attention/results/copy-tokens.json")
+    return evidence["verify_historical"](
+        ROOT, path, "benchmarks/attention/results/copy-tokens.json")
 
 
 def main() -> None:

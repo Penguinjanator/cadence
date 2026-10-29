@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 import cadence as cd
+from cadence import stream
 
 
 def two_slots():
@@ -46,6 +47,33 @@ def test_current_key_contents_are_read_after_an_in_place_expert_edit():
     expected = attention_reference(recall, address)
     assert not np.array_equal(before, expected)
     np.testing.assert_array_equal(recall.weights(address), expected)
+
+
+def test_content_reuse_is_bounded_and_checks_current_keys(monkeypatch):
+    brain = two_slots()
+    recall = brain.recall
+    address = recall.keys[:, 0].copy()
+    contractions = []
+    original = stream._einsum
+
+    def counted(*args):
+        contractions.append(1)
+        return original(*args)
+
+    monkeypatch.setattr(stream, "_einsum", counted)
+    recall.weights(address)
+    recall.weights(address)
+    brain.retune(recall_temperature=1.0)
+    recall.weights(address)
+    assert len(contractions) == 1
+    recall.keys[:, 0] *= -1.0
+    np.testing.assert_array_equal(recall.weights(address), attention_reference(recall, address))
+    assert len(contractions) == 2
+    for query in np.random.default_rng(8).normal(size=(40, 1, recall.address_width)):
+        recall.weights(query)
+        assert len(recall._contents) <= 4 * recall.heads
+    recall.reset(0)
+    assert not recall._contents and recall._content_keys is None
 
 
 @pytest.mark.parametrize("capacity", [1, 2, 7])

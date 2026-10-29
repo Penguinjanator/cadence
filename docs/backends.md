@@ -6,7 +6,7 @@ Every graph brain runs on the `"cpu"` backend in NumPy float64 unless you pick a
 from the NumPy-only [installation](../README.md#get-started) and add an extra:
 
 ```bash
-python -m pip install "cadence-net[fast]==0.91.0"
+python -m pip install "cadence-net[fast]==0.91.1"
 ```
 
 `[fast]` installs Numba and SciPy, `[accel]` PyTorch and `[apple]` MLX; from a checkout, use
@@ -183,6 +183,22 @@ readings (see [the depth benchmark](../benchmarks/depth/README.md)). `CADENCE_FU
 environment before `cadence` is imported forces the NumPy loop, on which the depth receipts
 and the look-back, contextual-choice, held-heads, copy-tokens and own-action receipts were
 recorded.
+
+A recall memory's reads, writes and address lessons run on the host under every backend: products
+of each stream's address or attention with its slots, and the copy of the slots a write makes.
+`CADENCE_RECALL_THREADS=N` shares those of at least 262,144 values over blocks of streams,
+using at most N workers and at most 32 workers in one reusable pool per process. Canonical
+contiguous operands keep the same summation per output; other layouts use the original NumPy
+call. The default, 1, dispatches no threaded work. Changing N reuses the bounded pool, and a
+forked child starts its own pool. As with Numba's threads, a worker of a process pool should
+keep its share of the cores.
+
+Recall may reuse raw content dot products for unchanged addresses and keys. It applies the
+current temperature on every read, so retuning and save/load agree. Since expert key arrays
+remain writable, a bitwise bank snapshot is checked before reuse; this validation has a host
+memory cost. The cache holds one snapshot and at most four addresses per head, and a slot
+write or full reset clears it. These implementation changes do not establish a new task score
+or a general training-speed ratio.
 
 A device kernel implements five operations: the synaptic transport, the elementwise neuron
 update, the softmax over the nudged group, the apical normalization and the largest movement

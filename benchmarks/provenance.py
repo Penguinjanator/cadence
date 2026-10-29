@@ -27,8 +27,9 @@ import numpy as np
 import cadence as cd
 from cadence.receipts import source_manifest
 
-ENVIRONMENT = ("CADENCE_FUSED", "NUMBA_NUM_THREADS", "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS",
-               "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
+ENVIRONMENT = ("CADENCE_FUSED", "CADENCE_RECALL_THREADS", "NUMBA_NUM_THREADS",
+               "OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
+               "VECLIB_MAXIMUM_THREADS")
 
 def sources(root: Path, *scripts: str) -> list[tuple[str, Path]]:
     """Bind every library module, package metadata, this helper and the experiment scripts.

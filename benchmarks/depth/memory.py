@@ -49,7 +49,9 @@ def benchmark(name: str) -> ModuleType:
 
 def sources() -> list[tuple[str, Path]]:
     """Complete library and component protocol source identity."""
-    return evidence["sources"](ROOT, "benchmarks/depth/memory.py", *("benchmarks/attention/" + name + ".py" for name in BENCHMARKS))
+    return evidence["sources"](
+        ROOT, "benchmarks/depth/memory.py",
+        *("benchmarks/attention/" + name + ".py" for name in BENCHMARKS))
 
 
 @contextmanager

@@ -33,6 +33,12 @@
 - Reduce recall-memory host copies: an all-stream address lesson reads the canonical slot
   arrays, selected keys are gathered once, and a write builds each new bounded slot array
   with one copy while preserving snapshots. Cache immutable association indices per device.
+- Reuse raw recall content products while applying the current temperature on every read.
+  Check a bitwise key snapshot before reuse, so runtime retuning, in-place expert edits and
+  checkpoint continuation agree. Bound the cache to one bank and four addresses per head.
+- Add opt-in `CADENCE_RECALL_THREADS=N` for large host recall products and copies, with one
+  reusable pool of at most 32 workers per process. Preserve the original traversal for
+  noncontiguous operands; forked children start their own pool.
 - Reconcile the task-design and continuing-world-model guides with the current Brain API,
   run the continuing example in installed-package documentation checks, and document the
   mathematical, serialization, refusal and executed-work boundaries above.

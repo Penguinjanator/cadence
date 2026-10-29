@@ -230,7 +230,8 @@ def check(body: dict[str, Any]) -> str | None:
             problem = evidence["worker"](run, ROOT, "benchmarks/depth/and_count.py")
             if problem:
                 return problem
-            if [point["lesson"] for point in run["curve"]] != list(range(every, lessons + 1, every)):
+            readings = [point["lesson"] for point in run["curve"]]
+            if readings != list(range(every, lessons + 1, every)):
                 return "missing or undeclared reading checkpoint"
             if any(not 0 <= point["accuracy"] <= 1 for point in run["curve"]):
                 return "invalid accuracy"
