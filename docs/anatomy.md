@@ -168,7 +168,7 @@ level, below a coarse settle's error. A brain with the compartment therefore lea
 (nudged phases of a whole 32 sweeps from a free phase at the founder's tolerance; the opposite
 phases' common drift cancels in the contrast).
 There, on a task that takes two layers of thresholds, one to four processing regions order by
-depth, and four come within 0.02 of a network of two hidden layers; see the
+depth, and four finish about 2.2 percentage points below a network of two hidden layers; see the
 [depth benchmark](../benchmarks/depth/README.md) and [deep brains](tune.md#deep-brains).
 
 ### Ports after development
