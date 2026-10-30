@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.91.2 — 2026-10-30
+
+- Bind the recall memory's reused content products to its bank for the length of one public
+  operation (`act`, `lesson`, `step`, `live`, `wait`). Inside an operation no caller runs
+  between reads and the memory replaces its bank rather than writing into it, so the bank
+  array's identity establishes unchanged keys; the bitwise snapshot remains the check between
+  operations, where an expert's in-place edit of `keys` is read as before. The binding ends with
+  the operation, a copy taken during one (`deepcopy`, `imagined`) is unbound once it ends, and
+  a forked child starts with none. 0.91.1 copied the whole bank after every write and compared
+  it on every reuse; with many streams and slots that traffic exceeded the products it saved
+  (64 streams, 960 slots and a 960-wide key are a 472 MB bank). Acts, lessons, `live`/`wait`
+  with episode ends, keys and address maps are bit-identical to 0.91.1. A deep composer
+  (256/128/128, two held heads, that bank) teaches and acts in 0.21 s per moment on one Mac
+  core against 0.42 s on 0.91.1, with the same digest of answers, weights and keys. No task
+  score or general training-speed ratio is claimed.
+- `lesson`'s warning about a moment the brain just acted on names the caller's line again.
+
 ## 0.91.1 — 2026-10-29
 
 - Reuse Torch nudge temperature inputs across changing arousal heat. Bound topology and

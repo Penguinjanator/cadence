@@ -37,12 +37,13 @@ designed region can replace any of them.
 from __future__ import annotations
 
 import warnings
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from copy import deepcopy
+from functools import wraps
 from pathlib import Path
 from types import MappingProxyType
-from typing import Any
+from typing import Any, TypeVar, cast
 
 import numpy as np
 
@@ -118,6 +119,23 @@ _CODE_WINNERS_FLOOR = 24
 # separators from its seed and the next one, so a code drawn from an offset of the seed would
 # share its stream with a brain of a nearby seed.
 _CODE_STREAM = 7103
+
+_Operation = TypeVar("_Operation", bound=Callable[..., Any])
+
+
+def _operation(method: _Operation) -> _Operation:
+    """A public operation: the recall memory binds the content products it reuses to its
+    bank for the operation's length (``Recall._scope``). A warning the method issues for its
+    caller counts this wrapper's frame."""
+
+    @wraps(method)
+    def operated(self: Brain, *args: Any, **kwargs: Any) -> Any:
+        if self.recall is None:
+            return method(self, *args, **kwargs)
+        with self.recall._scope():
+            return method(self, *args, **kwargs)
+
+    return cast(_Operation, operated)
 
 
 def _learning() -> LearnerConfig:
@@ -3412,6 +3430,7 @@ class Brain:
 
     # -- ongoing interaction
 
+    @_operation
     def step(
         self,
         observations: Any,
@@ -3477,6 +3496,7 @@ class Brain:
             self._lesson(x, labels)
         return self.act(x)
 
+    @_operation
     def lesson(self, observations: Any, labels: Any) -> dict[str, float]:
         """Teach the labels of the present observations without acting on them.
 
@@ -3524,7 +3544,7 @@ class Brain:
                 "successor still empty. Teach before acting, as step(..., teacher=labels) "
                 "orders them.",
                 RuntimeWarning,
-                stacklevel=2,
+                stacklevel=3,  # the caller, past the operation wrapper
             )
         self.last_learning = {}
         return dict(self._lesson(x, labels))
@@ -3584,6 +3604,7 @@ class Brain:
         self.last_learning["demonstrations"] = float(batch)
         return teaching
 
+    @_operation
     def live(
         self, observations: Any, *, reward: Any = None, done: Any = None,
         salience: Any = None, decision_id: Any = None,
@@ -3887,6 +3908,7 @@ class Brain:
                 raise
         return credited, work
 
+    @_operation
     def wait(self, observations: Any) -> None:
         """One moment of the stream while its issued action's outcome is still to come.
 
@@ -4145,6 +4167,7 @@ class Brain:
                 region.work.update(work)
         return tuple(phases)
 
+    @_operation
     def act(
         self,
         observations: Any,
