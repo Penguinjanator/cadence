@@ -6,7 +6,7 @@ Every graph brain runs on the `"cpu"` backend in NumPy float64 unless you pick a
 from the NumPy-only [installation](../README.md#get-started) and add an extra:
 
 ```bash
-python -m pip install "cadence-net[fast]==0.91.1"
+python -m pip install "cadence-net[fast]==0.91.2"
 ```
 
 `[fast]` installs Numba and SciPy, `[accel]` PyTorch and `[apple]` MLX; from a checkout, use
@@ -194,11 +194,14 @@ forked child starts its own pool. As with Numba's threads, a worker of a process
 keep its share of the cores.
 
 Recall may reuse raw content dot products for unchanged addresses and keys. It applies the
-current temperature on every read, so retuning and save/load agree. Since expert key arrays
-remain writable, a bitwise bank snapshot is checked before reuse; this validation has a host
-memory cost. The cache holds one snapshot and at most four addresses per head, and a slot
-write or full reset clears it. These implementation changes do not establish a new task score
-or a general training-speed ratio.
+current temperature on every read, so retuning and save/load agree. Within one public operation
+of the brain (`act`, `lesson`, `step`, `live`, `wait`) the reuse is bound to the bank array
+itself: no caller runs between the operation's reads, and the memory replaces its bank rather
+than writing into it. Between operations expert key arrays remain writable, so a bitwise bank
+snapshot is checked before reuse; this validation costs host memory traffic of the bank's size,
+which inside an operation is no longer paid on every read. The cache holds one bank and at most
+four addresses per head; a slot write, a full reset and the end of an operation clear it. These
+implementation changes do not establish a new task score or a general training-speed ratio.
 
 A device kernel implements five operations: the synaptic transport, the elementwise neuron
 update, the softmax over the nudged group, the apical normalization and the largest movement

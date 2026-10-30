@@ -19,8 +19,9 @@ rule sees the trace as a stimulus and does not differentiate through it.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
 from copy import copy
 from dataclasses import dataclass, field, fields
 from threading import Lock
@@ -43,6 +44,8 @@ _THREADED = 1 << 18
 _RECALL_WORKERS = 32
 _POOL: tuple[int, ThreadPoolExecutor] | None = None
 _POOL_LOCK = Lock()
+# The tokens of the recall operations in progress (``Recall._scope``).
+_OPERATIONS: set[object] = set()
 
 
 def _after_recall_fork() -> None:
@@ -50,6 +53,8 @@ def _after_recall_fork() -> None:
     global _POOL, _POOL_LOCK
     _POOL = None
     _POOL_LOCK = Lock()
+    # nor is an operation another thread had in progress still running in the child
+    _OPERATIONS.clear()
 
 
 if hasattr(os, "register_at_fork"):
@@ -929,6 +934,7 @@ class Recall:
         # the latest content scores per address over the present slots (``_content``)
         self._contents: list[tuple[np.ndarray, np.ndarray]] = []
         self._content_keys: np.ndarray | None = None
+        self._scope_token: object | None = None  # the token of the operation in progress
         self._device_columns: Any = None  # the association's columns on a torch device
         self.reset(0)
 
@@ -1262,6 +1268,7 @@ class Recall:
         branch._private = True
         branch._contents = []
         branch._content_keys = None
+        branch._scope_token = None
         return branch
 
     # -- the moment's address and read
@@ -1322,21 +1329,52 @@ class Recall:
             logits = logits + position
         return logits if held is None else np.where(held, logits, -np.inf)
 
+    @contextmanager
+    def _scope(self) -> Iterator[None]:
+        """One public operation of the brain (``act``, ``lesson``, ``step``, ``live``,
+        ``wait``). No caller runs between its reads, and the memory replaces its bank rather
+        than writing into it, so the content products the operation reuses are bound to the
+        bank array itself instead of a bitwise snapshot of it; they leave with the operation.
+        A nested operation shares the outermost one's; a copy taken during one holds its
+        token, which stops binding when the operation ends."""
+        if self._scope_token in _OPERATIONS:
+            yield
+            return
+        token = object()
+        self._scope_token = token
+        _OPERATIONS.add(token)
+        self._contents, self._content_keys = [], None
+        try:
+            yield
+        finally:
+            _OPERATIONS.discard(token)
+            self._scope_token = None
+            self._contents, self._content_keys = [], None
+
     def _content(self, address: np.ndarray, keys: np.ndarray) -> np.ndarray:
         """Content logits with reusable raw dot products and the current temperature.
 
-        Public expert key arrays remain writable. A bitwise snapshot detects in-place
-        changes, including signed zero; object identity alone cannot establish unchanged
-        contents. At most four addresses per head and one bank snapshot are retained.
+        Public expert key arrays remain writable. Between operations a bitwise snapshot
+        detects in-place changes, including signed zero; object identity alone cannot
+        establish unchanged contents. Within an operation (``_scope``) the bank is bound
+        by identity, which a bank of many streams and slots needs: its snapshot and
+        comparisons cost more than the products they save. At most four addresses per head
+        and one bank snapshot are retained.
         """
         if (keys is not self.keys or address.dtype != np.float64
                 or keys.dtype != np.float64 or not address.flags.c_contiguous
                 or not keys.flags.c_contiguous):
             return np.asarray(_einsum("bk,bmk->bm", address, keys) / self.temperature)
-        key_bits = keys.view(np.uint64)
-        if self._content_keys is None or not np.array_equal(self._content_keys, key_bits):
-            self._content_keys = key_bits.copy()
-            self._contents = []
+        if self._scope_token is not None and self._scope_token in _OPERATIONS:
+            if self._content_keys is not keys:
+                self._content_keys = keys
+                self._contents = []
+        else:
+            key_bits = keys.view(np.uint64)
+            if (self._content_keys is None or self._content_keys.dtype != np.uint64
+                    or not np.array_equal(self._content_keys, key_bits)):
+                self._content_keys = key_bits.copy()
+                self._contents = []
         bits = address.view(np.uint64)
         for scored, product in self._contents:
             if np.array_equal(scored, bits):
